@@ -40,3 +40,35 @@ export const recents = {
     await d.execute('DELETE FROM recent_repos WHERE path = $1', [path]);
   },
 };
+
+/**
+ * Generic JSON-valued key/value store backed by the `settings` SQLite table.
+ * Use for things that should survive relaunch but aren't repo content —
+ * open tabs, last-active tab, theme preference, etc.
+ */
+export const settings = {
+  async get<T>(key: string): Promise<T | null> {
+    if (!isTauri()) return null;
+    const d = await db();
+    const rows = await d.select<{ value: string }[]>(
+      'SELECT value FROM settings WHERE key = $1',
+      [key],
+    );
+    if (rows.length === 0) return null;
+    try {
+      return JSON.parse(rows[0].value) as T;
+    } catch {
+      return null;
+    }
+  },
+
+  async set<T>(key: string, value: T): Promise<void> {
+    if (!isTauri()) return;
+    const d = await db();
+    await d.execute(
+      `INSERT INTO settings (key, value) VALUES ($1, $2)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, JSON.stringify(value)],
+    );
+  },
+};

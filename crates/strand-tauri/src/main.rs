@@ -26,6 +26,13 @@ fn main() {
             commands::repo_meta,
             commands::repo_status,
             commands::repo_log,
+            commands::repo_diff_unstaged,
+            commands::repo_diff_staged,
+            commands::repo_diff_between,
+            commands::repo_stage,
+            commands::repo_unstage,
+            commands::repo_discard,
+            commands::repo_commit,
         ])
         .setup(|app| {
             if let Some(win) = app.get_webview_window("main") {

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { Commit, FileStatus, RepoMeta } from './types';
+import type { Commit, CommitOutcome, FileDiff, FileStatus, RepoMeta } from './types';
 
 /**
  * Typed wrappers around the Rust `tauri::command` handlers in
@@ -12,6 +12,15 @@ export const tauri = {
   repoMeta: (path: string) => invoke<RepoMeta>('repo_meta', { path }),
   repoStatus: (path: string) => invoke<FileStatus[]>('repo_status', { path }),
   repoLog: (path: string, limit?: number) => invoke<Commit[]>('repo_log', { path, limit }),
+  repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
+  repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
+  repoDiffBetween: (path: string, from: string, to: string) =>
+    invoke<FileDiff[]>('repo_diff_between', { path, from, to }),
+  repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
+  repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
+  repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
+  repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
+    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
 };
 
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */

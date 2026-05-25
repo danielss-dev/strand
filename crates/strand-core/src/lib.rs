@@ -12,6 +12,8 @@ pub mod repo;
 pub mod status;
 pub mod log;
 pub mod diff;
+pub mod stage;
+pub mod commit;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

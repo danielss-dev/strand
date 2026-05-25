@@ -200,8 +200,7 @@
   min-height: 0;
 }
 .lc-main {
-  display: grid;
-  grid-template-columns: clamp(220px, 24%, 340px) minmax(0, 1fr);
+  display: flex;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -209,9 +208,16 @@
 .lc-files {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
-  border-right: 0.5px solid var(--border);
   background: var(--bg-base);
+}
+.lc-files-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 .lc-diff {
   display: flex;
@@ -1174,4 +1180,133 @@ button { -webkit-tap-highlight-color: transparent; }
   padding: 6px 8px;
   font-size: 11px;
   color: var(--text-dim);
+}
+
+/* ─── Local Changes — tree rows + diff toolbar ─── */
+
+.lc-tree {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lc-tree-row {
+  display: grid;
+  grid-template-columns: calc(8px + var(--depth, 0) * 14px) 14px 14px minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  height: var(--row-h);
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: var(--type-ui);
+  position: relative;
+  user-select: none;
+}
+.lc-tree-row:hover { background: var(--bg-hover); color: var(--text); }
+.lc-tree-row.active { background: var(--bg-sel); color: var(--text); }
+
+.lc-tree-row .chev { color: var(--text-dim); display: inline-flex; justify-content: center; }
+.lc-tree-row.folder .chev { color: var(--text-muted); }
+.lc-tree-row .ftype { color: var(--text-muted); display: inline-flex; }
+.lc-tree-row.folder .ftype { color: var(--accent); }
+.lc-tree-row .fname {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text);
+}
+.lc-tree-row.folder .fname { color: var(--text-2); font-weight: 500; }
+
+.lc-tree-row .badge {
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--accent-fg);
+  flex-shrink: 0;
+}
+.lc-tree-row .badge.M { background: var(--mod); }
+.lc-tree-row .badge.A { background: var(--add); }
+.lc-tree-row .badge.D { background: var(--del); }
+.lc-tree-row .badge.U { background: var(--b-4); }
+.lc-tree-row .badge.R { background: var(--b-2); }
+.lc-tree-row .badge.C { background: var(--b-7); }
+.lc-tree-row .badge.T { background: var(--b-5); }
+
+.lc-tree-row .lc-action {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 1px 7px;
+  border-radius: 4px;
+  display: none;
+}
+.lc-tree-row:hover .lc-action { display: inline-flex; }
+.lc-tree-row .lc-action:hover { background: var(--bg-active); color: var(--text); }
+
+.lc-tree-row .folder-count {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.lc-diff-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Pierre runs with disableBackground so it inherits our base background. */
+  background: var(--bg-base);
+}
+
+/* ─── Resizable panel handles ──────────────────────────────────────────────
+ * `react-resizable-panels` renders a div with `[data-panel-resize-handle-id]`
+ * for each handle. We give it a 1px visible line on a wider hit area, with
+ * a hover/drag accent so it's discoverable but unobtrusive.
+ */
+.rs-handle {
+  position: relative;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.12s ease;
+}
+.rs-handle::before {
+  content: '';
+  position: absolute;
+  background: var(--border);
+  pointer-events: none;
+}
+.rs-handle:hover,
+.rs-handle[data-resize-handle-active] {
+  background: oklch(from var(--accent) l c h / 0.18);
+}
+.rs-handle:hover::before,
+.rs-handle[data-resize-handle-active]::before {
+  background: var(--accent);
+}
+
+.rs-handle.vert {
+  width: 5px;
+  margin: 0 -2px;
+  cursor: col-resize;
+}
+.rs-handle.vert::before {
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 0.5px;
+}
+
+.rs-handle.horiz {
+  height: 5px;
+  margin: -2px 0;
+  cursor: row-resize;
+}
+.rs-handle.horiz::before {
+  left: 0; right: 0;
+  top: 2px;
+  height: 0.5px;
 }

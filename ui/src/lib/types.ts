@@ -29,6 +29,24 @@ export interface Commit {
   parents: string[];
 }
 
+export type DiffStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange';
+
+export interface FileDiff {
+  path: string;
+  old_path: string | null;
+  status: DiffStatus;
+  adds: number;
+  dels: number;
+  binary: boolean;
+  /** Unified-diff text for this single file. Feed to `<Diff />`. */
+  patch: string;
+}
+
+export interface CommitOutcome {
+  oid: string;
+  amended: boolean;
+}
+
 /** Row in the `recent_repos` SQLite table. Frontend-managed. */
 export interface RecentRepo {
   path: string;

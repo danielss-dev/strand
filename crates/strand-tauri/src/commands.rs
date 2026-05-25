@@ -1,5 +1,7 @@
 use serde::Serialize;
-use strand_core::{log::Commit, repo::RepoMeta, status::FileStatus, Repo};
+use strand_core::{
+    commit::CommitOutcome, diff::FileDiff, log::Commit, repo::RepoMeta, status::FileStatus, Repo,
+};
 use tauri::State;
 
 use crate::state::AppState;
@@ -40,4 +42,47 @@ pub fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
 #[tauri::command]
 pub fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
     Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)
+}
+
+#[tauri::command]
+pub fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_unstaged()?)
+}
+
+#[tauri::command]
+pub fn repo_diff_staged(path: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_staged()?)
+}
+
+#[tauri::command]
+pub fn repo_diff_between(path: String, from: String, to: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_between(&from, &to)?)
+}
+
+#[tauri::command]
+pub fn repo_stage(path: String, file: String) -> CmdResult<()> {
+    Repo::discover(&path)?.stage_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_unstage(path: String, file: String) -> CmdResult<()> {
+    Repo::discover(&path)?.unstage_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_discard(path: String, file: String) -> CmdResult<()> {
+    Repo::discover(&path)?.discard_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_commit(
+    path: String,
+    subject: String,
+    body: Option<String>,
+    amend: bool,
+) -> CmdResult<CommitOutcome> {
+    Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
 }

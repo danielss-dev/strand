@@ -11,6 +11,7 @@
     "lint": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@pierre/diffs": "^1.2.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-os": "^2",
@@ -19,7 +20,8 @@
     "@tauri-apps/plugin-updater": "^2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "shiki": "^1.22.0",
+    "react-resizable-panels": "^2.1.9",
+    "shiki": "^3.23.0",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

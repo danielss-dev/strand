@@ -25,3 +25,4 @@ ui/.vite/
 # Bundled design handoff (kept on disk for reference, not in git)
 /Strand_extracted/
 /Strand.zip
+.playwright-mcp

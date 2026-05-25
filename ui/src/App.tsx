@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { Icon } from './components/Icon';
 import { Sidebar } from './components/Sidebar';
@@ -25,6 +26,9 @@ export function App() {
   const recents = useRepo((s) => s.recents);
   const openRepo = useRepo((s) => s.openRepo);
   const refreshRecents = useRepo((s) => s.refreshRecents);
+  const restoreSession = useRepo((s) => s.restoreSession);
+  const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
+  const refreshLog = useRepo((s) => s.refreshLog);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -58,9 +62,13 @@ export function App() {
     }, 900);
   }, [showToast]);
 
-  // Load recents once at startup so the empty-state sidebar + palette
-  // have something to show before the user opens anything.
-  useEffect(() => { void refreshRecents(); }, [refreshRecents]);
+  // Load recents + restore the tabs the user had open last time. Both run
+  // once on first mount; restoreSession is idempotent so StrictMode's
+  // double-invoke is harmless.
+  useEffect(() => {
+    void refreshRecents();
+    void restoreSession();
+  }, [refreshRecents, restoreSession]);
 
   // Theme tokens live on the document root so portal-rendered popovers
   // (which attach to document.body, outside .os-bg) still see them.
@@ -84,6 +92,32 @@ export function App() {
     });
     return () => { void unlisten.then((fn) => fn()); };
   }, [openByPath]);
+
+  // Refresh git state whenever the user returns to the app. The OS may
+  // have changed files behind our back (CLI commits, editor saves, branch
+  // switches from another tool) — pulling fresh status + log on focus
+  // keeps Strand from drifting out of sync. A small debounce avoids a
+  // double-fetch when both events fire close together.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let lastAt = 0;
+    const refresh = () => {
+      const now = Date.now();
+      if (now - lastAt < 400) return;
+      lastAt = now;
+      const { activePath } = useRepo.getState();
+      if (!activePath) return;
+      void refreshLocalChanges();
+      void refreshLog();
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [refreshLocalChanges, refreshLog]);
 
   // Global ⌘K / Ctrl+K
   useEffect(() => {
@@ -142,17 +176,23 @@ export function App() {
         />
 
         <div className="body">
-          <Sidebar onOpenRepo={openViaDialog} onOpenRecent={openByPath} />
-
-          {view === 'file' && selectedFile ? (
-            <FileView path={selectedFile} />
-          ) : (
-            <div className="main">
-              <MainHeader />
-              {view === 'local' && <LocalChanges />}
-              {(view === 'commits' || view === 'branch') && <Commits />}
-            </div>
-          )}
+          <PanelGroup direction="horizontal" autoSaveId="strand:body">
+            <Panel defaultSize={20} minSize={12} maxSize={40}>
+              <Sidebar onOpenRepo={openViaDialog} onOpenRecent={openByPath} />
+            </Panel>
+            <PanelResizeHandle className="rs-handle vert" />
+            <Panel minSize={30}>
+              {view === 'file' && selectedFile ? (
+                <FileView path={selectedFile} />
+              ) : (
+                <div className="main">
+                  <MainHeader />
+                  {view === 'local' && <LocalChanges />}
+                  {(view === 'commits' || view === 'branch') && <Commits />}
+                </div>
+              )}
+            </Panel>
+          </PanelGroup>
         </div>
 
         <StatusBar />
@@ -186,8 +226,22 @@ function MainHeader() {
   const meta = useRepo((s) => s.meta);
   const status = useRepo((s) => s.status);
   const commits = useRepo((s) => s.commits);
+  const activePath = useRepo((s) => s.activePath);
+  const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
+  const refreshLog = useRepo((s) => s.refreshLog);
   const diffMode = useSettings((s) => s.diffMode);
   const setSetting = useSettings((s) => s.set);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const doRefresh = useCallback(async () => {
+    if (!activePath || refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshLocalChanges(), refreshLog()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activePath, refreshing, refreshLocalChanges, refreshLog]);
 
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'
@@ -222,7 +276,13 @@ function MainHeader() {
             </div>
           </>
         )}
-        <div className="icon-btn" title="Refresh"><Icon name="refresh" size={13} /></div>
+        <div
+          className={'icon-btn' + (!activePath ? ' disabled' : '')}
+          onClick={() => { if (activePath) void doRefresh(); }}
+          title="Refresh"
+        >
+          <Icon name="refresh" size={13} className={refreshing ? 'spin' : undefined} />
+        </div>
         <div className="icon-btn" title="Terminal"><Icon name="terminal" size={13} /></div>
         <div className="icon-btn" title="Open externally"><Icon name="external" size={13} /></div>
       </div>

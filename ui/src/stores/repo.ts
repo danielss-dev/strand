@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 
-import { recents as recentsDb } from '../lib/db';
+import { recents as recentsDb, settings as settingsDb } from '../lib/db';
 import { tauri } from '../lib/tauri';
-import type { Commit, FileStatus, RecentRepo, RepoMeta } from '../lib/types';
+import type { Commit, FileDiff, FileStatus, RecentRepo, RepoMeta } from '../lib/types';
+
+interface PersistedSession {
+  tabs: string[];
+  activeTabPath: string | null;
+}
+const SESSION_KEY = 'session.tabs';
 
 export type View = 'local' | 'commits' | 'file' | 'branch';
 
@@ -10,6 +16,16 @@ export type View = 'local' | 'commits' | 'file' | 'branch';
 export interface RepoTab {
   path: string;
   meta: RepoMeta;
+}
+
+/**
+ * Which file is selected in the Local Changes pane, and whether the row
+ * came from the staged or unstaged list. Drives which diff renders in
+ * the middle pane.
+ */
+export interface LocalSelection {
+  file: string;
+  staged: boolean;
 }
 
 export interface RepoState {
@@ -26,17 +42,37 @@ export interface RepoState {
   status: FileStatus[];
   commits: Commit[];
 
+  unstagedDiffs: FileDiff[];
+  stagedDiffs: FileDiff[];
+  localSelection: LocalSelection | null;
+
   recents: RecentRepo[];
 
   view: View;
   selectedFile: string | null;
   selectedRef: string | null;
 
+  /** Re-open the tabs the user had open last time (called once at app start). */
+  restoreSession(): Promise<void>;
+
   openRepo(path: string): Promise<void>;
   closeTab(path: string): void;
   setActiveTab(path: string): Promise<void>;
   refreshStatus(): Promise<void>;
   refreshLog(limit?: number): Promise<void>;
+  refreshDiffs(): Promise<void>;
+
+  /** Refresh status + diffs together — what every write op runs afterward. */
+  refreshLocalChanges(): Promise<void>;
+
+  stage(file: string): Promise<void>;
+  unstage(file: string): Promise<void>;
+  discard(file: string): Promise<void>;
+  stageAll(): Promise<void>;
+  unstageAll(): Promise<void>;
+  commit(subject: string, body: string | null, amend: boolean): Promise<void>;
+
+  selectLocalFile(sel: LocalSelection | null): void;
 
   refreshRecents(): Promise<void>;
   forgetRecent(path: string): Promise<void>;
@@ -51,8 +87,23 @@ const EMPTY_ACTIVE = {
   meta: null as RepoMeta | null,
   status: [] as FileStatus[],
   commits: [] as Commit[],
+  unstagedDiffs: [] as FileDiff[],
+  stagedDiffs: [] as FileDiff[],
+  localSelection: null as LocalSelection | null,
   selectedFile: null as string | null,
 };
+
+async function persistSession(state: RepoState): Promise<void> {
+  try {
+    const payload: PersistedSession = {
+      tabs: state.tabs.map((t) => t.path),
+      activeTabPath: state.activeTabPath,
+    };
+    await settingsDb.set(SESSION_KEY, payload);
+  } catch (e) {
+    console.warn('session persist failed', e);
+  }
+}
 
 export const useRepo = create<RepoState>((set, get) => ({
   tabs: [],
@@ -63,6 +114,32 @@ export const useRepo = create<RepoState>((set, get) => ({
 
   view: 'local',
   selectedRef: null,
+
+  async restoreSession() {
+    let saved: PersistedSession | null = null;
+    try {
+      saved = await settingsDb.get<PersistedSession>(SESSION_KEY);
+    } catch (e) {
+      console.warn('session load failed', e);
+    }
+    if (!saved || saved.tabs.length === 0) return;
+
+    // Open each saved tab; openRepo handles dedupe and tolerates failures
+    // (a repo may have moved or been deleted since last launch).
+    for (const path of saved.tabs) {
+      try {
+        await get().openRepo(path);
+      } catch (e) {
+        console.warn(`restoreSession: failed to open ${path}`, e);
+      }
+    }
+    if (saved.activeTabPath) {
+      const stillOpen = get().tabs.some((t) => t.path === saved!.activeTabPath);
+      if (stillOpen && get().activeTabPath !== saved.activeTabPath) {
+        await get().setActiveTab(saved.activeTabPath);
+      }
+    }
+  },
 
   async openRepo(path) {
     // If this path is already open, just focus it.
@@ -89,6 +166,9 @@ export const useRepo = create<RepoState>((set, get) => ({
       meta,
       status: [],
       commits: [],
+      unstagedDiffs: [],
+      stagedDiffs: [],
+      localSelection: null,
       selectedFile: null,
     }));
 
@@ -98,7 +178,8 @@ export const useRepo = create<RepoState>((set, get) => ({
     } catch (e) {
       console.warn('recents.touch failed', e);
     }
-    await Promise.all([get().refreshStatus(), get().refreshLog()]);
+    void persistSession(get());
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
 
   closeTab(path) {
@@ -109,6 +190,7 @@ export const useRepo = create<RepoState>((set, get) => ({
 
     if (activeTabPath !== path) {
       set({ tabs: nextTabs });
+      void persistSession(get());
       return;
     }
 
@@ -121,10 +203,14 @@ export const useRepo = create<RepoState>((set, get) => ({
       meta: neighbor?.meta ?? null,
       status: [],
       commits: [],
+      unstagedDiffs: [],
+      stagedDiffs: [],
+      localSelection: null,
       selectedFile: null,
     });
+    void persistSession(get());
     if (neighbor) {
-      void Promise.all([get().refreshStatus(), get().refreshLog()]);
+      void Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     }
   },
 
@@ -137,9 +223,13 @@ export const useRepo = create<RepoState>((set, get) => ({
       meta: tab.meta,
       status: [],
       commits: [],
+      unstagedDiffs: [],
+      stagedDiffs: [],
+      localSelection: null,
       selectedFile: null,
     });
-    await Promise.all([get().refreshStatus(), get().refreshLog()]);
+    void persistSession(get());
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
 
   async refreshStatus() {
@@ -152,6 +242,72 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) return;
     set({ commits: await tauri.repoLog(path, limit ?? 500) });
   },
+  async refreshDiffs() {
+    const path = get().activePath;
+    if (!path) return;
+    const [unstaged, staged] = await Promise.all([
+      tauri.repoDiffUnstaged(path),
+      tauri.repoDiffStaged(path),
+    ]);
+    set({ unstagedDiffs: unstaged, stagedDiffs: staged });
+
+    // If the selected file is no longer present (it was just staged in full,
+    // for example) move the selection to a sibling so the middle pane keeps
+    // showing something useful.
+    const sel = get().localSelection;
+    if (sel) {
+      const stillThere = (sel.staged ? staged : unstaged).some((f) => f.path === sel.file);
+      if (!stillThere) {
+        const alt = (sel.staged ? unstaged : staged).find((f) => f.path === sel.file);
+        set({ localSelection: alt ? { file: alt.path, staged: !sel.staged } : null });
+      }
+    }
+  },
+
+  async refreshLocalChanges() {
+    await Promise.all([get().refreshStatus(), get().refreshDiffs()]);
+  },
+
+  async stage(file) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoStage(path, file);
+    await get().refreshLocalChanges();
+  },
+  async unstage(file) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoUnstage(path, file);
+    await get().refreshLocalChanges();
+  },
+  async discard(file) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoDiscard(path, file);
+    await get().refreshLocalChanges();
+  },
+  async stageAll() {
+    const path = get().activePath;
+    if (!path) return;
+    const files = get().unstagedDiffs.map((d) => d.path);
+    for (const f of files) await tauri.repoStage(path, f);
+    await get().refreshLocalChanges();
+  },
+  async unstageAll() {
+    const path = get().activePath;
+    if (!path) return;
+    const files = get().stagedDiffs.map((d) => d.path);
+    for (const f of files) await tauri.repoUnstage(path, f);
+    await get().refreshLocalChanges();
+  },
+  async commit(subject, body, amend) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoCommit(path, subject, body, amend);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
+
+  selectLocalFile: (sel) => set({ localSelection: sel }),
 
   async refreshRecents() {
     try {

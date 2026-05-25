@@ -275,16 +275,13 @@
 
 /* ─── Sidebar ─── */
 .sidebar {
-  width: 248px;
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  border-right: 0.5px solid var(--border);
   min-height: 0;
 }
-[data-density="compact"] .sidebar { width: 224px; }
-[data-density="relaxed"] .sidebar { width: 272px; }
 
 /* Primary nav above tabs */
 .side-primary {
@@ -473,7 +470,11 @@
 
 /* ─── Main pane ─── */
 .main {
+  /* Lives inside a react-resizable-panels Panel (block-display by default),
+   * so flex:1 alone won't stretch us — height:100% does. Both are kept so
+   * the same rule works in either parent layout. */
   flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-base);
@@ -517,6 +518,8 @@
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.on { background: var(--bg-active); color: var(--text); }
+.icon-btn.disabled { color: var(--text-dim); cursor: default; }
+.icon-btn.disabled:hover { background: transparent; color: var(--text-dim); }
 
 /* Tab strip — for file view, etc. */
 .tab-strip {
