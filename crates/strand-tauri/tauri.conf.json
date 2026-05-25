@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Strand",
+  "version": "0.0.1",
+  "identifier": "dev.danielss.strand",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Strand",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 880,
+        "minHeight": 560,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "visible": false,
+        "transparent": false,
+        "fullscreen": false,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "msi", "deb", "appimage", "rpm"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Fast, friendly Git client",
+    "longDescription": "Strand is a desktop Git client for macOS, Windows, and Linux."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "TODO_REPLACE_WITH_TAURI_UPDATER_PUBKEY",
+      "endpoints": [
+        "https://strand.danielss.dev/updates/{{target}}/{{arch}}/{{current_version}}"
+      ]
+    }
+  }
+}

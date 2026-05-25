@@ -1,0 +1,131 @@
+/* Strand — design tokens.
+ * Densities, themes (dark/light), and the colored branch palette.
+ * Ported verbatim from the Claude Design prototype.
+ */
+
+:root {
+  /* density (set by [data-density]) — default */
+  --row-h: 26px;
+  --row-pad-x: 10px;
+  --row-gap: 1px;
+  --section-pad: 12px;
+  --type-ui: 12.5px;
+  --type-ui-sm: 11px;
+  --type-mono: 12.5px;
+
+  /* radii */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* font stacks (overridden by settings store) */
+  --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+[data-density="compact"] {
+  --row-h: 22px;
+  --row-pad-x: 8px;
+  --row-gap: 0px;
+  --section-pad: 8px;
+  --type-ui: 12px;
+  --type-ui-sm: 10.5px;
+  --type-mono: 11.5px;
+}
+[data-density="relaxed"] {
+  --row-h: 32px;
+  --row-pad-x: 12px;
+  --row-gap: 2px;
+  --section-pad: 16px;
+  --type-ui: 13px;
+  --type-ui-sm: 11.5px;
+  --type-mono: 13px;
+}
+
+/* ─── Dark theme (default) — warm charcoal ─── */
+[data-theme="dark"] {
+  --bg-os: oklch(0.14 0.006 60);
+  --bg-base: oklch(0.185 0.007 65);
+  --bg-panel: oklch(0.215 0.008 65);
+  --bg-elev: oklch(0.255 0.009 65);
+  --bg-hover: oklch(0.295 0.01 65);
+  --bg-active: oklch(0.35 0.012 65);
+  --bg-sel: oklch(0.30 0.04 55);
+  --border: oklch(0.30 0.008 65);
+  --border-strong: oklch(0.42 0.01 65);
+  --text: oklch(0.96 0.005 80);
+  --text-2: oklch(0.82 0.005 80);
+  --text-muted: oklch(0.65 0.005 80);
+  --text-dim: oklch(0.50 0.005 80);
+  --accent: oklch(0.74 0.165 55);
+  --accent-2: oklch(0.84 0.13 55);
+  --accent-fg: oklch(0.15 0.01 60);
+  --accent-glow: oklch(0.74 0.165 55 / 0.18);
+
+  --add: oklch(0.78 0.16 145);
+  --add-bg: oklch(0.40 0.08 145 / 0.22);
+  --add-bg-strong: oklch(0.42 0.10 145 / 0.45);
+  --add-gut: oklch(0.40 0.08 145 / 0.35);
+  --del: oklch(0.70 0.18 22);
+  --del-bg: oklch(0.40 0.10 22 / 0.22);
+  --del-bg-strong: oklch(0.42 0.12 22 / 0.45);
+  --del-gut: oklch(0.40 0.10 22 / 0.35);
+  --mod: oklch(0.80 0.14 85);
+  --mod-bg: oklch(0.40 0.08 85 / 0.22);
+
+  --shadow-lg: 0 24px 64px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-pop: 0 12px 32px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
+
+  --gutter: oklch(0.235 0.008 65);
+  --selection: oklch(0.74 0.165 55 / 0.32);
+}
+
+/* ─── Light theme — warm cream ─── */
+[data-theme="light"] {
+  --bg-os: oklch(0.92 0.008 75);
+  --bg-base: oklch(0.985 0.006 80);
+  --bg-panel: oklch(0.965 0.008 80);
+  --bg-elev: oklch(0.95 0.009 80);
+  --bg-hover: oklch(0.93 0.011 80);
+  --bg-active: oklch(0.89 0.014 80);
+  --bg-sel: oklch(0.88 0.06 55);
+  --border: oklch(0.88 0.009 80);
+  --border-strong: oklch(0.78 0.011 80);
+  --text: oklch(0.22 0.012 60);
+  --text-2: oklch(0.38 0.011 60);
+  --text-muted: oklch(0.52 0.009 60);
+  --text-dim: oklch(0.65 0.008 60);
+  --accent: oklch(0.62 0.18 50);
+  --accent-2: oklch(0.55 0.20 45);
+  --accent-fg: oklch(0.99 0 0);
+  --accent-glow: oklch(0.62 0.18 50 / 0.14);
+
+  --add: oklch(0.45 0.16 145);
+  --add-bg: oklch(0.92 0.08 145 / 0.55);
+  --add-bg-strong: oklch(0.85 0.13 145 / 0.7);
+  --add-gut: oklch(0.75 0.13 145 / 0.6);
+  --del: oklch(0.50 0.20 25);
+  --del-bg: oklch(0.93 0.07 25 / 0.55);
+  --del-bg-strong: oklch(0.85 0.13 25 / 0.65);
+  --del-gut: oklch(0.78 0.16 25 / 0.55);
+  --mod: oklch(0.55 0.15 80);
+  --mod-bg: oklch(0.93 0.08 85 / 0.55);
+
+  --shadow-lg: 0 24px 64px rgba(60,40,20,0.18), 0 2px 8px rgba(60,40,20,0.08);
+  --shadow-pop: 0 12px 32px rgba(60,40,20,0.16), 0 1px 0 rgba(255,255,255,0.5) inset;
+
+  --gutter: oklch(0.94 0.009 80);
+  --selection: oklch(0.62 0.18 50 / 0.22);
+}
+
+/* Branch line colors — classic colored graph */
+:root {
+  --b-1: oklch(0.74 0.165 55);   /* orange */
+  --b-2: oklch(0.70 0.16 220);   /* azure */
+  --b-3: oklch(0.72 0.18 150);   /* green */
+  --b-4: oklch(0.72 0.20 320);   /* magenta */
+  --b-5: oklch(0.78 0.16 95);    /* yellow */
+  --b-6: oklch(0.70 0.16 270);   /* purple */
+  --b-7: oklch(0.72 0.16 190);   /* teal */
+}

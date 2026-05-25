@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Tauri build artifacts
+/crates/strand-tauri/gen/
+/crates/strand-tauri/target/
+
+# Node / Vite
+node_modules/
+ui/dist/
+ui/.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local env
+.env
+.env.local
+
+# Bundled design handoff (kept on disk for reference, not in git)
+/Strand_extracted/
+/Strand.zip

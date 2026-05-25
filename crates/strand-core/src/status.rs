@@ -1,0 +1,74 @@
+use serde::{Deserialize, Serialize};
+
+use crate::{error::Result, repo::Repo};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum StatusKind {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Untracked,
+    Conflicted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileStatus {
+    pub path: String,
+    pub kind: StatusKind,
+    pub staged: bool,
+}
+
+impl Repo {
+    /// Working-tree + index status, in a shape ready for the staging UI.
+    ///
+    /// Uses `git2` for now because gix's status APIs are still maturing;
+    /// the public type intentionally hides which engine produced it.
+    pub fn status(&self) -> Result<Vec<FileStatus>> {
+        let repo = self.git2()?;
+        let mut opts = git2::StatusOptions::new();
+        opts.include_untracked(true).recurse_untracked_dirs(true);
+
+        let mut out = Vec::new();
+        for entry in repo.statuses(Some(&mut opts))?.iter() {
+            let path = match entry.path() {
+                Some(p) => p.to_string(),
+                None => continue,
+            };
+            let s = entry.status();
+
+            if s.is_index_modified() || s.is_index_new() || s.is_index_deleted() || s.is_index_renamed() {
+                out.push(FileStatus {
+                    path: path.clone(),
+                    kind: classify(s, true),
+                    staged: true,
+                });
+            }
+            if s.is_wt_modified() || s.is_wt_new() || s.is_wt_deleted() || s.is_wt_renamed() {
+                out.push(FileStatus {
+                    path,
+                    kind: classify(s, false),
+                    staged: false,
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
+fn classify(s: git2::Status, staged: bool) -> StatusKind {
+    if s.is_conflicted() {
+        return StatusKind::Conflicted;
+    }
+    if staged {
+        if s.is_index_new() { return StatusKind::Added; }
+        if s.is_index_deleted() { return StatusKind::Deleted; }
+        if s.is_index_renamed() { return StatusKind::Renamed; }
+        return StatusKind::Modified;
+    }
+    if s.is_wt_new() { return StatusKind::Untracked; }
+    if s.is_wt_deleted() { return StatusKind::Deleted; }
+    if s.is_wt_renamed() { return StatusKind::Renamed; }
+    StatusKind::Modified
+}
