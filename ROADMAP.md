@@ -65,6 +65,11 @@ integration is now unblocked.
 - ☐ Conflict resolution UI (three-way view)
 - ☐ Discard changes (line / hunk / file) with single-undo
 - ☐ Stacked + split diff layouts (persisted per-repo)
+- ☐ **Theme management**
+  - Light + dark themes with system-preference follow
+  - Persisted per-user via settings store
+  - Theme switcher in settings UI + command palette action
+  - Live swap without reload (CSS variables already token-driven)
 - ☐ Command palette: real action set (branches, files, commits, recents)
 - ☐ Windows 11 build (chrome variant exists but is untested)
 - ☐ Linux build (deb / rpm / AppImage)

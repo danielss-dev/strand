@@ -153,6 +153,18 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Cross-cutting
 - ☐ Tweaks panel UI (settings exposed, no UI to change them yet)
+- ☐ **Theme management**
+  - ☐ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets
+  - ☐ `theme` key in `settings` SQLite table with default `system`
+  - ☐ `useTheme` hook: read setting, subscribe to OS `prefers-color-scheme`,
+    apply `data-theme` on `<html>`
+  - ☐ Settings UI section: theme picker (Light / Dark / System) with live preview
+  - ☐ Command palette actions: "Switch to Light", "Switch to Dark", "Use System Theme"
+  - ☐ Cycle-theme keyboard shortcut (⌘⇧T)
+  - ☐ Persist last manual choice across launches; restore before first paint
+    (no flash of wrong theme)
+  - ☐ Audit components for hardcoded colors; route everything through tokens
+  - ☐ Extension point for future custom themes (high-contrast, solarized, etc.)
 - ☐ Status-bar: real GPG / LFS / sync state
 - ☐ Toast system → proper notification component
 - ☐ Empty-state copy for every panel (PRD §9: "no 'no data' labels")
