@@ -16,6 +16,9 @@ export const tauri = {
     repoUnstage: (path, file) => invoke('repo_unstage', { path, file }),
     repoDiscard: (path, file) => invoke('repo_discard', { path, file }),
     repoCommit: (path, subject, body, amend) => invoke('repo_commit', { path, subject, body, amend }),
+    repoFetch: (path, remote) => invoke('repo_fetch', { path, remote }),
+    repoPull: (path, rebase) => invoke('repo_pull', { path, rebase }),
+    repoPush: (path, forceWithLease) => invoke('repo_push', { path, forceWithLease }),
 };
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */
 export const isTauri = () => '__TAURI_INTERNALS__' in window;

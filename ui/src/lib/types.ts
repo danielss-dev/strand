@@ -47,6 +47,11 @@ export interface CommitOutcome {
   amended: boolean;
 }
 
+export interface NetworkOutcome {
+  /** Combined stdout/stderr from `git`, trimmed. Show in a toast/log. */
+  output: string;
+}
+
 /** Row in the `recent_repos` SQLite table. Frontend-managed. */
 export interface RecentRepo {
   path: string;

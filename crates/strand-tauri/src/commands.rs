@@ -1,6 +1,7 @@
 use serde::Serialize;
 use strand_core::{
-    commit::CommitOutcome, diff::FileDiff, log::Commit, repo::RepoMeta, status::FileStatus, Repo,
+    commit::CommitOutcome, diff::FileDiff, log::Commit, network::NetworkOutcome, repo::RepoMeta,
+    status::FileStatus, Repo,
 };
 use tauri::State;
 
@@ -85,4 +86,19 @@ pub fn repo_commit(
     amend: bool,
 ) -> CmdResult<CommitOutcome> {
     Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+}
+
+#[tauri::command]
+pub fn repo_fetch(path: String, remote: Option<String>) -> CmdResult<NetworkOutcome> {
+    Ok(Repo::discover(&path)?.fetch(remote.as_deref())?)
+}
+
+#[tauri::command]
+pub fn repo_pull(path: String, rebase: bool) -> CmdResult<NetworkOutcome> {
+    Ok(Repo::discover(&path)?.pull(rebase)?)
+}
+
+#[tauri::command]
+pub fn repo_push(path: String, force_with_lease: bool) -> CmdResult<NetworkOutcome> {
+    Ok(Repo::discover(&path)?.push(force_with_lease)?)
 }

@@ -14,6 +14,7 @@ pub mod log;
 pub mod diff;
 pub mod stage;
 pub mod commit;
+pub mod network;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

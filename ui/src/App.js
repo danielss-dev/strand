@@ -27,8 +27,14 @@ export function App() {
     const restoreSession = useRepo((s) => s.restoreSession);
     const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
     const refreshLog = useRepo((s) => s.refreshLog);
+    const refreshMeta = useRepo((s) => s.refreshMeta);
+    const fetchRepo = useRepo((s) => s.fetch);
+    const pullRepo = useRepo((s) => s.pull);
+    const pushRepo = useRepo((s) => s.push);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [pulling, setPulling] = useState(false);
+    const [pushing, setPushing] = useState(false);
     const [toast, setToast] = useState(null);
     const showToast = useCallback((msg) => {
         setToast(msg);
@@ -48,14 +54,51 @@ export function App() {
         if (path)
             await openByPath(path);
     }, [openByPath]);
-    const onSync = useCallback(() => {
+    const onSync = useCallback(async () => {
+        if (syncing)
+            return;
         setSyncing(true);
-        // TODO: wire to a real `repo_fetch` Tauri command.
-        setTimeout(() => {
+        try {
+            await fetchRepo();
+            showToast('Fetched');
+        }
+        catch (e) {
+            showToast(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        finally {
             setSyncing(false);
-            showToast('Fetched origin · up to date');
-        }, 900);
-    }, [showToast]);
+        }
+    }, [fetchRepo, showToast, syncing]);
+    const onPull = useCallback(async () => {
+        if (pulling)
+            return;
+        setPulling(true);
+        try {
+            await pullRepo();
+            showToast('Pulled');
+        }
+        catch (e) {
+            showToast(`Pull failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        finally {
+            setPulling(false);
+        }
+    }, [pullRepo, showToast, pulling]);
+    const onPush = useCallback(async () => {
+        if (pushing)
+            return;
+        setPushing(true);
+        try {
+            await pushRepo();
+            showToast('Pushed');
+        }
+        catch (e) {
+            showToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        finally {
+            setPushing(false);
+        }
+    }, [pushRepo, showToast, pushing]);
     // Load recents + restore the tabs the user had open last time. Both run
     // once on first mount; restoreSession is idempotent so StrictMode's
     // double-invoke is harmless.
@@ -104,6 +147,7 @@ export function App() {
                 return;
             void refreshLocalChanges();
             void refreshLog();
+            void refreshMeta();
         };
         const onVis = () => { if (document.visibilityState === 'visible')
             refresh(); };
@@ -113,7 +157,7 @@ export function App() {
             window.removeEventListener('focus', refresh);
             document.removeEventListener('visibilitychange', onVis);
         };
-    }, [refreshLocalChanges, refreshLog]);
+    }, [refreshLocalChanges, refreshLog, refreshMeta]);
     // Global ⌘K / Ctrl+K
     useEffect(() => {
         const onKey = (e) => {
@@ -163,7 +207,7 @@ export function App() {
         '--font-ui': FONTS.ui[uiFont],
         '--font-mono': FONTS.mono[monoFont],
     };
-    return (_jsxs("div", { className: "os-bg", "data-theme": theme, "data-density": density, "data-platform": platform, style: rootStyle, children: [_jsxs("div", { className: "strand-window", children: [_jsx(Topbar, { onOpenPalette: () => setPaletteOpen(true), onOpenRepo: openViaDialog, onOpenRecent: openByPath, onSync: onSync, syncing: syncing, onToast: showToast }), _jsx("div", { className: "body", children: _jsxs(PanelGroup, { direction: "horizontal", autoSaveId: "strand:body", children: [_jsx(Panel, { defaultSize: 20, minSize: 12, maxSize: 40, children: _jsx(Sidebar, { onOpenRepo: openViaDialog, onOpenRecent: openByPath }) }), _jsx(PanelResizeHandle, { className: "rs-handle vert" }), _jsx(Panel, { minSize: 30, children: view === 'file' && selectedFile ? (_jsx(FileView, { path: selectedFile })) : (_jsxs("div", { className: "main", children: [_jsx(MainHeader, {}), view === 'local' && _jsx(LocalChanges, {}), (view === 'commits' || view === 'branch') && _jsx(Commits, {})] })) })] }) }), _jsx(StatusBar, {}), toast && (_jsxs("div", { className: "toast", children: [_jsx("span", { style: { color: 'var(--add)' }, children: _jsx(Icon, { name: "check", size: 13, stroke: 2.2 }) }), _jsx("span", { children: toast })] }))] }), paletteOpen && _jsx(CommandPalette, { actions: paletteActions, onClose: () => setPaletteOpen(false) }), !isTauri() && !meta && (_jsxs("div", { style: {
+    return (_jsxs("div", { className: "os-bg", "data-theme": theme, "data-density": density, "data-platform": platform, style: rootStyle, children: [_jsxs("div", { className: "strand-window", children: [_jsx(Topbar, { onOpenPalette: () => setPaletteOpen(true), onOpenRepo: openViaDialog, onOpenRecent: openByPath, onSync: onSync, onPull: onPull, onPush: onPush, syncing: syncing, pulling: pulling, pushing: pushing, onToast: showToast }), _jsx("div", { className: "body", children: _jsxs(PanelGroup, { direction: "horizontal", autoSaveId: "strand:body", children: [_jsx(Panel, { defaultSize: 20, minSize: 12, maxSize: 40, children: _jsx(Sidebar, { onOpenRepo: openViaDialog, onOpenRecent: openByPath }) }), _jsx(PanelResizeHandle, { className: "rs-handle vert" }), _jsx(Panel, { minSize: 30, children: view === 'file' && selectedFile ? (_jsx(FileView, { path: selectedFile })) : (_jsxs("div", { className: "main", children: [_jsx(MainHeader, {}), view === 'local' && _jsx(LocalChanges, {}), (view === 'commits' || view === 'branch') && _jsx(Commits, {})] })) })] }) }), _jsx(StatusBar, {}), toast && (_jsxs("div", { className: "toast", children: [_jsx("span", { style: { color: 'var(--add)' }, children: _jsx(Icon, { name: "check", size: 13, stroke: 2.2 }) }), _jsx("span", { children: toast })] }))] }), paletteOpen && _jsx(CommandPalette, { actions: paletteActions, onClose: () => setPaletteOpen(false) }), !isTauri() && !meta && (_jsxs("div", { style: {
                     position: 'fixed', bottom: 14, right: 16,
                     padding: '8px 12px', borderRadius: 8,
                     background: 'var(--bg-elev)', color: 'var(--text-2)',
@@ -178,6 +222,7 @@ function MainHeader() {
     const activePath = useRepo((s) => s.activePath);
     const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
     const refreshLog = useRepo((s) => s.refreshLog);
+    const refreshMeta = useRepo((s) => s.refreshMeta);
     const diffMode = useSettings((s) => s.diffMode);
     const setSetting = useSettings((s) => s.set);
     const [refreshing, setRefreshing] = useState(false);
@@ -186,12 +231,12 @@ function MainHeader() {
             return;
         setRefreshing(true);
         try {
-            await Promise.all([refreshLocalChanges(), refreshLog()]);
+            await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta()]);
         }
         finally {
             setRefreshing(false);
         }
-    }, [activePath, refreshing, refreshLocalChanges, refreshLog]);
+    }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta]);
     const title = view === 'local' ? 'Local Changes'
         : view === 'commits' ? 'All Commits'
             : view === 'branch' ? 'Branch'

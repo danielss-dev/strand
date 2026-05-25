@@ -72,6 +72,12 @@ export interface RepoState {
   unstageAll(): Promise<void>;
   commit(subject: string, body: string | null, amend: boolean): Promise<void>;
 
+  /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
+  refreshMeta(): Promise<void>;
+  fetch(): Promise<string>;
+  pull(rebase?: boolean): Promise<string>;
+  push(forceWithLease?: boolean): Promise<string>;
+
   selectLocalFile(sel: LocalSelection | null): void;
 
   refreshRecents(): Promise<void>;
@@ -304,7 +310,38 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoCommit(path, subject, body, amend);
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshMeta()]);
+  },
+
+  async refreshMeta() {
+    const path = get().activePath;
+    if (!path) return;
+    const meta = await tauri.repoMeta(path);
+    set((s) => ({
+      meta,
+      tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
+    }));
+  },
+  async fetch() {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoFetch(path, null);
+    await get().refreshMeta();
+    return res.output;
+  },
+  async pull(rebase = false) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoPull(path, rebase);
+    await Promise.all([get().refreshMeta(), get().refreshLocalChanges(), get().refreshLog()]);
+    return res.output;
+  },
+  async push(forceWithLease = false) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoPush(path, forceWithLease);
+    await get().refreshMeta();
+    return res.output;
   },
 
   selectLocalFile: (sel) => set({ localSelection: sel }),

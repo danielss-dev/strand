@@ -11,11 +11,26 @@ interface Props {
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
   onSync: () => void;
+  onPull: () => void;
+  onPush: () => void;
   syncing: boolean;
+  pulling: boolean;
+  pushing: boolean;
   onToast: (msg: string) => void;
 }
 
-export function Topbar({ onOpenPalette, onOpenRepo, onOpenRecent, onSync, syncing, onToast }: Props) {
+export function Topbar({
+  onOpenPalette,
+  onOpenRepo,
+  onOpenRecent,
+  onSync,
+  onPull,
+  onPush,
+  syncing,
+  pulling,
+  pushing,
+  onToast,
+}: Props) {
   const platform = useSettings((s) => s.platform);
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
@@ -74,15 +89,30 @@ export function Topbar({ onOpenPalette, onOpenRepo, onOpenRecent, onSync, syncin
       <div className="topbar-spacer" />
 
       <div className="sync-group">
-        <button className="sync-btn" onClick={onSync} title="Fetch" disabled={!meta}>
+        <button
+          className="sync-btn"
+          onClick={onSync}
+          title="Fetch"
+          disabled={!meta || syncing}
+        >
           <Icon name="refresh" size={13} className={syncing ? 'spin' : ''} />
         </button>
-        <button className="sync-btn" title="Pull" disabled={!meta}>
-          <Icon name="arrow-down" size={13} />
+        <button
+          className="sync-btn"
+          onClick={onPull}
+          title={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
+          disabled={!meta || pulling}
+        >
+          <Icon name="arrow-down" size={13} className={pulling ? 'spin' : ''} />
           <span className="count">{behind}</span>
         </button>
-        <button className="sync-btn" title="Push" disabled={!meta}>
-          <Icon name="arrow-up" size={13} />
+        <button
+          className="sync-btn"
+          onClick={onPush}
+          title={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
+          disabled={!meta || pushing}
+        >
+          <Icon name="arrow-up" size={13} className={pushing ? 'spin' : ''} />
           <span className="count">{ahead}</span>
         </button>
       </div>

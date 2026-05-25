@@ -29,9 +29,16 @@ export function App() {
   const restoreSession = useRepo((s) => s.restoreSession);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
+  const refreshMeta = useRepo((s) => s.refreshMeta);
+
+  const fetchRepo = useRepo((s) => s.fetch);
+  const pullRepo = useRepo((s) => s.pull);
+  const pushRepo = useRepo((s) => s.push);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -53,14 +60,44 @@ export function App() {
     if (path) await openByPath(path);
   }, [openByPath]);
 
-  const onSync = useCallback(() => {
+  const onSync = useCallback(async () => {
+    if (syncing) return;
     setSyncing(true);
-    // TODO: wire to a real `repo_fetch` Tauri command.
-    setTimeout(() => {
+    try {
+      await fetchRepo();
+      showToast('Fetched');
+    } catch (e) {
+      showToast(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
       setSyncing(false);
-      showToast('Fetched origin · up to date');
-    }, 900);
-  }, [showToast]);
+    }
+  }, [fetchRepo, showToast, syncing]);
+
+  const onPull = useCallback(async () => {
+    if (pulling) return;
+    setPulling(true);
+    try {
+      await pullRepo();
+      showToast('Pulled');
+    } catch (e) {
+      showToast(`Pull failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPulling(false);
+    }
+  }, [pullRepo, showToast, pulling]);
+
+  const onPush = useCallback(async () => {
+    if (pushing) return;
+    setPushing(true);
+    try {
+      await pushRepo();
+      showToast('Pushed');
+    } catch (e) {
+      showToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPushing(false);
+    }
+  }, [pushRepo, showToast, pushing]);
 
   // Load recents + restore the tabs the user had open last time. Both run
   // once on first mount; restoreSession is idempotent so StrictMode's
@@ -109,6 +146,7 @@ export function App() {
       if (!activePath) return;
       void refreshLocalChanges();
       void refreshLog();
+      void refreshMeta();
     };
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -117,7 +155,7 @@ export function App() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [refreshLocalChanges, refreshLog]);
+  }, [refreshLocalChanges, refreshLog, refreshMeta]);
 
   // Global ⌘K / Ctrl+K
   useEffect(() => {
@@ -171,7 +209,11 @@ export function App() {
           onOpenRepo={openViaDialog}
           onOpenRecent={openByPath}
           onSync={onSync}
+          onPull={onPull}
+          onPush={onPush}
           syncing={syncing}
+          pulling={pulling}
+          pushing={pushing}
           onToast={showToast}
         />
 
@@ -229,6 +271,7 @@ function MainHeader() {
   const activePath = useRepo((s) => s.activePath);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
+  const refreshMeta = useRepo((s) => s.refreshMeta);
   const diffMode = useSettings((s) => s.diffMode);
   const setSetting = useSettings((s) => s.set);
   const [refreshing, setRefreshing] = useState(false);
@@ -237,11 +280,11 @@ function MainHeader() {
     if (!activePath || refreshing) return;
     setRefreshing(true);
     try {
-      await Promise.all([refreshLocalChanges(), refreshLog()]);
+      await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta()]);
     } finally {
       setRefreshing(false);
     }
-  }, [activePath, refreshing, refreshLocalChanges, refreshLog]);
+  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta]);
 
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'

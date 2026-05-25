@@ -42,6 +42,8 @@ impl Repo {
             .map(|n| n.shorten().to_string())
             .unwrap_or_else(|| "HEAD".to_string());
 
+        let (ahead, behind) = self.compute_ahead_behind().unwrap_or((0, 0));
+
         Ok(RepoMeta {
             name: self
                 .path
@@ -51,10 +53,24 @@ impl Repo {
                 .to_string(),
             path: self.path.to_string_lossy().into_owned(),
             branch: head_name,
-            // TODO: compute against upstream ref.
-            ahead: 0,
-            behind: 0,
+            ahead,
+            behind,
         })
+    }
+
+    /// Walk HEAD against its configured upstream and return (ahead, behind).
+    /// Quietly returns `None` when HEAD has no upstream or is detached —
+    /// callers fall back to (0, 0).
+    fn compute_ahead_behind(&self) -> Option<(u32, u32)> {
+        let repo = self.git2().ok()?;
+        let head = repo.head().ok()?;
+        let branch = head.shorthand()?.to_string();
+        let local = repo.find_branch(&branch, git2::BranchType::Local).ok()?;
+        let upstream = local.upstream().ok()?;
+        let local_oid = local.get().target()?;
+        let upstream_oid = upstream.get().target()?;
+        let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid).ok()?;
+        Some((ahead as u32, behind as u32))
     }
 
     pub(crate) fn git2(&self) -> Result<git2::Repository> {

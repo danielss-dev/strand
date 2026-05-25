@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { Commit, CommitOutcome, FileDiff, FileStatus, RepoMeta } from './types';
+import type {
+  Commit,
+  CommitOutcome,
+  FileDiff,
+  FileStatus,
+  NetworkOutcome,
+  RepoMeta,
+} from './types';
 
 /**
  * Typed wrappers around the Rust `tauri::command` handlers in
@@ -21,6 +28,12 @@ export const tauri = {
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
   repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
     invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
+  repoFetch: (path: string, remote: string | null) =>
+    invoke<NetworkOutcome>('repo_fetch', { path, remote }),
+  repoPull: (path: string, rebase: boolean) =>
+    invoke<NetworkOutcome>('repo_pull', { path, rebase }),
+  repoPush: (path: string, forceWithLease: boolean) =>
+    invoke<NetworkOutcome>('repo_push', { path, forceWithLease }),
 };
 
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */
