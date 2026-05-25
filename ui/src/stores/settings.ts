@@ -10,6 +10,19 @@ export type GraphStyle = 'classic' | 'bold' | 'mono';
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
 
+function detectPlatform(): Platform {
+  // Tauri OS plugin injects this global before JS runs
+  const internals = (window as unknown as { __TAURI_OS_PLUGIN_INTERNALS__?: { os_type: string } })
+    .__TAURI_OS_PLUGIN_INTERNALS__;
+  if (internals?.os_type === 'windows') return 'win11';
+  if (internals?.os_type === 'macos') return 'mac';
+
+  // Fallback for browser mode
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('win')) return 'win11';
+  return 'mac';
+}
+
 export interface SettingsState {
   theme: Theme;
   platform: Platform;
@@ -41,7 +54,7 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       theme: 'dark',
-      platform: 'mac',
+      platform: detectPlatform(),
       density: 'default',
       diffMode: 'stacked',
       graphStyle: 'classic',
@@ -49,6 +62,17 @@ export const useSettings = create<SettingsState>()(
       monoFont: 'jetbrains',
       set: (key, value) => set({ [key]: value } as Partial<SettingsState>),
     }),
-    { name: 'strand.settings' },
+    {
+      name: 'strand.settings',
+      partialize: (state) => {
+        const { platform, ...rest } = state;
+        return rest;
+      },
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as object),
+        platform: detectPlatform(),
+      }),
+    },
   ),
 );

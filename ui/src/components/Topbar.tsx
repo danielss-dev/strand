@@ -93,7 +93,7 @@ export function Topbar({
           className="sync-btn"
           onClick={onSync}
           title="Fetch"
-          disabled={!meta || syncing}
+          disabled={!meta}
         >
           <Icon name="refresh" size={13} className={syncing ? 'spin' : ''} />
         </button>
@@ -101,7 +101,7 @@ export function Topbar({
           className="sync-btn"
           onClick={onPull}
           title={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
-          disabled={!meta || pulling}
+          disabled={!meta}
         >
           <Icon name="arrow-down" size={13} className={pulling ? 'spin' : ''} />
           <span className="count">{behind}</span>
@@ -110,7 +110,7 @@ export function Topbar({
           className="sync-btn"
           onClick={onPush}
           title={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
-          disabled={!meta || pushing}
+          disabled={!meta}
         >
           <Icon name="arrow-up" size={13} className={pushing ? 'spin' : ''} />
           <span className="count">{ahead}</span>

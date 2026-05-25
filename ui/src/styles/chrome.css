@@ -64,8 +64,14 @@
 }
 .topbar[data-native-chrome="win11"] {
   height: 32px;
-  padding-right: 140px;
+  padding-left: 6px;
+  padding-right: 10px;
   gap: 6px;
+}
+
+/* Browser preview on Windows: no traffic lights, tabs start at left */
+[data-platform="win11"] .topbar:not([data-native-chrome]) {
+  padding-left: 6px;
 }
 
 .topbar[data-native-chrome] .repo-tab { height: 24px; padding: 0 10px 0 8px; }

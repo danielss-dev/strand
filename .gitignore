@@ -11,6 +11,7 @@ node_modules/
 ui/dist/
 ui/.vite/
 **/*.tsbuildinfo
+ui/src/**/*.js
 
 # Editor / OS
 .DS_Store
