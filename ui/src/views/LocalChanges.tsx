@@ -78,7 +78,7 @@ function FileRow({ path, status }: { path: string; status: string }) {
     <div className="lc-row">
       <div />
       <span className="ftype"><Icon name="file" size={13} /></span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
         <span className="fname">{name}</span>
         {dir && <span className="fpath"> · {dir}</span>}
       </span>

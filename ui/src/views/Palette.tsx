@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { useSettings } from '../stores/settings';
@@ -17,12 +17,26 @@ interface Props {
 
 export function CommandPalette({ actions, onClose }: Props) {
   const [q, setQ] = useState('');
+  const [sel, setSel] = useState(0);
   const platform = useSettings((s) => s.platform);
   const cmdKey = platform === 'mac' ? '⌘' : 'Ctrl ';
+  const listRef = useRef<HTMLDivElement>(null);
 
   const filtered = q
     ? actions.filter((a) => a.label.toLowerCase().includes(q.toLowerCase()))
     : actions;
+
+  // Reset selection whenever the visible list changes so we never point at
+  // a stale index.
+  useEffect(() => { setSel(0); }, [q, filtered.length]);
+
+  // Keep the selected row in view as the user navigates with the keyboard.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const node = list.children.item(sel) as HTMLElement | null;
+    node?.scrollIntoView({ block: 'nearest' });
+  }, [sel]);
 
   return (
     <div
@@ -38,21 +52,28 @@ export function CommandPalette({ actions, onClose }: Props) {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Type a command, branch, or file…"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && filtered[0]) {
-                filtered[0].run();
-                onClose();
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSel((s) => Math.min(Math.max(filtered.length - 1, 0), s + 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSel((s) => Math.max(0, s - 1));
+              } else if (e.key === 'Enter') {
+                const item = filtered[sel];
+                if (item) { item.run(); onClose(); }
               }
             }}
           />
         </div>
-        <div className="palette-list">
+        <div className="palette-list" ref={listRef}>
           {filtered.length === 0 && (
             <div className="palette-sect">No matches</div>
           )}
-          {filtered.map((a) => (
+          {filtered.map((a, i) => (
             <div
               key={a.id}
-              className="palette-item"
+              className={'palette-item' + (i === sel ? ' active' : '')}
+              onMouseMove={() => { if (i !== sel) setSel(i); }}
               onClick={() => { a.run(); onClose(); }}
             >
               <span className="ico"><Icon name="command" size={14} /></span>

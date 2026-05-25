@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestones map to PRD §11. Status as of 2026-05-25.
+Milestones map to PRD §11. Status as of 2026-05-25 (post Phase B step 1).
 
 Legend: ☐ not started · ◐ in progress · ☑ done
 
@@ -19,9 +19,11 @@ system ported verbatim. No real feature surface yet.
 > PRD: "Repo management, basic ops (fetch/pull/push/commit/branch/checkout),
 > diff & stage, commit graph, file tree, one platform — likely macOS."
 
-- ☐ **Open / clone / add existing repo**
-  - Dialog flow (native picker, drag-and-drop, recents)
-  - SQLite-backed recent-repo list with last-opened timestamp
+- ◐ **Open / clone / add existing repo**
+  - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window)
+  - ☑ SQLite-backed recent-repo list with last-opened timestamp
+  - ☑ Multi-repo tabs (open, switch, close)
+  - ☐ Clone (HTTPS / SSH) with streaming progress
 - ☐ **Local Changes — real staging UI**
   - List unstaged + staged with the actual status from `repo_status`
   - Line / hunk / file stage + unstage (likely requires `@pierre/diffs`)
@@ -33,9 +35,10 @@ system ported verbatim. No real feature surface yet.
 - ☐ **Fetch / Pull / Push**
   - Rust commands streaming progress events to the frontend
   - Credential prompts via OS keychain
-- ☐ **Branch ops**
-  - List, checkout, create from HEAD or commit, delete
-  - Sidebar wired to real data (currently placeholder)
+- ◐ **Branch ops**
+  - ☐ List, checkout, create from HEAD or commit, delete
+  - ☐ Sidebar wired to real data (currently placeholder)
+  - ☑ Topbar branch dropdown shell (list + create-branch entry; both stubbed until reads/writes land)
 - ☐ **File tree**
   - Working-tree view, status badges, click to file detail
   - Likely requires `@pierre/trees`
@@ -44,8 +47,10 @@ system ported verbatim. No real feature surface yet.
   - Apple Developer ID signing + notarization
   - First DMG ships to a small alpha group
 
-**Blocker:** Pierre library licensing (PRD Q1). Pick a resolution path
-before the diff and tree work starts.
+**Blockers cleared (2026-05-25):** PRD Q1 (Pierre libraries approved),
+Q2 (license: AGPL-3.0 + dual-license commercial SKU), Q5 (pricing:
+free + honor-system paid commercial license). Pierre diff & tree
+integration is now unblocked.
 
 ---
 
@@ -104,10 +109,10 @@ before the diff and tree work starts.
 
 - **Security & signing.** EV cert for Windows. macOS notarization pipeline
   must be live by 0.1 alpha.
-- **Open questions.** PRD §12 lists 5 open Qs. Each blocks something:
-  1. Pierre licensing → blocks 0.1
-  2. OSS vs source-available → blocks 0.5 (affects positioning)
-  3. AI features extension point → design before 1.0
-  4. PR review surface → 1.1 candidate
-  5. Pricing model → blocks marketing + landing page
+- **Open questions.** PRD §12 lists 5 open Qs.
+  1. ☑ Pierre licensing — approved 2026-05-25.
+  2. ☑ OSS vs source-available — AGPL-3.0 + dual-license commercial.
+  3. ☐ AI features extension point — design before 1.0.
+  4. ☐ PR review surface — 1.1 candidate.
+  5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.

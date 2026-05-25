@@ -9,7 +9,7 @@ export type IconName =
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
   | 'win-min' | 'win-max' | 'win-close';
 
-interface Props extends Omit<SVGProps<SVGSVGElement>, 'name'> {
+interface Props extends Omit<SVGProps<SVGSVGElement>, 'name' | 'stroke'> {
   name: IconName;
   size?: number;
   stroke?: number;

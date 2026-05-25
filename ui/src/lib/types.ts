@@ -28,3 +28,10 @@ export interface Commit {
   time_unix: number;
   parents: string[];
 }
+
+/** Row in the `recent_repos` SQLite table. Frontend-managed. */
+export interface RecentRepo {
+  path: string;
+  name: string;
+  last_opened: number;
+}

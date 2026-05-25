@@ -9,13 +9,16 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## Blockers (resolve before starting dependent work)
 
-- ☐ **PRD Q1: Pierre library licensing.** Confirm `@pierre/diffs` and
-  `@pierre/trees` are usable in a commercial desktop app, or pick
-  alternatives (Monaco diff + a homegrown virtualized tree).
-  → Blocks: diff view, file tree, commit graph rendering quality.
-- ☐ **PRD Q2: OSS vs source-available.** Pick a license. Affects
-  contribution model and how we accept PRs.
-- ☐ **PRD Q5: Pricing model.** Affects landing page, account/license code.
+- ☑ **PRD Q1: Pierre library licensing.** Approved 2026-05-25 — both
+  `@pierre/diffs` and `@pierre/trees` cleared for use. Diff, tree, and
+  commit-graph rendering can proceed.
+- ☑ **PRD Q2: OSS vs source-available.** AGPL-3.0 for the public source
+  + dual-license commercial SKU as the honor-system path for companies.
+  Still needs: LICENSE (AGPL-3.0), COMMERCIAL.md, and a CLA before the
+  repo opens to outside contributions.
+- ☑ **PRD Q5: Pricing model.** Free for all individuals; one-time
+  commercial license available for companies that want to support the
+  project. No feature gating, no nag dialogs.
 
 ---
 
@@ -84,7 +87,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
 - ☐ Window state persistence (size, position, maximized)
 - ☐ Multi-window for "open file detached" if needed
-- ☐ Drag-and-drop folder onto window → opens repo
+- ☑ Drag-and-drop folder onto window → opens repo
 - ☐ Deep-link handler (`strand://open?path=…`) for CLI companion
 
 ---
@@ -92,15 +95,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## Frontend — components & wiring
 
 ### Repo opening
-- ☐ "Open repository" command (palette + ⌘O) using `plugin-dialog`
-- ☐ Drag-and-drop a folder → calls `useRepo.openRepo`
-- ☐ Recent-repos UI (sidebar dropdown + command palette)
-- ☐ Multi-repo tabs (currently only renders the active one)
+- ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`
+- ☑ Drag-and-drop a folder → calls `useRepo.openRepo`
+- ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
+- ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
+- ☐ Tab persistence across launches (open tabs are not restored on relaunch)
+- ☐ Tab reordering by drag and overflow scrolling
 
 ### Topbar
 - ☑ Layout + native-chrome alignment
 - ☐ Fetch / Pull / Push handlers (currently toast-only)
-- ☐ Branch picker dropdown (currently a static label)
+- ◐ Branch picker dropdown (shell exists; needs real branch list from #3 and create-branch wired in #4)
 - ☐ Stash split button
 
 ### Sidebar
@@ -141,9 +146,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Command palette
 - ☑ Open / close, ⌘K, fuzzy filter, run-on-Enter
-- ☐ Real action registry (currently 5 toy actions)
-- ☐ Include branches, recent files, commits in the index
-- ☐ Keyboard navigation (↑↓ to highlight, currently runs first match)
+- ◐ Real action registry (open + recents wired; sync/show/theme stubbed)
+- ☑ Include recent repos in the index (branches, files, commits still pending)
+- ☑ Keyboard navigation (↑↓ to highlight + scroll-into-view; mouse hover also moves selection)
 - ☐ Scope pills (All / Actions / Branches / Files / Commits)
 
 ### Cross-cutting
@@ -203,7 +208,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)
 - ☐ Hook execution warning on fresh clones
 - ☐ Signed update manifest enforcement
-- ☐ Decide license + publish source if going OSS (PRD Q2)
+- ◐ License decided (AGPL-3.0 + dual-license commercial). Still need:
+  - ☐ `LICENSE` file (AGPL-3.0 text) at repo root
+  - ☐ `COMMERCIAL.md` describing the commercial-license offer
+  - ☐ CLA workflow before opening to outside contributions
 
 ---
 

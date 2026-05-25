@@ -40,11 +40,19 @@ function SideSection({ label, collapsed, onToggle, count }: SectionProps) {
   );
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  onOpenRepo: () => void;
+  onOpenRecent: (path: string) => void;
+}
+
+export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
   const status = useRepo((s) => s.status);
+  const meta = useRepo((s) => s.meta);
+  const recents = useRepo((s) => s.recents);
+  const forgetRecent = useRepo((s) => s.forgetRecent);
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
@@ -94,23 +102,81 @@ export function Sidebar() {
       </div>
 
       <div className="side-scroll">
-        {tab === 'git' ? (
+        {!meta ? (
+          <EmptyRepoState recents={recents} onOpenRepo={onOpenRepo} onOpenRecent={onOpenRecent} onForget={forgetRecent} />
+        ) : tab === 'git' ? (
           <>
             <SideSection label="Branches" collapsed={!sections.branches} onToggle={() => toggle('branches')} count={0} />
             <SideSection label="Remotes" collapsed={!sections.remotes} onToggle={() => toggle('remotes')} count={0} />
             <SideSection label="Tags" collapsed={!sections.tags} onToggle={() => toggle('tags')} count={0} />
             <SideSection label="Stashes" collapsed={!sections.stashes} onToggle={() => toggle('stashes')} count={0} />
             <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
-            <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11 }}>
-              No repository open. Use ⌘O to open one.
-            </div>
           </>
         ) : (
           <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11 }}>
-            Open a repository to browse its files.
+            File tree — coming soon.
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface EmptyProps {
+  recents: ReturnType<typeof useRepo.getState>['recents'];
+  onOpenRepo: () => void;
+  onOpenRecent: (path: string) => void;
+  onForget: (path: string) => Promise<void>;
+}
+
+function EmptyRepoState({ recents, onOpenRepo, onOpenRecent, onForget }: EmptyProps) {
+  return (
+    <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div>No repository open. Use <kbd>⌘O</kbd>, drop a folder onto the window, or:</div>
+      <button
+        onClick={onOpenRepo}
+        style={{
+          padding: '6px 10px', borderRadius: 6,
+          background: 'var(--bg-elev)', color: 'var(--text-1)',
+          border: '1px solid var(--border)', fontSize: 11, cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        Open repository…
+      </button>
+
+      {recents.length > 0 && (
+        <div>
+          <div style={{ color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, margin: '4px 0 6px' }}>
+            Recent
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {recents.map((r) => (
+              <div
+                key={r.path}
+                onClick={() => onOpenRecent(r.path)}
+                title={r.path}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 6px', borderRadius: 4, cursor: 'pointer',
+                  color: 'var(--text-1)',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-elev)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                <span
+                  onClick={(e) => { e.stopPropagation(); void onForget(r.path); }}
+                  title="Remove from recents"
+                  style={{ color: 'var(--text-dim)', padding: 2 }}
+                >
+                  <Icon name="x" size={9} stroke={2} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
