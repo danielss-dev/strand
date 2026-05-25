@@ -26,10 +26,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Reads
 - ☑ `Repo::discover`
-- ☑ `Repo::meta` (branch only — ahead/behind hardcoded to 0)
+- ☑ `Repo::meta` (branch + real ahead/behind via `git2::graph_ahead_behind`)
 - ☑ `Repo::status` (via git2)
-- ☑ `Repo::log` (basic revwalk, no graph data)
-- ☐ Compute real ahead/behind against upstream ref
+- ☑ `Repo::log` (basic revwalk, no graph lane data)
+- ☑ `Repo::diff_unstaged` / `diff_staged` / `diff_between` — emit per-file
+  unified-patch text consumed by `<PatchDiff>` (Pierre parses hunks)
+- ☑ Rename detection (`DiffFindOptions::renames(true).copies(true)`)
 - ☐ Resolve refs (branches, remotes, tags) into typed structs
 - ☐ Stash list
 - ☐ Submodule list + status
@@ -38,18 +40,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ File history for a path
 - ☐ Tree listing for a commit (powers file tree at a revision)
 - ☐ File content at a revision (powers Content tab)
-- ☐ Diff between two oids — produce the `FileDiff`/`Hunk`/`DiffLine` types
-  already defined in `diff.rs`
-- ☐ Diff for working tree vs index, index vs HEAD, working vs HEAD
-- ☐ Rename detection threshold + classification
 - ☐ Commit search (message, author, hash) — and `-G` / `-S` content search
 
 ### Writes
-- ☐ Stage / unstage path
-- ☐ Stage / unstage hunk
+- ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
+- ☐ Stage / unstage hunk (needs `git2::Diff::apply` with hunk callback)
 - ☐ Stage / unstage line
-- ☐ Discard working-tree changes (path / hunk / line)
-- ☐ Commit (subject + body + amend)
+- ☑ Discard working-tree changes (path) — file-level only
+- ☐ Discard hunk / line + single-undo handle
+- ☑ Commit (subject + body + amend; no GPG signing yet)
 - ☐ Create / delete branch (from HEAD, from commit)
 - ☐ Checkout branch / commit
 - ☐ Create / delete tag (lightweight + annotated)
@@ -62,15 +61,20 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Submodule init / update / sync
 
 ### Network
-- ☐ `fetch` with progress events (stream via Tauri event)
-- ☐ `pull` (fetch + merge or rebase, configurable)
-- ☐ `push` with progress + force/lease flags
-- ☐ Clone with progress + credential prompts
-- ☐ Credential helper integration (OS keychain via `auth-git2` or similar)
+- ☑ `fetch` (shell-out to `git fetch --prune`)
+- ☑ `pull` (shell-out; rebase flag supported, no UI yet)
+- ☑ `push` (shell-out; `--force-with-lease` flag supported, no UI yet)
+- ☑ Credentials: inherit user's `git` config (helper, SSH agent) via
+  shell-out + `GIT_TERMINAL_PROMPT=0`. Native `auth-git2` integration
+  with OS keychain is a future polish.
+- ☐ Streaming progress events for fetch / pull / push (sync for now —
+  blocks the topbar button until done)
+- ☐ Clone (HTTPS / SSH) with streaming progress
 
 ### Hybrid concerns
-- ☐ Decide write engine per op: pure `git2` vs shell-out to user's `git`
-  (matters for GPG, hooks, LFS, sparse-checkout, partial clone)
+- ☑ Write-engine policy decided: `git2` for index/commit ops (stable
+  Rust API, no spawn overhead); shell-out to user's `git` for network
+  ops (credentials, hooks, LFS, GPG come for free)
 - ☐ Repo cache to avoid re-`discover` per command on hot paths
 - ☐ Tracing spans on every public fn for perf diagnostics
 
@@ -78,11 +82,16 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## strand-tauri (IPC + app shell)
 
-- ☑ 4 commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`
+- ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
+  `repo_diff_unstaged` / `_staged` / `_between`
+- ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`, `repo_commit`
+- ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`
 - ☑ Plugins: sql, updater, dialog, shell, os
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
+- ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
+  (`sql:default` only covers reads — silent failure trap, see
+  `docs/learnings.md`)
 - ☐ Stream events for long-running ops (clone, fetch, push)
-- ☐ Surface every `strand-core` op as an IPC command
 - ☐ Real updater pubkey + endpoint (currently placeholder)
 - ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
 - ☐ Window state persistence (size, position, maximized)
@@ -99,12 +108,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Drag-and-drop a folder → calls `useRepo.openRepo`
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
 - ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
-- ☐ Tab persistence across launches (open tabs are not restored on relaunch)
+- ☑ Tab persistence across launches (via `settings.session.tabs` in SQLite)
 - ☐ Tab reordering by drag and overflow scrolling
 
 ### Topbar
 - ☑ Layout + native-chrome alignment
-- ☐ Fetch / Pull / Push handlers (currently toast-only)
+- ☑ Fetch / Pull / Push handlers (shell out to `git`; spinner + shimmer
+  + directional bobbing animation while in flight; toasts on
+  success/failure with git stderr)
+- ☑ Real ahead/behind counts (driven by `Repo::meta`)
 - ◐ Branch picker dropdown (shell exists; needs real branch list from #3 and create-branch wired in #4)
 - ☐ Stash split button
 
@@ -119,13 +131,19 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Files tree — depends on `@pierre/trees` decision
 
 ### Local Changes view
-- ☑ Three-section layout (placeholder rows)
-- ☐ Real per-file rows from `useRepo.status`
-- ☐ Diff view in middle panel — depends on `@pierre/diffs` decision
-- ☐ Per-row Stage / Unstage / Discard actions
-- ☐ Bulk "Stage all" / "Unstage all"
-- ☐ Commit form: subject + body + amend + recent-messages dropdown
-- ☐ Commit kbd shortcut (⌘↵)
+- ☑ Three-section layout, vertically resizable unstaged / staged panes
+- ☑ Real per-file rows from `useRepo.unstagedDiffs` / `stagedDiffs`,
+  rendered as a hierarchical folder tree with colored status badges
+- ☑ Diff view in middle panel — `<PatchDiff>` themed via `pierre-dark`
+  with `disableBackground` so it inherits app tokens
+- ☑ Per-row Stage / Unstage actions (file-level, hover-revealed)
+- ☑ Bulk "Stage all" / "Unstage all"
+- ☑ Commit form: subject + body + amend
+- ☑ Commit kbd shortcut (⌘↵)
+- ☐ Per-row Discard action (currently store-level only; needs right-click menu)
+- ☐ Recent-messages dropdown on the subject field (needs SQLite schema +
+  per-repo history)
+- ☐ Hunk / line stage + unstage UI (Pierre's accept/reject hunk primitive)
 
 ### Commits view
 - ☑ Table from `repo_log`
@@ -152,6 +170,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Scope pills (All / Actions / Branches / Files / Commits)
 
 ### Cross-cutting
+- ☑ Resizable panes everywhere (`react-resizable-panels`); sizes
+  persisted per-region via `autoSaveId` (`strand:body`, `strand:lc-main`,
+  `strand:lc-files`)
+- ☑ Auto-refresh on window focus / visibility (status + diffs + log + meta)
+- ☑ Refresh button in MainHeader wired with spinner
 - ☐ Tweaks panel UI (settings exposed, no UI to change them yet)
 - ☐ **Theme management**
   - ☐ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets

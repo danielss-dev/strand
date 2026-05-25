@@ -1,6 +1,7 @@
 # Roadmap
 
-Milestones map to PRD §11. Status as of 2026-05-25 (post Phase B step 1).
+Milestones map to PRD §11. Status as of 2026-05-25 (after Phase A — diff,
+stage, commit, fetch/pull/push, resizable panes, session restore).
 
 Legend: ☐ not started · ◐ in progress · ☑ done
 
@@ -22,19 +23,28 @@ system ported verbatim. No real feature surface yet.
 - ◐ **Open / clone / add existing repo**
   - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window)
   - ☑ SQLite-backed recent-repo list with last-opened timestamp
-  - ☑ Multi-repo tabs (open, switch, close)
+  - ☑ Multi-repo tabs (open, switch, close, **persist across launches**)
   - ☐ Clone (HTTPS / SSH) with streaming progress
-- ☐ **Local Changes — real staging UI**
-  - List unstaged + staged with the actual status from `repo_status`
-  - Line / hunk / file stage + unstage (likely requires `@pierre/diffs`)
-  - Commit (subject + body + amend) via `git2`
-- ☐ **Commit graph**
-  - Table view from `repo_log` ☑ (placeholder, no lanes)
-  - SVG lane/edge rendering with branch colors
-  - Inline commit detail panel (changed files, message body)
-- ☐ **Fetch / Pull / Push**
-  - Rust commands streaming progress events to the frontend
-  - Credential prompts via OS keychain
+- ◐ **Local Changes — real staging UI**
+  - ☑ Unstaged + staged file lists (folder tree, status badges, hover Stage/Unstage)
+  - ☑ Pierre `<PatchDiff>` integration themed to app tokens
+  - ☑ Commit form: subject + body + amend; ⌘↵ shortcut; spinner state
+  - ☑ File-level stage / unstage / discard via `git2`
+  - ☐ Line / hunk stage + unstage (Pierre accept/reject primitive)
+  - ☐ Discard with single-undo handle
+  - ☐ Recent commit messages dropdown
+- ◐ **Commit graph**
+  - ☑ Table view from `repo_log` (placeholder, no lanes)
+  - ☐ SVG lane/edge rendering with branch colors
+  - ☐ Inline commit detail panel (changed files, message body)
+- ◐ **Fetch / Pull / Push**
+  - ☑ Rust commands (shell-out to user's `git`; credentials + SSH agent + GPG
+    inherited from the user's config)
+  - ☑ Topbar wired: real ahead/behind, click handlers, directional pulse + shimmer
+    animation while in flight, toast on success/failure with git stderr
+  - ☐ Streaming progress events (currently blocks until done)
+  - ☐ Native credential helper via OS keychain (auth-git2 path; defer until
+    we have a reason to leave shell-out)
 - ◐ **Branch ops**
   - ☐ List, checkout, create from HEAD or commit, delete
   - ☐ Sidebar wired to real data (currently placeholder)
@@ -51,6 +61,18 @@ system ported verbatim. No real feature surface yet.
 Q2 (license: AGPL-3.0 + dual-license commercial SKU), Q5 (pricing:
 free + honor-system paid commercial license). Pierre diff & tree
 integration is now unblocked.
+
+**Phase A shipped (2026-05-25):** `@pierre/diffs` integrated; `Repo::diff_*`
+producing per-file unified patches; file-level stage / unstage / discard;
+amend-aware commits with ⌘↵; real Local Changes UI with folder tree.
+Resizable panes everywhere with persisted sizes. Session restore wired
+through SQLite. Refresh button + window-focus auto-refresh.
+
+**Phase C kick (2026-05-25):** Real ahead/behind in `Repo::meta`;
+`Repo::{fetch, pull, push}` shelling out to the user's `git` so
+credentials, SSH agent, and GPG signing all work out of the box;
+topbar buttons wired with directional animation feedback. Streaming
+progress and clone still pending.
 
 ---
 
