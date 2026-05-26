@@ -62,22 +62,36 @@ pnpm tauri:build   # signed installers in target/release/bundle
 
 - Window chrome, sidebar, status bar, command palette (⌘K)
 - Theme + density + platform + font tweaks (persisted via Zustand)
-- Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`
+- Open-repo flow with multi-repo tabs, recent repos, and palette nav
+- Staging: diff view + stage/unstage + commit loop with resizable panes
+- Network: fetch / pull / push with ahead/behind counts
+- Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`, plus the
+  staging and network commands above
 - SQLite plugin (recent repos + settings schema)
 - Updater plugin (endpoint stub)
 
 ## What's still stubbed
 
-- Diff rendering — waiting on `@pierre/diffs` license confirmation (PRD Q1)
-- File tree — waiting on `@pierre/trees`
+- File tree — `@pierre/trees` integration pending
 - Commit graph SVG (currently table-only)
-- Fetch / pull / push, branch ops, stash, rebase — `strand-core` only exposes
-  read paths today; mutating commands wrap `git2` and shell out as PRD §4
-  describes
-- Recent repos UI, multi-repo tabs
+- Branch ops, stash, rebase — mutating commands wrap `git2` and shell out as
+  PRD §4 describes
 
 ## Design source
 
 The visual design originated as an HTML/CSS/JS prototype from Claude Design
 (see `Strand.zip`). Tokens and component-level CSS in `ui/src/styles/`
 are ported verbatim — when you tweak the visual identity, tweak it there.
+
+## License
+
+Strand is dual-licensed:
+
+- **AGPL-3.0** for the public distribution. Anyone can read, build, modify,
+  and use the source under the standard AGPL terms.
+- **Commercial license** (one-time purchase) for companies that prefer not to
+  take on AGPL obligations or want to support development.
+
+The app is fully functional for everyone — no feature gating, no nag dialogs,
+no trial period. The commercial license is honor-system: free for individuals,
+appreciated for company use. See `COMMERCIAL.md` for details.
