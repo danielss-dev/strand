@@ -37,3 +37,41 @@ mistake once.
   ROADMAP). Use CSS tokens from `tokens.css` — no hardcoded colors.
 - Performance targets in PRD §8 are not aspirational. If a change makes a
   hot path slower, fix it before merging.
+
+## Post-task ritual
+
+After finishing any non-trivial task, before declaring "done":
+
+1. **Update `TASKS.md`.** Flip the relevant rows:
+   - `☐` → `◐` when you start partial work on a multi-step item.
+   - `☐`/`◐` → `☑` when the row is genuinely complete.
+   - When marking a row done, append a short parenthetical naming the
+     concrete artifact (function, IPC command, UI surface) so a future
+     reader can verify without diffing.
+   - If you uncovered new work, add it as a `☐` under the right section
+     instead of leaving it implicit in chat.
+2. **Update `README.md`** when user-visible behavior changed. The
+   "What's wired up" / "What's still stubbed" sections should reflect
+   reality. New top-level files/folders → update the layout block. Keep
+   the README scannable — it isn't a changelog.
+3. **Memory.** Save durable things (conventions, "why we did it this
+   way", policy decisions) to the agent memory system. Don't write
+   transient task state there.
+
+Skip the ritual only when the change has no behavioral or planning
+impact (typo fixes, comment tweaks, formatter passes).
+
+## Workflow rules
+
+- **One commit per logical change.** Don't bundle unrelated work.
+- **Never** `--no-verify` or `--no-gpg-sign` without the user asking.
+  Commit signing is configured intentionally.
+- **Don't push without being asked.** Commits are local-by-default; the
+  user decides when to publish.
+- **Run the relevant checks before claiming green.** Rust:
+  `cargo check -p strand-core -p strand-tauri`. Frontend:
+  `pnpm --filter ./ui exec tsc --noEmit` (two pre-existing
+  `waitForPaint`/`requestAnimationFrame` errors in `App.tsx` are noise —
+  ignore them unless explicitly asked).
+- **No drive-by refactors.** One-line fix stays one line. Open a
+  follow-up `☐` in `TASKS.md` instead of expanding scope.

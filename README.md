@@ -21,7 +21,8 @@ strand/
 │   └── index.html
 ├── Cargo.toml              # workspace
 ├── package.json            # pnpm workspace root
-└── pnpm-workspace.yaml
+├── pnpm-workspace.yaml
+└── AGENTS.md               # working agreement for AI/dev agents (CLAUDE.md → here)
 ```
 
 ## Prerequisites
@@ -65,8 +66,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
 - Staging: diff view + stage/unstage + commit loop with resizable panes
 - Network: fetch / pull / push with ahead/behind counts
-- Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`, plus the
-  staging and network commands above
+- Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
+  branches, and tags — feeds the topbar branch picker
+- Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
+  `repo_refs`, plus the staging and network commands above
 - SQLite plugin (recent repos + settings schema)
 - Updater plugin (endpoint stub)
 
@@ -75,7 +78,8 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - File tree — `@pierre/trees` integration pending
 - Commit graph SVG (currently table-only)
 - Branch ops, stash, rebase — mutating commands wrap `git2` and shell out as
-  PRD §4 describes
+  PRD §4 describes (refs are read-only today; checkout/create branch from
+  the picker still toast-stubbed)
 
 ## Design source
 
