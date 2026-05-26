@@ -50,11 +50,16 @@ After finishing any non-trivial task, before declaring "done":
      reader can verify without diffing.
    - If you uncovered new work, add it as a `☐` under the right section
      instead of leaving it implicit in chat.
-2. **Update `README.md`** when user-visible behavior changed. The
+2. **Update `ROADMAP.md`.** If the task moved a milestone bullet from
+   `☐`/`◐` to `☑` (or partially completed a multi-part item), reflect
+   it. Add a dated "kick" / "shipped" paragraph at the bottom of the
+   active phase when something substantial lands — it's the changelog
+   for the milestone view.
+3. **Update `README.md`** when user-visible behavior changed. The
    "What's wired up" / "What's still stubbed" sections should reflect
    reality. New top-level files/folders → update the layout block. Keep
    the README scannable — it isn't a changelog.
-3. **Memory.** Save durable things (conventions, "why we did it this
+4. **Memory.** Save durable things (conventions, "why we did it this
    way", policy decisions) to the agent memory system. Don't write
    transient task state there.
 

@@ -46,9 +46,12 @@ system ported verbatim. No real feature surface yet.
   - ☐ Native credential helper via OS keychain (auth-git2 path; defer until
     we have a reason to leave shell-out)
 - ◐ **Branch ops**
-  - ☐ List, checkout, create from HEAD or commit, delete
+  - ☑ List branches, remotes, remote-tracking branches, tags via
+    `Repo::refs` (per-branch upstream + ahead/behind)
+  - ☐ Checkout, create from HEAD or commit, delete
   - ☐ Sidebar wired to real data (currently placeholder)
-  - ☑ Topbar branch dropdown shell (list + create-branch entry; both stubbed until reads/writes land)
+  - ☑ Topbar branch dropdown showing current/local/remote branches with
+    drift counts (checkout / create still stubbed until writes land)
 - ☐ **File tree**
   - Working-tree view, status badges, click to file detail
   - Likely requires `@pierre/trees`
@@ -73,6 +76,12 @@ through SQLite. Refresh button + window-focus auto-refresh.
 credentials, SSH agent, and GPG signing all work out of the box;
 topbar buttons wired with directional animation feedback. Streaming
 progress and clone still pending.
+
+**Refs reads (2026-05-26):** `Repo::refs` returns typed branches
+(with upstream + ahead/behind), remotes, remote-tracking branches, and
+tags. Exposed via `repo_refs` IPC and refreshed alongside meta. Topbar
+branch dropdown renders real data; checkout/create still toast-stubbed
+pending the writes batch.
 
 ---
 
