@@ -197,6 +197,7 @@
   border-radius: 7px;
   box-shadow: 0 0 0 0.5px var(--border) inset;
   height: 28px;
+  overflow: hidden;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
@@ -218,6 +219,44 @@
   padding-left: 4px;
 }
 .sync-btn.primary { color: var(--accent); }
+.icon-spin {
+  display: inline-flex;
+  animation: spin 0.8s linear infinite;
+  will-change: transform;
+}
+.slide-icon {
+  display: inline-flex;
+  align-items: center;
+}
+@keyframes slide-down {
+  0%   { transform: translateY(-3px); opacity: 0; }
+  30%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(3px); opacity: 0; }
+}
+@keyframes slide-up {
+  0%   { transform: translateY(3px); opacity: 0; }
+  30%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(-3px); opacity: 0; }
+}
+.slide-down {
+  animation: slide-down 0.6s linear infinite;
+  will-change: transform, opacity;
+}
+.slide-up {
+  animation: slide-up 0.6s linear infinite;
+  will-change: transform, opacity;
+}
+.spinner {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border: 1.5px solid var(--text-dim);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  will-change: transform;
+}
 
 .branch-btn {
   display: flex; align-items: center; gap: 7px;

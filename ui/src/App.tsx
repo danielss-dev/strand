@@ -60,9 +60,13 @@ export function App() {
     if (path) await openByPath(path);
   }, [openByPath]);
 
+  const waitForPaint = () =>
+    new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
   const onSync = useCallback(async () => {
     if (syncing) return;
     setSyncing(true);
+    await waitForPaint();
     try {
       await fetchRepo();
       showToast('Fetched');
@@ -76,6 +80,7 @@ export function App() {
   const onPull = useCallback(async () => {
     if (pulling) return;
     setPulling(true);
+    await waitForPaint();
     try {
       await pullRepo();
       showToast('Pulled');
@@ -89,6 +94,7 @@ export function App() {
   const onPush = useCallback(async () => {
     if (pushing) return;
     setPushing(true);
+    await waitForPaint();
     try {
       await pushRepo();
       showToast('Pushed');
@@ -279,6 +285,7 @@ function MainHeader() {
   const doRefresh = useCallback(async () => {
     if (!activePath || refreshing) return;
     setRefreshing(true);
+    await waitForPaint();
     try {
       await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta()]);
     } finally {
@@ -324,7 +331,9 @@ function MainHeader() {
           onClick={() => { if (activePath) void doRefresh(); }}
           title="Refresh"
         >
-          <Icon name="refresh" size={13} className={refreshing ? 'spin' : undefined} />
+          <span className={refreshing ? 'icon-spin' : undefined}>
+            <Icon name="refresh" size={13} />
+          </span>
         </div>
         <div className="icon-btn" title="Terminal"><Icon name="terminal" size={13} /></div>
         <div className="icon-btn" title="Open externally"><Icon name="external" size={13} /></div>

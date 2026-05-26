@@ -95,7 +95,9 @@ export function Topbar({
           title="Fetch"
           disabled={!meta}
         >
-          <Icon name="refresh" size={13} className={syncing ? 'spin' : ''} />
+          <span className={syncing ? 'icon-spin' : undefined}>
+            <Icon name="refresh" size={13} />
+          </span>
         </button>
         <button
           className="sync-btn"
@@ -103,7 +105,9 @@ export function Topbar({
           title={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
           disabled={!meta}
         >
-          <Icon name="arrow-down" size={13} className={pulling ? 'spin' : ''} />
+          <span className={pulling ? 'slide-icon slide-down' : 'slide-icon'}>
+            <Icon name="arrow-down" size={13} />
+          </span>
           <span className="count">{behind}</span>
         </button>
         <button
@@ -112,7 +116,9 @@ export function Topbar({
           title={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
           disabled={!meta}
         >
-          <Icon name="arrow-up" size={13} className={pushing ? 'spin' : ''} />
+          <span className={pushing ? 'slide-icon slide-up' : 'slide-icon'}>
+            <Icon name="arrow-up" size={13} />
+          </span>
           <span className="count">{ahead}</span>
         </button>
       </div>
