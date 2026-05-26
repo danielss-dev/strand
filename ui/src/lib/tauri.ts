@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import type {
+  CheckoutOutcome,
   Commit,
   CommitOutcome,
   FileDiff,
@@ -36,6 +37,16 @@ export const tauri = {
     invoke<NetworkOutcome>('repo_pull', { path, rebase }),
   repoPush: (path: string, forceWithLease: boolean) =>
     invoke<NetworkOutcome>('repo_push', { path, forceWithLease }),
+  repoCheckout: (path: string, branch: string) =>
+    invoke<CheckoutOutcome>('repo_checkout', { path, branch }),
+  repoBranchCreate: (
+    path: string,
+    name: string,
+    startPoint: string | null,
+    checkout: boolean,
+  ) => invoke<CheckoutOutcome>('repo_branch_create', { path, name, startPoint, checkout }),
+  repoBranchDelete: (path: string, name: string, force: boolean) =>
+    invoke<void>('repo_branch_delete', { path, name, force }),
 };
 
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */

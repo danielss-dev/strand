@@ -1,7 +1,7 @@
 use serde::Serialize;
 use strand_core::{
-    commit::CommitOutcome, diff::FileDiff, log::Commit, network::NetworkOutcome,
-    refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
+    branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff, log::Commit,
+    network::NetworkOutcome, refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
 };
 use tauri::State;
 
@@ -106,4 +106,25 @@ pub fn repo_pull(path: String, rebase: bool) -> CmdResult<NetworkOutcome> {
 #[tauri::command]
 pub fn repo_push(path: String, force_with_lease: bool) -> CmdResult<NetworkOutcome> {
     Ok(Repo::discover(&path)?.push(force_with_lease)?)
+}
+
+#[tauri::command]
+pub fn repo_checkout(path: String, branch: String) -> CmdResult<CheckoutOutcome> {
+    Ok(Repo::discover(&path)?.checkout_branch(&branch)?)
+}
+
+#[tauri::command]
+pub fn repo_branch_create(
+    path: String,
+    name: String,
+    start_point: Option<String>,
+    checkout: bool,
+) -> CmdResult<CheckoutOutcome> {
+    Ok(Repo::discover(&path)?.create_branch(&name, start_point.as_deref(), checkout)?)
+}
+
+#[tauri::command]
+pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<()> {
+    Repo::discover(&path)?.delete_branch(&name, force)?;
+    Ok(())
 }

@@ -90,6 +90,10 @@ export interface Refs {
   tags: Tag[];
 }
 
+export interface CheckoutOutcome {
+  branch: string;
+}
+
 export interface NetworkOutcome {
   /** Combined stdout/stderr from `git`, trimmed. Show in a toast/log. */
   output: string;

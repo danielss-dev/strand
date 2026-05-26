@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
@@ -246,10 +246,42 @@ function BranchSwitcherButton({
   onToast: (msg: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const refs = useRepo((s) => s.refs);
+  const checkout = useRepo((s) => s.checkout);
+  const createBranch = useRepo((s) => s.createBranch);
+
+  // Run a branch op, toasting the outcome and closing the menu on success.
+  // Errors keep the menu open so the user can try a different row.
+  const run = async (label: string, fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+      onToast(label);
+      setOpen(false);
+    } catch (e) {
+      onToast(`${label} failed: ${(e as Error).message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Pick a short branch name for tracking a remote branch. If `foo` is
+  // already taken locally, fall back to the full `origin/foo` form so git2
+  // doesn't error on name collision.
+  const localBranchNameFor = (remote: string, branchPart: string): string => {
+    const taken = refs.branches.some((b) => b.name === branchPart);
+    return taken ? `${remote}/${branchPart}` : branchPart;
+  };
+
+  const allBranchNames = [
+    ...refs.branches.map((b) => b.name),
+    ...refs.remote_branches.map((rb) => rb.name),
+  ];
 
   useLayoutEffect(() => {
     if (!open || !wrapRef.current) return;
@@ -310,8 +342,7 @@ function BranchSwitcherButton({
                   role="menuitem"
                   title={b.upstream ? `tracks ${b.upstream.name}` : 'no upstream'}
                   onClick={() => {
-                    setOpen(false);
-                    onToast(`Checkout ${b.name} — wired with branch writes`);
+                    void run(`Switched to ${b.name}`, () => checkout(b.name));
                   }}
                 >
                   <span className="ico"><Icon name="branch" size={13} /></span>
@@ -331,21 +362,27 @@ function BranchSwitcherButton({
             <>
               <div className="repo-menu-divider" />
               <div className="repo-menu-sect">Remote branches</div>
-              {remoteBranches.map((rb) => (
+              {remoteBranches.map((rb) => {
+                const localName = localBranchNameFor(rb.remote, rb.branch);
+                return (
                 <div
                   key={rb.full_name}
                   className="repo-menu-item"
                   role="menuitem"
+                  title={`Create ${localName} tracking ${rb.name}`}
                   onClick={() => {
-                    setOpen(false);
-                    onToast(`Track ${rb.name} — wired with branch writes`);
+                    void run(
+                      `Tracking ${rb.name}`,
+                      () => createBranch(localName, rb.name, true),
+                    );
                   }}
                 >
                   <span className="ico"><Icon name="branch" size={13} /></span>
                   <span className="label">{rb.branch}</span>
                   <span className="meta">{rb.remote}</span>
                 </div>
-              ))}
+                );
+              })}
             </>
           )}
 
@@ -355,16 +392,131 @@ function BranchSwitcherButton({
 
           <div className="repo-menu-divider" />
 
-          <div
-            className="repo-menu-item"
-            role="menuitem"
-            onClick={() => { setOpen(false); onToast('Create branch — wired with branch writes'); }}
-          >
-            <span className="ico"><Icon name="plus" size={13} /></span>
-            <span className="label">Create branch…</span>
-          </div>
+          <CreateBranchField
+            existing={allBranchNames}
+            disabled={busy}
+            onCreate={(name) => run(`Created ${name}`, () => createBranch(name, null, true))}
+          />
         </div>,
         document.body,
+      )}
+    </div>
+  );
+}
+
+/**
+ * Inline create-branch field. Lives at the bottom of the branch dropdown.
+ *
+ * - Spaces are normalized to `-` as the user types (Git doesn't allow
+ *   spaces in ref names anyway).
+ * - Below the field we show prefix matches against existing branches
+ *   (local + remote). Useful when the project has a convention like
+ *   `feature/foo` or `developments/bar` — you type `feature`, see the
+ *   siblings, and Tab to land on `feature/`.
+ * - ↑/↓ navigates the suggestion list; the highlighted match is what
+ *   Tab fills the input with — never beyond the next `/`, so Tab only
+ *   ever extends one folder segment at a time.
+ * - Enter submits the typed value as a new branch name.
+ */
+function CreateBranchField({
+  existing,
+  disabled,
+  onCreate,
+}: {
+  existing: string[];
+  disabled: boolean;
+  onCreate: (name: string) => Promise<void> | void;
+}) {
+  const [value, setValue] = useState('');
+  const [selected, setSelected] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const sanitize = (raw: string): string => raw.replace(/\s+/g, '-');
+
+  const matches = useMemo(() => {
+    if (!value) return [];
+    const q = value.toLowerCase();
+    return existing
+      .filter((n) => n.toLowerCase().startsWith(q) && n !== value)
+      .slice(0, 6);
+  }, [existing, value]);
+
+  // Keep the highlight in range when the match list changes (e.g. the user
+  // types another character and fewer candidates survive).
+  useEffect(() => {
+    if (selected >= matches.length) setSelected(0);
+  }, [matches.length, selected]);
+
+  // Fill the input with the next folder segment of `match`. No-op if the
+  // match has no `/` past the current cursor — Tab never completes leaves.
+  const acceptFolder = (match: string) => {
+    const slash = match.indexOf('/', value.length);
+    if (slash !== -1) setValue(match.slice(0, slash + 1));
+  };
+
+  const submit = () => {
+    const name = value.trim();
+    if (!name) return;
+    void Promise.resolve(onCreate(name));
+    setValue('');
+    setSelected(0);
+  };
+
+  // Can the currently-highlighted match contribute a folder segment? Used
+  // to gate the hint copy so we don't promise something Tab won't deliver.
+  const canCompleteFolder =
+    matches.length > 0 && matches[selected]?.indexOf('/', value.length) !== -1;
+
+  return (
+    <div className="branch-create">
+      <div className="branch-create-input">
+        <Icon name="plus" size={13} />
+        <input
+          ref={inputRef}
+          value={value}
+          placeholder="Create branch…"
+          disabled={disabled}
+          onChange={(e) => { setValue(sanitize(e.target.value)); setSelected(0); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab') {
+              e.preventDefault();
+              if (matches[selected]) acceptFolder(matches[selected]);
+            } else if (e.key === 'ArrowDown' && matches.length > 0) {
+              e.preventDefault();
+              setSelected((i) => (i + 1) % matches.length);
+            } else if (e.key === 'ArrowUp' && matches.length > 0) {
+              e.preventDefault();
+              setSelected((i) => (i - 1 + matches.length) % matches.length);
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+      </div>
+      {matches.length > 0 && (
+        <div className="branch-create-hints">
+          {matches.map((m, i) => (
+            <div
+              key={m}
+              className={'branch-create-hint' + (i === selected ? ' selected' : '')}
+              title={`Use prefix from ${m}`}
+              onMouseEnter={() => setSelected(i)}
+              onClick={() => {
+                acceptFolder(m);
+                inputRef.current?.focus();
+              }}
+            >
+              <span className="hint-typed">{m.slice(0, value.length)}</span>
+              <span className="hint-rest">{m.slice(value.length)}</span>
+            </div>
+          ))}
+          <div className="branch-create-tabhint">
+            {canCompleteFolder
+              ? 'Tab fills next folder · ↑↓ to choose'
+              : '↑↓ to choose · Tab once a folder is in range'}
+          </div>
+        </div>
       )}
     </div>
   );

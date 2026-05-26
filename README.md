@@ -68,8 +68,12 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker
+- Branch writes: checkout a local branch, create a branch via an inline
+  field with prefix autocomplete (auto-tracks when started from a
+  remote), delete a branch via the sidebar — wired into the topbar
+  picker and sidebar Git tab
 - Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, plus the staging and network commands above
+  `repo_refs`, plus the staging, network, and branch commands above
 - SQLite plugin (recent repos + settings schema)
 - Updater plugin (endpoint stub)
 
@@ -77,9 +81,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
 
 - File tree — `@pierre/trees` integration pending
 - Commit graph SVG (currently table-only)
-- Branch ops, stash, rebase — mutating commands wrap `git2` and shell out as
-  PRD §4 describes (refs are read-only today; checkout/create branch from
-  the picker still toast-stubbed)
+- Stash, rebase, cherry-pick, merge, revert — mutating commands wrap
+  `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
+  are wired; checkout from an arbitrary commit (detached HEAD) still
+  pending.
 
 ## Design source
 

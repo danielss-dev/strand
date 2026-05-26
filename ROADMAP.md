@@ -48,10 +48,14 @@ system ported verbatim. No real feature surface yet.
 - ◐ **Branch ops**
   - ☑ List branches, remotes, remote-tracking branches, tags via
     `Repo::refs` (per-branch upstream + ahead/behind)
-  - ☐ Checkout, create from HEAD or commit, delete
-  - ☐ Sidebar wired to real data (currently placeholder)
-  - ☑ Topbar branch dropdown showing current/local/remote branches with
-    drift counts (checkout / create still stubbed until writes land)
+  - ◐ Checkout, create from HEAD or commit, delete (`Repo::checkout_branch`
+    + `Repo::create_branch` + `Repo::delete_branch` shipped; checkout
+    from arbitrary commit / detached HEAD still pending)
+  - ☑ Sidebar wired to real data — Branches / Remotes / Tags rendered
+    as folder trees (`feature/foo` nests under `feature/`; remote names
+    are the top folders), click-to-checkout, hover-delete with confirm
+  - ☑ Topbar branch dropdown wired end-to-end: checkout a local branch,
+    create + track a remote branch, or `Create branch…` via prompt
 - ☐ **File tree**
   - Working-tree view, status badges, click to file detail
   - Likely requires `@pierre/trees`
@@ -82,6 +86,21 @@ progress and clone still pending.
 tags. Exposed via `repo_refs` IPC and refreshed alongside meta. Topbar
 branch dropdown renders real data; checkout/create still toast-stubbed
 pending the writes batch.
+
+**Branch writes (2026-05-26):** `Repo::{checkout_branch, create_branch,
+delete_branch}` via `git2`, exposed as `repo_checkout`,
+`repo_branch_create`, `repo_branch_delete` IPC. `create_branch` accepts
+any revspec as start point and auto-tracks when it resolves to a
+remote-tracking branch. Topbar dropdown now actually switches, creates,
+and tracks branches; refs + meta + log refresh after every op.
+
+**Branch UX polish (2026-05-26):** Sidebar Git tab renders real branches
+/ remotes (grouped per remote) / tags — click a local branch to check
+it out, hover for a × that deletes it (with confirm). Topbar dropdown's
+"Create branch…" is now an inline text field with prefix autocomplete:
+spaces are sanitized to dashes, Tab extends to the next `/` segment of
+matching existing branches. Untracked files now render their content
+in the diff pane (`show_untracked_content` on the diff options).
 
 ---
 

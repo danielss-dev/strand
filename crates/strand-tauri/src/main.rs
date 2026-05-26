@@ -37,6 +37,9 @@ fn main() {
             commands::repo_fetch,
             commands::repo_pull,
             commands::repo_push,
+            commands::repo_checkout,
+            commands::repo_branch_create,
+            commands::repo_branch_delete,
         ])
         .setup(|app| {
             if let Some(win) = app.get_webview_window("main") {

@@ -1672,6 +1672,60 @@ button {
   color: var(--text-dim);
 }
 
+/* ─── Create-branch inline field (branch picker dropdown footer) ─── */
+.branch-create {
+  padding: 4px 4px 6px;
+}
+.branch-create-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.branch-create-input:focus-within {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.branch-create-input input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  min-width: 0;
+}
+.branch-create-hints {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.branch-create-hint {
+  padding: 3px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.branch-create-hint:hover,
+.branch-create-hint.selected { background: var(--bg-hover); }
+.branch-create-hint.selected { outline: 1px solid var(--border); }
+.branch-create-hint .hint-typed { color: var(--text); }
+.branch-create-hint .hint-rest { color: var(--text-dim); }
+.branch-create-tabhint {
+  padding: 4px 10px 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
 /* ─── Local Changes — tree rows + diff toolbar ─── */
 
 .lc-tree {

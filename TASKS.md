@@ -30,7 +30,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ `Repo::status` (via git2)
 - ☑ `Repo::log` (basic revwalk, no graph lane data)
 - ☑ `Repo::diff_unstaged` / `diff_staged` / `diff_between` — emit per-file
-  unified-patch text consumed by `<PatchDiff>` (Pierre parses hunks)
+  unified-patch text consumed by `<PatchDiff>` (Pierre parses hunks);
+  untracked files include their full content via `show_untracked_content`
 - ☑ Rename detection (`DiffFindOptions::renames(true).copies(true)`)
 - ☑ Resolve refs (branches, remotes, tags) into typed structs
   (`Repo::refs` → `Refs { branches, remotes, remote_branches, tags }`;
@@ -51,8 +52,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Discard working-tree changes (path) — file-level only
 - ☐ Discard hunk / line + single-undo handle
 - ☑ Commit (subject + body + amend; no GPG signing yet)
-- ☐ Create / delete branch (from HEAD, from commit)
-- ☐ Checkout branch / commit
+- ◐ Create / delete branch (`Repo::create_branch` from any revspec —
+  HEAD, commit, remote-tracking branch; auto-sets upstream when starting
+  from a remote branch. `Repo::delete_branch` refuses HEAD. Checkout
+  from commit still pending.)
+- ◐ Checkout branch / commit (`Repo::checkout_branch` — safe checkout,
+  errors on dirty conflicts. Detached-HEAD checkout from commit pending.)
 - ☐ Create / delete tag (lightweight + annotated)
 - ☐ Stash create / apply / pop / drop / branch-from
 - ☐ Cherry-pick (single + multi)
@@ -86,7 +91,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`
-- ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`, `repo_commit`
+- ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
+  `repo_commit`, `repo_checkout`, `repo_branch_create`, `repo_branch_delete`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`
 - ☑ Plugins: sql, updater, dialog, shell, os
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
@@ -119,16 +125,23 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   + directional bobbing animation while in flight; toasts on
   success/failure with git stderr)
 - ☑ Real ahead/behind counts (driven by `Repo::meta`)
-- ◐ Branch picker dropdown (lists local + remote branches with upstream
-  + ahead/behind; checkout / create still stubbed until branch writes land)
+- ☑ Branch picker dropdown (lists local + remote branches with upstream
+  + ahead/behind; checkout local branch, track a remote branch, and an
+  inline create-branch field with prefix autocomplete — ↑↓ chooses among
+  prefix matches, Tab fills only the next `/` segment of the highlighted
+  match, never a full leaf name)
 - ☐ Stash split button
 
 ### Sidebar
 - ☑ Local Changes + All Commits primary rows
 - ☑ Git / Files tab toggle
-- ☐ Branches list from real data (sections are placeholders)
-- ☐ Remotes list grouped by remote
-- ☐ Tags list
+- ☑ Branches list from real data — names with `/` render as nested
+  folders (e.g. `feature/foo` lives under a `feature/` folder), default
+  expanded, click chev to collapse. Leaf rows checkout on click, show
+  drift, hover × to delete non-HEAD branches with a confirm.
+- ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
+  the top folder; click a leaf to create + track locally)
+- ☑ Tags list (folder tree; create/delete pending writes)
 - ☐ Stashes list
 - ☐ Submodules list
 - ☐ Files tree — depends on `@pierre/trees` decision

@@ -82,6 +82,10 @@ export interface RepoState {
   pull(rebase?: boolean): Promise<string>;
   push(forceWithLease?: boolean): Promise<string>;
 
+  checkout(branch: string): Promise<void>;
+  createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
+  deleteBranch(name: string, force: boolean): Promise<void>;
+
   selectLocalFile(sel: LocalSelection | null): void;
 
   refreshRecents(): Promise<void>;
@@ -372,6 +376,34 @@ export const useRepo = create<RepoState>((set, get) => ({
     const res = await tauri.repoPush(path, forceWithLease);
     await Promise.all([get().refreshMeta(), get().refreshRefs()]);
     return res.output;
+  },
+
+  async checkout(branch) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoCheckout(path, branch);
+    await Promise.all([
+      get().refreshMeta(),
+      get().refreshRefs(),
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+    ]);
+  },
+  async createBranch(name, startPoint, checkout) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoBranchCreate(path, name, startPoint, checkout);
+    await Promise.all([
+      get().refreshMeta(),
+      get().refreshRefs(),
+      ...(checkout ? [get().refreshLocalChanges(), get().refreshLog()] : []),
+    ]);
+  },
+  async deleteBranch(name, force) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoBranchDelete(path, name, force);
+    await get().refreshRefs();
   },
 
   selectLocalFile: (sel) => set({ localSelection: sel }),

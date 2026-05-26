@@ -68,6 +68,9 @@ fn diff_options() -> git2::DiffOptions {
     let mut opts = git2::DiffOptions::new();
     opts.include_untracked(true)
         .recurse_untracked_dirs(true)
+        // Without this, untracked deltas land in the diff but their patch
+        // bodies are empty — Pierre then renders "No textual diff".
+        .show_untracked_content(true)
         .context_lines(3);
     opts
 }

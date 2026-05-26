@@ -7,6 +7,7 @@ export type IconName =
   | 'chev-down' | 'chev-right' | 'chev-up' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
+  | 'trash'
   | 'win-min' | 'win-max' | 'win-close';
 
 interface Props extends Omit<SVGProps<SVGSVGElement>, 'name' | 'stroke'> {
@@ -53,6 +54,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'sync':        return <svg {...p}><path d="M2.5 7a5.5 5.5 0 0 1 9.5-3.5L14 5M13.5 9a5.5 5.5 0 0 1-9.5 3.5L2 11M14 2v3h-3M2 14v-3h3"/></svg>;
     case 'plus':        return <svg {...p}><path d="M8 3v10M3 8h10"/></svg>;
     case 'x':           return <svg {...p}><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>;
+    case 'trash':       return <svg {...p}><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.2a1 1 0 0 0 1 .8h4.4a1 1 0 0 0 1-.8L12 4M6.5 6.5v5M9.5 6.5v5"/></svg>;
     case 'check':       return <svg {...p}><path d="M3 8.5l3 3 7-7"/></svg>;
     case 'chev-down':   return <svg {...p}><path d="M3.5 5.5L8 10l4.5-4.5"/></svg>;
     case 'chev-right':  return <svg {...p}><path d="M5.5 3.5L10 8l-4.5 4.5"/></svg>;
