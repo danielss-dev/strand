@@ -26,6 +26,7 @@ fn main() {
             commands::repo_meta,
             commands::repo_status,
             commands::repo_log,
+            commands::repo_refs,
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
             commands::repo_diff_between,

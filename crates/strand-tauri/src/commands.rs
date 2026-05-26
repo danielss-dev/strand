@@ -1,7 +1,7 @@
 use serde::Serialize;
 use strand_core::{
-    commit::CommitOutcome, diff::FileDiff, log::Commit, network::NetworkOutcome, repo::RepoMeta,
-    status::FileStatus, Repo,
+    commit::CommitOutcome, diff::FileDiff, log::Commit, network::NetworkOutcome,
+    refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
 };
 use tauri::State;
 
@@ -43,6 +43,11 @@ pub fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
 #[tauri::command]
 pub fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
     Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)
+}
+
+#[tauri::command]
+pub fn repo_refs(path: String) -> CmdResult<Refs> {
+    Ok(Repo::discover(&path)?.refs()?)
 }
 
 #[tauri::command]

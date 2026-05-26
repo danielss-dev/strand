@@ -6,6 +6,7 @@ import type {
   FileDiff,
   FileStatus,
   NetworkOutcome,
+  Refs,
   RepoMeta,
 } from './types';
 
@@ -19,6 +20,7 @@ export const tauri = {
   repoMeta: (path: string) => invoke<RepoMeta>('repo_meta', { path }),
   repoStatus: (path: string) => invoke<FileStatus[]>('repo_status', { path }),
   repoLog: (path: string, limit?: number) => invoke<Commit[]>('repo_log', { path, limit }),
+  repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>

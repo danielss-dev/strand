@@ -32,7 +32,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ `Repo::diff_unstaged` / `diff_staged` / `diff_between` — emit per-file
   unified-patch text consumed by `<PatchDiff>` (Pierre parses hunks)
 - ☑ Rename detection (`DiffFindOptions::renames(true).copies(true)`)
-- ☐ Resolve refs (branches, remotes, tags) into typed structs
+- ☑ Resolve refs (branches, remotes, tags) into typed structs
+  (`Repo::refs` → `Refs { branches, remotes, remote_branches, tags }`;
+  exposed via `repo_refs` IPC; per-branch upstream + ahead/behind)
 - ☐ Stash list
 - ☐ Submodule list + status
 - ☐ Reflog reader
@@ -83,7 +85,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## strand-tauri (IPC + app shell)
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_diff_unstaged` / `_staged` / `_between`
+  `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`, `repo_commit`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`
 - ☑ Plugins: sql, updater, dialog, shell, os
@@ -117,7 +119,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   + directional bobbing animation while in flight; toasts on
   success/failure with git stderr)
 - ☑ Real ahead/behind counts (driven by `Repo::meta`)
-- ◐ Branch picker dropdown (shell exists; needs real branch list from #3 and create-branch wired in #4)
+- ◐ Branch picker dropdown (lists local + remote branches with upstream
+  + ahead/behind; checkout / create still stubbed until branch writes land)
 - ☐ Stash split button
 
 ### Sidebar

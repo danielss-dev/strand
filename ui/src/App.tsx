@@ -30,6 +30,7 @@ export function App() {
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
   const refreshMeta = useRepo((s) => s.refreshMeta);
+  const refreshRefs = useRepo((s) => s.refreshRefs);
 
   const fetchRepo = useRepo((s) => s.fetch);
   const pullRepo = useRepo((s) => s.pull);
@@ -153,6 +154,7 @@ export function App() {
       void refreshLocalChanges();
       void refreshLog();
       void refreshMeta();
+      void refreshRefs();
     };
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -161,7 +163,7 @@ export function App() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [refreshLocalChanges, refreshLog, refreshMeta]);
+  }, [refreshLocalChanges, refreshLog, refreshMeta, refreshRefs]);
 
   // Global ⌘K / Ctrl+K
   useEffect(() => {
@@ -278,6 +280,7 @@ function MainHeader() {
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
   const refreshMeta = useRepo((s) => s.refreshMeta);
+  const refreshRefs = useRepo((s) => s.refreshRefs);
   const diffMode = useSettings((s) => s.diffMode);
   const setSetting = useSettings((s) => s.set);
   const [refreshing, setRefreshing] = useState(false);
@@ -287,11 +290,11 @@ function MainHeader() {
     setRefreshing(true);
     await waitForPaint();
     try {
-      await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta()]);
+      await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta(), refreshRefs()]);
     } finally {
       setRefreshing(false);
     }
-  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta]);
+  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs]);
 
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'

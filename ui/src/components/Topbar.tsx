@@ -249,6 +249,7 @@ function BranchSwitcherButton({
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const refs = useRepo((s) => s.refs);
 
   useLayoutEffect(() => {
     if (!open || !wrapRef.current) return;
@@ -257,6 +258,18 @@ function BranchSwitcherButton({
   }, [open]);
 
   useOutsideClose([wrapRef, menuRef], open, () => setOpen(false));
+
+  const currentBranch = refs.branches.find((b) => b.is_head);
+  const otherBranches = refs.branches.filter((b) => !b.is_head);
+
+  // Hide remote branches that already track a local branch — they'd just
+  // duplicate the local row.
+  const trackedRemotes = new Set(
+    refs.branches
+      .map((b) => b.upstream?.name)
+      .filter((n): n is string => Boolean(n)),
+  );
+  const remoteBranches = refs.remote_branches.filter((rb) => !trackedRemotes.has(rb.name));
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
@@ -275,25 +288,77 @@ function BranchSwitcherButton({
           ref={menuRef}
           className="repo-menu"
           role="menu"
-          style={{ position: 'fixed', top: pos.top, right: pos.right, minWidth: 240 }}
+          style={{ position: 'fixed', top: pos.top, right: pos.right, left: 'auto', minWidth: 280 }}
         >
-          <div className="repo-menu-sect">On this repo</div>
+          <div className="repo-menu-sect">Current branch</div>
           <div className="repo-menu-item" role="menuitem" aria-disabled>
             <span className="ico"><Icon name="branch" size={13} /></span>
-            <span className="label">{branch}</span>
-            <span className="meta">current</span>
+            <span className="label">{currentBranch?.name ?? branch}</span>
+            <span className="meta">
+              {currentBranch?.upstream ? currentBranch.upstream.name : 'no upstream'}
+            </span>
           </div>
 
-          <div className="repo-menu-empty">
-            Other branches will list here once branch reads land (task #3).
-          </div>
+          {otherBranches.length > 0 && (
+            <>
+              <div className="repo-menu-divider" />
+              <div className="repo-menu-sect">Local branches</div>
+              {otherBranches.map((b) => (
+                <div
+                  key={b.full_name}
+                  className="repo-menu-item"
+                  role="menuitem"
+                  title={b.upstream ? `tracks ${b.upstream.name}` : 'no upstream'}
+                  onClick={() => {
+                    setOpen(false);
+                    onToast(`Checkout ${b.name} — wired with branch writes`);
+                  }}
+                >
+                  <span className="ico"><Icon name="branch" size={13} /></span>
+                  <span className="label">{b.name}</span>
+                  <span className="meta">
+                    {b.upstream
+                      ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() ||
+                        b.upstream.name
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {remoteBranches.length > 0 && (
+            <>
+              <div className="repo-menu-divider" />
+              <div className="repo-menu-sect">Remote branches</div>
+              {remoteBranches.map((rb) => (
+                <div
+                  key={rb.full_name}
+                  className="repo-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onToast(`Track ${rb.name} — wired with branch writes`);
+                  }}
+                >
+                  <span className="ico"><Icon name="branch" size={13} /></span>
+                  <span className="label">{rb.branch}</span>
+                  <span className="meta">{rb.remote}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {otherBranches.length === 0 && remoteBranches.length === 0 && (
+            <div className="repo-menu-empty">No other branches.</div>
+          )}
 
           <div className="repo-menu-divider" />
 
           <div
             className="repo-menu-item"
             role="menuitem"
-            onClick={() => { setOpen(false); onToast('Create branch — wired in task #4'); }}
+            onClick={() => { setOpen(false); onToast('Create branch — wired with branch writes'); }}
           >
             <span className="ico"><Icon name="plus" size={13} /></span>
             <span className="label">Create branch…</span>

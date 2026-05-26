@@ -47,6 +47,49 @@ export interface CommitOutcome {
   amended: boolean;
 }
 
+export interface UpstreamRef {
+  name: string;
+  remote: string;
+}
+
+export interface Branch {
+  name: string;
+  full_name: string;
+  target: string;
+  is_head: boolean;
+  upstream: UpstreamRef | null;
+  ahead: number;
+  behind: number;
+}
+
+export interface RemoteBranch {
+  name: string;
+  remote: string;
+  branch: string;
+  full_name: string;
+  target: string;
+}
+
+export interface Remote {
+  name: string;
+  url: string | null;
+}
+
+export interface Tag {
+  name: string;
+  full_name: string;
+  target: string;
+  annotated: boolean;
+  message: string | null;
+}
+
+export interface Refs {
+  branches: Branch[];
+  remotes: Remote[];
+  remote_branches: RemoteBranch[];
+  tags: Tag[];
+}
+
 export interface NetworkOutcome {
   /** Combined stdout/stderr from `git`, trimmed. Show in a toast/log. */
   output: string;

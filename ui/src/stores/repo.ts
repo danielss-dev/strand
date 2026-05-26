@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 import { recents as recentsDb, settings as settingsDb } from '../lib/db';
 import { tauri } from '../lib/tauri';
-import type { Commit, FileDiff, FileStatus, RecentRepo, RepoMeta } from '../lib/types';
+import type { Commit, FileDiff, FileStatus, RecentRepo, Refs, RepoMeta } from '../lib/types';
 
 interface PersistedSession {
   tabs: string[];
@@ -46,6 +46,9 @@ export interface RepoState {
   stagedDiffs: FileDiff[];
   localSelection: LocalSelection | null;
 
+  /** Branches / remotes / tags for the active tab. */
+  refs: Refs;
+
   recents: RecentRepo[];
 
   view: View;
@@ -61,6 +64,7 @@ export interface RepoState {
   refreshStatus(): Promise<void>;
   refreshLog(limit?: number): Promise<void>;
   refreshDiffs(): Promise<void>;
+  refreshRefs(): Promise<void>;
 
   /** Refresh status + diffs together — what every write op runs afterward. */
   refreshLocalChanges(): Promise<void>;
@@ -88,6 +92,8 @@ export interface RepoState {
   selectRef(ref: string | null): void;
 }
 
+const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags: [] };
+
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
@@ -97,6 +103,7 @@ const EMPTY_ACTIVE = {
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
   selectedFile: null as string | null,
+  refs: EMPTY_REFS,
 };
 
 async function persistSession(state: RepoState): Promise<void> {
@@ -176,6 +183,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      refs: EMPTY_REFS,
     }));
 
     try {
@@ -185,7 +193,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('recents.touch failed', e);
     }
     void persistSession(get());
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
   },
 
   closeTab(path) {
@@ -213,10 +221,11 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      refs: EMPTY_REFS,
     });
     void persistSession(get());
     if (neighbor) {
-      void Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+      void Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
     }
   },
 
@@ -233,9 +242,10 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      refs: EMPTY_REFS,
     });
     void persistSession(get());
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
   },
 
   async refreshStatus() {
@@ -274,6 +284,16 @@ export const useRepo = create<RepoState>((set, get) => ({
     await Promise.all([get().refreshStatus(), get().refreshDiffs()]);
   },
 
+  async refreshRefs() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      set({ refs: await tauri.repoRefs(path) });
+    } catch (e) {
+      console.warn('repoRefs failed', e);
+    }
+  },
+
   async stage(file) {
     const path = get().activePath;
     if (!path) return;
@@ -310,7 +330,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoCommit(path, subject, body, amend);
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshMeta()]);
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshMeta(),
+      get().refreshRefs(),
+    ]);
   },
 
   async refreshMeta() {
@@ -326,21 +351,26 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     const res = await tauri.repoFetch(path, null);
-    await get().refreshMeta();
+    await Promise.all([get().refreshMeta(), get().refreshRefs()]);
     return res.output;
   },
   async pull(rebase = false) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     const res = await tauri.repoPull(path, rebase);
-    await Promise.all([get().refreshMeta(), get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([
+      get().refreshMeta(),
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshRefs(),
+    ]);
     return res.output;
   },
   async push(forceWithLease = false) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     const res = await tauri.repoPush(path, forceWithLease);
-    await get().refreshMeta();
+    await Promise.all([get().refreshMeta(), get().refreshRefs()]);
     return res.output;
   },
 
