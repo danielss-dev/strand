@@ -219,6 +219,11 @@
   padding-left: 4px;
 }
 .sync-btn.primary { color: var(--accent); }
+.sync-btn > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .icon-spin {
   display: inline-flex;
   animation: spin 0.8s linear infinite;
@@ -330,9 +335,14 @@
 
 /* Primary nav above tabs */
 .side-primary {
+  display: flex;
+  flex-direction: column;
   padding: 6px 0 4px;
   flex-shrink: 0;
   border-bottom: 0.5px solid var(--border);
+}
+.side-primary .side-row {
+  margin: 0 6px;
 }
 
 /* Git / Files tab toggle */

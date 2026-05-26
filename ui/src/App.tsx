@@ -15,6 +15,9 @@ import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 
+const waitForPaint = () =>
+  new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
 export function App() {
   const { theme, density, platform, uiFont, monoFont, set: setSetting } = useSettings();
 
@@ -60,9 +63,6 @@ export function App() {
     const path = await pickRepoDirectory();
     if (path) await openByPath(path);
   }, [openByPath]);
-
-  const waitForPaint = () =>
-    new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const onSync = useCallback(async () => {
     if (syncing) return;
@@ -262,7 +262,7 @@ export function App() {
           position: 'fixed', bottom: 14, right: 16,
           padding: '8px 12px', borderRadius: 8,
           background: 'var(--bg-elev)', color: 'var(--text-2)',
-          fontSize: 11, boxShadow: 'var(--shadow-pop)',
+          fontSize: 12, boxShadow: 'var(--shadow-pop)',
         }}>
           Running in browser — Rust commands disabled. Run <code>pnpm tauri dev</code>.
         </div>
@@ -309,7 +309,7 @@ function MainHeader() {
   return (
     <div className="main-header">
       <div className="crumb">
-        <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+        <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           {meta?.name ?? '—'}
         </span>
         <span className="sep"><Icon name="chev-right" size={10} /></span>
@@ -319,27 +319,40 @@ function MainHeader() {
       <div className="h-actions">
         {view === 'local' && (
           <>
-            <div className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
-                 onClick={() => setSetting('diffMode', 'stacked')} title="Stacked (unified)">
+            <button
+              type="button"
+              className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
+              onClick={() => setSetting('diffMode', 'stacked')}
+              title="Stacked (unified)"
+              aria-label="Stacked (unified) diff view"
+            >
               <Icon name="unified" size={13} />
-            </div>
-            <div className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
-                 onClick={() => setSetting('diffMode', 'split')} title="Split (side-by-side)">
+            </button>
+            <button
+              type="button"
+              className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
+              onClick={() => setSetting('diffMode', 'split')}
+              title="Split (side-by-side)"
+              aria-label="Split (side-by-side) diff view"
+            >
               <Icon name="split" size={13} />
-            </div>
+            </button>
           </>
         )}
-        <div
+        <button
+          type="button"
           className={'icon-btn' + (!activePath ? ' disabled' : '')}
           onClick={() => { if (activePath) void doRefresh(); }}
           title="Refresh"
+          aria-label="Refresh"
+          disabled={!activePath}
         >
           <span className={refreshing ? 'icon-spin' : undefined}>
             <Icon name="refresh" size={13} />
           </span>
-        </div>
-        <div className="icon-btn" title="Terminal"><Icon name="terminal" size={13} /></div>
-        <div className="icon-btn" title="Open externally"><Icon name="external" size={13} /></div>
+        </button>
+        <button type="button" className="icon-btn" title="Terminal" aria-label="Terminal"><Icon name="terminal" size={13} /></button>
+        <button type="button" className="icon-btn" title="Open externally" aria-label="Open externally"><Icon name="external" size={13} /></button>
       </div>
     </div>
   );

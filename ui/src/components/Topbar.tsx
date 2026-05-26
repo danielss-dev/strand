@@ -90,9 +90,11 @@ export function Topbar({
 
       <div className="sync-group">
         <button
+          type="button"
           className="sync-btn"
           onClick={onSync}
           title="Fetch"
+          aria-label="Fetch"
           disabled={!meta}
         >
           <span className={syncing ? 'icon-spin' : undefined}>
@@ -100,9 +102,11 @@ export function Topbar({
           </span>
         </button>
         <button
+          type="button"
           className="sync-btn"
           onClick={onPull}
           title={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
+          aria-label={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
           disabled={!meta}
         >
           <span className={pulling ? 'slide-icon slide-down' : 'slide-icon'}>
@@ -111,9 +115,11 @@ export function Topbar({
           <span className="count">{behind}</span>
         </button>
         <button
+          type="button"
           className="sync-btn"
           onClick={onPush}
           title={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
+          aria-label={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
           disabled={!meta}
         >
           <span className={pushing ? 'slide-icon slide-up' : 'slide-icon'}>
@@ -125,11 +131,11 @@ export function Topbar({
 
       <BranchSwitcherButton branch={branch} hasRepo={!!meta} onToast={onToast} />
 
-      <div className="cmd-pill" onClick={onOpenPalette}>
+      <button type="button" className="cmd-pill" onClick={onOpenPalette} aria-label="Quick Launch">
         <Icon name="search" size={13} />
         <span>Quick Launch</span>
         <kbd>{platform === 'mac' ? '⌘K' : 'Ctrl K'}</kbd>
-      </div>
+      </button>
 
       {showFakeChrome && platform === 'win11' && (
         <div className="win-controls">
@@ -175,13 +181,15 @@ function RepoSwitcherButton({
 
   return (
     <div ref={wrapRef} className="tab-add-wrap">
-      <div
+      <button
+        type="button"
         className="tab-add"
         title="Open repository"
+        aria-label="Open repository"
         onClick={() => setOpen((o) => !o)}
       >
         <Icon name="plus" size={12} />
-      </div>
+      </button>
       {open && pos && createPortal(
         <div
           ref={menuRef}
@@ -189,15 +197,17 @@ function RepoSwitcherButton({
           role="menu"
           style={{ position: 'fixed', top: pos.top, left: pos.left }}
         >
-          <div
+          <button
+            type="button"
             className="repo-menu-item"
             role="menuitem"
+            tabIndex={0}
             onClick={() => { setOpen(false); onOpenRepo(); }}
           >
             <span className="ico"><Icon name="folder-open" size={13} /></span>
             <span className="label">Open repository…</span>
             <span className="meta">⌘O</span>
-          </div>
+          </button>
 
           <div className="repo-menu-divider" />
 
@@ -207,10 +217,12 @@ function RepoSwitcherButton({
             <>
               <div className="repo-menu-sect">Recent</div>
               {recents.map((r) => (
-                <div
+                <button
+                  type="button"
                   key={r.path}
                   className="repo-menu-item"
                   role="menuitem"
+                  tabIndex={0}
                   title={r.path}
                   onClick={() => { setOpen(false); onOpenRecent(r.path); }}
                 >
@@ -224,7 +236,7 @@ function RepoSwitcherButton({
                   >
                     <Icon name="x" size={9} stroke={2} />
                   </span>
-                </div>
+                </button>
               ))}
             </>
           )}
@@ -305,16 +317,19 @@ function BranchSwitcherButton({
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <div
+      <button
+        type="button"
         className="branch-btn"
         title={hasRepo ? 'Switch branch' : 'No repository open'}
+        aria-label={hasRepo ? 'Switch branch' : 'No repository open'}
         onClick={() => { if (hasRepo) setOpen((o) => !o); }}
         style={hasRepo ? undefined : { opacity: 0.5, cursor: 'default' }}
+        disabled={!hasRepo}
       >
         <Icon name="branch" size={13} />
         <span className="branch-name">{branch}</span>
         <Icon name="chev-down" size={11} className="chev" />
-      </div>
+      </button>
       {open && hasRepo && pos && createPortal(
         <div
           ref={menuRef}
@@ -323,7 +338,7 @@ function BranchSwitcherButton({
           style={{ position: 'fixed', top: pos.top, right: pos.right, left: 'auto', minWidth: 280 }}
         >
           <div className="repo-menu-sect">Current branch</div>
-          <div className="repo-menu-item" role="menuitem" aria-disabled>
+          <div className="repo-menu-item" role="menuitem" aria-disabled="true" tabIndex={-1}>
             <span className="ico"><Icon name="branch" size={13} /></span>
             <span className="label">{currentBranch?.name ?? branch}</span>
             <span className="meta">
@@ -336,10 +351,12 @@ function BranchSwitcherButton({
               <div className="repo-menu-divider" />
               <div className="repo-menu-sect">Local branches</div>
               {otherBranches.map((b) => (
-                <div
+                <button
+                  type="button"
                   key={b.full_name}
                   className="repo-menu-item"
                   role="menuitem"
+                  tabIndex={0}
                   title={b.upstream ? `tracks ${b.upstream.name}` : 'no upstream'}
                   onClick={() => {
                     void run(`Switched to ${b.name}`, () => checkout(b.name));
@@ -353,7 +370,7 @@ function BranchSwitcherButton({
                         b.upstream.name
                       : ''}
                   </span>
-                </div>
+                </button>
               ))}
             </>
           )}
@@ -365,10 +382,12 @@ function BranchSwitcherButton({
               {remoteBranches.map((rb) => {
                 const localName = localBranchNameFor(rb.remote, rb.branch);
                 return (
-                <div
+                <button
+                  type="button"
                   key={rb.full_name}
                   className="repo-menu-item"
                   role="menuitem"
+                  tabIndex={0}
                   title={`Create ${localName} tracking ${rb.name}`}
                   onClick={() => {
                     void run(
@@ -380,7 +399,7 @@ function BranchSwitcherButton({
                   <span className="ico"><Icon name="branch" size={13} /></span>
                   <span className="label">{rb.branch}</span>
                   <span className="meta">{rb.remote}</span>
-                </div>
+                </button>
                 );
               })}
             </>
@@ -475,6 +494,7 @@ function CreateBranchField({
           ref={inputRef}
           value={value}
           placeholder="Create branch…"
+          aria-label="Create branch"
           disabled={disabled}
           onChange={(e) => { setValue(sanitize(e.target.value)); setSelected(0); }}
           onKeyDown={(e) => {

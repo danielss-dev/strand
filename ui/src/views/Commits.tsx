@@ -8,7 +8,7 @@ export function Commits() {
     <div className="graph-wrap">
       <div className="graph-toolbar">
         <div className="graph-search">
-          <input placeholder="Search commits…" />
+          <input placeholder="Search commits…" aria-label="Search commits" />
         </div>
       </div>
       <div className="graph-split">

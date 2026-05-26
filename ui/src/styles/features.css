@@ -736,6 +736,27 @@
   font-weight: 500;
 }
 
+.sidebar-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--text-1);
+}
+.recent-item:hover {
+  background: var(--bg-elev);
+}
+
 /* Commit form */
 .commit-form {
   flex-shrink: 0;

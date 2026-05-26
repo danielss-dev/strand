@@ -126,9 +126,9 @@ function FileSection({
         <span className="count">{files.length}</span>
         <div className="h-actions">
           {files.length > 0 && (
-            <span className="h-link" onClick={onBulk} role="button">
+            <button type="button" className="h-link" onClick={onBulk}>
               {bulkLabel}
-            </span>
+            </button>
           )}
         </div>
       </div>
@@ -283,11 +283,11 @@ function TreeRow(props: TreeRowProps) {
     const open = !collapsed.has(node.path);
     return (
       <>
-        <div
+        <button
+          type="button"
           className="lc-tree-row folder"
           style={indent}
           onClick={() => onToggle(node.path)}
-          role="button"
         >
           <span className="chev">
             <Icon name={open ? 'chev-down' : 'chev-right'} size={11} />
@@ -298,7 +298,7 @@ function TreeRow(props: TreeRowProps) {
           <span />
           <span className="fname">{node.name}</span>
           <span className="folder-count">{node.count}</span>
-        </div>
+        </button>
         {open &&
           node.children.map((child) => (
             <TreeRow {...props} key={child.path} node={child} depth={depth + 1} />
@@ -311,12 +311,11 @@ function TreeRow(props: TreeRowProps) {
   const code = statusCode(node.diff.status);
 
   return (
-    <div
+    <button
+      type="button"
       className={`lc-tree-row${selected ? ' active' : ''}`}
       style={indent}
       onClick={() => props.onSelect({ file: node.path, staged })}
-      role="button"
-      tabIndex={0}
     >
       <span />
       <span className={`badge ${code}`}>{code}</span>
@@ -331,10 +330,17 @@ function TreeRow(props: TreeRowProps) {
           props.onAction(node.path);
         }}
         role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.stopPropagation();
+            props.onAction(node.path);
+          }
+        }}
       >
         {props.actionLabel}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -449,6 +455,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
           <span>Amend</span>
         </label>
         <button
+          type="button"
           className="btn primary cb-commit"
           disabled={disabled}
           onClick={() => void submit()}

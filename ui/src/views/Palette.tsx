@@ -51,6 +51,7 @@ export function CommandPalette({ actions, onClose }: Props) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Type a command, branch, or file…"
+            aria-label="Search commands"
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -70,7 +71,8 @@ export function CommandPalette({ actions, onClose }: Props) {
             <div className="palette-sect">No matches</div>
           )}
           {filtered.map((a, i) => (
-            <div
+            <button
+              type="button"
               key={a.id}
               className={'palette-item' + (i === sel ? ' active' : '')}
               onMouseMove={() => { if (i !== sel) setSel(i); }}
@@ -79,7 +81,7 @@ export function CommandPalette({ actions, onClose }: Props) {
               <span className="ico"><Icon name="command" size={14} /></span>
               <span className="label">{a.label}</span>
               {a.shortcut && <span className="kbd">{a.shortcut}</span>}
-            </div>
+            </button>
           ))}
         </div>
         <div className="palette-foot">

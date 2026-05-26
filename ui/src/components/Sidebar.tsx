@@ -16,11 +16,11 @@ interface RowProps {
 
 function SideRow({ icon, label, badge, active, onClick }: RowProps) {
   return (
-    <div className={'side-row' + (active ? ' active' : '')} onClick={onClick}>
+    <button type="button" className={'side-row' + (active ? ' active' : '')} onClick={onClick}>
       {icon && <span className="ico"><Icon name={icon} size={14} /></span>}
       <span className="label">{label}</span>
       {badge != null && badge !== 0 && <span className="badge">{badge}</span>}
-    </div>
+    </button>
   );
 }
 
@@ -33,11 +33,11 @@ interface SectionProps {
 
 function SideSection({ label, collapsed, onToggle, count }: SectionProps) {
   return (
-    <div className={'side-section' + (collapsed ? ' collapsed' : '')} onClick={onToggle}>
+    <button type="button" className={'side-section' + (collapsed ? ' collapsed' : '')} onClick={onToggle}>
       <Icon name="chev-down" size={8} stroke={2} className="chev" />
       <span>{label}</span>
       {count != null && <span className="count">{count}</span>}
-    </div>
+    </button>
   );
 }
 
@@ -241,11 +241,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
       </div>
 
       <div className="side-tabs">
-        <button className={'side-tab' + (tab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
+        <button type="button" className={'side-tab' + (tab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
           <Icon name="branch" size={12} />
           <span>Git</span>
         </button>
-        <button className={'side-tab' + (tab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
+        <button type="button" className={'side-tab' + (tab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
           <Icon name="folder" size={12} />
           <span>Files</span>
         </button>
@@ -257,6 +257,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder={tab === 'git' ? 'Filter branches, tags…' : 'Filter files'}
+          aria-label={tab === 'git' ? 'Filter branches and tags' : 'Filter files'}
         />
       </div>
 
@@ -296,7 +297,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
             <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
           </>
         ) : (
-          <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11 }}>
+          <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 12 }}>
             File tree — coming soon.
           </div>
         )}
@@ -357,7 +358,8 @@ interface FolderRowProps {
 
 function FolderRow({ name, depth, collapsed, count, onToggle }: FolderRowProps) {
   return (
-    <div
+    <button
+      type="button"
       className={'side-row branch-folder' + (collapsed ? ' collapsed' : '')}
       style={{ paddingLeft: 16 + depth * 14 }}
       onClick={onToggle}
@@ -367,7 +369,7 @@ function FolderRow({ name, depth, collapsed, count, onToggle }: FolderRowProps) 
       <span className="ico"><Icon name="folder" size={13} /></span>
       <span className="label">{name}</span>
       <span className="row-meta">{count}</span>
-    </div>
+    </button>
   );
 }
 
@@ -416,7 +418,12 @@ function BranchLeaf({
       }
       style={{ paddingLeft: 16 + depth * 14 }}
       onClick={confirming ? undefined : onClick}
+      onKeyDown={confirming ? undefined : (e) => {
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) onClick();
+      }}
       title={titleAttr}
+      role="button"
+      tabIndex={0}
     >
       <span className="folder-chev" aria-hidden />
       <span className="ico"><Icon name="branch" size={13} /></span>
@@ -462,11 +469,12 @@ function EmptyRepoState({ recents, onOpenRepo, onOpenRecent, onForget }: EmptyPr
     <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>No repository open. Use <kbd>⌘O</kbd>, drop a folder onto the window, or:</div>
       <button
+        type="button"
         onClick={onOpenRepo}
         style={{
           padding: '6px 10px', borderRadius: 6,
           background: 'var(--bg-elev)', color: 'var(--text-1)',
-          border: '1px solid var(--border)', fontSize: 11, cursor: 'pointer',
+          border: '1px solid var(--border)', fontSize: 12, cursor: 'pointer',
           textAlign: 'left',
         }}
       >
@@ -480,27 +488,30 @@ function EmptyRepoState({ recents, onOpenRepo, onOpenRecent, onForget }: EmptyPr
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {recents.map((r) => (
-              <div
+              <button
+                type="button"
                 key={r.path}
                 onClick={() => onOpenRecent(r.path)}
                 title={r.path}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '4px 6px', borderRadius: 4, cursor: 'pointer',
-                  color: 'var(--text-1)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-elev)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="recent-item"
               >
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                 <span
                   onClick={(e) => { e.stopPropagation(); void onForget(r.path); }}
                   title="Remove from recents"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      void onForget(r.path);
+                    }
+                  }}
                   style={{ color: 'var(--text-dim)', padding: 2 }}
                 >
                   <Icon name="x" size={9} stroke={2} />
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </div>

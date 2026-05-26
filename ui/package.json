@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@pierre/diffs": "^1.2.3",

@@ -23,15 +23,15 @@ export function FileView({ path }: Props) {
     <div className="main">
       <div className="main-header">
         <div className="crumb">
-          <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{path}</span>
+          <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{path}</span>
         </div>
       </div>
       <div className="tab-strip">
         {TABS.map((t) => (
-          <div key={t.id} className={'tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
+          <button type="button" key={t.id} className={'tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
             <Icon name={t.icon} size={13} className="tab-ico" />
             <span>{t.label}</span>
-          </div>
+          </button>
         ))}
       </div>
       <div className="fv-body">
