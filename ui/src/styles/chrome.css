@@ -460,12 +460,36 @@
 
 /* Branch / tag rows show drift counts or the upstream name on the right,
    and a hover-revealed × for delete (only on local non-HEAD branches). */
+.side-row.branch-row {
+  height: auto;
+  min-height: var(--row-h);
+  padding-top: 4px;
+  padding-bottom: 4px;
+  align-items: flex-start;
+}
+.side-row.branch-row .ico {
+  margin-top: 2px;
+}
+.side-row.branch-row .row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  line-height: 1.4;
+}
+.side-row.branch-row .row-text .label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .side-row .row-meta {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-dim);
-  margin-left: auto;
-  padding-left: 6px;
   white-space: nowrap;
 }
 

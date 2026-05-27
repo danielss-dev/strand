@@ -427,8 +427,10 @@ function BranchLeaf({
     >
       <span className="folder-chev" aria-hidden />
       <span className="ico"><Icon name="branch" size={13} /></span>
-      <span className="label">{label}</span>
-      {meta && <span className="row-meta">{meta}</span>}
+      <span className="row-text">
+        <span className="label">{label}</span>
+        {meta && <span className="row-meta">{meta}</span>}
+      </span>
       {deletable && (
         <span className="row-tools" onClick={(e) => e.stopPropagation()}>
           {confirming && (
