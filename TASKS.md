@@ -184,7 +184,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ◐ Branch / tag / HEAD chips inline in the message cell (`indexRefs` in `Commits.tsx` + `.ref-chip` CSS; right-side chip column still open)
 - ◐ Selectable rows (single-select wired via `useRepo.selectCommit`; multi-select for cherry-pick still pending)
 - ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
-- ☐ Keyboard nav (↑/↓ to move selection, Enter to focus diff, Esc to close panel)
+- ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
+  row focus; Enter opens details; Esc closes details)
 - ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)

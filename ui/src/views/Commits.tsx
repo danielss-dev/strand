@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
@@ -13,14 +14,73 @@ export function Commits() {
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const selectCommit = useRepo((s) => s.selectCommit);
+  const graphMainRef = useRef<HTMLDivElement>(null);
+  const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const didInitialFocus = useRef(false);
+  const [focusedCommit, setFocusedCommit] = useState<string | null>(null);
 
   const graph = useMemo(() => computeGraph(commits), [commits]);
   const refsByOid = useMemo(() => indexRefs(refs), [refs]);
+  const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
   const colWidth = graphColWidth(graph.laneCount);
 
   const onRowClick = (hash: string) => {
+    graphMainRef.current?.focus();
+    setFocusedCommit(hash);
     void selectCommit(selectedCommit === hash ? null : hash);
   };
+
+  const moveFocus = useCallback(
+    (direction: 1 | -1) => {
+      if (commits.length === 0) return;
+
+      const currentIndex = commits.findIndex((c) => c.hash === focusedCommit);
+      const nextIndex =
+        currentIndex === -1
+          ? direction === 1
+            ? 0
+            : commits.length - 1
+          : Math.max(0, Math.min(commits.length - 1, currentIndex + direction));
+      const nextHash = commits[nextIndex]?.hash;
+      if (!nextHash || nextHash === focusedCommit) return;
+
+      setFocusedCommit(nextHash);
+      if (selectedCommit) void selectCommit(nextHash);
+    },
+    [commits, focusedCommit, selectedCommit, selectCommit],
+  );
+
+  const onGraphKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveFocus(e.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (focusedCommit) void selectCommit(focusedCommit);
+        return;
+      }
+      if (e.key === 'Escape' && selectedCommit) {
+        e.preventDefault();
+        void selectCommit(null);
+      }
+    },
+    [focusedCommit, moveFocus, selectedCommit, selectCommit],
+  );
+
+  useEffect(() => {
+    if (didInitialFocus.current || !currentCommit) return;
+    didInitialFocus.current = true;
+    setFocusedCommit(currentCommit);
+    graphMainRef.current?.focus();
+    if (selectedCommit) void selectCommit(null);
+  }, [currentCommit, selectedCommit, selectCommit]);
+
+  useEffect(() => {
+    focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [focusedCommit]);
 
   return (
     <div className="graph-wrap">
@@ -32,7 +92,14 @@ export function Commits() {
       <div className="graph-split">
         <PanelGroup direction="horizontal" autoSaveId="strand:commits-split">
           <Panel defaultSize={selectedCommit ? 62 : 100} minSize={40}>
-            <div className="graph-main">
+            <div
+              ref={graphMainRef}
+              className="graph-main"
+              tabIndex={0}
+              role="region"
+              aria-label="Commit graph"
+              onKeyDown={onGraphKeyDown}
+            >
               <table className="graph-table">
                 <thead>
                   <tr>
@@ -48,10 +115,15 @@ export function Commits() {
                     const chips = refsByOid.get(c.hash);
                     const row = graph.rows[i];
                     const active = selectedCommit === c.hash;
+                    const focused = focusedCommit === c.hash;
                     return (
                       <tr
                         key={c.hash}
-                        className={active ? 'active' : undefined}
+                        ref={focused ? focusedRowRef : undefined}
+                        className={[active ? 'active' : null, focused ? 'focused' : null]
+                          .filter(Boolean)
+                          .join(' ') || undefined}
+                        aria-selected={active}
                         onClick={() => onRowClick(c.hash)}
                       >
                         <td className="graph-col" style={{ width: colWidth }}>
@@ -125,6 +197,12 @@ function indexRefs(refs: Refs): Map<string, RefChip[]> {
     push(t.target, { key: `t:${t.full_name}`, label: t.name, kind: 'tag' });
   }
   return m;
+}
+
+function currentCommitHash(refs: Refs, commits: { hash: string }[]): string | null {
+  const head = refs.branches.find((b) => b.is_head)?.target;
+  if (head && commits.some((c) => c.hash === head)) return head;
+  return commits[0]?.hash ?? null;
 }
 
 function relativeDate(unix: number): string {

@@ -930,6 +930,12 @@
   overflow: auto;
   min-width: 0;
 }
+.graph-main:focus {
+  outline: none;
+}
+.graph-main:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-glow) inset;
+}
 .graph-table {
   width: 100%;
   border-collapse: collapse;
@@ -965,8 +971,15 @@
 .graph-table tbody tr:hover {
   background: var(--bg-hover);
 }
+.graph-table tbody tr.focused {
+  box-shadow: 3px 0 0 var(--accent) inset;
+  background: var(--bg-hover);
+}
 .graph-table tbody tr.active {
   background: var(--bg-sel);
+}
+.graph-table tbody tr.active.focused {
+  box-shadow: 3px 0 0 var(--accent) inset;
 }
 .graph-table td {
   padding: 0 12px;

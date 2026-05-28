@@ -42,7 +42,9 @@ system ported verbatim. No real feature surface yet.
   - ☑ Table view from `repo_log`
   - ☑ SVG lane/edge rendering with branch colors
   - ☑ Inline commit detail panel (changed files, message body)
-  - ☐ Multi-select + keyboard navigation
+  - ☑ Keyboard navigation (focuses current commit on open; ↑/↓ moves row
+    focus; Enter opens details; Esc closes details)
+  - ☐ Multi-select
 - ◐ **Fetch / Pull / Push**
   - ☑ Rust commands (shell-out to user's `git`; credentials + SSH agent + GPG
     inherited from the user's config)
@@ -156,8 +158,14 @@ subject, body, author, full date, hash, parents, the list of changed
 files, and the focused file's diff via the existing `<Diff />` wrapper.
 Diffs come from a new `Repo::diff_commit` / `repo_diff_commit`
 (handles root commits by diffing against the empty tree). The Rust
-`Commit` struct gained a `body` field. Keyboard nav, multi-select, and
-file-tree re-rooting still pending.
+`Commit` struct gained a `body` field. Multi-select and file-tree
+re-rooting still pending.
+
+**Commit graph keyboard nav (2026-05-28):** The graph pane is now
+keyboard-focusable and ArrowUp / ArrowDown move row focus through the
+visible log. Opening the graph focuses the current branch tip; Enter opens
+the detail panel for the focused commit; Esc closes it; focused rows scroll
+into view. Multi-select remains pending.
 
 ---
 

@@ -72,7 +72,8 @@ pnpm tauri:build   # signed installers in target/release/bundle
   inline in the diff via Pierre annotations
 - Commit graph: SVG lanes + branch/tag chips inline; click a commit to
   open a resizable detail panel with the commit's metadata, file list,
-  and per-file diff
+  and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
+  through commits, Enter opens details, and Esc closes them
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker
@@ -89,8 +90,8 @@ pnpm tauri:build   # signed installers in target/release/bundle
 ## What's still stubbed
 
 - File tree — `@pierre/trees` integration pending
-- Commit graph: keyboard nav, multi-select, search, and Files-tab
-  re-rooting to the selected commit
+- Commit graph: multi-select, search, and Files-tab re-rooting to the
+  selected commit
 - Stash, rebase, cherry-pick, merge, revert — mutating commands wrap
   `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
   are wired; checkout from an arbitrary commit (detached HEAD) still
