@@ -224,6 +224,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     (no flash of wrong theme)
   - ☐ Audit components for hardcoded colors; route everything through tokens
   - ☐ Extension point for future custom themes (high-contrast, solarized, etc.)
+- ☐ **Keyboard operability pass.** Almost every action reachable from the
+  keyboard, not just the palette (PRD §6.7, `docs/learnings.md`). Per-surface
+  focus models + palette entries; audit for mouse-only actions. Drag-and-drop
+  (folder open, tab / file reorder) may stay pointer-only.
 - ☐ Status-bar: real GPG / LFS / sync state
 - ☐ Toast system → proper notification component
 - ☐ Empty-state copy for every panel (PRD §9: "no 'no data' labels")

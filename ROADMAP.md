@@ -221,6 +221,10 @@ file-tree re-rooting still pending.
 
 - **Security & signing.** EV cert for Windows. macOS notarization pipeline
   must be live by 0.1 alpha.
+- **Keyboard accessibility.** Almost every action must be keyboard-operable,
+  not just the command palette (PRD §2, §6.7). New surfaces in each
+  milestone ship with a focus model + shortcuts; audit before each release
+  that nothing meaningful is mouse-only without a reason.
 - **Open questions.** PRD §12 lists 5 open Qs.
   1. ☑ Pierre licensing — approved 2026-05-25.
   2. ☑ OSS vs source-available — AGPL-3.0 + dual-license commercial.

@@ -4,6 +4,9 @@
 
 Tauri 2 + Rust + React. See [`PRD.md`](./PRD.md) for the product spec.
 
+Keyboard-first: almost every action is operable from the keyboard alone —
+never keyboard-only, the mouse stays first-class.
+
 ## Layout
 
 ```

@@ -44,6 +44,42 @@ screen, whatever that screen is.
 
 ---
 
+## The app must be keyboard-operable
+
+**Rule.** Almost every action in Strand must be reachable and operable
+from the keyboard alone. "Keyboard-first, but never keyboard-only" (PRD
+§2) cuts both ways: the mouse stays first-class, but a power user should
+be able to drive the whole app without it. A small set of inherently
+pointer-driven affordances (drag-to-reorder, drag-and-drop of a folder)
+may stay mouse-only — but they're the rare exception, and whatever they
+accomplish should also be achievable another way.
+
+**Why.** Our primary persona is the CLI veteran (PRD §3) who judges the
+app on whether they can stay on the home row. A feature that is only
+clickable is, for that user, missing. Retrofitting keyboard support is
+far more expensive than designing each surface with a focus model and a
+shortcut from the start — the scattered "☐ keyboard nav" rows already in
+TASKS.md are what skipping it looks like.
+
+**How to apply.**
+
+- Every new interactive surface ships with: a focus model (what's
+  focused, with a visible focus ring from `tokens.css`), arrow/Tab
+  navigation wherever a list or grid is involved, and Enter/Space to
+  activate the focused item.
+- Every action exposed as a menu item, button, or row should also be
+  registered in the command palette (⌘K / Ctrl+K) so it's reachable by
+  search even without a dedicated shortcut.
+- Esc closes / dismisses, Enter confirms, and the focused element is
+  always scrolled into view during keyboard navigation.
+- Respect the cross-platform shortcut rule: ⌘ on macOS, Ctrl elsewhere
+  (see AGENTS.md). Never hardcode one family.
+- If a surface genuinely can't be made keyboard-operable, say so in the
+  PR and leave a ☐ in TASKS.md — don't let a mouse-only action pass
+  silently.
+
+---
+
 ## `tauri-plugin-sql` `:default` doesn't include writes
 
 `sql:default` only grants `allow-close`, `allow-load`, `allow-select`.

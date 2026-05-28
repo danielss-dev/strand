@@ -244,6 +244,7 @@ Tab state persists per-file across the session so jumping back to a file restore
 | --------------------------------- | -------- | -------------------------------------------- |
 | Command palette ⌘K                | P0       |                                              |
 | Keyboard shortcuts (customizable) | P0       | Sensible defaults; vim mode P3.              |
+| Full keyboard operability         | P0       | Almost every action keyboard-reachable; "keyboard-first, never keyboard-only" (§2). Inherently drag-only affordances are the rare exception. |
 | Light / dark / system theme       | P0       | Via Shiki Pierre theme pack.                 |
 | Auto-update                       | P0       | Tauri signed updates.                        |
 | Crash reporting (opt-in)          | P0       | Sentry or similar, off by default.           |
