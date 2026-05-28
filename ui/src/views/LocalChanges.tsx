@@ -407,21 +407,8 @@ function DiffBody({
       </div>
     );
   }
-  // Staged diffs reuse the same custom file-header strip as unstaged so
-  // the two panes feel like one tool. Per-hunk Unstage actions aren't
-  // wired yet; the Diff body renders as one contiguous block below the
-  // header for now.
   if (staged) {
-    return (
-      <>
-        <div className="lc-hunkfile">
-          <span className="path">{diff.path}</span>
-          <span className="stat-del">−{diff.dels}</span>
-          <span className="stat-add">+{diff.adds}</span>
-        </div>
-        <Diff patch={diff.patch} layout={layout} hideFileHeader />
-      </>
-    );
+    return <StagedHunkDiff diff={diff} layout={layout} />;
   }
   return <UnstagedHunkDiff diff={diff} layout={layout} />;
 }
@@ -497,6 +484,70 @@ function UnstagedHunkDiff({
                 title="Discard this hunk from the working tree"
               >
                 {busy ? 'Discarding…' : 'Discard'}
+              </button>
+            </div>
+            <Diff patch={hunk} layout={layout} hideFileHeader />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * Staged-side mirror of `UnstagedHunkDiff`: splits the staged patch into
+ * hunks and surfaces a per-hunk **Unstage** action. Unstage reverse-applies
+ * the hunk against the index (`ApplyTarget::IndexReverse`), moving that
+ * change back out to unstaged without touching the working tree.
+ */
+function StagedHunkDiff({
+  diff,
+  layout,
+}: {
+  diff: FileDiff;
+  layout: 'unified' | 'split';
+}) {
+  const applyPatch = useRepo((s) => s.applyPatch);
+  const [pending, setPending] = useState<number | null>(null);
+
+  const hunks = useMemo(() => splitPatchByHunk(diff.patch), [diff.patch]);
+
+  if (hunks.length === 0) {
+    return <Diff patch={diff.patch} layout={layout} />;
+  }
+
+  async function run(i: number) {
+    if (pending != null) return;
+    setPending(i);
+    try {
+      await applyPatch(hunks[i], 'index_reverse');
+    } catch (e) {
+      console.error('apply patch failed', e);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="lc-hunkfile">
+        <span className="path">{diff.path}</span>
+        <span className="stat-del">−{diff.dels}</span>
+        <span className="stat-add">+{diff.adds}</span>
+      </div>
+      {hunks.map((hunk, i) => {
+        const busy = pending === i;
+        return (
+          <div className="lc-hunk" key={i}>
+            <div className="lc-hunk-actions">
+              <button
+                type="button"
+                className="hbtn accept"
+                disabled={pending != null}
+                onClick={() => void run(i)}
+                title="Unstage this hunk"
+              >
+                {busy ? 'Unstaging…' : 'Unstage'}
               </button>
             </div>
             <Diff patch={hunk} layout={layout} hideFileHeader />

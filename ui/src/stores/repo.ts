@@ -86,7 +86,7 @@ export interface RepoState {
    * file's full patch) to either the index or the working tree in reverse.
    * Powers per-hunk Accept / Reject in the unstaged diff.
    */
-  applyPatch(patch: string, target: 'index' | 'workdir_reverse'): Promise<void>;
+  applyPatch(patch: string, target: 'index' | 'index_reverse' | 'workdir_reverse'): Promise<void>;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
   commit(subject: string, body: string | null, amend: boolean): Promise<void>;

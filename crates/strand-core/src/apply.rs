@@ -1,27 +1,32 @@
 use crate::{error::Result, repo::Repo};
 
-/// Where a patch should land. Picked by the UI when the user clicks
-/// Accept / Reject on a hunk in the unstaged diff.
+/// Where a patch should land. Picked by the UI when the user clicks a
+/// per-hunk action in the Local Changes diff.
 #[derive(Debug, Clone, Copy)]
 pub enum ApplyTarget {
-    /// Forward-apply to the index. "Accept hunk" — stage that hunk.
+    /// Forward-apply to the index. "Stage hunk" — stage just that hunk.
     Index,
-    /// Reverse-apply to the working tree. "Reject hunk" — discard that
+    /// Reverse-apply to the index. "Unstage hunk" — move that hunk back
+    /// out of the index, leaving it in the working tree.
+    IndexReverse,
+    /// Reverse-apply to the working tree. "Discard hunk" — wipe that
     /// hunk from disk. Destructive; the UI is responsible for any undo
     /// affordance.
     WorkdirReverse,
 }
 
 impl Repo {
-    /// Apply a unified-diff patch to either the index (stage) or the
-    /// working tree in reverse (discard). The patch must be the same shape
-    /// `git diff` emits — `diff --git` header, `---`/`+++`, and one or
-    /// more `@@` hunks. Callers slice per-hunk patches out of the per-file
-    /// `FileDiff.patch` they already have.
+    /// Apply a unified-diff patch to the index or the working tree. The
+    /// patch must be the same shape `git diff` emits — `diff --git`
+    /// header, `---`/`+++`, and one or more `@@` hunks. Callers slice
+    /// per-hunk patches out of the per-file `FileDiff.patch` they
+    /// already have. Reverse targets flip the patch via [`reverse_patch`]
+    /// before applying.
     pub fn apply_patch(&self, patch: &str, target: ApplyTarget) -> Result<()> {
         let repo = self.git2()?;
         let (buf, location) = match target {
             ApplyTarget::Index => (patch.to_owned(), git2::ApplyLocation::Index),
+            ApplyTarget::IndexReverse => (reverse_patch(patch), git2::ApplyLocation::Index),
             ApplyTarget::WorkdirReverse => (reverse_patch(patch), git2::ApplyLocation::WorkDir),
         };
         let diff = git2::Diff::from_buffer(buf.as_bytes())?;

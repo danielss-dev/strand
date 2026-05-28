@@ -30,9 +30,9 @@ system ported verbatim. No real feature surface yet.
   - ☑ Pierre `<PatchDiff>` integration themed to app tokens
   - ☑ Commit form: subject + body + amend; ⌘↵ shortcut; spinner state
   - ☑ File-level stage / unstage / discard via `git2`
-  - ◐ Line / hunk stage + unstage (hunk: unstaged → Stage / Discard
-    buttons backed by `Repo::apply_patch`. Staged-side unstage-hunk +
-    line-level still pending.)
+  - ◐ Line / hunk stage + unstage (hunk: unstaged → Stage / Discard;
+    staged → Unstage, all backed by `Repo::apply_patch`. Line-level
+    still pending.)
   - ☐ Discard with single-undo handle
   - ☐ Recent commit messages dropdown
 - ◐ **Commit graph**
@@ -110,8 +110,10 @@ patch into one Pierre `<Diff/>` per hunk, with Stage / Discard buttons
 above each. Stage forward-applies the hunk to the index (`Repo::apply_patch
 (ApplyTarget::Index)`); Discard reverse-applies it to the worktree
 (`ApplyTarget::WorkdirReverse`, via a TS-side `splitPatchByHunk` and a
-Rust-side patch reversal). Staged-side unstage-hunk and line-level
-selection still pending.
+Rust-side patch reversal). Staged diff gets the symmetric treatment via
+`StagedHunkDiff` — per-hunk **Unstage** reverse-applies the hunk to the
+index (new `ApplyTarget::IndexReverse`), moving it back to unstaged
+without touching disk. Line-level selection still pending.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-

@@ -48,9 +48,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
 - ◐ Stage / unstage hunk (unstaged: per-hunk Stage via
-  `Repo::apply_patch(ApplyTarget::Index)` + FE `splitPatchByHunk`,
-  which emits one patch per top-level `@@` hunk. Staged → unstage hunk
-  still pending — needs the inverse direction in the staged pane.)
+  `Repo::apply_patch(ApplyTarget::Index)`. Staged: per-hunk Unstage via
+  `Repo::apply_patch(ApplyTarget::IndexReverse)` — reverse-applies the
+  hunk to the index without touching the working tree. Line-level
+  selection still pending.)
 - ☐ Stage / unstage line
 - ☑ Discard working-tree changes (path) — file-level only
 - ◐ Discard hunk / line + single-undo handle (per-hunk Discard:
@@ -164,9 +165,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Per-row Discard action (currently store-level only; needs right-click menu)
 - ☐ Recent-messages dropdown on the subject field (needs SQLite schema +
   per-repo history)
-- ◐ Hunk / line stage + unstage UI (unstaged side: Stage + Discard
-  buttons above each hunk in `LocalChanges` → `UnstagedHunkDiff`.
-  Staged-side unstage-hunk and line-level still pending.)
+- ◐ Hunk / line stage + unstage UI (unstaged: Stage + Discard buttons
+  per hunk in `UnstagedHunkDiff`. Staged: Unstage button per hunk in
+  `StagedHunkDiff` (reverse-apply to index). Line-level still pending.)
 
 ### Commits view
 - ☑ Table from `repo_log`

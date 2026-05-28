@@ -92,6 +92,7 @@ pub fn repo_discard(path: String, file: String) -> CmdResult<()> {
 pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResult<()> {
     let t = match target.as_str() {
         "index" => ApplyTarget::Index,
+        "index_reverse" => ApplyTarget::IndexReverse,
         "workdir_reverse" => ApplyTarget::WorkdirReverse,
         other => {
             return Err(CmdError {
