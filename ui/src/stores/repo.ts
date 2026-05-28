@@ -72,6 +72,12 @@ export interface RepoState {
   stage(file: string): Promise<void>;
   unstage(file: string): Promise<void>;
   discard(file: string): Promise<void>;
+  /**
+   * Apply a unified-diff patch (typically a single hunk sliced out of a
+   * file's full patch) to either the index or the working tree in reverse.
+   * Powers per-hunk Accept / Reject in the unstaged diff.
+   */
+  applyPatch(patch: string, target: 'index' | 'workdir_reverse'): Promise<void>;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
   commit(subject: string, body: string | null, amend: boolean): Promise<void>;
@@ -314,6 +320,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoDiscard(path, file);
+    await get().refreshLocalChanges();
+  },
+  async applyPatch(patch, target) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoApplyPatch(path, patch, target);
     await get().refreshLocalChanges();
   },
   async stageAll() {

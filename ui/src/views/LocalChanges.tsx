@@ -4,6 +4,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
+import { splitPatchByHunk } from '../lib/patch';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -86,7 +87,7 @@ export function LocalChanges() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            <DiffPane diff={selectedDiff} />
+            <DiffPane diff={selectedDiff} staged={selection?.staged ?? false} />
           </Panel>
         </PanelGroup>
       </div>
@@ -363,7 +364,7 @@ function statusCode(status: FileDiff['status']): string {
 
 // ─── Diff pane ──────────────────────────────────────────────────────────────
 
-function DiffPane({ diff }: { diff: FileDiff | null }) {
+function DiffPane({ diff, staged }: { diff: FileDiff | null; staged: boolean }) {
   // The unified/split toggle lives in the main header (App.tsx → MainHeader)
   // and writes to `useSettings.diffMode`. Pierre talks 'unified' | 'split',
   // our setting is 'stacked' | 'split' — map at the boundary.
@@ -373,13 +374,21 @@ function DiffPane({ diff }: { diff: FileDiff | null }) {
   return (
     <div className="lc-diff">
       <div className="lc-diff-scroll">
-        <DiffBody diff={diff} layout={layout} />
+        <DiffBody diff={diff} staged={staged} layout={layout} />
       </div>
     </div>
   );
 }
 
-function DiffBody({ diff, layout }: { diff: FileDiff | null; layout: 'unified' | 'split' }) {
+function DiffBody({
+  diff,
+  staged,
+  layout,
+}: {
+  diff: FileDiff | null;
+  staged: boolean;
+  layout: 'unified' | 'split';
+}) {
   if (!diff) {
     return (
       <div className="lc-empty">
@@ -398,7 +407,104 @@ function DiffBody({ diff, layout }: { diff: FileDiff | null; layout: 'unified' |
       </div>
     );
   }
-  return <Diff patch={diff.patch} layout={layout} />;
+  // Staged diffs reuse the same custom file-header strip as unstaged so
+  // the two panes feel like one tool. Per-hunk Unstage actions aren't
+  // wired yet; the Diff body renders as one contiguous block below the
+  // header for now.
+  if (staged) {
+    return (
+      <>
+        <div className="lc-hunkfile">
+          <span className="path">{diff.path}</span>
+          <span className="stat-del">−{diff.dels}</span>
+          <span className="stat-add">+{diff.adds}</span>
+        </div>
+        <Diff patch={diff.patch} layout={layout} hideFileHeader />
+      </>
+    );
+  }
+  return <UnstagedHunkDiff diff={diff} layout={layout} />;
+}
+
+/**
+ * Renders the unstaged diff as one `<Diff/>` per hunk. A single sticky
+ * file-header strip sits at the top; Pierre's per-file header is
+ * suppressed on every hunk so the rows line up. Accept / Reject buttons
+ * float in the top-right of each hunk and reveal on hover:
+ * - **Accept** forward-applies that hunk to the index (stages just it).
+ * - **Reject** reverse-applies it to the working tree (discards it on disk).
+ *
+ * Both routes go through `useRepo.applyPatch`, which triggers a
+ * `refreshLocalChanges` so the diff list rebuilds with the remaining hunks.
+ */
+function UnstagedHunkDiff({
+  diff,
+  layout,
+}: {
+  diff: FileDiff;
+  layout: 'unified' | 'split';
+}) {
+  const applyPatch = useRepo((s) => s.applyPatch);
+  const [pending, setPending] = useState<number | null>(null);
+
+  const hunks = useMemo(() => splitPatchByHunk(diff.patch), [diff.patch]);
+
+  // Fall back to a single Diff for patches without `@@` lines (e.g. a
+  // mode-only change). Pierre still renders the file header in that
+  // case — there's nothing per-hunk to act on.
+  if (hunks.length === 0) {
+    return <Diff patch={diff.patch} layout={layout} />;
+  }
+
+  async function run(i: number, target: 'index' | 'workdir_reverse') {
+    if (pending != null) return;
+    setPending(i);
+    try {
+      await applyPatch(hunks[i], target);
+    } catch (e) {
+      console.error('apply patch failed', e);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="lc-hunkfile">
+        <span className="path">{diff.path}</span>
+        <span className="stat-del">−{diff.dels}</span>
+        <span className="stat-add">+{diff.adds}</span>
+      </div>
+      {hunks.map((hunk, i) => {
+        const busy = pending === i;
+        return (
+          <div className="lc-hunk" key={i}>
+            <div className="lc-hunk-actions">
+              <button
+                type="button"
+                className="hbtn accept"
+                disabled={pending != null}
+                onClick={() => void run(i, 'index')}
+                title="Stage this hunk"
+              >
+                {busy ? 'Accepting…' : 'Accept'}
+              </button>
+              <button
+                type="button"
+                className="hbtn reject"
+                disabled={pending != null}
+                onClick={() => void run(i, 'workdir_reverse')}
+                title="Discard this hunk from the working tree"
+              >
+                {busy ? 'Rejecting…' : 'Reject'}
+              </button>
+            </div>
+            <Diff patch={hunk} layout={layout} hideFileHeader />
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 // ─── Commit bar ─────────────────────────────────────────────────────────────

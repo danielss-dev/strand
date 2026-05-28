@@ -1,7 +1,7 @@
 use serde::Serialize;
 use strand_core::{
-    branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff, log::Commit,
-    network::NetworkOutcome, refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
+    apply::ApplyTarget, branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff,
+    log::Commit, network::NetworkOutcome, refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
 };
 use tauri::State;
 
@@ -80,6 +80,21 @@ pub fn repo_unstage(path: String, file: String) -> CmdResult<()> {
 #[tauri::command]
 pub fn repo_discard(path: String, file: String) -> CmdResult<()> {
     Repo::discover(&path)?.discard_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResult<()> {
+    let t = match target.as_str() {
+        "index" => ApplyTarget::Index,
+        "workdir_reverse" => ApplyTarget::WorkdirReverse,
+        other => {
+            return Err(CmdError {
+                message: format!("repo_apply_patch: unknown target `{other}`"),
+            })
+        }
+    };
+    Repo::discover(&path)?.apply_patch(&patch, t)?;
     Ok(())
 }
 

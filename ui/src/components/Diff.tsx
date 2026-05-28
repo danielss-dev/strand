@@ -12,11 +12,21 @@ export interface DiffProps {
   patch: string;
   /** Toggle between stacked (unified) and side-by-side layouts. */
   layout?: 'unified' | 'split';
+  /** Hide Pierre's `diff --git`/path header. Useful when we slice one
+   *  file's patch into per-hunk patches and don't want the same header
+   *  repeated above each hunk. */
+  hideFileHeader?: boolean;
   className?: string;
   style?: CSSProperties;
 }
 
-export function Diff({ patch, layout = 'unified', className, style }: DiffProps) {
+export function Diff({
+  patch,
+  layout = 'unified',
+  hideFileHeader = false,
+  className,
+  style,
+}: DiffProps) {
   return (
     <PatchDiff
       patch={patch}
@@ -27,6 +37,7 @@ export function Diff({ patch, layout = 'unified', className, style }: DiffProps)
         // light theme is wired.
         theme: 'pierre-dark',
         disableBackground: true,
+        disableFileHeader: hideFileHeader,
       }}
       className={className}
       style={style}

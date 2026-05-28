@@ -29,6 +29,8 @@ export const tauri = {
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
+  repoApplyPatch: (path: string, patch: string, target: 'index' | 'workdir_reverse') =>
+    invoke<void>('repo_apply_patch', { path, patch, target }),
   repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
     invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
   repoFetch: (path: string, remote: string | null) =>

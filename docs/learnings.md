@@ -100,3 +100,33 @@ lives inside a Panel:
 
 Existing sites: `.body`, `.lc-main`, `.lc-files`, `.main`, `.sidebar`.
 Copy the pattern when adding a new resizable region.
+
+---
+
+## Pierre exposes hunk *math*, not hunk *slots*
+
+**Rule.** `@pierre/diffs` ships a `diffAcceptRejectHunk(diff, i, opts)`
+utility that rewrites a `FileDiffMetadata` after a hunk is accepted /
+rejected, but the React `<PatchDiff/>` does **not** expose any per-hunk
+render slot (`renderHunkAction`, slot id, callback) — the README is
+explicit: "Add your own accept/reject changes UI." The only slot props
+on `DiffBasePropsReact` are file-header (`renderCustomHeader`,
+`renderHeaderPrefix`, `renderHeaderMetadata`), gutter, and merge-conflict
+actions. There is a `getHunkSeparatorSlotName(type, hunkIndex)` constant,
+but `PatchDiff` never hydrates anything against it.
+
+**Why.** Don't waste another session grepping Pierre for a hunk-level
+render hook that isn't there. The diffs.com docs page describing the
+`diffAcceptRejectHunk` API can mislead you — it's a *patch math* helper
+for client-side diff state, not a UI primitive.
+
+**How to apply.** To put per-hunk controls (accept, reject, comment,
+annotate, etc.) above each hunk in a Pierre diff, split the per-file
+patch into per-hunk patches and render one `<Diff/>` per hunk
+(`splitPatchByHunk` in `ui/src/lib/patch.ts`). Pass `hideFileHeader`
+on every hunk after the first so the file header doesn't repeat. The
+canonical site is `UnstagedHunkDiff` in
+`ui/src/views/LocalChanges.tsx`. Reverse-apply (the "Reject" path) is
+done on the Rust side by `reverse_patch` in
+`crates/strand-core/src/apply.rs` — `git2`'s `ApplyOptions` has no
+reverse flag, so we swap `+`/`-` and `@@ -A,B +C,D @@` ourselves.

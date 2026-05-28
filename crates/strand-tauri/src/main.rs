@@ -33,6 +33,7 @@ fn main() {
             commands::repo_stage,
             commands::repo_unstage,
             commands::repo_discard,
+            commands::repo_apply_patch,
             commands::repo_commit,
             commands::repo_fetch,
             commands::repo_pull,

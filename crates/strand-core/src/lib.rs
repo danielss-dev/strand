@@ -13,6 +13,7 @@ pub mod status;
 pub mod log;
 pub mod diff;
 pub mod stage;
+pub mod apply;
 pub mod commit;
 pub mod network;
 pub mod refs;
