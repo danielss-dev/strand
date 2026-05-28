@@ -66,6 +66,11 @@ pub fn repo_diff_between(path: String, from: String, to: String) -> CmdResult<Ve
 }
 
 #[tauri::command]
+pub fn repo_diff_commit(path: String, oid: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_commit(&oid)?)
+}
+
+#[tauri::command]
 pub fn repo_stage(path: String, file: String) -> CmdResult<()> {
     Repo::discover(&path)?.stage_path(&file)?;
     Ok(())

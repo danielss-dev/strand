@@ -65,6 +65,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Theme + density + platform + font tweaks (persisted via Zustand)
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
 - Staging: diff view + stage/unstage + commit loop with resizable panes
+- Commit graph: SVG lanes + branch/tag chips inline; click a commit to
+  open a resizable detail panel with the commit's metadata, file list,
+  and per-file diff
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker
@@ -73,14 +76,16 @@ pnpm tauri:build   # signed installers in target/release/bundle
   remote), delete a branch via the sidebar — wired into the topbar
   picker and sidebar Git tab
 - Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, plus the staging, network, and branch commands above
+  `repo_refs`, `repo_diff_commit`, plus the staging, network, and
+  branch commands above
 - SQLite plugin (recent repos + settings schema)
 - Updater plugin (endpoint stub)
 
 ## What's still stubbed
 
 - File tree — `@pierre/trees` integration pending
-- Commit graph SVG (currently table-only)
+- Commit graph: keyboard nav, multi-select, search, and Files-tab
+  re-rooting to the selected commit
 - Stash, rebase, cherry-pick, merge, revert — mutating commands wrap
   `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
   are wired; checkout from an arbitrary commit (detached HEAD) still

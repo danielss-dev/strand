@@ -62,6 +62,25 @@ impl Repo {
         let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), Some(&mut opts))?;
         collect(diff)
     }
+
+    /// Diff a single commit against its first parent — what the user expects
+    /// to see when they click a commit in the All Commits graph. Root commits
+    /// (no parents) diff against the empty tree, so every file shows up as
+    /// added.
+    pub fn diff_commit(&self, oid: &str) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let to_oid = repo.revparse_single(oid)?.id();
+        let to_commit = repo.find_commit(to_oid)?;
+        let to_tree = to_commit.tree()?;
+        let from_tree = if to_commit.parent_count() == 0 {
+            None
+        } else {
+            Some(to_commit.parent(0)?.tree()?)
+        };
+        let mut opts = diff_options();
+        let diff = repo.diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts))?;
+        collect(diff)
+    }
 }
 
 fn diff_options() -> git2::DiffOptions {

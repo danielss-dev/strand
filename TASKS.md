@@ -170,12 +170,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Commits view
 - ☑ Table from `repo_log`
-- ☐ SVG lane rendering
-- ☐ Branch / tag / HEAD chips on the right
-- ☐ Selectable + multi-selectable rows
-- ☐ Inline commit detail panel (message, files, diff)
+- ☑ SVG lane rendering (`ui/src/lib/graph.ts` lane algo + `CommitGraphCell` SVG; multi-color via `--b-1..--b-7`)
+- ◐ Branch / tag / HEAD chips inline in the message cell (`indexRefs` in `Commits.tsx` + `.ref-chip` CSS; right-side chip column still open)
+- ◐ Selectable rows (single-select wired via `useRepo.selectCommit`; multi-select for cherry-pick still pending)
+- ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
+- ☐ Keyboard nav (↑/↓ to move selection, Enter to focus diff, Esc to close panel)
+- ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)
+- ☐ GPG sign status indicator in commit-detail meta
 
 ### File view (4-tab)
 - ☑ Tab strip + header

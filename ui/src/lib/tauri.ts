@@ -26,6 +26,8 @@ export const tauri = {
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>
     invoke<FileDiff[]>('repo_diff_between', { path, from, to }),
+  repoDiffCommit: (path: string, oid: string) =>
+    invoke<FileDiff[]>('repo_diff_commit', { path, oid }),
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),

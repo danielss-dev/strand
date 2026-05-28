@@ -36,9 +36,10 @@ system ported verbatim. No real feature surface yet.
   - ☐ Discard with single-undo handle
   - ☐ Recent commit messages dropdown
 - ◐ **Commit graph**
-  - ☑ Table view from `repo_log` (placeholder, no lanes)
-  - ☐ SVG lane/edge rendering with branch colors
-  - ☐ Inline commit detail panel (changed files, message body)
+  - ☑ Table view from `repo_log`
+  - ☑ SVG lane/edge rendering with branch colors
+  - ☑ Inline commit detail panel (changed files, message body)
+  - ☐ Multi-select + keyboard navigation
 - ◐ **Fetch / Pull / Push**
   - ☑ Rust commands (shell-out to user's `git`; credentials + SSH agent + GPG
     inherited from the user's config)
@@ -111,6 +112,21 @@ above each. Stage forward-applies the hunk to the index (`Repo::apply_patch
 (`ApplyTarget::WorkdirReverse`, via a TS-side `splitPatchByHunk` and a
 Rust-side patch reversal). Staged-side unstage-hunk and line-level
 selection still pending.
+
+**Commit graph + detail panel (2026-05-28):** All Commits is now an
+actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-
+sorted output and assigns lanes by tracking which oid each lane is
+"waiting for", emitting per-row segments (`in` / `out` / `pass`).
+`CommitGraphCell` renders each row's segments + node as SVG, colored
+from `--b-1…--b-7`. Branch / tag / HEAD chips render inline at the
+start of the message cell. Clicking a row opens a right-side resizable
+detail Panel (`strand:commits-split`) — `CommitDetail.tsx` shows
+subject, body, author, full date, hash, parents, the list of changed
+files, and the focused file's diff via the existing `<Diff />` wrapper.
+Diffs come from a new `Repo::diff_commit` / `repo_diff_commit`
+(handles root commits by diffing against the empty tree). The Rust
+`Commit` struct gained a `body` field. Keyboard nav, multi-select, and
+file-tree re-rooting still pending.
 
 ---
 

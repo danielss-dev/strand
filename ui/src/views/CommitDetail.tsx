@@ -1,0 +1,167 @@
+import { useEffect, useMemo, useState } from 'react';
+
+import { Diff } from '../components/Diff';
+import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
+import type { DiffStatus, FileDiff } from '../lib/types';
+
+/**
+ * Right-side panel shown when a commit is selected in the All Commits
+ * graph. Renders the commit's subject + body, a metadata grid, the list
+ * of changed files, and a `<Diff />` for the currently focused file.
+ *
+ * Lifecycle: `useRepo.selectCommit(hash)` populates `selectedCommit` and
+ * fetches `selectedCommitDiffs` via `repo_diff_commit`. The component
+ * picks the first file by default whenever the commit changes.
+ */
+export function CommitDetail() {
+  const selectedCommit = useRepo((s) => s.selectedCommit);
+  const diffs = useRepo((s) => s.selectedCommitDiffs);
+  const loading = useRepo((s) => s.selectedCommitDiffsLoading);
+  const commits = useRepo((s) => s.commits);
+  const selectCommit = useRepo((s) => s.selectCommit);
+  const diffMode = useSettings((s) => s.diffMode);
+  const layout = diffMode === 'split' ? 'split' : 'unified';
+
+  const commit = useMemo(
+    () => commits.find((c) => c.hash === selectedCommit) ?? null,
+    [commits, selectedCommit],
+  );
+
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedFile(diffs[0]?.path ?? null);
+  }, [diffs]);
+
+  if (!commit) return null;
+
+  const focused = diffs.find((d) => d.path === selectedFile) ?? null;
+
+  return (
+    <aside className="commit-detail">
+      <div className="cd-head">
+        <div className="cd-head-row">
+          <div className="msg-subj">{commit.subject}</div>
+          <button
+            type="button"
+            className="cd-close"
+            aria-label="Close commit detail"
+            onClick={() => void selectCommit(null)}
+          >
+            ×
+          </button>
+        </div>
+        {commit.body ? <pre className="msg-body">{commit.body}</pre> : null}
+        <div className="cd-meta">
+          <span className="k">author</span>
+          <span className="v">
+            {commit.author_name}
+            {commit.author_email ? ` <${commit.author_email}>` : ''}
+          </span>
+          <span className="k">date</span>
+          <span className="v">{formatFullDate(commit.time_unix)}</span>
+          <span className="k">commit</span>
+          <span className="v" title={commit.hash}>
+            {commit.hash}
+          </span>
+          {commit.parents.length > 0 ? (
+            <>
+              <span className="k">{commit.parents.length > 1 ? 'parents' : 'parent'}</span>
+              <span className="v">
+                {commit.parents.map((p, i) => (
+                  <span key={p}>
+                    {i > 0 ? ' ' : ''}
+                    {p.slice(0, 7)}
+                  </span>
+                ))}
+              </span>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div className="cd-files">
+        {loading && diffs.length === 0 ? (
+          <div className="cd-empty">Loading…</div>
+        ) : diffs.length === 0 ? (
+          <div className="cd-empty">No file changes.</div>
+        ) : (
+          diffs.map((d) => (
+            <CdFileRow
+              key={d.path}
+              diff={d}
+              active={d.path === selectedFile}
+              onClick={() => setSelectedFile(d.path)}
+            />
+          ))
+        )}
+      </div>
+      <div className="cd-diff">
+        {focused ? (
+          focused.binary || focused.patch.length === 0 ? (
+            <div className="cd-empty">
+              {focused.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}
+            </div>
+          ) : (
+            <div className="cd-diff-scroll">
+              <Diff patch={focused.patch} layout={layout} />
+            </div>
+          )
+        ) : (
+          <div className="cd-empty">Select a file to see its diff.</div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function CdFileRow({
+  diff,
+  active,
+  onClick,
+}: {
+  diff: FileDiff;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const letter = statusLetter(diff.status);
+  return (
+    <div className={`cd-file${active ? ' active' : ''}`} onClick={onClick}>
+      <span className={`stat ${letter}`}>{letter}</span>
+      <span />
+      <span className="fpath" title={diff.path}>
+        {diff.path}
+      </span>
+      <span className="delta">
+        <span className="add">+{diff.adds}</span> <span className="del">−{diff.dels}</span>
+      </span>
+    </div>
+  );
+}
+
+function statusLetter(s: DiffStatus): 'A' | 'M' | 'D' | 'R' | 'C' | 'T' {
+  switch (s) {
+    case 'added':
+      return 'A';
+    case 'modified':
+      return 'M';
+    case 'deleted':
+      return 'D';
+    case 'renamed':
+      return 'R';
+    case 'copied':
+      return 'C';
+    case 'typechange':
+      return 'T';
+  }
+}
+
+function formatFullDate(unix: number): string {
+  const d = new Date(unix * 1000);
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

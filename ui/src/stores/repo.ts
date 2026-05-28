@@ -46,6 +46,15 @@ export interface RepoState {
   stagedDiffs: FileDiff[];
   localSelection: LocalSelection | null;
 
+  /**
+   * Commit clicked in the All Commits graph. When non-null, the right-side
+   * `<CommitDetail />` panel opens and `selectedCommitDiffs` is populated
+   * from `repo_diff_commit`.
+   */
+  selectedCommit: string | null;
+  selectedCommitDiffs: FileDiff[];
+  selectedCommitDiffsLoading: boolean;
+
   /** Branches / remotes / tags for the active tab. */
   refs: Refs;
 
@@ -93,6 +102,8 @@ export interface RepoState {
   deleteBranch(name: string, force: boolean): Promise<void>;
 
   selectLocalFile(sel: LocalSelection | null): void;
+  /** Open the commit-detail panel for `hash`, or close it when null. */
+  selectCommit(hash: string | null): Promise<void>;
 
   refreshRecents(): Promise<void>;
   forgetRecent(path: string): Promise<void>;
@@ -113,6 +124,9 @@ const EMPTY_ACTIVE = {
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
   selectedFile: null as string | null,
+  selectedCommit: null as string | null,
+  selectedCommitDiffs: [] as FileDiff[],
+  selectedCommitDiffsLoading: false,
   refs: EMPTY_REFS,
 };
 
@@ -193,6 +207,9 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      selectedCommit: null,
+      selectedCommitDiffs: [],
+      selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
     }));
 
@@ -231,6 +248,9 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      selectedCommit: null,
+      selectedCommitDiffs: [],
+      selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
     });
     void persistSession(get());
@@ -252,6 +272,9 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      selectedCommit: null,
+      selectedCommitDiffs: [],
+      selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
     });
     void persistSession(get());
@@ -419,6 +442,26 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
 
   selectLocalFile: (sel) => set({ localSelection: sel }),
+
+  async selectCommit(hash) {
+    if (hash === null) {
+      set({ selectedCommit: null, selectedCommitDiffs: [], selectedCommitDiffsLoading: false });
+      return;
+    }
+    const path = get().activePath;
+    if (!path) return;
+    set({ selectedCommit: hash, selectedCommitDiffs: [], selectedCommitDiffsLoading: true });
+    try {
+      const diffs = await tauri.repoDiffCommit(path, hash);
+      // Bail out if the selection moved while we were fetching.
+      if (get().selectedCommit !== hash) return;
+      set({ selectedCommitDiffs: diffs, selectedCommitDiffsLoading: false });
+    } catch (e) {
+      console.warn('repoDiffCommit failed', e);
+      if (get().selectedCommit !== hash) return;
+      set({ selectedCommitDiffs: [], selectedCommitDiffsLoading: false });
+    }
+  },
 
   async refreshRecents() {
     try {

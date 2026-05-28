@@ -30,6 +30,7 @@ fn main() {
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
             commands::repo_diff_between,
+            commands::repo_diff_commit,
             commands::repo_stage,
             commands::repo_unstage,
             commands::repo_discard,

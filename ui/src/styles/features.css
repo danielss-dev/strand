@@ -926,6 +926,7 @@
 }
 .graph-main {
   flex: 1;
+  height: 100%;
   overflow: auto;
   min-width: 0;
 }
@@ -1040,14 +1041,16 @@
 
 /* commit detail panel */
 .commit-detail {
-  width: clamp(320px, 36%, 440px);
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   border-left: 0.5px solid var(--border);
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .cd-head {
   padding: 14px 16px;
@@ -1104,8 +1107,6 @@
 .cd-files {
   padding: 8px 0;
   border-bottom: 0.5px solid var(--border);
-  max-height: 220px;
-  overflow-y: auto;
   flex-shrink: 0;
 }
 .cd-file {
@@ -1160,11 +1161,85 @@
   color: var(--del);
 }
 .cd-diff {
-  flex: 1;
-  overflow: hidden;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+}
+.cd-diff-scroll {
+  flex-shrink: 0;
+}
+.cd-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.cd-head-row .msg-subj {
+  flex: 1;
+  min-width: 0;
+}
+.cd-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cd-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.cd-empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+}
+/* Ref chips inline in the commit message cell. */
+.graph-table td.msg .ref-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+}
+.ref-chip.head {
+  color: var(--text);
+  background: var(--bg-active);
+  box-shadow: 0 0 0 0.5px var(--accent) inset;
+}
+.ref-chip.remote {
+  color: var(--text-muted);
+}
+.ref-chip.tag {
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--accent) 12%, var(--bg-elev));
+}
+.ref-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
 }
 
 /* ─── File view (4-tab) ─── */

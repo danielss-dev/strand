@@ -23,6 +23,8 @@ export interface Commit {
   hash: string;
   short_hash: string;
   subject: string;
+  /** Message minus the subject line; empty when the commit had no body. */
+  body: string;
   author_name: string;
   author_email: string;
   time_unix: number;

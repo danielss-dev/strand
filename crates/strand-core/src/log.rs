@@ -7,6 +7,7 @@ pub struct Commit {
     pub hash: String,
     pub short_hash: String,
     pub subject: String,
+    pub body: String,
     pub author_name: String,
     pub author_email: String,
     pub time_unix: i64,
@@ -28,10 +29,19 @@ impl Repo {
             let oid = oid?;
             let c = repo.find_commit(oid)?;
             let hash = oid.to_string();
+            let message = c.message().unwrap_or("");
+            let subject = c.summary().unwrap_or("").to_string();
+            // Body is whatever follows the first line; trim leading blank
+            // line so the panel's monospace block doesn't start with a gap.
+            let body = match message.split_once('\n') {
+                Some((_, rest)) => rest.trim_start_matches('\n').trim_end().to_string(),
+                None => String::new(),
+            };
             out.push(Commit {
                 short_hash: hash[..7.min(hash.len())].to_string(),
                 hash,
-                subject: c.summary().unwrap_or("").to_string(),
+                subject,
+                body,
                 author_name: c.author().name().unwrap_or("").to_string(),
                 author_email: c.author().email().unwrap_or("").to_string(),
                 time_unix: c.time().seconds(),
