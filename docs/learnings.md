@@ -103,30 +103,42 @@ Copy the pattern when adding a new resizable region.
 
 ---
 
-## Pierre exposes hunk *math*, not hunk *slots*
+## Pierre per-block controls go through `lineAnnotations`, not a render slot
 
-**Rule.** `@pierre/diffs` ships a `diffAcceptRejectHunk(diff, i, opts)`
-utility that rewrites a `FileDiffMetadata` after a hunk is accepted /
-rejected, but the React `<PatchDiff/>` does **not** expose any per-hunk
-render slot (`renderHunkAction`, slot id, callback) — the README is
-explicit: "Add your own accept/reject changes UI." The only slot props
-on `DiffBasePropsReact` are file-header (`renderCustomHeader`,
-`renderHeaderPrefix`, `renderHeaderMetadata`), gutter, and merge-conflict
-actions. There is a `getHunkSeparatorSlotName(type, hunkIndex)` constant,
-but `PatchDiff` never hydrates anything against it.
+**Rule.** `@pierre/diffs` ships `diffAcceptRejectHunk(diff, i, opts)` as
+a *patch math* helper — it rewrites a `FileDiffMetadata` after a hunk
+is accepted/rejected. The React components (`<PatchDiff/>`,
+`<FileDiff/>`) do **not** expose a per-hunk render slot. The only
+explicit render props on `DiffBasePropsReact` are file-header
+(`renderCustomHeader`, `renderHeaderPrefix`, `renderHeaderMetadata`),
+gutter (`renderGutterUtility`), `renderAnnotation`, and merge-conflict
+actions. There's a `getHunkSeparatorSlotName` constant, but `PatchDiff`
+never hydrates anything against it.
 
 **Why.** Don't waste another session grepping Pierre for a hunk-level
-render hook that isn't there. The diffs.com docs page describing the
-`diffAcceptRejectHunk` API can mislead you — it's a *patch math* helper
-for client-side diff state, not a UI primitive.
+render hook that isn't there. The diffs.com docs page describing
+`diffAcceptRejectHunk` can mislead you — that API is for client-side
+diff *state* mutation, not UI placement.
 
-**How to apply.** To put per-hunk controls (accept, reject, comment,
-annotate, etc.) above each hunk in a Pierre diff, split the per-file
-patch into per-hunk patches and render one `<Diff/>` per hunk
-(`splitPatchByHunk` in `ui/src/lib/patch.ts`). Pass `hideFileHeader`
-on every hunk after the first so the file header doesn't repeat. The
-canonical site is `UnstagedHunkDiff` in
-`ui/src/views/LocalChanges.tsx`. Reverse-apply (the "Reject" path) is
-done on the Rust side by `reverse_patch` in
-`crates/strand-core/src/apply.rs` — `git2`'s `ApplyOptions` has no
+**How to apply.** For per-change-block controls (Stage, Discard,
+Unstage, comment, annotate), use `<FileDiff/>` with `lineAnnotations`,
+one annotation per `ChangeContent`. The annotation slot Pierre injects
+is anchored to a *column* (additions or deletions side), so a slotted
+button drifts horizontally per block — render an invisible marker in
+`renderAnnotation` and float a real button in a sibling overlay layer
+that measures the marker's Y with `getBoundingClientRect`. Pin the
+overlay slot to the diff's right edge for consistent X. Use Pierre's
+`options.onLineEnter` (`OnDiffLineEnterLeaveProps`) to map
+`(lineNumber, annotationSide)` → block id and update a `hovered`
+state; feed the block's `SelectedLineRange` into the
+`selectedLines` prop so Pierre tints the affected lines using its
+built-in selection background. `DiffAcceptRejectHunkConfig.changeIndex`
+indexes `hunk.hunkContent[]` (the mixed context + change array), not a
+change-only ordinal — keep that contract when slicing patches.
+
+The canonical site is `HunkAnnotatedDiff` in
+`ui/src/views/LocalChanges.tsx`; patch slicing for sub-hunk apply is
+`sliceChangeBlock` in `ui/src/lib/patch.ts`. Reverse-apply (the
+Discard/Unstage path) is still done on the Rust side by `reverse_patch`
+in `crates/strand-core/src/apply.rs` — `git2`'s `ApplyOptions` has no
 reverse flag, so we swap `+`/`-` and `@@ -A,B +C,D @@` ourselves.

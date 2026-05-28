@@ -64,7 +64,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Window chrome, sidebar, status bar, command palette (⌘K)
 - Theme + density + platform + font tweaks (persisted via Zustand)
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
-- Staging: diff view + stage/unstage + commit loop with resizable panes
+- Staging: diff view + stage/unstage + commit loop with resizable panes;
+  per-change-block Stage / Discard (and Unstage on the staged side)
+  inline in the diff via Pierre annotations
 - Commit graph: SVG lanes + branch/tag chips inline; click a commit to
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff

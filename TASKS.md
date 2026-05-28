@@ -47,16 +47,19 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
-- ◐ Stage / unstage hunk (unstaged: per-hunk Stage via
-  `Repo::apply_patch(ApplyTarget::Index)`. Staged: per-hunk Unstage via
-  `Repo::apply_patch(ApplyTarget::IndexReverse)` — reverse-applies the
-  hunk to the index without touching the working tree. Line-level
-  selection still pending.)
-- ☐ Stage / unstage line
-- ☑ Discard working-tree changes (path) — file-level only
-- ◐ Discard hunk / line + single-undo handle (per-hunk Discard:
+- ☑ Stage / unstage hunk + sub-hunk change block (unstaged: per-block
+  Stage via `Repo::apply_patch(ApplyTarget::Index)`. Staged: per-block
+  Unstage via `Repo::apply_patch(ApplyTarget::IndexReverse)`. TS-side
+  `sliceChangeBlock` carves a synthetic single-hunk patch matching
+  Pierre's `DiffAcceptRejectHunkConfig.changeIndex` semantics, so each
+  click acts on one `ChangeContent` group.)
+- ☐ Stage / unstage line (sub-block; currently a whole change block is
+  the smallest unit. Would need character/line-range selection UI.)
+- ☑ Discard working-tree changes (path) — file-level
+- ◐ Discard hunk / line + single-undo handle (per-block Discard:
   `Repo::apply_patch(ApplyTarget::WorkdirReverse)` reverse-applies the
-  hunk to the working tree. Line-level + undo affordance still pending.)
+  sliced patch to the working tree. Line-level + undo affordance still
+  pending.)
 - ☑ Commit (subject + body + amend; no GPG signing yet)
 - ◐ Create / delete branch (`Repo::create_branch` from any revspec —
   HEAD, commit, remote-tracking branch; auto-sets upstream when starting
@@ -165,9 +168,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Per-row Discard action (currently store-level only; needs right-click menu)
 - ☐ Recent-messages dropdown on the subject field (needs SQLite schema +
   per-repo history)
-- ◐ Hunk / line stage + unstage UI (unstaged: Stage + Discard buttons
-  per hunk in `UnstagedHunkDiff`. Staged: Unstage button per hunk in
-  `StagedHunkDiff` (reverse-apply to index). Line-level still pending.)
+- ☑ Hunk / change-block stage + unstage UI (`HunkAnnotatedDiff` renders
+  one `<PierreFileDiff/>` per file with `lineAnnotations` driving an
+  inline Stage / Discard pair on each change block — Unstage on the
+  staged side. `sliceChangeBlock` carves the synthetic single-hunk patch
+  routed through `useRepo.applyPatch`.)
+- ☐ Line-level (sub-change-block) stage / unstage — current smallest
+  unit is the change block. Would require a line/char selection UI.
 
 ### Commits view
 - ☑ Table from `repo_log`

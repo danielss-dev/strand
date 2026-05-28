@@ -30,9 +30,11 @@ system ported verbatim. No real feature surface yet.
   - ☑ Pierre `<PatchDiff>` integration themed to app tokens
   - ☑ Commit form: subject + body + amend; ⌘↵ shortcut; spinner state
   - ☑ File-level stage / unstage / discard via `git2`
-  - ◐ Line / hunk stage + unstage (hunk: unstaged → Stage / Discard;
-    staged → Unstage, all backed by `Repo::apply_patch`. Line-level
-    still pending.)
+  - ☑ Hunk + sub-hunk change-block stage / unstage (Pierre
+    `<FileDiff/>` with `lineAnnotations` driving inline Stage / Discard
+    / Unstage on each `ChangeContent`; `sliceChangeBlock` carves the
+    synthetic per-block patch fed to `Repo::apply_patch`.) Line-level
+    still pending.
   - ☐ Discard with single-undo handle
   - ☐ Recent commit messages dropdown
 - ◐ **Commit graph**
@@ -105,15 +107,27 @@ spaces are sanitized to dashes, Tab extends to the next `/` segment of
 matching existing branches. Untracked files now render their content
 in the diff pane (`show_untracked_content` on the diff options).
 
-**Hunk-level staging (2026-05-28):** Unstaged diff splits its per-file
-patch into one Pierre `<Diff/>` per hunk, with Stage / Discard buttons
-above each. Stage forward-applies the hunk to the index (`Repo::apply_patch
-(ApplyTarget::Index)`); Discard reverse-applies it to the worktree
-(`ApplyTarget::WorkdirReverse`, via a TS-side `splitPatchByHunk` and a
-Rust-side patch reversal). Staged diff gets the symmetric treatment via
-`StagedHunkDiff` — per-hunk **Unstage** reverse-applies the hunk to the
-index (new `ApplyTarget::IndexReverse`), moving it back to unstaged
-without touching disk. Line-level selection still pending.
+**Hunk-level staging (2026-05-28, superseded same day by sub-hunk):**
+Initial pass split the per-file patch into one Pierre `<Diff/>` per hunk
+with hover-overlay Stage / Discard / Unstage buttons above each.
+`Repo::apply_patch` gained three targets (`Index`, `IndexReverse`,
+`WorkdirReverse`) backed by a Rust-side `reverse_patch` helper, which
+all survived into the sub-hunk pipeline; the TS-side per-hunk
+`splitPatchByHunk` helper was replaced by `sliceChangeBlock` later the
+same day (see next paragraph).
+
+**Sub-hunk staging (2026-05-28):** Per-change-block actions land on top
+of the per-hunk pipeline. `LocalChanges.tsx` swaps `<PatchDiff>`-per-hunk
+for a single `<PierreFileDiff/>` per file, parsed via `getSingularPatch`
+and decorated with one annotation per `ChangeContent` group. Clicking
+Stage / Discard (unstaged) or Unstage (staged) on a block calls a new
+`sliceChangeBlock` helper that builds a synthetic single-hunk patch
+isolating that block — rewriting other blocks in the same hunk to
+context (forward) or omitting them (reverse) — and routes it through
+`Repo::apply_patch` (`Index` / `WorkdirReverse` / `IndexReverse`). The
+old hover-overlay hunk action UI and `splitPatchByHunk` render path are
+gone; the old `splitPatchByHunk` helper, no longer used, was removed
+along with them.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-

@@ -1950,10 +1950,10 @@ button {
   background: var(--bg-base);
 }
 
-/* One <Diff/> per hunk, all sharing a single file-header strip at the top
- * (.lc-hunkfile). The Accept / Reject buttons float in the top-right of
- * each hunk, hover-revealed, so the action stays tied to the specific
- * hunk you're pointing at and doesn't claim a full row of vertical space. */
+/* A single <PierreFileDiff/> per file. We render our own file-header
+ * strip on top (.lc-hunkfile) and let Pierre fill the rest with hunks
+ * and an inline Stage/Discard (or Unstage) button row anchored to each
+ * change block via `lineAnnotations`. */
 .lc-hunkfile {
   display: flex;
   align-items: center;
@@ -1966,7 +1966,10 @@ button {
   color: var(--text-muted);
   position: sticky;
   top: 0;
-  z-index: 2;
+  /* Must sit above .lc-actions-overlay (z-index: 3) so scrolled-up
+   * block buttons get clipped behind the sticky filename strip
+   * instead of poking through it. */
+  z-index: 4;
 }
 .lc-hunkfile .path {
   color: var(--text);
@@ -1981,32 +1984,69 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.lc-hunk {
+/* Per-change-block Stage / Discard cluster. The visible buttons live in
+ * a sibling overlay layer (.lc-actions-overlay), not in Pierre's
+ * annotation row — Pierre's slot is anchored to a single column in
+ * split mode, so a slotted button drifts horizontally per block. The
+ * overlay decouples X (right edge of the diff) from Y (per-block,
+ * measured from a marker we slot into the annotation row).
+ *
+ * The marker itself stays collapsed to nothing so the file reads as a
+ * continuous diff. */
+.lc-diff {
+  --diffs-annotation-min-height: 0;
+}
+.lc-block-marker {
+  display: block;
+  height: 0;
+  width: 0;
+  overflow: hidden;
+}
+.lc-diff-wrap {
   position: relative;
+  /* Pierre lays its diff out inline; we wrap it so the overlay has a
+   * positioning anchor that spans exactly the diff's box. */
 }
-.lc-hunk + .lc-hunk {
-  margin-top: 8px;
-}
-.lc-hunk-actions {
+.lc-actions-overlay {
   position: absolute;
-  top: 4px;
-  right: 8px;
-  z-index: 1;
-  display: flex;
+  inset: 0;
+  pointer-events: none;
+  /* Buttons appear in front of the diff content. */
+  z-index: 3;
+}
+.lc-overlay-slot {
+  /* Each slot is pinned to the right edge of the overlay (= right edge
+   * of the diff). `top` is set inline from the measured marker Y, which
+   * lands on the FIRST line of the change block. `translateY(-100%)`
+   * moves the slot up by its own height so it sits in the row JUST
+   * ABOVE the block — Fork-style "top-right of the change block"
+   * rather than centered on the first line. */
+  position: absolute;
+  right: 14px;
+  transform: translateY(-100%);
+  pointer-events: auto;
+}
+.lc-block-actions {
+  display: inline-flex;
   gap: 2px;
   padding: 2px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
   border: 0.5px solid var(--border);
+  backdrop-filter: blur(6px);
   opacity: 0;
   transition: opacity 0.1s ease;
-  backdrop-filter: blur(6px);
 }
-.lc-hunk:hover .lc-hunk-actions,
-.lc-hunk-actions:focus-within {
+/* Only the hovered (or keyboard-focused) block's button is visible —
+ * matches the per-block hover treatment Fork uses. The active slot
+ * gets the `data-active` attribute set (presence-only — absent when
+ * inactive) so the selector is a plain attribute match. */
+.lc-overlay-slot[data-active] .lc-block-actions,
+.lc-overlay-slot:hover .lc-block-actions,
+.lc-overlay-slot:focus-within .lc-block-actions {
   opacity: 1;
 }
-.lc-hunk-actions .hbtn {
+.lc-block-actions .hbtn {
   font-size: 10.5px;
   padding: 2px 8px;
   border-radius: 4px;
@@ -2017,18 +2057,18 @@ button {
   background: transparent;
   border: 0;
 }
-.lc-hunk-actions .hbtn:hover {
+.lc-block-actions .hbtn:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
-.lc-hunk-actions .hbtn:disabled {
+.lc-block-actions .hbtn:disabled {
   opacity: 0.5;
   cursor: progress;
 }
-.lc-hunk-actions .hbtn.accept:hover {
+.lc-block-actions .hbtn.accept:hover {
   color: var(--add);
 }
-.lc-hunk-actions .hbtn.reject:hover {
+.lc-block-actions .hbtn.reject:hover {
   color: var(--del);
 }
 
