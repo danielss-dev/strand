@@ -30,9 +30,9 @@ system ported verbatim. No real feature surface yet.
   - ☑ Pierre `<PatchDiff>` integration themed to app tokens
   - ☑ Commit form: subject + body + amend; ⌘↵ shortcut; spinner state
   - ☑ File-level stage / unstage / discard via `git2`
-  - ◐ Line / hunk stage + unstage (hunk: unstaged → stage / discard via
-    Accept / Reject buttons backed by `Repo::apply_patch`. Staged-side
-    unstage-hunk + line-level still pending.)
+  - ◐ Line / hunk stage + unstage (hunk: unstaged → Stage / Discard
+    buttons backed by `Repo::apply_patch`. Staged-side unstage-hunk +
+    line-level still pending.)
   - ☐ Discard with single-undo handle
   - ☐ Recent commit messages dropdown
 - ◐ **Commit graph**
@@ -105,9 +105,9 @@ matching existing branches. Untracked files now render their content
 in the diff pane (`show_untracked_content` on the diff options).
 
 **Hunk-level staging (2026-05-28):** Unstaged diff splits its per-file
-patch into one Pierre `<Diff/>` per hunk, with Accept / Reject buttons
-above each. Accept forward-applies the hunk to the index (`Repo::apply_patch
-(ApplyTarget::Index)`); Reject reverse-applies it to the worktree
+patch into one Pierre `<Diff/>` per hunk, with Stage / Discard buttons
+above each. Stage forward-applies the hunk to the index (`Repo::apply_patch
+(ApplyTarget::Index)`); Discard reverse-applies it to the worktree
 (`ApplyTarget::WorkdirReverse`, via a TS-side `splitPatchByHunk` and a
 Rust-side patch reversal). Staged-side unstage-hunk and line-level
 selection still pending.

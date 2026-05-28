@@ -429,10 +429,10 @@ function DiffBody({
 /**
  * Renders the unstaged diff as one `<Diff/>` per hunk. A single sticky
  * file-header strip sits at the top; Pierre's per-file header is
- * suppressed on every hunk so the rows line up. Accept / Reject buttons
+ * suppressed on every hunk so the rows line up. Stage / Discard buttons
  * float in the top-right of each hunk and reveal on hover:
- * - **Accept** forward-applies that hunk to the index (stages just it).
- * - **Reject** reverse-applies it to the working tree (discards it on disk).
+ * - **Stage** forward-applies that hunk to the index (stages just it).
+ * - **Discard** reverse-applies it to the working tree (wipes it from disk).
  *
  * Both routes go through `useRepo.applyPatch`, which triggers a
  * `refreshLocalChanges` so the diff list rebuilds with the remaining hunks.
@@ -487,7 +487,7 @@ function UnstagedHunkDiff({
                 onClick={() => void run(i, 'index')}
                 title="Stage this hunk"
               >
-                {busy ? 'Accepting…' : 'Accept'}
+                {busy ? 'Staging…' : 'Stage'}
               </button>
               <button
                 type="button"
@@ -496,7 +496,7 @@ function UnstagedHunkDiff({
                 onClick={() => void run(i, 'workdir_reverse')}
                 title="Discard this hunk from the working tree"
               >
-                {busy ? 'Rejecting…' : 'Reject'}
+                {busy ? 'Discarding…' : 'Discard'}
               </button>
             </div>
             <Diff patch={hunk} layout={layout} hideFileHeader />

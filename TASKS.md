@@ -47,18 +47,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
-- ◐ Stage / unstage hunk (unstaged: per-change-block Accept via
-  `Repo::apply_patch(ApplyTarget::Index)` + FE `splitPatchBySubHunk`,
-  which slices a top-level git hunk into one sub-patch per `+`/`-` run.
-  Staged → unstage hunk still pending — needs the inverse direction in
-  the staged pane.)
+- ◐ Stage / unstage hunk (unstaged: per-hunk Stage via
+  `Repo::apply_patch(ApplyTarget::Index)` + FE `splitPatchByHunk`,
+  which emits one patch per top-level `@@` hunk. Staged → unstage hunk
+  still pending — needs the inverse direction in the staged pane.)
 - ☐ Stage / unstage line
 - ☑ Discard working-tree changes (path) — file-level only
-- ◐ Discard hunk / line + single-undo handle (per-change-block Reject:
-  FE builds a pre-flipped sub-patch (other blocks' `+` lines become
-  context, `-` lines drop, this block's `+`/`-` swap) and
-  `Repo::apply_patch(ApplyTarget::WorkTree)` forward-applies it.
-  Line-level + undo affordance still pending.)
+- ◐ Discard hunk / line + single-undo handle (per-hunk Discard:
+  `Repo::apply_patch(ApplyTarget::WorkdirReverse)` reverse-applies the
+  hunk to the working tree. Line-level + undo affordance still pending.)
 - ☑ Commit (subject + body + amend; no GPG signing yet)
 - ◐ Create / delete branch (`Repo::create_branch` from any revspec —
   HEAD, commit, remote-tracking branch; auto-sets upstream when starting
@@ -167,10 +164,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Per-row Discard action (currently store-level only; needs right-click menu)
 - ☐ Recent-messages dropdown on the subject field (needs SQLite schema +
   per-repo history)
-- ◐ Hunk / line stage + unstage UI (unstaged side: Accept (stage hunk) +
-  Reject (discard from worktree) buttons above each hunk in `LocalChanges`
-  → `UnstagedHunkDiff`. Staged-side unstage-hunk and line-level still
-  pending.)
+- ◐ Hunk / line stage + unstage UI (unstaged side: Stage + Discard
+  buttons above each hunk in `LocalChanges` → `UnstagedHunkDiff`.
+  Staged-side unstage-hunk and line-level still pending.)
 
 ### Commits view
 - ☑ Table from `repo_log`
