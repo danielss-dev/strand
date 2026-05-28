@@ -58,8 +58,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Discard working-tree changes (path) — file-level
 - ◐ Discard hunk / line + single-undo handle (per-block Discard:
   `Repo::apply_patch(ApplyTarget::WorkdirReverse)` reverse-applies the
-  sliced patch to the working tree. Line-level + undo affordance still
-  pending.)
+  sliced patch to the working tree. Single-undo shipped: `ApplyTarget::Workdir`
+  forward-applies the same slice back, surfaced as an Undo toast for 6s via
+  `discardPatch` / `undoDiscard` + `lastDiscard` handle. Line-level discard
+  still pending.)
 - ☑ Commit (subject + body + amend; no GPG signing yet)
 - ◐ Create / delete branch (`Repo::create_branch` from any revspec —
   HEAD, commit, remote-tracking branch; auto-sets upstream when starting

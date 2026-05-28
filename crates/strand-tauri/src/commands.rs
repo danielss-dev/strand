@@ -94,6 +94,7 @@ pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResul
         "index" => ApplyTarget::Index,
         "index_reverse" => ApplyTarget::IndexReverse,
         "workdir_reverse" => ApplyTarget::WorkdirReverse,
+        "workdir" => ApplyTarget::Workdir,
         other => {
             return Err(CmdError {
                 message: format!("repo_apply_patch: unknown target `{other}`"),

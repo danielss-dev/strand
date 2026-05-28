@@ -47,6 +47,16 @@ export interface RepoState {
   localSelection: LocalSelection | null;
 
   /**
+   * Single-undo handle for the most recent discard. Discarding a change
+   * block reverse-applies a sliced patch to the working tree; this keeps
+   * that exact slice around so {@link RepoState.undoDiscard} can
+   * forward-apply it back. `path` pins it to the repo it came from so a
+   * stale handle can't be replayed against a different tab. Cleared once
+   * the undo toast times out (see `clearUndo`) or after an undo.
+   */
+  lastDiscard: { patch: string; label: string; path: string } | null;
+
+  /**
    * Commit clicked in the All Commits graph. When non-null, the right-side
    * `<CommitDetail />` panel opens and `selectedCommitDiffs` is populated
    * from `repo_diff_commit`.
@@ -86,7 +96,20 @@ export interface RepoState {
    * file's full patch) to either the index or the working tree in reverse.
    * Powers per-hunk Accept / Reject in the unstaged diff.
    */
-  applyPatch(patch: string, target: 'index' | 'index_reverse' | 'workdir_reverse'): Promise<void>;
+  applyPatch(
+    patch: string,
+    target: 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir',
+  ): Promise<void>;
+  /**
+   * Discard a single sliced patch from the working tree and record it as
+   * the {@link RepoState.lastDiscard} undo handle. `slice` must be the
+   * forward-oriented patch (same one fed to `applyPatch(_, 'workdir_reverse')`).
+   */
+  discardPatch(slice: string, label: string): Promise<void>;
+  /** Re-apply the last discarded slice to the working tree, then clear the handle. */
+  undoDiscard(): Promise<void>;
+  /** Drop the undo handle without re-applying (called when the toast times out). */
+  clearUndo(): void;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
   commit(subject: string, body: string | null, amend: boolean): Promise<void>;
@@ -123,6 +146,7 @@ const EMPTY_ACTIVE = {
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
+  lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
   selectedCommit: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
@@ -351,6 +375,30 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoApplyPatch(path, patch, target);
     await get().refreshLocalChanges();
   },
+  async discardPatch(slice, label) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoApplyPatch(path, slice, 'workdir_reverse');
+    // Record the exact slice so undoDiscard can forward-apply it back.
+    // Replaces any prior handle — single-undo only ever recovers the
+    // most recent discard.
+    set({ lastDiscard: { patch: slice, label, path } });
+    await get().refreshLocalChanges();
+  },
+  async undoDiscard() {
+    const last = get().lastDiscard;
+    const path = get().activePath;
+    // Guard the handle against the active repo: a discard recorded in one
+    // tab must not be replayed into another. A mismatch just drops it.
+    if (!last || !path || last.path !== path) {
+      set({ lastDiscard: null });
+      return;
+    }
+    set({ lastDiscard: null });
+    await tauri.repoApplyPatch(path, last.patch, 'workdir');
+    await get().refreshLocalChanges();
+  },
+  clearUndo: () => set({ lastDiscard: null }),
   async stageAll() {
     const path = get().activePath;
     if (!path) return;

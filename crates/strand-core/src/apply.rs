@@ -13,6 +13,11 @@ pub enum ApplyTarget {
     /// hunk from disk. Destructive; the UI is responsible for any undo
     /// affordance.
     WorkdirReverse,
+    /// Forward-apply to the working tree. "Undo discard" — re-apply a
+    /// previously discarded slice to disk. The exact inverse of
+    /// [`WorkdirReverse`](ApplyTarget::WorkdirReverse) for the same patch,
+    /// which is what powers the single-undo handle on discard.
+    Workdir,
 }
 
 impl Repo {
@@ -28,6 +33,7 @@ impl Repo {
             ApplyTarget::Index => (patch.to_owned(), git2::ApplyLocation::Index),
             ApplyTarget::IndexReverse => (reverse_patch(patch), git2::ApplyLocation::Index),
             ApplyTarget::WorkdirReverse => (reverse_patch(patch), git2::ApplyLocation::WorkDir),
+            ApplyTarget::Workdir => (patch.to_owned(), git2::ApplyLocation::WorkDir),
         };
         let diff = git2::Diff::from_buffer(buf.as_bytes())?;
         repo.apply(&diff, location, None)?;

@@ -1664,6 +1664,25 @@
   animation: popIn 0.2s cubic-bezier(0.2, 0.7, 0.4, 1);
   z-index: 50;
 }
+/* Undo toast sits just above the plain toast so a discard landing on top
+   of a sync message doesn't overlap it. */
+.toast.undo {
+  bottom: 76px;
+}
+.toast-action {
+  margin-left: 4px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent, var(--b-3));
+  color: #fff;
+  font-size: var(--type-ui);
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-action:hover {
+  filter: brightness(1.1);
+}
 
 /* helper: spinner */
 @keyframes spin {

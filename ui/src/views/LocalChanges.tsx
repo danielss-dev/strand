@@ -468,6 +468,7 @@ function HunkAnnotatedDiff({
   side: 'unstaged' | 'staged';
 }) {
   const applyPatch = useRepo((s) => s.applyPatch);
+  const discardPatch = useRepo((s) => s.discardPatch);
   const [pending, setPending] = useState<string | null>(null);
   // Two independent hover sources. `lineHovered` follows Pierre's
   // onLineEnter (set when the cursor is on a block line, null on a
@@ -668,7 +669,14 @@ function HunkAnnotatedDiff({
     setPending(key);
     try {
       const slice = sliceChangeBlock(diff.patch, meta.hunkIndex, meta.contentIndex, direction);
-      await applyPatch(slice, target);
+      // Discard routes through discardPatch so it records a single-undo
+      // handle; stage / unstage are non-destructive and don't need one.
+      if (target === 'workdir_reverse') {
+        const name = diff.path.split('/').pop() ?? diff.path;
+        await discardPatch(slice, `Discarded a change in ${name}`);
+      } else {
+        await applyPatch(slice, target);
+      }
     } catch (e) {
       console.error('apply patch failed', e);
     } finally {

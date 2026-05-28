@@ -253,6 +253,8 @@ export function App() {
             <span>{toast}</span>
           </div>
         )}
+
+        <UndoToast />
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
@@ -267,6 +269,47 @@ export function App() {
           Running in browser — Rust commands disabled. Run <code>pnpm tauri dev</code>.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Single-undo affordance for discards. Watches `lastDiscard`; whenever a
+ * new handle appears it surfaces a toast with an Undo button for a few
+ * seconds, then lets the handle expire. Clicking Undo forward-applies the
+ * discarded slice back to the working tree. Modeled on the "Undo send"
+ * pattern — the window to undo is the lifetime of the toast.
+ */
+const UNDO_WINDOW_MS = 6000;
+
+function UndoToast() {
+  const lastDiscard = useRepo((s) => s.lastDiscard);
+  const undoDiscard = useRepo((s) => s.undoDiscard);
+  const clearUndo = useRepo((s) => s.clearUndo);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!lastDiscard) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const t = setTimeout(() => {
+      setVisible(false);
+      clearUndo();
+    }, UNDO_WINDOW_MS);
+    return () => clearTimeout(t);
+  }, [lastDiscard, clearUndo]);
+
+  if (!visible || !lastDiscard) return null;
+
+  return (
+    <div className="toast undo">
+      <span style={{ color: 'var(--text-2)' }}><Icon name="trash" size={13} /></span>
+      <span>{lastDiscard.label}</span>
+      <button type="button" className="toast-action" onClick={() => void undoDiscard()}>
+        Undo
+      </button>
     </div>
   );
 }

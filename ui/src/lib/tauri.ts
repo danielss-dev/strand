@@ -34,7 +34,7 @@ export const tauri = {
   repoApplyPatch: (
     path: string,
     patch: string,
-    target: 'index' | 'index_reverse' | 'workdir_reverse',
+    target: 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir',
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
   repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
     invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),

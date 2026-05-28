@@ -35,7 +35,8 @@ system ported verbatim. No real feature surface yet.
     / Unstage on each `ChangeContent`; `sliceChangeBlock` carves the
     synthetic per-block patch fed to `Repo::apply_patch`.) Line-level
     still pending.
-  - ☐ Discard with single-undo handle
+  - ☑ Discard with single-undo handle (per-change-block; undo toast
+    forward-applies the discarded slice back)
   - ☐ Recent commit messages dropdown
 - ◐ **Commit graph**
   - ☑ Table view from `repo_log`
@@ -128,6 +129,20 @@ context (forward) or omitting them (reverse) — and routes it through
 old hover-overlay hunk action UI and `splitPatchByHunk` render path are
 gone; the old `splitPatchByHunk` helper, no longer used, was removed
 along with them.
+
+**Discard single-undo (2026-05-28):** Discarding a change block now records
+a single-undo handle. The key symmetry: discard reverse-applies a sliced
+patch to the working tree (`ApplyTarget::WorkdirReverse`), so undo is just
+the same slice forward-applied to the working tree. A new
+`ApplyTarget::Workdir` (forward apply to `WorkDir`) is the exact inverse;
+`repo_apply_patch` accepts the `"workdir"` target string. The store's
+`discardPatch` performs the discard and stashes the slice in `lastDiscard`
+(path-pinned so it can't be replayed into another tab); `undoDiscard`
+forward-applies it. `LocalChanges.tsx` routes only the Discard button
+through `discardPatch` (stage/unstage are non-destructive). A self-contained
+`UndoToast` in `App.tsx` surfaces an Undo button for 6s per discard
+("Undo send" model) — single-undo only ever recovers the most recent
+discard. Line-level discard + a persistent undo stack are still future work.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-
