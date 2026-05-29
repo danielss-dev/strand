@@ -2284,6 +2284,7 @@ button {
 .clone-dialog {
   width: 520px;
   max-width: calc(100vw - 64px);
+  align-self: flex-start;
   background: var(--bg-panel);
   border-radius: 12px;
   box-shadow:

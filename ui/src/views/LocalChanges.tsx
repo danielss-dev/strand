@@ -861,6 +861,13 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
     if (recentOpen) recentPopRef.current?.focus();
   }, [recentOpen]);
 
+  // Keep the highlight in range if the list shrinks under us (de-dupe, repo
+  // switch, refresh). A stale index would leave aria-activedescendant
+  // pointing at a missing option and make Enter a no-op.
+  useEffect(() => {
+    if (recentSel >= recentMessages.length) setRecentSel(0);
+  }, [recentMessages.length, recentSel]);
+
   function openRecent() {
     if (recentMessages.length === 0) return;
     setRecentSel(0);

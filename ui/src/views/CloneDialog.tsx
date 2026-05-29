@@ -63,7 +63,14 @@ export function CloneDialog({
     return () => document.removeEventListener('keydown', onKey);
   }, [cloning, onClose]);
 
-  const dest = useMemo(() => (parent && name.trim() ? joinPath(parent, name.trim()) : ''), [parent, name]);
+  // The folder name must be a single path segment — no separators or `..`,
+  // or the clone could land outside the chosen parent directory.
+  const trimmedName = name.trim();
+  const nameValid = trimmedName !== '' && !/[\\/]/.test(trimmedName) && trimmedName !== '.' && trimmedName !== '..';
+  const dest = useMemo(
+    () => (parent && nameValid ? joinPath(parent, trimmedName) : ''),
+    [parent, nameValid, trimmedName],
+  );
   const canClone = Boolean(url.trim() && dest) && !cloning;
 
   async function chooseParent() {
@@ -169,7 +176,9 @@ export function CloneDialog({
             />
           </label>
 
-          {dest ? (
+          {trimmedName && !nameValid ? (
+            <div className="clone-error">Folder name must be a single folder, with no slashes or “..”.</div>
+          ) : dest ? (
             <div className="clone-dest-full">
               Clones into <code>{dest}</code>
             </div>

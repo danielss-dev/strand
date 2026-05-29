@@ -319,11 +319,11 @@ export const useRepo = create<RepoState>((set, get) => ({
     void persistSession(get());
     if (neighbor) {
       void Promise.all([
-      get().refreshLocalChanges(),
-      get().refreshLog(),
-      get().refreshRefs(),
-      get().refreshRecentMessages(),
-    ]);
+        get().refreshLocalChanges(),
+        get().refreshLog(),
+        get().refreshRefs(),
+        get().refreshRecentMessages(),
+      ]);
     }
   },
 
