@@ -17,6 +17,9 @@ interface Props {
   syncing: boolean;
   pulling: boolean;
   pushing: boolean;
+  syncDone: boolean;
+  pullDone: boolean;
+  pushDone: boolean;
   onToast: (msg: string) => void;
 }
 
@@ -31,6 +34,9 @@ export function Topbar({
   syncing,
   pulling,
   pushing,
+  syncDone,
+  pullDone,
+  pushDone,
   onToast,
 }: Props) {
   const platform = useSettings((s) => s.platform);
@@ -100,9 +106,13 @@ export function Topbar({
           aria-label="Fetch"
           disabled={!meta}
         >
-          <span className={syncing ? 'icon-spin' : undefined}>
-            <Icon name="refresh" size={13} />
-          </span>
+          {syncDone ? (
+            <span className="sync-done"><Icon name="check" size={13} stroke={2.2} /></span>
+          ) : (
+            <span className={syncing ? 'icon-spin' : undefined}>
+              <Icon name="refresh" size={13} />
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -112,9 +122,13 @@ export function Topbar({
           aria-label={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
           disabled={!meta}
         >
-          <span className={pulling ? 'slide-icon slide-down' : 'slide-icon'}>
-            <Icon name="arrow-down" size={13} />
-          </span>
+          {pullDone ? (
+            <span className="sync-done"><Icon name="check" size={13} stroke={2.2} /></span>
+          ) : (
+            <span className={pulling ? 'slide-icon slide-down' : 'slide-icon'}>
+              <Icon name="arrow-down" size={13} />
+            </span>
+          )}
           <span className="count">{behind}</span>
         </button>
         <button
@@ -125,9 +139,13 @@ export function Topbar({
           aria-label={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
           disabled={!meta}
         >
-          <span className={pushing ? 'slide-icon slide-up' : 'slide-icon'}>
-            <Icon name="arrow-up" size={13} />
-          </span>
+          {pushDone ? (
+            <span className="sync-done"><Icon name="check" size={13} stroke={2.2} /></span>
+          ) : (
+            <span className={pushing ? 'slide-icon slide-up' : 'slide-icon'}>
+              <Icon name="arrow-up" size={13} />
+            </span>
+          )}
           <span className="count">{ahead}</span>
         </button>
       </div>

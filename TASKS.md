@@ -146,8 +146,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Topbar
 - ☑ Layout + native-chrome alignment
 - ☑ Fetch / Pull / Push handlers (shell out to `git`; spinner + shimmer
-  + directional bobbing animation while in flight; toasts on
-  success/failure with git stderr)
+  + directional bobbing animation while in flight; success flashes an
+  inline accent-colored check on the button — `.sync-done` in chrome.css,
+  `flashDone` in App.tsx — no longer a toast; failures still toast git
+  stderr)
 - ☑ Real ahead/behind counts (driven by `Repo::meta`)
 - ☑ Branch picker dropdown (lists local + remote branches with upstream
   + ahead/behind; checkout local branch, track a remote branch, and an

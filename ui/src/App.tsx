@@ -46,6 +46,11 @@ export function App() {
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
+  // Brief "done" pulses: after a sync op succeeds the button flashes a
+  // check instead of raising a toast. Cleared after the pulse animation.
+  const [syncDone, setSyncDone] = useState(false);
+  const [pullDone, setPullDone] = useState(false);
+  const [pushDone, setPushDone] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   // Live network-op progress (clone/fetch/pull/push) shown as a pill while
   // a transfer is in flight. Null when idle.
@@ -54,6 +59,13 @@ export function App() {
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  // Flash a button's check pulse for ~1.6s. The duration outlasts the
+  // pop-in animation so the check lingers briefly before reverting.
+  const flashDone = useCallback((set: (v: boolean) => void) => {
+    set(true);
+    setTimeout(() => set(false), 1600);
   }, []);
 
   const onNetProgress = useCallback((p: Progress) => {
@@ -83,14 +95,14 @@ export function App() {
     await waitForPaint();
     try {
       await fetchRepo(onNetProgress);
-      showToast('Fetched');
+      flashDone(setSyncDone);
     } catch (e) {
       showToast(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSyncing(false);
       setNetProgress(null);
     }
-  }, [fetchRepo, onNetProgress, showToast, syncing]);
+  }, [fetchRepo, onNetProgress, showToast, flashDone, syncing]);
 
   const onPull = useCallback(async () => {
     if (pulling) return;
@@ -99,14 +111,14 @@ export function App() {
     await waitForPaint();
     try {
       await pullRepo(false, onNetProgress);
-      showToast('Pulled');
+      flashDone(setPullDone);
     } catch (e) {
       showToast(`Pull failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPulling(false);
       setNetProgress(null);
     }
-  }, [pullRepo, onNetProgress, showToast, pulling]);
+  }, [pullRepo, onNetProgress, showToast, flashDone, pulling]);
 
   const onPush = useCallback(async () => {
     if (pushing) return;
@@ -115,14 +127,14 @@ export function App() {
     await waitForPaint();
     try {
       await pushRepo(false, onNetProgress);
-      showToast('Pushed');
+      flashDone(setPushDone);
     } catch (e) {
       showToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPushing(false);
       setNetProgress(null);
     }
-  }, [pushRepo, onNetProgress, showToast, pushing]);
+  }, [pushRepo, onNetProgress, showToast, flashDone, pushing]);
 
   // Load recents + restore the tabs the user had open last time. Both run
   // once on first mount; restoreSession is idempotent so StrictMode's
@@ -242,6 +254,9 @@ export function App() {
           syncing={syncing}
           pulling={pulling}
           pushing={pushing}
+          syncDone={syncDone}
+          pullDone={pullDone}
+          pushDone={pushDone}
           onToast={showToast}
         />
 
