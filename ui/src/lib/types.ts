@@ -9,6 +9,8 @@ export interface RepoMeta {
   branch: string;
   ahead: number;
   behind: number;
+  /** True when HEAD is detached; `branch` then holds the short OID. */
+  detached: boolean;
 }
 
 export type StatusKind = 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED' | 'CONFLICTED';
@@ -99,6 +101,29 @@ export interface CheckoutOutcome {
 export interface NetworkOutcome {
   /** Combined stdout/stderr from `git`, trimmed. Show in a toast/log. */
   output: string;
+}
+
+/** Streamed progress fragment from a network op (clone/fetch/pull/push). */
+export interface Progress {
+  /** Phase label, e.g. "Receiving objects"; empty for plain status lines. */
+  phase: string;
+  /** Parsed `NN%` when the fragment carried one. */
+  percent: number | null;
+  /** Raw git fragment, trimmed — shown verbatim when there's no percent. */
+  raw: string;
+}
+
+export interface CloneOutcome {
+  /** Absolute path of the cloned working tree, ready to open. */
+  path: string;
+  output: string;
+}
+
+/** One file in the working-tree view (Files sidebar tab). */
+export interface WorkTreeEntry {
+  path: string;
+  /** Change status, or `null` for a clean tracked file. */
+  status: StatusKind | null;
 }
 
 /** Row in the `recent_repos` SQLite table. Frontend-managed. */

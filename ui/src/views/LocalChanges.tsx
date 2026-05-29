@@ -826,10 +826,61 @@ function BlockActions({
 
 function CommitBar({ canCommit }: { canCommit: boolean }) {
   const commit = useRepo((s) => s.commit);
+  const recentMessages = useRepo((s) => s.recentMessages);
+  const refreshRecentMessages = useRepo((s) => s.refreshRecentMessages);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [amend, setAmend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Recent-messages dropdown state.
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentSel, setRecentSel] = useState(0);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const recentWrapRef = useRef<HTMLDivElement>(null);
+  const recentPopRef = useRef<HTMLDivElement>(null);
+
+  // Make sure the list is fresh the first time the form mounts (the store
+  // also refreshes it on repo open / after each commit).
+  useEffect(() => {
+    void refreshRecentMessages();
+  }, [refreshRecentMessages]);
+
+  // Close the dropdown on outside click.
+  useEffect(() => {
+    if (!recentOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!recentWrapRef.current?.contains(e.target as Node)) setRecentOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [recentOpen]);
+
+  // Move focus into the popover once when it opens, so arrow keys drive it.
+  useEffect(() => {
+    if (recentOpen) recentPopRef.current?.focus();
+  }, [recentOpen]);
+
+  // Keep the highlight in range if the list shrinks under us (de-dupe, repo
+  // switch, refresh). A stale index would leave aria-activedescendant
+  // pointing at a missing option and make Enter a no-op.
+  useEffect(() => {
+    if (recentSel >= recentMessages.length) setRecentSel(0);
+  }, [recentMessages.length, recentSel]);
+
+  function openRecent() {
+    if (recentMessages.length === 0) return;
+    setRecentSel(0);
+    setRecentOpen(true);
+    void refreshRecentMessages();
+  }
+
+  function applyMessage(m: { subject: string; body: string }) {
+    setSubject(m.subject);
+    setBody(m.body);
+    setRecentOpen(false);
+    subjectRef.current?.focus();
+  }
 
   async function submit() {
     const trimmed = subject.trim();
@@ -853,8 +904,9 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   return (
     <div className="lc-commit-bar">
       <div className="cb-top">
-        <div className="subject-row">
+        <div className="subject-row" ref={recentWrapRef}>
           <input
+            ref={subjectRef}
             className="subject"
             placeholder="Commit subject"
             value={subject}
@@ -863,9 +915,73 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 void submit();
+              } else if (e.key === 'ArrowDown' && !recentOpen && recentMessages.length > 0) {
+                e.preventDefault();
+                openRecent();
               }
             }}
           />
+          {recentMessages.length > 0 && (
+            <button
+              type="button"
+              className="recent-btn"
+              aria-label="Recent commit messages"
+              aria-haspopup="listbox"
+              aria-expanded={recentOpen}
+              title="Recent commit messages"
+              onClick={() => (recentOpen ? setRecentOpen(false) : openRecent())}
+            >
+              <Icon name="history" size={13} />
+            </button>
+          )}
+          {recentOpen && recentMessages.length > 0 && (
+            <div
+              className="recent-pop"
+              role="listbox"
+              aria-label="Recent commit messages"
+              aria-activedescendant={`recent-opt-${recentSel}`}
+              tabIndex={-1}
+              ref={recentPopRef}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setRecentSel((i) => (i + 1) % recentMessages.length);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setRecentSel((i) => (i - 1 + recentMessages.length) % recentMessages.length);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const m = recentMessages[recentSel];
+                  if (m) applyMessage(m);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setRecentOpen(false);
+                  subjectRef.current?.focus();
+                }
+              }}
+            >
+              <div className="recent-head">Recent messages</div>
+              {recentMessages.map((m, i) => (
+                // Non-focusable option: focus stays on the listbox container
+                // so ArrowUp/Down keep driving the aria-activedescendant
+                // selection. mousedown is suppressed so a click doesn't pull
+                // focus off the listbox before onClick runs.
+                <div
+                  key={`${i}:${m.subject}`}
+                  id={`recent-opt-${i}`}
+                  role="option"
+                  aria-selected={i === recentSel}
+                  className={'recent-item' + (i === recentSel ? ' selected' : '')}
+                  title={m.body ? `${m.subject}\n\n${m.body}` : m.subject}
+                  onMouseEnter={() => setRecentSel(i)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => applyMessage(m)}
+                >
+                  {m.subject}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <label className="amend">
           <input

@@ -1,15 +1,29 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 
 import type {
   CheckoutOutcome,
+  CloneOutcome,
   Commit,
   CommitOutcome,
   FileDiff,
   FileStatus,
   NetworkOutcome,
+  Progress,
   Refs,
   RepoMeta,
+  WorkTreeEntry,
 } from './types';
+
+/**
+ * Build the IPC `Channel` the Rust network commands stream progress over.
+ * Kept here so callers pass a plain `(p: Progress) => void` and never touch
+ * the Channel primitive directly.
+ */
+function progressChannel(onProgress?: (p: Progress) => void): Channel<Progress> {
+  const channel = new Channel<Progress>();
+  if (onProgress) channel.onmessage = onProgress;
+  return channel;
+}
 
 /**
  * Typed wrappers around the Rust `tauri::command` handlers in
@@ -38,14 +52,23 @@ export const tauri = {
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
   repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
     invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
-  repoFetch: (path: string, remote: string | null) =>
-    invoke<NetworkOutcome>('repo_fetch', { path, remote }),
-  repoPull: (path: string, rebase: boolean) =>
-    invoke<NetworkOutcome>('repo_pull', { path, rebase }),
-  repoPush: (path: string, forceWithLease: boolean) =>
-    invoke<NetworkOutcome>('repo_push', { path, forceWithLease }),
+  repoFetch: (path: string, remote: string | null, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_fetch', { path, remote, onEvent: progressChannel(onProgress) }),
+  repoPull: (path: string, rebase: boolean, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_pull', { path, rebase, onEvent: progressChannel(onProgress) }),
+  repoPush: (path: string, forceWithLease: boolean, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_push', {
+      path,
+      forceWithLease,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void) =>
+    invoke<CloneOutcome>('repo_clone', { url, dest, onEvent: progressChannel(onProgress) }),
   repoCheckout: (path: string, branch: string) =>
     invoke<CheckoutOutcome>('repo_checkout', { path, branch }),
+  repoCheckoutCommit: (path: string, rev: string) =>
+    invoke<CheckoutOutcome>('repo_checkout_commit', { path, rev }),
+  repoTree: (path: string) => invoke<WorkTreeEntry[]>('repo_tree', { path }),
   repoBranchCreate: (
     path: string,
     name: string,

@@ -1,8 +1,10 @@
 use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff,
-    log::Commit, network::NetworkOutcome, refs::Refs, repo::RepoMeta, status::FileStatus, Repo,
+    log::Commit, network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
+    refs::Refs, repo::RepoMeta, status::FileStatus, tree::WorkTreeEntry, Repo,
 };
+use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::state::AppState;
@@ -115,24 +117,91 @@ pub fn repo_commit(
     Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
 }
 
+// Network commands run on a blocking thread (they shell out to `git`, which
+// can take a while) and stream progress back over an IPC `Channel`. They're
+// `async` so Tauri schedules them off the main thread; the actual blocking
+// work lives in `spawn_blocking`.
+
 #[tauri::command]
-pub fn repo_fetch(path: String, remote: Option<String>) -> CmdResult<NetworkOutcome> {
-    Ok(Repo::discover(&path)?.fetch(remote.as_deref())?)
+pub async fn repo_fetch(
+    path: String,
+    remote: Option<String>,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.fetch(remote.as_deref(), |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("fetch task failed: {e}") })?
 }
 
 #[tauri::command]
-pub fn repo_pull(path: String, rebase: bool) -> CmdResult<NetworkOutcome> {
-    Ok(Repo::discover(&path)?.pull(rebase)?)
+pub async fn repo_pull(
+    path: String,
+    rebase: bool,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.pull(rebase, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("pull task failed: {e}") })?
 }
 
 #[tauri::command]
-pub fn repo_push(path: String, force_with_lease: bool) -> CmdResult<NetworkOutcome> {
-    Ok(Repo::discover(&path)?.push(force_with_lease)?)
+pub async fn repo_push(
+    path: String,
+    force_with_lease: bool,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.push(force_with_lease, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("push task failed: {e}") })?
+}
+
+#[tauri::command]
+pub async fn repo_clone(
+    url: String,
+    dest: String,
+    on_event: Channel<Progress>,
+) -> CmdResult<CloneOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<CloneOutcome> {
+        core_clone(&url, &dest, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("clone task failed: {e}") })?
 }
 
 #[tauri::command]
 pub fn repo_checkout(path: String, branch: String) -> CmdResult<CheckoutOutcome> {
     Ok(Repo::discover(&path)?.checkout_branch(&branch)?)
+}
+
+#[tauri::command]
+pub fn repo_checkout_commit(path: String, rev: String) -> CmdResult<CheckoutOutcome> {
+    Ok(Repo::discover(&path)?.checkout_commit(&rev)?)
+}
+
+#[tauri::command]
+pub fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
+    Ok(Repo::discover(&path)?.work_tree()?)
 }
 
 #[tauri::command]

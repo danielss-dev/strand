@@ -39,7 +39,10 @@ fn main() {
             commands::repo_fetch,
             commands::repo_pull,
             commands::repo_push,
+            commands::repo_clone,
             commands::repo_checkout,
+            commands::repo_checkout_commit,
+            commands::repo_tree,
             commands::repo_branch_create,
             commands::repo_branch_delete,
         ])

@@ -329,6 +329,26 @@
     display: inline-flex;
     align-items: center;
 }
+/* Success pulse: the check that replaces the icon when a sync op
+   completes. Uses the app accent (themeable later) and pops in. */
+.sync-done {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    animation: sync-done-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+    will-change: transform, opacity;
+}
+@keyframes sync-done-pop {
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
 @keyframes slide-down {
     0% {
         transform: translateY(-3px);
@@ -412,6 +432,24 @@
 }
 .branch-btn .chev {
     color: var(--text-dim);
+}
+.branch-btn.detached {
+    box-shadow: 0 0 0 0.5px var(--mod) inset;
+}
+.branch-btn.detached .branch-name {
+    color: var(--mod);
+}
+.branch-btn .det-chip {
+    font-family: var(--font-ui);
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--mod-bg);
+    color: var(--mod);
+    flex-shrink: 0;
 }
 
 .cmd-pill {
