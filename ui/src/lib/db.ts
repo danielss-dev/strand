@@ -58,7 +58,7 @@ export const commitMessages = {
     const d = await db();
     return d.select<StoredMessage[]>(
       `SELECT subject, body FROM commit_messages WHERE repo_path = $1
-       ORDER BY committed_at DESC LIMIT $2`,
+       ORDER BY committed_at DESC, id DESC LIMIT $2`,
       [repoPath, limit],
     );
   },

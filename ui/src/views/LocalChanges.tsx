@@ -962,8 +962,11 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
             >
               <div className="recent-head">Recent messages</div>
               {recentMessages.map((m, i) => (
-                <button
-                  type="button"
+                // Non-focusable option: focus stays on the listbox container
+                // so ArrowUp/Down keep driving the aria-activedescendant
+                // selection. mousedown is suppressed so a click doesn't pull
+                // focus off the listbox before onClick runs.
+                <div
                   key={`${i}:${m.subject}`}
                   id={`recent-opt-${i}`}
                   role="option"
@@ -971,10 +974,11 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
                   className={'recent-item' + (i === recentSel ? ' selected' : '')}
                   title={m.body ? `${m.subject}\n\n${m.body}` : m.subject}
                   onMouseEnter={() => setRecentSel(i)}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => applyMessage(m)}
                 >
                   {m.subject}
-                </button>
+                </div>
               ))}
             </div>
           )}

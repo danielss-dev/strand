@@ -196,16 +196,16 @@ export function Commits() {
               onKeyDown={onGraphKeyDown}
             >
               <table className="graph-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: colWidth }}></th>
-                    <th>Message</th>
-                    <th style={{ width: 160 }}>Author</th>
-                    <th style={{ width: 100 }}>Date</th>
-                    <th style={{ width: 80 }}>Hash</th>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" style={{ width: colWidth }}></th>
+                    <th role="columnheader">Message</th>
+                    <th role="columnheader" style={{ width: 160 }}>Author</th>
+                    <th role="columnheader" style={{ width: 100 }}>Date</th>
+                    <th role="columnheader" style={{ width: 80 }}>Hash</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {commits.map((c, i) => {
                     const chips = refsByOid.get(c.hash);
                     const row = graph.rows[i];
@@ -228,10 +228,10 @@ export function Commits() {
                         aria-selected={selected}
                         onClick={(e) => onRowClick(c.hash, e)}
                       >
-                        <td className="graph-col" style={{ width: colWidth }}>
+                        <td role="gridcell" className="graph-col" style={{ width: colWidth }}>
                           {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} /> : null}
                         </td>
-                        <td className="msg">
+                        <td role="gridcell" className="msg">
                           {chips && chips.length > 0 ? (
                             <span className="ref-chips">
                               {chips.map((chip) => (
@@ -244,9 +244,9 @@ export function Commits() {
                           {row?.isMerge ? <span className="merge">⊕</span> : null}
                           <span className="msg-text">{c.subject}</span>
                         </td>
-                        <td className="author">{c.author_name}</td>
-                        <td className="date">{relativeDate(c.time_unix)}</td>
-                        <td className="hash">{c.short_hash}</td>
+                        <td role="gridcell" className="author">{c.author_name}</td>
+                        <td role="gridcell" className="date">{relativeDate(c.time_unix)}</td>
+                        <td role="gridcell" className="hash">{c.short_hash}</td>
                       </tr>
                     );
                   })}

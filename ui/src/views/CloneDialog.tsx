@@ -27,6 +27,11 @@ export function CloneDialog({
   const [error, setError] = useState<string | null>(null);
   const urlRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  // A successful clone calls onClose() (unmounting us) before the finally
+  // block settles state — skip those updates so we don't touch an unmounted
+  // component.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Keep Tab focus inside the modal — required by the aria-modal contract,
   // and stops a keyboard user silently driving the controls behind it.
@@ -90,7 +95,7 @@ export function CloneDialog({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setCloning(false);
+      if (mountedRef.current) setCloning(false);
     }
   }
 

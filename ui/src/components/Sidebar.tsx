@@ -187,7 +187,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
   // only bumps ahead/behind doesn't re-walk the tree.
   const [treeLoading, setTreeLoading] = useState(false);
   useEffect(() => {
-    if (tab !== 'files' || !meta) return;
+    if (tab !== 'files' || !meta?.path) return;
     let cancelled = false;
     setTreeLoading(true);
     void refreshTree().finally(() => {
@@ -196,7 +196,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, meta?.path, status, refreshTree]);
 
   const fileTree = useMemo(() => {
