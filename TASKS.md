@@ -26,7 +26,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Reads
 - ☑ `Repo::discover`
-- ☑ `Repo::meta` (branch + real ahead/behind via `git2::graph_ahead_behind`)
+- ☑ `Repo::meta` (branch + real ahead/behind via `git2::graph_ahead_behind`;
+  `detached` flag via `git2::head_detached`, short OID as the branch label)
 - ☑ `Repo::status` (via git2)
 - ☑ `Repo::log` (basic revwalk, no graph lane data)
 - ☑ `Repo::diff_unstaged` / `diff_staged` / `diff_between` — emit per-file
@@ -36,6 +37,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Resolve refs (branches, remotes, tags) into typed structs
   (`Repo::refs` → `Refs { branches, remotes, remote_branches, tags }`;
   exposed via `repo_refs` IPC; per-branch upstream + ahead/behind)
+- ☑ `Repo::work_tree` — working-tree file listing (index entries ∪ untracked,
+  ignored excluded, overlaid with change status) powering the Files sidebar tab
 - ☐ Stash list
 - ☐ Submodule list + status
 - ☐ Reflog reader
@@ -67,8 +70,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   HEAD, commit, remote-tracking branch; auto-sets upstream when starting
   from a remote branch. `Repo::delete_branch` refuses HEAD. Checkout
   from commit still pending.)
-- ◐ Checkout branch / commit (`Repo::checkout_branch` — safe checkout,
-  errors on dirty conflicts. Detached-HEAD checkout from commit pending.)
+- ☑ Checkout branch / commit (`Repo::checkout_branch` — safe checkout,
+  errors on dirty conflicts; `Repo::checkout_commit` — safe detached-HEAD
+  checkout of any revspec via `set_head_detached`.)
 - ☐ Create / delete tag (lightweight + annotated)
 - ☐ Stash create / apply / pop / drop / branch-from
 - ☐ Cherry-pick (single + multi)
@@ -85,9 +89,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Credentials: inherit user's `git` config (helper, SSH agent) via
   shell-out + `GIT_TERMINAL_PROMPT=0`. Native `auth-git2` integration
   with OS keychain is a future polish.
-- ☐ Streaming progress events for fetch / pull / push (sync for now —
-  blocks the topbar button until done)
-- ☐ Clone (HTTPS / SSH) with streaming progress
+- ☑ Streaming progress events for fetch / pull / push (`git --progress`
+  stderr parsed to `Progress { phase, percent, raw }`, streamed over a Tauri
+  `Channel`; commands are `async` + `spawn_blocking`; stdout drained on a
+  side thread so neither pipe deadlocks)
+- ☑ Clone (HTTPS / SSH) with streaming progress (`network::clone` shells out
+  to `git clone --progress`; returns the dest path to open)
 
 ### Hybrid concerns
 - ☑ Write-engine policy decided: `git2` for index/commit ops (stable
@@ -101,16 +108,20 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## strand-tauri (IPC + app shell)
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`
+  `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
-  `repo_commit`, `repo_checkout`, `repo_branch_create`, `repo_branch_delete`
-- ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`
+  `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
+  `repo_branch_delete`
+- ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`
+  (all `async`, streaming progress over a `Channel`)
 - ☑ Plugins: sql, updater, dialog, shell, os
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
 - ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
   (`sql:default` only covers reads — silent failure trap, see
   `docs/learnings.md`)
-- ☐ Stream events for long-running ops (clone, fetch, push)
+- ☑ SQLite migration v2: `commit_messages` (per-repo commit message history)
+- ☑ Stream events for long-running ops (clone, fetch, push, pull) — via
+  `tauri::ipc::Channel<Progress>`, no extra capability needed
 - ☐ Real updater pubkey + endpoint (currently placeholder)
 - ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
 - ☐ Window state persistence (size, position, maximized)
@@ -124,6 +135,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Repo opening
 - ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`
+- ☑ "Clone repository" command (palette + topbar `+` dropdown) → `CloneDialog`
+  (URL + native destination picker + live progress bar; opens on success)
 - ☑ Drag-and-drop a folder → calls `useRepo.openRepo`
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
 - ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
@@ -155,7 +168,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Tags list (folder tree; create/delete pending writes)
 - ☐ Stashes list
 - ☐ Submodules list
-- ☐ Files tree — depends on `@pierre/trees` decision
+- ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
+  click-to-open; lazily loaded when the Files tab is shown and refreshed on
+  status change. Built with the existing `buildTree`/`sortTree` primitives
+  (no `@pierre/trees` dependency).
 
 ### Local Changes view
 - ☑ Three-section layout, vertically resizable unstaged / staged panes
@@ -168,8 +184,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Commit form: subject + body + amend
 - ☑ Commit kbd shortcut (⌘↵)
 - ☐ Per-row Discard action (currently store-level only; needs right-click menu)
-- ☐ Recent-messages dropdown on the subject field (needs SQLite schema +
-  per-repo history)
+- ☑ Recent-messages dropdown on the subject field (SQLite `commit_messages`
+  per-repo history via migration v2; keyboard-navigable popover that fills
+  subject + body; opens with the history button or ArrowDown in the field)
 - ☑ Hunk / change-block stage + unstage UI (`HunkAnnotatedDiff` renders
   one `<PierreFileDiff/>` per file with `lineAnnotations` driving an
   inline Stage / Discard pair on each change block — Unstage on the
@@ -182,7 +199,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Table from `repo_log`
 - ☑ SVG lane rendering (`ui/src/lib/graph.ts` lane algo + `CommitGraphCell` SVG; multi-color via `--b-1..--b-7`)
 - ◐ Branch / tag / HEAD chips inline in the message cell (`indexRefs` in `Commits.tsx` + `.ref-chip` CSS; right-side chip column still open)
-- ◐ Selectable rows (single-select wired via `useRepo.selectCommit`; multi-select for cherry-pick still pending)
+- ☑ Selectable rows (single-select drives the detail panel via
+  `useRepo.selectCommit`; multi-select via ⌘/Ctrl-click toggle, Shift-click
+  range, Shift+↑/↓ extend, ⌘/Ctrl+A select-all, with a count pill + Clear —
+  ready for cherry-pick/compare bulk ops in 0.5)
 - ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
 - ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
   row focus; Enter opens details; Esc closes details)

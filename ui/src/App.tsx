@@ -10,10 +10,12 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { pickRepoDirectory } from './lib/dialog';
 import { isTauri } from './lib/tauri';
+import { CloneDialog } from './views/CloneDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { CommandPalette, type PaletteAction } from './views/Palette';
+import type { Progress } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -40,14 +42,24 @@ export function App() {
   const pushRepo = useRepo((s) => s.push);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Live network-op progress (clone/fetch/pull/push) shown as a pill while
+  // a transfer is in flight. Null when idle.
+  const [netProgress, setNetProgress] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  const onNetProgress = useCallback((p: Progress) => {
+    setNetProgress(
+      p.percent != null ? `${p.phase || 'Working'} · ${p.percent}%` : p.phase || p.raw || null,
+    );
   }, []);
 
   const openByPath = useCallback(async (path: string) => {
@@ -67,44 +79,50 @@ export function App() {
   const onSync = useCallback(async () => {
     if (syncing) return;
     setSyncing(true);
+    setNetProgress('Fetching…');
     await waitForPaint();
     try {
-      await fetchRepo();
+      await fetchRepo(onNetProgress);
       showToast('Fetched');
     } catch (e) {
       showToast(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSyncing(false);
+      setNetProgress(null);
     }
-  }, [fetchRepo, showToast, syncing]);
+  }, [fetchRepo, onNetProgress, showToast, syncing]);
 
   const onPull = useCallback(async () => {
     if (pulling) return;
     setPulling(true);
+    setNetProgress('Pulling…');
     await waitForPaint();
     try {
-      await pullRepo();
+      await pullRepo(false, onNetProgress);
       showToast('Pulled');
     } catch (e) {
       showToast(`Pull failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPulling(false);
+      setNetProgress(null);
     }
-  }, [pullRepo, showToast, pulling]);
+  }, [pullRepo, onNetProgress, showToast, pulling]);
 
   const onPush = useCallback(async () => {
     if (pushing) return;
     setPushing(true);
+    setNetProgress('Pushing…');
     await waitForPaint();
     try {
-      await pushRepo();
+      await pushRepo(false, onNetProgress);
       showToast('Pushed');
     } catch (e) {
       showToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPushing(false);
+      setNetProgress(null);
     }
-  }, [pushRepo, showToast, pushing]);
+  }, [pushRepo, onNetProgress, showToast, pushing]);
 
   // Load recents + restore the tabs the user had open last time. Both run
   // once on first mount; restoreSession is idempotent so StrictMode's
@@ -190,6 +208,7 @@ export function App() {
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  shortcut: '⌘O', run: () => { void openViaDialog(); } },
+      { id: 'clone',   label: 'Clone repository…', run: () => setCloneOpen(true) },
       { id: 'local',   label: 'Show: Local Changes', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
       { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
       { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
@@ -216,6 +235,7 @@ export function App() {
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenRepo={openViaDialog}
           onOpenRecent={openByPath}
+          onClone={() => setCloneOpen(true)}
           onSync={onSync}
           onPull={onPull}
           onPush={onPush}
@@ -247,6 +267,13 @@ export function App() {
 
         <StatusBar />
 
+        {netProgress && (
+          <div className="toast progress">
+            <span className="icon-spin"><Icon name="refresh" size={13} /></span>
+            <span>{netProgress}</span>
+          </div>
+        )}
+
         {toast && (
           <div className="toast">
             <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
@@ -258,6 +285,10 @@ export function App() {
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
+
+      {cloneOpen && (
+        <CloneDialog onClose={() => setCloneOpen(false)} onCloned={openByPath} />
+      )}
 
       {!isTauri() && !meta && (
         <div style={{

@@ -465,14 +465,17 @@
   position: absolute;
   right: 0;
   left: 0;
-  top: calc(100% + 4px);
+  /* The commit form lives at the bottom of the window, so the dropdown
+     opens upward off the subject field. */
+  bottom: calc(100% + 4px);
   background: var(--bg-elev);
   border-radius: 7px;
   box-shadow:
     0 0 0 0.5px var(--border-strong),
     0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 10;
-  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
 }
 .recent-head {
   padding: 6px 10px;
@@ -2152,4 +2155,273 @@ button {
   right: 0;
   top: 2px;
   height: 0.5px;
+}
+
+/* ─── Network progress toast (clone/fetch/pull/push) ─── */
+/* Sits above the success toast so an in-flight op and its result don't
+ * stack on the same line. */
+.toast.progress {
+  bottom: 76px;
+  color: var(--text-2);
+}
+.toast.progress .icon-spin {
+  color: var(--accent);
+  display: inline-flex;
+}
+
+/* ─── Recent commit messages dropdown ───
+ * Scope the items to `.recent-pop` so the generic `.recent-item` (used by
+ * the sidebar empty-state recents list) doesn't override the dropdown's
+ * single-line, monospace presentation. */
+.recent-pop .recent-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  border-bottom: 0.5px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-pop .recent-item:last-child {
+  border-bottom: 0;
+}
+.recent-pop .recent-item:hover,
+.recent-pop .recent-item.selected {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.recent-pop:focus,
+.recent-pop:focus-visible {
+  outline: none;
+}
+
+/* ─── Commit graph multi-select ─── */
+.graph-sel-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: var(--type-ui-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.graph-sel-count .clear {
+  font-size: var(--type-ui-sm);
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.graph-sel-count .clear:hover {
+  background: var(--bg-hover);
+  color: var(--accent-2);
+}
+/* Multi-selected rows. The single-select detail row keeps `.active`
+ * (var(--bg-sel)); multi-select uses the lighter selection wash so a row
+ * that's both selected and focused reads clearly. */
+.graph-table tbody tr.selected {
+  background: var(--selection);
+}
+.graph-table tbody tr.selected.active {
+  background: var(--bg-sel);
+}
+.graph-table tbody tr.selected.focused {
+  box-shadow: 3px 0 0 var(--accent) inset;
+}
+
+/* ─── Commit detail — checkout action ─── */
+.cd-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cd-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-action-error {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--del-bg);
+  color: var(--del);
+  font-size: var(--type-ui-sm);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* ─── Files sidebar tree — status badge on a file row ─── */
+.side-row.file-row .file-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-fg);
+}
+.side-row.file-row .file-badge.M { background: var(--mod); }
+.side-row.file-row .file-badge.A { background: var(--add); }
+.side-row.file-row .file-badge.D { background: var(--del); }
+.side-row.file-row .file-badge.U { background: var(--b-4); }
+.side-row.file-row .file-badge.R { background: var(--b-2); }
+.side-row.file-row .file-badge.C { background: var(--del); }
+
+/* ─── Clone dialog ─── */
+.clone-dialog {
+  width: 520px;
+  max-width: calc(100vw - 64px);
+  background: var(--bg-panel);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 0.5px var(--border-strong),
+    0 32px 96px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popIn 0.16s cubic-bezier(0.2, 0.7, 0.4, 1);
+}
+.clone-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: 48px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+.clone-head svg {
+  color: var(--text-muted);
+}
+.clone-head .title {
+  flex: 1;
+}
+.clone-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 8px;
+}
+.clone-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.clone-field .lbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.clone-input {
+  height: 32px;
+  border: 0;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  border-radius: 7px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--type-ui);
+  color: var(--text);
+  outline: none;
+  font-family: var(--font-mono);
+}
+.clone-input:focus {
+  box-shadow:
+    0 0 0 0.5px var(--accent) inset,
+    0 0 0 3px var(--accent-glow);
+}
+.clone-input::placeholder {
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+}
+.clone-dest {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.clone-dest-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clone-dest-full {
+  font-size: var(--type-ui-sm);
+  color: var(--text-muted);
+}
+.clone-dest-full code {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+.clone-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.clone-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  overflow: hidden;
+}
+.clone-progress-bar .fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+.clone-progress-bar .fill[data-indeterminate] {
+  animation: cloneIndeterminate 1.1s ease-in-out infinite;
+}
+@keyframes cloneIndeterminate {
+  0% { margin-left: 0; }
+  50% { margin-left: 60%; }
+  100% { margin-left: 0; }
+}
+.clone-progress-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clone-error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--del-bg);
+  color: var(--del);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow: auto;
+}
+.clone-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 0.5px solid var(--border);
 }

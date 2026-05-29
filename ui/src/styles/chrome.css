@@ -413,6 +413,24 @@
 .branch-btn .chev {
     color: var(--text-dim);
 }
+.branch-btn.detached {
+    box-shadow: 0 0 0 0.5px var(--mod) inset;
+}
+.branch-btn.detached .branch-name {
+    color: var(--mod);
+}
+.branch-btn .det-chip {
+    font-family: var(--font-ui);
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--mod-bg);
+    color: var(--mod);
+    flex-shrink: 0;
+}
 
 .cmd-pill {
     display: flex;

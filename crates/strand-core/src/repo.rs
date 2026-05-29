@@ -34,13 +34,27 @@ impl Repo {
 
     /// Lightweight metadata about the repo's HEAD, used by the topbar.
     pub fn meta(&self) -> Result<RepoMeta> {
-        let head_name = self
-            .gix
-            .head_name()
-            .ok()
-            .flatten()
-            .map(|n| n.shorten().to_string())
-            .unwrap_or_else(|| "HEAD".to_string());
+        // Detect detached HEAD via git2 (gix's `head_name()` returns None for
+        // both detached HEAD *and* an unborn branch, so it can't tell them
+        // apart on its own).
+        let g2 = self.git2().ok();
+        let detached = g2.as_ref().and_then(|r| r.head_detached().ok()).unwrap_or(false);
+
+        let branch = if detached {
+            // Show the short OID we're parked on, matching `git status`.
+            g2.as_ref()
+                .and_then(|r| r.head().ok())
+                .and_then(|h| h.target())
+                .map(|oid| oid.to_string()[..7].to_string())
+                .unwrap_or_else(|| "HEAD".to_string())
+        } else {
+            self.gix
+                .head_name()
+                .ok()
+                .flatten()
+                .map(|n| n.shorten().to_string())
+                .unwrap_or_else(|| "HEAD".to_string())
+        };
 
         let (ahead, behind) = self.compute_ahead_behind().unwrap_or((0, 0));
 
@@ -52,9 +66,10 @@ impl Repo {
                 .unwrap_or("repo")
                 .to_string(),
             path: self.path.to_string_lossy().into_owned(),
-            branch: head_name,
+            branch,
             ahead,
             behind,
+            detached,
         })
     }
 
@@ -85,4 +100,7 @@ pub struct RepoMeta {
     pub branch: String,
     pub ahead: u32,
     pub behind: u32,
+    /// True when HEAD is detached (parked on a commit, not a branch). The
+    /// `branch` field then holds the short OID.
+    pub detached: bool,
 }

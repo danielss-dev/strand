@@ -41,6 +41,46 @@ export const recents = {
   },
 };
 
+/** A stored commit message, newest first. */
+export interface StoredMessage {
+  subject: string;
+  body: string;
+}
+
+/**
+ * Per-repo commit message history, backing the "recent messages" dropdown on
+ * the commit form. Recording de-dupes an identical message to the top rather
+ * than piling up copies.
+ */
+export const commitMessages = {
+  async list(repoPath: string, limit = 8): Promise<StoredMessage[]> {
+    if (!isTauri()) return [];
+    const d = await db();
+    return d.select<StoredMessage[]>(
+      `SELECT subject, body FROM commit_messages WHERE repo_path = $1
+       ORDER BY committed_at DESC LIMIT $2`,
+      [repoPath, limit],
+    );
+  },
+
+  async record(repoPath: string, subject: string, body: string): Promise<void> {
+    if (!isTauri()) return;
+    const d = await db();
+    const now = Math.floor(Date.now() / 1000);
+    // Drop a prior identical message so re-using one bubbles it to the top
+    // instead of creating a duplicate row.
+    await d.execute(
+      'DELETE FROM commit_messages WHERE repo_path = $1 AND subject = $2 AND body = $3',
+      [repoPath, subject, body],
+    );
+    await d.execute(
+      `INSERT INTO commit_messages (repo_path, subject, body, committed_at)
+       VALUES ($1, $2, $3, $4)`,
+      [repoPath, subject, body, now],
+    );
+  },
+};
+
 /**
  * Generic JSON-valued key/value store backed by the `settings` SQLite table.
  * Use for things that should survive relaunch but aren't repo content —

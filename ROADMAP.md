@@ -24,7 +24,9 @@ system ported verbatim. No real feature surface yet.
   - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window)
   - ☑ SQLite-backed recent-repo list with last-opened timestamp
   - ☑ Multi-repo tabs (open, switch, close, **persist across launches**)
-  - ☐ Clone (HTTPS / SSH) with streaming progress
+  - ☑ Clone (HTTPS / SSH) with streaming progress (shell-out `git clone
+    --progress`; `CloneDialog` with URL + destination picker + live progress
+    bar; opens the cloned repo on success)
 - ◐ **Local Changes — real staging UI**
   - ☑ Unstaged + staged file lists (folder tree, status badges, hover Stage/Unstage)
   - ☑ Pierre `<PatchDiff>` integration themed to app tokens
@@ -37,37 +39,49 @@ system ported verbatim. No real feature surface yet.
     still pending.
   - ☑ Discard with single-undo handle (per-change-block; undo toast
     forward-applies the discarded slice back)
-  - ☐ Recent commit messages dropdown
+  - ☑ Recent commit messages dropdown (SQLite `commit_messages` history per
+    repo; dropdown on the subject field, keyboard-navigable)
 - ◐ **Commit graph**
   - ☑ Table view from `repo_log`
   - ☑ SVG lane/edge rendering with branch colors
   - ☑ Inline commit detail panel (changed files, message body)
   - ☑ Keyboard navigation (focuses current commit on open; ↑/↓ moves row
     focus; Enter opens details; Esc closes details)
-  - ☐ Multi-select
+  - ☑ Multi-select (⌘/Ctrl-click toggles, Shift-click ranges, Shift+↑/↓
+    extends, ⌘/Ctrl+A selects all; selection-count pill + Clear; distinct
+    from the single-select detail panel)
 - ◐ **Fetch / Pull / Push**
   - ☑ Rust commands (shell-out to user's `git`; credentials + SSH agent + GPG
     inherited from the user's config)
   - ☑ Topbar wired: real ahead/behind, click handlers, directional pulse + shimmer
     animation while in flight, toast on success/failure with git stderr
-  - ☐ Streaming progress events (currently blocks until done)
+  - ☑ Streaming progress events (git `--progress` stderr parsed into
+    `Progress { phase, percent, raw }`, streamed over a Tauri `Channel`;
+    live progress toast in the topbar — no longer blocks blind)
   - ☐ Native credential helper via OS keychain (auth-git2 path; defer until
     we have a reason to leave shell-out)
 - ◐ **Branch ops**
   - ☑ List branches, remotes, remote-tracking branches, tags via
     `Repo::refs` (per-branch upstream + ahead/behind)
-  - ◐ Checkout, create from HEAD or commit, delete (`Repo::checkout_branch`
-    + `Repo::create_branch` + `Repo::delete_branch` shipped; checkout
-    from arbitrary commit / detached HEAD still pending)
+  - ☑ Checkout, create from HEAD or commit, delete (`Repo::checkout_branch`
+    + `Repo::create_branch` + `Repo::delete_branch`; `Repo::checkout_commit`
+    detaches HEAD onto any commit — `RepoMeta.detached` drives a topbar chip,
+    and the commit-detail panel has a "Checkout" action)
   - ☑ Sidebar wired to real data — Branches / Remotes / Tags rendered
     as folder trees (`feature/foo` nests under `feature/`; remote names
     are the top folders), click-to-checkout, hover-delete with confirm
   - ☑ Topbar branch dropdown wired end-to-end: checkout a local branch,
     create + track a remote branch, or `Create branch…` via prompt
-- ☐ **File tree**
-  - Working-tree view, status badges, click to file detail
-  - Likely requires `@pierre/trees`
-- ☐ **macOS packaging**
+- ☑ **File tree**
+  - ☑ Working-tree view, status badges, click to file detail (`Repo::work_tree`
+    lists index entries overlaid with status; Sidebar Files tab renders a
+    folder tree with per-file status badges; click opens the file in FileView)
+  - Built as a custom tree reusing the existing `buildTree`/`sortTree`
+    primitives rather than pulling in `@pierre/trees` — no new dependency,
+    matches the Branches/Local-Changes trees. (FileView's Content/History/
+    Compare/Blame tabs are still placeholders — that's 0.5 work.)
+- ☐ **macOS packaging** — *blocked on environment (needs a Mac + Apple
+  Developer account); see `docs/packaging.md` for the exact runbook.*
   - Real app icon (currently a placeholder "S")
   - Apple Developer ID signing + notarization
   - First DMG ships to a small alpha group
@@ -166,6 +180,40 @@ keyboard-focusable and ArrowUp / ArrowDown move row focus through the
 visible log. Opening the graph focuses the current branch tip; Enter opens
 the detail panel for the focused commit; Esc closes it; focused rows scroll
 into view. Multi-select remains pending.
+
+**0.1 feature close-out (2026-05-29):** Cleared the remaining code items for
+the internal alpha in one batch.
+- **Streaming network progress.** `network.rs` now spawns `git` with piped
+  stdout/stderr (stdout drained on a side thread to avoid pipe deadlock),
+  splits stderr on `\r`/`\n`, and parses each fragment into
+  `Progress { phase, percent, raw }`. `fetch`/`pull`/`push` take an
+  `on_progress` callback; `repo_fetch`/`_pull`/`_push` became `async` +
+  `tokio::spawn_blocking` and stream over a `tauri::ipc::Channel<Progress>`.
+  A live progress toast surfaces phase + percent in the topbar.
+- **Clone.** New `network::clone` free fn (`git clone --progress`) +
+  `repo_clone`; `CloneDialog.tsx` (URL, native destination picker, derived
+  folder name, progress bar) reachable from the topbar `+` menu and the
+  command palette; opens the clone on success.
+- **Detached checkout.** `Repo::checkout_commit` (safe `set_head_detached`);
+  `RepoMeta.detached` (detected via `git2::head_detached`); `repo_checkout_commit`;
+  a "Checkout" action in `CommitDetail`; a "detached" chip on the topbar
+  branch button.
+- **Working-tree file tree.** `tree.rs::work_tree` (index entries overlaid
+  with status, ignored excluded); `repo_tree`; the Sidebar Files tab renders
+  a folder tree with status badges, lazily fetched and refreshed on status
+  change.
+- **Recent commit messages.** SQLite migration v2 (`commit_messages`); a
+  `commitMessages` db module (dedupe-to-top); the store records on commit;
+  a keyboard-navigable dropdown on the commit subject field.
+- **Commit graph multi-select.** Local `Set` selection in `Commits.tsx`
+  (⌘/Ctrl-click toggle, Shift-click range, Shift+↑/↓ extend, ⌘/Ctrl+A all),
+  a selection-count pill with Clear, and selected-row styling — kept distinct
+  from the single-select detail panel.
+
+Verified with `cargo check`/`test` (+ 4 new `network` unit tests), `clippy`,
+`tsc`, and `vite build`, then an adversarial multi-agent review pass.
+**Still open for 0.1:** macOS packaging (icon, Developer-ID signing,
+notarization, DMG) — environment-blocked; runbook in `docs/packaging.md`.
 
 ---
 

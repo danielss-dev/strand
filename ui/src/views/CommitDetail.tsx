@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Diff } from '../components/Diff';
+import { Icon } from '../components/Icon';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type { DiffStatus, FileDiff } from '../lib/types';
@@ -20,6 +21,7 @@ export function CommitDetail() {
   const loading = useRepo((s) => s.selectedCommitDiffsLoading);
   const commits = useRepo((s) => s.commits);
   const selectCommit = useRepo((s) => s.selectCommit);
+  const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const diffMode = useSettings((s) => s.diffMode);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
@@ -33,7 +35,31 @@ export function CommitDetail() {
     setSelectedFile(diffs[0]?.path ?? null);
   }, [diffs]);
 
+  // Detached-HEAD checkout of this commit. Errors (e.g. a dirty working tree
+  // that would be overwritten) surface inline rather than silently failing.
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  // Reset transient checkout state whenever the selected commit changes.
+  useEffect(() => {
+    setCheckoutError(null);
+    setCheckingOut(false);
+  }, [selectedCommit]);
+
   if (!commit) return null;
+
+  const hash = commit.hash;
+  async function onCheckout() {
+    if (checkingOut) return;
+    setCheckingOut(true);
+    setCheckoutError(null);
+    try {
+      await checkoutCommit(hash);
+    } catch (e) {
+      setCheckoutError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCheckingOut(false);
+    }
+  }
 
   const focused = diffs.find((d) => d.path === selectedFile) ?? null;
 
@@ -78,6 +104,19 @@ export function CommitDetail() {
             </>
           ) : null}
         </div>
+        <div className="cd-actions">
+          <button
+            type="button"
+            className="btn ghost cd-action-btn"
+            disabled={checkingOut}
+            onClick={() => void onCheckout()}
+            title="Check out this commit (detached HEAD)"
+          >
+            <Icon name="branch" size={12} />
+            {checkingOut ? 'Checking out…' : 'Checkout'}
+          </button>
+        </div>
+        {checkoutError ? <div className="cd-action-error">{checkoutError}</div> : null}
       </div>
       <div className="cd-files">
         {loading && diffs.length === 0 ? (

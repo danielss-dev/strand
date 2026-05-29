@@ -77,6 +77,29 @@ impl Repo {
         Ok(CheckoutOutcome { branch: name.to_string() })
     }
 
+    /// Check out an arbitrary commit (any revspec git understands — an OID,
+    /// `HEAD~3`, a tag) as a **detached HEAD**. Like [`checkout_branch`] this
+    /// is a safe checkout: it errors rather than clobbering conflicting
+    /// working-tree changes. The returned `branch` is the short OID, which is
+    /// what the topbar shows while detached.
+    ///
+    /// [`checkout_branch`]: Repo::checkout_branch
+    pub fn checkout_commit(&self, rev: &str) -> Result<CheckoutOutcome> {
+        let repo = self.git2()?;
+        let commit = repo.revparse_single(rev)?.peel_to_commit()?;
+
+        let tree = commit.tree()?;
+        let mut opts = git2::build::CheckoutBuilder::new();
+        opts.safe();
+        repo.checkout_tree(tree.as_object(), Some(&mut opts))?;
+        repo.set_head_detached(commit.id())?;
+
+        let oid = commit.id().to_string();
+        Ok(CheckoutOutcome {
+            branch: oid[..7.min(oid.len())].to_string(),
+        })
+    }
+
     /// Delete a local branch by short name. Refuses to delete the current
     /// branch — git can't either, since HEAD would be left dangling.
     ///

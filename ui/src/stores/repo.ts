@@ -1,8 +1,22 @@
 import { create } from 'zustand';
 
-import { recents as recentsDb, settings as settingsDb } from '../lib/db';
+import {
+  commitMessages as commitMessagesDb,
+  recents as recentsDb,
+  settings as settingsDb,
+  type StoredMessage,
+} from '../lib/db';
 import { tauri } from '../lib/tauri';
-import type { Commit, FileDiff, FileStatus, RecentRepo, Refs, RepoMeta } from '../lib/types';
+import type {
+  Commit,
+  FileDiff,
+  FileStatus,
+  Progress,
+  RecentRepo,
+  Refs,
+  RepoMeta,
+  WorkTreeEntry,
+} from '../lib/types';
 
 interface PersistedSession {
   tabs: string[];
@@ -68,6 +82,14 @@ export interface RepoState {
   /** Branches / remotes / tags for the active tab. */
   refs: Refs;
 
+  /** Working-tree file listing for the Files sidebar tab (lazy: only the
+   * Files tab triggers {@link RepoState.refreshTree}). */
+  workTree: WorkTreeEntry[];
+
+  /** Recent commit messages for the active repo, newest first. Powers the
+   * dropdown on the commit subject field. */
+  recentMessages: StoredMessage[];
+
   recents: RecentRepo[];
 
   view: View;
@@ -84,6 +106,10 @@ export interface RepoState {
   refreshLog(limit?: number): Promise<void>;
   refreshDiffs(): Promise<void>;
   refreshRefs(): Promise<void>;
+  /** Re-read the working-tree file listing (Files tab). */
+  refreshTree(): Promise<void>;
+  /** Re-read the recent commit messages for the active repo. */
+  refreshRecentMessages(): Promise<void>;
 
   /** Refresh status + diffs together — what every write op runs afterward. */
   refreshLocalChanges(): Promise<void>;
@@ -116,11 +142,13 @@ export interface RepoState {
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
-  fetch(): Promise<string>;
-  pull(rebase?: boolean): Promise<string>;
-  push(forceWithLease?: boolean): Promise<string>;
+  fetch(onProgress?: (p: Progress) => void): Promise<string>;
+  pull(rebase?: boolean, onProgress?: (p: Progress) => void): Promise<string>;
+  push(forceWithLease?: boolean, onProgress?: (p: Progress) => void): Promise<string>;
 
   checkout(branch: string): Promise<void>;
+  /** Check out an arbitrary commit as a detached HEAD. */
+  checkoutCommit(rev: string): Promise<void>;
   createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
   deleteBranch(name: string, force: boolean): Promise<void>;
 
@@ -152,6 +180,8 @@ const EMPTY_ACTIVE = {
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
   refs: EMPTY_REFS,
+  workTree: [] as WorkTreeEntry[],
+  recentMessages: [] as StoredMessage[],
 };
 
 async function persistSession(state: RepoState): Promise<void> {
@@ -235,6 +265,8 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      workTree: [],
+      recentMessages: [],
     }));
 
     try {
@@ -244,7 +276,12 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('recents.touch failed', e);
     }
     void persistSession(get());
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshRefs(),
+      get().refreshRecentMessages(),
+    ]);
   },
 
   closeTab(path) {
@@ -276,10 +313,17 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      workTree: [],
+      recentMessages: [],
     });
     void persistSession(get());
     if (neighbor) {
-      void Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
+      void Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshRefs(),
+      get().refreshRecentMessages(),
+    ]);
     }
   },
 
@@ -300,9 +344,16 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      workTree: [],
+      recentMessages: [],
     });
     void persistSession(get());
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog(), get().refreshRefs()]);
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshRefs(),
+      get().refreshRecentMessages(),
+    ]);
   },
 
   async refreshStatus() {
@@ -348,6 +399,31 @@ export const useRepo = create<RepoState>((set, get) => ({
       set({ refs: await tauri.repoRefs(path) });
     } catch (e) {
       console.warn('repoRefs failed', e);
+    }
+  },
+
+  async refreshTree() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const tree = await tauri.repoTree(path);
+      // Bail if the active repo changed while the listing was in flight.
+      if (get().activePath !== path) return;
+      set({ workTree: tree });
+    } catch (e) {
+      console.warn('repoTree failed', e);
+    }
+  },
+
+  async refreshRecentMessages() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const messages = await commitMessagesDb.list(path, 8);
+      if (get().activePath !== path) return;
+      set({ recentMessages: messages });
+    } catch (e) {
+      console.warn('commitMessages.list failed', e);
     }
   },
 
@@ -417,11 +493,19 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoCommit(path, subject, body, amend);
+    // Stash the message for the recent-messages dropdown (best-effort — a
+    // history miss must never block the commit flow).
+    try {
+      await commitMessagesDb.record(path, subject, body ?? '');
+    } catch (e) {
+      console.warn('commitMessages.record failed', e);
+    }
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
       get().refreshMeta(),
       get().refreshRefs(),
+      get().refreshRecentMessages(),
     ]);
   },
 
@@ -429,22 +513,29 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     const meta = await tauri.repoMeta(path);
+    // fetch/pull/push call this after a seconds-long round-trip; if the user
+    // switched tabs meanwhile, still patch the per-tab meta but don't clobber
+    // the active mirror (which now reflects a different repo).
+    if (get().activePath !== path) {
+      set((s) => ({ tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)) }));
+      return;
+    }
     set((s) => ({
       meta,
       tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
     }));
   },
-  async fetch() {
+  async fetch(onProgress) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoFetch(path, null);
+    const res = await tauri.repoFetch(path, null, onProgress);
     await Promise.all([get().refreshMeta(), get().refreshRefs()]);
     return res.output;
   },
-  async pull(rebase = false) {
+  async pull(rebase = false, onProgress) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPull(path, rebase);
+    const res = await tauri.repoPull(path, rebase, onProgress);
     await Promise.all([
       get().refreshMeta(),
       get().refreshLocalChanges(),
@@ -453,10 +544,10 @@ export const useRepo = create<RepoState>((set, get) => ({
     ]);
     return res.output;
   },
-  async push(forceWithLease = false) {
+  async push(forceWithLease = false, onProgress) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPush(path, forceWithLease);
+    const res = await tauri.repoPush(path, forceWithLease, onProgress);
     await Promise.all([get().refreshMeta(), get().refreshRefs()]);
     return res.output;
   },
@@ -465,6 +556,17 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoCheckout(path, branch);
+    await Promise.all([
+      get().refreshMeta(),
+      get().refreshRefs(),
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+    ]);
+  },
+  async checkoutCommit(rev) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoCheckoutCommit(path, rev);
     await Promise.all([
       get().refreshMeta(),
       get().refreshRefs(),

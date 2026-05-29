@@ -19,19 +19,56 @@ export function Commits() {
   const didInitialFocus = useRef(false);
   const [focusedCommit, setFocusedCommit] = useState<string | null>(null);
 
+  // Multi-selection (for future bulk ops: cherry-pick, compare, …). Distinct
+  // from `selectedCommit`, which drives the single-commit detail panel.
+  // `anchor` is the fixed end of a shift-range; it moves on plain
+  // click/arrow and stays put while extending.
+  const [multi, setMulti] = useState<Set<string>>(() => new Set());
+  const anchorRef = useRef<string | null>(null);
+
   const graph = useMemo(() => computeGraph(commits), [commits]);
+  // Inclusive range of hashes between two commits, by their row order.
+  const rangeBetween = useCallback(
+    (a: string, b: string): string[] => {
+      const ia = commits.findIndex((c) => c.hash === a);
+      const ib = commits.findIndex((c) => c.hash === b);
+      if (ia === -1 || ib === -1) return b ? [b] : [];
+      const [lo, hi] = ia <= ib ? [ia, ib] : [ib, ia];
+      return commits.slice(lo, hi + 1).map((c) => c.hash);
+    },
+    [commits],
+  );
   const refsByOid = useMemo(() => indexRefs(refs), [refs]);
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
   const colWidth = graphColWidth(graph.laneCount);
 
-  const onRowClick = (hash: string) => {
+  const onRowClick = (hash: string, e: React.MouseEvent) => {
     graphMainRef.current?.focus();
     setFocusedCommit(hash);
+    if (e.metaKey || e.ctrlKey) {
+      // Toggle membership; leave the detail panel untouched.
+      setMulti((prev) => {
+        const next = new Set(prev);
+        if (next.has(hash)) next.delete(hash);
+        else next.add(hash);
+        return next;
+      });
+      anchorRef.current = hash;
+      return;
+    }
+    if (e.shiftKey) {
+      const anchor = anchorRef.current ?? focusedCommit ?? hash;
+      setMulti(new Set(rangeBetween(anchor, hash)));
+      return;
+    }
+    // Plain click: single-select + toggle the detail panel.
+    setMulti(new Set([hash]));
+    anchorRef.current = hash;
     void selectCommit(selectedCommit === hash ? null : hash);
   };
 
   const moveFocus = useCallback(
-    (direction: 1 | -1) => {
+    (direction: 1 | -1, extend: boolean) => {
       if (commits.length === 0) return;
 
       const currentIndex = commits.findIndex((c) => c.hash === focusedCommit);
@@ -45,16 +82,34 @@ export function Commits() {
       if (!nextHash || nextHash === focusedCommit) return;
 
       setFocusedCommit(nextHash);
-      if (selectedCommit) void selectCommit(nextHash);
+      if (extend) {
+        const anchor = anchorRef.current ?? focusedCommit ?? nextHash;
+        setMulti(new Set(rangeBetween(anchor, nextHash)));
+      } else {
+        setMulti(new Set([nextHash]));
+        anchorRef.current = nextHash;
+        if (selectedCommit) void selectCommit(nextHash);
+      }
     },
-    [commits, focusedCommit, selectedCommit, selectCommit],
+    [commits, focusedCommit, selectedCommit, selectCommit, rangeBetween],
   );
+
+  const clearMulti = useCallback(() => {
+    const keep = focusedCommit;
+    setMulti(keep ? new Set([keep]) : new Set());
+    anchorRef.current = keep;
+  }, [focusedCommit]);
 
   const onGraphKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        moveFocus(e.key === 'ArrowDown' ? 1 : -1);
+        moveFocus(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setMulti(new Set(commits.map((c) => c.hash)));
         return;
       }
       if (e.key === 'Enter') {
@@ -62,21 +117,51 @@ export function Commits() {
         if (focusedCommit) void selectCommit(focusedCommit);
         return;
       }
-      if (e.key === 'Escape' && selectedCommit) {
-        e.preventDefault();
-        void selectCommit(null);
+      if (e.key === 'Escape') {
+        if (selectedCommit) {
+          e.preventDefault();
+          void selectCommit(null);
+        } else if (multi.size > 1) {
+          e.preventDefault();
+          clearMulti();
+        }
       }
     },
-    [focusedCommit, moveFocus, selectedCommit, selectCommit],
+    [commits, focusedCommit, moveFocus, selectedCommit, selectCommit, multi, clearMulti],
   );
 
   useEffect(() => {
     if (didInitialFocus.current || !currentCommit) return;
     didInitialFocus.current = true;
     setFocusedCommit(currentCommit);
+    setMulti(new Set([currentCommit]));
+    anchorRef.current = currentCommit;
     graphMainRef.current?.focus();
     if (selectedCommit) void selectCommit(null);
   }, [currentCommit, selectedCommit, selectCommit]);
+
+  // Prune the selection to commits that still exist after a log refresh
+  // (e.g. a checkout swapped the visible history), and re-anchor focus if the
+  // focused row vanished — otherwise the highlight, scroll, and the next
+  // arrow press all lose their place.
+  useEffect(() => {
+    setMulti((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(commits.map((c) => c.hash));
+      let changed = false;
+      const next = new Set<string>();
+      for (const h of prev) {
+        if (present.has(h)) next.add(h);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    if (focusedCommit && !commits.some((c) => c.hash === focusedCommit)) {
+      const fallback = currentCommit ?? commits[0]?.hash ?? null;
+      setFocusedCommit(fallback);
+      anchorRef.current = fallback;
+    }
+  }, [commits, focusedCommit, currentCommit]);
 
   useEffect(() => {
     focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
@@ -88,6 +173,14 @@ export function Commits() {
         <div className="graph-search">
           <input placeholder="Search commits…" aria-label="Search commits" />
         </div>
+        {multi.size > 1 && (
+          <div className="graph-sel-count" role="status">
+            <span>{multi.size} selected</span>
+            <button type="button" className="clear" onClick={clearMulti} title="Clear selection">
+              Clear
+            </button>
+          </div>
+        )}
       </div>
       <div className="graph-split">
         <PanelGroup direction="horizontal" autoSaveId="strand:commits-split">
@@ -96,8 +189,10 @@ export function Commits() {
               ref={graphMainRef}
               className="graph-main"
               tabIndex={0}
-              role="region"
+              role="grid"
+              aria-multiselectable
               aria-label="Commit graph"
+              aria-activedescendant={focusedCommit ? `commit-row-${focusedCommit}` : undefined}
               onKeyDown={onGraphKeyDown}
             >
               <table className="graph-table">
@@ -116,15 +211,22 @@ export function Commits() {
                     const row = graph.rows[i];
                     const active = selectedCommit === c.hash;
                     const focused = focusedCommit === c.hash;
+                    const selected = multi.has(c.hash);
                     return (
                       <tr
                         key={c.hash}
+                        id={`commit-row-${c.hash}`}
+                        role="row"
                         ref={focused ? focusedRowRef : undefined}
-                        className={[active ? 'active' : null, focused ? 'focused' : null]
+                        className={[
+                          active ? 'active' : null,
+                          focused ? 'focused' : null,
+                          selected ? 'selected' : null,
+                        ]
                           .filter(Boolean)
                           .join(' ') || undefined}
-                        aria-selected={active}
-                        onClick={() => onRowClick(c.hash)}
+                        aria-selected={selected}
+                        onClick={(e) => onRowClick(c.hash, e)}
                       >
                         <td className="graph-col" style={{ width: colWidth }}>
                           {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} /> : null}

@@ -10,6 +10,7 @@ interface Props {
   onOpenPalette: () => void;
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
+  onClone: () => void;
   onSync: () => void;
   onPull: () => void;
   onPush: () => void;
@@ -23,6 +24,7 @@ export function Topbar({
   onOpenPalette,
   onOpenRepo,
   onOpenRecent,
+  onClone,
   onSync,
   onPull,
   onPush,
@@ -81,6 +83,7 @@ export function Topbar({
         <RepoSwitcherButton
           onOpenRepo={onOpenRepo}
           onOpenRecent={onOpenRecent}
+          onClone={onClone}
           recents={recents}
           onForget={forgetRecent}
         />
@@ -129,7 +132,12 @@ export function Topbar({
         </button>
       </div>
 
-      <BranchSwitcherButton branch={branch} hasRepo={!!meta} onToast={onToast} />
+      <BranchSwitcherButton
+        branch={branch}
+        detached={!!meta?.detached}
+        hasRepo={!!meta}
+        onToast={onToast}
+      />
 
       <button type="button" className="cmd-pill" onClick={onOpenPalette} aria-label="Quick Launch">
         <Icon name="search" size={13} />
@@ -158,11 +166,13 @@ export function Topbar({
 function RepoSwitcherButton({
   onOpenRepo,
   onOpenRecent,
+  onClone,
   recents,
   onForget,
 }: {
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
+  onClone: () => void;
   recents: ReturnType<typeof useRepo.getState>['recents'];
   onForget: (path: string) => Promise<void>;
 }) {
@@ -209,6 +219,17 @@ function RepoSwitcherButton({
             <span className="meta">⌘O</span>
           </button>
 
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => { setOpen(false); onClone(); }}
+          >
+            <span className="ico"><Icon name="remote" size={13} /></span>
+            <span className="label">Clone repository…</span>
+          </button>
+
           <div className="repo-menu-divider" />
 
           {recents.length === 0 ? (
@@ -250,10 +271,12 @@ function RepoSwitcherButton({
 /** Topbar branch button — opens a dropdown with branches + create. */
 function BranchSwitcherButton({
   branch,
+  detached,
   hasRepo,
   onToast,
 }: {
   branch: string;
+  detached: boolean;
   hasRepo: boolean;
   onToast: (msg: string) => void;
 }) {
@@ -319,14 +342,23 @@ function BranchSwitcherButton({
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
         type="button"
-        className="branch-btn"
-        title={hasRepo ? 'Switch branch' : 'No repository open'}
-        aria-label={hasRepo ? 'Switch branch' : 'No repository open'}
+        className={'branch-btn' + (detached ? ' detached' : '')}
+        title={
+          !hasRepo
+            ? 'No repository open'
+            : detached
+              ? `Detached HEAD at ${branch}`
+              : 'Switch branch'
+        }
+        aria-label={
+          !hasRepo ? 'No repository open' : detached ? `Detached HEAD at ${branch}` : 'Switch branch'
+        }
         onClick={() => { if (hasRepo) setOpen((o) => !o); }}
         style={hasRepo ? undefined : { opacity: 0.5, cursor: 'default' }}
         disabled={!hasRepo}
       >
-        <Icon name="branch" size={13} />
+        <Icon name={detached ? 'circle' : 'branch'} size={13} />
+        {detached && <span className="det-chip">detached</span>}
         <span className="branch-name">{branch}</span>
         <Icon name="chev-down" size={11} className="chev" />
       </button>

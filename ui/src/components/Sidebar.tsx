@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Icon, type IconName } from './Icon';
 import { useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Tag } from '../lib/types';
+import type { Branch, RemoteBranch, StatusKind, Tag, WorkTreeEntry } from '../lib/types';
 
 type SideTab = 'git' | 'files';
 
@@ -93,6 +93,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
+  const selectedFile = useRepo((s) => s.selectedFile);
   const status = useRepo((s) => s.status);
   const meta = useRepo((s) => s.meta);
   const recents = useRepo((s) => s.recents);
@@ -101,6 +102,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
   const checkout = useRepo((s) => s.checkout);
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
+  const workTree = useRepo((s) => s.workTree);
+  const refreshTree = useRepo((s) => s.refreshTree);
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
@@ -177,6 +180,43 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
     return t;
   }, [filtered.tags]);
+
+  // Files tab: lazily fetch the working-tree listing when the tab is shown,
+  // and refresh it whenever status (a proxy for working-tree change) updates.
+  // Depend on `meta?.path` (not the whole meta object) so a meta refresh that
+  // only bumps ahead/behind doesn't re-walk the tree.
+  const [treeLoading, setTreeLoading] = useState(false);
+  useEffect(() => {
+    if (tab !== 'files' || !meta) return;
+    let cancelled = false;
+    setTreeLoading(true);
+    void refreshTree().finally(() => {
+      if (!cancelled) setTreeLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, meta?.path, status, refreshTree]);
+
+  const fileTree = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const items = q ? workTree.filter((e) => e.path.toLowerCase().includes(q)) : workTree;
+    const t = buildTree<WorkTreeEntry>(items, (e) => e.path.split('/'));
+    sortTree(t, (a, b) => a.path.localeCompare(b.path));
+    return t;
+  }, [workTree, filter]);
+
+  const renderFileLeaf = (e: WorkTreeEntry, depth: number) => (
+    <FileLeaf
+      key={e.path}
+      depth={depth}
+      name={leafName(e.path)}
+      status={e.status}
+      active={selectedFile === e.path}
+      onClick={() => selectFile(e.path)}
+    />
+  );
 
   const runBranchOp = async (fn: () => Promise<void>) => {
     try { await fn(); } catch (e) { console.warn(e); }
@@ -273,7 +313,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
               count={filtered.branches.length}
             />
             {sections.branches &&
-              renderTreeChildren(branchTree, 0, collapsed, toggleCollapsed, renderBranchLeaf)}
+              renderTreeChildren(branchTree, 0, collapsed, toggleCollapsed, renderBranchLeaf, 'branches')}
 
             <SideSection
               label="Remotes"
@@ -282,7 +322,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
               count={filtered.remotes.length}
             />
             {sections.remotes &&
-              renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf)}
+              renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes')}
 
             <SideSection
               label="Tags"
@@ -291,15 +331,21 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
               count={filtered.tags.length}
             />
             {sections.tags &&
-              renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf)}
+              renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
 
             <SideSection label="Stashes" collapsed={!sections.stashes} onToggle={() => toggle('stashes')} count={0} />
             <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
           </>
-        ) : (
+        ) : fileTree.children.length === 0 ? (
           <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 12 }}>
-            File tree — coming soon.
+            {filter.trim()
+              ? 'No files match.'
+              : treeLoading
+                ? 'Loading working tree…'
+                : 'No files in the working tree.'}
           </div>
+        ) : (
+          renderTreeChildren(fileTree, 0, collapsed, toggleCollapsed, renderFileLeaf, 'files')
         )}
       </div>
     </div>
@@ -308,18 +354,23 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
 
 // Render a TreeNode's children (not the root itself) into a flat JSX list.
 // `renderLeaf` provides the row for a leaf; folder rows are handled here.
+// `keyPrefix` namespaces the collapse key per tree (branches/remotes/tags/files)
+// so a folder named `feature/` in one tree doesn't fold a same-named folder in
+// another — all four trees share one `collapsed` Set.
 function renderTreeChildren<T>(
   node: TreeNode<T>,
   depth: number,
   collapsed: Set<string>,
   toggleCollapsed: (path: string) => void,
   renderLeaf: (item: T, depth: number) => React.ReactNode,
+  keyPrefix: string,
 ): React.ReactNode {
   return node.children.map((child) => {
     if (child.children.length === 0 && child.leaf != null) {
       return renderLeaf(child.leaf, depth);
     }
-    const isCollapsed = collapsed.has(child.fullPath);
+    const collapseKey = `${keyPrefix}:${child.fullPath}`;
+    const isCollapsed = collapsed.has(collapseKey);
     return (
       <div key={child.fullPath}>
         <FolderRow
@@ -327,10 +378,10 @@ function renderTreeChildren<T>(
           depth={depth}
           collapsed={isCollapsed}
           count={leafCount(child)}
-          onToggle={() => toggleCollapsed(child.fullPath)}
+          onToggle={() => toggleCollapsed(collapseKey)}
         />
         {!isCollapsed &&
-          renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf)}
+          renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf, keyPrefix)}
       </div>
     );
   });
@@ -419,7 +470,10 @@ function BranchLeaf({
       style={{ paddingLeft: 16 + depth * 14 }}
       onClick={confirming ? undefined : onClick}
       onKeyDown={confirming ? undefined : (e) => {
-        if (onClick && (e.key === 'Enter' || e.key === ' ')) onClick();
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault(); // Space would otherwise scroll the sidebar
+          onClick();
+        }
       }}
       title={titleAttr}
       role="button"
@@ -457,6 +511,58 @@ function BranchLeaf({
       )}
     </div>
   );
+}
+
+interface FileLeafProps {
+  depth: number;
+  name: string;
+  status: StatusKind | null;
+  active: boolean;
+  onClick: () => void;
+}
+
+function FileLeaf({ depth, name, status, active, onClick }: FileLeafProps) {
+  const letter = status ? statusLetter(status) : null;
+  return (
+    <div
+      className={'side-row branch-row file-row' + (active ? ' active' : '')}
+      style={{ paddingLeft: 16 + depth * 14 }}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault(); // Space would otherwise scroll the sidebar
+          onClick();
+        }
+      }}
+      title={name}
+      role="button"
+      tabIndex={0}
+    >
+      <span className="folder-chev" aria-hidden />
+      <span className="ico"><Icon name="file" size={13} /></span>
+      <span className="row-text">
+        <span className="label">{name}</span>
+      </span>
+      {letter && <span className={`file-badge ${letter}`}>{letter}</span>}
+    </div>
+  );
+}
+
+function statusLetter(s: StatusKind): 'M' | 'A' | 'D' | 'R' | 'U' | 'C' {
+  switch (s) {
+    case 'MODIFIED':
+      return 'M';
+    case 'ADDED':
+      return 'A';
+    case 'DELETED':
+      return 'D';
+    case 'RENAMED':
+      return 'R';
+    case 'UNTRACKED':
+      return 'U';
+    case 'CONFLICTED':
+      return 'C';
+  }
 }
 
 interface EmptyProps {

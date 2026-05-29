@@ -18,6 +18,7 @@ pub mod commit;
 pub mod network;
 pub mod refs;
 pub mod branch;
+pub mod tree;
 
 pub use error::{Error, Result};
 pub use repo::Repo;
