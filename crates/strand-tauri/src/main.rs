@@ -45,6 +45,11 @@ fn main() {
             commands::repo_tree,
             commands::repo_branch_create,
             commands::repo_branch_delete,
+            commands::repo_stash_list,
+            commands::repo_stash_save,
+            commands::repo_stash_apply,
+            commands::repo_stash_pop,
+            commands::repo_stash_drop,
         ])
         .setup(|app| {
             if let Some(win) = app.get_webview_window("main") {

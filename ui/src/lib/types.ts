@@ -98,6 +98,22 @@ export interface CheckoutOutcome {
   branch: string;
 }
 
+export interface Stash {
+  /** Stash index; 0 is the most recent (git's `stash@{0}`). */
+  index: number;
+  /** OID of the stash commit. */
+  oid: string;
+  /** Full stash message, e.g. `WIP on main: 1a2b3c4 Subject`. */
+  message: string;
+  /** Branch the stash was taken on, parsed from the message when possible. */
+  branch: string | null;
+}
+
+export interface StashOutcome {
+  /** OID of the new stash commit, or `null` when there was nothing to stash. */
+  oid: string | null;
+}
+
 export interface NetworkOutcome {
   /** Combined stdout/stderr from `git`, trimmed. Show in a toast/log. */
   output: string;

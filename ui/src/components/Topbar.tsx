@@ -150,6 +150,8 @@ export function Topbar({
         </button>
       </div>
 
+      <StashButton onToast={onToast} />
+
       <BranchSwitcherButton
         branch={branch}
         detached={!!meta?.detached}
@@ -277,6 +279,163 @@ function RepoSwitcherButton({
                   </span>
                 </button>
               ))}
+            </>
+          )}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+/**
+ * Stash split button — the primary face stashes all changes; the chevron
+ * opens a menu with create variants (untracked / keep-index) and "Pop latest".
+ * Per-stash apply / pop / drop lives on the sidebar Stashes list. Reads the
+ * store directly and only takes `onToast`, mirroring {@link BranchSwitcherButton}.
+ */
+function StashButton({ onToast }: { onToast: (msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const meta = useRepo((s) => s.meta);
+  const stashes = useRepo((s) => s.stashes);
+  const stashSave = useRepo((s) => s.stashSave);
+  const stashPop = useRepo((s) => s.stashPop);
+
+  const hasRepo = !!meta;
+
+  useLayoutEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+  }, [open]);
+
+  useOutsideClose([wrapRef, menuRef], open, () => setOpen(false));
+
+  const save = async (includeUntracked: boolean, keepIndex: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const outcome = await stashSave(null, includeUntracked, keepIndex);
+      onToast(outcome.oid ? 'Stashed changes' : 'Nothing to stash');
+      setOpen(false);
+    } catch (e) {
+      onToast(`Stash failed: ${(e as Error).message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pop = async (index: number) => {
+    if (busy) return;
+    // Guard the empty stack — the menu item only renders when non-empty, but
+    // the list can empty between render and click (a concurrent drop/pop, or
+    // an external git command). Avoids a needless "Pop failed" toast.
+    if (stashes.length === 0) {
+      onToast('No stashes to pop');
+      return;
+    }
+    setBusy(true);
+    try {
+      await stashPop(index);
+      onToast('Popped stash');
+      setOpen(false);
+    } catch (e) {
+      onToast(`Pop failed: ${(e as Error).message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="sync-group stash-group">
+      <button
+        type="button"
+        className="sync-btn"
+        onClick={() => void save(false, false)}
+        title="Stash all changes"
+        aria-label="Stash all changes"
+        disabled={!hasRepo || busy}
+      >
+        <span><Icon name="stash" size={13} /></span>
+        <span>Stash</span>
+      </button>
+      <button
+        type="button"
+        className="sync-btn"
+        onClick={() => { if (hasRepo) setOpen((o) => !o); }}
+        title="Stash options"
+        aria-label="Stash options"
+        disabled={!hasRepo}
+      >
+        <Icon name="chev-down" size={10} />
+        {stashes.length > 0 && <span className="count">{stashes.length}</span>}
+      </button>
+      {open && hasRepo && pos && createPortal(
+        <div
+          ref={menuRef}
+          className="repo-menu"
+          role="menu"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, left: 'auto', minWidth: 240 }}
+        >
+          <div className="repo-menu-sect">Create stash</div>
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => void save(false, false)}
+          >
+            <span className="ico"><Icon name="stash" size={13} /></span>
+            <span className="label">Stash all changes</span>
+          </button>
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => void save(true, false)}
+          >
+            <span className="ico"><Icon name="stash" size={13} /></span>
+            <span className="label">Stash including untracked</span>
+            <span className="meta">-u</span>
+          </button>
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => void save(false, true)}
+          >
+            <span className="ico"><Icon name="stash" size={13} /></span>
+            <span className="label">Stash, keep staged</span>
+            <span className="meta">--keep-index</span>
+          </button>
+
+          <div className="repo-menu-divider" />
+
+          {stashes.length === 0 ? (
+            <div className="repo-menu-empty">No stashes yet.</div>
+          ) : (
+            <>
+              <div className="repo-menu-sect">
+                {stashes.length} stash{stashes.length > 1 ? 'es' : ''}
+              </div>
+              <button
+                type="button"
+                className="repo-menu-item"
+                role="menuitem"
+                tabIndex={0}
+                title="Apply & remove the most recent stash"
+                onClick={() => void pop(0)}
+              >
+                <span className="ico"><Icon name="arrow-up" size={13} /></span>
+                <span className="label">Pop latest</span>
+                <span className="meta">{stashes[0]?.branch ?? ''}</span>
+              </button>
             </>
           )}
         </div>,

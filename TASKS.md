@@ -39,7 +39,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   exposed via `repo_refs` IPC; per-branch upstream + ahead/behind)
 - ☑ `Repo::work_tree` — working-tree file listing (index entries ∪ untracked,
   ignored excluded, overlaid with change status) powering the Files sidebar tab
-- ☐ Stash list
+- ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
+  oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
+  out of git's `WIP on <branch>:` / `On <branch>:` message)
 - ☐ Submodule list + status
 - ☐ Reflog reader
 - ☐ Blame (`git2::Blame`)
@@ -74,7 +76,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   errors on dirty conflicts; `Repo::checkout_commit` — safe detached-HEAD
   checkout of any revspec via `set_head_detached`.)
 - ☐ Create / delete tag (lightweight + annotated)
-- ☐ Stash create / apply / pop / drop / branch-from
+- ◐ Stash create / apply / pop / drop (`stash_save` via `stash_save2` with
+  `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
+  `StashOutcome { oid: None }` instead of erroring; `stash_apply` / `stash_pop`
+  / `stash_drop` by index). **branch-from still pending** — no direct git2 API;
+  needs branch-at-stash-base + checkout + apply/drop.)
 - ☐ Cherry-pick (single + multi)
 - ☐ Revert
 - ☐ Merge (ff / no-ff / squash)
@@ -111,7 +117,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
-  `repo_branch_delete`
+  `repo_branch_delete`, `repo_stash_list`, `repo_stash_save`,
+  `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`
   (all `async`, streaming progress over a `Channel`)
 - ☑ Plugins: sql, updater, dialog, shell, os
@@ -156,7 +163,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   inline create-branch field with prefix autocomplete — ↑↓ chooses among
   prefix matches, Tab fills only the next `/` segment of the highlighted
   match, never a full leaf name)
-- ☐ Stash split button
+- ☑ Stash split button (reuses `.sync-group`: primary face stashes all
+  changes; chevron opens a menu with ±untracked / keep-index create variants
+  and "Pop latest", plus a live count badge. Self-contained — reads the store,
+  takes only `onToast`, like `BranchSwitcherButton`.)
 
 ### Sidebar
 - ☑ Local Changes + All Commits primary rows
@@ -168,7 +178,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
   the top folder; click a leaf to create + track locally)
 - ☑ Tags list (folder tree; create/delete pending writes)
-- ☐ Stashes list
+- ☑ Stashes list — flat list under the Git tab (`StashLeaf` reuses the
+  branch-row + `row-tools`/`armed` styling). Click a row to apply; hover for
+  Pop (apply & remove) and Drop (destructive, behind an inline confirm).
+  Respects the sidebar filter (matches message + branch).
 - ☐ Submodules list
 - ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
   click-to-open; lazily loaded when the Files tab is shown and refreshed on

@@ -222,7 +222,7 @@ notarization, DMG) — environment-blocked; runbook in `docs/packaging.md`.
 > PRD: "All P0 features. All three platforms. Auto-update. Light & dark
 > themes. Performance targets met for medium repos."
 
-- ☐ Stashes (create, apply, pop, drop)
+- ☑ Stashes (create, apply, pop, drop)
 - ☐ Tags (lightweight + annotated)
 - ☐ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
 - ☐ Conflict resolution UI (three-way view)
@@ -239,6 +239,21 @@ notarization, DMG) — environment-blocked; runbook in `docs/packaging.md`.
 - ☐ Tauri auto-update: real pubkey, real endpoint, signed manifests
 - ☐ Performance pass to hit PRD §8 targets on medium repos
   (open <2s for 100k commits, status refresh <200ms on 10k files)
+
+**Stashes shipped (2026-05-30):** First 0.5 vertical. `strand-core::stash`
+(`stash_list` via `stash_foreach`; `stash_save` via `stash_save2` with
+`INCLUDE_UNTRACKED` / `KEEP_INDEX` flags; `stash_apply` / `stash_pop` /
+`stash_drop` by index) — a clean working tree maps git2's `NotFound` to a
+no-op `StashOutcome { oid: None }` so "nothing to stash" isn't an error.
+Five `repo_stash_*` IPC commands; store gained a `stashes` slice eager-
+refreshed alongside refs (reset per tab). Sidebar **Stashes** section is a
+flat list — click a row to apply, hover for Pop / Drop (Drop behind an inline
+confirm), reusing the branch-row/`armed` styling. Topbar **Stash split button**
+(reuses `.sync-group`): primary stashes all; chevron menu offers
+±untracked / keep-index variants + "Pop latest" with a live count badge.
+Verified with `cargo check`/`test` (+4 `stash` unit tests), `clippy`, `tsc`,
+`vite build`, and a 3-dimension adversarial review pass. **Still open:**
+`branch-from` (no direct git2 API — needs base-commit + checkout + apply/drop).
 
 ---
 

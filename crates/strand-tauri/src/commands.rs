@@ -2,7 +2,8 @@ use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff,
     log::Commit, network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
-    refs::Refs, repo::RepoMeta, status::FileStatus, tree::WorkTreeEntry, Repo,
+    refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
+    tree::WorkTreeEntry, Repo,
 };
 use tauri::ipc::Channel;
 use tauri::State;
@@ -217,5 +218,38 @@ pub fn repo_branch_create(
 #[tauri::command]
 pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<()> {
     Repo::discover(&path)?.delete_branch(&name, force)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
+    Ok(Repo::discover(&path)?.stash_list()?)
+}
+
+#[tauri::command]
+pub fn repo_stash_save(
+    path: String,
+    message: Option<String>,
+    include_untracked: bool,
+    keep_index: bool,
+) -> CmdResult<StashOutcome> {
+    Ok(Repo::discover(&path)?.stash_save(message.as_deref(), include_untracked, keep_index)?)
+}
+
+#[tauri::command]
+pub fn repo_stash_apply(path: String, index: usize) -> CmdResult<()> {
+    Repo::discover(&path)?.stash_apply(index)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_stash_pop(path: String, index: usize) -> CmdResult<()> {
+    Repo::discover(&path)?.stash_pop(index)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_stash_drop(path: String, index: usize) -> CmdResult<()> {
+    Repo::discover(&path)?.stash_drop(index)?;
     Ok(())
 }

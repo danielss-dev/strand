@@ -15,6 +15,8 @@ import type {
   RecentRepo,
   Refs,
   RepoMeta,
+  Stash,
+  StashOutcome,
   WorkTreeEntry,
 } from '../lib/types';
 
@@ -81,6 +83,9 @@ export interface RepoState {
 
   /** Branches / remotes / tags for the active tab. */
   refs: Refs;
+
+  /** Stash stack for the active tab, most-recent first. */
+  stashes: Stash[];
 
   /** Working-tree file listing for the Files sidebar tab (lazy: only the
    * Files tab triggers {@link RepoState.refreshTree}). */
@@ -152,6 +157,24 @@ export interface RepoState {
   createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
   deleteBranch(name: string, force: boolean): Promise<void>;
 
+  /** Re-read the stash stack for the active tab. */
+  refreshStashes(): Promise<void>;
+  /**
+   * Stash the working-tree + index changes. Returns the outcome so callers
+   * can distinguish a real stash from a clean-tree no-op (`oid === null`).
+   */
+  stashSave(
+    message: string | null,
+    includeUntracked: boolean,
+    keepIndex: boolean,
+  ): Promise<StashOutcome>;
+  /** Apply a stash by index, leaving it on the stack. */
+  stashApply(index: number): Promise<void>;
+  /** Apply a stash by index and drop it on success. */
+  stashPop(index: number): Promise<void>;
+  /** Drop a stash by index without applying it. Destructive. */
+  stashDrop(index: number): Promise<void>;
+
   selectLocalFile(sel: LocalSelection | null): void;
   /** Open the commit-detail panel for `hash`, or close it when null. */
   selectCommit(hash: string | null): Promise<void>;
@@ -180,6 +203,7 @@ const EMPTY_ACTIVE = {
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
   refs: EMPTY_REFS,
+  stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
   recentMessages: [] as StoredMessage[],
 };
@@ -265,6 +289,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      stashes: [],
       workTree: [],
       recentMessages: [],
     }));
@@ -280,6 +305,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLocalChanges(),
       get().refreshLog(),
       get().refreshRefs(),
+      get().refreshStashes(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -313,6 +339,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      stashes: [],
       workTree: [],
       recentMessages: [],
     });
@@ -344,6 +371,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      stashes: [],
       workTree: [],
       recentMessages: [],
     });
@@ -352,6 +380,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLocalChanges(),
       get().refreshLog(),
       get().refreshRefs(),
+      get().refreshStashes(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -505,6 +534,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLog(),
       get().refreshMeta(),
       get().refreshRefs(),
+      get().refreshStashes(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -589,6 +619,50 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchDelete(path, name, force);
     await get().refreshRefs();
+  },
+
+  async refreshStashes() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const stashes = await tauri.repoStashList(path);
+      // Bail if the active repo changed while the list was in flight.
+      if (get().activePath !== path) return;
+      set({ stashes });
+    } catch (e) {
+      console.warn('repoStashList failed', e);
+    }
+  },
+  async stashSave(message, includeUntracked, keepIndex) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const outcome = await tauri.repoStashSave(path, message, includeUntracked, keepIndex);
+    // Only the working tree changed if something was actually stashed; refresh
+    // regardless so the stash list reflects the new (or unchanged) stack.
+    await Promise.all([
+      get().refreshStashes(),
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+    ]);
+    return outcome;
+  },
+  async stashApply(index) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoStashApply(path, index);
+    await Promise.all([get().refreshStashes(), get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async stashPop(index) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoStashPop(path, index);
+    await Promise.all([get().refreshStashes(), get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async stashDrop(index) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoStashDrop(path, index);
+    await get().refreshStashes();
   },
 
   selectLocalFile: (sel) => set({ localSelection: sel }),

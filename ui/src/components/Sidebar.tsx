@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Icon, type IconName } from './Icon';
 import { useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, StatusKind, Tag, WorkTreeEntry } from '../lib/types';
+import type { Branch, RemoteBranch, Stash, StatusKind, Tag, WorkTreeEntry } from '../lib/types';
 
 type SideTab = 'git' | 'files';
 
@@ -104,6 +104,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
   const deleteBranch = useRepo((s) => s.deleteBranch);
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
+  const stashes = useRepo((s) => s.stashes);
+  const stashApply = useRepo((s) => s.stashApply);
+  const stashPop = useRepo((s) => s.stashPop);
+  const stashDrop = useRepo((s) => s.stashDrop);
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
@@ -180,6 +184,16 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
     return t;
   }, [filtered.tags]);
+
+  // Stashes are a flat stack (their messages can contain `/`, so we don't
+  // split them into a folder tree like branches). Filter on message + branch.
+  const filteredStashes = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return stashes;
+    return stashes.filter(
+      (s) => s.message.toLowerCase().includes(q) || (s.branch?.toLowerCase().includes(q) ?? false),
+    );
+  }, [stashes, filter]);
 
   // Files tab: lazily fetch the working-tree listing when the tab is shown,
   // and refresh it whenever status (a proxy for working-tree change) updates.
@@ -332,7 +346,30 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
             {sections.tags &&
               renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
 
-            <SideSection label="Stashes" collapsed={!sections.stashes} onToggle={() => toggle('stashes')} count={0} />
+            <SideSection
+              label="Stashes"
+              collapsed={!sections.stashes}
+              onToggle={() => toggle('stashes')}
+              count={filteredStashes.length}
+            />
+            {sections.stashes &&
+              filteredStashes.map((s) => (
+                <StashLeaf
+                  key={s.index}
+                  label={stashLabel(s)}
+                  meta={s.branch ?? undefined}
+                  confirming={pendingDelete === `stash:${s.index}`}
+                  onApply={() => void runBranchOp(() => stashApply(s.index))}
+                  onPop={() => void runBranchOp(() => stashPop(s.index))}
+                  onRequestDrop={() => setPendingDelete(`stash:${s.index}`)}
+                  onCancelDrop={() => setPendingDelete(null)}
+                  onConfirmDrop={() => {
+                    setPendingDelete(null);
+                    void runBranchOp(() => stashDrop(s.index));
+                  }}
+                />
+              ))}
+
             <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
           </>
         ) : fileTree.children.length === 0 ? (
@@ -394,6 +431,19 @@ function leafCount<T>(node: TreeNode<T>): number {
 function leafName(fullName: string): string {
   const i = fullName.lastIndexOf('/');
   return i === -1 ? fullName : fullName.slice(i + 1);
+}
+
+// Strip the "WIP on <branch>: " / "On <branch>: " prefix git prepends — the
+// branch already shows in the row meta, so the label keeps just the
+// description (a custom message, or "<oid> <subject>" for an auto-stash).
+function stashLabel(s: Stash): string {
+  const m = s.message;
+  const colon = m.indexOf(':');
+  if (colon !== -1 && (m.startsWith('WIP on ') || m.startsWith('On '))) {
+    const rest = m.slice(colon + 1).trim();
+    if (rest) return rest;
+  }
+  return m;
 }
 
 // ─── row components ─────────────────────────────────────────────────────
@@ -508,6 +558,107 @@ function BranchLeaf({
           </button>
         </span>
       )}
+    </div>
+  );
+}
+
+interface StashLeafProps {
+  label: string;
+  /** Branch the stash was taken on, shown as muted meta. */
+  meta?: string;
+  /** When true, the row swaps its tools for an inline drop-confirm prompt. */
+  confirming: boolean;
+  /** Primary click — apply the stash, leaving it on the stack. */
+  onApply: () => void;
+  /** Pop — apply and remove from the stack. */
+  onPop: () => void;
+  onRequestDrop: () => void;
+  onConfirmDrop: () => void;
+  onCancelDrop: () => void;
+}
+
+/**
+ * One stash row. Click applies (non-destructive); the hover toolbar adds Pop
+ * (apply & remove) and Drop (destructive, behind an inline confirm). Reuses
+ * the branch-row + row-tools styling, so the armed/confirm states match the
+ * branch-delete affordance.
+ */
+function StashLeaf({
+  label,
+  meta,
+  confirming,
+  onApply,
+  onPop,
+  onRequestDrop,
+  onConfirmDrop,
+  onCancelDrop,
+}: StashLeafProps) {
+  return (
+    <div
+      className={'side-row branch-row stash-row' + (confirming ? ' armed' : '')}
+      style={{ paddingLeft: 16 }}
+      onClick={confirming ? undefined : onApply}
+      onKeyDown={confirming ? undefined : (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault(); // Space would otherwise scroll the sidebar
+          onApply();
+        }
+      }}
+      title={confirming ? `Confirm drop · ${label}` : `${label} — click to apply`}
+      role="button"
+      tabIndex={0}
+    >
+      <span className="folder-chev" aria-hidden />
+      <span className="ico"><Icon name="stash" size={13} /></span>
+      <span className="row-text">
+        <span className="label">{label}</span>
+        {meta && <span className="row-meta">{meta}</span>}
+      </span>
+      <span className="row-tools" onClick={(e) => e.stopPropagation()}>
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              className="row-tool"
+              title="Cancel"
+              aria-label="Cancel drop"
+              onClick={onCancelDrop}
+            >
+              <Icon name="x" size={11} stroke={2} />
+            </button>
+            <button
+              type="button"
+              className="row-tool danger confirm"
+              title="Confirm drop"
+              aria-label="Confirm drop"
+              onClick={onConfirmDrop}
+            >
+              <Icon name="trash" size={11} stroke={1.6} />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="row-tool"
+              title="Pop (apply & remove)"
+              aria-label="Pop stash"
+              onClick={onPop}
+            >
+              <Icon name="arrow-up" size={12} stroke={1.8} />
+            </button>
+            <button
+              type="button"
+              className="row-tool danger"
+              title="Drop stash"
+              aria-label="Drop stash"
+              onClick={onRequestDrop}
+            >
+              <Icon name="trash" size={11} stroke={1.6} />
+            </button>
+          </>
+        )}
+      </span>
     </div>
   );
 }

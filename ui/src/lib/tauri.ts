@@ -11,6 +11,8 @@ import type {
   Progress,
   Refs,
   RepoMeta,
+  Stash,
+  StashOutcome,
   WorkTreeEntry,
 } from './types';
 
@@ -77,6 +79,17 @@ export const tauri = {
   ) => invoke<CheckoutOutcome>('repo_branch_create', { path, name, startPoint, checkout }),
   repoBranchDelete: (path: string, name: string, force: boolean) =>
     invoke<void>('repo_branch_delete', { path, name, force }),
+  repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
+  repoStashSave: (
+    path: string,
+    message: string | null,
+    includeUntracked: boolean,
+    keepIndex: boolean,
+  ) => invoke<StashOutcome>('repo_stash_save', { path, message, includeUntracked, keepIndex }),
+  repoStashApply: (path: string, index: number) =>
+    invoke<void>('repo_stash_apply', { path, index }),
+  repoStashPop: (path: string, index: number) => invoke<void>('repo_stash_pop', { path, index }),
+  repoStashDrop: (path: string, index: number) => invoke<void>('repo_stash_drop', { path, index }),
 };
 
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */
