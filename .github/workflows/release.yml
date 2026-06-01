@@ -1,0 +1,122 @@
+name: Release
+
+# Builds, signs, and publishes a Strand release for macOS, Windows, and Linux.
+#
+# Trigger by pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`),
+# or run manually from the Actions tab. The job opens a **draft** GitHub Release
+# and uploads each platform's installers to it; you review and publish.
+#
+# Keep the tag in sync with `version` in tauri.conf.json / Cargo.toml /
+# package.json — Tauri names the artifacts (e.g. Strand_0.1.0_aarch64.dmg) from
+# the config version, not the tag.
+#
+# Required / optional secrets are documented in docs/packaging.md § "Release CI".
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0). Must match the version in tauri.conf.json.'
+        required: true
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon + Intel in one universal binary.
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          # .deb / .rpm / .AppImage
+          - platform: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          # .msi
+          - platform: windows-latest
+            args: ''
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential \
+            file \
+            wget
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the cache distinct per platform/target combination.
+          key: ${{ matrix.platform }}-${{ matrix.args }}
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build, sign, and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- macOS code signing (Developer ID) ---
+          # Base64 of the exported .p12 + its export password. tauri-action
+          # imports these into a throwaway keychain on the runner.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+
+          # --- macOS notarization (Apple notary service) ---
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+          # --- Tauri auto-updater signing (optional) ---
+          # Only used once bundle.createUpdaterArtifacts is enabled and the
+          # updater pubkey placeholder in tauri.conf.json is replaced. Harmless
+          # to leave set/empty otherwise.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # The Tauri project lives at crates/strand-tauri, not the default
+          # src-tauri — point tauri-action at it so it finds the config + bundles.
+          projectPath: crates/strand-tauri
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'Strand ${{ github.event.inputs.tag || github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
