@@ -80,11 +80,13 @@ system ported verbatim. No real feature surface yet.
     primitives rather than pulling in `@pierre/trees` — no new dependency,
     matches the Branches/Local-Changes trees. (FileView's Content/History/
     Compare/Blame tabs are still placeholders — that's 0.5 work.)
-- ☐ **macOS packaging** — *blocked on environment (needs a Mac + Apple
-  Developer account); see `docs/packaging.md` for the exact runbook.*
-  - Real app icon (currently a placeholder "S")
-  - Apple Developer ID signing + notarization
-  - First DMG ships to a small alpha group
+- ◐ **macOS packaging** — *signed DMG now builds on a Mac with the
+  Developer-ID cert in the Keychain; notarization + alpha distribution still
+  pending. See `docs/packaging.md` for the exact runbook.*
+  - ☑ Real app icon (squircle on the Apple grid — commit `aefc189`)
+  - ◐ Apple Developer ID signing + notarization (signing done; notarization
+    pending Apple credentials)
+  - ☐ First DMG ships to a small alpha group
 
 **Blockers cleared (2026-05-25):** PRD Q1 (Pierre libraries approved),
 Q2 (license: AGPL-3.0 + dual-license commercial SKU), Q5 (pricing:
@@ -212,8 +214,17 @@ the internal alpha in one batch.
 
 Verified with `cargo check`/`test` (+ 4 new `network` unit tests), `clippy`,
 `tsc`, and `vite build`, then an adversarial multi-agent review pass.
-**Still open for 0.1:** macOS packaging (icon, Developer-ID signing,
-notarization, DMG) — environment-blocked; runbook in `docs/packaging.md`.
+
+**macOS artifact (2026-06-01):** First signed bundle off a real Mac.
+`pnpm tauri build --target aarch64-apple-darwin` with
+`APPLE_SIGNING_IDENTITY` set produces `Strand_0.0.1_aarch64.dmg` (~10 MB),
+signed with the Developer-ID Application cert (chain to Apple Root CA;
+embedded `Strand.app` is valid + satisfies its Designated Requirement).
+Gatekeeper still reports "Unnotarized Developer ID" — notarization needs
+`APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` (or an API key), which aren't in
+the environment yet. **Still open for 0.1:** notarization + stapling, then
+shipping the first DMG to the alpha group. Universal (arm64 + x86_64) build
+also pending (only `aarch64-apple-darwin` is installed).
 
 ---
 
@@ -236,7 +247,8 @@ notarization, DMG) — environment-blocked; runbook in `docs/packaging.md`.
 - ☐ Command palette: real action set (branches, files, commits, recents)
 - ☐ Windows 11 build (chrome variant exists but is untested)
 - ☐ Linux build (deb / rpm / AppImage)
-- ☐ Tauri auto-update: real pubkey, real endpoint, signed manifests
+- ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
+  wired, `createUpdaterArtifacts` on); real endpoint still pending
 - ☐ Performance pass to hit PRD §8 targets on medium repos
   (open <2s for 100k commits, status refresh <200ms on 10k files)
 
