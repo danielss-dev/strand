@@ -1805,6 +1805,70 @@ button {
   color: var(--text-dim);
 }
 
+/* ─── Right-click context menu (sidebar rows) ─── */
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+.context-menu {
+  position: fixed;
+  min-width: 180px;
+  max-width: 280px;
+  background: var(--bg-panel);
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 0.5px var(--border-strong),
+    0 16px 48px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  animation: popIn 0.12s cubic-bezier(0.2, 0.7, 0.4, 1);
+}
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.context-menu-item.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.context-menu-item.danger {
+  color: #ff6b62;
+}
+.context-menu-item.danger.active {
+  background: rgba(179, 38, 30, 0.18);
+}
+.context-menu-item.disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+.context-menu-item .ico {
+  color: var(--text-muted);
+  display: flex;
+}
+.context-menu-item.danger .ico {
+  color: inherit;
+}
+.context-menu-item .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Create-branch inline field (branch picker dropdown footer) ─── */
 .branch-create {
   padding: 4px 4px 6px;
@@ -2352,6 +2416,15 @@ button {
 .clone-input::placeholder {
   color: var(--text-dim);
   font-family: var(--font-ui);
+}
+/* Multi-line variant: the fixed single-line height + zero vertical padding
+   pin text to the top, so a textarea needs its own metrics. */
+textarea.clone-input {
+  height: auto;
+  min-height: 64px;
+  padding: 8px 10px;
+  line-height: 1.45;
+  resize: vertical;
 }
 .clone-dest {
   display: flex;

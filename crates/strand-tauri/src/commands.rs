@@ -222,6 +222,69 @@ pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<
 }
 
 #[tauri::command]
+pub fn repo_tag_create(
+    path: String,
+    name: String,
+    target: Option<String>,
+    message: Option<String>,
+    force: bool,
+) -> CmdResult<()> {
+    Repo::discover(&path)?.create_tag(&name, target.as_deref(), message.as_deref(), force)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_tag_delete(path: String, name: String) -> CmdResult<()> {
+    Repo::discover(&path)?.delete_tag(&name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn repo_remote_tags(path: String, remote: String) -> CmdResult<Vec<String>> {
+    tokio::task::spawn_blocking(move || -> CmdResult<Vec<String>> {
+        Repo::discover(&path)?.remote_tags(&remote).map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("remote tags task failed: {e}") })?
+}
+
+#[tauri::command]
+pub async fn repo_tag_push(
+    path: String,
+    tag: String,
+    remote: String,
+    delete: bool,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.push_tag(&tag, &remote, delete, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
+}
+
+#[tauri::command]
+pub async fn repo_tag_push_all(
+    path: String,
+    remote: String,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.push_all_tags(&remote, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
+}
+
+#[tauri::command]
 pub fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
     Ok(Repo::discover(&path)?.stash_list()?)
 }

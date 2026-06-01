@@ -8,8 +8,13 @@ import { useRepo } from '../stores/repo';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
 
+interface CommitsProps {
+  /** Open the New-tag dialog targeting a commit (revspec + label). */
+  onCreateTag: (target: string, label: string) => void;
+}
+
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits() {
+export function Commits({ onCreateTag }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
@@ -258,7 +263,7 @@ export function Commits() {
             <>
               <PanelResizeHandle className="rs-handle vert" />
               <Panel defaultSize={38} minSize={25} maxSize={55}>
-                <CommitDetail />
+                <CommitDetail onCreateTag={onCreateTag} />
               </Panel>
             </>
           ) : null}

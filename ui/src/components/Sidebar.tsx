@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
-import { useRepo } from '../stores/repo';
+import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, StatusKind, Tag, WorkTreeEntry } from '../lib/types';
 
 type SideTab = 'git' | 'files';
@@ -39,13 +40,13 @@ function SideSection({ label, collapsed, onToggle, count, action }: SectionProps
       <button type="button" className="ss-toggle" onClick={onToggle}>
         <Icon name="chev-down" size={8} stroke={2} className="chev" />
         <span>{label}</span>
-        {count != null && <span className="count">{count}</span>}
       </button>
       {action && (
         <button type="button" className="ss-action" title={action.title} aria-label={action.title} onClick={action.onClick}>
           <Icon name={action.icon} size={12} stroke={2} />
         </button>
       )}
+      {count != null && <span className="count">{count}</span>}
     </div>
   );
 }
@@ -55,6 +56,10 @@ interface SidebarProps {
   onOpenRecent: (path: string) => void;
   /** Open the Save-snapshot / Stash dialog. */
   onCreateStash: () => void;
+  /** Open the New-tag dialog targeting HEAD. */
+  onCreateTag: () => void;
+  /** Surface a transient message (tag push / remote-delete feedback). */
+  onToast: (msg: string) => void;
 }
 
 // ─── tree primitives ────────────────────────────────────────────────────
@@ -100,7 +105,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -111,8 +116,14 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
   const forgetRecent = useRepo((s) => s.forgetRecent);
   const refs = useRepo((s) => s.refs);
   const checkout = useRepo((s) => s.checkout);
+  const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
+  const deleteTag = useRepo((s) => s.deleteTag);
+  const pushTag = useRepo((s) => s.pushTag);
+  const deleteRemoteTag = useRepo((s) => s.deleteRemoteTag);
+  const remoteTags = useRepo((s) => s.remoteTags);
+  const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
   const stashes = useRepo((s) => s.stashes);
@@ -135,20 +146,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
       return next;
     });
 
-  // Which branch (by full_name) is currently in the inline-confirm state.
-  // Only one row can be confirming at a time, so a single string is enough.
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-
-  // Escape cancels a pending delete. Click-outside is handled by the row
-  // itself — any click that doesn't land on the confirm UI resets state.
-  useEffect(() => {
-    if (!pendingDelete) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPendingDelete(null);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [pendingDelete]);
+  // The open right-click menu, if any. Per-row actions (checkout, delete,
+  // push, …) live here instead of inline on the row.
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const openMenu = (x: number, y: number, items: MenuItem[]) => setMenu({ x, y, items });
 
   const unstaged = status.filter((s) => !s.staged).length;
   const toggle = (k: keyof typeof sections) => setSections((s) => ({ ...s, [k]: !s[k] }));
@@ -195,6 +196,19 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
     return t;
   }, [filtered.tags]);
+
+  // Default remote for tag push / remote-delete — null hides those tools.
+  const tagRemote = useMemo(() => defaultRemote(refs), [refs]);
+
+  // Lazily learn which tags the remote already has (a network ls-remote), the
+  // first time the Tags section is opened for a repo. `remoteTags` resets to
+  // null on tab switch, so this re-runs per repo; it stays loaded after, so
+  // collapsing/expanding doesn't re-hit the network.
+  useEffect(() => {
+    if (tab === 'git' && sections.tags && meta?.path && tagRemote && remoteTags === null) {
+      void refreshRemoteTags();
+    }
+  }, [tab, sections.tags, meta?.path, tagRemote, remoteTags, refreshRemoteTags]);
 
   // Stashes are a flat stack (their messages can contain `/`, so we don't
   // split them into a folder tree like branches). Filter on message + branch.
@@ -246,44 +260,110 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
     try { await fn(); } catch (e) { console.warn(e); }
   };
 
+  // Tag network ops surface success/failure via a toast (unlike the silent
+  // local branch/tag ops) — a push can fail on auth or a missing upstream.
+  const runTagPush = (name: string) => {
+    void (async () => {
+      try {
+        await pushTag(name);
+        onToast(`Pushed ${name} to ${tagRemote}`);
+      } catch (e) {
+        onToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  };
+  const runTagDeleteRemote = (name: string) => {
+    void (async () => {
+      try {
+        await deleteRemoteTag(name);
+        onToast(`Deleted ${name} on ${tagRemote}`);
+      } catch (e) {
+        onToast(`Remote delete failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  };
+
+  // ── per-row menus — every action a row supports lives here ──
+  const localBranchName = (rb: RemoteBranch) =>
+    refs.branches.some((b) => b.name === rb.branch) ? `${rb.remote}/${rb.branch}` : rb.branch;
+
+  const branchMenu = (b: Branch): MenuItem[] =>
+    b.is_head
+      ? [{ label: 'Current branch', disabled: true, onSelect: () => {} }]
+      : [
+          { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+          { label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) },
+        ];
+
+  const remoteMenu = (rb: RemoteBranch): MenuItem[] => [
+    { label: 'Create local branch & track', icon: 'branch', onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)) },
+  ];
+
+  const tagMenu = (tg: Tag): MenuItem[] => {
+    const items: MenuItem[] = [
+      { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
+    ];
+    if (tagRemote) {
+      items.push({ label: `Push to ${tagRemote}`, icon: 'arrow-up', onSelect: () => runTagPush(tg.name) });
+      // Gray out remote-delete when we know the remote doesn't have this tag.
+      // `remoteTags === null` means we haven't checked yet → leave it enabled.
+      const onRemote = remoteTags === null || remoteTags.includes(tg.name);
+      items.push({
+        label: `Delete on ${tagRemote}`,
+        icon: 'remote',
+        danger: true,
+        confirm: true,
+        disabled: !onRemote,
+        onSelect: () => runTagDeleteRemote(tg.name),
+      });
+    }
+    items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteTag(tg.name)) });
+    return items;
+  };
+
+  const stashMenu = (s: Stash): MenuItem[] => [
+    { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(() => stashApply(s.index)) },
+    { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
+    { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => stashDrop(s.index)) },
+  ];
+
   const renderBranchLeaf = (b: Branch, depth: number) => (
-    <BranchLeaf
+    <SideLeaf
       key={b.full_name}
       depth={depth}
+      icon="branch"
       label={leafName(b.name)}
-      fullName={b.name}
-      isHead={b.is_head}
+      active={b.is_head}
       meta={b.upstream
         ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() || b.upstream.name
         : undefined}
-      onClick={() => !b.is_head && void runBranchOp(() => checkout(b.name))}
-      deletable={!b.is_head}
-      confirming={pendingDelete === b.full_name}
-      onRequestDelete={() => setPendingDelete(b.full_name)}
-      onCancelDelete={() => setPendingDelete(null)}
-      onConfirmDelete={() => {
-        setPendingDelete(null);
-        void runBranchOp(() => deleteBranch(b.name, true));
-      }}
+      onActivate={() => !b.is_head && void runBranchOp(() => checkout(b.name))}
+      onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
     />
   );
 
   const renderRemoteLeaf = (rb: RemoteBranch, depth: number) => (
-    <BranchLeaf
+    <SideLeaf
       key={rb.full_name}
       depth={depth}
+      icon="branch"
       label={leafName(rb.name)}
-      onClick={() => {
-        const localName = refs.branches.some((b) => b.name === rb.branch)
-          ? `${rb.remote}/${rb.branch}`
-          : rb.branch;
-        void runBranchOp(() => createBranch(localName, rb.name, true));
-      }}
+      onActivate={() => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true))}
+      onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
     />
   );
 
   const renderTagLeaf = (tg: Tag, depth: number) => (
-    <BranchLeaf key={tg.full_name} depth={depth} label={leafName(tg.name)} />
+    <SideLeaf
+      key={tg.full_name}
+      depth={depth}
+      icon="tag"
+      label={leafName(tg.name)}
+      meta={tg.annotated ? 'annotated' : undefined}
+      title={`${leafName(tg.name)} — click to check out`}
+      onActivate={() => void runBranchOp(() => checkoutCommit(tg.target))}
+      onMenu={(x, y) => openMenu(x, y, tagMenu(tg))}
+    />
   );
 
   return (
@@ -353,6 +433,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
               collapsed={!sections.tags}
               onToggle={() => toggle('tags')}
               count={filtered.tags.length}
+              action={{ icon: 'plus', title: 'New tag…', onClick: onCreateTag }}
             />
             {sections.tags &&
               renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
@@ -366,19 +447,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
             />
             {sections.stashes &&
               filteredStashes.map((s) => (
-                <StashLeaf
+                <SideLeaf
                   key={s.index}
+                  depth={0}
+                  icon="stash"
                   label={stashLabel(s)}
                   meta={s.branch ?? undefined}
-                  confirming={pendingDelete === `stash:${s.index}`}
-                  onApply={() => void runBranchOp(() => stashApply(s.index))}
-                  onPop={() => void runBranchOp(() => stashPop(s.index))}
-                  onRequestDrop={() => setPendingDelete(`stash:${s.index}`)}
-                  onCancelDrop={() => setPendingDelete(null)}
-                  onConfirmDrop={() => {
-                    setPendingDelete(null);
-                    void runBranchOp(() => stashDrop(s.index));
-                  }}
+                  title={`${stashLabel(s)} — click to apply`}
+                  onActivate={() => void runBranchOp(() => stashApply(s.index))}
+                  onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
                 />
               ))}
 
@@ -396,6 +473,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProp
           renderTreeChildren(fileTree, 0, collapsed, toggleCollapsed, renderFileLeaf, 'files')
         )}
       </div>
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
     </div>
   );
 }
@@ -485,191 +566,62 @@ function FolderRow({ name, depth, collapsed, count, onToggle }: FolderRowProps) 
   );
 }
 
-interface BranchLeafProps {
+interface SideLeafProps {
   depth: number;
+  icon: IconName;
   label: string;
-  /** Full branch name, used in the confirm prompt copy. */
-  fullName?: string;
-  isHead?: boolean;
+  /** Muted trailing text (branch drift, stash branch, "annotated", …). */
   meta?: string;
-  onClick?: () => void;
-  /** When true, the row shows a hover-revealed × that starts the confirm. */
-  deletable?: boolean;
-  /** When true, the row swaps its meta/× area for an inline confirm prompt. */
-  confirming?: boolean;
-  onRequestDelete?: () => void;
-  onConfirmDelete?: () => void;
-  onCancelDelete?: () => void;
-}
-
-function BranchLeaf({
-  depth,
-  label,
-  fullName,
-  isHead,
-  meta,
-  onClick,
-  deletable,
-  confirming,
-  onRequestDelete,
-  onConfirmDelete,
-  onCancelDelete,
-}: BranchLeafProps) {
-  // Suppress the title attribute in armed state so the OS tooltip doesn't
-  // cover the on-hover toolbar.
-  const titleAttr = confirming
-    ? `Confirm delete · ${fullName ?? label}`
-    : label;
-
-  return (
-    <div
-      className={
-        'side-row branch-row' +
-        (isHead ? ' active' : '') +
-        (confirming ? ' armed' : '')
-      }
-      style={{ paddingLeft: 16 + depth * 14 }}
-      onClick={confirming ? undefined : onClick}
-      onKeyDown={confirming ? undefined : (e) => {
-        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault(); // Space would otherwise scroll the sidebar
-          onClick();
-        }
-      }}
-      title={titleAttr}
-      role="button"
-      tabIndex={0}
-    >
-      <span className="folder-chev" aria-hidden />
-      <span className="ico"><Icon name="branch" size={13} /></span>
-      <span className="row-text">
-        <span className="label">{label}</span>
-        {meta && <span className="row-meta">{meta}</span>}
-      </span>
-      {deletable && (
-        <span className="row-tools" onClick={(e) => e.stopPropagation()}>
-          {confirming && (
-            <button
-              type="button"
-              className="row-tool"
-              title="Cancel"
-              aria-label="Cancel delete"
-              onClick={onCancelDelete}
-            >
-              <Icon name="x" size={11} stroke={2} />
-            </button>
-          )}
-          <button
-            type="button"
-            className={'row-tool danger' + (confirming ? ' confirm' : '')}
-            title={confirming ? 'Confirm delete' : 'Delete branch'}
-            aria-label={confirming ? 'Confirm delete' : 'Delete branch'}
-            onClick={confirming ? onConfirmDelete : onRequestDelete}
-          >
-            <Icon name="trash" size={11} stroke={1.6} />
-          </button>
-        </span>
-      )}
-    </div>
-  );
-}
-
-interface StashLeafProps {
-  label: string;
-  /** Branch the stash was taken on, shown as muted meta. */
-  meta?: string;
-  /** When true, the row swaps its tools for an inline drop-confirm prompt. */
-  confirming: boolean;
-  /** Primary click — apply the stash, leaving it on the stack. */
-  onApply: () => void;
-  /** Pop — apply and remove from the stack. */
-  onPop: () => void;
-  onRequestDrop: () => void;
-  onConfirmDrop: () => void;
-  onCancelDrop: () => void;
+  /** Highlights the row (the checked-out branch). */
+  active?: boolean;
+  /** Tooltip; defaults to the label. */
+  title?: string;
+  /** Primary action — left-click, Enter, or Space. */
+  onActivate?: () => void;
+  /** Open the row's action menu at the given viewport coordinates. */
+  onMenu: (x: number, y: number) => void;
 }
 
 /**
- * One stash row. Click applies (non-destructive); the hover toolbar adds Pop
- * (apply & remove) and Drop (destructive, behind an inline confirm). Reuses
- * the branch-row + row-tools styling, so the armed/confirm states match the
- * branch-delete affordance.
+ * A sidebar leaf row (branch / remote / tag / stash). The primary action runs
+ * on click / Enter; every action the row supports — including the primary one
+ * — also lives in a right-click menu opened via `onMenu`. Keyboard users open
+ * it with the Menu key or Shift+F10, positioned at the row's corner.
  */
-function StashLeaf({
-  label,
-  meta,
-  confirming,
-  onApply,
-  onPop,
-  onRequestDrop,
-  onConfirmDrop,
-  onCancelDrop,
-}: StashLeafProps) {
+function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onMenu }: SideLeafProps) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const openKeyboardMenu = () => {
+    const r = rowRef.current?.getBoundingClientRect();
+    if (r) onMenu(r.left + 12, r.bottom - 4);
+  };
   return (
     <div
-      className={'side-row branch-row stash-row' + (confirming ? ' armed' : '')}
-      style={{ paddingLeft: 16 }}
-      onClick={confirming ? undefined : onApply}
-      onKeyDown={confirming ? undefined : (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+      ref={rowRef}
+      className={'side-row branch-row' + (active ? ' active' : '')}
+      style={{ paddingLeft: 16 + depth * 14 }}
+      onClick={onActivate}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && onActivate) {
           e.preventDefault(); // Space would otherwise scroll the sidebar
-          onApply();
+          onActivate();
+        } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+          e.preventDefault();
+          openKeyboardMenu();
         }
       }}
-      title={confirming ? `Confirm drop · ${label}` : `${label} — click to apply`}
+      title={title ?? label}
       role="button"
       tabIndex={0}
     >
       <span className="folder-chev" aria-hidden />
-      <span className="ico"><Icon name="stash" size={13} /></span>
+      <span className="ico"><Icon name={icon} size={13} /></span>
       <span className="row-text">
         <span className="label">{label}</span>
         {meta && <span className="row-meta">{meta}</span>}
-      </span>
-      <span className="row-tools" onClick={(e) => e.stopPropagation()}>
-        {confirming ? (
-          <>
-            <button
-              type="button"
-              className="row-tool"
-              title="Cancel"
-              aria-label="Cancel drop"
-              onClick={onCancelDrop}
-            >
-              <Icon name="x" size={11} stroke={2} />
-            </button>
-            <button
-              type="button"
-              className="row-tool danger confirm"
-              title="Confirm drop"
-              aria-label="Confirm drop"
-              onClick={onConfirmDrop}
-            >
-              <Icon name="trash" size={11} stroke={1.6} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="row-tool"
-              title="Pop (apply & remove)"
-              aria-label="Pop stash"
-              onClick={onPop}
-            >
-              <Icon name="arrow-up" size={12} stroke={1.8} />
-            </button>
-            <button
-              type="button"
-              className="row-tool danger"
-              title="Drop stash"
-              aria-label="Drop stash"
-              onClick={onRequestDrop}
-            >
-              <Icon name="trash" size={11} stroke={1.6} />
-            </button>
-          </>
-        )}
       </span>
     </div>
   );

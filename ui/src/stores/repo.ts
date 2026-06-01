@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   commitMessages as commitMessagesDb,
   recents as recentsDb,
+  remoteTagsCache,
   settings as settingsDb,
   type StoredMessage,
 } from '../lib/db';
@@ -84,6 +85,14 @@ export interface RepoState {
   /** Branches / remotes / tags for the active tab. */
   refs: Refs;
 
+  /**
+   * Short names of tags present on the default remote — `null` until the Tags
+   * section is opened and {@link RepoState.refreshRemoteTags} runs (a network
+   * `ls-remote`). Used to gray out "delete on remote" for tags the remote
+   * doesn't have. `null` ⇒ unknown ⇒ don't gray (fail open).
+   */
+  remoteTags: string[] | null;
+
   /** Stash stack for the active tab, most-recent first. */
   stashes: Stash[];
 
@@ -157,6 +166,26 @@ export interface RepoState {
   createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
   deleteBranch(name: string, force: boolean): Promise<void>;
 
+  /**
+   * Create a tag at `target` (any revspec; null ⇒ HEAD). A non-empty
+   * `message` makes it an annotated tag, otherwise lightweight.
+   */
+  createTag(name: string, target: string | null, message: string | null): Promise<void>;
+  /** Delete a tag by short name. */
+  deleteTag(name: string): Promise<void>;
+  /**
+   * Push a tag to the default remote (HEAD's upstream remote, else `origin`,
+   * else the only/first remote). Throws if no remote is configured. Returns
+   * git's output.
+   */
+  pushTag(tag: string, onProgress?: (p: Progress) => void): Promise<string>;
+  /** Delete a tag on the default remote. Returns git's output. */
+  deleteRemoteTag(tag: string, onProgress?: (p: Progress) => void): Promise<string>;
+  /** Push every local tag to the default remote. Returns git's output. */
+  pushAllTags(onProgress?: (p: Progress) => void): Promise<string>;
+  /** Load (via `git ls-remote --tags`) which tags the default remote has. */
+  refreshRemoteTags(): Promise<void>;
+
   /** Re-read the stash stack for the active tab. */
   refreshStashes(): Promise<void>;
   /**
@@ -194,6 +223,55 @@ export interface RepoState {
 
 const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags: [] };
 
+/**
+ * The remote tag pushes target by default: the current branch's upstream
+ * remote, else `origin`, else the only/first configured remote, else null
+ * (no remote — callers surface that to the user). Tags have no per-tag
+ * upstream of their own, so this mirrors what `git push <remote> <tag>` needs.
+ */
+export function defaultRemote(refs: Refs): string | null {
+  const head = refs.branches.find((b) => b.is_head);
+  if (head?.upstream?.remote) return head.upstream.remote;
+  if (refs.remotes.some((r) => r.name === 'origin')) return 'origin';
+  return refs.remotes[0]?.name ?? null;
+}
+
+/**
+ * Repo paths whose remote tags we've already revalidated over the network this
+ * session. After the first `ls-remote`, later opens of the same repo paint
+ * from the persisted cache instead of hitting the network again — our own
+ * pushes/deletes keep the cache fresh, and a relaunch revalidates anew.
+ */
+const revalidatedRemoteTags = new Set<string>();
+
+/**
+ * Apply `fn` to the known remote-tag set for `path` after a push/delete:
+ * update the in-memory slice when that repo is active (instant UI), and
+ * read-modify-write the persisted cache regardless of the active tab so the
+ * gray-out stays correct on the next open. `fn` must be idempotent — it's
+ * applied independently to memory and cache. No-op where the set is absent
+ * (unloaded memory / cache miss); the next open revalidates.
+ */
+function setRemoteTags(
+  get: () => RepoState,
+  set: (partial: Partial<RepoState>) => void,
+  path: string,
+  fn: (cur: string[]) => string[],
+): void {
+  if (get().activePath === path) {
+    const cur = get().remoteTags;
+    if (cur) set({ remoteTags: fn(cur) });
+  }
+  void (async () => {
+    try {
+      const cached = await remoteTagsCache.get(path);
+      if (cached) await remoteTagsCache.set(path, fn(cached));
+    } catch (e) {
+      console.warn('remoteTagsCache update failed', e);
+    }
+  })();
+}
+
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
@@ -208,6 +286,7 @@ const EMPTY_ACTIVE = {
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
   refs: EMPTY_REFS,
+  remoteTags: null as string[] | null,
   stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
   recentMessages: [] as StoredMessage[],
@@ -294,6 +373,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      remoteTags: null,
       stashes: [],
       workTree: [],
       recentMessages: [],
@@ -344,6 +424,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      remoteTags: null,
       stashes: [],
       workTree: [],
       recentMessages: [],
@@ -376,6 +457,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
       refs: EMPTY_REFS,
+      remoteTags: null,
       stashes: [],
       workTree: [],
       recentMessages: [],
@@ -624,6 +706,87 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchDelete(path, name, force);
     await get().refreshRefs();
+  },
+
+  async createTag(name, target, message) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoTagCreate(path, name, target, message, false);
+    // Refresh refs (sidebar list) and the log (graph chips read from refs).
+    await Promise.all([get().refreshRefs(), get().refreshLog()]);
+  },
+  async deleteTag(name) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoTagDelete(path, name);
+    await get().refreshRefs();
+  },
+  async pushTag(tag, onProgress) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const remote = defaultRemote(get().refs);
+    if (!remote) throw new Error('No remote configured');
+    const res = await tauri.repoTagPush(path, tag, remote, false, onProgress);
+    // Optimistically mark the tag present on the remote (memory + cache), so
+    // the gray-out stays correct without a re-fetch.
+    setRemoteTags(get, set, path, (cur) => (cur.includes(tag) ? cur : [...cur, tag]));
+    return res.output;
+  },
+  async deleteRemoteTag(tag, onProgress) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const remote = defaultRemote(get().refs);
+    if (!remote) throw new Error('No remote configured');
+    const res = await tauri.repoTagPush(path, tag, remote, true, onProgress);
+    setRemoteTags(get, set, path, (cur) => cur.filter((t) => t !== tag));
+    return res.output;
+  },
+  async pushAllTags(onProgress) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const remote = defaultRemote(get().refs);
+    if (!remote) throw new Error('No remote configured');
+    const res = await tauri.repoTagPushAll(path, remote, onProgress);
+    // Every local tag is now on the remote — fold them into the known set.
+    const local = get().refs.tags.map((t) => t.name);
+    setRemoteTags(get, set, path, (cur) => Array.from(new Set([...cur, ...local])));
+    return res.output;
+  },
+  async refreshRemoteTags() {
+    const path = get().activePath;
+    if (!path) return;
+    const remote = defaultRemote(get().refs);
+    if (!remote) {
+      set({ remoteTags: [] });
+      return;
+    }
+
+    // Stale-while-revalidate: paint the persisted cache instantly (if we have
+    // nothing yet) so the gray-out appears without waiting on the network.
+    if (get().remoteTags === null) {
+      try {
+        const cached = await remoteTagsCache.get(path);
+        if (cached && get().activePath === path && get().remoteTags === null) {
+          set({ remoteTags: cached });
+        }
+      } catch (e) {
+        console.warn('remoteTagsCache.get failed', e);
+      }
+    }
+
+    // Revalidate over the network at most once per repo per session; refresh
+    // the cache so the next launch starts warm.
+    if (revalidatedRemoteTags.has(path)) return;
+    try {
+      const tags = await tauri.repoRemoteTags(path, remote);
+      revalidatedRemoteTags.add(path);
+      void remoteTagsCache.set(path, tags);
+      if (get().activePath === path) set({ remoteTags: tags });
+    } catch (e) {
+      // Leave whatever we have (cached value, or null = unknown = don't gray);
+      // git reports the real error if a delete is attempted. Retry next open.
+      console.warn('repoRemoteTags failed', e);
+    }
   },
 
   async refreshStashes() {

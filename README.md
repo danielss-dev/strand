@@ -85,9 +85,17 @@ pnpm tauri:build   # signed installers in target/release/bundle
   create from the topbar stash menu or a Save-snapshot dialog (message +
   include-untracked + keep-changes-in-working-dir), reachable via the
   sidebar `+`, the topbar menu, and ⌘K
+- Tags: create (lightweight or annotated) from the sidebar Tags `+`, ⌘K, or a
+  commit's detail panel; click a tag to check out its commit; right-click for
+  push to the default remote, delete on the remote (grayed out for tags the
+  remote doesn't have), or delete locally (each delete behind a confirm step);
+  ⌘K "Push all tags"
+- Sidebar row actions live in a right-click menu (branches, remotes, tags,
+  stashes) — keyboard-openable via the Menu key / Shift+F10; the primary
+  action also runs on click
 - Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, `repo_diff_commit`, plus the staging, network, and
-  branch commands above
+  `repo_refs`, `repo_diff_commit`, plus the staging, network, branch,
+  and tag commands above
 - SQLite plugin (recent repos + settings schema)
 - Updater plugin (endpoint stub)
 
