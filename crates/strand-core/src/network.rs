@@ -87,6 +87,79 @@ impl Repo {
         }
         run_git_streaming(&self.path, &args, on_progress)
     }
+
+    /// Push a single tag to `remote`, or delete it there when `delete` is set
+    /// (`git push <remote> [--delete] refs/tags/<tag>`). Tags are local until
+    /// pushed, and a tag deleted locally stays on the remote until deleted
+    /// there too — this covers both halves.
+    pub fn push_tag(
+        &self,
+        tag: &str,
+        remote: &str,
+        delete: bool,
+        on_progress: impl FnMut(Progress),
+    ) -> Result<NetworkOutcome> {
+        validate_remote_arg(remote, "remote")?;
+        // Fully-qualify the ref so git never guesses (and a `--` separator
+        // keeps both the remote and refspec out of option parsing).
+        let refspec = format!("refs/tags/{tag}");
+        let mut args = vec!["push", "--progress"];
+        if delete {
+            args.push("--delete");
+        }
+        args.push("--");
+        args.push(remote);
+        args.push(refspec.as_str());
+        run_git_streaming(&self.path, &args, on_progress)
+    }
+
+    /// Push every local tag to `remote` (`git push <remote> --tags`).
+    pub fn push_all_tags(
+        &self,
+        remote: &str,
+        on_progress: impl FnMut(Progress),
+    ) -> Result<NetworkOutcome> {
+        validate_remote_arg(remote, "remote")?;
+        let args = vec!["push", "--progress", "--tags", "--", remote];
+        run_git_streaming(&self.path, &args, on_progress)
+    }
+
+    /// Short names of the tags that exist on `remote` (`git ls-remote --tags`).
+    ///
+    /// Fetched tags land in the shared `refs/tags/` namespace with no marker of
+    /// origin, so this is the only reliable way to know which tags a remote
+    /// already has — used to gray out "delete on remote" for tags that aren't
+    /// there. A network call, so callers run it off the hot path.
+    pub fn remote_tags(&self, remote: &str) -> Result<Vec<String>> {
+        validate_remote_arg(remote, "remote")?;
+        let out = Command::new("git")
+            .current_dir(&self.path)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .args(["ls-remote", "--tags", "--", remote])
+            .output()
+            .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(Error::Other(if err.is_empty() {
+                "git ls-remote failed".to_string()
+            } else {
+                err
+            }));
+        }
+        // Each line is `<oid>\trefs/tags/<name>`, with a second `<name>^{}`
+        // line for annotated tags (the peeled commit). A BTreeSet folds those
+        // duplicates and sorts.
+        let text = String::from_utf8_lossy(&out.stdout);
+        let mut names = std::collections::BTreeSet::new();
+        for line in text.lines() {
+            if let Some((_, refname)) = line.split_once('\t') {
+                if let Some(name) = refname.strip_prefix("refs/tags/") {
+                    names.insert(name.strip_suffix("^{}").unwrap_or(name).to_string());
+                }
+            }
+        }
+        Ok(names.into_iter().collect())
+    }
 }
 
 /// Clone `url` into `dest` (the full target directory — git creates it).

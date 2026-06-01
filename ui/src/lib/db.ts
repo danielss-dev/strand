@@ -112,3 +112,19 @@ export const settings = {
     );
   },
 };
+
+/**
+ * Per-repo cache of the tag names present on the default remote. Lets the
+ * sidebar paint the "delete on remote" gray-out state instantly on open while
+ * a fresh `ls-remote` revalidates in the background (stale-while-revalidate).
+ * It's a cache, not source of truth — a miss just means we wait for the
+ * network that once. Stored in the generic `settings` table, keyed by path.
+ */
+export const remoteTagsCache = {
+  get(repoPath: string): Promise<string[] | null> {
+    return settings.get<string[]>(`remote-tags:${repoPath}`);
+  },
+  set(repoPath: string, tags: string[]): Promise<void> {
+    return settings.set(`remote-tags:${repoPath}`, tags);
+  },
+};

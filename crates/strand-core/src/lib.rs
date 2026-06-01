@@ -19,6 +19,7 @@ pub mod network;
 pub mod refs;
 pub mod branch;
 pub mod stash;
+pub mod tag;
 pub mod tree;
 
 pub use error::{Error, Result};

@@ -234,7 +234,8 @@ also pending (only `aarch64-apple-darwin` is installed).
 > themes. Performance targets met for medium repos."
 
 - ☑ Stashes (create, apply, pop, drop)
-- ☐ Tags (lightweight + annotated)
+- ☑ Tags (lightweight + annotated) — create / delete / checkout, plus push /
+  delete on a remote
 - ☐ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
 - ☐ Conflict resolution UI (three-way view)
 - ☐ Discard changes (line / hunk / file) with single-undo
@@ -284,6 +285,55 @@ header (`SideSection` grew an optional `action` prop), the Topbar stash menu's
 "Save snapshot…" item, and ⌘K. Verified with `cargo check`/`test` and the git
 command sequences exercised against a scratch repo (snapshot keeps the tree
 unchanged; pop merges past a dirty index).
+
+**Tags create/delete/checkout (2026-06-01):** Second 0.5 vertical.
+`strand-core::tag` adds `create_tag` (lightweight when the message is empty,
+annotated via `git2`'s `tag` + a config-derived signature otherwise; `force`
+overwrites) and `delete_tag` (`tag_delete`); tag *reads* already lived in
+`refs.rs`. Two new IPC commands (`repo_tag_create` / `repo_tag_delete`) +
+store actions (`createTag` / `deleteTag`, refreshing refs + log so sidebar
+rows and graph chips update). Sidebar Tags rows are now interactive: click
+checks out the tagged commit (detached HEAD), hover-× deletes with an inline
+confirm (the branch-row affordance, generalized — `BranchLeaf` gained `icon`
++ `deleteLabel`), and the section header `+` opens a new `views/TagDialog.tsx`
+(name + optional annotation message, lightweight/annotated chosen by message
+presence). The dialog is reachable from the sidebar `+`, ⌘K ("Create tag…"),
+and a "Tag…" action in the commit-detail panel (targets that commit). Verified
+with `cargo check`/`clippy`, a new std-only `tag` integration test (both
+flavours + force + delete + readback), `tsc`, and `vite build`.
+
+**Tag remote push/delete (2026-06-01):** Closed the "still open" item from the
+same day. `network.rs` gains `Repo::push_tag` (`git push <remote> [--delete]
+refs/tags/<tag>`) and `push_all_tags` (`git push <remote> --tags`), shelled out
++ streamed through the existing `run_git_streaming` so credentials and progress
+come for free; `repo_tag_push` / `repo_tag_push_all` async IPC + `pushTag` /
+`deleteRemoteTag` / `pushAllTags` store actions. The default remote resolves to
+HEAD's upstream remote → `origin` → the first configured remote (exported as
+`defaultRemote(refs)`, shared by the store and sidebar). The flat `BranchLeaf`
+reuse for tags was replaced by a dedicated `TagLeaf` (push / delete-on-remote /
+delete-local hover tools, single inline confirm; remote tools hidden when no
+remote exists); tag network ops toast success/failure, and ⌘K has "Push all
+tags". Verified with `cargo check`/`clippy`/`test`, `tsc`, and `vite build`.
+A follow-up added `Repo::remote_tags` (`git ls-remote --tags`, loaded lazily
+when the Tags section opens) so "delete on remote" grays out for tags the
+remote doesn't have — fetched tags share `refs/tags/`, so ls-remote is the
+only way to tell. The `remoteTags` set is optimistically updated on push/delete
+to avoid re-fetching. Made it **stale-while-revalidate**: a persisted
+`remoteTagsCache` (SQLite `settings`, per repo path) paints the gray-out state
+instantly on open, then `ls-remote` revalidates in the background at most once
+per repo per session — so it feels instant and doesn't re-hit the network on
+every tab switch.
+
+**Sidebar row actions → right-click menu (2026-06-01):** Per-row actions moved
+off inline hover tools into a reusable right-click `ContextMenu`
+(`components/ContextMenu.tsx`) — portal-rendered at the cursor, keyboard-
+operable (Menu key / Shift+F10 to open, ↑/↓/Enter/Esc to drive), viewport-
+clamped, with a "Confirm: …" step for destructive items. Branches, remotes,
+tags, and stashes now share one `SideLeaf` (primary action stays on click; the
+menu lists every action including the primary); the per-type `*Leaf` components
+and the `.row-tools`/`.armed` CSS were deleted. Keeps with the keyboard-first
+track — actions are reachable without the mouse. Verified with `tsc` +
+`vite build`.
 
 ---
 

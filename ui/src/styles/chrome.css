@@ -745,66 +745,6 @@
     white-space: nowrap;
 }
 
-/* Hover toolbar on branch rows.
-   - Idle: trash icon appears only on hover (delete intent).
-   - Armed: row gets a faint red wash so the user knows it's primed for
-     deletion even when the cursor leaves. On re-hover the toolbar shows
-     ×  (cancel) and a filled-red trash (confirm). */
-.side-row .row-tools {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    flex-shrink: 0;
-}
-.side-row .row-tool {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 0;
-    background: transparent;
-    color: var(--text-dim);
-    cursor: pointer;
-    opacity: 0;
-    padding: 0;
-}
-.side-row:hover .row-tool {
-    opacity: 0.85;
-}
-.side-row .row-tool:hover {
-    background: var(--bg-active);
-    color: var(--text);
-    opacity: 1;
-}
-.side-row .row-tool.danger:hover {
-    color: #ff6b62;
-    background: rgba(179, 38, 30, 0.18);
-}
-
-/* When the row is armed, hide the drift-count meta so the toolbar has
-   room without the row jumping width, and keep the confirm icon visible
-   even when not hovered so the armed state is unmistakable. */
-.side-row.armed {
-    background: rgba(179, 38, 30, 0.1);
-}
-.side-row.armed .row-meta {
-    display: none;
-}
-.side-row.armed .row-tool.danger.confirm {
-    opacity: 1;
-    color: #fff;
-    background: #b3261e;
-}
-.side-row.armed .row-tool.danger.confirm:hover {
-    background: #c8362d;
-}
-.side-row.armed:hover .row-tool {
-    opacity: 1;
-}
-
 /* Tree rows reserve a chev slot before the icon. Folder rows fill it
    with a rotating chev; leaf rows leave it empty so the branch icon
    lines up with the folder icon at the same depth. */

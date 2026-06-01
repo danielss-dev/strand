@@ -79,6 +79,37 @@ export const tauri = {
   ) => invoke<CheckoutOutcome>('repo_branch_create', { path, name, startPoint, checkout }),
   repoBranchDelete: (path: string, name: string, force: boolean) =>
     invoke<void>('repo_branch_delete', { path, name, force }),
+  repoTagCreate: (
+    path: string,
+    name: string,
+    target: string | null,
+    message: string | null,
+    force: boolean,
+  ) => invoke<void>('repo_tag_create', { path, name, target, message, force }),
+  repoTagDelete: (path: string, name: string) =>
+    invoke<void>('repo_tag_delete', { path, name }),
+  repoTagPush: (
+    path: string,
+    tag: string,
+    remote: string,
+    del: boolean,
+    onProgress?: (p: Progress) => void,
+  ) =>
+    invoke<NetworkOutcome>('repo_tag_push', {
+      path,
+      tag,
+      remote,
+      delete: del,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoTagPushAll: (path: string, remote: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_tag_push_all', {
+      path,
+      remote,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoRemoteTags: (path: string, remote: string) =>
+    invoke<string[]>('repo_remote_tags', { path, remote }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,

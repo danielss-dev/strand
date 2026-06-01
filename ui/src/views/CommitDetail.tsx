@@ -15,7 +15,12 @@ import type { DiffStatus, FileDiff } from '../lib/types';
  * fetches `selectedCommitDiffs` via `repo_diff_commit`. The component
  * picks the first file by default whenever the commit changes.
  */
-export function CommitDetail() {
+export function CommitDetail({
+  onCreateTag,
+}: {
+  /** Open the New-tag dialog targeting this commit (revspec + label). */
+  onCreateTag: (target: string, label: string) => void;
+}) {
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const diffs = useRepo((s) => s.selectedCommitDiffs);
   const loading = useRepo((s) => s.selectedCommitDiffsLoading);
@@ -114,6 +119,15 @@ export function CommitDetail() {
           >
             <Icon name="branch" size={12} />
             {checkingOut ? 'Checking out…' : 'Checkout'}
+          </button>
+          <button
+            type="button"
+            className="btn ghost cd-action-btn"
+            onClick={() => onCreateTag(hash, commit.short_hash)}
+            title="Create a tag at this commit"
+          >
+            <Icon name="tag" size={12} />
+            Tag…
           </button>
         </div>
         {checkoutError ? <div className="cd-action-error">{checkoutError}</div> : null}

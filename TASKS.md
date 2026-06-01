@@ -75,7 +75,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Checkout branch / commit (`Repo::checkout_branch` — safe checkout,
   errors on dirty conflicts; `Repo::checkout_commit` — safe detached-HEAD
   checkout of any revspec via `set_head_detached`.)
-- ☐ Create / delete tag (lightweight + annotated)
+- ☑ Create / delete tag (`Repo::create_tag` — lightweight when message is
+  empty, annotated via `git2::Repository::tag` + config signature when set;
+  `force` overwrites; `Repo::delete_tag` via `tag_delete`. `tag.rs`, with a
+  std-only integration test covering both flavours + force + delete.)
+- ☑ Push / delete tags on a remote (`Repo::push_tag` — `git push <remote>
+  [--delete] refs/tags/<tag>`; `Repo::push_all_tags` — `git push <remote>
+  --tags`; both shell out via `run_git_streaming` like the other network ops.
+  Default remote resolves to HEAD's upstream remote → `origin` → first remote.
+  `--follow-tags` on a branch push still not wired.)
 - ◐ Stash create / snapshot / apply / pop / drop (`stash_save` via `stash_save2`
   with `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
   `StashOutcome { oid: None }` instead of erroring; `stash_snapshot` keeps the
@@ -105,6 +113,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   side thread so neither pipe deadlocks)
 - ☑ Clone (HTTPS / SSH) with streaming progress (`network::clone` shells out
   to `git clone --progress`; returns the dest path to open)
+- ☑ Push / delete tags on a remote (`Repo::push_tag` /
+  `Repo::push_all_tags` — `git push <remote> [--delete] refs/tags/<tag>` and
+  `git push <remote> --tags`, shelled out + streamed like the other net ops)
+- ☑ Remote tag listing (`Repo::remote_tags` via `git ls-remote --tags` —
+  fetched tags share `refs/tags/`, so ls-remote is the only way to know which
+  tags a remote has; used to gray out "delete on remote" for absent tags)
 
 ### Hybrid concerns
 - ☑ Write-engine policy decided: `git2` for index/commit ops (stable
@@ -121,10 +135,12 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
-  `repo_branch_delete`, `repo_stash_list`, `repo_stash_save`,
-  `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
-- ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`
-  (all `async`, streaming progress over a `Channel`)
+  `repo_branch_delete`, `repo_tag_create`, `repo_tag_delete`,
+  `repo_stash_list`, `repo_stash_save`, `repo_stash_snapshot`,
+  `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
+- ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
+  `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags` (all `async`;
+  streaming progress over a `Channel` where applicable)
 - ☑ Plugins: sql, updater, dialog, shell, os
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
 - ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
@@ -180,24 +196,46 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Sidebar
 - ☑ Local Changes + All Commits primary rows
 - ☑ Git / Files tab toggle
+- ☑ Per-row actions via a right-click **`ContextMenu`** (`components/ContextMenu.tsx`):
+  portal-rendered at the cursor (or the row corner when opened from the
+  keyboard — Menu key / Shift+F10), ↑/↓/Enter/Esc navigable, viewport-clamped,
+  closes on outside click. Destructive items carry a `confirm` flag that swaps
+  to a "Confirm: …" step (replacing the old inline-`armed` row affordance).
+  All leaf rows share one `SideLeaf` (icon + label + meta + primary click +
+  `onMenu`); the old `BranchLeaf`/`TagLeaf`/`StashLeaf` + `.row-tools`/`.armed`
+  CSS were removed.
 - ☑ Branches list from real data — names with `/` render as nested
   folders (e.g. `feature/foo` lives under a `feature/` folder), default
-  expanded, click chev to collapse. Leaf rows checkout on click, show
-  drift, hover × to delete non-HEAD branches with a confirm.
+  expanded, click chev to collapse. Leaf rows checkout on click; right-click
+  menu = Checkout / Delete branch (confirm). HEAD shows a disabled "Current
+  branch".
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
-  the top folder; click a leaf to create + track locally)
-- ☑ Tags list (folder tree; create/delete pending writes)
-- ☑ Stashes list — flat list under the Git tab (`StashLeaf` reuses the
-  branch-row + `row-tools`/`armed` styling). Click a row to apply; hover for
-  Pop (apply & remove) and Drop (destructive, behind an inline confirm).
-  Respects the sidebar filter (matches message + branch). Section header has a
-  hover-revealed `+` action (`SideSection`'s optional `action` prop) that opens
-  the Save-snapshot dialog.
+  the top folder; click a leaf — or its menu's "Create local branch & track" —
+  to create + track locally)
+- ☑ Tags list (folder tree). Click checks out the tagged commit (detached HEAD
+  via `checkoutCommit`); right-click menu = Checkout / Push to <remote> /
+  Delete on <remote> (confirm) / Delete tag (confirm) — the two remote items
+  hide when no remote is configured, and "Delete on <remote>" is grayed out
+  for tags the remote doesn't have. Remote-tag knowledge is **stale-while-
+  revalidate**: the `remoteTagsCache` (SQLite `settings`, keyed by repo path)
+  paints the gray-out instantly on open, then a background `ls-remote`
+  revalidates — at most once per repo per session, since our own push/delete
+  keep the cache fresh (optimistic `setRemoteTags`). Section header `+` opens
+  the New-tag dialog. Tag network ops toast success/failure; ⌘K "Push all tags".
+- ☑ Stashes list — flat list under the Git tab. Click a row to apply;
+  right-click menu = Apply / Pop (apply & remove) / Drop (confirm). Respects
+  the sidebar filter (matches message + branch). Section header `+` action
+  (`SideSection`'s optional `action` prop) opens the Save-snapshot dialog.
 - ☑ Save-snapshot dialog (`views/StashDialog.tsx`, reuses the `.clone-dialog`
   shell): message field + "Include untracked files" + "Keep changes in working
   directory" checkboxes; primary CTA flips Stash / Save Snapshot. Reachable
   from the sidebar `+`, the Topbar stash menu, and ⌘K ("Save snapshot…" /
   "Stash changes…"). Clean tree surfaces "Nothing to stash" inline.
+- ☑ New-tag dialog (`views/TagDialog.tsx`, reuses the `.clone-dialog` shell):
+  name field + optional message (non-empty ⇒ annotated, else lightweight, with
+  a live hint). Targets HEAD from the Tags `+` and ⌘K ("Create tag…"), or a
+  specific commit from the commit-detail "Tag…" action. App owns the dialog
+  state; the target is plumbed App → Commits → CommitDetail.
 - ☐ Submodules list
 - ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
   click-to-open; lazily loaded when the Files tab is shown and refreshed on
@@ -237,6 +275,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
 - ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
   row focus; Enter opens details; Esc closes details)
+- ☑ Commit-detail actions: Checkout (detached) + "Tag…" (opens the New-tag
+  dialog targeting that commit)
 - ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)

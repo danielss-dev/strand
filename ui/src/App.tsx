@@ -12,6 +12,7 @@ import { pickRepoDirectory } from './lib/dialog';
 import { isTauri } from './lib/tauri';
 import { CloneDialog } from './views/CloneDialog';
 import { StashDialog } from './views/StashDialog';
+import { TagDialog } from './views/TagDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -41,11 +42,14 @@ export function App() {
   const fetchRepo = useRepo((s) => s.fetch);
   const pullRepo = useRepo((s) => s.pull);
   const pushRepo = useRepo((s) => s.push);
+  const pushAllTags = useRepo((s) => s.pushAllTags);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
+  // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
+  const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -228,6 +232,20 @@ export function App() {
       { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
       { id: 'snapshot', label: 'Save snapshot…',  run: () => setStashDialog({ snapshot: true }) },
       { id: 'stash',    label: 'Stash changes…',  run: () => setStashDialog({ snapshot: false }) },
+      { id: 'tag',      label: 'Create tag…',     run: () => setTagDialog({ target: null, label: 'HEAD' }) },
+      { id: 'push-tags', label: 'Push all tags', run: () => {
+        void (async () => {
+          setNetProgress('Pushing tags…');
+          try {
+            await pushAllTags(onNetProgress);
+            showToast('Pushed all tags');
+          } catch (e) {
+            showToast(`Push tags failed: ${e instanceof Error ? e.message : String(e)}`);
+          } finally {
+            setNetProgress(null);
+          }
+        })();
+      } },
       { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
       { id: 'tweaks',  label: 'Toggle theme',      shortcut: '⌘⇧T', run: () => setSetting('theme', theme === 'dark' ? 'light' : 'dark') },
     ];
@@ -238,7 +256,8 @@ export function App() {
       run: () => { void openByPath(r.path); },
     }));
     return [...base, ...recentActions];
-  }, [setView, selectFile, onSync, openViaDialog, openByPath, setSetting, theme, recents]);
+  }, [setView, selectFile, onSync, openViaDialog, openByPath, setSetting, theme, recents,
+      pushAllTags, onNetProgress, showToast]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -273,6 +292,8 @@ export function App() {
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true })}
+                onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onToast={showToast}
               />
             </Panel>
             <PanelResizeHandle className="rs-handle vert" />
@@ -283,7 +304,11 @@ export function App() {
                 <div className="main">
                   <MainHeader />
                   {view === 'local' && <LocalChanges />}
-                  {(view === 'commits' || view === 'branch') && <Commits />}
+                  {(view === 'commits' || view === 'branch') && (
+                    <Commits
+                      onCreateTag={(target, label) => setTagDialog({ target, label })}
+                    />
+                  )}
                 </div>
               )}
             </Panel>
@@ -317,6 +342,14 @@ export function App() {
 
       {stashDialog && (
         <StashDialog initialSnapshot={stashDialog.snapshot} onClose={() => setStashDialog(null)} />
+      )}
+
+      {tagDialog && (
+        <TagDialog
+          target={tagDialog.target}
+          targetLabel={tagDialog.label}
+          onClose={() => setTagDialog(null)}
+        />
       )}
 
       {!isTauri() && !meta && (
