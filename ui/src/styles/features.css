@@ -1587,11 +1587,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 0 16px;
   height: 36px;
   cursor: pointer;
   color: var(--text-2);
   font-size: var(--type-ui);
+  text-align: left;
 }
 .palette-item .ico {
   width: 16px;
