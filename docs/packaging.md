@@ -1,30 +1,41 @@
 # Packaging & signing runbook
 
-Status: the **macOS alpha packaging** item in `ROADMAP.md` §0.1 is the one
-remaining 0.1 task that can't be completed from a dev checkout — it needs a
-Mac, an Apple Developer account, and signing certificates that don't live in
-the repo. This file is the runbook for whoever has those credentials.
+Status (2026-06-01): a **signed macOS DMG now builds** on a Mac with the
+Developer-ID cert in the login Keychain — see "Done so far" below. What
+remains for the §0.1 alpha is **notarization + stapling** (needs Apple
+credentials) and **shipping the first DMG** to the alpha group. This file is
+the runbook for both the part that works and the part that's left.
 
 Everything else in 0.1 (clone, streaming progress, detached checkout, file
 tree, recent messages, multi-select) is code-complete and verified.
 
 ---
 
-## Why it's blocked here
+## Done so far (2026-06-01)
 
-- **No macOS host.** Strand is currently developed on Windows; the `.dmg`
-  target, `codesign`, and `notarytool` only run on macOS.
-- **No Apple Developer ID.** Signing needs a "Developer ID Application"
-  certificate ($99/yr Apple Developer Program) installed in the host
-  Keychain. Notarization needs an app-specific password or an App Store
-  Connect API key.
-- **Placeholder icon.** `crates/strand-tauri/icons/` ships a generated
-  placeholder "S". A real 1024×1024 source PNG must be designed first, then
-  expanded to the icon set.
+- **Real icon.** The placeholder "S" is gone; `crates/strand-tauri/icons/`
+  now carries the real icon set (squircle on the Apple grid, commit
+  `aefc189`).
+- **Signed bundle.** On an Apple-Silicon Mac with Xcode + the "Developer ID
+  Application: Daniel Schwarz Campos (57CBXS5P39)" cert in the Keychain:
+  ```sh
+  APPLE_SIGNING_IDENTITY="Developer ID Application: Daniel Schwarz Campos (57CBXS5P39)" \
+    pnpm tauri build --target aarch64-apple-darwin
+  ```
+  produces `target/aarch64-apple-darwin/release/bundle/dmg/Strand_0.0.1_aarch64.dmg`
+  (~10 MB). The DMG and the embedded `Strand.app` are both signed (chain to
+  Apple Root CA); the app is `valid on disk` and `satisfies its Designated
+  Requirement`. Tauri deletes the staged `.app` after bundling — the signed
+  copy lives inside the DMG.
 
-None of these are code; they're assets and credentials. The Tauri config is
-already wired for the bundle (`tauri.conf.json` → `bundle.targets` includes
-`"dmg"`, `bundle.icon` lists the icon set).
+## Still blocked here
+
+- **No notarization credentials.** `spctl` reports "Unnotarized Developer ID"
+  until the DMG is notarized + stapled. That needs `APPLE_ID` /
+  `APPLE_PASSWORD` / `APPLE_TEAM_ID` (or an App Store Connect API key), none
+  of which are in the environment — see §3.
+- **Apple-Silicon-only.** Only `aarch64-apple-darwin` is installed; the
+  universal target needs `rustup target add x86_64-apple-darwin` — see §3.
 
 ---
 
@@ -80,9 +91,10 @@ already wired for the bundle (`tauri.conf.json` → `bundle.targets` includes
    spctl -a -vvv -t install "Strand.app"
    xcrun stapler validate "Strand.app"
    ```
-2. Ship the stapled `.dmg`. (Auto-update is separate — see the 0.5
-   "real updater pubkey + endpoint" task; `tauri.conf.json` still has the
-   `TODO_REPLACE_WITH_TAURI_UPDATER_PUBKEY` placeholder.)
+2. Ship the stapled `.dmg`. (Auto-update is now wired on the signing side —
+   the updater pubkey is real and `bundle.createUpdaterArtifacts` is on — but
+   the `endpoints` host `strand.danielss.dev` isn't live yet, so updates won't
+   actually be served until that lands. See §5.)
 
 ---
 
@@ -92,3 +104,85 @@ Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
 `bundle.targets` and build without an Apple account; Windows EV signing and
 Linux sigstore signing are tracked under §0.5 "platform / packaging", not
 0.1.
+
+---
+
+## Release CI
+
+`.github/workflows/release.yml` builds, signs, and publishes all three
+platforms via [`tauri-apps/tauri-action`]. It runs on a `v*` tag push (or
+manual dispatch) and opens a **draft** GitHub Release with the installers
+attached — macOS universal `.dmg`, Windows `.msi`, Linux `.deb`/`.rpm`/
+`.AppImage`. Review and publish the draft by hand.
+
+**Before tagging:** bump `version` in `tauri.conf.json`, the workspace
+`Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
+from the config version, not the tag.
+
+### Secrets to add (Settings → Secrets and variables → Actions)
+
+`GITHUB_TOKEN` is provided automatically — don't add it. Everything below is a
+repo (or org) Actions **secret**.
+
+| Secret | Required for | What it is |
+| --- | --- | --- |
+| `APPLE_CERTIFICATE` | macOS signing | Base64 of the exported **Developer ID Application** `.p12` (see below) |
+| `APPLE_CERTIFICATE_PASSWORD` | macOS signing | The password set when exporting the `.p12` |
+| `APPLE_SIGNING_IDENTITY` | macOS signing | `Developer ID Application: Daniel Schwarz Campos (57CBXS5P39)` |
+| `APPLE_ID` | macOS notarization | Apple Account email |
+| `APPLE_PASSWORD` | macOS notarization | App-specific password from appleid.apple.com |
+| `APPLE_TEAM_ID` | macOS notarization | `57CBXS5P39` |
+| `TAURI_SIGNING_PRIVATE_KEY` | **Every build** | Tauri updater private key (see below) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **Every build** | Password for that key |
+
+Without the `APPLE_*` secrets the macOS job still builds, but the `.dmg` is
+unsigned/un-notarized. The `TAURI_SIGNING_*` pair, however, is now
+**mandatory**: `bundle.createUpdaterArtifacts` is `true` and the updater
+pubkey is set, so any bundle build (CI *or* local) fails without the private
+key. Windows EV signing and Linux signing are not wired yet.
+
+> **Local builds** now need the key too. Point Tauri at the generated file:
+> ```sh
+> export TAURI_SIGNING_PRIVATE_KEY="$HOME/.strand/updater.key"   # path or content
+> export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<password>"
+> ```
+
+The macOS updater artifact (`Strand.app.tar.gz` + `.sig`) comes from the
+**`app`** bundle target, not `dmg` — so `bundle.targets` must keep `"app"`
+alongside `"dmg"`, or the Mac build only warns ("no updater-enabled targets
+were built") and ships no update. Windows (`msi`) and Linux (`appimage`) are
+updater-enabled on their own. Verified 2026-06-01: the generated `.sig` key ID
+matches the configured pubkey (`84FCBFD2A981CE5D`).
+
+### Producing the macOS cert secret
+
+Export the Developer ID Application identity (the one already in the login
+Keychain) to a `.p12`, then base64 it:
+
+```sh
+# Keychain Access → right-click the "Developer ID Application" identity →
+# Export… → .p12 (set a password = APPLE_CERTIFICATE_PASSWORD)
+base64 -i DeveloperID.p12 | pbcopy   # paste as APPLE_CERTIFICATE
+```
+
+### Updater key (already generated)
+
+The keypair was generated on 2026-06-01 and lives **outside the repo** at
+`~/.strand/` (perms `700`; never commit it). The public key is already in
+`tauri.conf.json` → `plugins.updater.pubkey` (minisign key ID
+`84FCBFD2A981CE5D`). To populate the GitHub secrets:
+
+```sh
+cat ~/.strand/updater.key       | pbcopy   # → TAURI_SIGNING_PRIVATE_KEY
+cat ~/.strand/updater.password  | pbcopy   # → TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+```
+
+To regenerate from scratch (rotates the key — every prior release's updater
+signatures become unverifiable, so the pubkey in config must be updated too):
+
+```sh
+pnpm tauri signer generate -p '<password>' -w ~/.strand/updater.key -f
+# → ~/.strand/updater.key.pub contents → tauri.conf.json plugins.updater.pubkey
+```
+
+[`tauri-apps/tauri-action`]: https://github.com/tauri-apps/tauri-action

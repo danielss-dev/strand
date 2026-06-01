@@ -129,7 +129,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ SQLite migration v2: `commit_messages` (per-repo commit message history)
 - ☑ Stream events for long-running ops (clone, fetch, push, pull) — via
   `tauri::ipc::Channel<Progress>`, no extra capability needed
-- ☐ Real updater pubkey + endpoint (currently placeholder)
+- ◐ Real updater pubkey + endpoint. Pubkey done: minisign keypair generated
+  (key ID `84FCBFD2A981CE5D`, private key at `~/.strand/`, off-repo) and wired
+  into `tauri.conf.json` → `plugins.updater.pubkey`; `bundle.createUpdaterArtifacts`
+  enabled so signed `latest.json` + bundles are produced. **Still pending:** the
+  `endpoints` host `strand.danielss.dev` isn't live, so no updates are served yet.
 - ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
 - ☐ Window state persistence (size, position, maximized)
 - ☐ Multi-window for "open file detached" if needed
@@ -283,12 +287,21 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## Platform / packaging
 
-- ☐ Replace placeholder icon with a real 1024×1024 source
-- ☐ Apple Developer ID + notarization pipeline (start during alpha — 1-2
-  week review on first submission)
+- ☑ Replace placeholder icon with a real 1024×1024 source (squircle on the
+  Apple grid; commit `aefc189`)
+- ◐ Apple Developer ID + notarization pipeline. Signing works:
+  `pnpm tauri build --target aarch64-apple-darwin` + `APPLE_SIGNING_IDENTITY`
+  yields a Developer-ID-signed `Strand_0.0.1_aarch64.dmg`. Notarization +
+  stapling still pending Apple credentials (`APPLE_ID` / `APPLE_PASSWORD` /
+  `APPLE_TEAM_ID`); universal build pending `x86_64-apple-darwin` target.
 - ☐ Windows EV cert (~$300/yr — budget per PRD §12)
 - ☐ Linux sigstore signing for AppImage
-- ☐ CI: GitHub Actions matrix for mac/win/linux × x86_64/aarch64
+- ◐ CI: GitHub Actions matrix for mac/win/linux × x86_64/aarch64
+  (`.github/workflows/release.yml` — tag-driven `tauri-action` matrix:
+  macOS universal, Windows `.msi`, Linux `.deb`/`.rpm`/`.AppImage` → draft
+  GitHub Release. Secrets documented in `docs/packaging.md` § "Release CI".
+  Not yet run end-to-end — needs the Apple signing secrets added + a first
+  `v*` tag to validate.)
 - ☐ Auto-update beta channel + stable channel
 - ☐ Windows 11 platform pass (chrome styled but never tested)
 - ☐ Linux platform pass on GNOME + KDE

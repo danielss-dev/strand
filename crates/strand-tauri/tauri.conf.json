@@ -34,7 +34,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "msi", "deb", "appimage", "rpm"],
+    "createUpdaterArtifacts": true,
+    "targets": ["app", "dmg", "msi", "deb", "appimage", "rpm"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -48,7 +49,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "TODO_REPLACE_WITH_TAURI_UPDATER_PUBKEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0RkNCRkQyQTk4MUNFNUQKUldSZHpvR3Awci84aENYTEMrTjRFUXU5d2twUUg3UDc4bVVMZ1ZSNFYvdTZwUXlQN2hjWW1nRnkK",
       "endpoints": [
         "https://strand.danielss.dev/updates/{{target}}/{{arch}}/{{current_version}}"
       ]
