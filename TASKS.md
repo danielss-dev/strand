@@ -76,11 +76,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   errors on dirty conflicts; `Repo::checkout_commit` — safe detached-HEAD
   checkout of any revspec via `set_head_detached`.)
 - ☐ Create / delete tag (lightweight + annotated)
-- ◐ Stash create / apply / pop / drop (`stash_save` via `stash_save2` with
-  `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
-  `StashOutcome { oid: None }` instead of erroring; `stash_apply` / `stash_pop`
-  / `stash_drop` by index). **branch-from still pending** — no direct git2 API;
-  needs branch-at-stash-base + checkout + apply/drop.)
+- ◐ Stash create / snapshot / apply / pop / drop (`stash_save` via `stash_save2`
+  with `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
+  `StashOutcome { oid: None }` instead of erroring; `stash_snapshot` keeps the
+  changes in place via `git stash create` + `store` (or `push -u` + `apply
+  --index` when including untracked); `stash_drop` by index). `stash_apply` /
+  `stash_pop` shell out to `git` (`run_git` helper) so a dirty index merges
+  like real git instead of git2's blanket "uncommitted changes in the index"
+  refusal. **branch-from still pending** — no direct git2 API; needs
+  branch-at-stash-base + checkout + apply/drop.)
 - ☐ Cherry-pick (single + multi)
 - ☐ Revert
 - ☐ Merge (ff / no-ff / squash)
@@ -118,7 +122,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
   `repo_branch_delete`, `repo_stash_list`, `repo_stash_save`,
-  `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
+  `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`
   (all `async`, streaming progress over a `Channel`)
 - ☑ Plugins: sql, updater, dialog, shell, os
@@ -168,9 +172,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   prefix matches, Tab fills only the next `/` segment of the highlighted
   match, never a full leaf name)
 - ☑ Stash split button (reuses `.sync-group`: primary face stashes all
-  changes; chevron opens a menu with ±untracked / keep-index create variants
-  and "Pop latest", plus a live count badge. Self-contained — reads the store,
-  takes only `onToast`, like `BranchSwitcherButton`.)
+  changes; chevron opens a menu with "Save snapshot…" plus ±untracked /
+  keep-index create variants and "Pop latest", plus a live count badge.
+  Self-contained — reads the store, takes `onToast` + `onSaveSnapshot`, like
+  `BranchSwitcherButton`.)
 
 ### Sidebar
 - ☑ Local Changes + All Commits primary rows
@@ -185,7 +190,14 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Stashes list — flat list under the Git tab (`StashLeaf` reuses the
   branch-row + `row-tools`/`armed` styling). Click a row to apply; hover for
   Pop (apply & remove) and Drop (destructive, behind an inline confirm).
-  Respects the sidebar filter (matches message + branch).
+  Respects the sidebar filter (matches message + branch). Section header has a
+  hover-revealed `+` action (`SideSection`'s optional `action` prop) that opens
+  the Save-snapshot dialog.
+- ☑ Save-snapshot dialog (`views/StashDialog.tsx`, reuses the `.clone-dialog`
+  shell): message field + "Include untracked files" + "Keep changes in working
+  directory" checkboxes; primary CTA flips Stash / Save Snapshot. Reachable
+  from the sidebar `+`, the Topbar stash menu, and ⌘K ("Save snapshot…" /
+  "Stash changes…"). Clean tree surfaces "Nothing to stash" inline.
 - ☐ Submodules list
 - ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
   click-to-open; lazily loaded when the Files tab is shown and refreshed on

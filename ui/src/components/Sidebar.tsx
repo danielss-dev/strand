@@ -29,21 +29,32 @@ interface SectionProps {
   collapsed: boolean;
   onToggle: () => void;
   count?: number;
+  /** Optional trailing action (e.g. "+" to create) shown on the right. */
+  action?: { icon: IconName; title: string; onClick: () => void };
 }
 
-function SideSection({ label, collapsed, onToggle, count }: SectionProps) {
+function SideSection({ label, collapsed, onToggle, count, action }: SectionProps) {
   return (
-    <button type="button" className={'side-section' + (collapsed ? ' collapsed' : '')} onClick={onToggle}>
-      <Icon name="chev-down" size={8} stroke={2} className="chev" />
-      <span>{label}</span>
-      {count != null && <span className="count">{count}</span>}
-    </button>
+    <div className={'side-section' + (collapsed ? ' collapsed' : '')}>
+      <button type="button" className="ss-toggle" onClick={onToggle}>
+        <Icon name="chev-down" size={8} stroke={2} className="chev" />
+        <span>{label}</span>
+        {count != null && <span className="count">{count}</span>}
+      </button>
+      {action && (
+        <button type="button" className="ss-action" title={action.title} aria-label={action.title} onClick={action.onClick}>
+          <Icon name={action.icon} size={12} stroke={2} />
+        </button>
+      )}
+    </div>
   );
 }
 
 interface SidebarProps {
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
+  /** Open the Save-snapshot / Stash dialog. */
+  onCreateStash: () => void;
 }
 
 // ─── tree primitives ────────────────────────────────────────────────────
@@ -89,7 +100,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -351,6 +362,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent }: SidebarProps) {
               collapsed={!sections.stashes}
               onToggle={() => toggle('stashes')}
               count={filteredStashes.length}
+              action={{ icon: 'plus', title: 'Save snapshot…', onClick: onCreateStash }}
             />
             {sections.stashes &&
               filteredStashes.map((s) => (

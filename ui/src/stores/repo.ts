@@ -168,6 +168,11 @@ export interface RepoState {
     includeUntracked: boolean,
     keepIndex: boolean,
   ): Promise<StashOutcome>;
+  /**
+   * Save a snapshot: record the changes onto the stash stack but keep them in
+   * the working directory. Returns the outcome (`oid === null` ⇒ clean tree).
+   */
+  stashSnapshot(message: string | null, includeUntracked: boolean): Promise<StashOutcome>;
   /** Apply a stash by index, leaving it on the stack. */
   stashApply(index: number): Promise<void>;
   /** Apply a stash by index and drop it on success. */
@@ -644,6 +649,15 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLocalChanges(),
       get().refreshLog(),
     ]);
+    return outcome;
+  },
+  async stashSnapshot(message, includeUntracked) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const outcome = await tauri.repoStashSnapshot(path, message, includeUntracked);
+    // The snapshot leaves the working tree as-is, but a new stash entry exists —
+    // refresh the stack (and the log, which lists stash commits).
+    await Promise.all([get().refreshStashes(), get().refreshLog()]);
     return outcome;
   },
   async stashApply(index) {

@@ -81,6 +81,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
   field with prefix autocomplete (auto-tracks when started from a
   remote), delete a branch via the sidebar — wired into the topbar
   picker and sidebar Git tab
+- Stashes: list / apply / pop / drop in the sidebar Stashes section, plus
+  create from the topbar stash menu or a Save-snapshot dialog (message +
+  include-untracked + keep-changes-in-working-dir), reachable via the
+  sidebar `+`, the topbar menu, and ⌘K
 - Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_commit`, plus the staging, network, and
   branch commands above
@@ -92,10 +96,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - File tree — `@pierre/trees` integration pending
 - Commit graph: multi-select, search, and Files-tab re-rooting to the
   selected commit
-- Stash, rebase, cherry-pick, merge, revert — mutating commands wrap
+- Rebase, cherry-pick, merge, revert — mutating commands wrap
   `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
-  are wired; checkout from an arbitrary commit (detached HEAD) still
-  pending.
+  and stashes are wired; stash branch-from and checkout from an arbitrary
+  commit (detached HEAD) still pending.
 
 ## Design source
 

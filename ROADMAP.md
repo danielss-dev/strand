@@ -267,6 +267,24 @@ Verified with `cargo check`/`test` (+4 `stash` unit tests), `clippy`, `tsc`,
 `vite build`, and a 3-dimension adversarial review pass. **Still open:**
 `branch-from` (no direct git2 API — needs base-commit + checkout + apply/drop).
 
+**Save snapshot + stash apply/pop fix (2026-06-01):** `stash_snapshot` (core)
+records a stash but keeps the changes in the working tree — `git stash create`
++ `store` (no working-tree round-trip, staging preserved), or `push
+--include-untracked` + `apply --index` when untracked files are included. At
+the same time, `stash_apply` / `stash_pop` were moved off git2 onto a `git`
+subprocess (`run_git` helper): git2 refused to apply/pop whenever the index
+held *unrelated* staged changes ("uncommitted changes exist in the index",
+code Uncommitted -22), where real `git stash pop` merges — that was the
+reported "Pop failed" bug. New `repo_stash_snapshot` IPC command +
+`stashSnapshot` store action. `views/StashDialog.tsx` (reusing the
+`.clone-dialog` shell) gives both flavours a message field + "Include
+untracked" / "Keep changes in working directory" checkboxes; the CTA flips
+Stash / Save Snapshot. Reachable from a hover-`+` on the sidebar **Stashes**
+header (`SideSection` grew an optional `action` prop), the Topbar stash menu's
+"Save snapshot…" item, and ⌘K. Verified with `cargo check`/`test` and the git
+command sequences exercised against a scratch repo (snapshot keeps the tree
+unchanged; pop merges past a dirty index).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

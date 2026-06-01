@@ -645,8 +645,46 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-dim);
-    cursor: pointer;
     user-select: none;
+}
+.side-section .ss-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+.side-section .ss-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.side-section:hover .ss-action,
+.side-section .ss-action:focus-visible {
+    opacity: 1;
+}
+.side-section .ss-action:hover {
+    color: var(--text);
+    background: var(--bg-hover);
 }
 .side-section .chev {
     width: 8px;

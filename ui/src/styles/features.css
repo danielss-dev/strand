@@ -2426,3 +2426,41 @@ button {
   padding: 12px 16px;
   border-top: 0.5px solid var(--border);
 }
+
+/* Save-snapshot / Stash dialog — reuses the clone-dialog shell. */
+.stash-dialog {
+  width: 460px;
+}
+.stash-blurb {
+  margin: 0;
+  font-size: var(--type-ui);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.stash-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: var(--type-ui);
+  color: var(--text);
+}
+.stash-check input {
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--accent);
+}
+.stash-check .hint {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.stash-note {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  font-size: 11px;
+  color: var(--text-2);
+}

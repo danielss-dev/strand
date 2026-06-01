@@ -1,15 +1,26 @@
-//! Stash operations — save, list, apply, pop, drop.
+//! Stash operations — save, snapshot, list, apply, pop, drop.
 //!
-//! git2's stash entry points (`stash_save2`, `stash_apply`, `stash_pop`,
-//! `stash_drop`, `stash_foreach`) all take `&mut git2::Repository`. Each
-//! [`Repo::git2`] call hands back a freshly-opened *owned* `Repository`, so we
-//! just bind it `mut` locally — no interior-mutability juggling, same as every
-//! other write module here. Network-style stash work (none yet) would shell
-//! out; these are pure index/working-tree ops, so `git2` is the right engine.
+//! `list`/`save`/`drop` use git2's stash entry points (`stash_save2`,
+//! `stash_drop`, `stash_foreach`), each on a freshly-opened owned
+//! `git2::Repository` bound `mut` locally — same as every other write module.
+//!
+//! `apply`/`pop`/`snapshot` instead **shell out to `git`** (the same
+//! subprocess approach [`network`] already uses). git2's `stash_apply` refuses
+//! whenever the index holds unrelated staged changes ("uncommitted changes
+//! exist in the index"), where real `git stash pop` merges cleanly; and git2
+//! has no `stash create`/`store`, which is the disruption-free way to snapshot.
+//! Matching git's actual behaviour matters more here than staying pure-git2.
+//!
+//! [`network`]: crate::network
+
+use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Result, repo::Repo};
+use crate::{
+    error::{Error, Result},
+    repo::Repo,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stash {
@@ -90,21 +101,90 @@ impl Repo {
         }
     }
 
+    /// Save a snapshot: record the current changes onto the stash stack *but
+    /// leave them in the working tree* (Fork's "Save snapshot").
+    ///
+    /// Without untracked files we use `git stash create` + `git stash store`,
+    /// which builds the stash commit straight from the current state and never
+    /// touches the working tree or index — staged/unstaged splits are preserved
+    /// exactly, with no flicker. `create` ignores untracked files, so when
+    /// `include_untracked` is set we instead `push --include-untracked` and
+    /// re-`apply --index`: the working tree is clean right after the push, so
+    /// the re-apply reinstates everything (untracked included) without conflict.
+    ///
+    /// A clean working tree is the no-op `StashOutcome { oid: None }`, as in
+    /// [`stash_save`](Repo::stash_save).
+    pub fn stash_snapshot(
+        &self,
+        message: Option<&str>,
+        include_untracked: bool,
+    ) -> Result<StashOutcome> {
+        if include_untracked {
+            let mut push: Vec<&str> = vec!["stash", "push", "--include-untracked"];
+            if let Some(m) = message {
+                push.push("-m");
+                push.push(m);
+            }
+            let out = self.run_git(&push)?;
+            // git prints this (and stashes nothing) for a clean tree.
+            if out.contains("No local changes to save") {
+                return Ok(StashOutcome { oid: None });
+            }
+            self.run_git(&["stash", "apply", "--index"])?;
+            let oid = self.run_git(&["rev-parse", "stash@{0}"])?;
+            Ok(StashOutcome { oid: Some(oid) })
+        } else {
+            let oid = self.run_git(&["stash", "create"])?;
+            // An empty stdout from `stash create` means there was nothing to stash.
+            if oid.is_empty() {
+                return Ok(StashOutcome { oid: None });
+            }
+            let mut store: Vec<&str> = vec!["stash", "store"];
+            if let Some(m) = message {
+                store.push("-m");
+                store.push(m);
+            }
+            store.push(&oid);
+            self.run_git(&store)?;
+            Ok(StashOutcome { oid: Some(oid) })
+        }
+    }
+
     /// Apply a stash by index, leaving it on the stack (`git stash apply`).
-    /// Errors (rather than clobbering) if applying would conflict with the
-    /// current working tree.
+    /// Shells out so a dirty index merges as git does, rather than git2's
+    /// blanket refusal. A genuine conflict leaves markers and errors.
     pub fn stash_apply(&self, index: usize) -> Result<()> {
-        let mut repo = self.git2()?;
-        repo.stash_apply(index, None)?;
+        self.run_git(&["stash", "apply", &format!("stash@{{{index}}}")])?;
         Ok(())
     }
 
     /// Apply a stash by index and drop it on success (`git stash pop`). If the
     /// apply conflicts the stash is left intact, matching git.
     pub fn stash_pop(&self, index: usize) -> Result<()> {
-        let mut repo = self.git2()?;
-        repo.stash_pop(index, None)?;
+        self.run_git(&["stash", "pop", &format!("stash@{{{index}}}")])?;
         Ok(())
+    }
+
+    /// Run a blocking `git` subcommand in the repo's working directory and
+    /// return trimmed stdout, mapping a non-zero exit to its stderr. Mirrors
+    /// the `git`-subprocess approach in [`network`](crate::network);
+    /// `GIT_TERMINAL_PROMPT=0` stops a stuck auth prompt from blocking.
+    fn run_git(&self, args: &[&str]) -> Result<String> {
+        let out = Command::new("git")
+            .current_dir(self.path())
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .args(args)
+            .output()
+            .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(Error::Other(if stderr.is_empty() {
+                format!("git {} failed", args.join(" "))
+            } else {
+                stderr
+            }));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     }
 
     /// Drop a stash by index without applying it (`git stash drop`).

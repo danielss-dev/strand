@@ -237,6 +237,15 @@ pub fn repo_stash_save(
 }
 
 #[tauri::command]
+pub fn repo_stash_snapshot(
+    path: String,
+    message: Option<String>,
+    include_untracked: bool,
+) -> CmdResult<StashOutcome> {
+    Ok(Repo::discover(&path)?.stash_snapshot(message.as_deref(), include_untracked)?)
+}
+
+#[tauri::command]
 pub fn repo_stash_apply(path: String, index: usize) -> CmdResult<()> {
     Repo::discover(&path)?.stash_apply(index)?;
     Ok(())

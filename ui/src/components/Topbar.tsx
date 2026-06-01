@@ -21,6 +21,8 @@ interface Props {
   pullDone: boolean;
   pushDone: boolean;
   onToast: (msg: string) => void;
+  /** Open the Save-snapshot dialog (message + keep-changes options). */
+  onSaveSnapshot: () => void;
 }
 
 export function Topbar({
@@ -38,6 +40,7 @@ export function Topbar({
   pullDone,
   pushDone,
   onToast,
+  onSaveSnapshot,
 }: Props) {
   const platform = useSettings((s) => s.platform);
   const tabs = useRepo((s) => s.tabs);
@@ -150,7 +153,7 @@ export function Topbar({
         </button>
       </div>
 
-      <StashButton onToast={onToast} />
+      <StashButton onToast={onToast} onSaveSnapshot={onSaveSnapshot} />
 
       <BranchSwitcherButton
         branch={branch}
@@ -292,9 +295,16 @@ function RepoSwitcherButton({
  * Stash split button — the primary face stashes all changes; the chevron
  * opens a menu with create variants (untracked / keep-index) and "Pop latest".
  * Per-stash apply / pop / drop lives on the sidebar Stashes list. Reads the
- * store directly and only takes `onToast`, mirroring {@link BranchSwitcherButton}.
+ * store directly; `onToast` reports quick-stash results and `onSaveSnapshot`
+ * hands off to the message dialog, mirroring {@link BranchSwitcherButton}.
  */
-function StashButton({ onToast }: { onToast: (msg: string) => void }) {
+function StashButton({
+  onToast,
+  onSaveSnapshot,
+}: {
+  onToast: (msg: string) => void;
+  onSaveSnapshot: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -382,6 +392,17 @@ function StashButton({ onToast }: { onToast: (msg: string) => void }) {
           style={{ position: 'fixed', top: pos.top, right: pos.right, left: 'auto', minWidth: 240 }}
         >
           <div className="repo-menu-sect">Create stash</div>
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => { setOpen(false); onSaveSnapshot(); }}
+          >
+            <span className="ico"><Icon name="plus" size={13} /></span>
+            <span className="label">Save snapshot…</span>
+            <span className="meta">keep</span>
+          </button>
           <button
             type="button"
             className="repo-menu-item"

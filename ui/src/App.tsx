@@ -11,6 +11,7 @@ import { useRepo } from './stores/repo';
 import { pickRepoDirectory } from './lib/dialog';
 import { isTauri } from './lib/tauri';
 import { CloneDialog } from './views/CloneDialog';
+import { StashDialog } from './views/StashDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -43,6 +44,8 @@ export function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
+  // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
+  const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -223,6 +226,8 @@ export function App() {
       { id: 'clone',   label: 'Clone repository…', run: () => setCloneOpen(true) },
       { id: 'local',   label: 'Show: Local Changes', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
       { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
+      { id: 'snapshot', label: 'Save snapshot…',  run: () => setStashDialog({ snapshot: true }) },
+      { id: 'stash',    label: 'Stash changes…',  run: () => setStashDialog({ snapshot: false }) },
       { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
       { id: 'tweaks',  label: 'Toggle theme',      shortcut: '⌘⇧T', run: () => setSetting('theme', theme === 'dark' ? 'light' : 'dark') },
     ];
@@ -258,12 +263,17 @@ export function App() {
           pullDone={pullDone}
           pushDone={pushDone}
           onToast={showToast}
+          onSaveSnapshot={() => setStashDialog({ snapshot: true })}
         />
 
         <div className="body">
           <PanelGroup direction="horizontal" autoSaveId="strand:body">
             <Panel defaultSize={20} minSize={12} maxSize={40}>
-              <Sidebar onOpenRepo={openViaDialog} onOpenRecent={openByPath} />
+              <Sidebar
+                onOpenRepo={openViaDialog}
+                onOpenRecent={openByPath}
+                onCreateStash={() => setStashDialog({ snapshot: true })}
+              />
             </Panel>
             <PanelResizeHandle className="rs-handle vert" />
             <Panel minSize={30}>
@@ -303,6 +313,10 @@ export function App() {
 
       {cloneOpen && (
         <CloneDialog onClose={() => setCloneOpen(false)} onCloned={openByPath} />
+      )}
+
+      {stashDialog && (
+        <StashDialog initialSnapshot={stashDialog.snapshot} onClose={() => setStashDialog(null)} />
       )}
 
       {!isTauri() && !meta && (
