@@ -131,6 +131,10 @@ export interface RepoState {
   stage(file: string): Promise<void>;
   unstage(file: string): Promise<void>;
   discard(file: string): Promise<void>;
+  /** Stage / unstage / discard a specific set of files with a single refresh. */
+  stageMany(files: string[]): Promise<void>;
+  unstageMany(files: string[]): Promise<void>;
+  discardMany(files: string[]): Promise<void>;
   /**
    * Apply a unified-diff patch (typically a single hunk sliced out of a
    * file's full patch) to either the index or the working tree in reverse.
@@ -559,6 +563,24 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoDiscard(path, file);
+    await get().refreshLocalChanges();
+  },
+  async stageMany(files) {
+    const path = get().activePath;
+    if (!path || files.length === 0) return;
+    for (const f of files) await tauri.repoStage(path, f);
+    await get().refreshLocalChanges();
+  },
+  async unstageMany(files) {
+    const path = get().activePath;
+    if (!path || files.length === 0) return;
+    for (const f of files) await tauri.repoUnstage(path, f);
+    await get().refreshLocalChanges();
+  },
+  async discardMany(files) {
+    const path = get().activePath;
+    if (!path || files.length === 0) return;
+    for (const f of files) await tauri.repoDiscard(path, f);
     await get().refreshLocalChanges();
   },
   async applyPatch(patch, target) {

@@ -3,7 +3,7 @@ import type { SVGProps } from 'react';
 export type IconName =
   | 'edit' | 'graph' | 'branch' | 'tag' | 'stash' | 'remote' | 'submodule'
   | 'file' | 'folder' | 'folder-open' | 'changes' | 'search' | 'command'
-  | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'x' | 'check'
+  | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
   | 'chev-down' | 'chev-right' | 'chev-up' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
@@ -53,6 +53,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'refresh':     return <svg {...p}><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4M12 2v3h-3M4 14v-3h3"/></svg>;
     case 'sync':        return <svg {...p}><path d="M2.5 7a5.5 5.5 0 0 1 9.5-3.5L14 5M13.5 9a5.5 5.5 0 0 1-9.5 3.5L2 11M14 2v3h-3M2 14v-3h3"/></svg>;
     case 'plus':        return <svg {...p}><path d="M8 3v10M3 8h10"/></svg>;
+    case 'minus':       return <svg {...p}><path d="M3 8h10"/></svg>;
     case 'x':           return <svg {...p}><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>;
     case 'trash':       return <svg {...p}><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.2a1 1 0 0 0 1 .8h4.4a1 1 0 0 0 1-.8L12 4M6.5 6.5v5M9.5 6.5v5"/></svg>;
     case 'check':       return <svg {...p}><path d="M3 8.5l3 3 7-7"/></svg>;

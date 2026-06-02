@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { GitStatusEntry } from '@pierre/trees';
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
+import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
 import { defaultRemote, useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Stash, StatusKind, Tag, WorkTreeEntry } from '../lib/types';
+import type { Branch, RemoteBranch, Stash, Tag } from '../lib/types';
 
 type SideTab = 'git' | 'files';
 
@@ -237,23 +239,28 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     };
   }, [tab, meta?.path, status, refreshTree]);
 
-  const fileTree = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    const items = q ? workTree.filter((e) => e.path.toLowerCase().includes(q)) : workTree;
-    const t = buildTree<WorkTreeEntry>(items, (e) => e.path.split('/'));
-    sortTree(t, (a, b) => a.path.localeCompare(b.path));
-    return t;
-  }, [workTree, filter]);
-
-  const renderFileLeaf = (e: WorkTreeEntry, depth: number) => (
-    <FileLeaf
-      key={e.path}
-      depth={depth}
-      name={leafName(e.path)}
-      status={e.status}
-      active={selectedFile === e.path}
-      onClick={() => selectFile(e.path)}
-    />
+  // Files tab — the Pierre tree is fed the whole working-tree listing.
+  // Filtering is Pierre's own in-tree search box, so the shared filter box
+  // (git tab only) no longer touches this list.
+  const filePaths = useMemo(() => workTree.map((e) => e.path), [workTree]);
+  const fileGitStatus = useMemo<GitStatusEntry[]>(
+    () =>
+      workTree.flatMap((e) => {
+        const s = workStatusToGit(e.status);
+        return s ? [{ path: e.path, status: s }] : [];
+      }),
+    [workTree],
+  );
+  const fileMenu = useCallback(
+    (targets: string[]): TreeMenuItem[] => [
+      { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0]) },
+      {
+        label: targets.length > 1 ? 'Copy paths' : 'Copy path',
+        icon: 'file',
+        onSelect: () => copyToClipboard(targets.join('\n')),
+      },
+    ],
+    [selectFile],
   );
 
   const runBranchOp = async (fn: () => Promise<void>) => {
@@ -395,84 +402,88 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         </button>
       </div>
 
-      <div className="side-filter">
-        <Icon name="search" size={11} />
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={tab === 'git' ? 'Filter branches, tags…' : 'Filter files'}
-          aria-label={tab === 'git' ? 'Filter branches and tags' : 'Filter files'}
-        />
-      </div>
+      {tab === 'git' && (
+        <div className="side-filter">
+          <Icon name="search" size={11} />
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter branches, tags…"
+            aria-label="Filter branches and tags"
+          />
+        </div>
+      )}
 
-      <div className="side-scroll">
-        {!meta ? (
+      {!meta ? (
+        <div className="side-scroll">
           <EmptyRepoState recents={recents} onOpenRepo={onOpenRepo} onOpenRecent={onOpenRecent} onForget={forgetRecent} />
-        ) : tab === 'git' ? (
-          <>
-            <SideSection
-              label="Branches"
-              collapsed={!sections.branches}
-              onToggle={() => toggle('branches')}
-              count={filtered.branches.length}
-            />
-            {sections.branches &&
-              renderTreeChildren(branchTree, 0, collapsed, toggleCollapsed, renderBranchLeaf, 'branches')}
+        </div>
+      ) : tab === 'git' ? (
+        <div className="side-scroll">
+          <SideSection
+            label="Branches"
+            collapsed={!sections.branches}
+            onToggle={() => toggle('branches')}
+            count={filtered.branches.length}
+          />
+          {sections.branches &&
+            renderTreeChildren(branchTree, 0, collapsed, toggleCollapsed, renderBranchLeaf, 'branches')}
 
-            <SideSection
-              label="Remotes"
-              collapsed={!sections.remotes}
-              onToggle={() => toggle('remotes')}
-              count={filtered.remotes.length}
-            />
-            {sections.remotes &&
-              renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes')}
+          <SideSection
+            label="Remotes"
+            collapsed={!sections.remotes}
+            onToggle={() => toggle('remotes')}
+            count={filtered.remotes.length}
+          />
+          {sections.remotes &&
+            renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes')}
 
-            <SideSection
-              label="Tags"
-              collapsed={!sections.tags}
-              onToggle={() => toggle('tags')}
-              count={filtered.tags.length}
-              action={{ icon: 'plus', title: 'New tag…', onClick: onCreateTag }}
-            />
-            {sections.tags &&
-              renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
+          <SideSection
+            label="Tags"
+            collapsed={!sections.tags}
+            onToggle={() => toggle('tags')}
+            count={filtered.tags.length}
+            action={{ icon: 'plus', title: 'New tag…', onClick: onCreateTag }}
+          />
+          {sections.tags &&
+            renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
 
-            <SideSection
-              label="Stashes"
-              collapsed={!sections.stashes}
-              onToggle={() => toggle('stashes')}
-              count={filteredStashes.length}
-              action={{ icon: 'plus', title: 'Save snapshot…', onClick: onCreateStash }}
-            />
-            {sections.stashes &&
-              filteredStashes.map((s) => (
-                <SideLeaf
-                  key={s.index}
-                  depth={0}
-                  icon="stash"
-                  label={stashLabel(s)}
-                  meta={s.branch ?? undefined}
-                  title={`${stashLabel(s)} — click to apply`}
-                  onActivate={() => void runBranchOp(() => stashApply(s.index))}
-                  onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
-                />
-              ))}
+          <SideSection
+            label="Stashes"
+            collapsed={!sections.stashes}
+            onToggle={() => toggle('stashes')}
+            count={filteredStashes.length}
+            action={{ icon: 'plus', title: 'Save snapshot…', onClick: onCreateStash }}
+          />
+          {sections.stashes &&
+            filteredStashes.map((s) => (
+              <SideLeaf
+                key={s.index}
+                depth={0}
+                icon="stash"
+                label={stashLabel(s)}
+                meta={s.branch ?? undefined}
+                title={`${stashLabel(s)} — click to apply`}
+                onActivate={() => void runBranchOp(() => stashApply(s.index))}
+                onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
+              />
+            ))}
 
-            <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
-          </>
-        ) : fileTree.children.length === 0 ? (
-          <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 12 }}>
-            {filter.trim()
-              ? 'No files match.'
-              : treeLoading
-                ? 'Loading working tree…'
-                : 'No files in the working tree.'}
-          </div>
-        ) : (
-          renderTreeChildren(fileTree, 0, collapsed, toggleCollapsed, renderFileLeaf, 'files')
-        )}
-      </div>
+          <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
+        </div>
+      ) : (
+        <div className="side-files">
+          <PierreTree
+            paths={filePaths}
+            gitStatus={fileGitStatus}
+            selectedPath={selectedFile}
+            onSelect={(p) => selectFile(p)}
+            menuItems={fileMenu}
+            search
+            emptyLabel={treeLoading ? 'Loading working tree…' : 'No files in the working tree.'}
+          />
+        </div>
+      )}
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
@@ -625,58 +636,6 @@ function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onMenu 
       </span>
     </div>
   );
-}
-
-interface FileLeafProps {
-  depth: number;
-  name: string;
-  status: StatusKind | null;
-  active: boolean;
-  onClick: () => void;
-}
-
-function FileLeaf({ depth, name, status, active, onClick }: FileLeafProps) {
-  const letter = status ? statusLetter(status) : null;
-  return (
-    <div
-      className={'side-row branch-row file-row' + (active ? ' active' : '')}
-      style={{ paddingLeft: 16 + depth * 14 }}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault(); // Space would otherwise scroll the sidebar
-          onClick();
-        }
-      }}
-      title={name}
-      role="button"
-      tabIndex={0}
-    >
-      <span className="folder-chev" aria-hidden />
-      <span className="ico"><Icon name="file" size={13} /></span>
-      <span className="row-text">
-        <span className="label">{name}</span>
-      </span>
-      {letter && <span className={`file-badge ${letter}`}>{letter}</span>}
-    </div>
-  );
-}
-
-function statusLetter(s: StatusKind): 'M' | 'A' | 'D' | 'R' | 'U' | 'C' {
-  switch (s) {
-    case 'MODIFIED':
-      return 'M';
-    case 'ADDED':
-      return 'A';
-    case 'DELETED':
-      return 'D';
-    case 'RENAMED':
-      return 'R';
-    case 'UNTRACKED':
-      return 'U';
-    case 'CONFLICTED':
-      return 'C';
-  }
 }
 
 interface EmptyProps {

@@ -1923,125 +1923,7 @@ button {
   font-family: var(--font-mono);
 }
 
-/* ─── Local Changes — tree rows + diff toolbar ─── */
-
-.lc-tree {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  flex: 1 1 auto;
-  min-height: 1;
-}
-
-.lc-tree-row {
-  display: grid;
-  grid-template-columns:
-    calc(8px + var(--depth, 1) * 14px) 14px 14px minmax(40px, 1fr)
-    auto;
-  align-items: center;
-  gap: 4px;
-  height: var(--row-h);
-  flex-shrink: 0;
-  cursor: pointer;
-  color: var(--text-2);
-  font-size: var(--type-ui);
-  position: relative;
-  user-select: none;
-}
-.lc-tree-row:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.lc-tree-row.active {
-  background: var(--bg-sel);
-  color: var(--text);
-}
-
-.lc-tree-row .chev {
-  color: var(--text-dim);
-  display: inline-flex;
-  justify-content: center;
-}
-.lc-tree-row.folder .chev {
-  color: var(--text-muted);
-}
-.lc-tree-row .ftype {
-  color: var(--text-muted);
-  display: inline-flex;
-}
-.lc-tree-row.folder .ftype {
-  color: var(--accent);
-}
-.lc-tree-row .fname {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-}
-.lc-tree-row.folder .fname {
-  color: var(--text-2);
-  font-weight: 500;
-}
-
-.lc-tree-row .badge {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  color: var(--accent-fg);
-  flex-shrink: 0;
-}
-.lc-tree-row .badge.M {
-  background: var(--mod);
-}
-.lc-tree-row .badge.A {
-  background: var(--add);
-}
-.lc-tree-row .badge.D {
-  background: var(--del);
-}
-.lc-tree-row .badge.U {
-  background: var(--b-4);
-}
-.lc-tree-row .badge.R {
-  background: var(--b-2);
-}
-.lc-tree-row .badge.C {
-  background: var(--b-7);
-}
-.lc-tree-row .badge.T {
-  background: var(--b-5);
-}
-
-.lc-tree-row .lc-action {
-  font-family: var(--font-ui);
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 1px 7px;
-  border-radius: 4px;
-  display: none;
-}
-.lc-tree-row:hover .lc-action {
-  display: inline-flex;
-}
-.lc-tree-row .lc-action:hover {
-  background: var(--bg-active);
-  color: var(--text);
-}
-
-.lc-tree-row .folder-count {
-  font-size: 10.5px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
+/* ─── Local Changes — diff toolbar ─── */
 
 .lc-diff-scroll {
   flex: 1 1 auto;
@@ -2324,28 +2206,6 @@ button {
   white-space: pre-wrap;
 }
 
-/* ─── Files sidebar tree — status badge on a file row ─── */
-.side-row.file-row .file-badge {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--accent-fg);
-}
-.side-row.file-row .file-badge.M { background: var(--mod); }
-.side-row.file-row .file-badge.A { background: var(--add); }
-.side-row.file-row .file-badge.D { background: var(--del); }
-.side-row.file-row .file-badge.U { background: var(--b-4); }
-.side-row.file-row .file-badge.R { background: var(--b-2); }
-.side-row.file-row .file-badge.C { background: var(--del); }
-
 /* ─── Clone dialog ─── */
 .clone-dialog {
   width: 520px;
@@ -2538,4 +2398,59 @@ textarea.clone-input {
   box-shadow: 0 0 0 0.5px var(--border) inset;
   font-size: 11px;
   color: var(--text-2);
+}
+
+/* ─── Pierre file tree (@pierre/trees) ─────────────────────────────────── */
+
+/* Carrier for the tree theme. CSS custom properties set here inherit into
+   Pierre's custom-element host and across its shadow boundary — so mapping
+   Strand tokens onto Pierre's *-override variables themes the whole tree (and
+   tracks the light/dark token switch automatically). They live on the wrap,
+   not the host, because React 18 does not forward `className` onto a custom
+   element. */
+.tree-host-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+
+  --trees-bg-override: transparent;
+  --trees-fg-override: var(--text);
+  --trees-fg-muted-override: var(--text-muted);
+  --trees-bg-muted-override: var(--bg-hover);
+  --trees-selected-bg-override: var(--bg-sel);
+  --trees-selected-fg-override: var(--text);
+  --trees-accent-override: var(--accent);
+  --trees-border-color-override: var(--border);
+  --trees-indent-guide-bg-override: var(--border);
+  --trees-scrollbar-thumb-override: var(--border-strong);
+  --trees-focus-ring-color-override: var(--accent);
+  --trees-search-bg-override: var(--bg-base);
+  --trees-search-fg-override: var(--text);
+  --trees-input-bg-override: var(--bg-base);
+  --trees-font-family-override: var(--font-ui);
+  --trees-font-size-override: var(--type-ui);
+
+  --trees-git-added-color-override: var(--add);
+  --trees-git-modified-color-override: var(--mod);
+  --trees-git-deleted-color-override: var(--del);
+  --trees-git-renamed-color-override: var(--b-2);
+  --trees-git-untracked-color-override: var(--b-4);
+  --trees-git-ignored-color-override: var(--text-dim);
+}
+
+.tree-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Files sidebar tab — a bounded-height column so the tree owns its own scroll
+   (it must not nest inside the .side-scroll region used by the Git tab). */
+.side-files {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
