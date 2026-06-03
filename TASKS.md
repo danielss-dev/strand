@@ -346,18 +346,55 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Auto-refresh on window focus / visibility (status + diffs + log + meta)
 - ☑ Refresh button in MainHeader wired with spinner
 - ☐ Tweaks panel UI (settings exposed, no UI to change them yet)
-- ☐ **Theme management**
-  - ☐ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets
-  - ☐ `theme` key in `settings` SQLite table with default `system`
-  - ☐ `useTheme` hook: read setting, subscribe to OS `prefers-color-scheme`,
-    apply `data-theme` on `<html>`
-  - ☐ Settings UI section: theme picker (Light / Dark / System) with live preview
-  - ☐ Command palette actions: "Switch to Light", "Switch to Dark", "Use System Theme"
-  - ☐ Cycle-theme keyboard shortcut (⌘⇧T)
-  - ☐ Persist last manual choice across launches; restore before first paint
-    (no flash of wrong theme)
-  - ☐ Audit components for hardcoded colors; route everything through tokens
-  - ☐ Extension point for future custom themes (high-contrast, solarized, etc.)
+- ☑ **Theme management**
+  - ☑ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets
+    (`[data-theme]` token blocks in `tokens.css`; `system` resolves to one of
+    the concrete themes via `prefers-color-scheme`)
+  - ☑ `theme` preference persisted with default `system` — kept in the existing
+    zustand-`persist` localStorage store (`strand.settings`), not the SQLite
+    `settings` table: localStorage rehydrates **synchronously**, which is what
+    lets the pre-paint inline script restore the theme with no flash. Type is
+    `ThemePref = 'dark' | 'light' | 'system'`; old persisted `'dark'`/`'light'`
+    users keep their choice.
+  - ☑ `useTheme` hook (`lib/theme.ts`): reads the preference, subscribes to OS
+    `prefers-color-scheme`, applies `data-theme` on `<html>`, and publishes the
+    resolved concrete theme into the store (`resolvedTheme`) so Pierre diffs +
+    the settings hint read it reactively. Single applier — called once at the
+    app root.
+  - ☑ Settings UI section (`views/SettingsDialog.tsx`, reuses the `.clone-dialog`
+    shell): theme picker (System / Light / Dark) as a `role="radiogroup"` of
+    cards with live mini-UI swatches (each swatch carries its own `data-theme`
+    so it previews that theme), roving-tabindex arrow nav + focus trap. Opens
+    from a status-bar gear, ⌘,, or ⌘K. Selecting applies live (no Save step).
+  - ☑ **Accent color picker** — 8 hue presets (amber / rose / magenta / violet /
+    blue / cyan / teal / green) in a second `role="radiogroup"` of hue dots in
+    the same dialog. Applied via `[data-accent]` on `<html>`, which rotates a
+    single `--accent-h`; every accent token (`--accent`/`-2`/`-fg`/`-glow`,
+    `--selection`, selected-row tint, ambient window glow) is
+    `oklch(L C var(--accent-h))`, so an accent is a hue rotation that recolors
+    the whole app live in both themes. Persisted (`accent` in the store) +
+    restored pre-paint by the same inline script; `ACCENT_OPTIONS` registry in
+    `lib/theme.ts`.
+  - ☑ Command palette actions: "Settings…", "Theme: Light", "Theme: Dark",
+    "Theme: System"
+  - ☑ Cycle-theme keyboard shortcut (⌘⇧T) — a real global handler that toggles
+    light ↔ dark (skips system; from system, flips away from the current
+    appearance), with a confirming toast
+  - ☑ Persist last choice across launches; restore before first paint via a tiny
+    inline script in `index.html` that reads the same persisted key and sets
+    `data-theme` before the stylesheet paints (no flash of wrong theme). The
+    store seeds `resolvedTheme` from that attribute, so React's first commit
+    doesn't flicker.
+  - ☑ Audit components for hardcoded colors; route through tokens — popover /
+    menu / modal `rgba(0,0,0,…)` shadows → new per-theme `--shadow-1…4`
+    elevation tokens (dark values unchanged, light softened); context-menu
+    danger + merge/conflict accept-checks → `--del`/`--del-bg`/`--accent-fg`;
+    Pierre diff theme follows the resolved theme (`pierre-light`/`pierre-dark`)
+    everywhere it renders. (Mac/Win traffic-light chrome colors left fixed by
+    design; three `.avatar` rules are dead CSS for unbuilt blame/detail views.)
+  - ☑ Extension point for future custom themes — `THEME_OPTIONS` registry +
+    `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
+    + add-an-entry, no other code changes.
 - ☐ **Keyboard operability pass.** Almost every action reachable from the
   keyboard, not just the palette (PRD §6.7, `docs/learnings.md`). Per-surface
   focus models + palette entries; audit for mouse-only actions. Drag-and-drop

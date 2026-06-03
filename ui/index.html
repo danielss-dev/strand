@@ -3,6 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Resolve the theme before first paint so there's no flash of the wrong
+         theme. Reads the same persisted preference zustand writes
+         (localStorage 'strand.settings' → state.theme); React's useTheme owns
+         it from the first commit on. Kept tiny and defensive on purpose. -->
+    <script>
+      (function () {
+        // Default matches the store ('system'); resolve the OS separately so a
+        // localStorage failure (incognito) still follows the OS instead of
+        // hard-defaulting to dark (which would flash on a light-mode OS).
+        var pref = 'system', accent = 'amber';
+        try {
+          var raw = localStorage.getItem('strand.settings');
+          var st = raw ? JSON.parse(raw).state || {} : {};
+          if (st.theme === 'light' || st.theme === 'dark' || st.theme === 'system') pref = st.theme;
+          if (typeof st.accent === 'string') accent = st.accent;
+        } catch (e) {}
+        var sys = 'dark';
+        try {
+          sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        } catch (e) {}
+        var root = document.documentElement;
+        root.dataset.theme = pref === 'system' ? sys : pref;
+        root.dataset.accent = accent;
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="128x128" href="/favicon.png" />
     <title>Strand</title>

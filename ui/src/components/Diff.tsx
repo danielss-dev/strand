@@ -1,6 +1,8 @@
 import { PatchDiff } from '@pierre/diffs/react';
 import type { CSSProperties } from 'react';
 
+import { useSettings } from '../stores/settings';
+
 /**
  * Thin wrapper around `@pierre/diffs` so the rest of the app talks to one
  * stable shape — Pierre is on v1 but its full prop surface is large and
@@ -27,15 +29,16 @@ export function Diff({
   className,
   style,
 }: DiffProps) {
+  // Follow the app theme — Pierre ships matching pierre-light / pierre-dark.
+  // `disableBackground` keeps the surface on our tokens; the theme drives the
+  // syntax colors, which need to flip with light/dark.
+  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   return (
     <PatchDiff
       patch={patch}
       options={{
         diffStyle: layout,
-        // Pierre ships matching light/dark themes. Strand is currently dark-only
-        // (theme management lands in 0.5); switch to a ThemesType object once
-        // light theme is wired.
-        theme: 'pierre-dark',
+        theme: pierreTheme,
         disableBackground: true,
         disableFileHeader: hideFileHeader,
       }}

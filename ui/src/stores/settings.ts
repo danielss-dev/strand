@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/** A concrete theme that maps to a `[data-theme]` token set in tokens.css. */
 export type Theme = 'dark' | 'light';
+/** The user's stored preference: a concrete theme, or `system` to follow the
+ * OS `prefers-color-scheme`. Resolved to a `Theme` by `lib/theme.ts`. */
+export type ThemePref = Theme | 'system';
+/** Accent color preset. Each id maps to an OKLCH hue via a `[data-accent]`
+ * block in tokens.css; the registry lives in `lib/theme.ts` (`ACCENT_OPTIONS`). */
+export type AccentId = 'amber' | 'rose' | 'magenta' | 'violet' | 'blue' | 'cyan' | 'teal' | 'green';
 export type Platform = 'mac' | 'win11';
 export type Density = 'compact' | 'default' | 'relaxed';
 export type DiffMode = 'stacked' | 'split';
@@ -9,6 +16,17 @@ export type GraphStyle = 'classic' | 'bold' | 'mono';
 
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
+
+/** The concrete theme already applied to `<html>` by the pre-paint inline
+ * script in index.html — the exact (pref + OS) resolution, with no second
+ * computation here. `useTheme` keeps it in sync from React's first commit. */
+function initialResolvedTheme(): Theme {
+  if (typeof document !== 'undefined') {
+    const t = document.documentElement.dataset.theme;
+    if (t === 'light' || t === 'dark') return t;
+  }
+  return 'dark';
+}
 
 function detectPlatform(): Platform {
   // Tauri OS plugin injects this global before JS runs
@@ -24,7 +42,16 @@ function detectPlatform(): Platform {
 }
 
 export interface SettingsState {
-  theme: Theme;
+  /** Theme *preference* (dark / light / system). The resolved concrete theme
+   * driving `[data-theme]` is computed in `lib/theme.ts` (`useTheme`). */
+  theme: ThemePref;
+  /** Resolved concrete theme (`theme` collapsed against the OS). Runtime-only,
+   * not persisted; written by `useTheme`, read by anything that needs the live
+   * concrete theme without its own OS subscription (e.g. Pierre diff theming). */
+  resolvedTheme: Theme;
+  /** Accent color preset, applied via `[data-accent]` on `<html>` (a hue
+   * rotation over the accent tokens). Works across light + dark. */
+  accent: AccentId;
   platform: Platform;
   density: Density;
   diffMode: DiffMode;
@@ -56,7 +83,9 @@ export const FONTS = {
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: 'dark',
+      theme: 'system',
+      resolvedTheme: initialResolvedTheme(),
+      accent: 'amber',
       platform: detectPlatform(),
       density: 'default',
       diffMode: 'stacked',
@@ -69,7 +98,9 @@ export const useSettings = create<SettingsState>()(
     {
       name: 'strand.settings',
       partialize: (state) => {
-        const { platform, diffsCollapsed, ...rest } = state;
+        // `resolvedTheme` is derived at runtime; `platform` is re-detected;
+        // `diffsCollapsed` is a session-only view toggle — none persist.
+        const { platform, diffsCollapsed, resolvedTheme, ...rest } = state;
         return rest;
       },
       merge: (persisted, current) => ({

@@ -4,6 +4,7 @@ import { File as PierreFile } from '@pierre/diffs/react';
 import { Icon } from '../components/Icon';
 import { tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
 import {
   buildViews,
   conflictAtLine,
@@ -24,6 +25,7 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
   const activePath = useRepo((s) => s.activePath);
   const oursBranch = useRepo((s) => s.meta?.branch ?? 'HEAD');
   const resolveConflict = useRepo((s) => s.resolveConflict);
+  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
 
   const [raw, setRaw] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -153,7 +155,7 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     side: 'theirs' | 'ours' | 'result',
     onPick?: (index: number) => void,
   ) => ({
-    theme: 'pierre-dark' as const,
+    theme: pierreTheme,
     disableBackground: true,
     disableFileHeader: true,
     onLineClick: (p: { lineNumber: number }) => {

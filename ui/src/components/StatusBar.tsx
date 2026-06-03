@@ -1,7 +1,7 @@
 import { Icon } from './Icon';
 import { useRepo } from '../stores/repo';
 
-export function StatusBar() {
+export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const meta = useRepo((s) => s.meta);
   const status = useRepo((s) => s.status);
 
@@ -32,6 +32,15 @@ export function StatusBar() {
         <div className="sb-item">{modified} modified · {staged} staged</div>
         <span className="sep">·</span>
         <div className="sb-item">UTF-8 · LF</div>
+        <button
+          type="button"
+          className="sb-item sb-gear"
+          onClick={onOpenSettings}
+          title="Settings (⌘,)"
+          aria-label="Settings"
+        >
+          <Icon name="settings" size={12} />
+        </button>
       </div>
     </div>
   );

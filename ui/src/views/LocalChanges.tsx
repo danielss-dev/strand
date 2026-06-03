@@ -493,6 +493,7 @@ function HunkAnnotatedDiff({
 }) {
   const applyPatch = useRepo((s) => s.applyPatch);
   const discardPatch = useRepo((s) => s.discardPatch);
+  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const [pending, setPending] = useState<string | null>(null);
   // Two independent hover sources. `lineHovered` follows Pierre's
   // onLineEnter (set when the cursor is on a block line, null on a
@@ -679,12 +680,12 @@ function HunkAnnotatedDiff({
   const fileDiffOptions = useMemo(
     () => ({
       diffStyle: layout,
-      theme: 'pierre-dark' as const,
+      theme: pierreTheme,
       disableBackground: true,
       disableFileHeader: true,
       onLineEnter,
     }),
-    [layout, onLineEnter],
+    [layout, pierreTheme, onLineEnter],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {

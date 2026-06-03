@@ -10,7 +10,9 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { pickRepoDirectory } from './lib/dialog';
 import { isTauri } from './lib/tauri';
+import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
+import { SettingsDialog } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
@@ -24,7 +26,10 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 export function App() {
-  const { theme, density, platform, uiFont, monoFont, set: setSetting } = useSettings();
+  const { density, platform, uiFont, monoFont, accent } = useSettings();
+  // Theme preference → resolved theme; `useTheme` applies `data-theme` on
+  // <html>, subscribes to the OS, and exposes setters for the picker/palette.
+  const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
 
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
@@ -47,6 +52,7 @@ export function App() {
   const abortOperation = useRepo((s) => s.abortOperation);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
@@ -155,16 +161,17 @@ export function App() {
     void restoreSession();
   }, [refreshRecents, restoreSession]);
 
-  // Theme tokens live on the document root so portal-rendered popovers
-  // (which attach to document.body, outside .os-bg) still see them.
+  // Density, platform, and font tokens live on the document root so
+  // portal-rendered popovers (which attach to document.body, outside .os-bg)
+  // still see them. `data-theme` is applied separately by `useTheme`.
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = theme;
     root.dataset.density = density;
     root.dataset.platform = platform;
+    root.dataset.accent = accent;
     root.style.setProperty('--font-ui', FONTS.ui[uiFont]);
     root.style.setProperty('--font-mono', FONTS.mono[monoFont]);
-  }, [theme, density, platform, uiFont, monoFont]);
+  }, [density, platform, accent, uiFont, monoFont]);
 
   // Native drag-and-drop: drop a folder onto the window to open it.
   useEffect(() => {
@@ -220,13 +227,20 @@ export function App() {
         e.preventDefault(); setView('local'); selectFile(null);
       } else if (mod && e.key === '2') {
         e.preventDefault(); setView('commits'); selectFile(null);
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        const next = cycleTheme();
+        showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
+      } else if (mod && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen(true);
       } else if (e.key === 'Escape') {
         setPaletteOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setView, selectFile, openViaDialog]);
+  }, [setView, selectFile, openViaDialog, cycleTheme, showToast]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const base: PaletteAction[] = [
@@ -251,7 +265,10 @@ export function App() {
         })();
       } },
       { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
-      { id: 'tweaks',  label: 'Toggle theme',      shortcut: '⌘⇧T', run: () => setSetting('theme', theme === 'dark' ? 'light' : 'dark') },
+      { id: 'settings', label: 'Settings…', shortcut: '⌘,', run: () => setSettingsOpen(true) },
+      { id: 'theme-light',  label: 'Theme: Light',  run: () => setTheme('light') },
+      { id: 'theme-dark',   label: 'Theme: Dark',   run: () => setTheme('dark') },
+      { id: 'theme-system', label: 'Theme: System', shortcut: '⌘⇧T', run: () => setTheme('system') },
     ];
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
@@ -277,7 +294,7 @@ export function App() {
       run: () => { void openByPath(r.path); },
     }));
     return [...base, ...recentActions];
-  }, [setView, selectFile, onSync, openViaDialog, openByPath, setSetting, theme, recents,
+  }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, onNetProgress, showToast, meta?.operation, abortOperation]);
 
   const rootStyle = {
@@ -339,7 +356,7 @@ export function App() {
           </PanelGroup>
         </div>
 
-        <StatusBar />
+        <StatusBar onOpenSettings={() => setSettingsOpen(true)} />
 
         {netProgress && (
           <div className="toast progress">
@@ -359,6 +376,8 @@ export function App() {
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
+
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
 
       {cloneOpen && (
         <CloneDialog onClose={() => setCloneOpen(false)} onCloned={openByPath} />

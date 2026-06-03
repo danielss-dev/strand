@@ -51,17 +51,17 @@
   --bg-elev: oklch(0.255 0.009 65);
   --bg-hover: oklch(0.295 0.01 65);
   --bg-active: oklch(0.35 0.012 65);
-  --bg-sel: oklch(0.30 0.04 55);
+  --bg-sel: oklch(0.30 0.04 var(--accent-h, 55));
   --border: oklch(0.30 0.008 65);
   --border-strong: oklch(0.42 0.01 65);
   --text: oklch(0.96 0.005 80);
   --text-2: oklch(0.82 0.005 80);
   --text-muted: oklch(0.65 0.005 80);
   --text-dim: oklch(0.50 0.005 80);
-  --accent: oklch(0.74 0.165 55);
-  --accent-2: oklch(0.84 0.13 55);
-  --accent-fg: oklch(0.15 0.01 60);
-  --accent-glow: oklch(0.74 0.165 55 / 0.18);
+  --accent: oklch(0.74 0.165 var(--accent-h, 55));
+  --accent-2: oklch(0.84 0.13 var(--accent-h, 55));
+  --accent-fg: oklch(0.15 0.01 var(--accent-h, 55));
+  --accent-glow: oklch(0.74 0.165 var(--accent-h, 55) / 0.18);
 
   --add: oklch(0.78 0.16 145);
   --add-bg: oklch(0.40 0.08 145 / 0.22);
@@ -76,9 +76,15 @@
 
   --shadow-lg: 0 24px 64px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4);
   --shadow-pop: 0 12px 32px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
+  /* Elevation drop-shadows for popovers / menus / modals — the hairline ring
+     is applied per-component. Tuned softer + warmer in light. */
+  --shadow-1: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 16px 48px rgba(0, 0, 0, 0.35);
+  --shadow-4: 0 32px 96px rgba(0, 0, 0, 0.45);
 
   --gutter: oklch(0.235 0.008 65);
-  --selection: oklch(0.74 0.165 55 / 0.32);
+  --selection: oklch(0.74 0.165 var(--accent-h, 55) / 0.32);
 }
 
 /* ─── Light theme — warm cream ─── */
@@ -89,17 +95,17 @@
   --bg-elev: oklch(0.95 0.009 80);
   --bg-hover: oklch(0.93 0.011 80);
   --bg-active: oklch(0.89 0.014 80);
-  --bg-sel: oklch(0.88 0.06 55);
+  --bg-sel: oklch(0.88 0.06 var(--accent-h, 55));
   --border: oklch(0.88 0.009 80);
   --border-strong: oklch(0.78 0.011 80);
   --text: oklch(0.22 0.012 60);
   --text-2: oklch(0.38 0.011 60);
   --text-muted: oklch(0.52 0.009 60);
   --text-dim: oklch(0.65 0.008 60);
-  --accent: oklch(0.62 0.18 50);
-  --accent-2: oklch(0.55 0.20 45);
+  --accent: oklch(0.62 0.18 var(--accent-h, 55));
+  --accent-2: oklch(0.55 0.20 var(--accent-h, 55));
   --accent-fg: oklch(0.99 0 0);
-  --accent-glow: oklch(0.62 0.18 50 / 0.14);
+  --accent-glow: oklch(0.62 0.18 var(--accent-h, 55) / 0.14);
 
   --add: oklch(0.45 0.16 145);
   --add-bg: oklch(0.92 0.08 145 / 0.55);
@@ -114,10 +120,28 @@
 
   --shadow-lg: 0 24px 64px rgba(60,40,20,0.18), 0 2px 8px rgba(60,40,20,0.08);
   --shadow-pop: 0 12px 32px rgba(60,40,20,0.16), 0 1px 0 rgba(255,255,255,0.5) inset;
+  --shadow-1: 0 4px 12px rgba(60, 40, 20, 0.10);
+  --shadow-2: 0 12px 32px rgba(60, 40, 20, 0.14);
+  --shadow-3: 0 16px 48px rgba(60, 40, 20, 0.16);
+  --shadow-4: 0 32px 96px rgba(60, 40, 20, 0.20);
 
   --gutter: oklch(0.94 0.009 80);
-  --selection: oklch(0.62 0.18 50 / 0.22);
+  --selection: oklch(0.62 0.18 var(--accent-h, 55) / 0.22);
 }
+
+/* Accent presets — a single OKLCH hue (`--accent-h`) drives every accent token
+ * in both themes (see the `--accent*` / `--bg-sel` / `--selection` definitions
+ * above). Set by `[data-accent]` on <html>; registry in `lib/theme.ts`.
+ * Theme-independent, so it composes with light/dark. Add one here + in
+ * ACCENT_OPTIONS. */
+[data-accent="amber"]   { --accent-h: 55; }
+[data-accent="rose"]    { --accent-h: 18; }
+[data-accent="magenta"] { --accent-h: 330; }
+[data-accent="violet"]  { --accent-h: 290; }
+[data-accent="blue"]    { --accent-h: 250; }
+[data-accent="cyan"]    { --accent-h: 210; }
+[data-accent="teal"]    { --accent-h: 178; }
+[data-accent="green"]   { --accent-h: 150; }
 
 /* Branch line colors — classic colored graph */
 :root {

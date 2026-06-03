@@ -242,7 +242,7 @@ also pending (only `aarch64-apple-darwin` is installed).
   mergetool fallback still ☐ in TASKS.)
 - ☐ Discard changes (line / hunk / file) with single-undo
 - ☐ Stacked + split diff layouts (persisted per-repo)
-- ☐ **Theme management**
+- ☑ **Theme management**
   - Light + dark themes with system-preference follow
   - Persisted per-user via settings store
   - Theme switcher in settings UI + command palette action
@@ -336,6 +336,48 @@ read-only `<File>`, highlighting the focused conflict via `selectedLines`;
 pick theirs/ours/both per conflict (or click a side's block) and Resolve writes
 the merged file + stages it. The earlier inline `ConflictResolver.tsx` was
 removed. Verified: tsc + vite build (Rust unchanged).
+
+**Theme management (2026-06-04):** Light / dark / **system** as a first-class
+preference, applied live with no reload and no flash. `lib/theme.ts` is the new
+home: a `useTheme` hook (called once at the app root) subscribes to the OS
+`prefers-color-scheme`, resolves the stored preference to a concrete theme,
+writes `data-theme` on `<html>`, and publishes the resolved theme into the
+settings store so Pierre diffs (`Diff`, `HunkAnnotatedDiff`, `MergeResolver`)
+and the settings hint read it reactively without each running their own OS
+subscription. The preference persists through the existing zustand-`persist`
+localStorage store (consistent with every other setting — *not* the SQLite
+`settings` table the task sketched; localStorage rehydrates synchronously, which
+the SQLite path can't, and that's what makes the no-flash guarantee cheap). A
+tiny inline script in `index.html` paints the correct `data-theme` before first
+paint by reading the same persisted key (so `--bg-os` resolves on the very first
+frame); the store seeds `resolvedTheme` from that attribute, so there's no
+second resolution and no flicker on React's first commit. A new
+`views/SettingsDialog.tsx` (status-bar gear, ⌘,, or ⌘K) hosts an Appearance →
+Theme picker: a `role="radiogroup"` of three cards with live mini-UI swatches
+(each swatch carries its own `data-theme` so it previews that theme's tokens
+regardless of the app theme), roving-tabindex arrow nav, focus trap. The command
+palette gained **Settings…** + **Theme: Light/Dark/System**; ⌘⇧T is now a real
+global handler that toggles light ↔ dark (skipping system — from system it flips
+away from the current appearance), with a confirming toast. The
+theme set is a registry (`THEME_OPTIONS` + per-`[data-theme]` token blocks), so a
+future custom theme (high-contrast, solarized) is add-a-block + add-an-entry.
+**Accent color** is the same idea one axis over: a `data-accent` attribute
+rotates a single `--accent-h` hue, and every accent token (`--accent`,
+`--accent-2`, `--accent-fg`, `--accent-glow`, `--selection`, the selected-row
+tint, and the window's ambient glow) is now `oklch(L C var(--accent-h))` — so the
+8 presets (amber / rose / magenta / violet / blue / cyan / teal / green) recolor
+the whole app live in both themes from one hue, with each theme's lightness/chroma
+preserved. It's a second radiogroup of hue dots in the same Settings dialog,
+persisted + restored pre-paint alongside the theme (`ACCENT_OPTIONS` registry).
+Token audit: hardcoded popover/menu/modal `rgba(0,0,0,…)` shadows replaced with
+new per-theme `--shadow-1…4` elevation tokens (dark values byte-identical, light
+softened/warmed); context-menu danger color/bg and the merge/conflict accept
+checks routed onto `--del`/`--del-bg`/`--accent-fg`; two dead `box-shadow`
+duplicates removed. Verified: tsc + vite build, an adversarial 5-dimension review
+(4 confirmed findings fixed, 1 rejected as dead CSS), and a live Playwright pass
+(no-flash theme + accent attributes, dialog open, light↔dark live swap, ⌘⇧T
+cycle + toast, accent hue rotation propagating app-wide, both radiogroups'
+roving arrow-key nav, persistence round-trips).
 
 **Conflict resolution UI (2026-06-03, superseded same day by the 3-pane modal):**
 Finishes the history-ops vertical with a three-way resolver built on
