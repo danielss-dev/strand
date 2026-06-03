@@ -418,6 +418,7 @@ function MainHeader() {
   const refreshMeta = useRepo((s) => s.refreshMeta);
   const refreshRefs = useRepo((s) => s.refreshRefs);
   const diffMode = useSettings((s) => s.diffMode);
+  const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const setSetting = useSettings((s) => s.set);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -472,6 +473,16 @@ function MainHeader() {
               aria-label="Split (side-by-side) diff view"
             >
               <Icon name="split" size={13} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setSetting('diffsCollapsed', !diffsCollapsed)}
+              title={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+              aria-label={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+              aria-pressed={diffsCollapsed}
+            >
+              <Icon name={diffsCollapsed ? 'expand-all' : 'collapse-all'} size={13} />
             </button>
           </>
         )}

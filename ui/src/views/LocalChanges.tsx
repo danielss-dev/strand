@@ -50,10 +50,16 @@ export function LocalChanges() {
     if (first) selectLocalFile(first);
   }, [selection, unstaged, staged, selectLocalFile]);
 
-  const selectedDiff = useMemo(() => {
-    if (!selection) return null;
+  // The diff(s) the selection drives. A file row → just that file. A folder
+  // row (Pierre reports directory paths with a trailing slash, no exact file
+  // match) → every changed file beneath it, stacked in the pane.
+  const selectedDiffs = useMemo<FileDiff[]>(() => {
+    if (!selection) return [];
     const pool = selection.staged ? staged : unstaged;
-    return pool.find((d) => d.path === selection.file) ?? null;
+    const exact = pool.find((d) => d.path === selection.file);
+    if (exact) return [exact];
+    const prefix = selection.file.replace(/\/+$/, '') + '/';
+    return pool.filter((d) => d.path.startsWith(prefix));
   }, [selection, unstaged, staged]);
 
   return (
@@ -96,7 +102,7 @@ export function LocalChanges() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            <DiffPane diff={selectedDiff} staged={selection?.staged ?? false} />
+            <DiffPane diffs={selectedDiffs} staged={selection?.staged ?? false} />
           </Panel>
         </PanelGroup>
       </div>
@@ -194,6 +200,7 @@ function FileSection({
         onSelect={(p) => onSelect(p ? { file: p, staged } : null)}
         onActivate={onAction}
         menuItems={menuItems}
+        toggleDirOnRowClick={false}
         emptyLabel={staged ? 'Nothing staged.' : 'No unstaged changes.'}
       />
     </div>
@@ -202,50 +209,87 @@ function FileSection({
 
 // ─── Diff pane ──────────────────────────────────────────────────────────────
 
-function DiffPane({ diff, staged }: { diff: FileDiff | null; staged: boolean }) {
+function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
   // The unified/split toggle lives in the main header (App.tsx → MainHeader)
   // and writes to `useSettings.diffMode`. Pierre talks 'unified' | 'split',
   // our setting is 'stacked' | 'split' — map at the boundary.
   const diffMode = useSettings((s) => s.diffMode);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
+  // `diffsCollapsed` (the header toggle) is the bulk default; `overrides` holds
+  // the files the user has individually flipped away from it via their header.
+  // A bulk toggle clears the overrides so "collapse/expand all" is absolute.
+  const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
+  const [overrides, setOverrides] = useState<Set<string>>(() => new Set());
+  useEffect(() => setOverrides(new Set()), [diffsCollapsed]);
+
+  const isCollapsed = (path: string) =>
+    overrides.has(path) ? !diffsCollapsed : diffsCollapsed;
+  const toggle = (path: string) =>
+    setOverrides((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+
   return (
     <div className="lc-diff">
       <div className="lc-diff-scroll">
-        <DiffBody diff={diff} staged={staged} layout={layout} />
+        {diffs.length === 0 ? (
+          <div className="lc-empty">
+            <strong>Select a file</strong>
+            Pick something on the left to see its diff.
+          </div>
+        ) : (
+          diffs.map((d) => (
+            <FileDiffSection
+              key={`${staged ? 's' : 'u'}:${d.path}`}
+              diff={d}
+              staged={staged}
+              layout={layout}
+              collapsed={isCollapsed(d.path)}
+              onToggle={() => toggle(d.path)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function DiffBody({
+/**
+ * One file in the diff pane: a sticky, clickable header that folds its diff
+ * body, plus the body itself (Pierre diff with per-block actions, or a compact
+ * note for binary / no-diff files). Collapsed → header only.
+ */
+function FileDiffSection({
   diff,
   staged,
   layout,
+  collapsed,
+  onToggle,
 }: {
-  diff: FileDiff | null;
+  diff: FileDiff;
   staged: boolean;
   layout: 'unified' | 'split';
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
-  if (!diff) {
-    return (
-      <div className="lc-empty">
-        <strong>Select a file</strong>
-        Pick something on the left to see its diff.
-      </div>
-    );
-  }
-  if (diff.binary || diff.patch.length === 0) {
-    return (
-      <div className="lc-empty">
-        <strong>{diff.binary ? 'Binary file' : 'No textual diff'}</strong>
-        {diff.binary
-          ? 'Strand does not render binary file diffs yet.'
-          : 'Nothing to show — the file may have been moved or its content is identical.'}
-      </div>
-    );
-  }
-  return <HunkAnnotatedDiff diff={diff} layout={layout} side={staged ? 'staged' : 'unstaged'} />;
+  const empty = diff.binary || diff.patch.length === 0;
+  return (
+    <div className="lc-file-block">
+      <FileHeaderStrip diff={diff} collapsed={collapsed} onToggle={onToggle} />
+      {!collapsed &&
+        (empty ? (
+          <div className="lc-file-note">
+            {diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+          </div>
+        ) : (
+          <HunkAnnotatedDiff diff={diff} layout={layout} side={staged ? 'staged' : 'unstaged'} />
+        ))}
+    </div>
+  );
 }
 
 interface LineRange {
@@ -520,17 +564,11 @@ function HunkAnnotatedDiff({
   // slip past the binary check) fall back to read-only rendering — there
   // are no change blocks to act on anyway.
   if (!fileDiff || fileDiff.hunks.length === 0) {
-    return (
-      <>
-        <FileHeaderStrip diff={diff} />
-        <Diff patch={diff.patch} layout={layout} hideFileHeader />
-      </>
-    );
+    return <Diff patch={diff.patch} layout={layout} hideFileHeader />;
   }
 
   return (
     <>
-      <FileHeaderStrip diff={diff} />
       <div
         className="lc-diff-wrap"
         ref={wrapperRef}
@@ -589,13 +627,28 @@ function mapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
 
 type ApplyTarget = 'index' | 'index_reverse' | 'workdir_reverse';
 
-function FileHeaderStrip({ diff }: { diff: FileDiff }) {
+function FileHeaderStrip({
+  diff,
+  collapsed,
+  onToggle,
+}: {
+  diff: FileDiff;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <div className="lc-hunkfile">
+    <button
+      type="button"
+      className="lc-hunkfile"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      title={collapsed ? 'Expand diff' : 'Collapse diff'}
+    >
+      <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={12} className="chev" />
       <span className="path">{diff.path}</span>
       <span className="stat-del">−{diff.dels}</span>
       <span className="stat-add">+{diff.adds}</span>
-    </div>
+    </button>
   );
 }
 

@@ -4,7 +4,7 @@ export type IconName =
   | 'edit' | 'graph' | 'branch' | 'tag' | 'stash' | 'remote' | 'submodule'
   | 'file' | 'folder' | 'folder-open' | 'changes' | 'search' | 'command'
   | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
-  | 'chev-down' | 'chev-right' | 'chev-up' | 'dot' | 'more'
+  | 'chev-down' | 'chev-right' | 'chev-up' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
   | 'trash'
@@ -60,6 +60,8 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'chev-down':   return <svg {...p}><path d="M3.5 5.5L8 10l4.5-4.5"/></svg>;
     case 'chev-right':  return <svg {...p}><path d="M5.5 3.5L10 8l-4.5 4.5"/></svg>;
     case 'chev-up':     return <svg {...p}><path d="M3.5 10.5L8 6l4.5 4.5"/></svg>;
+    case 'expand-all':  return <svg {...p}><path d="M4.5 6.5L8 3l3.5 3.5M4.5 9.5L8 13l3.5-3.5"/></svg>;
+    case 'collapse-all':return <svg {...p}><path d="M4.5 3.5L8 7l3.5-3.5M4.5 12.5L8 9l3.5 3.5"/></svg>;
     case 'dot':         return <svg {...p} fill="currentColor" stroke="none"><circle cx="8" cy="8" r="2"/></svg>;
     case 'more':        return <svg {...p} fill="currentColor" stroke="none"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>;
     case 'history':     return <svg {...p}><path d="M2 8a6 6 0 1 1 6 6"/><path d="M2 14v-3h3M8 4v4l3 2"/></svg>;

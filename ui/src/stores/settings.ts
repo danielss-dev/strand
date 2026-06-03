@@ -28,6 +28,9 @@ export interface SettingsState {
   platform: Platform;
   density: Density;
   diffMode: DiffMode;
+  /** Whether the Local Changes diff pane shows file diffs collapsed (headers
+   * only). A session-only view toggle — not persisted across launches. */
+  diffsCollapsed: boolean;
   graphStyle: GraphStyle;
   uiFont: UiFont;
   monoFont: MonoFont;
@@ -57,6 +60,7 @@ export const useSettings = create<SettingsState>()(
       platform: detectPlatform(),
       density: 'default',
       diffMode: 'stacked',
+      diffsCollapsed: false,
       graphStyle: 'classic',
       uiFont: 'geist',
       monoFont: 'jetbrains',
@@ -65,7 +69,7 @@ export const useSettings = create<SettingsState>()(
     {
       name: 'strand.settings',
       partialize: (state) => {
-        const { platform, ...rest } = state;
+        const { platform, diffsCollapsed, ...rest } = state;
         return rest;
       },
       merge: (persisted, current) => ({

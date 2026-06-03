@@ -480,6 +480,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             onSelect={(p) => selectFile(p)}
             menuItems={fileMenu}
             search
+            initialExpansion="closed"
             emptyLabel={treeLoading ? 'Loading working tree…' : 'No files in the working tree.'}
           />
         </div>

@@ -248,6 +248,16 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   rendered as a hierarchical folder tree with colored status badges
 - ☑ Diff view in middle panel — `<PatchDiff>` themed via `pierre-dark`
   with `disableBackground` so it inherits app tokens
+- ☑ Folder row selection aggregates the diffs of every changed file beneath
+  it, stacked in the diff pane (`selectedDiffs` in `LocalChanges.tsx` →
+  `FileDiffSection`; each file keeps its sticky header + per-block actions)
+- ☑ Folder rows toggle expansion only via the disclosure chevron, not the
+  whole row (`PierreTree` `toggleDirOnRowClick={false}` + microtask
+  reverse-toggle); a double-click on the chevron no longer stages the folder
+- ☑ Collapsible file diffs in the pane: each `FileDiffSection` has a clickable
+  sticky header that folds its body; a single header-toolbar toggle
+  (`useSettings.diffsCollapsed`, session-only) collapses/expands all, with
+  per-file overrides cleared on each bulk toggle
 - ☑ Per-row Stage / Unstage actions (file-level, hover-revealed)
 - ☑ Bulk "Stage all" / "Unstage all"
 - ☑ Commit form: subject + body + amend

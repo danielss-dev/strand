@@ -11,7 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { FileTree, useFileTree } from '@pierre/trees/react';
-import type { GitStatus, GitStatusEntry } from '@pierre/trees';
+import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusEntry } from '@pierre/trees';
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import type { DiffStatus, StatusKind } from '../lib/types';
@@ -85,6 +85,19 @@ interface PierreTreeProps {
   menuItems?: (paths: string[]) => MenuItem[];
   /** Enable Pierre's in-tree fuzzy search (also bound to ⌘F / Ctrl+F). */
   search?: boolean;
+  /**
+   * Whether folders start expanded or collapsed. Defaults to `'open'`. Pierre
+   * re-applies this on every `resetPaths`, so a `'closed'` tree stays collapsed
+   * even after the path set loads asynchronously.
+   */
+  initialExpansion?: 'open' | 'closed';
+  /**
+   * When `false`, clicking a folder row only selects it — expansion is driven
+   * solely by the disclosure chevron. Defaults to `true` (Pierre's native
+   * "click the whole row to toggle"). Used by Local Changes, where a folder
+   * click drives the aggregated diff and shouldn't also fold the tree.
+   */
+  toggleDirOnRowClick?: boolean;
   className?: string;
   style?: CSSProperties;
   /** Shown (centered) when there are no paths. */
@@ -108,6 +121,25 @@ function rowFromEvent(native: Event): HTMLElement | null {
 }
 
 /**
+ * True when the event originated inside a row's disclosure (icon) cell —
+ * Pierre renders the folder chevron under `data-item-section="icon"`. We walk
+ * the composed path outward and decide before reaching the row element itself.
+ */
+function isChevronEvent(native: Event): boolean {
+  for (const node of native.composedPath()) {
+    if (!(node instanceof HTMLElement)) continue;
+    if (node.dataset.itemSection === 'icon') return true;
+    if (node.dataset.itemPath != null) return false; // reached the row, not via the icon cell
+  }
+  return false;
+}
+
+/** Narrow a Pierre item handle to a directory handle (else null). */
+function asDir(handle: FileTreeItemHandle | null): FileTreeDirectoryHandle | null {
+  return handle && handle.isDirectory() ? (handle as FileTreeDirectoryHandle) : null;
+}
+
+/**
  * React wrapper around `@pierre/trees`. The Pierre model owns tree state
  * (expansion, virtualization, search, icons, multi-selection) and renders into
  * a shadow root; this component bridges it to Strand's path-first data.
@@ -124,7 +156,20 @@ function rowFromEvent(native: Event): HTMLElement | null {
  * more frequent status-only refreshes (preserves expansion + selection).
  */
 export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function PierreTree(
-  { paths, gitStatus, selectedPath = null, onSelect, onActivate, menuItems, search, className, style, emptyLabel },
+  {
+    paths,
+    gitStatus,
+    selectedPath = null,
+    onSelect,
+    onActivate,
+    menuItems,
+    search,
+    initialExpansion = 'open',
+    toggleDirOnRowClick = true,
+    className,
+    style,
+    emptyLabel,
+  },
   ref,
 ) {
   // Latest-value refs so the once-created model's callbacks never go stale.
@@ -148,7 +193,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   const { model } = useFileTree({
     paths: paths as string[],
     gitStatus: gitStatus as GitStatusEntry[] | undefined,
-    initialExpansion: 'open',
+    initialExpansion,
     flattenEmptyDirectories: true,
     itemHeight: 24,
     icons: { set: 'complete', colored: true },
@@ -221,16 +266,45 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   }, [selectedPath, pathsKey, model]);
 
   // Double-click a row to activate it (stage / unstage). Single-click still
-  // just selects via Pierre + onSelectionChange.
+  // just selects via Pierre + onSelectionChange. A double-click on the
+  // disclosure chevron is left to toggle expansion only — never stages — so a
+  // quick double-toggle of a folder doesn't accidentally stage everything under
+  // it.
   const onDoubleClick = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
       if (!onActivateRef.current) return;
+      if (isChevronEvent(e.nativeEvent)) return;
       const row = rowFromEvent(e.nativeEvent);
       if (!row) return;
       const targets = resolveTargets(row.dataset.itemPath!);
       if (targets.length) onActivateRef.current(targets);
     },
     [resolveTargets],
+  );
+
+  // When `toggleDirOnRowClick` is off, a click on a folder row's body should
+  // select it without folding the tree — only the chevron toggles. Pierre
+  // couples select+toggle on the whole row with no opt-out, so we let it run
+  // and then restore the pre-click expansion in a microtask. Microtasks drain
+  // before the next paint, so the toggle is neutralized with no flicker, while
+  // Pierre's selection/focus/multi-select behaviour stays untouched.
+  const onClickCapture = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (toggleDirOnRowClick) return;
+      if (isChevronEvent(e.nativeEvent)) return; // chevron is the one place toggling is allowed
+      const row = rowFromEvent(e.nativeEvent);
+      if (!row || row.dataset.itemType !== 'folder') return;
+      const path = row.dataset.itemPath!;
+      const wasExpanded = asDir(model.getItem(path))?.isExpanded();
+      if (wasExpanded == null) return;
+      queueMicrotask(() => {
+        const dir = asDir(model.getItem(path));
+        if (!dir) return;
+        if (wasExpanded) dir.expand();
+        else dir.collapse();
+      });
+    },
+    [toggleDirOnRowClick, model],
   );
 
   // Keyboard equivalent of double-click: Enter on a focused *file* row (Enter
@@ -283,6 +357,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       // forward `className` onto Pierre's custom-element host, but CSS custom
       // properties set here inherit across the shadow boundary regardless.
       className={'tree-host-wrap' + (className ? ` ${className}` : '')}
+      onClickCapture={onClickCapture}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       onKeyDownCapture={onKeyDownCapture}

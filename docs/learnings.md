@@ -178,3 +178,37 @@ The canonical site is `HunkAnnotatedDiff` in
 Discard/Unstage path) is still done on the Rust side by `reverse_patch`
 in `crates/strand-core/src/apply.rs` — `git2`'s `ApplyOptions` has no
 reverse flag, so we swap `+`/`-` and `@@ -A,B +C,D @@` ourselves.
+
+---
+
+## `@pierre/trees` couples row-click to select **and** expand
+
+**Rule.** A plain click on a directory row in `@pierre/trees` always does
+two things at once: single-select the row *and* toggle its expansion
+(`computeFileTreeRowClickPlan` → `toggleDirectory: !hasModifier && isDirectory`).
+The chevron is not a separate hit target — the whole row, chevron
+included, runs the one `handleRowClick`. There is **no option** to disable
+the toggle or to make only the chevron toggle (`FileTreeOptions` /
+`FileTreeRenderOptions` expose nothing for it), and the click is handled
+inside Pierre's shadow DOM.
+
+**Why.** We needed a folder click in Local Changes to *select* the folder
+(which drives the stacked aggregated diff) without folding the tree. Don't
+go looking for a Pierre prop — it isn't there.
+
+**How to apply.** `PierreTree` takes `toggleDirOnRowClick` (default `true`
+= Pierre's native behaviour). When `false`, an `onClickCapture` on the host
+records the folder's expansion *before* Pierre handles the click (React's
+capture phase fires before Pierre's bubble-phase preact handler), then a
+`queueMicrotask` restores that expansion — neutralizing the toggle with no
+flicker (microtasks drain before the next paint), while leaving Pierre's
+selection/focus/multi-select untouched. The disclosure cell is
+`[data-item-section="icon"]` on a `[data-item-type="folder"]` row; clicks
+there are let through so the chevron still toggles. The same chevron check
+guards `onDoubleClick` so a double-toggle doesn't fire the stage/unstage
+`onActivate`.
+
+Note: "expand/collapse all" in Local Changes operates on the **diff pane**
+(folding each file's diff body), not on the tree's folders — the header
+toolbar toggle writes `useSettings.diffsCollapsed` and each `FileDiffSection`
+header folds its own body. There is intentionally no folder expand/collapse-all.
