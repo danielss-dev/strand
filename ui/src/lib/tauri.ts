@@ -117,13 +117,20 @@ export const tauri = {
     }),
   repoRemoteTags: (path: string, remote: string) =>
     invoke<string[]>('repo_remote_tags', { path, remote }),
+  // Return `true` when the op stopped on conflicts (left in progress), `false`
+  // when it completed cleanly; reject only on a real failure.
   repoCherryPick: (path: string, commits: string[]) =>
-    invoke<void>('repo_cherry_pick', { path, commits }),
-  repoRevert: (path: string, commits: string[]) => invoke<void>('repo_revert', { path, commits }),
+    invoke<boolean>('repo_cherry_pick', { path, commits }),
+  repoRevert: (path: string, commits: string[]) =>
+    invoke<boolean>('repo_revert', { path, commits }),
   repoMerge: (path: string, refname: string, mode: MergeMode) =>
-    invoke<void>('repo_merge', { path, refname, mode }),
-  repoRebase: (path: string, onto: string) => invoke<void>('repo_rebase', { path, onto }),
+    invoke<boolean>('repo_merge', { path, refname, mode }),
+  repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),
   repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
+  repoReadConflictFile: (path: string, file: string) =>
+    invoke<string>('repo_read_conflict_file', { path, file }),
+  repoResolveConflict: (path: string, file: string, contents: string) =>
+    invoke<void>('repo_resolve_conflict', { path, file, contents }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,

@@ -186,17 +186,26 @@ export interface RepoState {
   deleteBranch(name: string, force: boolean): Promise<void>;
 
   /**
-   * History ops — all shell out to `git`. Each can stop on conflict (the
-   * promise rejects with git's message) and leaves the repo mid-operation;
-   * {@link RepoState.abortOperation} backs out, and `meta.operation` reports
-   * the in-progress state. Callers surface success/failure via a toast.
+   * History ops — all shell out to `git`. Each resolves to `true` when it
+   * stopped on **conflicts** (an expected outcome: the repo is left
+   * mid-operation and the view switches to Local Changes for resolution) and
+   * `false` when it completed cleanly; the promise rejects only on a real
+   * failure (dirty tree, bad ref). {@link RepoState.abortOperation} backs out,
+   * and `meta.operation` reports the in-progress state. Callers toast based on
+   * the returned flag.
    */
-  cherryPick(commits: string[]): Promise<void>;
-  revert(commits: string[]): Promise<void>;
-  merge(refname: string, mode: MergeMode): Promise<void>;
-  rebase(onto: string): Promise<void>;
+  cherryPick(commits: string[]): Promise<boolean>;
+  revert(commits: string[]): Promise<boolean>;
+  merge(refname: string, mode: MergeMode): Promise<boolean>;
+  rebase(onto: string): Promise<boolean>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
+  /**
+   * Write a conflicted file's resolved contents back and stage it (marks it
+   * resolved). The op stays in progress until the user commits — refresh
+   * status/diffs so the file leaves the Conflicts list.
+   */
+  resolveConflict(file: string, contents: string): Promise<void>;
 
   /**
    * Create a tag at `target` (any revspec; null ⇒ HEAD). A non-empty
@@ -346,6 +355,27 @@ async function refreshAfterHistoryOp(get: () => RepoState): Promise<void> {
     get().refreshLog(),
     get().refreshRefs(),
   ]);
+}
+
+/**
+ * Run a history op (`op` returns the `conflicted` flag) with the shared tail:
+ * always refresh afterward (even on a thrown failure), and on a conflict route
+ * to Local Changes with a cleared selection so the conflict bar opens the first
+ * conflicted file. Returns the `conflicted` flag for the caller's toast.
+ */
+async function runHistoryOp(
+  get: () => RepoState,
+  set: (partial: Partial<RepoState>) => void,
+  op: () => Promise<boolean>,
+): Promise<boolean> {
+  let conflicted = false;
+  try {
+    conflicted = await op();
+    return conflicted;
+  } finally {
+    await refreshAfterHistoryOp(get);
+    if (conflicted) set({ view: 'local', localSelection: null });
+  }
 }
 
 async function persistSession(state: RepoState): Promise<void> {
@@ -789,45 +819,36 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
 
   // History ops change HEAD, the working tree, the log and refs — refresh all
-  // four afterward. The refresh runs in `finally` because a *conflict* rejects
-  // the op yet still leaves the repo mid-operation: we must refresh (and rethrow)
-  // so `meta.operation` lights the banner and the conflicted files appear right
-  // away, not on the next focus.
+  // four afterward (in `finally`, so a real failure still re-syncs). On a
+  // conflict the op resolves `true`: jump to Local Changes and clear the
+  // selection so the conflict bar opens the first conflicted file.
   async cherryPick(commits) {
-    const path = get().activePath;
-    if (!path) throw new Error('no repo open');
-    try {
-      await tauri.repoCherryPick(path, commits);
-    } finally {
-      await refreshAfterHistoryOp(get);
-    }
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoCherryPick(path, commits);
+    });
   },
   async revert(commits) {
-    const path = get().activePath;
-    if (!path) throw new Error('no repo open');
-    try {
-      await tauri.repoRevert(path, commits);
-    } finally {
-      await refreshAfterHistoryOp(get);
-    }
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoRevert(path, commits);
+    });
   },
   async merge(refname, mode) {
-    const path = get().activePath;
-    if (!path) throw new Error('no repo open');
-    try {
-      await tauri.repoMerge(path, refname, mode);
-    } finally {
-      await refreshAfterHistoryOp(get);
-    }
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoMerge(path, refname, mode);
+    });
   },
   async rebase(onto) {
-    const path = get().activePath;
-    if (!path) throw new Error('no repo open');
-    try {
-      await tauri.repoRebase(path, onto);
-    } finally {
-      await refreshAfterHistoryOp(get);
-    }
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoRebase(path, onto);
+    });
   },
   async abortOperation() {
     const path = get().activePath;
@@ -837,6 +858,13 @@ export const useRepo = create<RepoState>((set, get) => ({
     } finally {
       await refreshAfterHistoryOp(get);
     }
+  },
+  async resolveConflict(file, contents) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoResolveConflict(path, file, contents);
+    // Status drives the Conflicts list; diffs/meta keep the rest in sync.
+    await Promise.all([get().refreshStatus(), get().refreshDiffs(), get().refreshMeta()]);
   },
 
   async createTag(name, target, message) {

@@ -303,33 +303,43 @@ pub async fn repo_tag_push_all(
     .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
 }
 
+// These return `true` when the op stopped on conflicts (left in progress for
+// resolution) and `false` when it completed cleanly; `Err` is a real failure.
+
 #[tauri::command]
-pub fn repo_cherry_pick(path: String, commits: Vec<String>) -> CmdResult<()> {
-    Repo::discover(&path)?.cherry_pick(&commits)?;
-    Ok(())
+pub fn repo_cherry_pick(path: String, commits: Vec<String>) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.cherry_pick(&commits)?)
 }
 
 #[tauri::command]
-pub fn repo_revert(path: String, commits: Vec<String>) -> CmdResult<()> {
-    Repo::discover(&path)?.revert(&commits)?;
-    Ok(())
+pub fn repo_revert(path: String, commits: Vec<String>) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.revert(&commits)?)
 }
 
 #[tauri::command]
-pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<()> {
-    Repo::discover(&path)?.merge(&refname, MergeMode::from_wire(&mode)?)?;
-    Ok(())
+pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.merge(&refname, MergeMode::from_wire(&mode)?)?)
 }
 
 #[tauri::command]
-pub fn repo_rebase(path: String, onto: String) -> CmdResult<()> {
-    Repo::discover(&path)?.rebase(&onto)?;
-    Ok(())
+pub fn repo_rebase(path: String, onto: String) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.rebase(&onto)?)
 }
 
 #[tauri::command]
 pub fn repo_abort_operation(path: String) -> CmdResult<()> {
     Repo::discover(&path)?.abort_operation()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_read_conflict_file(path: String, file: String) -> CmdResult<String> {
+    Ok(Repo::discover(&path)?.read_conflict_file(&file)?)
+}
+
+#[tauri::command]
+pub fn repo_resolve_conflict(path: String, file: String, contents: String) -> CmdResult<()> {
+    Repo::discover(&path)?.resolve_conflict(&file, &contents)?;
     Ok(())
 }
 

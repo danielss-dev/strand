@@ -38,6 +38,19 @@ impl Repo {
             };
             let s = entry.status();
 
+            // An unmerged (conflicted) entry carries the CONFLICTED bit but not
+            // necessarily any wt/index-modified bit, so it would otherwise be
+            // dropped. Emit it once as a single conflicted row — the conflict
+            // resolver keys off this.
+            if s.is_conflicted() {
+                out.push(FileStatus {
+                    path,
+                    kind: StatusKind::Conflicted,
+                    staged: false,
+                });
+                continue;
+            }
+
             if s.is_index_modified() || s.is_index_new() || s.is_index_deleted() || s.is_index_renamed() {
                 out.push(FileStatus {
                     path: path.clone(),

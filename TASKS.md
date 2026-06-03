@@ -153,7 +153,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
   `repo_branch_delete`, `repo_tag_create`, `repo_tag_delete`,
   `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,
-  `repo_abort_operation`, `repo_stash_list`, `repo_stash_save`,
+  `repo_abort_operation`, `repo_read_conflict_file`, `repo_resolve_conflict`,
+  `repo_stash_list`, `repo_stash_save`,
   `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
   `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags` (all `async`;
@@ -315,6 +316,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Commit-detail actions: Checkout (detached) + "Tag…" (opens the New-tag
   dialog targeting that commit) + Cherry-pick + Revert (single commit onto HEAD;
   conflict/success surfaced via toast)
+- ☑ Right-click a graph row → `ContextMenu` with the same actions (Checkout /
+  Tag… / Cherry-pick / Revert / Copy SHA); keyboard-operable via Menu key /
+  Shift+F10 on the focused row (opens at the row corner)
 - ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)
@@ -372,11 +376,29 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   main view with an Abort button + ⌘K "Abort <op>". The three-way *resolution*
   UI below is still the open work; today conflicts are resolved in Local Changes
   (conflicted files show via the `CONFLICTED` status) and committed by hand.
-- ◐ Detect conflicted files from `status` (`CONFLICTED` status kind exists and
-  renders; no dedicated conflicted-files grouping yet)
-- ☐ Per-file resolved-state tracker
-- ☐ Three-way visual conflict view (likely Pierre's conflict primitive)
-- ☐ "Take current / incoming / both" actions
+- ☑ Detect conflicted files from `status` (`status.rs` now emits every
+  `is_conflicted()` entry as a single `CONFLICTED` row — a pure unmerged entry
+  has no wt/index bit and was otherwise dropped; the Local Changes **conflict
+  bar** lists them)
+- ☑ Per-file resolved-state tracker (status-driven: resolving writes + stages
+  the file via `Repo::resolve_conflict`, so it leaves the conflicts list; the
+  bar shrinks as files are resolved, merge completes on commit)
+- ☑ Conflict entry point: selecting a conflicted file shows an in-pane
+  **landing** (`views/ConflictLanding.tsx`) — explains the conflict, offers
+  tick-a-side quick-resolve (take incoming / current / both for the whole file),
+  and an "Open merge editor" button. Auto-opens the first conflict during a
+  merge so it isn't hidden; conflicted files are filtered out of the normal
+  Unstaged/Staged lists (they listed as confusing M/M duplicates).
+- ☑ Three-way visual conflict view (`views/MergeResolver.tsx` — full-screen
+  modal: incoming/theirs + current/ours side-by-side on top, assembled result
+  below, ‹ › conflict nav + red→green N/M counter, **scroll-synced** source
+  panes. Per-side "take all from this side" checkboxes in the branch headers.
+  Markers parsed in `lib/conflictParse.ts`; each pane is Pierre's read-only
+  `<File>` with the focused conflict highlighted via `selectedLines`.)
+- ☑ "Take current / incoming / both" actions (per-conflict via the mid action
+  bar or clicking a side's highlighted block; per-side bulk via the header
+  checkboxes; result assembled from picks, "Resolve" writes + stages once all
+  are picked. Pick-sides only — no free editing.)
 - ☐ Fallback to external mergetool (`git config merge.tool`)
 
 ---

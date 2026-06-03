@@ -237,8 +237,9 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Tags (lightweight + annotated) — create / delete / checkout, plus push /
   delete on a remote
 - ☑ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
-- ◐ Conflict resolution UI (three-way view) — in-progress banner + Abort shipped;
-  the three-way merge editor is still the open work
+- ☑ Conflict resolution UI (three-way view) — Pierre `<UnresolvedFile>` resolver
+  with accept current/incoming/both; in-progress banner + Abort. (External
+  mergetool fallback still ☐ in TASKS.)
 - ☐ Discard changes (line / hunk / file) with single-undo
 - ☐ Stacked + split diff layouts (persisted per-repo)
 - ☐ **Theme management**
@@ -324,6 +325,38 @@ to avoid re-fetching. Made it **stale-while-revalidate**: a persisted
 instantly on open, then `ls-remote` revalidates in the background at most once
 per repo per session — so it feels instant and doesn't re-hit the network on
 every tab switch.
+
+**3-pane merge resolver (2026-06-03):** Reworked the conflict UI from the inline
+unified `<UnresolvedFile>` into a full-screen **three-way** resolver
+(`views/MergeResolver.tsx`): incoming (theirs) + current (ours) side-by-side on
+top, the assembled result below, an N/M counter with ‹ › conflict nav, and
+Cancel/Resolve. Markers are parsed in `lib/conflictParse.ts` (pure: segments +
+per-conflict line spans in each view) and each pane renders with Pierre's
+read-only `<File>`, highlighting the focused conflict via `selectedLines`;
+pick theirs/ours/both per conflict (or click a side's block) and Resolve writes
+the merged file + stages it. The earlier inline `ConflictResolver.tsx` was
+removed. Verified: tsc + vite build (Rust unchanged).
+
+**Conflict resolution UI (2026-06-03, superseded same day by the 3-pane modal):**
+Finishes the history-ops vertical with a three-way resolver built on
+`@pierre/diffs`' `<UnresolvedFile>`. `status.rs`
+now surfaces every unmerged entry as a `CONFLICTED` row (a pure conflict carries
+no wt/index bit and was being dropped). `strand-core::conflict` adds
+`read_conflict_file` (raw text + markers) and `resolve_conflict` (write back +
+stage = `git add`, marking it resolved); both guard against path traversal. IPC
+`repo_read_conflict_file` / `repo_resolve_conflict` + a `resolveConflict` store
+action. UI: a **conflict bar** above the Local Changes workspace lists unmerged
+files (auto-opens the first during a merge); selecting one renders
+`views/ConflictResolver.tsx`, which shows Pierre's structured conflict regions
+and anchors **Accept current / incoming / both** on each via
+`renderMergeConflictUtility`. Because the React `<UnresolvedFile>` keeps the
+resolved file in internal controlled state (its `onMergeConflictAction` is
+mutually exclusive with `onMergeConflictResolve`), we drive resolution
+ourselves: each pick re-slices the contents exactly like Pierre's
+`getResolvedConflictReplacementLines` and remounts (`key`) to re-parse, so we
+always hold the resolved text — "Mark resolved" writes + stages it, the bar
+shrinks, and committing finishes the merge. Verified: cargo test (+2 `conflict`),
+clippy, tsc, vite build.
 
 **History ops — cherry-pick / revert / merge / rebase (2026-06-03):** Third 0.5
 vertical. New `strand-core::history` shells out to `git` for all four (the stash

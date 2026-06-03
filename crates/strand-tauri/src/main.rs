@@ -58,6 +58,8 @@ fn main() {
             commands::repo_merge,
             commands::repo_rebase,
             commands::repo_abort_operation,
+            commands::repo_read_conflict_file,
+            commands::repo_resolve_conflict,
             commands::repo_stash_list,
             commands::repo_stash_save,
             commands::repo_stash_snapshot,

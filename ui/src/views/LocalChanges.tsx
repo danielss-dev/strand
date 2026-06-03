@@ -16,6 +16,8 @@ import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type { FileDiff } from '../lib/types';
+import { MergeResolver } from './MergeResolver';
+import { ConflictLanding } from './ConflictLanding';
 
 /**
  * The staging workspace described in PRD §5: a left column with two file
@@ -29,6 +31,7 @@ import type { FileDiff } from '../lib/types';
 export function LocalChanges() {
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
+  const status = useRepo((s) => s.status);
   const selection = useRepo((s) => s.localSelection);
   const stageMany = useRepo((s) => s.stageMany);
   const unstageMany = useRepo((s) => s.unstageMany);
@@ -37,30 +40,74 @@ export function LocalChanges() {
   const unstageAll = useRepo((s) => s.unstageAll);
   const selectLocalFile = useRepo((s) => s.selectLocalFile);
 
+  // Conflicted (unmerged) files, from status — drive the Conflicts bar + the
+  // in-pane landing. Deduped (status can list a path on both sides).
+  const conflicts = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of status) if (s.kind === 'CONFLICTED') set.add(s.path);
+    return [...set];
+  }, [status]);
+  const conflictSet = useMemo(() => new Set(conflicts), [conflicts]);
+
+  // Conflicted files are handled by the Conflicts bar + landing, so keep them
+  // out of the normal Unstaged/Staged lists (git lists them on both sides,
+  // which read as confusing duplicates).
+  const unstagedView = useMemo(() => unstaged.filter((d) => !conflictSet.has(d.path)), [unstaged, conflictSet]);
+  const stagedView = useMemo(() => staged.filter((d) => !conflictSet.has(d.path)), [staged, conflictSet]);
+
+  // The conflicted file shown in the in-pane landing. Auto-opens the first
+  // conflict *when conflicts first appear* (so the resolver isn't hidden behind
+  // a click), but a file-list click can dismiss it — so we don't re-open on
+  // every render. `prevConflictCount` tracks the 0 → >0 transition.
+  const [activeConflict, setActiveConflict] = useState<string | null>(null);
+  const prevConflictCount = useRef(0);
+  useEffect(() => {
+    if (activeConflict && !conflicts.includes(activeConflict)) setActiveConflict(null);
+    if (prevConflictCount.current === 0 && conflicts.length > 0) setActiveConflict(conflicts[0]);
+    prevConflictCount.current = conflicts.length;
+  }, [activeConflict, conflicts]);
+  // Selecting a normal changed file dismisses the conflict landing.
+  const selectFileRow = useCallback(
+    (sel: LocalSelection | null) => { setActiveConflict(null); selectLocalFile(sel); },
+    [selectLocalFile],
+  );
+
+  // The conflicted file open in the full-screen merge editor, if any.
+  const [resolverFile, setResolverFile] = useState<string | null>(null);
+  useEffect(() => {
+    if (resolverFile && !conflicts.includes(resolverFile)) setResolverFile(null);
+  }, [resolverFile, conflicts]);
+
   // Default to showing *all* changes (unstaged, else staged) whenever nothing
-  // is selected — on open, and after an operation clears the selection — so the
-  // diff pane always reflects the whole working tree until the user narrows it.
+  // is selected — on open, and after an operation clears the selection.
   useEffect(() => {
     if (selection) return;
-    if (unstaged.length) selectLocalFile({ file: '', staged: false, all: true });
-    else if (staged.length) selectLocalFile({ file: '', staged: true, all: true });
-  }, [selection, unstaged, staged, selectLocalFile]);
+    if (unstagedView.length) selectLocalFile({ file: '', staged: false, all: true });
+    else if (stagedView.length) selectLocalFile({ file: '', staged: true, all: true });
+  }, [selection, unstagedView, stagedView, selectLocalFile]);
 
   // The diff(s) the selection drives. "Show all" → the whole side. A file row →
   // just that file. A folder row (Pierre reports directory paths with a
   // trailing slash, no exact file match) → every changed file beneath it.
   const selectedDiffs = useMemo<FileDiff[]>(() => {
     if (!selection) return [];
-    const pool = selection.staged ? staged : unstaged;
+    const pool = selection.staged ? stagedView : unstagedView;
     if (selection.all) return pool;
     const exact = pool.find((d) => d.path === selection.file);
     if (exact) return [exact];
     const prefix = selection.file.replace(/\/+$/, '') + '/';
     return pool.filter((d) => d.path.startsWith(prefix));
-  }, [selection, unstaged, staged]);
+  }, [selection, unstagedView, stagedView]);
 
   return (
     <div className="lc-stack">
+      {conflicts.length > 0 && (
+        <ConflictBar
+          files={conflicts}
+          activeFile={activeConflict}
+          onSelect={(file) => setActiveConflict(file)}
+        />
+      )}
       <div className="lc-main">
         <PanelGroup direction="horizontal" autoSaveId="strand:lc-main">
           <Panel defaultSize={28} minSize={15} maxSize={60}>
@@ -69,10 +116,10 @@ export function LocalChanges() {
                 <Panel defaultSize={50} minSize={10}>
                   <FileSection
                     title="Unstaged"
-                    files={unstaged}
+                    files={unstagedView}
                     staged={false}
                     selection={selection}
-                    onSelect={selectLocalFile}
+                    onSelect={selectFileRow}
                     onAction={(files) => void stageMany(files)}
                     actionLabel="Stage"
                     onDiscard={(files) => void discardMany(files)}
@@ -84,10 +131,10 @@ export function LocalChanges() {
                 <Panel defaultSize={50} minSize={10}>
                   <FileSection
                     title="Staged"
-                    files={staged}
+                    files={stagedView}
                     staged={true}
                     selection={selection}
-                    onSelect={selectLocalFile}
+                    onSelect={selectFileRow}
                     onAction={(files) => void unstageMany(files)}
                     actionLabel="Unstage"
                     onBulk={() => void unstageAll()}
@@ -99,12 +146,63 @@ export function LocalChanges() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            <DiffPane diffs={selectedDiffs} staged={selection?.staged ?? false} />
+            {activeConflict ? (
+              <ConflictLanding
+                key={activeConflict}
+                path={activeConflict}
+                onOpenEditor={() => setResolverFile(activeConflict)}
+              />
+            ) : (
+              <DiffPane diffs={selectedDiffs} staged={selection?.staged ?? false} />
+            )}
           </Panel>
         </PanelGroup>
       </div>
 
       <CommitBar canCommit={staged.length > 0} />
+
+      {resolverFile && (
+        <MergeResolver path={resolverFile} onClose={() => setResolverFile(null)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Strip above the staging workspace listing the unmerged files during a
+ * merge / rebase / cherry-pick. Clicking one shows it in the in-pane conflict
+ * landing; the active file is highlighted. Keyboard-operable (each file is a
+ * button in a horizontal toolbar).
+ */
+function ConflictBar({
+  files,
+  activeFile,
+  onSelect,
+}: {
+  files: string[];
+  activeFile: string | null;
+  onSelect: (file: string) => void;
+}) {
+  const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+  return (
+    <div className="lc-conflict-bar" role="toolbar" aria-label="Conflicted files">
+      <span className="cb-label">
+        <Icon name="rebase" size={12} />
+        {files.length} conflicted {files.length === 1 ? 'file' : 'files'}
+      </span>
+      <div className="cb-files">
+        {files.map((f) => (
+          <button
+            key={f}
+            type="button"
+            className={'cb-file' + (f === activeFile ? ' active' : '')}
+            onClick={() => onSelect(f)}
+            title={f}
+          >
+            {baseName(f)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -150,7 +248,7 @@ function FileSection({
     [files],
   );
   // A row is highlighted only for a concrete file selection on this side — not
-  // for a "show all" selection (the header carries that highlight instead).
+  // for a "show all" selection (the column header carries that highlight).
   const selectedPath =
     selection && !selection.all && selection.staged === staged ? selection.file : null;
   const allActive = selection?.all === true && selection.staged === staged;

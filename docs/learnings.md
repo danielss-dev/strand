@@ -111,6 +111,94 @@ exactly the cases that blow them. Both fixes were prompted by a real freeze.
 
 ---
 
+## A merge/rebase/cherry-pick conflict is an *outcome*, not an error
+
+**Rule.** `git merge`/`rebase`/`cherry-pick`/`revert` exit **non-zero** when they
+stop on a conflict — but that's the expected, useful result, not a failure.
+`strand-core`'s history ops return `Result<bool>` (via `run_sequencer`):
+`Ok(true)` = stopped on conflicts (index has unmerged entries —
+`index.has_conflicts()`), `Ok(false)` = clean, `Err` = a *real* failure (dirty
+tree, unrelated histories, merge commit without `-m`). The store actions return
+that flag, and on `true` they switch to Local Changes with a cleared selection
+so the conflict bar opens the first file. **Do not** let these reject on
+conflict.
+
+**Why.** The first cut rejected on the non-zero exit, so `MergeDialog` treated a
+conflict as a failure: it kept the dialog open ("Merging…") and never routed to
+the resolver — the exact "merge is frozen, doesn't open the resolve view" bug.
+The distinction (conflict vs. real failure) has to be made where we can inspect
+the index — in Rust — not by string-matching git's stderr in the UI.
+
+**How to apply.** New sequencer-style ops go through `Repo::run_sequencer`
+(maps a non-zero exit with unmerged entries to `Ok(true)`). UI callers
+`await` the flag and toast/route on it; their `catch` is only for genuine
+errors. Also: `run_git` here sets `stdin(Stdio::null())` — the app isn't
+launched from a terminal, so an inherited stdin can hang git if it ever tries to
+read; null makes it error instead.
+
+---
+
+## Conflict resolver is a custom 3-pane modal — we parse the markers ourselves
+
+**Rule.** The merge-conflict UI is `views/MergeResolver.tsx`: a full-screen
+modal with the incoming ("theirs") and current ("ours") files side by side on
+top and the assembled result below, walked with a ‹ › conflict nav. We parse
+the `<<<<<<< / ======= / >>>>>>>` markers ourselves (`lib/conflictParse.ts`)
+and render each pane with Pierre's read-only `<File>` (`@pierre/diffs/react`),
+highlighting the focused conflict via `selectedLines` (a single
+`{start,end}` 1-based range). Resolution is **pick-sides only** (theirs / ours /
+both per conflict); the result text is assembled from the picks, and "Resolve"
+writes it back + stages via `useRepo.resolveConflict`.
+
+**Why we didn't use Pierre's `<UnresolvedFile>`.** It exists and renders the
+conflict regions, but (a) it's a single unified view, not the side-by-side
+3-pane the user wanted, and (b) the React wrapper keeps the resolved file in
+internal controlled state you can't read: its core supports
+`onMergeConflictResolve(file)` but the wrapper always wires the mutually
+exclusive `onMergeConflictAction` instead (the core `setOptions` throws if both
+are set). Parsing markers ourselves sidesteps all of that and gives full
+control over layout + the result text.
+
+**Entry point + bulk.** Selecting a conflicted file shows an in-pane landing
+(`views/ConflictLanding.tsx`) — tick a side to take it for the whole file, or
+"Open merge editor" for the modal — and the first conflict auto-opens during a
+merge (don't hide resolution behind a click). Conflicted files are filtered out
+of the normal Unstaged/Staged lists. In the modal, each branch header has a
+"take all from this side" checkbox whose checked state is *derived* from the
+resolutions (`every` conflict includes that side; `both` includes both), and the
+two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
+`requestAnimationFrame` re-entrancy guard).
+
+**How to apply.**
+- `parseConflicts(text)` → segments (`common` | `conflict{ours,theirs}`);
+  `buildViews(parsed, resolutions)` → `{theirsText, oursText, resultText,
+  ranges}` where each `ConflictRange` carries the 0-based `[start,end)` span of
+  that conflict in *each* view, so `toLineRange` feeds Pierre's `selectedLines`
+  and `conflictAtLine` maps a `onLineClick` back to a conflict (click a side's
+  block = take that side). In git's markers the first block (`<<<<<<< HEAD`) is
+  *ours*, the block after `=======` is *theirs*.
+- An unresolved conflict contributes one placeholder line to `resultText`; the
+  result only loses every marker once all are resolved (`Resolve` gates on it).
+- **Highlighting *all* conflict regions**: `<File>`'s `selectedLines` is a single
+  range, so it only marks the focused conflict. For the rest, `HighlightLayer`
+  measures the rendered gutter rows (each Pierre gutter cell carries a 0-based
+  `data-line-index`) and paints a translucent, side-tinted absolute band over
+  every non-focused conflict's line span — re-measuring on ResizeObserver (async
+  highlight), scroll (virtualization), and window resize. **Pierre renders into
+  an *open shadow root* on its `diffs-container` element** (`attachShadow({mode:
+  'open'})`), so the gutter rows are NOT in the light DOM — query
+  `el.querySelector('diffs-container')?.shadowRoot` (this was the bug: a
+  light-DOM query found nothing, so only the focused conflict's `selectedLines`
+  showed). `getBoundingClientRect` works across the shadow boundary. The band
+  layer lives inside the (now `position: relative`) `.mm-pane-scroll` so it
+  scrolls with the content.
+- Conflicted files come from `status` (`status.rs` emits every
+  `is_conflicted()` entry — they carry no wt/index bit so they'd otherwise be
+  dropped); resolving = write + `git add` (`Repo::resolve_conflict`), and the
+  op stays in progress (`meta.operation`) until the user commits.
+
+---
+
 ## Shell-out helpers are per-module; don't add a second `Repo::run_git`
 
 **Rule.** The "shell out to the user's `git`" modules each carry their own

@@ -82,15 +82,19 @@ export function MergeDialog({
     setBusy(true);
     setError(null);
     try {
-      await merge(source, mode);
+      const conflicted = await merge(source, mode);
       onToast(
-        mode === 'squash'
-          ? `Squashed ${source} into the index — review and commit`
-          : `Merged ${source} into ${into}`,
+        conflicted
+          ? `Merge stopped with conflicts — resolve them in Local Changes`
+          : mode === 'squash'
+            ? `Squashed ${source} into the index — review and commit`
+            : `Merged ${source} into ${into}`,
       );
+      // A conflict is an expected outcome — close and let the resolver open
+      // (the store already switched to Local Changes). Only a real failure
+      // (dirty tree, unrelated histories) lands in catch and keeps us open.
       onClose();
     } catch (e) {
-      // A conflict (or any failure) keeps the dialog open with git's message.
       if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
       if (mountedRef.current) setBusy(false);

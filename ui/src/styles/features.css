@@ -2515,6 +2515,341 @@ textarea.clone-input {
   margin-left: auto;
 }
 
+/* ─── Conflict resolution ──────────────────────────────────────────────── */
+
+/* Strip of conflicted files above the staging workspace. */
+.lc-conflict-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--warn, var(--accent)) 10%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.lc-conflict-bar .cb-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.lc-conflict-bar .cb-files {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;
+}
+.lc-conflict-bar .cb-file {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 5px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.lc-conflict-bar .cb-file:hover {
+  color: var(--text);
+}
+.lc-conflict-bar .cb-file.active {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+  color: var(--text);
+}
+
+/* Full-screen three-way merge resolver modal. */
+.merge-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+.merge-modal {
+  display: flex;
+  flex-direction: column;
+  width: 95vw;
+  height: 92vh;
+  background: var(--bg-elev);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  box-shadow: 0 0 0 0.5px var(--border), var(--shadow-pop);
+  overflow: hidden;
+}
+.mm-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 9px 14px;
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.mm-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+.mm-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.mm-counter {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mm-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn, var(--accent)) 22%, var(--bg-base));
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.mm-count.done {
+  background: color-mix(in srgb, var(--add) 26%, var(--bg-base));
+}
+.mm-error,
+.mm-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--text-2);
+  font-size: var(--type-ui);
+}
+.mm-error { color: var(--del); white-space: pre-wrap; }
+
+/* Top row: the two source panes side by side. */
+.mm-sides {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.mm-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.mm-pane + .mm-pane {
+  box-shadow: -0.5px 0 0 var(--border);
+}
+.mm-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.mm-pane-head.theirs { background: color-mix(in srgb, var(--b-5, #8b7fd6) 16%, transparent); }
+.mm-pane-head.ours { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.mm-pane-head.result { background: var(--bg-base); }
+.mm-side-tag {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.mm-pane-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+/* Overlay highlighting every non-focused conflict region (the focused one is
+   drawn by Pierre's selectedLines). Translucent so the code shows through. */
+.mm-bands {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.mm-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--b-5, #8b7fd6) 20%, transparent);
+}
+/* Side-specific tints so incoming vs current read distinctly (matches the
+   focused conflict's selectedLines highlight). */
+.mm-band.theirs { background: color-mix(in srgb, var(--b-5, #8b7fd6) 22%, transparent); }
+.mm-band.ours { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.mm-band.result { background: color-mix(in srgb, var(--b-5, #8b7fd6) 14%, transparent); }
+.mm-band.resolved {
+  background: color-mix(in srgb, var(--add) 16%, transparent);
+}
+
+/* Mid action bar: pick a side for the focused conflict. */
+.mm-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 7px 14px;
+  background: var(--bg-base);
+  box-shadow: 0 0.5px 0 var(--border), 0 -0.5px 0 var(--border);
+}
+.mm-actions-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.mm-actions-btns {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+}
+
+/* Bottom: the assembled result. */
+.mm-result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.mm-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 9px 14px;
+  box-shadow: 0 -0.5px 0 var(--border);
+}
+.mm-status {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.mm-footer-btns {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+}
+
+/* Modal header branch cards with a "take all from this side" checkbox. */
+.mm-cards {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  margin-left: 8px;
+}
+.mm-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  min-width: 0;
+}
+.mm-card.on { box-shadow: 0 0 0 1.5px var(--accent) inset; }
+.mm-card-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px var(--border) inset;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.mm-card-check.on { background: var(--accent); box-shadow: none; }
+.mm-card-text { display: flex; flex-direction: column; min-width: 0; }
+.mm-card-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mm-card-role { font-size: 10.5px; color: var(--text-dim); }
+.mm-count.none { background: color-mix(in srgb, var(--del) 26%, var(--bg-base)); }
+
+/* In-pane "Merge conflict" landing (the entry point before the editor). */
+.conflict-landing {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.cl-inner {
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.cl-icon { color: var(--warn, var(--accent)); }
+.cl-title { margin: 0; font-size: 18px; color: var(--text); }
+.cl-sub { margin: 0; font-size: var(--type-ui); line-height: 1.5; color: var(--text-2); }
+.cl-cards { display: flex; gap: 14px; margin-top: 8px; width: 100%; }
+.cl-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  cursor: pointer;
+  text-align: left;
+}
+.cl-card.on { box-shadow: 0 0 0 1.5px var(--accent) inset; }
+.cl-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px var(--border) inset;
+  color: #fff;
+}
+.cl-check.on { background: var(--accent); box-shadow: none; }
+.cl-card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cl-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cl-role { font-size: 11px; color: var(--text-dim); }
+.cl-actions { display: flex; gap: 10px; margin-top: 14px; }
+
 /* ─── Pierre file tree (@pierre/trees) ─────────────────────────────────── */
 
 /* Carrier for the tree theme. CSS custom properties set here inherit into

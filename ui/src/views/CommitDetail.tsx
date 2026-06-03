@@ -78,8 +78,12 @@ export function CommitDetail({
     if (historyBusy) return;
     setHistoryBusy(true);
     try {
-      await cherryPick([hash]);
-      onToast(`Cherry-picked ${commit!.short_hash}`);
+      const conflicted = await cherryPick([hash]);
+      onToast(
+        conflicted
+          ? `Cherry-pick of ${commit!.short_hash} has conflicts — resolve in Local Changes`
+          : `Cherry-picked ${commit!.short_hash}`,
+      );
     } catch (e) {
       onToast(`Cherry-pick failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -90,8 +94,12 @@ export function CommitDetail({
     if (historyBusy) return;
     setHistoryBusy(true);
     try {
-      await revert([hash]);
-      onToast(`Reverted ${commit!.short_hash}`);
+      const conflicted = await revert([hash]);
+      onToast(
+        conflicted
+          ? `Revert of ${commit!.short_hash} has conflicts — resolve in Local Changes`
+          : `Reverted ${commit!.short_hash}`,
+      );
     } catch (e) {
       onToast(`Revert failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

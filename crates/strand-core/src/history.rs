@@ -57,41 +57,39 @@ impl Repo {
     /// Cherry-pick one or more commits onto HEAD, in the order given
     /// (`git cherry-pick <oid>…`). Each commit is any revspec git understands.
     ///
-    /// Stops on the first conflict, leaving the cherry-pick in progress (git's
-    /// own behaviour); the returned error carries git's message. Picking a
-    /// merge commit errors unless a mainline is chosen — we don't expose that
-    /// yet, so git's "is a merge but no -m option was given" surfaces verbatim.
-    pub fn cherry_pick(&self, commits: &[String]) -> Result<()> {
+    /// Returns `Ok(true)` when the pick stopped on a **conflict** (the op is
+    /// left in progress with unmerged files to resolve — an expected outcome,
+    /// not a failure), `Ok(false)` when it applied cleanly, and `Err` only for
+    /// a real failure (e.g. picking a merge commit without `-m`).
+    pub fn cherry_pick(&self, commits: &[String]) -> Result<bool> {
         if commits.is_empty() {
             return Err(Error::Other("cherry-pick: no commits given".into()));
         }
         let mut args = vec!["cherry-pick"];
         push_revs(&mut args, commits)?;
-        run_git(&self.path, &args)?;
-        Ok(())
+        self.run_sequencer(&args)
     }
 
     /// Revert one or more commits, recording the inverse as new commits
     /// (`git revert --no-edit <oid>…`). `--no-edit` keeps git from opening an
-    /// editor for the auto-generated message. Stops on conflict like
-    /// [`cherry_pick`](Repo::cherry_pick).
-    pub fn revert(&self, commits: &[String]) -> Result<()> {
+    /// editor. `Ok(true)` on conflict, like [`cherry_pick`](Repo::cherry_pick).
+    pub fn revert(&self, commits: &[String]) -> Result<bool> {
         if commits.is_empty() {
             return Err(Error::Other("revert: no commits given".into()));
         }
         let mut args = vec!["revert", "--no-edit"];
         push_revs(&mut args, commits)?;
-        run_git(&self.path, &args)?;
-        Ok(())
+        self.run_sequencer(&args)
     }
 
     /// Merge `refname` into the current branch.
     ///
     /// `--no-edit` avoids the merge-message editor for the merge-commit cases.
-    /// `Squash` stages the result without committing — the caller surfaces
-    /// "review and commit" — so it never passes `--no-edit` (no commit is
-    /// made). A conflict leaves the merge in progress and returns git's output.
-    pub fn merge(&self, refname: &str, mode: MergeMode) -> Result<()> {
+    /// `Squash` stages the result without committing (no `--no-edit` — nothing
+    /// is committed). Returns `Ok(true)` when the merge stopped on conflicts
+    /// (left in progress for resolution), `Ok(false)` on a clean merge, and
+    /// `Err` for a real failure (dirty tree, unrelated histories, …).
+    pub fn merge(&self, refname: &str, mode: MergeMode) -> Result<bool> {
         validate_ref(refname)?;
         let mut args = vec!["merge"];
         match mode {
@@ -106,17 +104,38 @@ impl Repo {
         // as one (paired with the leading-'-' rejection in `validate_ref`).
         args.push("--");
         args.push(refname);
-        run_git(&self.path, &args)?;
-        Ok(())
+        self.run_sequencer(&args)
     }
 
     /// Rebase the current branch onto `onto` (`git rebase <onto>`). A dirty
-    /// working tree makes git refuse (it wants a clean tree); that message
-    /// surfaces unchanged. A conflict pauses the rebase in progress.
-    pub fn rebase(&self, onto: &str) -> Result<()> {
+    /// working tree makes git refuse — that surfaces as `Err`. `Ok(true)` when
+    /// the rebase paused on a conflict.
+    pub fn rebase(&self, onto: &str) -> Result<bool> {
         validate_ref(onto)?;
-        run_git(&self.path, &["rebase", "--", onto])?;
-        Ok(())
+        self.run_sequencer(&["rebase", "--", onto])
+    }
+
+    /// Run a sequencer op (`merge`/`cherry-pick`/`revert`/`rebase`) and map its
+    /// exit to a conflict-aware result. A conflict makes git exit non-zero but
+    /// is an *expected* outcome — the op ran and left unmerged entries — so we
+    /// return `Ok(true)` instead of an error when the index has conflicts.
+    /// Only a genuine failure (no conflicts left behind) is an `Err`.
+    fn run_sequencer(&self, args: &[&str]) -> Result<bool> {
+        match run_git(&self.path, args) {
+            Ok(_) => Ok(false),
+            Err(e) => {
+                if self.has_conflicts().unwrap_or(false) {
+                    Ok(true)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Whether the index currently holds unmerged (conflicted) entries.
+    fn has_conflicts(&self) -> Result<bool> {
+        Ok(self.git2()?.index()?.has_conflicts())
     }
 
     /// Abort the sequencer/merge/rebase operation currently in progress,
@@ -174,6 +193,9 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
     let out = Command::new("git")
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
+        // Detach stdin so git can never block reading from a TTY/pipe we don't
+        // have (the app isn't launched from a terminal) — it errors instead.
+        .stdin(std::process::Stdio::null())
         .args(args)
         .output()
         .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
@@ -284,9 +306,10 @@ mod tests {
         git(&dir, &["checkout", "-q", "main"]);
         write_commit(&dir, "f.txt", "main side\n", "main edit");
 
-        // Both branches edited the same line → merge conflicts and errors.
-        let err = repo.merge("feature", MergeMode::Auto).unwrap_err();
-        assert!(err.to_string().to_uppercase().contains("CONFLICT"), "got: {err}");
+        // Both branches edited the same line → merge conflicts. That's an
+        // expected outcome (Ok(true)), not an error.
+        let conflicted = repo.merge("feature", MergeMode::Auto).unwrap();
+        assert!(conflicted, "divergent edits to the same line conflict");
         // meta reports the in-progress merge, and abort clears it.
         assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("merge"));
         repo.abort_operation().unwrap();

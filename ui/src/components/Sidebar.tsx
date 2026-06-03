@@ -304,8 +304,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const runRebase = (onto: string) => {
     void (async () => {
       try {
-        await rebase(onto);
-        onToast(`Rebased ${currentBranch} onto ${onto}`);
+        const conflicted = await rebase(onto);
+        onToast(
+          conflicted
+            ? `Rebase onto ${onto} has conflicts — resolve in Local Changes`
+            : `Rebased ${currentBranch} onto ${onto}`,
+        );
       } catch (e) {
         onToast(`Rebase failed: ${e instanceof Error ? e.message : String(e)}`);
       }

@@ -3,8 +3,10 @@ import type { KeyboardEvent } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
-import type { Refs } from '../lib/types';
+import type { Commit, Refs } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { ContextMenu, type MenuItem } from '../components/ContextMenu';
+import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
 
@@ -21,8 +23,62 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const selectCommit = useRepo((s) => s.selectCommit);
+  const checkoutCommit = useRepo((s) => s.checkoutCommit);
+  const cherryPick = useRepo((s) => s.cherryPick);
+  const revert = useRepo((s) => s.revert);
   const revealCommit = useRepo((s) => s.revealCommit);
   const clearReveal = useRepo((s) => s.clearReveal);
+
+  // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
+  // actions as the detail panel, reachable straight from the graph.
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const openCommitMenu = useCallback(
+    (c: Commit, x: number, y: number) => {
+      const fail = (verb: string, e: unknown) =>
+        onToast(`${verb} failed: ${e instanceof Error ? e.message : String(e)}`);
+      const items: MenuItem[] = [
+        {
+          label: 'Checkout',
+          icon: 'branch',
+          onSelect: () => void (async () => {
+            try { await checkoutCommit(c.hash); } catch (e) { fail('Checkout', e); }
+          })(),
+        },
+        { label: 'Tag…', icon: 'tag', onSelect: () => onCreateTag(c.hash, c.short_hash) },
+        {
+          label: 'Cherry-pick',
+          icon: 'arrow-down',
+          onSelect: () => void (async () => {
+            try {
+              const conflicted = await cherryPick([c.hash]);
+              onToast(conflicted
+                ? `Cherry-pick of ${c.short_hash} has conflicts — resolve in Local Changes`
+                : `Cherry-picked ${c.short_hash}`);
+            } catch (e) { fail('Cherry-pick', e); }
+          })(),
+        },
+        {
+          label: 'Revert',
+          icon: 'history',
+          onSelect: () => void (async () => {
+            try {
+              const conflicted = await revert([c.hash]);
+              onToast(conflicted
+                ? `Revert of ${c.short_hash} has conflicts — resolve in Local Changes`
+                : `Reverted ${c.short_hash}`);
+            } catch (e) { fail('Revert', e); }
+          })(),
+        },
+        {
+          label: 'Copy SHA',
+          icon: 'file',
+          onSelect: () => { void copyToClipboard(c.hash); onToast('Copied commit hash'); },
+        },
+      ];
+      setMenu({ x, y, items });
+    },
+    [checkoutCommit, cherryPick, revert, onCreateTag, onToast],
+  );
   const graphMainRef = useRef<HTMLDivElement>(null);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
   const didInitialFocus = useRef(false);
@@ -126,6 +182,15 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
         if (focusedCommit) void selectCommit(focusedCommit);
         return;
       }
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        const c = commits.find((x) => x.hash === focusedCommit);
+        const r = focusedRowRef.current?.getBoundingClientRect();
+        if (c && r) {
+          e.preventDefault();
+          openCommitMenu(c, r.left + 24, r.bottom - 6);
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         if (selectedCommit) {
           e.preventDefault();
@@ -136,7 +201,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
         }
       }
     },
-    [commits, focusedCommit, moveFocus, selectedCommit, selectCommit, multi, clearMulti],
+    [commits, focusedCommit, moveFocus, selectedCommit, selectCommit, multi, clearMulti, openCommitMenu],
   );
 
   useEffect(() => {
@@ -251,6 +316,11 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                           .join(' ') || undefined}
                         aria-selected={selected}
                         onClick={(e) => onRowClick(c.hash, e)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setFocusedCommit(c.hash);
+                          openCommitMenu(c, e.clientX, e.clientY);
+                        }}
                       >
                         <td role="gridcell" className="graph-col" style={{ width: colWidth }}>
                           {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} /> : null}
@@ -288,6 +358,10 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
           ) : null}
         </PanelGroup>
       </div>
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
     </div>
   );
 }
