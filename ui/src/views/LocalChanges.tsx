@@ -290,16 +290,53 @@ function FileDiffSection({
   onToggle: () => void;
 }) {
   const empty = diff.binary || diff.patch.length === 0;
+
+  // Viewport-lazy mount: the "show all" view can stack hundreds of files, and
+  // mounting every Pierre diff at once froze the app on open / after a big
+  // squash-merge. We only mount a file's diff body once its block scrolls near
+  // the viewport, and keep it mounted thereafter (mounting is the cost, not
+  // staying mounted). Until then a placeholder reserves the file's estimated
+  // height so the scrollbar stays honest and far-off diffs aren't counted as
+  // near. Empty/binary bodies are trivial, so they skip the gating.
+  const blockRef = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (seen || collapsed || empty) return;
+    const el = blockRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      // Pre-mount a screenful early so a fast scroll meets ready content.
+      { rootMargin: '900px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen, collapsed, empty]);
+
+  // Rough body-height estimate (changed lines, no context) so the placeholder
+  // reserves space close to the real diff height.
+  const estHeight = useMemo(
+    () => Math.min(1600, Math.max(80, (diff.adds + diff.dels) * 20)),
+    [diff.adds, diff.dels],
+  );
+
   return (
-    <div className="lc-file-block">
+    <div className="lc-file-block" ref={blockRef}>
       <FileHeaderStrip diff={diff} collapsed={collapsed} onToggle={onToggle} />
       {!collapsed &&
         (empty ? (
           <div className="lc-file-note">
             {diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
           </div>
-        ) : (
+        ) : seen ? (
           <HunkAnnotatedDiff diff={diff} layout={layout} side={staged ? 'staged' : 'unstaged'} />
+        ) : (
+          <div className="lc-file-pending" style={{ height: estHeight }} aria-hidden />
         ))}
     </div>
   );

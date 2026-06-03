@@ -7,6 +7,7 @@ import type {
   CommitOutcome,
   FileDiff,
   FileStatus,
+  MergeMode,
   NetworkOutcome,
   Progress,
   Refs,
@@ -46,6 +47,12 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_commit', { path, oid }),
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
+  repoStageMany: (path: string, files: string[]) =>
+    invoke<void>('repo_stage_many', { path, files }),
+  repoUnstageMany: (path: string, files: string[]) =>
+    invoke<void>('repo_unstage_many', { path, files }),
+  repoDiscardMany: (path: string, files: string[]) =>
+    invoke<void>('repo_discard_many', { path, files }),
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
   repoApplyPatch: (
     path: string,
@@ -110,6 +117,13 @@ export const tauri = {
     }),
   repoRemoteTags: (path: string, remote: string) =>
     invoke<string[]>('repo_remote_tags', { path, remote }),
+  repoCherryPick: (path: string, commits: string[]) =>
+    invoke<void>('repo_cherry_pick', { path, commits }),
+  repoRevert: (path: string, commits: string[]) => invoke<void>('repo_revert', { path, commits }),
+  repoMerge: (path: string, refname: string, mode: MergeMode) =>
+    invoke<void>('repo_merge', { path, refname, mode }),
+  repoRebase: (path: string, onto: string) => invoke<void>('repo_rebase', { path, onto }),
+  repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,

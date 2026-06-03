@@ -29,7 +29,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ `Repo::meta` (branch + real ahead/behind via `git2::graph_ahead_behind`;
   `detached` flag via `git2::head_detached`, short OID as the branch label)
 - ☑ `Repo::status` (via git2)
-- ☑ `Repo::log` (basic revwalk, no graph lane data)
+- ☑ `Repo::log` (revwalk across **all refs** — local + remote branches + tags +
+  HEAD, so the graph shows the whole repo regardless of the checked-out branch;
+  no graph lane data — that's computed UI-side in `lib/graph.ts`)
 - ☑ `Repo::diff_unstaged` / `diff_staged` / `diff_between` — emit per-file
   unified-patch text consumed by `<PatchDiff>` (Pierre parses hunks);
   untracked files include their full content via `show_untracked_content`
@@ -52,6 +54,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
+- ☑ Stage / unstage / discard **many** paths in one call (`Repo::stage_paths` /
+  `unstage_paths` / `discard_paths` — open the repo + write the index once, vs
+  the old per-path loop; `reset_default` takes the whole pathspec list)
 - ☑ Stage / unstage hunk + sub-hunk change block (unstaged: per-block
   Stage via `Repo::apply_patch(ApplyTarget::Index)`. Staged: per-block
   Unstage via `Repo::apply_patch(ApplyTarget::IndexReverse)`. TS-side
@@ -93,11 +98,21 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   like real git instead of git2's blanket "uncommitted changes in the index"
   refusal. **branch-from still pending** — no direct git2 API; needs
   branch-at-stash-base + checkout + apply/drop.)
-- ☐ Cherry-pick (single + multi)
-- ☐ Revert
-- ☐ Merge (ff / no-ff / squash)
-- ☐ Rebase (onto branch, onto commit)
+- ◐ Cherry-pick (single + multi) — `Repo::cherry_pick(&[oid])` shells out to
+  `git cherry-pick` (accepts a list); the commit-detail panel wires single-commit
+  cherry-pick. Bulk cherry-pick from the graph multi-selection still ☐.
+- ☑ Revert (`Repo::revert(&[oid])` — `git revert --no-edit`; commit-detail
+  "Revert" button. Reverting a merge commit needs `-m`, not yet exposed.)
+- ☑ Merge (ff / no-ff / squash) (`Repo::merge(refname, MergeMode)` — `git merge`
+  `[--no-ff|--squash] --no-edit`; sidebar branch menu "Merge into <current>" →
+  `MergeDialog` with the three strategies. Squash leaves the result staged.)
+- ☑ Rebase (onto branch, onto commit) (`Repo::rebase(onto)` — `git rebase <onto>`,
+  any revspec; sidebar branch menu "Rebase <current> onto this", confirm step.)
+- ☑ Abort in-progress op (`Repo::abort_operation` — detects rebase / cherry-pick
+  / revert / merge from `.git/` markers and runs the matching `--abort`; surfaced
+  by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)
 - ☐ Interactive rebase (custom sequence-editor; shells out)
+- ☐ Cherry-pick / revert a merge commit (mainline `-m` selection UI)
 - ☐ Submodule init / update / sync
 
 ### Network
@@ -133,11 +148,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`
-- ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_discard`,
+- ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
+  `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
   `repo_branch_delete`, `repo_tag_create`, `repo_tag_delete`,
-  `repo_stash_list`, `repo_stash_save`, `repo_stash_snapshot`,
-  `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
+  `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,
+  `repo_abort_operation`, `repo_stash_list`, `repo_stash_save`,
+  `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
   `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags` (all `async`;
   streaming progress over a `Channel` where applicable)
@@ -207,7 +224,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Branches list from real data — names with `/` render as nested
   folders (e.g. `feature/foo` lives under a `feature/` folder), default
   expanded, click chev to collapse. Leaf rows checkout on click; right-click
-  menu = Checkout / Delete branch (confirm). HEAD shows a disabled "Current
+  menu = Checkout / Merge into <current> (opens `MergeDialog`) / Rebase <current>
+  onto this (confirm) / Delete branch (confirm). HEAD shows a disabled "Current
   branch".
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
   the top folder; click a leaf — or its menu's "Create local branch & track" —
@@ -262,7 +280,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (`useSettings.diffsCollapsed`, session-only) collapses/expands all, with
   per-file overrides cleared on each bulk toggle
 - ☑ Per-row Stage / Unstage actions (file-level, hover-revealed)
-- ☑ Bulk "Stage all" / "Unstage all"
+- ☑ Bulk "Stage all" / "Unstage all" (single batched IPC — `repo_stage_many` /
+  `repo_unstage_many` open the repo + write the index once, not once per file;
+  matters for big changesets like a squash-merge staging hundreds of files)
+- ☑ Stacked diff pane is **viewport-lazy**: each file's Pierre diff body mounts
+  only when its block scrolls near the viewport (IntersectionObserver, ~900px
+  pre-roll), with a height-estimated placeholder until then — so "show all" over
+  hundreds of files no longer freezes on open / after a merge
 - ☑ Commit form: subject + body + amend
 - ☑ Commit kbd shortcut (⌘↵)
 - ☐ Per-row Discard action (currently store-level only; needs right-click menu)
@@ -289,7 +313,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
   row focus; Enter opens details; Esc closes details)
 - ☑ Commit-detail actions: Checkout (detached) + "Tag…" (opens the New-tag
-  dialog targeting that commit)
+  dialog targeting that commit) + Cherry-pick + Revert (single commit onto HEAD;
+  conflict/success surfaced via toast)
 - ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)
@@ -342,7 +367,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## Conflict resolution
 
-- ☐ Detect conflicted files from `status`
+- ◐ In-progress op surfaced + abort: `RepoMeta.operation` (rebase / cherry-pick
+  / revert / merge, read from `.git/` markers) drives an `OpBanner` above the
+  main view with an Abort button + ⌘K "Abort <op>". The three-way *resolution*
+  UI below is still the open work; today conflicts are resolved in Local Changes
+  (conflicted files show via the `CONFLICTED` status) and committed by hand.
+- ◐ Detect conflicted files from `status` (`CONFLICTED` status kind exists and
+  renders; no dedicated conflicted-files grouping yet)
 - ☐ Per-file resolved-state tracker
 - ☐ Three-way visual conflict view (likely Pierre's conflict primitive)
 - ☐ "Take current / incoming / both" actions

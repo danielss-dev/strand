@@ -12,6 +12,7 @@ import type {
   Commit,
   FileDiff,
   FileStatus,
+  MergeMode,
   Progress,
   RecentRepo,
   Refs,
@@ -185,6 +186,19 @@ export interface RepoState {
   deleteBranch(name: string, force: boolean): Promise<void>;
 
   /**
+   * History ops — all shell out to `git`. Each can stop on conflict (the
+   * promise rejects with git's message) and leaves the repo mid-operation;
+   * {@link RepoState.abortOperation} backs out, and `meta.operation` reports
+   * the in-progress state. Callers surface success/failure via a toast.
+   */
+  cherryPick(commits: string[]): Promise<void>;
+  revert(commits: string[]): Promise<void>;
+  merge(refname: string, mode: MergeMode): Promise<void>;
+  rebase(onto: string): Promise<void>;
+  /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
+  abortOperation(): Promise<void>;
+
+  /**
    * Create a tag at `target` (any revspec; null ⇒ HEAD). A non-empty
    * `message` makes it an annotated tag, otherwise lightweight.
    */
@@ -317,6 +331,22 @@ const EMPTY_ACTIVE = {
   workTree: [] as WorkTreeEntry[],
   recentMessages: [] as StoredMessage[],
 };
+
+/**
+ * The refresh every history op (cherry-pick / revert / merge / rebase /
+ * abort) runs once git returns: meta (branch + `operation` banner state),
+ * local changes (staged squash result or conflict markers), the log (new or
+ * rewritten commits), and refs (tips moved). Both the success tail and a
+ * post-abort cleanup share it.
+ */
+async function refreshAfterHistoryOp(get: () => RepoState): Promise<void> {
+  await Promise.all([
+    get().refreshMeta(),
+    get().refreshLocalChanges(),
+    get().refreshLog(),
+    get().refreshRefs(),
+  ]);
+}
 
 async function persistSession(state: RepoState): Promise<void> {
   try {
@@ -594,19 +624,19 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
-    for (const f of files) await tauri.repoStage(path, f);
+    await tauri.repoStageMany(path, files);
     await get().refreshLocalChanges();
   },
   async unstageMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
-    for (const f of files) await tauri.repoUnstage(path, f);
+    await tauri.repoUnstageMany(path, files);
     await get().refreshLocalChanges();
   },
   async discardMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
-    for (const f of files) await tauri.repoDiscard(path, f);
+    await tauri.repoDiscardMany(path, files);
     await get().refreshLocalChanges();
   },
   async applyPatch(patch, target) {
@@ -643,14 +673,16 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     const files = get().unstagedDiffs.map((d) => d.path);
-    for (const f of files) await tauri.repoStage(path, f);
+    if (files.length === 0) return;
+    await tauri.repoStageMany(path, files);
     await get().refreshLocalChanges();
   },
   async unstageAll() {
     const path = get().activePath;
     if (!path) return;
     const files = get().stagedDiffs.map((d) => d.path);
-    for (const f of files) await tauri.repoUnstage(path, f);
+    if (files.length === 0) return;
+    await tauri.repoUnstageMany(path, files);
     await get().refreshLocalChanges();
   },
   async commit(subject, body, amend) {
@@ -754,6 +786,57 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchDelete(path, name, force);
     await get().refreshRefs();
+  },
+
+  // History ops change HEAD, the working tree, the log and refs — refresh all
+  // four afterward. The refresh runs in `finally` because a *conflict* rejects
+  // the op yet still leaves the repo mid-operation: we must refresh (and rethrow)
+  // so `meta.operation` lights the banner and the conflicted files appear right
+  // away, not on the next focus.
+  async cherryPick(commits) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    try {
+      await tauri.repoCherryPick(path, commits);
+    } finally {
+      await refreshAfterHistoryOp(get);
+    }
+  },
+  async revert(commits) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    try {
+      await tauri.repoRevert(path, commits);
+    } finally {
+      await refreshAfterHistoryOp(get);
+    }
+  },
+  async merge(refname, mode) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    try {
+      await tauri.repoMerge(path, refname, mode);
+    } finally {
+      await refreshAfterHistoryOp(get);
+    }
+  },
+  async rebase(onto) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    try {
+      await tauri.repoRebase(path, onto);
+    } finally {
+      await refreshAfterHistoryOp(get);
+    }
+  },
+  async abortOperation() {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    try {
+      await tauri.repoAbortOperation(path);
+    } finally {
+      await refreshAfterHistoryOp(get);
+    }
   },
 
   async createTag(name, target, message) {

@@ -11,10 +11,12 @@ import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
 interface CommitsProps {
   /** Open the New-tag dialog targeting a commit (revspec + label). */
   onCreateTag: (target: string, label: string) => void;
+  /** Surface cherry-pick / revert feedback from the commit-detail panel. */
+  onToast: (msg: string) => void;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag }: CommitsProps) {
+export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
@@ -280,7 +282,7 @@ export function Commits({ onCreateTag }: CommitsProps) {
             <>
               <PanelResizeHandle className="rs-handle vert" />
               <Panel defaultSize={38} minSize={25} maxSize={55}>
-                <CommitDetail onCreateTag={onCreateTag} />
+                <CommitDetail onCreateTag={onCreateTag} onToast={onToast} />
               </Panel>
             </>
           ) : null}

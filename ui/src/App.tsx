@@ -13,11 +13,12 @@ import { isTauri } from './lib/tauri';
 import { CloneDialog } from './views/CloneDialog';
 import { StashDialog } from './views/StashDialog';
 import { TagDialog } from './views/TagDialog';
+import { MergeDialog } from './views/MergeDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { CommandPalette, type PaletteAction } from './views/Palette';
-import type { Progress } from './lib/types';
+import type { Progress, RepoMeta } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -43,6 +44,7 @@ export function App() {
   const pullRepo = useRepo((s) => s.pull);
   const pushRepo = useRepo((s) => s.push);
   const pushAllTags = useRepo((s) => s.pushAllTags);
+  const abortOperation = useRepo((s) => s.abortOperation);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -50,6 +52,8 @@ export function App() {
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
+  // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
+  const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -249,6 +253,23 @@ export function App() {
       { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
       { id: 'tweaks',  label: 'Toggle theme',      shortcut: '⌘⇧T', run: () => setSetting('theme', theme === 'dark' ? 'light' : 'dark') },
     ];
+    // Surface "Abort" in the palette only while an op is actually paused.
+    if (meta?.operation) {
+      base.push({
+        id: 'abort-op',
+        label: `Abort ${meta.operation}`,
+        run: () => {
+          void (async () => {
+            try {
+              await abortOperation();
+              showToast('Operation aborted');
+            } catch (e) {
+              showToast(`Abort failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          })();
+        },
+      });
+    }
     const recentActions: PaletteAction[] = recents.map((r) => ({
       id: `recent:${r.path}`,
       label: `Open recent: ${r.name}`,
@@ -257,7 +278,7 @@ export function App() {
     }));
     return [...base, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setSetting, theme, recents,
-      pushAllTags, onNetProgress, showToast]);
+      pushAllTags, onNetProgress, showToast, meta?.operation, abortOperation]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -293,6 +314,7 @@ export function App() {
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onMerge={(source, into) => setMergeDialog({ source, into })}
                 onToast={showToast}
               />
             </Panel>
@@ -303,10 +325,12 @@ export function App() {
               ) : (
                 <div className="main">
                   <MainHeader />
+                  <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {(view === 'commits' || view === 'branch') && (
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
+                      onToast={showToast}
                     />
                   )}
                 </div>
@@ -349,6 +373,15 @@ export function App() {
           target={tagDialog.target}
           targetLabel={tagDialog.label}
           onClose={() => setTagDialog(null)}
+        />
+      )}
+
+      {mergeDialog && (
+        <MergeDialog
+          source={mergeDialog.source}
+          into={mergeDialog.into}
+          onClose={() => setMergeDialog(null)}
+          onToast={showToast}
         />
       )}
 
@@ -407,6 +440,52 @@ function UndoToast() {
   );
 }
 
+/** Human label for an in-progress sequencer op (from `meta.operation`). */
+const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
+  rebase: 'Rebase in progress',
+  'cherry-pick': 'Cherry-pick in progress',
+  revert: 'Revert in progress',
+  merge: 'Merge in progress',
+};
+
+/**
+ * Banner shown above the main view whenever a merge/rebase/cherry-pick/revert
+ * is paused (typically on a conflict). Offers an Abort that restores the
+ * pre-op state — the in-app escape hatch until the three-way resolution UI
+ * lands. Resolving + committing the conflict (via Local Changes) clears
+ * `operation` on the next refresh, which hides the banner.
+ */
+function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
+  const operation = useRepo((s) => s.meta?.operation ?? null);
+  const abortOperation = useRepo((s) => s.abortOperation);
+  const [busy, setBusy] = useState(false);
+  if (!operation) return null;
+
+  const onAbort = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await abortOperation();
+      onToast('Operation aborted');
+    } catch (e) {
+      onToast(`Abort failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="op-banner" role="status">
+      <Icon name="rebase" size={13} />
+      <span className="op-label">{OP_LABEL[operation]}</span>
+      <span className="op-hint">Resolve the conflicts in Local Changes and commit, or</span>
+      <button type="button" className="btn ghost op-abort" disabled={busy} onClick={() => void onAbort()}>
+        {busy ? 'Aborting…' : 'Abort'}
+      </button>
+    </div>
+  );
+}
+
 function MainHeader() {
   const view = useRepo((s) => s.view);
   const meta = useRepo((s) => s.meta);
@@ -440,7 +519,7 @@ function MainHeader() {
   const sub = view === 'local'
     ? `${meta?.branch ?? '—'} · ${status.length} files with changes`
     : view === 'commits'
-      ? `${commits.length} commits on this branch`
+      ? `${commits.length} commits across all branches`
       : '';
 
   return (

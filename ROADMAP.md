@@ -236,8 +236,9 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Stashes (create, apply, pop, drop)
 - ☑ Tags (lightweight + annotated) — create / delete / checkout, plus push /
   delete on a remote
-- ☐ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
-- ☐ Conflict resolution UI (three-way view)
+- ☑ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
+- ◐ Conflict resolution UI (three-way view) — in-progress banner + Abort shipped;
+  the three-way merge editor is still the open work
 - ☐ Discard changes (line / hunk / file) with single-undo
 - ☐ Stacked + split diff layouts (persisted per-repo)
 - ☐ **Theme management**
@@ -323,6 +324,26 @@ to avoid re-fetching. Made it **stale-while-revalidate**: a persisted
 instantly on open, then `ls-remote` revalidates in the background at most once
 per repo per session — so it feels instant and doesn't re-hit the network on
 every tab switch.
+
+**History ops — cherry-pick / revert / merge / rebase (2026-06-03):** Third 0.5
+vertical. New `strand-core::history` shells out to `git` for all four (the stash
+apply/pop precedent — real git resolves conflicts with on-disk markers, signs the
+resulting commits, and runs hooks; git2's merge/cherrypick/revert primitives do
+none of that and have no rebase driver). `cherry_pick(&[oid])` / `revert(&[oid])`
+(`--no-edit`) / `merge(refname, MergeMode {Auto|NoFastForward|Squash})` / `rebase(onto)`,
+plus `abort_operation` which detects the live op from `.git/` markers
+(`rebase-merge`/`rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_HEAD`) and
+runs the matching `--abort`. `RepoMeta` gained `operation: Option<String>` so the UI
+can show an in-progress banner. Five new `repo_*` IPC commands + `tauri.ts` wrappers
++ store actions (each refreshes meta + local changes + log + refs). UI: commit-detail
+**Cherry-pick** / **Revert** buttons (single commit onto HEAD); sidebar branch menu
+**Merge into <current>** (opens a new `MergeDialog` with FF-when-possible / No-FF /
+Squash) and **Rebase <current> onto this** (confirm); an `OpBanner` above the main view
+with **Abort** whenever an op is paused, plus a ⌘K "Abort <op>" action. Conflicts
+aren't hidden — git's message toasts, the repo stays mid-op, and Abort/resolve-in-
+Local-Changes are the two exits (the three-way resolution UI is still its own line).
+Verified with `cargo test` (+3 `history` tests: no-ff merge + revert, cross-branch
+cherry-pick, conflict→abort round-trip), `clippy`, `tsc`, and `vite build`.
 
 **Sidebar row actions → right-click menu (2026-06-01):** Per-row actions moved
 off inline hover tools into a reusable right-click `ContextMenu`

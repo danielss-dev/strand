@@ -1,7 +1,8 @@
 use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff,
-    log::Commit, network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
+    history::MergeMode, log::Commit,
+    network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
     refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
     tree::WorkTreeEntry, Repo,
 };
@@ -82,6 +83,24 @@ pub fn repo_stage(path: String, file: String) -> CmdResult<()> {
 #[tauri::command]
 pub fn repo_unstage(path: String, file: String) -> CmdResult<()> {
     Repo::discover(&path)?.unstage_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_stage_many(path: String, files: Vec<String>) -> CmdResult<()> {
+    Repo::discover(&path)?.stage_paths(&files)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_unstage_many(path: String, files: Vec<String>) -> CmdResult<()> {
+    Repo::discover(&path)?.unstage_paths(&files)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_discard_many(path: String, files: Vec<String>) -> CmdResult<()> {
+    Repo::discover(&path)?.discard_paths(&files)?;
     Ok(())
 }
 
@@ -282,6 +301,36 @@ pub async fn repo_tag_push_all(
     })
     .await
     .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
+}
+
+#[tauri::command]
+pub fn repo_cherry_pick(path: String, commits: Vec<String>) -> CmdResult<()> {
+    Repo::discover(&path)?.cherry_pick(&commits)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_revert(path: String, commits: Vec<String>) -> CmdResult<()> {
+    Repo::discover(&path)?.revert(&commits)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<()> {
+    Repo::discover(&path)?.merge(&refname, MergeMode::from_wire(&mode)?)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_rebase(path: String, onto: String) -> CmdResult<()> {
+    Repo::discover(&path)?.rebase(&onto)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_abort_operation(path: String) -> CmdResult<()> {
+    Repo::discover(&path)?.abort_operation()?;
+    Ok(())
 }
 
 #[tauri::command]

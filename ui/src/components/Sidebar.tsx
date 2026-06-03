@@ -60,6 +60,8 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  /** Open the Merge dialog: merge `source` into the current branch `into`. */
+  onMerge: (source: string, into: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string) => void;
 }
@@ -107,7 +109,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onMerge, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -133,6 +135,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
   const stashDrop = useRepo((s) => s.stashDrop);
+  const rebase = useRepo((s) => s.rebase);
+  const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
@@ -295,13 +299,31 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const localBranchName = (rb: RemoteBranch) =>
     refs.branches.some((b) => b.name === rb.branch) ? `${rb.remote}/${rb.branch}` : rb.branch;
 
-  const branchMenu = (b: Branch): MenuItem[] =>
-    b.is_head
-      ? [{ label: 'Current branch', disabled: true, onSelect: () => {} }]
-      : [
-          { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
-          { label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) },
-        ];
+  // Merge/rebase a non-current branch into/onto the current one. Both can
+  // conflict — surface git's message (and success) via a toast.
+  const runRebase = (onto: string) => {
+    void (async () => {
+      try {
+        await rebase(onto);
+        onToast(`Rebased ${currentBranch} onto ${onto}`);
+      } catch (e) {
+        onToast(`Rebase failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  };
+
+  const branchMenu = (b: Branch): MenuItem[] => {
+    if (b.is_head) return [{ label: 'Current branch', disabled: true, onSelect: () => {} }];
+    const items: MenuItem[] = [
+      { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+    ];
+    if (currentBranch) {
+      items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
+      items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
+    }
+    items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) });
+    return items;
+  };
 
   const remoteMenu = (rb: RemoteBranch): MenuItem[] => [
     { label: 'Create local branch & track', icon: 'branch', onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)) },

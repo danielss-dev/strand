@@ -15,13 +15,27 @@ pub struct Commit {
 }
 
 impl Repo {
-    /// Walk commits from HEAD, newest first, up to `limit`.
+    /// Walk commits across **all refs** (`git log --all`-style), newest first,
+    /// up to `limit`.
     ///
-    /// Stub implementation — graph computation (lanes, refs) lives elsewhere.
+    /// We push every local branch, remote-tracking branch, and tag — plus HEAD
+    /// for the detached case — so the graph shows the whole repository, not just
+    /// the checked-out branch's ancestry. That's what makes commits on *other*
+    /// branches visible (and so cherry-pick / merge targets reachable) when an
+    /// old branch is checked out. `push_glob` peels annotated tags to their
+    /// commit and skips non-committish refs, so tags are safe to include.
+    /// Graph computation (lanes, ref chips) lives in the UI (`lib/graph.ts`).
     pub fn log(&self, limit: usize) -> Result<Vec<Commit>> {
         let repo = self.git2()?;
         let mut walk = repo.revwalk()?;
+        // HEAD covers a detached checkout (no branch ref to glob); the globs
+        // cover everything else. A commit reachable from several refs is still
+        // yielded once. Each push is best-effort — an empty namespace just
+        // matches nothing.
         walk.push_head().ok();
+        walk.push_glob("refs/heads/*").ok();
+        walk.push_glob("refs/remotes/*").ok();
+        walk.push_glob("refs/tags/*").ok();
         walk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)?;
 
         let mut out = Vec::with_capacity(limit);

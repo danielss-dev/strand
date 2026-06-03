@@ -80,6 +80,67 @@ TASKS.md are what skipping it looks like.
 
 ---
 
+## Never mount every diff at once; bulk index ops go in one call
+
+**Rule.** Two perf traps with large changesets (a squash-merge or a fresh repo
+can stage hundreds of files):
+
+1. **Don't mount a Pierre diff per file eagerly.** The "show all" Local Changes
+   view stacks one `<HunkAnnotatedDiff/>` (a virtualized Pierre `<FileDiff/>`)
+   per changed file. Mounting all of them on open froze the app for seconds.
+   `FileDiffSection` now **viewport-lazy mounts** the body: an
+   `IntersectionObserver` (~900px pre-roll) flips a `seen` flag the first time
+   the block nears the viewport, and a height-estimated `.lc-file-pending`
+   placeholder (`(adds+dels)*20`, clamped) reserves space until then so the
+   scrollbar stays honest and far-off files aren't counted as near. Once mounted
+   it stays mounted (mounting is the cost, not staying mounted). Any new
+   multi-file diff surface must do the same — don't render N heavy diffs at once.
+
+2. **Bulk index writes are one call, not N.** Staging/unstaging/discarding a set
+   of files must go through `Repo::stage_paths` / `unstage_paths` /
+   `discard_paths` (IPC `repo_stage_many` / `_unstage_many` / `_discard_many`),
+   which open the repo and write the index **once**. The old store loop did one
+   `repo_stage` IPC per file — each re-opened the repo and rewrote the whole
+   index, so "Stage all" / "Unstage all" on a squash-merge's hundreds of files
+   was hundreds of full index writes. `stageMany`/`unstageMany`/`discardMany`
+   and `stageAll`/`unstageAll` all route through the batch path now.
+
+**Why.** PRD §8 perf targets (status refresh < 200ms, diff render < 100ms) are
+hard requirements, and "open a repo with a lot of changes" / "squash-merge" are
+exactly the cases that blow them. Both fixes were prompted by a real freeze.
+
+---
+
+## Shell-out helpers are per-module; don't add a second `Repo::run_git`
+
+**Rule.** The "shell out to the user's `git`" modules each carry their own
+subprocess helper, and they are deliberately *not* shared: `network.rs` has
+`run_git_streaming` (free fn, streams stderr fragments), `stash.rs` has a
+`Repo::run_git` **inherent method**, and `history.rs` has a module-private
+free fn `run_git`. If you add another shell-out module (submodules, interactive
+rebase, …) **do not** define another `fn run_git` as a `Repo` method — Rust
+forbids two inherent methods with the same name on the same type across modules,
+so it collides with `stash.rs` and won't compile. Use a module-local free
+function `run_git(cwd: &Path, args: &[&str])` (the `history.rs` shape) instead.
+
+**Why.** The collision error (`duplicate definitions for run_git`) points at
+both modules and is easy to misread as a merge artifact. The duplication is
+intentional: each helper differs (streaming vs. plain, conflict-aware
+stdout+stderr combining vs. stderr-only) and keeping them self-contained matched
+the existing pattern better than a forced shared abstraction.
+
+**How to apply.** Shell-out policy is for ops where matching real `git`
+behaviour matters more than staying pure-git2: **conflicts** (git leaves markers
++ the in-progress state on disk), **GPG/SSH signing**, and **hooks** — none of
+which git2's `merge`/`cherrypick`/`revert` do for free, and git2 has no rebase
+driver. Index/commit ops still use git2. After any history op, the store refresh
+tail is meta + local-changes + log + refs (`refreshAfterHistoryOp`), and a paused
+op is detected via `Repo::operation_in_progress` reading `.git/` markers
+(`rebase-merge`/`rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_HEAD`,
+checked in that order) → surfaced as `RepoMeta.operation` + the `OpBanner`.
+
+---
+
 ## `tauri-plugin-sql` `:default` doesn't include writes
 
 `sql:default` only grants `allow-close`, `allow-load`, `allow-select`.

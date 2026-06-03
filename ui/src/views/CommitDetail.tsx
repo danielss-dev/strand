@@ -17,9 +17,12 @@ import type { DiffStatus, FileDiff } from '../lib/types';
  */
 export function CommitDetail({
   onCreateTag,
+  onToast,
 }: {
   /** Open the New-tag dialog targeting this commit (revspec + label). */
   onCreateTag: (target: string, label: string) => void;
+  /** Surface cherry-pick / revert success or git's conflict message. */
+  onToast: (msg: string) => void;
 }) {
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const diffs = useRepo((s) => s.selectedCommitDiffs);
@@ -27,6 +30,8 @@ export function CommitDetail({
   const commits = useRepo((s) => s.commits);
   const selectCommit = useRepo((s) => s.selectCommit);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
+  const cherryPick = useRepo((s) => s.cherryPick);
+  const revert = useRepo((s) => s.revert);
   const diffMode = useSettings((s) => s.diffMode);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
@@ -63,6 +68,34 @@ export function CommitDetail({
       setCheckoutError(e instanceof Error ? e.message : String(e));
     } finally {
       setCheckingOut(false);
+    }
+  }
+
+  // Cherry-pick / revert this commit onto HEAD. Both can conflict — surface
+  // git's message via a toast rather than the inline (single-line) slot.
+  const [historyBusy, setHistoryBusy] = useState(false);
+  async function onCherryPick() {
+    if (historyBusy) return;
+    setHistoryBusy(true);
+    try {
+      await cherryPick([hash]);
+      onToast(`Cherry-picked ${commit!.short_hash}`);
+    } catch (e) {
+      onToast(`Cherry-pick failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+  async function onRevert() {
+    if (historyBusy) return;
+    setHistoryBusy(true);
+    try {
+      await revert([hash]);
+      onToast(`Reverted ${commit!.short_hash}`);
+    } catch (e) {
+      onToast(`Revert failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setHistoryBusy(false);
     }
   }
 
@@ -128,6 +161,26 @@ export function CommitDetail({
           >
             <Icon name="tag" size={12} />
             Tag…
+          </button>
+          <button
+            type="button"
+            className="btn ghost cd-action-btn"
+            disabled={historyBusy}
+            onClick={() => void onCherryPick()}
+            title="Apply this commit's changes onto the current branch"
+          >
+            <Icon name="arrow-down" size={12} />
+            Cherry-pick
+          </button>
+          <button
+            type="button"
+            className="btn ghost cd-action-btn"
+            disabled={historyBusy}
+            onClick={() => void onRevert()}
+            title="Create a commit that undoes this commit"
+          >
+            <Icon name="history" size={12} />
+            Revert
           </button>
         </div>
         {checkoutError ? <div className="cd-action-error">{checkoutError}</div> : null}

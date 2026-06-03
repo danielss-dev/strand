@@ -11,7 +11,15 @@ export interface RepoMeta {
   behind: number;
   /** True when HEAD is detached; `branch` then holds the short OID. */
   detached: boolean;
+  /**
+   * Multi-step history op paused mid-flight, or `null` in a normal state.
+   * Drives the in-progress banner + Abort affordance.
+   */
+  operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | null;
 }
+
+/** Merge strategy chosen in the Merge dialog. */
+export type MergeMode = 'auto' | 'no_ff' | 'squash';
 
 export type StatusKind = 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED' | 'CONFLICTED';
 

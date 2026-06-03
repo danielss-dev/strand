@@ -70,7 +70,30 @@ impl Repo {
             ahead,
             behind,
             detached,
+            operation: self.operation_in_progress(),
         })
+    }
+
+    /// Which multi-step history op (if any) is paused mid-flight, detected from
+    /// the on-disk markers git leaves in `.git/`. Returns one of `"rebase"`,
+    /// `"cherry-pick"`, `"revert"`, `"merge"`, or `None`. Order matters: a
+    /// rebase can leave a `MERGE_HEAD` while resolving, so rebase is checked
+    /// first. Used by [`meta`](Repo::meta) (UI banner) and
+    /// [`abort_operation`](crate::repo::Repo::abort_operation).
+    pub(crate) fn operation_in_progress(&self) -> Option<String> {
+        let git_dir = self.gix.git_dir();
+        let has = |name: &str| git_dir.join(name).exists();
+        if has("rebase-merge") || has("rebase-apply") {
+            Some("rebase".into())
+        } else if has("CHERRY_PICK_HEAD") {
+            Some("cherry-pick".into())
+        } else if has("REVERT_HEAD") {
+            Some("revert".into())
+        } else if has("MERGE_HEAD") {
+            Some("merge".into())
+        } else {
+            None
+        }
     }
 
     /// Walk HEAD against its configured upstream and return (ahead, behind).
@@ -103,4 +126,8 @@ pub struct RepoMeta {
     /// True when HEAD is detached (parked on a commit, not a branch). The
     /// `branch` field then holds the short OID.
     pub detached: bool,
+    /// Multi-step history op paused mid-flight (`"rebase"` / `"cherry-pick"` /
+    /// `"revert"` / `"merge"`), or `None` when the repo is in a normal state.
+    /// Drives the in-progress banner + Abort affordance.
+    pub operation: Option<String>,
 }

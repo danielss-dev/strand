@@ -2022,6 +2022,17 @@ button {
   font-size: 12px;
   color: var(--text-muted);
 }
+/* Space reserved for a not-yet-mounted diff body (viewport-lazy mount). */
+.lc-file-pending {
+  background: repeating-linear-gradient(
+    0deg,
+    var(--bg-base),
+    var(--bg-base) 19px,
+    var(--bg-elev) 19px,
+    var(--bg-elev) 20px
+  );
+  opacity: 0.35;
+}
 .lc-block-marker {
   display: block;
   height: 0;
@@ -2441,6 +2452,67 @@ textarea.clone-input {
   box-shadow: 0 0 0 0.5px var(--border) inset;
   font-size: 11px;
   color: var(--text-2);
+}
+
+/* Merge dialog — strategy radio list (reuses the clone-dialog shell). */
+.merge-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.merge-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.merge-mode.on {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+  background: var(--bg-base);
+}
+.merge-mode input {
+  flex: none;
+  margin-top: 1px;
+  accent-color: var(--accent);
+}
+.mm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.mm-label {
+  font-size: var(--type-ui);
+  color: var(--text);
+}
+.mm-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* In-progress sequencer banner (merge/rebase/cherry-pick/revert paused). */
+.op-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: color-mix(in srgb, var(--warn, var(--accent)) 14%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border);
+  color: var(--text);
+  font-size: var(--type-ui);
+}
+.op-banner .op-label {
+  font-weight: 600;
+}
+.op-banner .op-hint {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.op-banner .op-abort {
+  margin-left: auto;
 }
 
 /* ─── Pierre file tree (@pierre/trees) ─────────────────────────────────── */
