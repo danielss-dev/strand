@@ -2,6 +2,14 @@
 
 Notes for AI coding agents working on Strand. Read this first.
 
+## Prime directive
+
+Strand must be **stable, fast, and performance-first.** This is the lens
+for every change: prefer correctness and predictable behavior over clever
+shortcuts, and never regress a hot path. Performance is a feature, not an
+afterthought — if a change trades responsiveness for convenience, it's the
+wrong change. See PRD §8 for the concrete targets.
+
 ## Start here
 
 - [`PRD.md`](./PRD.md) — what we're building and why.
