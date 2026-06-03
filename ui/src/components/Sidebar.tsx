@@ -119,6 +119,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const refs = useRepo((s) => s.refs);
   const checkout = useRepo((s) => s.checkout);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
+  const revealInGraph = useRepo((s) => s.revealInGraph);
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
   const deleteTag = useRepo((s) => s.deleteTag);
@@ -345,6 +346,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() || b.upstream.name
         : undefined}
       onActivate={() => !b.is_head && void runBranchOp(() => checkout(b.name))}
+      onSelect={() => revealInGraph(b.target)}
       onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
     />
   );
@@ -356,6 +358,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon="branch"
       label={leafName(rb.name)}
       onActivate={() => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true))}
+      onSelect={() => revealInGraph(rb.target)}
       onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
     />
   );
@@ -367,8 +370,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon="tag"
       label={leafName(tg.name)}
       meta={tg.annotated ? 'annotated' : undefined}
-      title={`${leafName(tg.name)} — click to check out`}
+      title={`${leafName(tg.name)} — click to reveal, double-click to check out`}
       onActivate={() => void runBranchOp(() => checkoutCommit(tg.target))}
+      onSelect={() => revealInGraph(tg.target)}
       onMenu={(x, y) => openMenu(x, y, tagMenu(tg))}
     />
   );
@@ -463,7 +467,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 icon="stash"
                 label={stashLabel(s)}
                 meta={s.branch ?? undefined}
-                title={`${stashLabel(s)} — click to apply`}
+                title={`${stashLabel(s)} — double-click to apply`}
                 onActivate={() => void runBranchOp(() => stashApply(s.index))}
                 onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
               />
@@ -588,19 +592,21 @@ interface SideLeafProps {
   active?: boolean;
   /** Tooltip; defaults to the label. */
   title?: string;
-  /** Primary action — left-click, Enter, or Space. */
+  /** Primary action — double-click, Enter, or Space. */
   onActivate?: () => void;
+  /** Single-click action — reveals the row's tip commit in the graph. */
+  onSelect?: () => void;
   /** Open the row's action menu at the given viewport coordinates. */
   onMenu: (x: number, y: number) => void;
 }
 
 /**
  * A sidebar leaf row (branch / remote / tag / stash). The primary action runs
- * on click / Enter; every action the row supports — including the primary one
+ * on double-click / Enter; every action the row supports — including the primary one
  * — also lives in a right-click menu opened via `onMenu`. Keyboard users open
  * it with the Menu key or Shift+F10, positioned at the row's corner.
  */
-function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onMenu }: SideLeafProps) {
+function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const openKeyboardMenu = () => {
     const r = rowRef.current?.getBoundingClientRect();
@@ -611,7 +617,8 @@ function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onMenu 
       ref={rowRef}
       className={'side-row branch-row' + (active ? ' active' : '')}
       style={{ paddingLeft: 16 + depth * 14 }}
-      onClick={onActivate}
+      onClick={onSelect}
+      onDoubleClick={onActivate}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu(e.clientX, e.clientY);

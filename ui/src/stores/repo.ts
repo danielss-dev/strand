@@ -89,6 +89,13 @@ export interface RepoState {
   selectedCommitDiffs: FileDiff[];
   selectedCommitDiffsLoading: boolean;
 
+  /**
+   * A commit the All Commits graph should scroll to and highlight, set by a
+   * single-click on a sidebar branch/remote/tag row. Transient: the graph
+   * consumes it (focuses the row) and calls {@link RepoState.clearReveal}.
+   */
+  revealCommit: string | null;
+
   /** Branches / remotes / tags for the active tab. */
   refs: Refs;
 
@@ -224,6 +231,13 @@ export interface RepoState {
   /** Open the commit-detail panel for `hash`, or close it when null. */
   selectCommit(hash: string | null): Promise<void>;
 
+  /** Switch to the All Commits graph and reveal (scroll to + highlight)
+   * `hash` — the tip of a sidebar branch/remote/tag row. */
+  revealInGraph(hash: string): void;
+  /** Clear the pending {@link RepoState.revealCommit} once the graph has
+   * consumed it. */
+  clearReveal(): void;
+
   refreshRecents(): Promise<void>;
   forgetRecent(path: string): Promise<void>;
 
@@ -296,6 +310,7 @@ const EMPTY_ACTIVE = {
   selectedCommit: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
+  revealCommit: null as string | null,
   refs: EMPTY_REFS,
   remoteTags: null as string[] | null,
   stashes: [] as Stash[],
@@ -910,6 +925,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
 
   setView: (view) => set({ view }),
+  revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
+  clearReveal: () => set({ revealCommit: null }),
   selectFile: (selectedFile) => set({ selectedFile, view: selectedFile ? 'file' : get().view }),
   selectRef: (selectedRef) => set({ selectedRef }),
 }));

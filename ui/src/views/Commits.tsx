@@ -19,6 +19,8 @@ export function Commits({ onCreateTag }: CommitsProps) {
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const selectCommit = useRepo((s) => s.selectCommit);
+  const revealCommit = useRepo((s) => s.revealCommit);
+  const clearReveal = useRepo((s) => s.clearReveal);
   const graphMainRef = useRef<HTMLDivElement>(null);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
   const didInitialFocus = useRef(false);
@@ -167,6 +169,21 @@ export function Commits({ onCreateTag }: CommitsProps) {
       anchorRef.current = fallback;
     }
   }, [commits, focusedCommit, currentCommit]);
+
+  // A single-click on a sidebar branch/remote/tag row asks the graph to scroll
+  // to and highlight that ref's tip commit. Focusing the row drives the
+  // scrollIntoView effect below. Wait for the log to load before consuming so a
+  // view switch (which renders an empty graph for a beat) doesn't drop it.
+  useEffect(() => {
+    if (!revealCommit || commits.length === 0) return;
+    if (commits.some((c) => c.hash === revealCommit)) {
+      setFocusedCommit(revealCommit);
+      setMulti(new Set([revealCommit]));
+      anchorRef.current = revealCommit;
+      graphMainRef.current?.focus();
+    }
+    clearReveal();
+  }, [revealCommit, commits, clearReveal]);
 
   useEffect(() => {
     focusedRowRef.current?.scrollIntoView({ block: 'nearest' });

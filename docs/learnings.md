@@ -212,3 +212,27 @@ Note: "expand/collapse all" in Local Changes operates on the **diff pane**
 (folding each file's diff body), not on the tree's folders — the header
 toolbar toggle writes `useSettings.diffsCollapsed` and each `FileDiffSection`
 header folds its own body. There is intentionally no folder expand/collapse-all.
+
+---
+
+## Sidebar leaf rows: single-click reveals, double-click activates
+
+**Rule.** `SideLeaf` in `ui/src/components/Sidebar.tsx` (branches, remote
+branches, tags, stashes) runs its *primary* action — checkout / create
+tracking branch / checkout tag / apply stash — on **double-click** (`onActivate`),
+not single-click. A single click runs `onSelect`, which for refs calls
+`revealInGraph(target)`: it switches to the All Commits view and scrolls to +
+highlights that ref's tip commit. Stashes have no `onSelect` (single click is a
+no-op for them).
+
+**Why.** Single-click checkout was too easy to trigger by accident, and users
+wanted a click to just *show* where a branch is in the graph. Keyboard parity
+is kept via Enter/Space = `onActivate` (the primary action), since there is no
+keyboard double-click.
+
+**How to apply.** The reveal is a transient store signal: `revealInGraph(hash)`
+sets `view:'commits'` + `revealCommit`, and `Commits.tsx` consumes it in an
+effect (sets `focusedCommit`, which drives the existing `scrollIntoView`), then
+calls `clearReveal()`. The effect waits for `commits.length > 0` so a view
+switch (empty graph for a beat) does not drop the request. If the tip commit
+is outside the loaded log window, the view still switches but nothing scrolls.
