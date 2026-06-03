@@ -37,25 +37,22 @@ export function LocalChanges() {
   const unstageAll = useRepo((s) => s.unstageAll);
   const selectLocalFile = useRepo((s) => s.selectLocalFile);
 
-  // Auto-select first file when the previous selection disappears so the
-  // diff pane stays populated between operations.
+  // Default to showing *all* changes (unstaged, else staged) whenever nothing
+  // is selected — on open, and after an operation clears the selection — so the
+  // diff pane always reflects the whole working tree until the user narrows it.
   useEffect(() => {
     if (selection) return;
-    const first =
-      unstaged[0] != null
-        ? { file: unstaged[0].path, staged: false }
-        : staged[0] != null
-          ? { file: staged[0].path, staged: true }
-          : null;
-    if (first) selectLocalFile(first);
+    if (unstaged.length) selectLocalFile({ file: '', staged: false, all: true });
+    else if (staged.length) selectLocalFile({ file: '', staged: true, all: true });
   }, [selection, unstaged, staged, selectLocalFile]);
 
-  // The diff(s) the selection drives. A file row → just that file. A folder
-  // row (Pierre reports directory paths with a trailing slash, no exact file
-  // match) → every changed file beneath it, stacked in the pane.
+  // The diff(s) the selection drives. "Show all" → the whole side. A file row →
+  // just that file. A folder row (Pierre reports directory paths with a
+  // trailing slash, no exact file match) → every changed file beneath it.
   const selectedDiffs = useMemo<FileDiff[]>(() => {
     if (!selection) return [];
     const pool = selection.staged ? staged : unstaged;
+    if (selection.all) return pool;
     const exact = pool.find((d) => d.path === selection.file);
     if (exact) return [exact];
     const prefix = selection.file.replace(/\/+$/, '') + '/';
@@ -152,7 +149,11 @@ function FileSection({
     () => files.map((f) => ({ path: f.path, status: diffStatusToGit(f.status) })),
     [files],
   );
-  const selectedPath = selection && selection.staged === staged ? selection.file : null;
+  // A row is highlighted only for a concrete file selection on this side — not
+  // for a "show all" selection (the header carries that highlight instead).
+  const selectedPath =
+    selection && !selection.all && selection.staged === staged ? selection.file : null;
+  const allActive = selection?.all === true && selection.staged === staged;
 
   const menuItems = useCallback(
     (targets: string[]): TreeMenuItem[] => {
@@ -183,8 +184,17 @@ function FileSection({
   return (
     <div className="lc-files-section">
       <div className="lc-col-head">
-        {title}
-        <span className="count">{files.length}</span>
+        <button
+          type="button"
+          className={'lc-col-title' + (allActive ? ' active' : '')}
+          onClick={() => onSelect({ file: '', staged, all: true })}
+          disabled={files.length === 0}
+          title={`Show all ${title.toLowerCase()} changes`}
+          aria-pressed={allActive}
+        >
+          {title}
+          <span className="count">{files.length}</span>
+        </button>
         <div className="h-actions">
           {files.length > 0 && (
             <button type="button" className="h-link" onClick={onBulk}>
@@ -219,12 +229,15 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
   // `diffsCollapsed` (the header toggle) is the bulk default; `overrides` holds
   // the files the user has individually flipped away from it via their header.
   // A bulk toggle clears the overrides so "collapse/expand all" is absolute.
+  // A lone file always defaults to expanded — collapse-all only makes sense for
+  // the multi-file (folder / show-all) views.
   const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const [overrides, setOverrides] = useState<Set<string>>(() => new Set());
   useEffect(() => setOverrides(new Set()), [diffsCollapsed]);
 
+  const baseCollapsed = diffs.length > 1 && diffsCollapsed;
   const isCollapsed = (path: string) =>
-    overrides.has(path) ? !diffsCollapsed : diffsCollapsed;
+    overrides.has(path) ? !baseCollapsed : baseCollapsed;
   const toggle = (path: string) =>
     setOverrides((prev) => {
       const next = new Set(prev);

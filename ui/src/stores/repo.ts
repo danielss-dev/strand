@@ -43,6 +43,13 @@ export interface RepoTab {
 export interface LocalSelection {
   file: string;
   staged: boolean;
+  /**
+   * When true, the diff pane shows *every* file on this side (`staged`)
+   * stacked, rather than the single `file` (which is ignored). This is the
+   * default view when Local Changes opens, and is re-selectable from the
+   * column header.
+   */
+  all?: boolean;
 }
 
 export interface RepoState {
@@ -499,7 +506,11 @@ export const useRepo = create<RepoState>((set, get) => ({
     // for example) move the selection to a sibling so the middle pane keeps
     // showing something useful.
     const sel = get().localSelection;
-    if (sel) {
+    if (sel?.all) {
+      // A "show all" selection stays valid as long as its side has files;
+      // if the side emptied, drop it so the view re-defaults (see LocalChanges).
+      if ((sel.staged ? staged : unstaged).length === 0) set({ localSelection: null });
+    } else if (sel) {
       const stillThere = (sel.staged ? staged : unstaged).some((f) => f.path === sel.file);
       if (!stillThere) {
         const alt = (sel.staged ? unstaged : staged).find((f) => f.path === sel.file);

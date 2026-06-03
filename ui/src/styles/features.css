@@ -590,6 +590,29 @@
   white-space: nowrap;
   overflow: hidden;
 }
+.lc-col-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* Inherit the uppercase header styling from .lc-col-head. */
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 -4px;
+  padding: 2px 4px;
+}
+.lc-col-title:hover:not(:disabled) {
+  color: var(--text);
+}
+.lc-col-title.active {
+  color: var(--accent);
+}
+.lc-col-title:disabled {
+  cursor: default;
+}
 .lc-col-head .count {
   font-family: var(--font-mono);
   font-size: 10.5px;

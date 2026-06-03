@@ -251,6 +251,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Folder row selection aggregates the diffs of every changed file beneath
   it, stacked in the diff pane (`selectedDiffs` in `LocalChanges.tsx` →
   `FileDiffSection`; each file keeps its sticky header + per-block actions)
+- ☑ "Show all" diff view: Local Changes opens showing every changed file
+  stacked (default `LocalSelection.all`), re-selectable by clicking the
+  Unstaged / Staged column title (per-side: the side's full changeset)
 - ☑ Folder rows toggle expansion only via the disclosure chevron, not the
   whole row (`PierreTree` `toggleDirOnRowClick={false}` + microtask
   reverse-toggle); a double-click on the chevron no longer stages the folder
