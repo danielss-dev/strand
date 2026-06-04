@@ -56,7 +56,12 @@ impl Repo {
                 .unwrap_or_else(|| "HEAD".to_string())
         };
 
-        let (ahead, behind) = self.compute_ahead_behind().unwrap_or((0, 0));
+        // Reuse the git2 handle already opened above instead of opening a
+        // third time — `meta` is on the post-every-op refresh path.
+        let (ahead, behind) = g2
+            .as_ref()
+            .and_then(Self::compute_ahead_behind)
+            .unwrap_or((0, 0));
 
         Ok(RepoMeta {
             name: self
@@ -98,9 +103,9 @@ impl Repo {
 
     /// Walk HEAD against its configured upstream and return (ahead, behind).
     /// Quietly returns `None` when HEAD has no upstream or is detached —
-    /// callers fall back to (0, 0).
-    fn compute_ahead_behind(&self) -> Option<(u32, u32)> {
-        let repo = self.git2().ok()?;
+    /// callers fall back to (0, 0). Takes an already-open `git2::Repository`
+    /// so the caller (`meta`) doesn't re-open the repo just for this.
+    fn compute_ahead_behind(repo: &git2::Repository) -> Option<(u32, u32)> {
         let head = repo.head().ok()?;
         let branch = head.shorthand()?.to_string();
         let local = repo.find_branch(&branch, git2::BranchType::Local).ok()?;
