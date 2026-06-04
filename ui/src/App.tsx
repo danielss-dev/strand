@@ -518,6 +518,7 @@ function MainHeader() {
   const diffMode = useSettings((s) => s.diffMode);
   const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const setSetting = useSettings((s) => s.set);
+  const setDiffMode = useRepo((s) => s.setDiffMode);
   const [refreshing, setRefreshing] = useState(false);
 
   const doRefresh = useCallback(async () => {
@@ -557,7 +558,7 @@ function MainHeader() {
             <button
               type="button"
               className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
-              onClick={() => setSetting('diffMode', 'stacked')}
+              onClick={() => setDiffMode('stacked')}
               title="Stacked (unified)"
               aria-label="Stacked (unified) diff view"
             >
@@ -566,7 +567,7 @@ function MainHeader() {
             <button
               type="button"
               className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
-              onClick={() => setSetting('diffMode', 'split')}
+              onClick={() => setDiffMode('split')}
               title="Split (side-by-side)"
               aria-label="Split (side-by-side) diff view"
             >

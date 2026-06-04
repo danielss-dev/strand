@@ -288,9 +288,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   only when its block scrolls near the viewport (IntersectionObserver, ~900px
   pre-roll), with a height-estimated placeholder until then — so "show all" over
   hundreds of files no longer freezes on open / after a merge
+- ☑ Stacked / split diff layout toggle, **persisted per-repo** (MainHeader
+  buttons map `useSettings.diffMode` `stacked`/`split` → Pierre `unified`/`split`
+  for `LocalChanges` + `CommitDetail`; `useRepo.setDiffMode` writes the choice to
+  the SQLite `settings` table keyed `diff-mode:<repoPath>` via `repoDiffMode`, and
+  `loadRepoDiffMode` restores it on tab activate / repo open. A repo with no saved
+  choice follows the last-used layout.)
 - ☑ Commit form: subject + body + amend
 - ☑ Commit kbd shortcut (⌘↵)
-- ☐ Per-row Discard action (currently store-level only; needs right-click menu)
+- ☑ Per-row Discard action (`FileSection.menuItems` adds a confirm-gated
+  "Discard…" item to the Unstaged file-row right-click menu, wired to
+  `discardMany`; acts on the row or the whole multi-selection)
 - ☑ Recent-messages dropdown on the subject field (SQLite `commit_messages`
   per-repo history via migration v2; keyboard-navigable popover that fills
   subject + body; opens with the history button or ArrowDown in the field)

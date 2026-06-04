@@ -1,5 +1,6 @@
 import Database from '@tauri-apps/plugin-sql';
 
+import type { DiffMode } from '../stores/settings';
 import type { RecentRepo } from './types';
 import { isTauri } from './tauri';
 
@@ -126,5 +127,21 @@ export const remoteTagsCache = {
   },
   set(repoPath: string, tags: string[]): Promise<void> {
     return settings.set(`remote-tags:${repoPath}`, tags);
+  },
+};
+
+/**
+ * Per-repo diff layout (stacked / split). A null means the repo has no explicit
+ * choice yet, in which case the live `useSettings.diffMode` (the last-used
+ * layout) stands as the default. Stored in the generic `settings` table, keyed
+ * by repo path. Only an explicit toggle writes a row, so a repo follows the
+ * default until the user picks a layout for it.
+ */
+export const repoDiffMode = {
+  get(repoPath: string): Promise<DiffMode | null> {
+    return settings.get<DiffMode>(`diff-mode:${repoPath}`);
+  },
+  set(repoPath: string, mode: DiffMode): Promise<void> {
+    return settings.set(`diff-mode:${repoPath}`, mode);
   },
 };

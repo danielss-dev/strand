@@ -4,10 +4,12 @@ import {
   commitMessages as commitMessagesDb,
   recents as recentsDb,
   remoteTagsCache,
+  repoDiffMode,
   settings as settingsDb,
   type StoredMessage,
 } from '../lib/db';
 import { tauri } from '../lib/tauri';
+import { useSettings, type DiffMode } from './settings';
 import type {
   Commit,
   FileDiff,
@@ -169,6 +171,18 @@ export interface RepoState {
   undoDiscard(): Promise<void>;
   /** Drop the undo handle without re-applying (called when the toast times out). */
   clearUndo(): void;
+  /**
+   * Set the diff layout for the active repo: applies it live (via
+   * `useSettings.diffMode`) and persists it per-repo so the choice is restored
+   * the next time this repo is the active tab.
+   */
+  setDiffMode(mode: DiffMode): void;
+  /**
+   * Apply the active repo's saved diff layout to `useSettings.diffMode`, if it
+   * has one. A repo with no saved choice keeps the current (last-used) layout.
+   * Called when a repo becomes the active tab.
+   */
+  loadRepoDiffMode(): Promise<void>;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
   commit(subject: string, body: string | null, amend: boolean): Promise<void>;
@@ -472,6 +486,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('recents.touch failed', e);
     }
     void persistSession(get());
+    void get().loadRepoDiffMode();
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
@@ -549,6 +564,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       recentMessages: [],
     });
     void persistSession(get());
+    void get().loadRepoDiffMode();
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
@@ -699,6 +715,19 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshLocalChanges();
   },
   clearUndo: () => set({ lastDiscard: null }),
+  setDiffMode(mode) {
+    useSettings.getState().set('diffMode', mode);
+    const path = get().activePath;
+    if (path) void repoDiffMode.set(path, mode);
+  },
+  async loadRepoDiffMode() {
+    const path = get().activePath;
+    if (!path) return;
+    const mode = await repoDiffMode.get(path);
+    // Guard against a tab switch landing mid-read (e.g. several repos opening
+    // during session restore): only the still-active repo's layout may win.
+    if (mode && get().activePath === path) useSettings.getState().set('diffMode', mode);
+  },
   async stageAll() {
     const path = get().activePath;
     if (!path) return;

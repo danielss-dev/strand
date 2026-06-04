@@ -240,8 +240,11 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Conflict resolution UI (three-way view) — Pierre `<UnresolvedFile>` resolver
   with accept current/incoming/both; in-progress banner + Abort. (External
   mergetool fallback still ☐ in TASKS.)
-- ☐ Discard changes (line / hunk / file) with single-undo
-- ☐ Stacked + split diff layouts (persisted per-repo)
+- ☑ Discard changes (hunk / file) with single-undo — file-level + per-change-block
+  Discard, both with the 6s Undo toast; per-row Discard in the file-tree right-click
+  menu. (Line-level sub-block discard needs a line-selection UI — deferred, tracked
+  ◐ in TASKS.)
+- ☑ Stacked + split diff layouts (persisted per-repo)
 - ☑ **Theme management**
   - Light + dark themes with system-preference follow
   - Persisted per-user via settings store
@@ -378,6 +381,22 @@ duplicates removed. Verified: tsc + vite build, an adversarial 5-dimension revie
 (no-flash theme + accent attributes, dialog open, light↔dark live swap, ⌘⇧T
 cycle + toast, accent hue rotation propagating app-wide, both radiogroups'
 roving arrow-key nav, persistence round-trips).
+
+**Per-repo diff layout + discard close-out (2026-06-04):** Closed the two
+remaining alpha-era diff items. The stacked/split toggle already existed
+(MainHeader buttons → `useSettings.diffMode` → Pierre `unified`/`split` for
+Local Changes + commit detail); the missing half was **per-repo persistence**.
+`useRepo.setDiffMode` now writes the choice to the SQLite `settings` table
+(keyed `diff-mode:<repoPath>` via a new `repoDiffMode` db helper), and
+`loadRepoDiffMode` restores it whenever a repo becomes the active tab (wired into
+`setActiveTab` + `openRepo`). The persisted localStorage `diffMode` stays the
+last-used default for repos that haven't picked one, so an unseen repo opens in a
+familiar layout and an explicit choice always wins on return. Discard is
+otherwise complete: file-level + per-change-block Discard with the 6s Undo toast,
+plus a per-row Discard in the file-tree right-click menu (`FileSection.menuItems`
+→ `discardMany`, confirm-gated) — the only gap left is line-level sub-block
+discard, which needs a line-selection UI and is deferred. Verified with `tsc` +
+`vite build` (Rust unchanged).
 
 **Conflict resolution UI (2026-06-03, superseded same day by the 3-pane modal):**
 Finishes the history-ops vertical with a three-way resolver built on
