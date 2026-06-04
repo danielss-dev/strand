@@ -26,3 +26,15 @@ pub mod tree;
 
 pub use error::{Error, Result};
 pub use repo::Repo;
+
+/// Global `git -c` overrides prepended to every shell-out so a repo-local
+/// `.git/config` can't silently run code as a side effect of an internal git
+/// step. `core.fsmonitor` runs a configured program on status/fetch (a
+/// confirmed RCE vector when opening an untrusted repo); `core.pager` could
+/// spawn a pager. We deliberately do **not** clear `core.sshCommand`,
+/// `credential.helper`, or `GIT_ASKPASS` — those are how the user
+/// authenticates (see `network` module docs). Hooks remain the same accepted
+/// trust boundary git itself has (PRD §10). Single source of truth so the
+/// three per-module `run_git` helpers can't drift.
+pub(crate) const GIT_SAFE_CONFIG: &[&str] =
+    &["-c", "core.fsmonitor=", "-c", "core.pager=cat"];
