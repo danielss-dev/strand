@@ -9,7 +9,6 @@
     "core:webview:default",
     "core:event:default",
     "dialog:default",
-    "shell:allow-open",
     "os:default",
     "updater:default",
     "sql:default",
