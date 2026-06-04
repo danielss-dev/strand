@@ -485,6 +485,32 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Idle memory < 250MB for one medium repo
 - ☐ Installer < 25MB per platform
 
+### Audit follow-ups (2026-06-04 perf/UX audit)
+
+Larger items surfaced by the audit and verified against the code; the safe
+quick-wins from that audit already landed (see ROADMAP changelog).
+
+- ☐ Cache the opened repo per path in `AppState` + open git2 once per `Repo`
+  (reused handle) — every IPC command currently re-runs `gix discover` + git2
+  open. Needs explicit invalidation tied to the refresh path. (`meta()` already
+  reuses one git2 handle.)
+- ☐ Move CPU/disk-bound read commands (`repo_log`/`status`/`diff_*`/`tree`/`refs`)
+  to `spawn_blocking` so a slow op can't head-of-line-block the IPC thread.
+- ☐ `repo_snapshot(path)` batch command (meta + status + diffs + refs in one
+  open) to collapse the ~6 IPC round-trips per post-commit/checkout refresh.
+- ☐ Virtualize the commit-graph table (`Commits.tsx`) — every row mounts today;
+  prerequisite for the 100k-commit target. Preserve `scrollIntoView` +
+  `aria-activedescendant` + ⌘A.
+- ☐ Diff `collect()` (`diff.rs`): index deltas by a map (drop the
+  O(files×lines) linear scan + per-line alloc), merge the adds/dels count into
+  the print pass, and route by delta index (also fixes deleted-file mis-routing).
+- ☐ Share one `statuses()` walk between `status` and `work_tree` (the UI calls
+  both for one refresh).
+- ☐ Sidebar: memoize ref-tree builds / `leafCount`; debounce `refreshTree` off
+  the `status` dep so stage toggles don't re-walk the whole tree.
+- ☐ Wire commit-graph search (filtering must preserve graph lane continuity —
+  that's why the input is disabled today). `Commits.tsx`.
+
 ---
 
 ## Security & privacy
@@ -495,6 +521,16 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)
 - ☐ Hook execution warning on fresh clones
 - ☐ Signed update manifest enforcement
+- ☑ Shell-out config hardening — `GIT_SAFE_CONFIG` (`-c core.fsmonitor=` /
+  `core.pager=cat`) prepended on network/history/stash; conflict read/write path
+  now canonicalizes to block symlink escape (`crates/strand-core`).
+- ☑ Dropped unused `shell:allow-open` capability (least privilege).
+- ☐ Set a production CSP (`tauri.conf.json` `csp` is `null`). Needs a SHA hash
+  for the inline theme-bootstrap script in `index.html` (or move it into the
+  bundle), `style-src 'unsafe-inline'` for React/Pierre, `connect-src` for IPC;
+  smoke-test the built app before merge.
+- ☐ Narrow `os:default` capability to the specific perms used (re-verify the
+  mac/win platform toggle after).
 - ◐ License decided (AGPL-3.0 + dual-license commercial). Still need:
   - ☐ `LICENSE` file (AGPL-3.0 text) at repo root
   - ☐ `COMMERCIAL.md` describing the commercial-license offer

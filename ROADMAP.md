@@ -450,6 +450,31 @@ and the `.row-tools`/`.armed` CSS were deleted. Keeps with the keyboard-first
 track — actions are reachable without the mouse. Verified with `tsc` +
 `vite build`.
 
+**Perf/UX/security audit — safe quick-wins (2026-06-04):** A 7-dimension
+multi-agent audit (each finding adversarially verified against the code) drove
+a batch of low-risk fixes that don't touch a hot-path contract. **Correctness:**
+the store's `refreshStatus/Log/Diffs/Refs` now re-check `activePath` after their
+await, so a tab switch mid-flight can't paint another repo's data into the
+active tab. **Perf:** `meta()` reuses one git2 handle instead of re-opening;
+`App.tsx` subscribes to settings with per-field selectors (no whole-tree
+re-render on a `diffMode`/`theme` write). **a11y:** the five modal dialogs
+restore focus to their opener on close, and a persistent visually-hidden
+`aria-live` region announces toasts/network progress. **Security:** every
+`git` shell-out prepends `GIT_SAFE_CONFIG` (`-c core.fsmonitor=` closes a
+reproduced repo-config RCE), conflict file I/O canonicalizes to block symlink
+escape, the unused `shell:allow-open` capability was dropped. **Stability:** UI
+fonts are self-hosted (latin/latin-ext woff2 under `ui/public/fonts`) — no
+Google CDN on the cold-start path. **Honesty:** the command palette only
+surfaces repo-scoped actions when a repo is open; dead/stub controls (commit
+search, Terminal, Open-externally) are disabled rather than presenting a
+no-op affordance. **Visual:** light-theme override for the branch palette
+(`--b-1..--b-7`, AA contrast as text), a real `--warn` token (warnings were
+tinted with the user's accent), accent-following OS glow. The bigger unlocks
+(repo handle cache, `spawn_blocking` read commands, `repo_snapshot` batch,
+commit-graph virtualization, CSP) are tracked under TASKS.md → Performance /
+Security "Audit follow-ups." Verified with `cargo test -p strand-core`, `tsc`,
+`vite build`.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)
