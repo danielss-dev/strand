@@ -26,7 +26,14 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 export function App() {
-  const { density, platform, uiFont, monoFont, accent } = useSettings();
+  // Per-field selectors (not a bare `useSettings()`) so App only re-renders
+  // when one of the five fields it actually reads changes — not on every
+  // diffMode / diffsCollapsed / theme write.
+  const density = useSettings((s) => s.density);
+  const platform = useSettings((s) => s.platform);
+  const uiFont = useSettings((s) => s.uiFont);
+  const monoFont = useSettings((s) => s.monoFont);
+  const accent = useSettings((s) => s.accent);
   // Theme preference → resolved theme; `useTheme` applies `data-theme` on
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
   const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
