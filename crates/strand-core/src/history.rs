@@ -196,6 +196,8 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
         // Detach stdin so git can never block reading from a TTY/pipe we don't
         // have (the app isn't launched from a terminal) — it errors instead.
         .stdin(std::process::Stdio::null())
+        // Neutralize repo-local config that would run code as a side effect.
+        .args(crate::GIT_SAFE_CONFIG)
         .args(args)
         .output()
         .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;

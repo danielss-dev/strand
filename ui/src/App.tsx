@@ -26,7 +26,14 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 export function App() {
-  const { density, platform, uiFont, monoFont, accent } = useSettings();
+  // Per-field selectors (not a bare `useSettings()`) so App only re-renders
+  // when one of the five fields it actually reads changes — not on every
+  // diffMode / diffsCollapsed / theme write.
+  const density = useSettings((s) => s.density);
+  const platform = useSettings((s) => s.platform);
+  const uiFont = useSettings((s) => s.uiFont);
+  const monoFont = useSettings((s) => s.monoFont);
+  const accent = useSettings((s) => s.accent);
   // Theme preference → resolved theme; `useTheme` applies `data-theme` on
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
   const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
@@ -243,33 +250,42 @@ export function App() {
   }, [setView, selectFile, openViaDialog, cycleTheme, showToast]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
+    // Repo-independent — always available.
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  shortcut: '⌘O', run: () => { void openViaDialog(); } },
       { id: 'clone',   label: 'Clone repository…', run: () => setCloneOpen(true) },
-      { id: 'local',   label: 'Show: Local Changes', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
-      { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
-      { id: 'snapshot', label: 'Save snapshot…',  run: () => setStashDialog({ snapshot: true }) },
-      { id: 'stash',    label: 'Stash changes…',  run: () => setStashDialog({ snapshot: false }) },
-      { id: 'tag',      label: 'Create tag…',     run: () => setTagDialog({ target: null, label: 'HEAD' }) },
-      { id: 'push-tags', label: 'Push all tags', run: () => {
-        void (async () => {
-          setNetProgress('Pushing tags…');
-          try {
-            await pushAllTags(onNetProgress);
-            showToast('Pushed all tags');
-          } catch (e) {
-            showToast(`Push tags failed: ${e instanceof Error ? e.message : String(e)}`);
-          } finally {
-            setNetProgress(null);
-          }
-        })();
-      } },
-      { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
+    ];
+    // Repo-scoped actions only make sense — and only succeed — with a repo
+    // open, so don't surface them (the network ones would fail confusingly).
+    if (meta) {
+      base.push(
+        { id: 'local',   label: 'Show: Local Changes', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
+        { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
+        { id: 'snapshot', label: 'Save snapshot…',  run: () => setStashDialog({ snapshot: true }) },
+        { id: 'stash',    label: 'Stash changes…',  run: () => setStashDialog({ snapshot: false }) },
+        { id: 'tag',      label: 'Create tag…',     run: () => setTagDialog({ target: null, label: 'HEAD' }) },
+        { id: 'push-tags', label: 'Push all tags', run: () => {
+          void (async () => {
+            setNetProgress('Pushing tags…');
+            try {
+              await pushAllTags(onNetProgress);
+              showToast('Pushed all tags');
+            } catch (e) {
+              showToast(`Push tags failed: ${e instanceof Error ? e.message : String(e)}`);
+            } finally {
+              setNetProgress(null);
+            }
+          })();
+        } },
+        { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
+      );
+    }
+    base.push(
       { id: 'settings', label: 'Settings…', shortcut: '⌘,', run: () => setSettingsOpen(true) },
       { id: 'theme-light',  label: 'Theme: Light',  run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', shortcut: '⌘⇧T', run: () => setTheme('system') },
-    ];
+    );
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
       base.push({
@@ -295,7 +311,7 @@ export function App() {
     }));
     return [...base, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta?.operation, abortOperation]);
+      pushAllTags, onNetProgress, showToast, meta, abortOperation]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -358,15 +374,23 @@ export function App() {
 
         <StatusBar onOpenSettings={() => setSettingsOpen(true)} />
 
+        {/* Persistent live region: the visible pills below mount/unmount, which
+            is unreliable for screen readers, so announce the active message
+            from an always-present node. assertive because the toast is the
+            sole channel for network-op failures. */}
+        <div className="sr-only" role="status" aria-live="assertive" aria-atomic="true">
+          {toast ?? netProgress ?? ''}
+        </div>
+
         {netProgress && (
-          <div className="toast progress">
+          <div className="toast progress" aria-hidden="true">
             <span className="icon-spin"><Icon name="refresh" size={13} /></span>
             <span>{netProgress}</span>
           </div>
         )}
 
         {toast && (
-          <div className="toast">
+          <div className="toast" aria-hidden="true">
             <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
             <span>{toast}</span>
           </div>
@@ -597,8 +621,10 @@ function MainHeader() {
             <Icon name="refresh" size={13} />
           </span>
         </button>
-        <button type="button" className="icon-btn" title="Terminal" aria-label="Terminal"><Icon name="terminal" size={13} /></button>
-        <button type="button" className="icon-btn" title="Open externally" aria-label="Open externally"><Icon name="external" size={13} /></button>
+        {/* Planned, not yet wired — disabled so they don't present a dead
+            affordance (a click that silently does nothing). */}
+        <button type="button" className="icon-btn" title="Terminal (coming soon)" aria-label="Open terminal (coming soon)" disabled><Icon name="terminal" size={13} /></button>
+        <button type="button" className="icon-btn" title="Open externally (coming soon)" aria-label="Open externally (coming soon)" disabled><Icon name="external" size={13} /></button>
       </div>
     </div>
   );

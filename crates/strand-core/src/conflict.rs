@@ -42,12 +42,40 @@ impl Repo {
     /// Resolve `rel_path` against the working directory, rejecting absolute
     /// paths and `..` traversal so a crafted path can't read/write outside the
     /// repo.
+    ///
+    /// The lexical check (no `..`, not absolute) isn't enough on its own: an
+    /// in-tree **symlink** (`link/target` where `link` points outside the
+    /// working tree) escapes it without ever containing `..`. So we also
+    /// canonicalize and require the result to stay under the working tree.
+    /// `canonicalize` needs an existing path, so for a not-yet-created file
+    /// (the `resolve_conflict` write of a brand-new file) we canonicalize the
+    /// parent directory instead.
     fn workdir_path(&self, rel_path: &str) -> Result<std::path::PathBuf> {
         let p = Path::new(rel_path);
         if p.is_absolute() || p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
             return Err(Error::Other(format!("invalid path: {rel_path}")));
         }
-        Ok(self.path().join(p))
+        let full = self.path().join(p);
+
+        let root = self
+            .path()
+            .canonicalize()
+            .map_err(|e| Error::Other(format!("cannot resolve working tree: {e}")))?;
+        // Canonicalize the path itself if it exists (read / overwrite), else its
+        // parent (writing a new file). Either way the resolved location must sit
+        // inside the working tree once symlinks are followed.
+        let probe = if full.exists() {
+            full.as_path()
+        } else {
+            full.parent().unwrap_or(full.as_path())
+        };
+        let resolved = probe
+            .canonicalize()
+            .map_err(|e| Error::Other(format!("invalid path: {rel_path} ({e})")))?;
+        if !resolved.starts_with(&root) {
+            return Err(Error::Other(format!("path escapes working tree: {rel_path}")));
+        }
+        Ok(full)
     }
 }
 
@@ -100,6 +128,22 @@ mod tests {
         let (repo, dir) = scratch_repo();
         assert!(repo.read_conflict_file("../escape.txt").is_err());
         assert!(repo.resolve_conflict("/etc/passwd", "x").is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlink_escape() {
+        let (repo, dir) = scratch_repo();
+        // An in-tree symlink pointing outside the working tree: `link/x` has no
+        // `..` and isn't absolute, so only symlink resolution catches it.
+        let outside = std::env::temp_dir();
+        std::os::unix::fs::symlink(&outside, dir.join("link")).unwrap();
+        assert!(repo.read_conflict_file("link/anything.txt").is_err());
+        assert!(repo.resolve_conflict("link/evil.txt", "x").is_err());
+        // A normal nested path still works.
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        assert!(repo.resolve_conflict("sub/ok.txt", "hi\n").is_ok());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

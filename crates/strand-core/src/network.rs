@@ -135,6 +135,7 @@ impl Repo {
         let out = Command::new("git")
             .current_dir(&self.path)
             .env("GIT_TERMINAL_PROMPT", "0")
+            .args(crate::GIT_SAFE_CONFIG)
             .args(["ls-remote", "--tags", "--", remote])
             .output()
             .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
@@ -226,6 +227,8 @@ fn run_git_streaming(
     let mut child = Command::new("git")
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
+        // Neutralize repo-local config that would run code as a side effect.
+        .args(crate::GIT_SAFE_CONFIG)
         // Force progress reporting even though stderr isn't a TTY.
         .args(args)
         .stdout(Stdio::piped())

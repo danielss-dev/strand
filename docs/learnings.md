@@ -410,3 +410,57 @@ than a highlight bar that collides with the selection affordance.
 `meta` remains for tags/stashes. `FolderRow` takes an `icon` (default `folder`)
 and an optional `count` (omit to hide). The REMOTES section count is
 `refs.remotes.length` (remotes), not the remote-branch count.
+
+---
+
+## UI fonts are self-hosted — keep the CDN off the cold-start path
+
+**Rule.** Strand ships its own font files. `ui/index.html` references
+`/fonts/fonts.css` (generated, under `ui/public/fonts/`); it must **not** pull
+from `fonts.googleapis.com` / `fonts.gstatic.com` or any other remote.
+
+**Why.** A local-first desktop git client that fetches its typeface from a CDN
+loses its typography offline or behind a firewall, and `display=swap` reflows
+(FOUT) on every cold start — both hit the PRD §8 cold-start budget and the
+"works without a network" expectation.
+
+**How to apply.** `ui/public/fonts/fonts.css` mirrors Google's exact
+`@font-face` blocks for the **latin + latin-ext** subsets only (cyrillic/greek/
+vietnamese are dropped — this is an English-language dev tool), with `src`
+rewritten to local `/fonts/*.woff2`. Files in `ui/public/` are copied to `dist`
+verbatim by Vite and served at the root. To add/refresh a family: fetch the
+Google CSS with a modern-browser UA, keep only the latin/latin-ext blocks,
+download those woff2 (via `curl` — system CA), rewrite `src`, and commit the
+binaries (they're not git-ignored; `dist/` is). The user font picker
+(`settings.ts`) must only offer families that are actually bundled, or picking
+one breaks offline.
+
+---
+
+## Git shell-outs prepend `GIT_SAFE_CONFIG`; conflict paths are canonicalized
+
+**Rule.** Every shell-out to the user's `git` (the per-module `run_git*`
+helpers in `network.rs`, `history.rs`, `stash.rs`) prepends
+`crate::GIT_SAFE_CONFIG` (`-c core.fsmonitor= -c core.pager=cat`) **before** the
+subcommand. A new shell-out module does the same.
+
+**Why.** Opening an untrusted repo is a real flow (P0 "add existing / open
+recent"). A repo-local `.git/config` key like `core.fsmonitor=/path/to/prog`
+runs that program as a side effect of an internal git step — a *silent* RCE
+(empirically reproduced on `git status`/`fetch`). git2/gix don't honor
+fsmonitor's exec, so only the shell-out paths are exposed. `GIT_SAFE_CONFIG`
+(command-line `-c` wins over repo config) neutralizes it.
+
+**Do not** clear `core.sshCommand`, `credential.helper`, `GIT_ASKPASS`/
+`SSH_ASKPASS`, or the SSH passphrase prompt — those are how the user
+authenticates (see the `network` module docs). Hooks remain the same accepted,
+git-equal trust boundary (PRD §10); we don't sandbox them. `GIT_SAFE_CONFIG` is
+a single `pub(crate)` const in `lib.rs` (one source of truth) even though the
+`run_git*` helpers themselves stay per-module — see the per-module helper rule
+above.
+
+**Conflict file I/O** (`conflict.rs`) resolves a relative path against the
+working tree, but the `..`/absolute lexical check isn't enough: an in-tree
+**symlink** (`link/target` where `link` → outside) escapes it with no `..`. So
+`workdir_path` also `canonicalize()`s (the parent dir, for a not-yet-created
+file) and requires the result to stay under the canonical working tree.

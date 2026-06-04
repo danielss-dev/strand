@@ -34,6 +34,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const themesRef = useRef<HTMLDivElement>(null);
   const accentsRef = useRef<HTMLDivElement>(null);
 
+  // Restore focus to whatever opened the dialog when it closes, so keyboard
+  // flow returns to the status bar / palette instead of falling to <body>.
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    return () => prev?.focus?.();
+  }, []);
+
   // Focus trap — same aria-modal contract as TagDialog / StashDialog.
   function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'Tab' || !dialogRef.current) return;

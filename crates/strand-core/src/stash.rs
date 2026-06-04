@@ -119,6 +119,10 @@ impl Repo {
         message: Option<&str>,
         include_untracked: bool,
     ) -> Result<StashOutcome> {
+        // NOTE: the user `message` is always passed as the value bound to `-m`,
+        // never as a bare positional, so git can't read a leading-'-' message
+        // as an option (unlike the remote/ref args in network/history, which
+        // need an explicit `--`). Keep the `-m <msg>` form if you touch this.
         if include_untracked {
             let mut push: Vec<&str> = vec!["stash", "push", "--include-untracked"];
             if let Some(m) = message {
@@ -173,6 +177,8 @@ impl Repo {
         let out = Command::new("git")
             .current_dir(self.path())
             .env("GIT_TERMINAL_PROMPT", "0")
+            // Neutralize repo-local config that would run code as a side effect.
+            .args(crate::GIT_SAFE_CONFIG)
             .args(args)
             .output()
             .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;

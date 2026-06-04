@@ -1715,7 +1715,7 @@
   border: none;
   border-radius: 6px;
   background: var(--accent, var(--b-3));
-  color: #fff;
+  color: var(--accent-fg);
   font-size: var(--type-ui);
   font-weight: 600;
   cursor: pointer;

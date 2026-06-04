@@ -577,12 +577,18 @@ export const useRepo = create<RepoState>((set, get) => ({
   async refreshStatus() {
     const path = get().activePath;
     if (!path) return;
-    set({ status: await tauri.repoStatus(path) });
+    const status = await tauri.repoStatus(path);
+    // Bail if the active repo changed while the request was in flight, or we'd
+    // paint another tab's status into this one (see refreshTree).
+    if (get().activePath !== path) return;
+    set({ status });
   },
   async refreshLog(limit) {
     const path = get().activePath;
     if (!path) return;
-    set({ commits: await tauri.repoLog(path, limit ?? 500) });
+    const commits = await tauri.repoLog(path, limit ?? 500);
+    if (get().activePath !== path) return;
+    set({ commits });
   },
   async refreshDiffs() {
     const path = get().activePath;
@@ -591,6 +597,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       tauri.repoDiffUnstaged(path),
       tauri.repoDiffStaged(path),
     ]);
+    if (get().activePath !== path) return;
     set({ unstagedDiffs: unstaged, stagedDiffs: staged });
 
     // If the selected file is no longer present (it was just staged in full,
@@ -618,7 +625,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     try {
-      set({ refs: await tauri.repoRefs(path) });
+      const refs = await tauri.repoRefs(path);
+      if (get().activePath !== path) return;
+      set({ refs });
     } catch (e) {
       console.warn('repoRefs failed', e);
     }
