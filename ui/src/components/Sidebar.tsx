@@ -180,11 +180,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     };
   }, [refs, filter]);
 
-  // Build one tree per section. Names are split on `/` so e.g. `feature/foo`
-  // nests under a `feature` folder. Remote branches use their full
-  // `origin/foo` name so the remote name becomes the top-level folder.
+  // Local branches render flat with their full name (`feat/foo`). Remote
+  // branches group one level under their remote (`origin`), then list flat —
+  // tags still split on `/` into folders (see tagTree).
   const branchTree = useMemo(() => {
-    const t = buildTree<Branch>(filtered.branches, (b) => b.name.split('/'));
+    const t = buildTree<Branch>(filtered.branches, (b) => [b.name]);
     sortTree(t, (a, b) => {
       if (a.is_head !== b.is_head) return a.is_head ? -1 : 1;
       return a.name.localeCompare(b.name);
@@ -193,7 +193,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   }, [filtered.branches]);
 
   const remoteTree = useMemo(() => {
-    const t = buildTree<RemoteBranch>(filtered.remotes, (rb) => rb.name.split('/'));
+    const t = buildTree<RemoteBranch>(filtered.remotes, (rb) => [rb.remote, rb.branch]);
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
     return t;
   }, [filtered.remotes]);
@@ -365,12 +365,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     <SideLeaf
       key={b.full_name}
       depth={depth}
-      icon="branch"
-      label={leafName(b.name)}
+      icon={b.is_head ? 'check' : 'branch'}
+      label={b.name}
       active={b.is_head}
-      meta={b.upstream
-        ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() || b.upstream.name
-        : undefined}
+      ahead={b.upstream ? b.ahead : 0}
+      behind={b.upstream ? b.behind : 0}
       onActivate={() => !b.is_head && void runBranchOp(() => checkout(b.name))}
       onSelect={() => revealInGraph(b.target)}
       onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
@@ -382,7 +381,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       key={rb.full_name}
       depth={depth}
       icon="branch"
-      label={leafName(rb.name)}
+      label={rb.branch}
       onActivate={() => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true))}
       onSelect={() => revealInGraph(rb.target)}
       onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
@@ -463,10 +462,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             label="Remotes"
             collapsed={!sections.remotes}
             onToggle={() => toggle('remotes')}
-            count={filtered.remotes.length}
+            count={refs.remotes.length}
           />
           {sections.remotes &&
-            renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes')}
+            renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes', {
+              folderIcon: 'remote',
+              showFolderCount: false,
+            })}
 
           <SideSection
             label="Tags"
@@ -535,6 +537,7 @@ function renderTreeChildren<T>(
   toggleCollapsed: (path: string) => void,
   renderLeaf: (item: T, depth: number) => React.ReactNode,
   keyPrefix: string,
+  folderOpts?: { folderIcon?: IconName; showFolderCount?: boolean },
 ): React.ReactNode {
   return node.children.map((child) => {
     if (child.children.length === 0 && child.leaf != null) {
@@ -548,11 +551,12 @@ function renderTreeChildren<T>(
           name={child.name}
           depth={depth}
           collapsed={isCollapsed}
-          count={leafCount(child)}
+          icon={folderOpts?.folderIcon ?? 'folder'}
+          count={folderOpts?.showFolderCount === false ? undefined : leafCount(child)}
           onToggle={() => toggleCollapsed(collapseKey)}
         />
         {!isCollapsed &&
-          renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf, keyPrefix)}
+          renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf, keyPrefix, folderOpts)}
       </div>
     );
   });
@@ -587,11 +591,14 @@ interface FolderRowProps {
   name: string;
   depth: number;
   collapsed: boolean;
-  count: number;
+  /** Leaf icon for the folder (default `folder`; remotes use `remote`). */
+  icon?: IconName;
+  /** Child count shown on the right; omit to hide it (e.g. remote groups). */
+  count?: number;
   onToggle: () => void;
 }
 
-function FolderRow({ name, depth, collapsed, count, onToggle }: FolderRowProps) {
+function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle }: FolderRowProps) {
   return (
     <button
       type="button"
@@ -601,9 +608,9 @@ function FolderRow({ name, depth, collapsed, count, onToggle }: FolderRowProps) 
       title={name}
     >
       <span className="folder-chev"><Icon name="chev-down" size={8} stroke={2} /></span>
-      <span className="ico"><Icon name="folder" size={13} /></span>
+      <span className="ico"><Icon name={icon} size={13} /></span>
       <span className="label">{name}</span>
-      <span className="row-meta">{count}</span>
+      {count != null && <span className="row-meta">{count}</span>}
     </button>
   );
 }
@@ -612,8 +619,12 @@ interface SideLeafProps {
   depth: number;
   icon: IconName;
   label: string;
-  /** Muted trailing text (branch drift, stash branch, "annotated", …). */
+  /** Muted trailing text (stash branch, "annotated", …). */
   meta?: string;
+  /** Commits ahead of upstream — rendered as a green `N↑`. */
+  ahead?: number;
+  /** Commits behind upstream — rendered as a red `N↓`. */
+  behind?: number;
   /** Highlights the row (the checked-out branch). */
   active?: boolean;
   /** Tooltip; defaults to the label. */
@@ -632,7 +643,7 @@ interface SideLeafProps {
  * — also lives in a right-click menu opened via `onMenu`. Keyboard users open
  * it with the Menu key or Shift+F10, positioned at the row's corner.
  */
-function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
+function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const openKeyboardMenu = () => {
     const r = rowRef.current?.getBoundingClientRect();
@@ -666,7 +677,14 @@ function SideLeaf({ depth, icon, label, meta, active, title, onActivate, onSelec
       <span className="ico"><Icon name={icon} size={13} /></span>
       <span className="row-text">
         <span className="label">{label}</span>
-        {meta && <span className="row-meta">{meta}</span>}
+        {ahead > 0 || behind > 0 ? (
+          <span className="drift">
+            {ahead > 0 && <span className="drift-ahead">{ahead}↑</span>}
+            {behind > 0 && <span className="drift-behind">{behind}↓</span>}
+          </span>
+        ) : (
+          meta && <span className="row-meta">{meta}</span>
+        )}
       </span>
     </div>
   );

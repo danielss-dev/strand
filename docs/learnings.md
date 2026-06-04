@@ -385,3 +385,28 @@ effect (sets `focusedCommit`, which drives the existing `scrollIntoView`), then
 calls `clearReveal()`. The effect waits for `commits.length > 0` so a view
 switch (empty graph for a beat) does not drop the request. If the tip commit
 is outside the loaded log window, the view still switches but nothing scrolls.
+
+---
+
+## Branch / remote sidebar presentation
+
+**Rule.** In `ui/src/components/Sidebar.tsx`: local branches render **flat
+with their full name** (`feat/foo`, no `feat/` folder nesting). Remote branches
+group **one level** under their remote (`origin`, shown with the `remote` globe
+icon, no child count) and then list flat (`feat/foo`). Tags still split on `/`
+into folders. The current branch is marked by an **accent `check` icon + bold
+label, with no selection-fill** — the filled `--bg-sel` bar stays reserved for
+the primary rows (Local Changes / All Commits). Upstream drift renders as a
+green `N↑` (`--add`) and red `N↓` (`--del`); a branch in sync with its upstream
+shows **nothing** (no fallback to the upstream name).
+
+**Why.** Matches the agreed sidebar design: flat names read faster than deep
+folder trees for the common case, and a checkmark is a clearer "you are here"
+than a highlight bar that collides with the selection affordance.
+
+**How to apply.** `branchTree` builds with `(b) => [b.name]` (single segment);
+`remoteTree` with `(rb) => [rb.remote, rb.branch]`. `SideLeaf` takes numeric
+`ahead`/`behind` props (colored spans) instead of a packed `meta` string;
+`meta` remains for tags/stashes. `FolderRow` takes an `icon` (default `folder`)
+and an optional `count` (omit to hide). The REMOTES section count is
+`refs.remotes.length` (remotes), not the remote-branch count.

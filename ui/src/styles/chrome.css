@@ -745,6 +745,38 @@
     white-space: nowrap;
 }
 
+/* Upstream drift — ahead is green (`N↑`), behind is red (`N↓`). */
+.side-row .drift {
+    display: inline-flex;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    white-space: nowrap;
+}
+.side-row .drift-ahead {
+    color: var(--add);
+}
+.side-row .drift-behind {
+    color: var(--del);
+}
+
+/* The checked-out branch reads as the current branch via a bold label and an
+   accent checkmark — not a filled selection bar (that's for the primary rows). */
+.side-row.branch-row.active {
+    background: transparent;
+    color: var(--text);
+}
+.side-row.branch-row.active:hover {
+    background: var(--bg-hover);
+}
+.side-row.branch-row.active .label {
+    font-weight: 600;
+}
+.side-row.branch-row.active .ico {
+    color: var(--accent);
+    opacity: 1;
+}
+
 /* Tree rows reserve a chev slot before the icon. Folder rows fill it
    with a rotating chev; leaf rows leave it empty so the branch icon
    lines up with the folder icon at the same depth. */
@@ -761,6 +793,9 @@
 }
 .side-row.branch-folder {
     color: var(--text-2);
+    /* A <button>, unlike the leaf-row <div>s, won't fill its block on its own —
+       match their width so the hover/active box reaches the pane edge. */
+    width: calc(100% - 12px);
 }
 .side-row.branch-folder.collapsed .folder-chev {
     transform: rotate(-90deg);
