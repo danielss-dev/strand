@@ -260,7 +260,14 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
     <div className="graph-wrap">
       <div className="graph-toolbar">
         <div className="graph-search">
-          <input placeholder="Search commits…" aria-label="Search commits" />
+          {/* Search isn't wired yet (filtering the graph needs to preserve lane
+              continuity — see TASKS). Disabled so it doesn't swallow input that
+              goes nowhere. */}
+          <input
+            placeholder="Search commits (coming soon)"
+            aria-label="Search commits (coming soon)"
+            disabled
+          />
         </div>
         {multi.size > 1 && (
           <div className="graph-sel-count" role="status">
