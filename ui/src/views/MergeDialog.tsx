@@ -49,6 +49,13 @@ export function MergeDialog({
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
+  // Restore focus to whatever opened the dialog when it closes, so keyboard
+  // flow returns to the graph/sidebar instead of falling to <body>.
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    return () => prev?.focus?.();
+  }, []);
+
   // Keep Tab focus inside the modal — same contract as TagDialog/StashDialog.
   function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'Tab' || !dialogRef.current) return;

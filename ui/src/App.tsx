@@ -365,15 +365,23 @@ export function App() {
 
         <StatusBar onOpenSettings={() => setSettingsOpen(true)} />
 
+        {/* Persistent live region: the visible pills below mount/unmount, which
+            is unreliable for screen readers, so announce the active message
+            from an always-present node. assertive because the toast is the
+            sole channel for network-op failures. */}
+        <div className="sr-only" role="status" aria-live="assertive" aria-atomic="true">
+          {toast ?? netProgress ?? ''}
+        </div>
+
         {netProgress && (
-          <div className="toast progress">
+          <div className="toast progress" aria-hidden="true">
             <span className="icon-spin"><Icon name="refresh" size={13} /></span>
             <span>{netProgress}</span>
           </div>
         )}
 
         {toast && (
-          <div className="toast">
+          <div className="toast" aria-hidden="true">
             <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
             <span>{toast}</span>
           </div>
