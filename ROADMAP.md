@@ -503,6 +503,27 @@ confirmed and fixed, incl. a remote-branch start-point bug that broke upstream
 auto-tracking), and a live Playwright pass (combobox/listbox semantics,
 filtering + highlight, ↑↓ nav, Tab scope cycle, focus-restore round-trip).
 
+**Clone/open progress popup (2026-06-05):** Long operations now show a persistent
+bottom-center progress popup (`components/ProgressPopup.tsx`) instead of leaving
+the user staring at a frozen-looking UI. **Clone**: the dialog collects URL +
+destination, then closes and hands off to `App.runClone`, which shows a
+determinate bar with a per-phase ETA derived from git's streamed `--progress`
+output (the estimate tracks the dominant "Receiving objects" phase, since git's
+percent resets each phase), then switches the same popup in place to "Opening"
+and opens the clone. **Open**: opening any repo (`openByPath`) shows an
+indeterminate sweep + elapsed time, after a 200ms delay so a small repo doesn't
+flash a bar — so opening a huge repo no longer looks hung. A **failed clone/open
+switches the popup to a persistent, dismissible error state** (reason + Dismiss,
+`role="alert"`, Escape to close) rather than vanishing, so a clone that dies
+(network drop, out of disk space) shows *why* instead of leaving the user
+guessing. Each operation carries a monotonic id so overlapping opens/clones only
+ever clear their own popup, and a single coarse `sr-only` live region announces
+the op without flooding screen readers with per-tick percentages. Verified with `tsc`, `vite build`, an
+adversarial 3-dimension review (correctness / UX-perf / a11y — 11 findings, all
+actionable ones fixed: the concurrent-op popup stomp, a toast-overlap collision,
+the clone→open hand-off, SR spam, and orphaned CSS), and a live Playwright pass
+of both popup variants + the stacking fix.
+
 **0.5 remaining (as of 2026-06-05):** the public-beta milestone's open items are
 now all platform/infra rather than features: Windows 11 + Linux builds (need the
 target OSes to build/validate — can't be done from the macOS dev box), the

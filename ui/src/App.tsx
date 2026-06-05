@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { Icon } from './components/Icon';
+import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { pickRepoDirectory } from './lib/dialog';
-import { isTauri } from './lib/tauri';
+import { errMessage, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
 import { SettingsDialog } from './views/SettingsDialog';
@@ -44,6 +45,34 @@ const STATUS_WORD: Record<StatusKind, string> = {
   UNTRACKED: 'untracked',
   CONFLICTED: 'conflicted',
 };
+
+/** A long-running clone/open driving the persistent progress popup. */
+interface OpProgress {
+  /** Monotonic id of the owning operation — a finally only clears its own popup
+   *  so overlapping opens/clones can't wipe each other's progress. */
+  id: number;
+  kind: 'clone' | 'open';
+  /** Verb line ("Cloning" / "Opening"). */
+  title: string;
+  /** Repo / folder name. */
+  subject: string;
+  /** 0–100 for a determinate bar; null for an indeterminate sweep. */
+  percent: number | null;
+  /** Phase text under the bar. */
+  detail: string;
+  /** Pre-formatted ETA ("~1m 12s remaining"), or null to show elapsed instead. */
+  eta: string | null;
+  startedAt: number;
+  /** When set, the op failed: the popup shows this reason + a Dismiss button
+   *  and stays until dismissed, instead of silently vanishing. */
+  error?: string | null;
+}
+
+/** Last path segment of a filesystem path (handles `/` and `\`). */
+function basename(p: string): string {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? p;
+}
 
 export function App() {
   // Per-field selectors (not a bare `useSettings()`) so App only re-renders
@@ -107,9 +136,15 @@ export function App() {
   const [pullDone, setPullDone] = useState(false);
   const [pushDone, setPushDone] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  // Live network-op progress (clone/fetch/pull/push) shown as a pill while
-  // a transfer is in flight. Null when idle.
+  // Live network-op progress (fetch/pull/push) shown as a pill while a
+  // transfer is in flight. Null when idle.
   const [netProgress, setNetProgress] = useState<string | null>(null);
+  // Persistent clone/open progress popup — stays until the op completes.
+  const [opProgress, setOpProgress] = useState<OpProgress | null>(null);
+  // Monotonic op id so a finished op only clears its *own* popup — concurrent
+  // opens (drag-drop while a recent is loading) or a drop mid-clone can't
+  // stomp each other's progress.
+  const opGen = useRef(0);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -130,11 +165,100 @@ export function App() {
   }, []);
 
   const openByPath = useCallback(async (path: string) => {
+    const id = ++opGen.current;
+    const startedAt = Date.now();
+    // Delay the popup briefly so opening a small repo (the common case, which
+    // finishes well under this) doesn't flash a bar. A big repo blows past the
+    // delay and shows the indeterminate "Opening…" bar until it's ready.
+    let shown = false;
+    const timer = setTimeout(() => {
+      shown = true;
+      setOpProgress({
+        id,
+        kind: 'open',
+        title: 'Opening',
+        subject: basename(path),
+        percent: null,
+        detail: 'Reading repository…',
+        eta: null,
+        startedAt,
+      });
+    }, 200);
     try {
       await openRepo(path);
+      clearTimeout(timer);
+      // Success: clear the popup if this op still owns it.
+      setOpProgress((cur) => (cur && cur.id === id ? null : cur));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showToast(`Open failed: ${msg}`);
+      clearTimeout(timer);
+      const msg = errMessage(e);
+      // If the popup is up, switch it to a persistent error so the failure
+      // isn't swallowed; if the open failed before the popup showed (fast fail,
+      // e.g. "not a git repository"), a toast is enough.
+      if (shown) setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
+      else showToast(`Open failed: ${msg}`);
+    }
+  }, [openRepo, showToast]);
+
+  // Run a clone with the persistent progress popup, then open the result. The
+  // same popup (one op id) switches in place from "Cloning" to "Opening" — no
+  // flicker. The Clone dialog closes the moment this starts; failures surface
+  // as a toast (there's no dialog to return to).
+  const runClone = useCallback(async (url: string, dest: string) => {
+    const id = ++opGen.current;
+    const startedAt = Date.now();
+    // Per-phase ETA: git's percent resets each phase (Counting → Compressing →
+    // Receiving → Resolving), so time the current phase and extrapolate from it
+    // — the dominant "Receiving objects" phase is where the estimate matters.
+    let phaseStart = startedAt;
+    let phaseLabel = '';
+    setOpProgress({
+      id,
+      kind: 'clone',
+      title: 'Cloning',
+      subject: basename(dest),
+      percent: null,
+      detail: 'Starting…',
+      eta: null,
+      startedAt,
+    });
+    let clonedPath: string | null = null;
+    try {
+      const res = await tauri.repoClone(url, dest, (p: Progress) => {
+        if (p.phase && p.phase !== phaseLabel) {
+          phaseLabel = p.phase;
+          phaseStart = Date.now();
+        }
+        const pct = p.percent;
+        let eta: string | null = null;
+        if (pct != null && pct > 1 && pct < 100) {
+          const remaining = ((Date.now() - phaseStart) / 1000) * (100 - pct) / pct;
+          if (remaining >= 1) eta = `~${formatDuration(remaining)} remaining`;
+        }
+        const detail = pct != null ? `${p.phase || 'Working'} ${pct}%` : p.raw || p.phase || 'Cloning…';
+        setOpProgress((cur) => (cur && cur.id === id && cur.kind === 'clone' ? { ...cur, percent: pct, detail, eta } : cur));
+      });
+      clonedPath = res.path;
+    } catch (e) {
+      // Surface the failure in the popup itself (persistent + dismissible) so a
+      // clone that dies isn't a popup that just vanishes with a fleeting toast.
+      const msg = errMessage(e);
+      setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg, percent: null, eta: null } : cur));
+      return;
+    }
+    // Switch the same popup to "Opening" in place (no delay, no flicker) and
+    // open the freshly cloned repo.
+    setOpProgress((cur) =>
+      cur && cur.id === id
+        ? { id, kind: 'open', title: 'Opening', subject: basename(clonedPath!), percent: null, detail: 'Reading repository…', eta: null, startedAt: Date.now() }
+        : cur,
+    );
+    try {
+      await openRepo(clonedPath);
+      setOpProgress((cur) => (cur && cur.id === id ? null : cur));
+    } catch (e) {
+      const msg = errMessage(e);
+      setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
     }
   }, [openRepo, showToast]);
 
@@ -152,7 +276,7 @@ export function App() {
       await fetchRepo(onNetProgress);
       flashDone(setSyncDone);
     } catch (e) {
-      showToast(`Fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+      showToast(`Fetch failed: ${errMessage(e)}`);
     } finally {
       setSyncing(false);
       setNetProgress(null);
@@ -168,7 +292,7 @@ export function App() {
       await pullRepo(false, onNetProgress);
       flashDone(setPullDone);
     } catch (e) {
-      showToast(`Pull failed: ${e instanceof Error ? e.message : String(e)}`);
+      showToast(`Pull failed: ${errMessage(e)}`);
     } finally {
       setPulling(false);
       setNetProgress(null);
@@ -184,7 +308,7 @@ export function App() {
       await pushRepo(false, onNetProgress);
       flashDone(setPushDone);
     } catch (e) {
-      showToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
+      showToast(`Push failed: ${errMessage(e)}`);
     } finally {
       setPushing(false);
       setNetProgress(null);
@@ -312,7 +436,7 @@ export function App() {
         run: () => {
           if (b.is_head) { revealInGraph(b.target); return; }
           void checkout(b.name).catch((e) =>
-            showToast(`Checkout failed: ${e instanceof Error ? e.message : String(e)}`));
+            showToast(`Checkout failed: ${errMessage(e)}`));
         },
       });
     }
@@ -334,7 +458,7 @@ export function App() {
           // only auto-tracks when the start point resolves as a remote-tracking
           // *branch*, which git2 finds by shorthand.
           void createBranch(rb.branch, rb.name, true).catch((e) =>
-            showToast(`Checkout failed: ${e instanceof Error ? e.message : String(e)}`));
+            showToast(`Checkout failed: ${errMessage(e)}`));
         },
       });
     }
@@ -402,7 +526,7 @@ export function App() {
               await pushAllTags(onNetProgress);
               showToast('Pushed all tags');
             } catch (e) {
-              showToast(`Push tags failed: ${e instanceof Error ? e.message : String(e)}`);
+              showToast(`Push tags failed: ${errMessage(e)}`);
             } finally {
               setNetProgress(null);
             }
@@ -429,7 +553,7 @@ export function App() {
               await abortOperation();
               showToast('Operation aborted');
             } catch (e) {
-              showToast(`Abort failed: ${e instanceof Error ? e.message : String(e)}`);
+              showToast(`Abort failed: ${errMessage(e)}`);
             }
           })();
         },
@@ -531,6 +655,19 @@ export function App() {
           </div>
         )}
 
+        {opProgress && (
+          <ProgressPopup
+            title={opProgress.title}
+            subject={opProgress.subject}
+            detail={opProgress.detail}
+            percent={opProgress.percent}
+            eta={opProgress.eta}
+            startedAt={opProgress.startedAt}
+            error={opProgress.error ?? null}
+            onDismiss={() => setOpProgress((cur) => (cur && cur.id === opProgress.id ? null : cur))}
+          />
+        )}
+
         <UndoToast />
       </div>
 
@@ -539,7 +676,7 @@ export function App() {
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
 
       {cloneOpen && (
-        <CloneDialog onClose={() => setCloneOpen(false)} onCloned={openByPath} />
+        <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
       )}
 
       {stashDialog && (
@@ -646,7 +783,7 @@ function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
       await abortOperation();
       onToast('Operation aborted');
     } catch (e) {
-      onToast(`Abort failed: ${e instanceof Error ? e.message : String(e)}`);
+      onToast(`Abort failed: ${errMessage(e)}`);
     } finally {
       setBusy(false);
     }

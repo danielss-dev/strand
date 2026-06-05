@@ -2,36 +2,26 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { pickDirectory } from '../lib/dialog';
-import { tauri } from '../lib/tauri';
-import type { Progress } from '../lib/types';
 
 /**
- * Modal for cloning a repository. The user pastes a URL, picks a destination
- * folder, and watches a live progress bar fed by `repo_clone`'s streamed
- * git output. On success it hands the cloned path to `onCloned` (which opens
- * it as a new tab) and closes.
+ * Modal for configuring a clone. The user pastes a URL and picks a destination;
+ * on submit it hands `(url, dest)` to `onStartClone` and closes immediately —
+ * the actual clone runs in the background with a persistent progress popup (see
+ * `App.runClone`), so the dialog isn't a blocking wait.
  */
 export function CloneDialog({
   onClose,
-  onCloned,
+  onStartClone,
 }: {
   onClose: () => void;
-  onCloned: (path: string) => void | Promise<void>;
+  onStartClone: (url: string, dest: string) => void;
 }) {
   const [url, setUrl] = useState('');
   const [parent, setParent] = useState('');
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const urlRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  // A successful clone calls onClose() (unmounting us) before the finally
-  // block settles state — skip those updates so we don't touch an unmounted
-  // component.
-  const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Restore focus to whatever opened the dialog when it closes, so keyboard
   // flow returns to the graph/sidebar instead of falling to <body>.
@@ -66,14 +56,14 @@ export function CloneDialog({
     if (!nameEdited) setName(deriveName(url));
   }, [url, nameEdited]);
 
-  // Escape closes (unless a clone is mid-flight — don't strand a running op).
+  // Escape closes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !cloning) onClose();
+      if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [cloning, onClose]);
+  }, [onClose]);
 
   // The folder name must be a single path segment — no separators or `..`,
   // or the clone could land outside the chosen parent directory.
@@ -83,41 +73,24 @@ export function CloneDialog({
     () => (parent && nameValid ? joinPath(parent, trimmedName) : ''),
     [parent, nameValid, trimmedName],
   );
-  const canClone = Boolean(url.trim() && dest) && !cloning;
+  const canClone = Boolean(url.trim() && dest);
 
   async function chooseParent() {
     const dir = await pickDirectory('Clone into…');
     if (dir) setParent(dir);
   }
 
-  async function doClone() {
+  function start() {
     if (!canClone) return;
-    setCloning(true);
-    setError(null);
-    setProgress(null);
-    try {
-      const res = await tauri.repoClone(url.trim(), dest, (p) => setProgress(p));
-      await onCloned(res.path);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (mountedRef.current) setCloning(false);
-    }
+    onStartClone(url.trim(), dest);
+    onClose();
   }
-
-  const pct = progress?.percent ?? null;
-  const progLabel = progress
-    ? progress.percent != null
-      ? `${progress.phase || 'Working'} · ${progress.percent}%`
-      : progress.raw || progress.phase || 'Cloning…'
-    : null;
 
   return (
     <div
       className="palette-backdrop"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !cloning) onClose();
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -131,13 +104,7 @@ export function CloneDialog({
         <div className="clone-head">
           <Icon name="remote" size={15} />
           <span className="title">Clone repository</span>
-          <button
-            type="button"
-            className="cd-close"
-            aria-label="Close"
-            disabled={cloning}
-            onClick={onClose}
-          >
+          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>
             ×
           </button>
         </div>
@@ -151,10 +118,9 @@ export function CloneDialog({
               className="clone-input"
               placeholder="https://github.com/org/repo.git"
               value={url}
-              disabled={cloning}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && canClone) void doClone();
+                if (e.key === 'Enter' && canClone) start();
               }}
             />
           </label>
@@ -162,7 +128,7 @@ export function CloneDialog({
           <label className="clone-field">
             <span className="lbl">Destination folder</span>
             <div className="clone-dest">
-              <button type="button" className="btn" disabled={cloning} onClick={() => void chooseParent()}>
+              <button type="button" className="btn" onClick={() => void chooseParent()}>
                 Choose…
               </button>
               <span className="clone-dest-path" title={parent || undefined}>
@@ -177,13 +143,12 @@ export function CloneDialog({
               className="clone-input"
               placeholder="repo"
               value={name}
-              disabled={cloning}
               onChange={(e) => {
                 setName(e.target.value);
                 setNameEdited(true);
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && canClone) void doClone();
+                if (e.key === 'Enter' && canClone) start();
               }}
             />
           </label>
@@ -195,29 +160,14 @@ export function CloneDialog({
               Clones into <code>{dest}</code>
             </div>
           ) : null}
-
-          {progLabel ? (
-            <div className="clone-progress" aria-live="polite">
-              <div className="clone-progress-bar">
-                <div
-                  className="fill"
-                  style={{ width: pct != null ? `${pct}%` : '40%' }}
-                  data-indeterminate={pct == null ? '' : undefined}
-                />
-              </div>
-              <div className="clone-progress-label">{progLabel}</div>
-            </div>
-          ) : null}
-
-          {error ? <div className="clone-error">{error}</div> : null}
         </div>
 
         <div className="clone-foot">
-          <button type="button" className="btn" disabled={cloning} onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn primary" disabled={!canClone} onClick={() => void doClone()}>
-            {cloning ? 'Cloning…' : 'Clone'}
+          <button type="button" className="btn primary" disabled={!canClone} onClick={start}>
+            Clone
           </button>
         </div>
       </div>

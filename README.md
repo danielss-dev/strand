@@ -72,6 +72,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
   tags/commits reveal in the graph, files open in the file view.
 - Theme + density + platform + font tweaks (persisted via Zustand)
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
+- Clone / open progress: a persistent bottom popup shows a loading bar until the
+  op completes — a determinate bar with an ETA while cloning (then it rolls into
+  "Opening…"), and an indeterminate bar with elapsed time when opening a large
+  repo so it never looks hung
 - Staging: diff view + stage/unstage + commit loop with resizable panes;
   per-change-block Stage / Discard (and Unstage on the staged side)
   inline in the diff via Pierre annotations; stacked / split diff layout

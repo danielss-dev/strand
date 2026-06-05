@@ -29,6 +29,25 @@ function progressChannel(onProgress?: (p: Progress) => void): Channel<Progress> 
 }
 
 /**
+ * Pull a human message out of a caught value. Tauri command rejections come
+ * back as the serialized `CmdError` — a plain `{ message }` object, *not* an
+ * `Error` — so `String(e)` on them yields "[object Object]". Handle Error,
+ * string, and `{ message }` shapes; fall back to JSON.
+ */
+export function errMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+    return (e as { message: string }).message;
+  }
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
+/**
  * Typed wrappers around the Rust `tauri::command` handlers in
  * `crates/strand-tauri/src/commands.rs`. Add new wrappers here so the
  * frontend never calls `invoke` with a string literal.

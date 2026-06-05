@@ -185,7 +185,19 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Repo opening
 - ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`
 - ☑ "Clone repository" command (palette + topbar `+` dropdown) → `CloneDialog`
-  (URL + native destination picker + live progress bar; opens on success)
+  (URL + native destination picker). The dialog now closes on submit and hands
+  `(url, dest)` to `App.runClone`, which drives a **persistent progress popup**
+  (`ProgressPopup`) — determinate bar + per-phase ETA from streamed git output —
+  that stays until the clone finishes, then switches in place to "Opening" and
+  opens the repo. **Clone/open failures switch the popup to a persistent,
+  dismissible error state** (reason + Dismiss button, `role="alert"`, Escape to
+  close) instead of vanishing — so a clone that dies (e.g. out of disk space) is
+  never silently swallowed.
+- ☑ Open progress: any repo open (`App.openByPath`) shows a persistent
+  `ProgressPopup` — an **indeterminate** bar + elapsed time ("Opening <name>… 3s")
+  for big repos that take a moment (200ms delay so small repos don't flash). Each
+  op carries a generation id so overlapping opens/clones don't clear each other's
+  popup.
 - ☑ Drag-and-drop a folder → calls `useRepo.openRepo`
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
 - ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
