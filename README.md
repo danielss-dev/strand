@@ -64,7 +64,12 @@ pnpm tauri:build   # signed installers in target/release/bundle
 
 ## What's wired up
 
-- Window chrome, sidebar, status bar, command palette (⌘K)
+- Window chrome, sidebar, status bar
+- Command palette (⌘K): fuzzy search across commands, branches, tags, files,
+  commits, and recent repos — grouped under section headers with scope pills
+  (Tab cycles them), match highlighting, and full keyboard + screen-reader
+  operability. Branch entries check out (remote branches checkout-and-track),
+  tags/commits reveal in the graph, files open in the file view.
 - Theme + density + platform + font tweaks (persisted via Zustand)
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
 - Staging: diff view + stage/unstage + commit loop with resizable panes;

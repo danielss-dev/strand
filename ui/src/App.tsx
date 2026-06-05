@@ -20,10 +20,30 @@ import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { CommandPalette, type PaletteAction } from './views/Palette';
-import type { Progress, RepoMeta } from './lib/types';
+import type { Progress, RepoMeta, StatusKind } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+/** Single-letter status badge shown as the palette meta for a working-tree file. */
+const STATUS_ABBR: Record<StatusKind, string> = {
+  MODIFIED: 'M',
+  ADDED: 'A',
+  DELETED: 'D',
+  RENAMED: 'R',
+  UNTRACKED: 'U',
+  CONFLICTED: 'C',
+};
+
+/** Spoken status word for the palette option's accessible name. */
+const STATUS_WORD: Record<StatusKind, string> = {
+  MODIFIED: 'modified',
+  ADDED: 'added',
+  DELETED: 'deleted',
+  RENAMED: 'renamed',
+  UNTRACKED: 'untracked',
+  CONFLICTED: 'conflicted',
+};
 
 export function App() {
   // Per-field selectors (not a bare `useSettings()`) so App only re-renders
@@ -43,6 +63,7 @@ export function App() {
   const selectFile = useRepo((s) => s.selectFile);
   const selectedFile = useRepo((s) => s.selectedFile);
   const meta = useRepo((s) => s.meta);
+  const activePath = useRepo((s) => s.activePath);
   const recents = useRepo((s) => s.recents);
   const openRepo = useRepo((s) => s.openRepo);
   const refreshRecents = useRepo((s) => s.refreshRecents);
@@ -51,6 +72,16 @@ export function App() {
   const refreshLog = useRepo((s) => s.refreshLog);
   const refreshMeta = useRepo((s) => s.refreshMeta);
   const refreshRefs = useRepo((s) => s.refreshRefs);
+
+  // Repo data the command palette indexes (branches / files / commits).
+  const refs = useRepo((s) => s.refs);
+  const commits = useRepo((s) => s.commits);
+  const workTree = useRepo((s) => s.workTree);
+  const refreshTree = useRepo((s) => s.refreshTree);
+  const checkout = useRepo((s) => s.checkout);
+  const createBranch = useRepo((s) => s.createBranch);
+  const revealInGraph = useRepo((s) => s.revealInGraph);
+  const selectCommit = useRepo((s) => s.selectCommit);
 
   const fetchRepo = useRepo((s) => s.fetch);
   const pullRepo = useRepo((s) => s.pull);
@@ -249,22 +280,122 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [setView, selectFile, openViaDialog, cycleTheme, showToast]);
 
+  // The working-tree file list is otherwise lazy (only the Files sidebar tab
+  // loads it). Pull it when the palette opens so file search has data; keyed on
+  // activePath so it refreshes on a tab switch but not on every meta tick.
+  useEffect(() => {
+    if (paletteOpen && activePath) void refreshTree();
+  }, [paletteOpen, activePath, refreshTree]);
+
+  // Repo data items (branches / tags / files / commits) are built only while
+  // the palette is open, so a large repo's log and file tree cost nothing when
+  // it's closed. The CommandPalette caps how many actually render.
+  const repoActions = useMemo<PaletteAction[]>(() => {
+    if (!paletteOpen || !meta) return [];
+    const out: PaletteAction[] = [];
+
+    // Branches — checkout a local branch. The current branch can't be checked
+    // out again, so it reveals its tip in the graph instead.
+    for (const b of refs.branches) {
+      const drift = [b.ahead ? `↑${b.ahead}` : '', b.behind ? `↓${b.behind}` : '']
+        .filter(Boolean).join(' ');
+      const driftSpoken = [b.ahead ? `${b.ahead} ahead` : '', b.behind ? `${b.behind} behind` : '']
+        .filter(Boolean).join(', ');
+      out.push({
+        id: `branch:${b.full_name}`,
+        label: b.name,
+        group: 'Branches',
+        keywords: b.full_name,
+        meta: b.is_head ? 'current' : drift || b.target.slice(0, 7),
+        metaLabel: b.is_head ? undefined : driftSpoken || undefined,
+        icon: b.is_head ? 'check' : 'branch',
+        run: () => {
+          if (b.is_head) { revealInGraph(b.target); return; }
+          void checkout(b.name).catch((e) =>
+            showToast(`Checkout failed: ${e instanceof Error ? e.message : String(e)}`));
+        },
+      });
+    }
+
+    // Remote branches without a local counterpart — checkout creates a local
+    // tracking branch (createBranch auto-tracks a remote-tracking start point).
+    const localNames = new Set(refs.branches.map((b) => b.name));
+    for (const rb of refs.remote_branches) {
+      if (localNames.has(rb.branch)) continue;
+      out.push({
+        id: `remote:${rb.full_name}`,
+        label: `${rb.remote}/${rb.branch}`,
+        group: 'Branches',
+        keywords: `${rb.full_name} remote track checkout`,
+        meta: rb.target.slice(0, 7),
+        icon: 'remote',
+        run: () => {
+          // Pass the shorthand (origin/foo), not the full ref — createBranch
+          // only auto-tracks when the start point resolves as a remote-tracking
+          // *branch*, which git2 finds by shorthand.
+          void createBranch(rb.branch, rb.name, true).catch((e) =>
+            showToast(`Checkout failed: ${e instanceof Error ? e.message : String(e)}`));
+        },
+      });
+    }
+
+    // Tags — reveal the tagged commit in the graph (non-destructive; checkout
+    // detaches HEAD and stays a deliberate sidebar action).
+    for (const t of refs.tags) {
+      out.push({
+        id: `tag:${t.full_name}`,
+        label: t.name,
+        group: 'Tags',
+        keywords: t.full_name,
+        meta: t.target.slice(0, 7),
+        run: () => { revealInGraph(t.target); },
+      });
+    }
+
+    // Files — open in the file view, same as clicking a row in the Files tab.
+    for (const f of workTree) {
+      out.push({
+        id: `file:${f.path}`,
+        label: f.path,
+        group: 'Files',
+        meta: f.status ? STATUS_ABBR[f.status] : undefined,
+        metaLabel: f.status ? STATUS_WORD[f.status] : undefined,
+        run: () => { selectFile(f.path); },
+      });
+    }
+
+    // Commits — reveal in the graph and open the detail panel.
+    for (const c of commits) {
+      out.push({
+        id: `commit:${c.hash}`,
+        label: c.subject || '(no message)',
+        group: 'Commits',
+        keywords: `${c.hash} ${c.author_name}`,
+        meta: c.short_hash,
+        run: () => { revealInGraph(c.hash); void selectCommit(c.hash); },
+      });
+    }
+
+    return out;
+  }, [paletteOpen, meta, refs, workTree, commits, checkout, createBranch,
+      revealInGraph, selectCommit, selectFile, showToast]);
+
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
-      { id: 'open',    label: 'Open repository…',  shortcut: '⌘O', run: () => { void openViaDialog(); } },
-      { id: 'clone',   label: 'Clone repository…', run: () => setCloneOpen(true) },
+      { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: '⌘O', run: () => { void openViaDialog(); } },
+      { id: 'clone',   label: 'Clone repository…', group: 'Actions', run: () => setCloneOpen(true) },
     ];
     // Repo-scoped actions only make sense — and only succeed — with a repo
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
-        { id: 'local',   label: 'Show: Local Changes', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
-        { id: 'commits', label: 'Show: All Commits',  shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
-        { id: 'snapshot', label: 'Save snapshot…',  run: () => setStashDialog({ snapshot: true }) },
-        { id: 'stash',    label: 'Stash changes…',  run: () => setStashDialog({ snapshot: false }) },
-        { id: 'tag',      label: 'Create tag…',     run: () => setTagDialog({ target: null, label: 'HEAD' }) },
-        { id: 'push-tags', label: 'Push all tags', run: () => {
+        { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
+        { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
+        { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
+        { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
+        { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
+        { id: 'push-tags', label: 'Push all tags', group: 'Actions', run: () => {
           void (async () => {
             setNetProgress('Pushing tags…');
             try {
@@ -277,20 +408,21 @@ export function App() {
             }
           })();
         } },
-        { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', shortcut: '⌘⇧S', run: onSync },
+        { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: '⌘⇧S', run: onSync },
       );
     }
     base.push(
-      { id: 'settings', label: 'Settings…', shortcut: '⌘,', run: () => setSettingsOpen(true) },
-      { id: 'theme-light',  label: 'Theme: Light',  run: () => setTheme('light') },
-      { id: 'theme-dark',   label: 'Theme: Dark',   run: () => setTheme('dark') },
-      { id: 'theme-system', label: 'Theme: System', shortcut: '⌘⇧T', run: () => setTheme('system') },
+      { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: '⌘,', run: () => setSettingsOpen(true) },
+      { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
+      { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
+      { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: '⌘⇧T', run: () => setTheme('system') },
     );
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
       base.push({
         id: 'abort-op',
         label: `Abort ${meta.operation}`,
+        group: 'Actions',
         run: () => {
           void (async () => {
             try {
@@ -305,13 +437,16 @@ export function App() {
     }
     const recentActions: PaletteAction[] = recents.map((r) => ({
       id: `recent:${r.path}`,
-      label: `Open recent: ${r.name}`,
-      shortcut: r.path,
+      label: r.name,
+      group: 'Recent',
+      keywords: r.path,
+      meta: r.path,
+      icon: 'history',
       run: () => { void openByPath(r.path); },
     }));
-    return [...base, ...recentActions];
+    return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta, abortOperation]);
+      pushAllTags, onNetProgress, showToast, meta, abortOperation, repoActions]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],

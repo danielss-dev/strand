@@ -250,7 +250,8 @@ also pending (only `aarch64-apple-darwin` is installed).
   - Persisted per-user via settings store
   - Theme switcher in settings UI + command palette action
   - Live swap without reload (CSS variables already token-driven)
-- ☐ Command palette: real action set (branches, files, commits, recents)
+- ☑ Command palette: real action set (branches, files, commits, recents) — grouped,
+  scoped, fuzzy-scored with match highlighting
 - ☐ Windows 11 build (chrome variant exists but is untested)
 - ☐ Linux build (deb / rpm / AppImage)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
@@ -474,6 +475,42 @@ tinted with the user's accent), accent-following OS glow. The bigger unlocks
 commit-graph virtualization, CSP) are tracked under TASKS.md → Performance /
 Security "Audit follow-ups." Verified with `cargo test -p strand-core`, `tsc`,
 `vite build`.
+
+**Command palette — real action set (2026-06-05):** The palette went from a
+substring filter over static commands to a grouped, scoped, fuzzy-scored command
+surface. `PaletteAction` gained `group` / `keywords` / `meta` / `metaLabel` /
+`icon`; `App.tsx` builds the candidate set from the store — **Actions** (open /
+clone / show / snapshot / stash / tag / push-tags / sync / settings / theme /
+abort), **Branches** (checkout a local branch, current reveals in the graph,
+remote branches checkout-and-track), **Tags** (reveal the tagged commit),
+**Files** (open in the file view, from a lazily-loaded `workTree`), **Commits**
+(reveal + open detail), and **Recent** (open repo). Repo-data groups are built
+only while the palette is open, so a 100k-commit / 10k-file repo costs nothing
+when it's closed. `Palette.tsx` scores matches (contiguous-substring >
+subsequence > keyword, word-boundary bonus) with inline `.hl` highlighting,
+groups results under section headers, and caps per group (`CAP_PER_GROUP` /
+`CAP_SCOPED`) so the list never renders thousands of rows. Adaptive **scope
+pills** (All + every present group) filter by category — `role=group` toggle
+buttons with `aria-pressed`, cycled with Tab / Shift+Tab. Accessibility was a
+first-class part of the build: the input is a `role=combobox` driving a
+`role=listbox` of `role=option` rows via `aria-activedescendant` (no focus leaves
+the input), an `aria-live` region announces the result count, each section is a
+labelled `role=group`, opaque metas get a spoken `metaLabel` ("M" → "modified",
+"↑2 ↓1" → "2 ahead, 1 behind"), and focus is restored to the opener on close
+(captured before `autoFocus`). Verified with `tsc`, `vite build`, an adversarial
+4-dimension review (correctness / perf / conventions / a11y — 14 findings
+confirmed and fixed, incl. a remote-branch start-point bug that broke upstream
+auto-tracking), and a live Playwright pass (combobox/listbox semantics,
+filtering + highlight, ↑↓ nav, Tab scope cycle, focus-restore round-trip).
+
+**0.5 remaining (as of 2026-06-05):** the public-beta milestone's open items are
+now all platform/infra rather than features: Windows 11 + Linux builds (need the
+target OSes to build/validate — can't be done from the macOS dev box), the
+auto-update *endpoint* (`strand.danielss.dev` must be live; pubkey + signed
+manifests already done), and the **performance pass** to hit PRD §8 targets —
+the concrete code items live in TASKS.md → Performance → "Audit follow-ups" and
+want benchmarking against large repos before merge (the prime directive forbids
+regressing a hot path blind).
 
 ---
 

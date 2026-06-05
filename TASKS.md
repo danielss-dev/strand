@@ -342,10 +342,25 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Command palette
 - ☑ Open / close, ⌘K, fuzzy filter, run-on-Enter
-- ◐ Real action registry (open + recents wired; sync/show/theme stubbed)
-- ☑ Include recent repos in the index (branches, files, commits still pending)
+- ☑ Real action registry — grouped command set (`PaletteAction.group`):
+  **Actions** (open/clone/show/snapshot/stash/tag/push-tags/sync/settings/theme/abort),
+  **Branches** (checkout local; current branch reveals in graph; remote branches
+  checkout-and-track), **Tags** (reveal tagged commit), **Files** (open in file
+  view from `workTree`), **Commits** (reveal + open detail), **Recent** (open
+  repo). Built in `App.tsx` (`repoActions` + `paletteActions`); repo groups are
+  gated on `paletteOpen` so a big log/tree costs nothing when closed.
+- ☑ Index branches, files, commits, and recents (was: recents only). File search
+  pulls `workTree` lazily on palette open (`refreshTree`, keyed on activePath).
+- ☑ Fuzzy scorer with match highlighting (`match`/`subsequence` in `Palette.tsx`:
+  contiguous-substring > subsequence > keyword, word-boundary bonus; `.hl` spans)
+  + per-group result caps (`CAP_PER_GROUP`/`CAP_SCOPED`) so large repos stay fast.
 - ☑ Keyboard navigation (↑↓ to highlight + scroll-into-view; mouse hover also moves selection)
-- ☐ Scope pills (All / Actions / Branches / Files / Commits)
+- ☑ Scope pills (All + every group present) — `role=group` toggle buttons with
+  `aria-pressed`; **Tab / Shift+Tab** cycles scope. Adaptive: repo groups drop
+  out when no repo is open (stale scope falls back to All).
+- ☑ a11y: combobox/listbox/option semantics with `aria-activedescendant`, an
+  `aria-live` result-count region, section `role=group` labels + spoken `metaLabel`,
+  and focus-restore to the opener on close (captured pre-`autoFocus`).
 
 ### Cross-cutting
 - ☑ Resizable panes everywhere (`react-resizable-panels`); sizes

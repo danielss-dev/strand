@@ -464,3 +464,63 @@ working tree, but the `..`/absolute lexical check isn't enough: an in-tree
 **symlink** (`link/target` where `link` → outside) escapes it with no `..`. So
 `workdir_path` also `canonicalize()`s (the parent dir, for a not-yet-created
 file) and requires the result to stay under the canonical working tree.
+
+---
+
+## The command palette is a combobox/listbox — add actions, don't re-skin it
+
+**Rule.** `views/Palette.tsx` is a `role=combobox` text input driving a
+`role=listbox` of `role=option` rows via `aria-activedescendant`. **Focus never
+leaves the input** — Arrow keys move a `sel` index (the option gets
+`aria-selected`, the input's `aria-activedescendant` points at its id), Enter
+runs `items[sel]`, and **Tab / Shift+Tab cycle the scope pills** (the input owns
+Tab, so it's never a focus trap). Results are grouped by `PaletteAction.group`
+under `role=group` section headers, scored by `match()` (contiguous-substring >
+subsequence > keyword, word-boundary bonus, inline `.hl` highlight), and **capped
+per group** (`CAP_PER_GROUP` / `CAP_SCOPED`) so a huge repo never renders
+thousands of rows. The candidate list is assembled in `App.tsx` (`repoActions` +
+`paletteActions`); repo-data groups (branches/tags/files/commits) are built
+**only while `paletteOpen`**, and the file group pulls `workTree` lazily on open
+(`refreshTree`, keyed on `activePath`).
+
+**Why.** The design tokens (`.palette-scope .pill`, `.palette-sect`,
+`.palette-item .meta`, `.label .hl`) were already there for exactly this — the
+substring-over-static-commands version was a stub. The a11y wiring (combobox +
+activedescendant, `aria-live` count, spoken `metaLabel`, focus-restore) is the
+project's keyboard-first contract on its marquee surface; the first cut shipped
+none of it and a 4-dimension review flagged each gap.
+
+**How to apply.**
+- **Add a command** = push a `PaletteAction` (`{id,label,group,run, keywords?,
+  meta?, metaLabel?, icon?}`) in `App.tsx`. Pick the right `group`; the scope
+  pill set is derived from the groups present, so a new group needs nothing else.
+- **Opaque metas need a `metaLabel`** (spoken form): `"M"`→`"modified"`,
+  `"↑2 ↓1"`→`"2 ahead, 1 behind"`. The visible `meta` is `aria-hidden`; the
+  option's accessible name is `label + ", " + (metaLabel ?? meta)`.
+- **Restore focus to the opener.** `openerRef` is captured on the component's
+  *first render* (`if (openerRef.current === null) openerRef.current =
+  document.activeElement`), **before** the input's `autoFocus` runs, then
+  re-focused on unmount. The mount-effect pattern the other dialogs use captures
+  the input instead (autoFocus already fired by the time a passive effect runs);
+  for a surface whose own input autofocuses, capture during render.
+- Scope pills are toggle buttons (`role=group` + `aria-pressed`), **not**
+  `role=tab` — there are no tab panels, and the codebase models toggles with
+  `aria-pressed` everywhere else.
+
+---
+
+## `createBranch` start point must be a branch *shorthand*, not a full ref
+
+**Rule.** To create a local branch that auto-tracks a remote (the `git checkout
+-b foo origin/foo` flow), pass `createBranch(localName, "origin/foo", true)` —
+the **shorthand** `origin/foo` (`RemoteBranch.name`), never the full ref
+`refs/remotes/origin/foo` (`RemoteBranch.full_name`).
+
+**Why.** `Repo::create_branch` (`crates/strand-core/src/branch.rs`) resolves the
+start point with `revparse_single` (which accepts *either* form, so the branch is
+still created + checked out) but only wires the upstream when
+`repo.find_branch(rev, BranchType::Remote)` succeeds — and git2's `find_branch`
+with `BranchType::Remote` accepts **only the shorthand**. Pass the full ref and
+you silently get an untracked local branch (push/pull defaults break), with no
+error. Every correct call site (Topbar, Sidebar) uses `rb.name`; the command
+palette regressed by passing `rb.full_name` and a review caught it.

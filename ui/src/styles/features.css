@@ -1592,6 +1592,10 @@
   background: var(--accent);
   color: var(--accent-fg);
 }
+.palette-scope .pill:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
 .palette-list {
   flex: 1;
   overflow-y: auto;
@@ -1616,6 +1620,9 @@
   color: var(--text-2);
   font-size: var(--type-ui);
   text-align: left;
+  /* Leave room so scrollIntoView({block:'nearest'}) on a group's first row
+     doesn't tuck its (non-sticky) section header under the top edge. */
+  scroll-margin-top: 24px;
 }
 .palette-item .ico {
   width: 16px;
@@ -1625,16 +1632,25 @@
 }
 .palette-item .label {
   flex: 1;
+  min-width: 0;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .palette-item .label .hl {
   color: var(--accent);
   font-weight: 600;
 }
 .palette-item .meta {
+  flex-shrink: 0;
+  max-width: 280px;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .palette-item .kbd {
   font-family: var(--font-mono);
