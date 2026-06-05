@@ -229,6 +229,29 @@ checked in that order) → surfaced as `RepoMeta.operation` + the `OpBanner`.
 
 ---
 
+## A caught Tauri error is a `{ message }` object, not an `Error`
+
+**Rule.** A `tauri::command` that returns `Err` rejects the JS `invoke` promise
+with the **serialized error value**, not an `Error` instance. Our `CmdError` is
+`#[derive(Serialize)] struct CmdError { message: String }`, so the caught value
+is a plain object `{ message: "…" }`. Therefore `e instanceof Error` is **false**
+and `String(e)` is **`"[object Object]"`**. Never extract a caught message with
+`e instanceof Error ? e.message : String(e)` — use **`errMessage(e)`** from
+`lib/tauri.ts` (handles `Error`, `string`, `{ message }`, then JSON-stringifies).
+
+**Why.** Every error toast/banner that used the brittle ternary showed
+`[object Object]` for any backend failure (a failed clone/checkout/stash/merge/
+tag-push…), hiding the actual git reason — reported in the wild on a clone that
+ran out of disk space. The whole codebase was swept to `errMessage` once.
+
+**Related.** The streaming network ops (`run_git_streaming` in
+`crates/strand-core/src/network.rs`) also condense a *failed* git transcript to
+its `fatal:`/`error:` lines via `error_summary` — git streams progress to stderr
+too, so returning the whole thing buries the cause ("Cloning into…" shows, not
+"Out of diskspace"). New shell-out error paths should do the same.
+
+---
+
 ## `tauri-plugin-sql` `:default` doesn't include writes
 
 `sql:default` only grants `allow-close`, `allow-load`, `allow-select`.

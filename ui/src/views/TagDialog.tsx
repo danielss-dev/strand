@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 
 /**
@@ -82,7 +83,7 @@ export function TagDialog({
       await createTag(tagName, target, message.trim() || null);
       onClose();
     } catch (e) {
-      if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
+      if (mountedRef.current) setError(errMessage(e));
     } finally {
       if (mountedRef.current) setBusy(false);
     }

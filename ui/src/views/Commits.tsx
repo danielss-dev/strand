@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
+import { errMessage } from '../lib/tauri';
 import type { Commit, Refs } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
@@ -35,7 +36,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const openCommitMenu = useCallback(
     (c: Commit, x: number, y: number) => {
       const fail = (verb: string, e: unknown) =>
-        onToast(`${verb} failed: ${e instanceof Error ? e.message : String(e)}`);
+        onToast(`${verb} failed: ${errMessage(e)}`);
       const items: MenuItem[] = [
         {
           label: 'Checkout',

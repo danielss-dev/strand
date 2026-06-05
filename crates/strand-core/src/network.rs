@@ -268,13 +268,31 @@ fn run_git_streaming(
 
     let combined = format!("{stdout_str}{collected}").trim().to_string();
     if !status.success() {
-        return Err(Error::Other(if combined.is_empty() {
-            format!("git {} failed", args.join(" "))
-        } else {
-            combined
-        }));
+        return Err(Error::Other(error_summary(&combined, args)));
     }
     Ok(NetworkOutcome { output: combined })
+}
+
+/// Pull the meaningful failure out of a git transcript. git streams progress to
+/// stderr too, so the full combined output is mostly "Resolving deltas: NN%"
+/// noise with the actual `fatal:` / `error:` line buried at the very end —
+/// returning the whole thing makes the UI show the *start* ("Cloning into…"),
+/// not the cause. Surface git's error lines (or, lacking any, the tail).
+fn error_summary(combined: &str, args: &[&str]) -> String {
+    let errs: Vec<&str> = combined
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("fatal:") || l.starts_with("error:"))
+        .collect();
+    if !errs.is_empty() {
+        return errs.join("\n");
+    }
+    let lines: Vec<&str> = combined.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    if lines.is_empty() {
+        return format!("git {} failed", args.join(" "));
+    }
+    // No explicit error line — show the last few lines, where the conclusion is.
+    lines[lines.len().saturating_sub(4)..].join("\n")
 }
 
 /// Read `reader` and call `sink` with each fragment delimited by '\r' or
@@ -370,5 +388,35 @@ mod tests {
         assert!(validate_remote_arg("https://github.com/org/repo.git", "clone URL").is_ok());
         assert!(validate_remote_arg("git@github.com:org/repo.git", "clone URL").is_ok());
         assert!(validate_remote_arg("ssh://git@host/path.git", "clone URL").is_ok());
+    }
+
+    #[test]
+    fn error_summary_extracts_fatal_lines() {
+        // A real out-of-disk clone transcript: the cause is the trailing fatals,
+        // not the "Cloning into…" preamble or the resolve-deltas progress noise.
+        let transcript = "Cloning into '/x/linux'...\n\
+            remote: Enumerating objects: 11556596, done.\n\
+            Resolving deltas: 100% (9348480/9348480), done.\n\
+            fatal: sha1 file '/x/linux/.git/objects/pack/tmp_idx' write error. Out of diskspace\n\
+            fatal: fetch-pack: invalid index-pack output";
+        let s = error_summary(transcript, &["clone", "--progress", "--", "url", "/x/linux"]);
+        assert_eq!(
+            s,
+            "fatal: sha1 file '/x/linux/.git/objects/pack/tmp_idx' write error. Out of diskspace\n\
+             fatal: fetch-pack: invalid index-pack output",
+        );
+    }
+
+    #[test]
+    fn error_summary_falls_back_to_tail() {
+        let transcript = "line1\nline2\nremote: some context\nfetch-pack: protocol error\nconnection reset by peer";
+        let s = error_summary(transcript, &["fetch"]);
+        assert!(s.contains("connection reset by peer"));
+        assert!(!s.contains("line1")); // only the last 4 lines are kept
+    }
+
+    #[test]
+    fn error_summary_empty_names_the_command() {
+        assert_eq!(error_summary("", &["push"]), "git push failed");
     }
 }

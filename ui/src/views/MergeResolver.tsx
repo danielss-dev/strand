@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { File as PierreFile } from '@pierre/diffs/react';
 
 import { Icon } from '../components/Icon';
-import { tauri } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import {
@@ -44,7 +44,7 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     tauri
       .repoReadConflictFile(activePath, path)
       .then((c) => { if (!cancelled) setRaw(c); })
-      .catch((e) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)); });
+      .catch((e) => { if (!cancelled) setLoadError(errMessage(e)); });
     return () => { cancelled = true; };
   }, [activePath, path]);
 
@@ -145,7 +145,7 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
       await resolveConflict(path, views.resultText);
       onClose();
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      setLoadError(errMessage(e));
     } finally {
       setBusy(false);
     }

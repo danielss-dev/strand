@@ -4,6 +4,7 @@ import type { GitStatusEntry } from '@pierre/trees';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
+import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, Tag } from '../lib/types';
 
@@ -280,7 +281,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await pushTag(name);
         onToast(`Pushed ${name} to ${tagRemote}`);
       } catch (e) {
-        onToast(`Push failed: ${e instanceof Error ? e.message : String(e)}`);
+        onToast(`Push failed: ${errMessage(e)}`);
       }
     })();
   };
@@ -290,7 +291,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await deleteRemoteTag(name);
         onToast(`Deleted ${name} on ${tagRemote}`);
       } catch (e) {
-        onToast(`Remote delete failed: ${e instanceof Error ? e.message : String(e)}`);
+        onToast(`Remote delete failed: ${errMessage(e)}`);
       }
     })();
   };
@@ -311,7 +312,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             : `Rebased ${currentBranch} onto ${onto}`,
         );
       } catch (e) {
-        onToast(`Rebase failed: ${e instanceof Error ? e.message : String(e)}`);
+        onToast(`Rebase failed: ${errMessage(e)}`);
       }
     })();
   };

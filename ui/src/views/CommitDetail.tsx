@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
+import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type { DiffStatus, FileDiff } from '../lib/types';
@@ -65,7 +66,7 @@ export function CommitDetail({
     try {
       await checkoutCommit(hash);
     } catch (e) {
-      setCheckoutError(e instanceof Error ? e.message : String(e));
+      setCheckoutError(errMessage(e));
     } finally {
       setCheckingOut(false);
     }
@@ -85,7 +86,7 @@ export function CommitDetail({
           : `Cherry-picked ${commit!.short_hash}`,
       );
     } catch (e) {
-      onToast(`Cherry-pick failed: ${e instanceof Error ? e.message : String(e)}`);
+      onToast(`Cherry-pick failed: ${errMessage(e)}`);
     } finally {
       setHistoryBusy(false);
     }
@@ -101,7 +102,7 @@ export function CommitDetail({
           : `Reverted ${commit!.short_hash}`,
       );
     } catch (e) {
-      onToast(`Revert failed: ${e instanceof Error ? e.message : String(e)}`);
+      onToast(`Revert failed: ${errMessage(e)}`);
     } finally {
       setHistoryBusy(false);
     }

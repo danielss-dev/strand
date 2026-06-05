@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Icon } from '../components/Icon';
-import { tauri } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { buildViews, parseConflicts, type Resolution } from '../lib/conflictParse';
 
@@ -37,7 +37,7 @@ export function ConflictLanding({
     tauri
       .repoReadConflictFile(activePath, path)
       .then((c) => { if (!cancelled) setRaw(c); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e) => { if (!cancelled) setError(errMessage(e)); });
     return () => { cancelled = true; };
   }, [activePath, path]);
 
@@ -55,7 +55,7 @@ export function ConflictLanding({
       await resolveConflict(path, buildViews(parsed, res).resultText);
       // The file leaves the conflicts list → the parent closes this landing.
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setBusy(false);
     }
