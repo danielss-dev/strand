@@ -219,7 +219,7 @@ fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
 /// dialog), `GIT_ASKPASS`/`SSH_ASKPASS`, or an SSH key passphrase prompt —
 /// those are intentionally left working so the user can still authenticate.
 /// A wall-clock timeout / cancel path for a genuinely stuck op is future work.
-fn run_git_streaming(
+pub(crate) fn run_git_streaming(
     cwd: &Path,
     args: &[&str],
     mut on_progress: impl FnMut(Progress),

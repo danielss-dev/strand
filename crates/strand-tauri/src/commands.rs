@@ -1,10 +1,10 @@
 use serde::Serialize;
 use strand_core::{
-    apply::ApplyTarget, branch::CheckoutOutcome, commit::CommitOutcome, diff::FileDiff,
-    history::MergeMode, log::Commit,
+    apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
+    diff::FileDiff, file::{FileContent, FileHistoryEntry}, history::MergeMode, log::Commit,
     network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
     refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
-    tree::WorkTreeEntry, Repo,
+    submodule::Submodule, tree::WorkTreeEntry, Repo,
 };
 use tauri::ipc::Channel;
 use tauri::State;
@@ -72,6 +72,37 @@ pub fn repo_diff_between(path: String, from: String, to: String) -> CmdResult<Ve
 #[tauri::command]
 pub fn repo_diff_commit(path: String, oid: String) -> CmdResult<Vec<FileDiff>> {
     Ok(Repo::discover(&path)?.diff_commit(&oid)?)
+}
+
+#[tauri::command]
+pub fn repo_diff_commit_file(path: String, oid: String, file: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_commit_file(&oid, &file)?)
+}
+
+#[tauri::command]
+pub fn repo_diff_workdir_file(path: String, file: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_workdir_file(&file)?)
+}
+
+// ── File view (Content / History / Blame tabs) ──
+
+#[tauri::command]
+pub fn repo_file_content(path: String, file: String, rev: Option<String>) -> CmdResult<FileContent> {
+    Ok(Repo::discover(&path)?.file_content(&file, rev.as_deref())?)
+}
+
+#[tauri::command]
+pub fn repo_file_history(
+    path: String,
+    file: String,
+    limit: Option<usize>,
+) -> CmdResult<Vec<FileHistoryEntry>> {
+    Ok(Repo::discover(&path)?.file_history(&file, limit.unwrap_or(200))?)
+}
+
+#[tauri::command]
+pub fn repo_blame(path: String, file: String) -> CmdResult<Vec<BlameLine>> {
+    Ok(Repo::discover(&path)?.blame(&file)?)
 }
 
 #[tauri::command]
@@ -222,6 +253,32 @@ pub fn repo_checkout_commit(path: String, rev: String) -> CmdResult<CheckoutOutc
 #[tauri::command]
 pub fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
     Ok(Repo::discover(&path)?.work_tree()?)
+}
+
+#[tauri::command]
+pub fn repo_submodules(path: String) -> CmdResult<Vec<Submodule>> {
+    Ok(Repo::discover(&path)?.submodules()?)
+}
+
+// `git submodule update` can clone/fetch, so it runs off the IPC thread and
+// streams progress like the other network ops.
+#[tauri::command]
+pub async fn repo_submodule_update(
+    path: String,
+    paths: Vec<String>,
+    init: bool,
+    recursive: bool,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.submodule_update(&paths, init, recursive, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("submodule update task failed: {e}") })?
 }
 
 #[tauri::command]

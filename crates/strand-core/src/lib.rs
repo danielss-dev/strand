@@ -23,6 +23,9 @@ pub mod history;
 pub mod stash;
 pub mod tag;
 pub mod tree;
+pub mod submodule;
+pub mod blame;
+pub mod file;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

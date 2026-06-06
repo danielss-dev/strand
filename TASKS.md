@@ -44,12 +44,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
   oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
   out of git's `WIP on <branch>:` / `On <branch>:` message)
-- ☐ Submodule list + status
+- ☑ Submodule list + status (`Repo::submodules` via git2 — recorded vs
+  checked-out OIDs, status reduced to uninitialized / up-to-date / out-of-date /
+  modified)
 - ☐ Reflog reader
-- ☐ Blame (`git2::Blame`)
-- ☐ File history for a path
+- ☑ Blame (`Repo::blame` via `git2::blame_file` — per-line commit/author/summary
+  against HEAD, per-commit summary cache, 50k-line cap)
+- ☑ File history for a path (`Repo::file_history` — `git log --follow --numstat`,
+  rename-following with per-path add/del counts)
 - ☐ Tree listing for a commit (powers file tree at a revision)
-- ☐ File content at a revision (powers Content tab)
+- ☑ File content at a revision (`Repo::file_content` — working tree from disk via
+  `safe_workdir_path`, or a blob at a revision; binary heuristic + 2 MB cap)
 - ☐ Commit search (message, author, hash) — and `-G` / `-S` content search
 
 ### Writes
@@ -113,7 +118,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)
 - ☐ Interactive rebase (custom sequence-editor; shells out)
 - ☐ Cherry-pick / revert a merge commit (mainline `-m` selection UI)
-- ☐ Submodule init / update / sync
+- ☑ Submodule init / update / sync (`Repo::submodule_update` — `git submodule
+  update [--init] [--recursive] [-- paths]`, shelled out + streamed like the
+  other network ops)
 
 ### Network
 - ☑ `fetch` (shell-out to `git fetch --prune`)
@@ -147,7 +154,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## strand-tauri (IPC + app shell)
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`
+  `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
+  `repo_submodules`, `repo_blame`, `repo_file_content`, `repo_file_history`,
+  `repo_diff_commit_file`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
   `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
@@ -157,8 +166,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_stash_list`, `repo_stash_save`,
   `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
-  `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags` (all `async`;
-  streaming progress over a `Channel` where applicable)
+  `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags`,
+  `repo_submodule_update` (all `async`; streaming progress over a `Channel`
+  where applicable)
 - ☑ Plugins: sql, updater, dialog, shell, os
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
 - ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
@@ -267,7 +277,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   a live hint). Targets HEAD from the Tags `+` and ⌘K ("Create tag…"), or a
   specific commit from the commit-detail "Tag…" action. App owns the dialog
   state; the target is plumbed App → Commits → CommitDetail.
-- ☐ Submodules list
+- ☑ Submodules list — flat list under the Git tab from `repo_submodules`, with a
+  status badge (uninit / out of date / modified). Double-click opens the
+  submodule as its own tab (joins the superproject path + sub path via
+  `openByPath`); right-click menu = Open submodule / Update (or Init & update) /
+  Copy path; the section header `sync` action updates all (`--init --recursive`).
 - ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
   click-to-open; lazily loaded when the Files tab is shown and refreshed on
   status change. Built with the existing `buildTree`/`sortTree` primitives
@@ -345,11 +359,19 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ GPG sign status indicator in commit-detail meta
 
 ### File view (4-tab)
-- ☑ Tab strip + header
-- ☐ Content tab — Shiki-highlighted file content at revision
-- ☐ History tab — log for the file path
-- ☐ Compare tab — two-revision picker + diff
-- ☐ Blame tab — per-line author + commit jump
+- ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
+  a Close action returns to Local Changes)
+- ☑ Content tab — working-tree (or revision) content via `repo_file_content`,
+  rendered with Pierre's read-only `<File>` (syntax-highlighted, app-themed).
+  Shiki-direct highlighting deferred — `<File>` already covers it.
+- ☑ History tab — `repo_file_history` (`--follow`) revision list; selecting a
+  commit shows this file's change there (`repo_diff_commit_file`, pathspec-
+  limited), double-click jumps to the commit in the graph
+- ☑ Compare tab — two-revision picker (from the file's history) + the file's
+  diff between them (`repo_diff_between` filtered to the path)
+- ☑ Blame tab — `repo_blame` per-line author + commit; **virtualized** fixed-row
+  list (only the viewport slice mounts, since blame can run to 50k lines); click
+  a line to jump to its commit in the graph
 - ☐ Tab state persistence per-file (settings store)
 
 ### Command palette

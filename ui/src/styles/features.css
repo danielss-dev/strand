@@ -900,12 +900,15 @@
   background: var(--bg-base);
   flex-shrink: 0;
 }
+.graph-toolbar-spacer {
+  flex: 1;
+}
 .graph-search {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1;
-  max-width: 320px;
+  width: 320px;
+  max-width: 42%;
   height: 24px;
   padding: 0 8px;
   background: var(--bg-panel);
@@ -1492,6 +1495,106 @@
 }
 .cmp-picker .arrow {
   color: var(--text-dim);
+}
+.cmp-picker .ref select {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* File-view tab shells (Content / History / Compare / Blame) */
+.fv-tab {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fv-pierre {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-base);
+}
+.fv-empty {
+  margin: auto;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+  text-align: center;
+  max-width: 440px;
+  line-height: 1.5;
+}
+.fv-banner {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: var(--type-ui-sm);
+  color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 12%, var(--bg-panel));
+  border-bottom: 0.5px solid var(--border);
+}
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* "Back to <file>" button after a blame/history → commit jump. Lives inline in
+   the commit-graph toolbar, to the left of the search. */
+.file-back-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px 4px 7px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: var(--type-ui-sm);
+  cursor: pointer;
+}
+.file-back-bar:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* History tab: revisions list (left) + this file's diff at the selection (right) */
+.fv-history {
+  flex-direction: row;
+}
+/* The uncommitted-changes (working-tree) entry stands apart from real commits. */
+.hist-row.working .gnode .dot {
+  background: var(--accent);
+}
+.hist-row.working .subj {
+  color: var(--accent);
+}
+.fv-history .hist-list {
+  flex: 0 0 340px;
+  min-width: 0;
+  border-right: 0.5px solid var(--border);
+}
+.fv-history-diff {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-base);
 }
 
 /* ─── Command palette ─── */
@@ -2223,7 +2326,6 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   font-size: var(--type-ui-sm);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;

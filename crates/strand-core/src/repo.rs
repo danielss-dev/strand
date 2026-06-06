@@ -119,6 +119,38 @@ impl Repo {
     pub(crate) fn git2(&self) -> Result<git2::Repository> {
         Ok(git2::Repository::open(&self.path)?)
     }
+
+    /// Resolve `rel_path` against the working directory, rejecting absolute
+    /// paths, `..` traversal, and in-tree symlinks that escape the working
+    /// tree. Mirrors the guard in [`conflict`](crate::conflict); used by the
+    /// file-content reader. `canonicalize` needs an existing path, so for a
+    /// not-yet-created file we canonicalize the parent directory instead.
+    pub(crate) fn safe_workdir_path(&self, rel_path: &str) -> Result<PathBuf> {
+        let p = Path::new(rel_path);
+        if p.is_absolute() || p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            return Err(crate::Error::Other(format!("invalid path: {rel_path}")));
+        }
+        let full = self.path.join(p);
+
+        let root = self
+            .path
+            .canonicalize()
+            .map_err(|e| crate::Error::Other(format!("cannot resolve working tree: {e}")))?;
+        let probe = if full.exists() {
+            full.as_path()
+        } else {
+            full.parent().unwrap_or(full.as_path())
+        };
+        let resolved = probe
+            .canonicalize()
+            .map_err(|e| crate::Error::Other(format!("invalid path: {rel_path} ({e})")))?;
+        if !resolved.starts_with(&root) {
+            return Err(crate::Error::Other(format!(
+                "path escapes working tree: {rel_path}"
+            )));
+        }
+        Ok(full)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

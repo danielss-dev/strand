@@ -150,6 +150,59 @@ export interface WorkTreeEntry {
   status: StatusKind | null;
 }
 
+/** A submodule's state relative to the superproject's recorded commit. */
+export type SubmoduleState = 'uninitialized' | 'up-to-date' | 'out-of-date' | 'modified';
+
+export interface Submodule {
+  name: string;
+  /** Path within the superproject working tree (forward-slashed). */
+  path: string;
+  url: string | null;
+  /** Commit OID the superproject records, or `null`. */
+  head_id: string | null;
+  /** Commit OID actually checked out, or `null` when uninitialized. */
+  workdir_id: string | null;
+  initialized: boolean;
+  status: SubmoduleState;
+}
+
+/** One line of `git blame` output for a file at HEAD. */
+export interface BlameLine {
+  /** 1-based line number. */
+  line_no: number;
+  /** Line text (newline stripped). */
+  content: string;
+  /** Full OID of the commit that last touched the line; empty if unknown. */
+  commit: string;
+  short: string;
+  author: string;
+  author_email: string;
+  time_unix: number;
+  /** Subject of the blamed commit. */
+  summary: string;
+}
+
+/** A file's content (working tree, or at a revision) for the Content tab. */
+export interface FileContent {
+  path: string;
+  /** File text, empty when `binary`. Capped server-side (`truncated`). */
+  text: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
+/** One commit in a file's history (`git log --follow -- path`). */
+export interface FileHistoryEntry {
+  hash: string;
+  short_hash: string;
+  author_name: string;
+  author_email: string;
+  time_unix: number;
+  subject: string;
+  adds: number;
+  dels: number;
+}
+
 /** Row in the `recent_repos` SQLite table. Frontend-managed. */
 export interface RecentRepo {
   path: string;

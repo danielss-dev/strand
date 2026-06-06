@@ -81,6 +81,41 @@ impl Repo {
         let diff = repo.diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts))?;
         collect(diff)
     }
+
+    /// Diff a single commit against its first parent, restricted to one path
+    /// (pathspec) — what the file view's History tab shows for a selected
+    /// commit. Far cheaper than diffing the whole commit and filtering: the
+    /// pathspec limits git2's walk to the file. Returns the matching `FileDiff`
+    /// (usually one), or empty when the file wasn't part of that commit (e.g.
+    /// it existed under a different name before a rename).
+    pub fn diff_commit_file(&self, oid: &str, path: &str) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let to_commit = repo.revparse_single(oid)?.peel_to_commit()?;
+        let to_tree = to_commit.tree()?;
+        let from_tree = if to_commit.parent_count() == 0 {
+            None
+        } else {
+            Some(to_commit.parent(0)?.tree()?)
+        };
+        let mut opts = diff_options();
+        opts.pathspec(path);
+        let diff = repo.diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts))?;
+        collect(diff)
+    }
+
+    /// Diff one path's working-tree state against HEAD — the net uncommitted
+    /// change (staged + unstaged combined) for a single file. Powers the file
+    /// view's "Uncommitted changes" history entry. Compares the HEAD tree
+    /// directly to the workdir (ignoring the index), so a half-staged file still
+    /// shows its full on-disk delta; untracked files appear as additions.
+    pub fn diff_workdir_file(&self, path: &str) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        let mut opts = diff_options();
+        opts.pathspec(path);
+        let diff = repo.diff_tree_to_workdir(head_tree.as_ref(), Some(&mut opts))?;
+        collect(diff)
+    }
 }
 
 fn diff_options() -> git2::DiffOptions {

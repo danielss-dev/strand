@@ -6,7 +6,7 @@ import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
 import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Stash, Tag } from '../lib/types';
+import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag } from '../lib/types';
 
 type SideTab = 'git' | 'files';
 
@@ -136,6 +136,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
   const stashDrop = useRepo((s) => s.stashDrop);
+  const submodules = useRepo((s) => s.submodules);
+  const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
   const rebase = useRepo((s) => s.rebase);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
 
@@ -227,6 +229,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       (s) => s.message.toLowerCase().includes(q) || (s.branch?.toLowerCase().includes(q) ?? false),
     );
   }, [stashes, filter]);
+
+  // Submodules are a flat list filtered on path + name.
+  const filteredSubmodules = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return submodules;
+    return submodules.filter(
+      (s) => s.path.toLowerCase().includes(q) || s.name.toLowerCase().includes(q),
+    );
+  }, [submodules, filter]);
 
   // Files tab: lazily fetch the working-tree listing when the tab is shown,
   // and refresh it whenever status (a proxy for working-tree change) updates.
@@ -361,6 +372,40 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
     { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => stashDrop(s.index)) },
   ];
+
+  // Open a submodule's working tree as its own repo tab (via openByPath, which
+  // shows the progress popup). Paths join the canonical superproject path with
+  // the forward-slashed submodule path — git's discover handles mixed separators.
+  const openSubmodule = (sub: Submodule) => {
+    if (!meta || !sub.initialized) return;
+    onOpenRecent(`${meta.path}/${sub.path}`);
+  };
+  // `git submodule update` (always --init --recursive) for the given paths
+  // (empty ⇒ all). Surfaces start + result via a toast.
+  const runSubmoduleUpdate = (paths: string[], label: string) => {
+    void (async () => {
+      onToast(`Updating ${label}…`);
+      try {
+        await submoduleUpdate(paths, true, true);
+        onToast(`Updated ${label}`);
+      } catch (e) {
+        onToast(`Submodule update failed: ${errMessage(e)}`);
+      }
+    })();
+  };
+  const submoduleMenu = (sub: Submodule): MenuItem[] => {
+    const items: MenuItem[] = [];
+    if (sub.initialized) {
+      items.push({ label: 'Open submodule', icon: 'folder-open', onSelect: () => openSubmodule(sub) });
+    }
+    items.push({
+      label: sub.initialized ? 'Update' : 'Init & update',
+      icon: 'arrow-down',
+      onSelect: () => runSubmoduleUpdate([sub.path], leafName(sub.path)),
+    });
+    items.push({ label: 'Copy path', icon: 'file', onSelect: () => void copyToClipboard(sub.path) });
+    return items;
+  };
 
   const renderBranchLeaf = (b: Branch, depth: number) => (
     <SideLeaf
@@ -502,7 +547,30 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
               />
             ))}
 
-          <SideSection label="Submodules" collapsed={!sections.submods} onToggle={() => toggle('submods')} count={0} />
+          <SideSection
+            label="Submodules"
+            collapsed={!sections.submods}
+            onToggle={() => toggle('submods')}
+            count={filteredSubmodules.length}
+            action={
+              submodules.length > 0
+                ? { icon: 'sync', title: 'Update all submodules', onClick: () => runSubmoduleUpdate([], 'all submodules') }
+                : undefined
+            }
+          />
+          {sections.submods &&
+            filteredSubmodules.map((sub) => (
+              <SideLeaf
+                key={sub.path}
+                depth={0}
+                icon="submodule"
+                label={leafName(sub.path)}
+                meta={submoduleStateLabel(sub.status)}
+                title={`${sub.path}${sub.url ? ` — ${sub.url}` : ''}${sub.initialized ? ' — double-click to open' : ' — not initialized'}`}
+                onActivate={() => openSubmodule(sub)}
+                onMenu={(x, y) => openMenu(x, y, submoduleMenu(sub))}
+              />
+            ))}
         </div>
       ) : (
         <div className="side-files">
@@ -571,6 +639,16 @@ function leafCount<T>(node: TreeNode<T>): number {
 function leafName(fullName: string): string {
   const i = fullName.lastIndexOf('/');
   return i === -1 ? fullName : fullName.slice(i + 1);
+}
+
+/** Muted trailing label for a submodule row; clean (up-to-date) shows nothing. */
+function submoduleStateLabel(s: SubmoduleState): string {
+  switch (s) {
+    case 'uninitialized': return 'uninit';
+    case 'out-of-date': return 'out of date';
+    case 'modified': return 'modified';
+    case 'up-to-date': return '';
+  }
 }
 
 // Strip the "WIP on <branch>: " / "On <branch>: " prefix git prepends — the

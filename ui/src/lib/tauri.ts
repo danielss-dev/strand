@@ -1,11 +1,14 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 
 import type {
+  BlameLine,
   CheckoutOutcome,
   CloneOutcome,
   Commit,
   CommitOutcome,
+  FileContent,
   FileDiff,
+  FileHistoryEntry,
   FileStatus,
   MergeMode,
   NetworkOutcome,
@@ -14,6 +17,7 @@ import type {
   RepoMeta,
   Stash,
   StashOutcome,
+  Submodule,
   WorkTreeEntry,
 } from './types';
 
@@ -64,6 +68,15 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_between', { path, from, to }),
   repoDiffCommit: (path: string, oid: string) =>
     invoke<FileDiff[]>('repo_diff_commit', { path, oid }),
+  repoDiffCommitFile: (path: string, oid: string, file: string) =>
+    invoke<FileDiff[]>('repo_diff_commit_file', { path, oid, file }),
+  repoDiffWorkdirFile: (path: string, file: string) =>
+    invoke<FileDiff[]>('repo_diff_workdir_file', { path, file }),
+  repoFileContent: (path: string, file: string, rev: string | null) =>
+    invoke<FileContent>('repo_file_content', { path, file, rev }),
+  repoFileHistory: (path: string, file: string, limit?: number) =>
+    invoke<FileHistoryEntry[]>('repo_file_history', { path, file, limit }),
+  repoBlame: (path: string, file: string) => invoke<BlameLine[]>('repo_blame', { path, file }),
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
   repoStageMany: (path: string, files: string[]) =>
@@ -97,6 +110,21 @@ export const tauri = {
   repoCheckoutCommit: (path: string, rev: string) =>
     invoke<CheckoutOutcome>('repo_checkout_commit', { path, rev }),
   repoTree: (path: string) => invoke<WorkTreeEntry[]>('repo_tree', { path }),
+  repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
+  repoSubmoduleUpdate: (
+    path: string,
+    paths: string[],
+    init: boolean,
+    recursive: boolean,
+    onProgress?: (p: Progress) => void,
+  ) =>
+    invoke<NetworkOutcome>('repo_submodule_update', {
+      path,
+      paths,
+      init,
+      recursive,
+      onEvent: progressChannel(onProgress),
+    }),
   repoBranchCreate: (
     path: string,
     name: string,

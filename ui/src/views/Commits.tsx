@@ -7,6 +7,7 @@ import { errMessage } from '../lib/tauri';
 import type { Commit, Refs } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
+import { Icon } from '../components/Icon';
 import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
@@ -29,6 +30,10 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const revert = useRepo((s) => s.revert);
   const revealCommit = useRepo((s) => s.revealCommit);
   const clearReveal = useRepo((s) => s.clearReveal);
+  // After a blame/history → commit jump, offer a way back to the file (at the
+  // tab it was on). Lives inline in the toolbar so it doesn't add a second row.
+  const fileReturn = useRepo((s) => s.fileReturn);
+  const returnToFile = useRepo((s) => s.returnToFile);
 
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
@@ -260,6 +265,26 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   return (
     <div className="graph-wrap">
       <div className="graph-toolbar">
+        {fileReturn && (
+          <button
+            type="button"
+            className="file-back-bar"
+            onClick={() => returnToFile()}
+            title={`Back to ${fileReturn}`}
+          >
+            <Icon name="chev-left" size={13} />
+            <span>Back to {fileReturn.split(/[\\/]/).filter(Boolean).pop() ?? fileReturn}</span>
+          </button>
+        )}
+        <div className="graph-toolbar-spacer" />
+        {multi.size > 1 && (
+          <div className="graph-sel-count" role="status">
+            <span>{multi.size} selected</span>
+            <button type="button" className="clear" onClick={clearMulti} title="Clear selection">
+              Clear
+            </button>
+          </div>
+        )}
         <div className="graph-search">
           {/* Search isn't wired yet (filtering the graph needs to preserve lane
               continuity — see TASKS). Disabled so it doesn't swallow input that
@@ -270,14 +295,6 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
             disabled
           />
         </div>
-        {multi.size > 1 && (
-          <div className="graph-sel-count" role="status">
-            <span>{multi.size} selected</span>
-            <button type="button" className="clear" onClick={clearMulti} title="Clear selection">
-              Clear
-            </button>
-          </div>
-        )}
       </div>
       <div className="graph-split">
         <PanelGroup direction="horizontal" autoSaveId="strand:commits-split">

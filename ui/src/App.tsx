@@ -101,6 +101,7 @@ export function App() {
   const refreshLog = useRepo((s) => s.refreshLog);
   const refreshMeta = useRepo((s) => s.refreshMeta);
   const refreshRefs = useRepo((s) => s.refreshRefs);
+  const refreshSubmodules = useRepo((s) => s.refreshSubmodules);
 
   // Repo data the command palette indexes (branches / files / commits).
   const refs = useRepo((s) => s.refs);
@@ -365,6 +366,7 @@ export function App() {
       void refreshLog();
       void refreshMeta();
       void refreshRefs();
+      void refreshSubmodules();
     };
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -373,7 +375,7 @@ export function App() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [refreshLocalChanges, refreshLog, refreshMeta, refreshRefs]);
+  }, [refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
 
   // Global ⌘K / Ctrl+K
   useEffect(() => {
@@ -811,6 +813,7 @@ function MainHeader() {
   const refreshLog = useRepo((s) => s.refreshLog);
   const refreshMeta = useRepo((s) => s.refreshMeta);
   const refreshRefs = useRepo((s) => s.refreshRefs);
+  const refreshSubmodules = useRepo((s) => s.refreshSubmodules);
   const diffMode = useSettings((s) => s.diffMode);
   const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const setSetting = useSettings((s) => s.set);
@@ -822,11 +825,13 @@ function MainHeader() {
     setRefreshing(true);
     await waitForPaint();
     try {
-      await Promise.all([refreshLocalChanges(), refreshLog(), refreshMeta(), refreshRefs()]);
+      await Promise.all([
+        refreshLocalChanges(), refreshLog(), refreshMeta(), refreshRefs(), refreshSubmodules(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs]);
+  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
 
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'

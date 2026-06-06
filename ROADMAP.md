@@ -537,11 +537,11 @@ regressing a hot path blind).
 
 ## 1.0 — Stable (≈ 20 weeks)
 
-- ☐ Submodules (clone, update, status, recursive)
+- ☑ Submodules (list + status, init/update --recursive)
 - ☐ Interactive rebase (custom sequence-editor protocol)
-- ☐ Blame view (per-line author + commit jump)
+- ☑ Blame view (per-line author + commit jump)
 - ☐ Reflog browser
-- ☐ File history (log for a path)
+- ☑ File history (log for a path)
 - ☐ Commit search (`-G` / `-S`)
 - ☐ Stashes shown inline on the graph
 - ☐ Drag-and-drop renames in file tree
@@ -551,6 +551,61 @@ regressing a hot path blind).
 - ☐ Localization framework + English baseline
 - ☐ Performance pass on 100k-commit repos
 - ☐ Signed installers on all three platforms
+
+**File view + submodules (2026-06-06):** First 1.0 vertical — the four-tab file
+view (PRD §6.5) and submodules went from placeholders to wired features.
+- **File content.** `Repo::file_content(path, rev)` reads the working-tree copy
+  from disk (behind the same `safe_workdir_path` traversal/symlink guard the
+  conflict reader uses) or a blob at a revision via `git2`; binary heuristic +
+  2 MB cap (`truncated` flag). The Content tab renders it through Pierre's
+  read-only `<File>` (syntax-highlighted, app-themed) — not Shiki, which stays
+  a future polish.
+- **Blame.** `Repo::blame(path)` maps each HEAD line to its commit via
+  `git2::blame_file`, paired with the HEAD blob content (per-commit summary
+  cache, 50k-line cap). The Blame tab renders a **fixed-height virtual list**
+  (only the viewport slice mounts — a 50k-line blame would otherwise freeze the
+  main thread and flood Tab nav); click a line to jump to its commit in the graph.
+- **File history.** `Repo::file_history(path)` shells out to
+  `git log --follow --numstat` (rename-following history + per-path add/del
+  counts — both painful over a git2 revwalk). The History tab lists revisions
+  and shows that commit's change to the file via a new pathspec-limited
+  `Repo::diff_commit_file`; the Compare tab diffs the file between any two of
+  its revisions (`diff_between` filtered to the path).
+- **Submodules.** `Repo::submodules()` (git2 list + status reduced to
+  uninitialized / up-to-date / out-of-date / modified, with recorded vs
+  checked-out OIDs) and `Repo::submodule_update(paths, init, recursive)`
+  (shell-out + streamed progress, like the other network ops). The sidebar
+  Submodules section is now live: status badges, double-click to open a
+  submodule as its own tab, right-click Update / Init & update / Copy path, and
+  an "Update all" header action.
+- Six new IPC commands (`repo_file_content` / `_file_history` / `_blame` /
+  `_diff_commit_file` / `_submodules` / `_submodule_update`), TS types +
+  wrappers, a `submodules` store slice refreshed on open / tab-switch /
+  checkout / focus / manual refresh. Verified with `cargo test -p strand-core`
+  (+4 new tests: blame line-mapping, history rename-follow, content
+  working-tree/revision + traversal rejection, submodule listing), `clippy`,
+  `tsc`, `vite build`, and an adversarial 5-dimension review (FFI contract /
+  security / logic / React-perf-a11y / conventions — one confirmed finding, the
+  non-virtualized blame list, fixed).
+
+**File view follow-ups (2026-06-06):** Three polish items from first use.
+- **Uncommitted changes in History.** The History tab now leads with a
+  "Working tree" entry whenever the file has local (uncommitted) changes,
+  selected by default; it shows the net working-tree-vs-HEAD diff via a new
+  `Repo::diff_workdir_file` (`diff_tree_to_workdir`, pathspec-limited, staged +
+  unstaged combined; untracked files appear as additions).
+- **Blame syntax highlighting.** The blame code column is tokenized through
+  **Pierre's own shared highlighter** (`lib/highlight.ts` →
+  `getSharedHighlighter` + `getFiletypeFromFileName`, with the `pierre-dark` /
+  `pierre-light` themes), so blame is colored *identically* to the Content tab
+  — same engine, same theme, same language detection. Capped at 12k lines, only
+  the virtualized viewport rows paint spans, graceful fallback to plain text.
+  No second highlighter and no extra cold-start cost (Pierre already loads it).
+- **Back navigation.** The file-view tab + a `fileReturn` marker moved into the
+  store, so jumping from a blame line / history row to a commit shows a "Back to
+  <file>" bar in the commits view that returns you to the file *at the same
+  tab*. Any normal navigation (opening a file, switching tabs) clears the
+  marker. Verified with `cargo test -p strand-core`, `tsc`, and `vite build`.
 
 ---
 

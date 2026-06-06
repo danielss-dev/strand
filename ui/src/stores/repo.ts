@@ -21,6 +21,7 @@ import type {
   RepoMeta,
   Stash,
   StashOutcome,
+  Submodule,
   WorkTreeEntry,
 } from '../lib/types';
 
@@ -31,6 +32,9 @@ interface PersistedSession {
 const SESSION_KEY = 'session.tabs';
 
 export type View = 'local' | 'commits' | 'file' | 'branch';
+
+/** Active tab within the 4-tab file view. */
+export type FileTab = 'content' | 'history' | 'compare' | 'blame';
 
 /** One open repository in the topbar tab strip. */
 export interface RepoTab {
@@ -117,6 +121,9 @@ export interface RepoState {
    * Files tab triggers {@link RepoState.refreshTree}). */
   workTree: WorkTreeEntry[];
 
+  /** Submodules of the active repo (list + status), for the sidebar section. */
+  submodules: Submodule[];
+
   /** Recent commit messages for the active repo, newest first. Powers the
    * dropdown on the commit subject field. */
   recentMessages: StoredMessage[];
@@ -124,6 +131,13 @@ export interface RepoState {
   recents: RecentRepo[];
 
   view: View;
+  /** Active tab in the file view; persists across a commit jump so Back can
+   *  return you to the same tab. */
+  fileTab: FileTab;
+  /** When set, the file path to return to after a blame/history → commit jump
+   *  (drives the "Back to file" bar in the commits view). Cleared by any normal
+   *  navigation (selecting a file, opening a repo, switching tabs). */
+  fileReturn: string | null;
   selectedFile: string | null;
   selectedRef: string | null;
 
@@ -139,6 +153,19 @@ export interface RepoState {
   refreshRefs(): Promise<void>;
   /** Re-read the working-tree file listing (Files tab). */
   refreshTree(): Promise<void>;
+  /** Re-read the submodule list + status for the active tab. */
+  refreshSubmodules(): Promise<void>;
+  /**
+   * Run `git submodule update` for `paths` (empty ⇒ all), optionally
+   * initializing (`--init`) and recursing. Streams progress; refreshes the
+   * submodule list + working tree afterward. Returns git's output.
+   */
+  submoduleUpdate(
+    paths: string[],
+    init: boolean,
+    recursive: boolean,
+    onProgress?: (p: Progress) => void,
+  ): Promise<string>;
   /** Re-read the recent commit messages for the active repo. */
   refreshRecentMessages(): Promise<void>;
 
@@ -281,6 +308,14 @@ export interface RepoState {
   setView(view: View): void;
   selectFile(path: string | null): void;
   selectRef(ref: string | null): void;
+  /** Set the active file-view tab. */
+  setFileTab(tab: FileTab): void;
+  /** Jump from the file view to `hash` in the graph, remembering the current
+   *  file so {@link RepoState.returnToFile} can come back to it (same tab). */
+  jumpFromFile(hash: string): void;
+  /** Return to the file recorded by {@link RepoState.jumpFromFile}. No-op when
+   *  there's nothing to return to. */
+  returnToFile(): void;
 }
 
 const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags: [] };
@@ -344,6 +379,7 @@ const EMPTY_ACTIVE = {
   localSelection: null as LocalSelection | null,
   lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
+  fileReturn: null as string | null,
   selectedCommit: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
@@ -352,6 +388,7 @@ const EMPTY_ACTIVE = {
   remoteTags: null as string[] | null,
   stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
+  submodules: [] as Submodule[],
   recentMessages: [] as StoredMessage[],
 };
 
@@ -412,6 +449,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   recents: [],
 
   view: 'local',
+  fileTab: 'content',
   selectedRef: null,
 
   async restoreSession() {
@@ -469,6 +507,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      fileReturn: null,
       selectedCommit: null,
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
@@ -476,6 +515,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       remoteTags: null,
       stashes: [],
       workTree: [],
+      submodules: [],
       recentMessages: [],
     }));
 
@@ -492,6 +532,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLog(),
       get().refreshRefs(),
       get().refreshStashes(),
+      get().refreshSubmodules(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -521,6 +562,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      fileReturn: null,
       selectedCommit: null,
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
@@ -528,6 +570,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       remoteTags: null,
       stashes: [],
       workTree: [],
+      submodules: [],
       recentMessages: [],
     });
     void persistSession(get());
@@ -554,6 +597,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stagedDiffs: [],
       localSelection: null,
       selectedFile: null,
+      fileReturn: null,
       selectedCommit: null,
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
@@ -561,6 +605,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       remoteTags: null,
       stashes: [],
       workTree: [],
+      submodules: [],
       recentMessages: [],
     });
     void persistSession(get());
@@ -570,6 +615,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLog(),
       get().refreshRefs(),
       get().refreshStashes(),
+      get().refreshSubmodules(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -644,6 +690,29 @@ export const useRepo = create<RepoState>((set, get) => ({
     } catch (e) {
       console.warn('repoTree failed', e);
     }
+  },
+
+  async refreshSubmodules() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const submodules = await tauri.repoSubmodules(path);
+      // Bail if the active repo changed while the listing was in flight.
+      if (get().activePath !== path) return;
+      set({ submodules });
+    } catch (e) {
+      console.warn('repoSubmodules failed', e);
+    }
+  },
+
+  async submoduleUpdate(paths, init, recursive, onProgress) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoSubmoduleUpdate(path, paths, init, recursive, onProgress);
+    // An update can move pointers + populate working trees — refresh the
+    // submodule list and the superproject's status.
+    await Promise.all([get().refreshSubmodules(), get().refreshLocalChanges()]);
+    return res.output;
   },
 
   async refreshRecentMessages() {
@@ -826,6 +895,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRefs(),
       get().refreshLocalChanges(),
       get().refreshLog(),
+      get().refreshSubmodules(),
     ]);
   },
   async checkoutCommit(rev) {
@@ -837,6 +907,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRefs(),
       get().refreshLocalChanges(),
       get().refreshLog(),
+      get().refreshSubmodules(),
     ]);
   },
   async createBranch(name, startPoint, checkout) {
@@ -1076,6 +1147,28 @@ export const useRepo = create<RepoState>((set, get) => ({
   setView: (view) => set({ view }),
   revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
   clearReveal: () => set({ revealCommit: null }),
-  selectFile: (selectedFile) => set({ selectedFile, view: selectedFile ? 'file' : get().view }),
+  // Opening a file resets the file-view tab to Content and drops any stale
+  // back-target; closing (null) just drops the back-target.
+  selectFile: (selectedFile) =>
+    set({
+      selectedFile,
+      view: selectedFile ? 'file' : get().view,
+      fileReturn: null,
+      ...(selectedFile ? { fileTab: 'content' as FileTab } : {}),
+    }),
   selectRef: (selectedRef) => set({ selectedRef }),
+  setFileTab: (fileTab) => set({ fileTab }),
+  jumpFromFile: (hash) => {
+    if (!hash) return;
+    // Remember where we came from, then reveal + open the commit. We don't call
+    // selectFile (which would clear fileReturn) — selectedFile stays set so the
+    // back bar can restore the file view at its current tab.
+    set({ fileReturn: get().selectedFile, view: 'commits', revealCommit: hash });
+    void get().selectCommit(hash);
+  },
+  returnToFile: () => {
+    const target = get().fileReturn;
+    if (!target) return;
+    set({ selectedFile: target, view: 'file', fileReturn: null });
+  },
 }));
