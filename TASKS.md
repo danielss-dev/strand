@@ -182,6 +182,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   into `tauri.conf.json` → `plugins.updater.pubkey`; `bundle.createUpdaterArtifacts`
   enabled so signed `latest.json` + bundles are produced. **Still pending:** the
   `endpoints` host `strand.danielss.dev` isn't live, so no updates are served yet.
+  (2026-06-07: on the Windows box the `TAURI_SIGNING_PRIVATE_KEY` in env does
+  **not** match this pubkey — Tauri warns the generated `.sig` won't validate at
+  runtime. Reconcile the key/config before shipping Windows auto-updates.)
 - ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
 - ☐ Window state persistence (size, position, maximized)
 - ☐ Multi-window for "open file detached" if needed
@@ -515,7 +518,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   Not yet run end-to-end — needs the Apple signing secrets added + a first
   `v*` tag to validate.)
 - ☐ Auto-update beta channel + stable channel
-- ☐ Windows 11 platform pass (chrome styled but never tested)
+- ◐ Windows 11 platform pass — Rust compiles clean and the MSI builds on a
+  Windows 11 box (2026-06-07: `Strand_0.0.1_x64_en-US.msi`, 10.5 MB, via
+  `pnpm tauri build --bundles msi`). **Runtime** validation — launching the
+  installed app to check the overlay titlebar / theme / window chrome — still pending.
 - ☐ Linux platform pass on GNOME + KDE
 - ☐ Per-platform credential storage:
   - macOS Keychain

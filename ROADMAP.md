@@ -252,7 +252,8 @@ also pending (only `aarch64-apple-darwin` is installed).
   - Live swap without reload (CSS variables already token-driven)
 - ☑ Command palette: real action set (branches, files, commits, recents) — grouped,
   scoped, fuzzy-scored with match highlighting
-- ☐ Windows 11 build (chrome variant exists but is untested)
+- ◐ Windows 11 build — MSI now builds on a Windows 11 box (`Strand_0.0.1_x64_en-US.msi`,
+  10.5 MB); runtime chrome validation still pending (see 2026-06-07 below)
 - ☐ Linux build (deb / rpm / AppImage)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
   wired, `createUpdaterArtifacts` on); real endpoint still pending
@@ -532,6 +533,24 @@ manifests already done), and the **performance pass** to hit PRD §8 targets —
 the concrete code items live in TASKS.md → Performance → "Audit follow-ups" and
 want benchmarking against large repos before merge (the prime directive forbids
 regressing a hot path blind).
+
+**Windows 11 build (2026-06-07):** First Windows artifact — and the first proof
+the "untested" Windows variant actually compiles. The dev box is now Windows 11
+(not the macOS box the note above assumed), which unblocks the Windows half of
+the platform work. `cargo check --workspace` is clean on `x86_64-pc-windows-msvc`
+(no platform-specific code beyond the one `windows_subsystem` attr in `main.rs`),
+and `pnpm tauri build --bundles msi` produces a WiX MSI at
+`target/release/bundle/msi/Strand_0.0.1_x64_en-US.msi` (10.5 MB — under the PRD §8
+<25 MB installer target); the raw `strand.exe` is 17.3 MB. WebView2 runtime 148 is
+present, so the app renders. **Caveat:** the updater `.sig` is signed with the
+`TAURI_SIGNING_PRIVATE_KEY` in this box's env, which does **not** match the
+configured `plugins.updater.pubkey` (key `84FCBFD2A981CE5D`) — Tauri warns the
+signature won't be accepted at runtime. The MSI installs fine; only auto-update
+verification is affected, and it's the same key/endpoint reconciliation already
+tracked open under TASKS → strand-tauri. **Still pending:** launching the
+installed app to validate the Windows chrome (overlay titlebar, theme, window
+controls) — the runtime "platform pass" — plus EV signing and the universal/Linux
+builds.
 
 ---
 
