@@ -518,10 +518,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   Not yet run end-to-end — needs the Apple signing secrets added + a first
   `v*` tag to validate.)
 - ☐ Auto-update beta channel + stable channel
-- ◐ Windows 11 platform pass — Rust compiles clean and the MSI builds on a
+- ☑ Windows 11 platform pass — Rust compiles clean and the MSI builds on a
   Windows 11 box (2026-06-07: `Strand_0.0.1_x64_en-US.msi`, 10.5 MB, via
-  `pnpm tauri build --bundles msi`). **Runtime** validation — launching the
-  installed app to check the overlay titlebar / theme / window chrome — still pending.
+  `pnpm tauri build --bundles msi`). **Runtime validated 2026-06-07:** launched the
+  bundled release `strand.exe` on Windows 11 — the WebView2 frontend renders the
+  full UI, the dark theme + amber accent apply cleanly with no flash, and the native
+  window frame / controls (titlebar, min/max/close, maximize-restore) all work.
+  Chrome is correct on Windows.
 - ☐ Linux platform pass on GNOME + KDE
 - ☐ Per-platform credential storage:
   - macOS Keychain

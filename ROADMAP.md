@@ -252,8 +252,9 @@ also pending (only `aarch64-apple-darwin` is installed).
   - Live swap without reload (CSS variables already token-driven)
 - ☑ Command palette: real action set (branches, files, commits, recents) — grouped,
   scoped, fuzzy-scored with match highlighting
-- ◐ Windows 11 build — MSI now builds on a Windows 11 box (`Strand_0.0.1_x64_en-US.msi`,
-  10.5 MB); runtime chrome validation still pending (see 2026-06-07 below)
+- ☑ Windows 11 build — MSI builds on a Windows 11 box (`Strand_0.0.1_x64_en-US.msi`,
+  10.5 MB) and the installed app's runtime chrome (titlebar, theme, window controls)
+  validated on Windows 11 (see 2026-06-07 below)
 - ☐ Linux build (deb / rpm / AppImage)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
   wired, `createUpdaterArtifacts` on); real endpoint still pending
@@ -547,10 +548,17 @@ present, so the app renders. **Caveat:** the updater `.sig` is signed with the
 configured `plugins.updater.pubkey` (key `84FCBFD2A981CE5D`) — Tauri warns the
 signature won't be accepted at runtime. The MSI installs fine; only auto-update
 verification is affected, and it's the same key/endpoint reconciliation already
-tracked open under TASKS → strand-tauri. **Still pending:** launching the
-installed app to validate the Windows chrome (overlay titlebar, theme, window
-controls) — the runtime "platform pass" — plus EV signing and the universal/Linux
-builds.
+tracked open under TASKS → strand-tauri.
+
+**Windows runtime platform pass (2026-06-07):** Launched the bundled release
+`strand.exe` on Windows 11 and observed the live window. The WebView2 frontend
+loads and renders the full UI (sidebar with Git/Files tabs, "No repository open"
+empty state, Local Changes with the UNSTAGED/STAGED panes + diff pane, the commit
+form), the dark theme + amber accent apply cleanly with no flash-of-white (the
+pre-paint theme bootstrap + self-hosted fonts hold up off the macOS box), and the
+native Windows window frame is intact — titlebar, min/max/close, and
+maximize/restore all behave. Chrome looks correct on Windows. **Still pending:**
+EV signing and the universal/Linux builds.
 
 ---
 
