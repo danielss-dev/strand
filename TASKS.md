@@ -541,9 +541,9 @@ synthetic fixtures). Engine-measurable targets pass; webview/app targets still n
 a running-app pass.
 
 - ☐ Cold start < 1.0s on M-series Mac (webview/app — not yet measured)
-- ☑ Open 100k-commit repo < 2.0s (measured ~0.5s: discover + log on a 100k-commit
-  fixture; see finding #1 — log carries a ~0.46s git2 topo-sort floor that's the
-  scaling risk, tracked below)
+- ☑ Open 100k-commit repo < 2.0s (was ~0.5s on the git2 path; the ~0.46s topo-sort
+  floor that was the 1M-commit scaling risk is now gone — `log` shells out to an
+  incremental `git log`, so `discover + log(5000)` is ~47ms on the 100k fixture)
 - ☑ Status refresh on 10k-file working tree < 200ms (measured 42ms; ~85ms with the
   `work_tree` walk the UI also runs per refresh)
 - ☐ Diff render for 5,000-line file < 100ms (webview/Pierre render — not measured;
@@ -554,12 +554,17 @@ a running-app pass.
 
 ### Perf-pass leads (2026-06-08 baseline)
 
-- ☐ **`log` first-page latency: shell out to `git log --all --topo-order -n <page>`
-  instead of git2's whole-DAG revwalk.** git2's `Sort::TOPOLOGICAL` buffers the
-  entire reachable set before yielding, so limit doesn't help (~0.46s floor on 100k,
-  ~12× slower than raw `git log` for the same page). Under the 2.0s target now but
-  the dominant cost and the thing that breaks at 1M commits. `log.rs`; `--topo-order`
-  preserves the order `lib/graph.ts` lanes need.
+- ☑ **`log` first-page latency: shell out to `git log` instead of git2's whole-DAG
+  revwalk** (`Repo::log`, `log.rs`). git2's `Sort::TOPOLOGICAL` buffered the entire
+  reachable set before yielding, so `limit` didn't bound the work (~0.48s floor on
+  100k). Now `git log -z --date-order -n <limit> HEAD --branches --remotes --tags`
+  does an incremental, commit-graph-backed walk that stops at `limit`:
+  `log(1000)` 480ms→**22ms**, `discover+log(5000)` (per-IPC cost) 478ms→**47ms** on
+  the 100k fixture. Used `--date-order` (not the lead's suggested `--topo-order`):
+  it reproduces git2's `Sort::TIME | Sort::TOPOLOGICAL` ordering *exactly* (topo
+  invariant the lanes need + time tiebreak), so the graph layout is unchanged — a
+  pure perf change, no visual regression. Ref selectors mirror the old `push_head` +
+  `push_glob` set (not `--all`, which would add `refs/stash`/notes).
 
 ### Audit follow-ups (2026-06-04 perf/UX audit)
 
