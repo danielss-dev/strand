@@ -1,0 +1,92 @@
+//! Performance baseline harness for the strand-core read path (PRD §8).
+//!
+//! Not a product feature — a dev tool to measure the engine's hot reads
+//! against large repos before the performance pass touches them, so a change
+//! can be checked against a real number instead of merged blind (the prime
+//! directive forbids regressing a hot path).
+//!
+//! Usage:
+//!   cargo run --release --example perfcheck -- <repo-path> [log-limit]
+//!
+//! It times each public read op the IPC layer calls, reporting min/median/max
+//! over N iterations on a warm handle, plus the cost of `discover` alone and a
+//! combined `discover + log` (what every IPC command actually pays today,
+//! since commands re-discover per call).
+
+use std::time::{Duration, Instant};
+
+use strand_core::Repo;
+
+fn bench<T>(name: &str, iters: usize, mut f: impl FnMut() -> T) {
+    // One warmup pass (page caches, lazy git2 internals) excluded from stats.
+    let _ = f();
+    let mut times = Vec::with_capacity(iters);
+    for _ in 0..iters {
+        let t = Instant::now();
+        let _ = std::hint::black_box(f());
+        times.push(t.elapsed());
+    }
+    times.sort_unstable();
+    let min = times[0];
+    let med = times[iters / 2];
+    let max = times[iters - 1];
+    println!(
+        "  {name:<26} min {:>9}  med {:>9}  max {:>9}   (n={iters})",
+        ms(min),
+        ms(med),
+        ms(max)
+    );
+}
+
+fn ms(d: Duration) -> String {
+    format!("{:.2}ms", d.as_secs_f64() * 1000.0)
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let path = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| ".".to_string());
+    let log_limit: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(5000);
+
+    println!("\n== strand-core perfcheck ==");
+    println!("repo: {path}");
+
+    // --- Open / discover (cold per-command cost) ---
+    bench("discover (open)", 30, || {
+        Repo::discover(&path).expect("discover")
+    });
+
+    let repo = Repo::discover(&path).expect("discover");
+
+    // --- meta (every post-op refresh) ---
+    bench("meta", 50, || repo.meta().expect("meta"));
+
+    // --- log at several limits (graph load) ---
+    for limit in [1000usize, 10_000, log_limit] {
+        // De-dup if log_limit collides with a fixed limit.
+        bench(&format!("log({limit})"), 10, || {
+            repo.log(limit).expect("log")
+        });
+    }
+
+    // Full IPC round-trip the app actually pays today: re-discover + log.
+    bench("discover+log(5000)", 10, || {
+        Repo::discover(&path).expect("discover").log(5000).expect("log")
+    });
+
+    // --- status + work_tree (the post-change refresh; both run per refresh) ---
+    bench("status", 30, || repo.status().expect("status"));
+    bench("work_tree", 30, || repo.work_tree().expect("work_tree"));
+
+    // --- diffs (Local Changes) ---
+    bench("diff_unstaged", 20, || {
+        repo.diff_unstaged().expect("diff_unstaged")
+    });
+    bench("diff_staged", 20, || {
+        repo.diff_staged().expect("diff_staged")
+    });
+
+    println!();
+}

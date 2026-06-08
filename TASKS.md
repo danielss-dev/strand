@@ -535,13 +535,31 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## Performance (PRD §8 targets)
 
-- ☐ Cold start < 1.0s on M-series Mac (measure baseline)
-- ☐ Open 100k-commit repo < 2.0s
-- ☐ Status refresh on 10k-file working tree < 200ms
-- ☐ Diff render for 5,000-line file < 100ms
-- ☐ Stage/unstage hunk < 50ms perceived
-- ☐ Idle memory < 250MB for one medium repo
-- ☐ Installer < 25MB per platform
+First engine baseline measured 2026-06-08 on M1 Pro — see `docs/perf-baseline.md`
+and the `crates/strand-core/examples/perfcheck.rs` harness (100k-commit + 10k-file
+synthetic fixtures). Engine-measurable targets pass; webview/app targets still need
+a running-app pass.
+
+- ☐ Cold start < 1.0s on M-series Mac (webview/app — not yet measured)
+- ☑ Open 100k-commit repo < 2.0s (measured ~0.5s: discover + log on a 100k-commit
+  fixture; see finding #1 — log carries a ~0.46s git2 topo-sort floor that's the
+  scaling risk, tracked below)
+- ☑ Status refresh on 10k-file working tree < 200ms (measured 42ms; ~85ms with the
+  `work_tree` walk the UI also runs per refresh)
+- ☐ Diff render for 5,000-line file < 100ms (webview/Pierre render — not measured;
+  engine-side `diff_unstaged` for a 501-file changeset is ~150ms, see audit follow-up)
+- ☐ Stage/unstage hunk < 50ms perceived (webview — not yet measured)
+- ☐ Idle memory < 250MB for one medium repo (full app — not yet measured)
+- ☑ Installer < 25MB per platform (macOS DMG ~10MB, Windows MSI 10.5MB — recorded)
+
+### Perf-pass leads (2026-06-08 baseline)
+
+- ☐ **`log` first-page latency: shell out to `git log --all --topo-order -n <page>`
+  instead of git2's whole-DAG revwalk.** git2's `Sort::TOPOLOGICAL` buffers the
+  entire reachable set before yielding, so limit doesn't help (~0.46s floor on 100k,
+  ~12× slower than raw `git log` for the same page). Under the 2.0s target now but
+  the dominant cost and the thing that breaks at 1M commits. `log.rs`; `--topo-order`
+  preserves the order `lib/graph.ts` lanes need.
 
 ### Audit follow-ups (2026-06-04 perf/UX audit)
 
