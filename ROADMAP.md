@@ -258,8 +258,9 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☐ Linux build (deb / rpm / AppImage)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
   wired, `createUpdaterArtifacts` on); real endpoint still pending
-- ☐ Performance pass to hit PRD §8 targets on medium repos
-  (open <2s for 100k commits, status refresh <200ms on 10k files)
+- ◐ Performance pass to hit PRD §8 targets on medium repos
+  (open <2s for 100k commits ☑, status refresh <200ms on 10k files ☑; webview-side
+  targets — cold start, diff render, memory — still need a running-app pass)
 
 **Stashes shipped (2026-05-30):** First 0.5 vertical. `strand-core::stash`
 (`stash_list` via `stash_foreach`; `stash_save` via `stash_save2` with
@@ -559,6 +560,27 @@ pre-paint theme bootstrap + self-hosted fonts hold up off the macOS box), and th
 native Windows window frame is intact — titlebar, min/max/close, and
 maximize/restore all behave. Chrome looks correct on Windows. **Still pending:**
 EV signing and the universal/Linux builds.
+
+**Perf pass — `log` first-page latency (2026-06-08):** First optimization off the
+2026-06-08 baseline, targeting the highest-leverage finding. `Repo::log` moved off
+git2's whole-DAG revwalk (whose `Sort::TOPOLOGICAL` buffers the entire reachable set
+before yielding the first row — a ~0.48s floor on 100k commits, independent of
+`limit`, and the thing that breaks the <2s open target at ~1M commits) onto a
+shell-out: `git log -z --date-order -n <limit> HEAD --branches --remotes --tags`,
+which does an incremental, commit-graph-backed walk that stops at `limit`. Re-measured
+on the 100k-commit fixture (M1 Pro): **`log(1000)` 480→22ms (~22×), `log(10000)`
+484→73ms, and `discover+log(5000)` — the real per-IPC cost the app pays per
+refresh — 478→47ms (~10×)**. `--date-order` (not the lead's suggested `--topo-order`)
+reproduces git2's `Sort::TIME | Sort::TOPOLOGICAL` ordering *exactly* — the topo
+invariant `lib/graph.ts` lanes depend on, broken ties by commit time — so the graph
+layout is unchanged; this is a pure perf change with no visual regression. Ref
+selectors mirror the previous `push_head` + `push_glob` set (not `--all`, which would
+also pull in `refs/stash`/notes). Verified with `cargo test -p strand-core` (+3 `log`
+tests: empty/unborn repo → empty, subject/body/parent parsing, and a branchy merge
+repo asserting the topo invariant holds), `clippy`, and a before/after `perfcheck` run
+(numbers above). Remaining perf items (webview cold start, diff render, idle memory)
+need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` reads,
+`repo_snapshot` batch, diff `collect()`) stay tracked under TASKS → Performance.
 
 ---
 

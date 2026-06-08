@@ -46,10 +46,10 @@ target/release/examples/perfcheck ~/GitSources/.strand-perf-fixtures/bigtree 500
 |----------------------|-------:|------|
 | discover (open)      | 0.24ms | gix discover is effectively free |
 | meta                 | 0.27ms | post-op refresh |
-| log(1000)            | 480ms  | **near-constant floor regardless of limit** |
+| log(1000)            | 480ms  | **near-constant floor regardless of limit** — see update below |
 | log(10000)           | 484ms  | |
 | log(100000)          | 615ms  | only +135ms for 99k more rows (~1.6µs/commit) |
-| discover+log(5000)   | 478ms  | full per-command IPC cost today |
+| discover+log(5000)   | 478ms  | full per-command IPC cost — see update below |
 | status               | 0.52ms | |
 | diff_unstaged/staged | ~0.37ms | clean tree |
 
@@ -67,7 +67,7 @@ target/release/examples/perfcheck ~/GitSources/.strand-perf-fixtures/bigtree 500
 
 | target | result | status |
 |--------|--------|--------|
-| Open 100k-commit repo < 2.0s | ~0.5s (discover + log) | ✅ pass (3–4× margin) |
+| Open 100k-commit repo < 2.0s | ~47ms (discover + log, post-fix) | ✅ pass (~40× margin) |
 | Status refresh on 10k files < 200ms | 42ms (85ms with work_tree) | ✅ pass |
 | Installer < 25 MB | macOS DMG ~10 MB, Win MSI 10.5 MB (recorded) | ✅ pass |
 | Cold start < 1.0s | webview — not measured here | ⏳ needs app run |
@@ -95,6 +95,18 @@ All three engine-measurable targets pass comfortably at target scale.
    Note the lane algo (`lib/graph.ts`) needs topo order, which `--topo-order`
    preserves. UI-side commit-graph virtualization (tracked separately) does not
    reduce this number — it's engine-side.
+
+   **✅ Resolved 2026-06-08.** `Repo::log` now shells out to
+   `git log -z --date-order -n <limit> HEAD --branches --remotes --tags`
+   (`log.rs`). Re-measured on `bighist` (same M1 Pro): **`log(1000)` 480→22ms,
+   `log(10000)` 484→73ms, `discover+log(5000)` 478→47ms** — `limit` finally
+   bounds the work. `log(100000)` stays ~589ms (a genuine whole-DAG walk; not a
+   hot path — the graph loads a page). Used `--date-order` rather than the
+   suggested `--topo-order`: it reproduces git2's `Sort::TIME | Sort::TOPOLOGICAL`
+   ordering exactly (the topo invariant the lanes need, broken ties by commit
+   time), so the on-screen graph layout is unchanged — a pure perf change. The
+   ref selectors mirror the old `push_head` + `push_glob` set (not `--all`, which
+   would also pull in `refs/stash` and notes).
 
 2. **`diff_unstaged` at ~150ms for a 501-file changeset is the only
    engine number near a budget.** Prime suspect is the already-tracked O(files×lines)
