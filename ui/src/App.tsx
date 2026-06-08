@@ -113,6 +113,7 @@ export function App() {
   const checkout = useRepo((s) => s.checkout);
   const createBranch = useRepo((s) => s.createBranch);
   const revealInGraph = useRepo((s) => s.revealInGraph);
+  const requestCommitSearch = useRepo((s) => s.requestCommitSearch);
   const selectCommit = useRepo((s) => s.selectCommit);
 
   const fetchRepo = useRepo((s) => s.fetch);
@@ -523,6 +524,7 @@ export function App() {
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: '⌘3', keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
+        { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
@@ -577,7 +579,7 @@ export function App() {
     }));
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta, abortOperation, repoActions]);
+      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch, repoActions]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],

@@ -907,10 +907,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 320px;
-  max-width: 42%;
+  width: 380px;
+  max-width: 48%;
   height: 24px;
-  padding: 0 8px;
+  padding: 0 6px;
   background: var(--bg-panel);
   border-radius: 5px;
   box-shadow: 0 0 0 0.5px var(--border) inset;
@@ -918,12 +918,58 @@
 }
 .graph-search input {
   flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   outline: none;
   font: inherit;
   font-size: var(--type-ui-sm);
   color: var(--text);
+}
+/* Field picker (Message / Author / Hash) — opens a ContextMenu. */
+.search-mode {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: var(--type-ui-sm);
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.search-mode:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.search-count {
+  flex-shrink: 0;
+  font-size: var(--type-ui-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.search-nav,
+.search-clear {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.search-nav:hover:not(:disabled),
+.search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.search-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .seg {
   display: flex;
@@ -996,6 +1042,18 @@
 }
 [data-density="relaxed"] .graph-table tbody tr {
   height: 38px;
+}
+/* Commit-search: matched rows get a faint accent wash; the matched substring
+ * in the searched column is accent-bolded (the same .hl convention the command
+ * palette uses). Declared before hover/focused/active/selected so those
+ * stronger row states override the wash. */
+.graph-table tbody tr.match {
+  background: var(--accent-glow);
+}
+.graph-table .search-hl {
+  color: var(--accent);
+  background: transparent;
+  font-weight: 600;
 }
 .graph-table tbody tr:hover {
   background: var(--bg-hover);

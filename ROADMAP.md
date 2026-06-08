@@ -591,7 +591,9 @@ need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` 
 - ☑ Blame view (per-line author + commit jump)
 - ☑ Reflog browser
 - ☑ File history (log for a path)
-- ☐ Commit search (`-G` / `-S`)
+- ◐ Commit search — in-graph message/author/hash search shipped (highlight + ‹/›
+  nav, lanes intact); `-G` / `-S` content search still pending (needs a backend
+  `git log` search)
 - ☐ Stashes shown inline on the graph
 - ☐ Drag-and-drop renames in file tree
 - ☐ Compact / default / relaxed density (settings UI; CSS already supports it)
@@ -679,6 +681,29 @@ the creation entry, and `limit` bounding), `clippy`, `tsc`, and `vite build`.
   <file>" bar in the commits view that returns you to the file *at the same
   tab*. Any normal navigation (opening a file, switching tabs) clears the
   marker. Verified with `cargo test -p strand-core`, `tsc`, and `vite build`.
+
+**Commit search (2026-06-08):** The long-inert search box in the All Commits
+header is now live. The key design call: **highlight matches in place, don't
+filter** — `lib/graph.ts` lays out lanes in a single pass that assumes every
+parent stays present, so dropping rows would break lane continuity (the exact
+reason the input was disabled). Instead, matching rows get a faint `--accent-glow`
+wash and the matched substring in the searched column is accent-bolded (the
+palette's `.hl` convention); the graph is never touched. A field picker
+(Message / Author / Hash, via the shared `ContextMenu`) sits in the search pill;
+‹/› (or ↵ / ⇧↵ in the field) step through matches against an N/M counter that's
+*derived from the focused row* (no separate index to desync), each step scrolling
+the row into view via the existing focus effect while keeping DOM focus in the
+input. Keyboard-first per the project contract: `/` focuses the field (ignored
+while typing elsewhere), ⌘K → "Search commits…" jumps to it (one-shot
+`commitSearchFocus` store signal, mirroring `revealCommit`), Esc clears.
+Matching is **client-side over the loaded log** (message *subject* / author
+name+email / hash prefix) — so it's instant and needs no backend, but it only
+covers the loaded window and can't do content search. The body is deliberately
+**not** searched: every commit here ends with a `Co-Authored-By:` trailer, so a
+body search for a common substring ("auth") would light up nearly the whole log. Full-history +
+`-G`/`-S` pickaxe search (a `git log`-backed `Repo` command) stay open under
+TASKS → strand-core → Reads. Verified with `tsc` + `vite build` (frontend-only;
+no Rust change).
 
 ---
 

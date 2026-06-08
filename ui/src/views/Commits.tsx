@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
@@ -34,6 +34,9 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   // tab it was on). Lives inline in the toolbar so it doesn't add a second row.
   const fileReturn = useRepo((s) => s.fileReturn);
   const returnToFile = useRepo((s) => s.returnToFile);
+  // One-shot signal from the command palette's "Search commits…" action.
+  const commitSearchFocus = useRepo((s) => s.commitSearchFocus);
+  const clearCommitSearchFocus = useRepo((s) => s.clearCommitSearchFocus);
 
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
@@ -97,6 +100,14 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const [multi, setMulti] = useState<Set<string>>(() => new Set());
   const anchorRef = useRef<string | null>(null);
 
+  // Commit search. We highlight matches in place and step through them with
+  // ‹/› rather than filtering the list — filtering would break the graph's
+  // lane continuity (every parent must stay present; see lib/graph.ts). Search
+  // covers the loaded log (message / author / hash), not full history.
+  const [query, setQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<SearchMode>('message');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const graph = useMemo(() => computeGraph(commits), [commits]);
   // Inclusive range of hashes between two commits, by their row order.
   const rangeBetween = useCallback(
@@ -112,6 +123,71 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const refsByOid = useMemo(() => indexRefs(refs), [refs]);
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
   const colWidth = graphColWidth(graph.laneCount);
+
+  // Hashes of commits matching the query, in row order. Empty when the query
+  // is blank — no highlighting, full graph as usual.
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [] as string[];
+    return commits.filter((c) => commitMatches(c, q, searchMode)).map((c) => c.hash);
+  }, [commits, query, searchMode]);
+  const matchSet = useMemo(() => new Set(matches), [matches]);
+  // The "current" match is derived from the focused row, so the counter and
+  // ‹/› stepping can't drift out of sync with a separate index.
+  const matchPos = focusedCommit ? matches.indexOf(focusedCommit) : -1;
+
+  const stepMatch = useCallback(
+    (dir: 1 | -1) => {
+      if (matches.length === 0) return;
+      const cur = focusedCommit ? matches.indexOf(focusedCommit) : -1;
+      const next =
+        cur === -1
+          ? dir === 1
+            ? 0
+            : matches.length - 1
+          : (cur + dir + matches.length) % matches.length;
+      // Focusing the row scrolls it into view via the existing effect; DOM
+      // focus stays in the input so the user can keep typing / press Enter.
+      setFocusedCommit(matches[next]);
+    },
+    [matches, focusedCommit],
+  );
+
+  const clearSearch = useCallback(() => {
+    setQuery('');
+    searchInputRef.current?.focus();
+  }, []);
+
+  const onSearchKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        stepMatch(e.shiftKey ? -1 : 1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (query) clearSearch();
+        else searchInputRef.current?.blur();
+      }
+    },
+    [stepMatch, query, clearSearch],
+  );
+
+  const openModeMenu = useCallback(
+    (x: number, y: number) => {
+      const opt = (m: SearchMode): MenuItem => ({
+        label: MODE_LABEL[m],
+        icon: searchMode === m ? 'check' : undefined,
+        onSelect: () => {
+          setSearchMode(m);
+          // ContextMenu restores focus to its opener (the mode button) on
+          // close; defer past that so the field gets focus for typing.
+          requestAnimationFrame(() => searchInputRef.current?.focus());
+        },
+      });
+      setMenu({ x, y, items: [opt('message'), opt('author'), opt('hash')] });
+    },
+    [searchMode],
+  );
 
   const onRowClick = (hash: string, e: React.MouseEvent) => {
     graphMainRef.current?.focus();
@@ -262,6 +338,30 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
     focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [focusedCommit]);
 
+  // `/` focuses the search field (unless the user is typing somewhere else).
+  // Scoped to this view: the listener only exists while the graph is mounted.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== '/') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // The command palette's "Search commits…" sets a one-shot store flag; consume
+  // it once the graph is mounted (handles the palette switching the view in).
+  useEffect(() => {
+    if (!commitSearchFocus) return;
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+    clearCommitSearchFocus();
+  }, [commitSearchFocus, clearCommitSearchFocus]);
+
   return (
     <div className="graph-wrap">
       <div className="graph-toolbar">
@@ -285,15 +385,69 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
             </button>
           </div>
         )}
-        <div className="graph-search">
-          {/* Search isn't wired yet (filtering the graph needs to preserve lane
-              continuity — see TASKS). Disabled so it doesn't swallow input that
-              goes nowhere. */}
+        <div className="graph-search" role="search">
+          <button
+            type="button"
+            className="search-mode"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              openModeMenu(r.left, r.bottom + 4);
+            }}
+            aria-label={`Search field: ${MODE_LABEL[searchMode]}`}
+            title="Choose search field"
+          >
+            {MODE_LABEL[searchMode]}
+            <Icon name="chev-down" size={11} />
+          </button>
+          <Icon name="search" size={13} />
           <input
-            placeholder="Search commits (coming soon)"
-            aria-label="Search commits (coming soon)"
-            disabled
+            ref={searchInputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder={`Search ${MODE_LABEL[searchMode].toLowerCase()}…`}
+            aria-label={`Search commits by ${MODE_LABEL[searchMode].toLowerCase()}`}
           />
+          {query && (
+            <>
+              <span className="search-count" role="status" aria-live="polite">
+                {matches.length === 0
+                  ? 'No results'
+                  : matchPos >= 0
+                    ? `${matchPos + 1}/${matches.length}`
+                    : `${matches.length} found`}
+              </span>
+              <button
+                type="button"
+                className="search-nav"
+                onClick={() => stepMatch(-1)}
+                disabled={matches.length === 0}
+                aria-label="Previous match"
+                title="Previous match (⇧↵)"
+              >
+                <Icon name="chev-up" size={13} />
+              </button>
+              <button
+                type="button"
+                className="search-nav"
+                onClick={() => stepMatch(1)}
+                disabled={matches.length === 0}
+                aria-label="Next match"
+                title="Next match (↵)"
+              >
+                <Icon name="chev-down" size={13} />
+              </button>
+              <button
+                type="button"
+                className="search-clear"
+                onClick={clearSearch}
+                aria-label="Clear search"
+                title="Clear search (Esc)"
+              >
+                <Icon name="x" size={12} />
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="graph-split">
@@ -326,6 +480,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                     const active = selectedCommit === c.hash;
                     const focused = focusedCommit === c.hash;
                     const selected = multi.has(c.hash);
+                    const isMatch = matchSet.has(c.hash);
                     return (
                       <tr
                         key={c.hash}
@@ -336,6 +491,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                           active ? 'active' : null,
                           focused ? 'focused' : null,
                           selected ? 'selected' : null,
+                          isMatch ? 'match' : null,
                         ]
                           .filter(Boolean)
                           .join(' ') || undefined}
@@ -361,11 +517,17 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                             </span>
                           ) : null}
                           {row?.isMerge ? <span className="merge">⊕</span> : null}
-                          <span className="msg-text">{c.subject}</span>
+                          <span className="msg-text">
+                            {highlight(c.subject, query, searchMode === 'message')}
+                          </span>
                         </td>
-                        <td role="gridcell" className="author">{c.author_name}</td>
+                        <td role="gridcell" className="author">
+                          {highlight(c.author_name, query, searchMode === 'author')}
+                        </td>
                         <td role="gridcell" className="date">{relativeDate(c.time_unix)}</td>
-                        <td role="gridcell" className="hash">{c.short_hash}</td>
+                        <td role="gridcell" className="hash">
+                          {highlight(c.short_hash, query, searchMode === 'hash')}
+                        </td>
                       </tr>
                     );
                   })}
@@ -388,6 +550,55 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
     </div>
+  );
+}
+
+/** Which field the commit search matches against. */
+type SearchMode = 'message' | 'author' | 'hash';
+
+const MODE_LABEL: Record<SearchMode, string> = {
+  message: 'Message',
+  author: 'Author',
+  hash: 'Hash',
+};
+
+/**
+ * Does `c` match `q` (already trimmed + lowercased) under `mode`?
+ *
+ * Message matches the **subject only**, not the body: the body isn't shown in
+ * the row (so a body-only hit looks like a phantom match), and it routinely
+ * carries trailers like `Co-Authored-By:` / `Signed-off-by:` that turn a search
+ * for a common substring ("auth") into a match on nearly every commit.
+ */
+function commitMatches(c: Commit, q: string, mode: SearchMode): boolean {
+  switch (mode) {
+    case 'message':
+      return c.subject.toLowerCase().includes(q);
+    case 'author':
+      return c.author_name.toLowerCase().includes(q) || c.author_email.toLowerCase().includes(q);
+    case 'hash':
+      return c.hash.toLowerCase().startsWith(q);
+  }
+}
+
+/**
+ * Accent-bold the first case-insensitive occurrence of `query` in `text` (the
+ * same `.hl` convention the command palette uses). `enabled` is false for
+ * columns the active search mode doesn't target, so only the searched field
+ * lights up. Every match is against a visible field (subject / author / short
+ * hash), so a matched row always shows where it hit.
+ */
+function highlight(text: string, query: string, enabled: boolean): ReactNode {
+  const q = query.trim();
+  if (!enabled || !q) return text;
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i === -1) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="search-hl">{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
   );
 }
 

@@ -57,7 +57,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Tree listing for a commit (powers file tree at a revision)
 - ☑ File content at a revision (`Repo::file_content` — working tree from disk via
   `safe_workdir_path`, or a blob at a revision; binary heuristic + 2 MB cap)
-- ☐ Commit search (message, author, hash) — and `-G` / `-S` content search
+- ◐ Commit search (message, author, hash) — in-graph highlight over the loaded
+  log is done **client-side** (no backend; `Commits.tsx` `commitMatches`), so no
+  `Repo` search command exists yet. Full-history search + `-G` / `-S` content
+  search (which need `git log --grep`/`-G`) are still ☐.
 
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
@@ -359,7 +362,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   Tag… / Cherry-pick / Revert / Copy SHA); keyboard-operable via Menu key /
   Shift+F10 on the focused row (opens at the row corner)
 - ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
-- ☐ Search bar (currently visible but inert)
+- ☑ Search bar — wired in the All Commits header (`Commits.tsx`). A field picker
+  (Message / Author / Hash, via `ContextMenu`) + text input highlight matching
+  rows **in place** (`.match` wash + accent-bolded substring) without filtering,
+  so graph lanes stay continuous. ‹/› (or ↵ / ⇧↵) step through matches with an
+  N/M counter; `/` focuses the field, ⌘K "Search commits…" jumps to it, Esc
+  clears. Client-side over the loaded log (message **subject**, author
+  name/email, hash prefix — body is excluded so `Co-Authored-By:`/`Signed-off-by:`
+  trailers don't match nearly every commit) — full-history + `-G`/`-S` content
+  search remain ☐ under Reads.
 - ☐ Graph style preset switching (classic / bold / subtle)
 - ☐ GPG sign status indicator in commit-detail meta
 
@@ -604,8 +615,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   both for one refresh).
 - ☐ Sidebar: memoize ref-tree builds / `leafCount`; debounce `refreshTree` off
   the `status` dep so stage toggles don't re-walk the whole tree.
-- ☐ Wire commit-graph search (filtering must preserve graph lane continuity —
-  that's why the input is disabled today). `Commits.tsx`.
+- ☑ Wire commit-graph search (`Commits.tsx`). Resolved by **highlighting matches
+  in place instead of filtering** — every commit stays in the list, so the lane
+  algorithm's parent→child continuity is never broken. (Backend `git log`-based
+  search for full history / `-G`/`-S` is still ☐ under strand-core → Reads.)
 
 ---
 

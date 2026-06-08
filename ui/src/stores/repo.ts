@@ -309,6 +309,15 @@ export interface RepoState {
    * consumed it. */
   clearReveal(): void;
 
+  /**
+   * One-shot signal: the command palette's "Search commits…" action asks the
+   * All Commits view to focus its search field. Consumed + cleared by the
+   * graph once it mounts (mirrors {@link RepoState.revealCommit}).
+   */
+  commitSearchFocus: boolean;
+  requestCommitSearch(): void;
+  clearCommitSearchFocus(): void;
+
   refreshRecents(): Promise<void>;
   forgetRecent(path: string): Promise<void>;
 
@@ -459,6 +468,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   view: 'local',
   fileTab: 'content',
   selectedRef: null,
+  commitSearchFocus: false,
 
   async restoreSession() {
     let saved: PersistedSession | null = null;
@@ -1171,6 +1181,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   setView: (view) => set({ view }),
   revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
   clearReveal: () => set({ revealCommit: null }),
+  requestCommitSearch: () => set({ view: 'commits', commitSearchFocus: true }),
+  clearCommitSearchFocus: () => set({ commitSearchFocus: false }),
   // Opening a file resets the file-view tab to Content and drops any stale
   // back-target; closing (null) just drops the back-target.
   selectFile: (selectedFile) =>

@@ -547,3 +547,34 @@ with `BranchType::Remote` accepts **only the shorthand**. Pass the full ref and
 you silently get an untracked local branch (push/pull defaults break), with no
 error. Every correct call site (Topbar, Sidebar) uses `rb.name`; the command
 palette regressed by passing `rb.full_name` and a review caught it.
+
+---
+
+## Commit-graph search highlights, never filters — lanes depend on it
+
+**Rule.** Search in the All Commits view (`ui/src/views/Commits.tsx`) **must not
+remove rows from the list.** It highlights matches in place (a `.match` wash +
+accent-bolded substring) and steps through them with ‹/›. Do not "filter the
+graph to matches."
+
+**Why.** `lib/graph.ts` assigns lanes in a single top-down pass that assumes the
+list is a complete, topologically-sorted history — every commit's parent is still
+somewhere below it. Drop the non-matching rows and a parent can vanish from under
+its child, so lanes connect to nothing and the SVG is garbage. This is *the*
+reason the search box shipped `disabled` for months; highlighting sidesteps it
+because the row set never changes.
+
+**How to apply.**
+- Message/Author/Hash matching is **client-side over the loaded log**
+  (`commitMatches`) — instant, no backend, but only the loaded window (~500), and
+  no content search.
+- The current match is **derived from `focusedCommit`** (`matches.indexOf`), not a
+  separate counter — keeps the N/M readout and ‹/› in sync for free. Stepping
+  `setFocusedCommit`s the row (the existing effect scrolls it in) while DOM focus
+  stays in the input.
+- Reachable from the keyboard: `/` focuses the field, ⌘K "Search commits…" via a
+  one-shot `commitSearchFocus` store signal (modeled on `revealCommit`).
+- **Future `-G`/`-S` content search or full-history search** needs a `git
+  log`-backed `Repo` command (can't be client-side). If you add it, prefer a
+  *flat results mode* (no lanes drawn) over filtering the graph — same conclusion,
+  arrived at differently: when you're showing a subset, don't pretend it's a graph.

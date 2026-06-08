@@ -84,6 +84,10 @@ pnpm tauri:build   # signed installers in target/release/bundle
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
   through commits, Enter opens details, and Esc closes them
+- Commit search: search the loaded graph by message, author, or hash (field
+  picker in the header). Matches are highlighted in place — lanes stay intact —
+  and ‹/› (or ↵ / ⇧↵) step through them with an N/M counter; `/` focuses the
+  box, ⌘K → "Search commits…" jumps to it, Esc clears
 - Reflog browser: a second lens on history, reached from a `Graph | Reflog`
   toggle in the All Commits header (also ⌘3 / ⌘K). Lists HEAD's movements
   newest-first — `HEAD@{n}`, an op badge (commit / checkout / reset / merge / …),
@@ -117,8 +121,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
 ## What's still stubbed
 
 - File tree — `@pierre/trees` integration pending
-- Commit graph: multi-select, search, and Files-tab re-rooting to the
-  selected commit
+- Commit graph: full-history and `-G`/`-S` content search (in-graph
+  message/author/hash search is wired; see above), and Files-tab re-rooting to
+  the selected commit
 - Rebase, cherry-pick, merge, revert — mutating commands wrap
   `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
   and stashes are wired; stash branch-from and checkout from an arbitrary
