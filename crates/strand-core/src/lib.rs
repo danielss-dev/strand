@@ -26,6 +26,7 @@ pub mod tree;
 pub mod submodule;
 pub mod blame;
 pub mod file;
+pub mod reflog;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

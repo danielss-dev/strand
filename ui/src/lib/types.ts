@@ -203,6 +203,22 @@ export interface FileHistoryEntry {
   dels: number;
 }
 
+/** One entry in a ref's reflog (`git reflog`), newest first. */
+export interface ReflogEntry {
+  /** Position in the reflog; 0 is the most recent move (`HEAD@{0}`). */
+  index: number;
+  /** OID the ref points at after this move (full hex) — the jump target. */
+  new_oid: string;
+  new_short: string;
+  /** OID before this move; all-zero for the ref's creation entry. */
+  old_oid: string;
+  committer_name: string;
+  committer_email: string;
+  time_unix: number;
+  /** Reflog message, e.g. `commit: fix typo` or `checkout: moving from a to b`. */
+  message: string;
+}
+
 /** Row in the `recent_repos` SQLite table. Frontend-managed. */
 export interface RecentRepo {
   path: string;

@@ -47,7 +47,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Submodule list + status (`Repo::submodules` via git2 — recorded vs
   checked-out OIDs, status reduced to uninitialized / up-to-date / out-of-date /
   modified)
-- ☐ Reflog reader
+- ☑ Reflog reader (`Repo::reflog(selector, limit)` via `git2::Repository::reflog`
+  — per-entry old→new OID, committer, time, message; newest-first; unborn HEAD →
+  empty. `reflog.rs`, with std-only tests covering empty/ordering/limit.)
 - ☑ Blame (`Repo::blame` via `git2::blame_file` — per-line commit/author/summary
   against HEAD, per-commit summary cache, 50k-line cap)
 - ☑ File history for a path (`Repo::file_history` — `git log --follow --numstat`,
@@ -155,8 +157,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
-  `repo_submodules`, `repo_blame`, `repo_file_content`, `repo_file_history`,
-  `repo_diff_commit_file`
+  `repo_submodules`, `repo_blame`, `repo_reflog`, `repo_file_content`,
+  `repo_file_history`, `repo_diff_commit_file`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
   `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
@@ -360,6 +362,19 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Search bar (currently visible but inert)
 - ☐ Graph style preset switching (classic / bold / subtle)
 - ☐ GPG sign status indicator in commit-detail meta
+
+### Reflog view
+- ☑ Reflog browser (`views/Reflog.tsx` — reached via a `[Graph | Reflog]`
+  segmented toggle (`components/HistoryModeToggle.tsx`) in the All Commits header
+  actions, plus ⌘3 + ⌘K "Show: Reflog"; the sidebar "All Commits" row stays
+  active across both lenses, so reflog doesn't claim a third primary row. Lists
+  HEAD reflog newest-first from `repo_reflog` via a lazy `reflog` store slice /
+  `refreshReflog` action; each row shows `HEAD@{n}`, an op badge parsed from the
+  message (commit/checkout/reset/merge/…, colored by family), the message, time,
+  and short OID. Keyboard-operable: `role=listbox` with roving
+  `aria-activedescendant`, ↑/↓ to move focus, Enter or click jumps to the entry's
+  commit in the graph via `revealInGraph`. Recovery path for commits orphaned by
+  reset/rebase/amend.)
 
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;

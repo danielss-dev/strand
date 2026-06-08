@@ -14,6 +14,7 @@ import type {
   NetworkOutcome,
   Progress,
   Refs,
+  ReflogEntry,
   RepoMeta,
   Stash,
   StashOutcome,
@@ -77,6 +78,8 @@ export const tauri = {
   repoFileHistory: (path: string, file: string, limit?: number) =>
     invoke<FileHistoryEntry[]>('repo_file_history', { path, file, limit }),
   repoBlame: (path: string, file: string) => invoke<BlameLine[]>('repo_blame', { path, file }),
+  repoReflog: (path: string, selector?: string, limit?: number) =>
+    invoke<ReflogEntry[]>('repo_reflog', { path, selector, limit }),
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
   repoStageMany: (path: string, files: string[]) =>

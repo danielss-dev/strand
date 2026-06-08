@@ -925,14 +925,14 @@
   font-size: var(--type-ui-sm);
   color: var(--text);
 }
-.graph-toolbar .seg {
+.seg {
   display: flex;
   background: var(--bg-elev);
   border-radius: 6px;
   padding: 2px;
   box-shadow: 0 0 0 0.5px var(--border) inset;
 }
-.graph-toolbar .seg button {
+.seg button {
   border: 0;
   background: transparent;
   color: var(--text-muted);
@@ -943,7 +943,7 @@
   border-radius: 4px;
   cursor: pointer;
 }
-.graph-toolbar .seg button.on {
+.seg button.on {
   background: var(--bg-active);
   color: var(--text);
 }
@@ -1451,6 +1451,103 @@
 }
 .hist-row .stats .del {
   color: var(--del);
+}
+
+/* Reflog view */
+.reflog-list {
+  flex: 1;
+  overflow-y: auto;
+  outline: none;
+}
+.reflog-list:focus-visible {
+  box-shadow: 0 0 0 1.5px var(--accent) inset;
+}
+.reflog-row {
+  display: grid;
+  grid-template-columns: 78px 92px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-bottom: 0.5px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+.reflog-row:hover {
+  background: var(--bg-hover);
+}
+.reflog-row.focused {
+  background: var(--bg-sel);
+}
+.reflog-row .sel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.reflog-row .op {
+  justify-self: start;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.reflog-row .op.add {
+  color: var(--add);
+}
+.reflog-row .op.warn {
+  color: var(--warn);
+}
+.reflog-row .op.nav {
+  color: var(--accent);
+}
+.reflog-row .msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reflog-row .msg em {
+  color: var(--text-muted);
+}
+.reflog-row .when {
+  font-size: var(--type-ui-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.reflog-row .hash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.reflog-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+}
+.reflog-empty p {
+  margin: 0;
+  color: var(--text-2);
+}
+.reflog-empty span {
+  font-size: var(--type-ui-sm);
+  max-width: 320px;
 }
 
 /* Compare picker */

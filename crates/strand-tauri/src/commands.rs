@@ -3,6 +3,7 @@ use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{FileContent, FileHistoryEntry}, history::MergeMode, log::Commit,
     network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
+    reflog::ReflogEntry,
     refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
     submodule::Submodule, tree::WorkTreeEntry, Repo,
 };
@@ -103,6 +104,15 @@ pub fn repo_file_history(
 #[tauri::command]
 pub fn repo_blame(path: String, file: String) -> CmdResult<Vec<BlameLine>> {
     Ok(Repo::discover(&path)?.blame(&file)?)
+}
+
+#[tauri::command]
+pub fn repo_reflog(
+    path: String,
+    selector: Option<String>,
+    limit: Option<usize>,
+) -> CmdResult<Vec<ReflogEntry>> {
+    Ok(Repo::discover(&path)?.reflog(selector.as_deref().unwrap_or("HEAD"), limit.unwrap_or(500))?)
 }
 
 #[tauri::command]

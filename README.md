@@ -84,6 +84,11 @@ pnpm tauri:build   # signed installers in target/release/bundle
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
   through commits, Enter opens details, and Esc closes them
+- Reflog browser: a second lens on history, reached from a `Graph | Reflog`
+  toggle in the All Commits header (also ⌘3 / ⌘K). Lists HEAD's movements
+  newest-first — `HEAD@{n}`, an op badge (commit / checkout / reset / merge / …),
+  message, time, and short OID; ↑/↓ + Enter or a click jumps to the entry's
+  commit in the graph, so commits orphaned by a reset/rebase/amend are recoverable
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker

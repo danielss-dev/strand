@@ -461,7 +461,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         <SideRow
           icon="graph"
           label="All Commits"
-          active={view === 'commits'}
+          active={view === 'commits' || view === 'reflog'}
           onClick={() => { setView('commits'); selectFile(null); }}
         />
       </div>

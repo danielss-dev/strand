@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
+import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { Icon } from './components/Icon';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +21,7 @@ import { MergeDialog } from './views/MergeDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
+import { Reflog } from './views/Reflog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 import type { Progress, RepoMeta, StatusKind } from './lib/types';
 
@@ -391,6 +393,8 @@ export function App() {
         e.preventDefault(); setView('local'); selectFile(null);
       } else if (mod && e.key === '2') {
         e.preventDefault(); setView('commits'); selectFile(null);
+      } else if (mod && e.key === '3') {
+        e.preventDefault(); setView('reflog'); selectFile(null);
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         const next = cycleTheme();
@@ -518,6 +522,7 @@ export function App() {
       base.push(
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
+        { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: '⌘3', keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
@@ -621,6 +626,7 @@ export function App() {
                   <MainHeader />
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
+                  {view === 'reflog' && <Reflog />}
                   {(view === 'commits' || view === 'branch') && (
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
@@ -833,15 +839,19 @@ function MainHeader() {
     }
   }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
 
+  const reflog = useRepo((s) => s.reflog);
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'
+    : view === 'reflog' ? 'Reflog'
     : view === 'branch' ? 'Branch'
     : '';
   const sub = view === 'local'
     ? `${meta?.branch ?? '—'} · ${status.length} files with changes`
     : view === 'commits'
       ? `${commits.length} commits across all branches`
-      : '';
+      : view === 'reflog'
+        ? `${reflog.length} HEAD movements`
+        : '';
 
   return (
     <div className="main-header">
@@ -854,6 +864,7 @@ function MainHeader() {
         <span style={{ color: 'var(--text-dim)', fontSize: 11.5, marginLeft: 6 }}>· {sub}</span>
       </div>
       <div className="h-actions">
+        {(view === 'commits' || view === 'reflog') && <HistoryModeToggle />}
         {view === 'local' && (
           <>
             <button

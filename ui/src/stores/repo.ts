@@ -18,6 +18,7 @@ import type {
   Progress,
   RecentRepo,
   Refs,
+  ReflogEntry,
   RepoMeta,
   Stash,
   StashOutcome,
@@ -31,7 +32,7 @@ interface PersistedSession {
 }
 const SESSION_KEY = 'session.tabs';
 
-export type View = 'local' | 'commits' | 'file' | 'branch';
+export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog';
 
 /** Active tab within the 4-tab file view. */
 export type FileTab = 'content' | 'history' | 'compare' | 'blame';
@@ -124,6 +125,10 @@ export interface RepoState {
   /** Submodules of the active repo (list + status), for the sidebar section. */
   submodules: Submodule[];
 
+  /** HEAD reflog for the active tab, newest first. Lazy: only the Reflog view
+   * triggers {@link RepoState.refreshReflog}. */
+  reflog: ReflogEntry[];
+
   /** Recent commit messages for the active repo, newest first. Powers the
    * dropdown on the commit subject field. */
   recentMessages: StoredMessage[];
@@ -155,6 +160,8 @@ export interface RepoState {
   refreshTree(): Promise<void>;
   /** Re-read the submodule list + status for the active tab. */
   refreshSubmodules(): Promise<void>;
+  /** Re-read the HEAD reflog for the active tab (Reflog view). */
+  refreshReflog(): Promise<void>;
   /**
    * Run `git submodule update` for `paths` (empty ⇒ all), optionally
    * initializing (`--init`) and recursing. Streams progress; refreshes the
@@ -389,6 +396,7 @@ const EMPTY_ACTIVE = {
   stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
   submodules: [] as Submodule[],
+  reflog: [] as ReflogEntry[],
   recentMessages: [] as StoredMessage[],
 };
 
@@ -516,6 +524,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      reflog: [],
       recentMessages: [],
     }));
 
@@ -571,6 +580,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      reflog: [],
       recentMessages: [],
     });
     void persistSession(get());
@@ -606,6 +616,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      reflog: [],
       recentMessages: [],
     });
     void persistSession(get());
@@ -702,6 +713,19 @@ export const useRepo = create<RepoState>((set, get) => ({
       set({ submodules });
     } catch (e) {
       console.warn('repoSubmodules failed', e);
+    }
+  },
+
+  async refreshReflog() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const reflog = await tauri.repoReflog(path);
+      // Bail if the active repo changed while the read was in flight.
+      if (get().activePath !== path) return;
+      set({ reflog });
+    } catch (e) {
+      console.warn('repoReflog failed', e);
     }
   },
 

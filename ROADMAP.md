@@ -589,7 +589,7 @@ need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` 
 - ☑ Submodules (list + status, init/update --recursive)
 - ☐ Interactive rebase (custom sequence-editor protocol)
 - ☑ Blame view (per-line author + commit jump)
-- ☐ Reflog browser
+- ☑ Reflog browser
 - ☑ File history (log for a path)
 - ☐ Commit search (`-G` / `-S`)
 - ☐ Stashes shown inline on the graph
@@ -636,6 +636,30 @@ view (PRD §6.5) and submodules went from placeholders to wired features.
   `tsc`, `vite build`, and an adversarial 5-dimension review (FFI contract /
   security / logic / React-perf-a11y / conventions — one confirmed finding, the
   non-virtualized blame list, fixed).
+
+**Reflog browser (2026-06-08):** Second 1.0 vertical. The reflog is the local,
+chronological record of where HEAD has pointed — and the only UI path back to
+commits orphaned by a reset / rebase / amend (the commit graph only shows
+reachable history). `strand-core::reflog` reads it via `git2::Repository::reflog`
+(a pure local read — no shell-out needed): `Repo::reflog(selector, limit)` returns
+per-entry old→new OID + committer + time + message, newest-first, mapping an
+unborn HEAD's missing reflog to an empty list (mirrors `log` on an empty repo).
+New `repo_reflog` IPC (selector defaults to `HEAD`) + `repoReflog` wrapper +
+`ReflogEntry` type. A lazy `reflog` store slice (`refreshReflog`, guarded on
+`activePath`, reset per tab like `workTree`/`submodules`) feeds a new
+`views/Reflog.tsx`. **Placement:** the graph and the reflog are two lenses on
+the same history, so rather than a third sidebar primary row, a shared
+`[Graph | Reflog]` segmented toggle (`components/HistoryModeToggle.tsx`) sits in
+the All Commits header actions — the sidebar's "All Commits" row stays active across both,
+and ⌘3 + ⌘K "Show: Reflog" jump straight to the reflog lens. Each row shows
+`HEAD@{n}`, an op badge parsed from the
+message (commit / checkout / reset / merge / rebase …, colored by family so
+rewriting moves stand out), the message, time, and short OID; clicking or
+pressing Enter jumps to that entry's commit in the graph (`revealInGraph`).
+Keyboard-first: `role=listbox` with roving `aria-activedescendant` and ↑/↓ focus
+movement. Verified with `cargo test -p strand-core` (+3 `reflog` tests:
+unborn-HEAD→empty, newest-first ordering with parsed messages + null old-OID on
+the creation entry, and `limit` bounding), `clippy`, `tsc`, and `vite build`.
 
 **File view follow-ups (2026-06-06):** Three polish items from first use.
 - **Uncommitted changes in History.** The History tab now leads with a

@@ -36,6 +36,7 @@ fn main() {
             commands::repo_file_content,
             commands::repo_file_history,
             commands::repo_blame,
+            commands::repo_reflog,
             commands::repo_stage,
             commands::repo_unstage,
             commands::repo_stage_many,
