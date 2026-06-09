@@ -28,6 +28,25 @@ export interface RepoMeta {
 /** Merge strategy chosen in the Merge dialog. */
 export type MergeMode = 'auto' | 'no_ff' | 'squash';
 
+/** A git interactive-rebase verb the sequence editor exposes (no `edit` in v1). */
+export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop';
+
+/** One planned step against a commit; `message` is read only for `reword`. */
+export interface RebaseStep {
+  action: RebaseAction;
+  oid: string;
+  message: string | null;
+}
+
+/** A commit in the editable range, oldest→newest, as the sequence editor lists it. */
+export interface RebaseEntry {
+  oid: string;
+  short: string;
+  subject: string;
+  author: string;
+  is_merge: boolean;
+}
+
 export type StatusKind = 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED' | 'CONFLICTED';
 
 export interface FileStatus {

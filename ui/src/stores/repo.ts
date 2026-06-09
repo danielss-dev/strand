@@ -16,6 +16,8 @@ import type {
   FileStatus,
   MergeMode,
   Progress,
+  RebaseEntry,
+  RebaseStep,
   RecentRepo,
   Refs,
   ReflogEntry,
@@ -266,8 +268,26 @@ export interface RepoState {
   revert(commits: string[]): Promise<boolean>;
   merge(refname: string, mode: MergeMode): Promise<boolean>;
   rebase(onto: string): Promise<boolean>;
+  /**
+   * Load the editable commit range (oldest→newest) an interactive rebase over
+   * `base..HEAD` would offer. `base` null = from the root. Read-only — does not
+   * touch the repo.
+   */
+  loadRebaseTodo(base: string | null): Promise<RebaseEntry[]>;
+  /**
+   * Run an interactive rebase from a `steps` plan the editor built (reorder /
+   * drop / squash / fixup / reword). Same conflict contract as the other
+   * history ops.
+   */
+  interactiveRebase(base: string | null, steps: RebaseStep[]): Promise<boolean>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
+  /**
+   * Resume the paused merge/rebase/cherry-pick/revert after conflicts were
+   * resolved in Local Changes (`git … --continue`, not a commit). `true` when
+   * it paused again on a fresh conflict.
+   */
+  continueOperation(): Promise<boolean>;
   /**
    * Write a conflicted file's resolved contents back and stage it (marks it
    * resolved). The op stays in progress until the user commits — refresh
@@ -1083,6 +1103,18 @@ export const useRepo = create<RepoState>((set, get) => ({
       return tauri.repoRebase(path, onto);
     });
   },
+  async loadRebaseTodo(base) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    return tauri.repoRebaseTodo(path, base);
+  },
+  async interactiveRebase(base, steps) {
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoInteractiveRebase(path, base, steps);
+    });
+  },
   async abortOperation() {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
@@ -1091,6 +1123,13 @@ export const useRepo = create<RepoState>((set, get) => ({
     } finally {
       await refreshAfterHistoryOp(get);
     }
+  },
+  async continueOperation() {
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoContinueOperation(path);
+    });
   },
   async resolveConflict(file, contents) {
     const path = get().activePath;

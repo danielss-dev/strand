@@ -15,12 +15,14 @@ import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
 interface CommitsProps {
   /** Open the New-tag dialog targeting a commit (revspec + label). */
   onCreateTag: (target: string, label: string) => void;
+  /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
+  onInteractiveRebase: (base: string | null, label: string) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string) => void;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onToast }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const stashes = useRepo((s) => s.stashes);
   const refs = useRepo((s) => s.refs);
@@ -83,6 +85,14 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
           })(),
         },
         {
+          label: 'Rebase from here…',
+          icon: 'rebase',
+          // Edit this commit and everything newer: base is its parent (or root
+          // when it has none, so the commit itself is still editable).
+          onSelect: () =>
+            onInteractiveRebase(c.parents.length ? `${c.hash}^` : null, c.short_hash),
+        },
+        {
           label: 'Copy SHA',
           icon: 'file',
           onSelect: () => { void copyToClipboard(c.hash); onToast('Copied commit hash'); },
@@ -90,7 +100,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
       ];
       setMenu({ x, y, items });
     },
-    [checkoutCommit, cherryPick, revert, onCreateTag, onToast],
+    [checkoutCommit, cherryPick, revert, onCreateTag, onInteractiveRebase, onToast],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail
@@ -605,7 +615,11 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
             <>
               <PanelResizeHandle className="rs-handle vert" />
               <Panel defaultSize={38} minSize={25} maxSize={55}>
-                <CommitDetail onCreateTag={onCreateTag} onToast={onToast} />
+                <CommitDetail
+                  onCreateTag={onCreateTag}
+                  onInteractiveRebase={onInteractiveRebase}
+                  onToast={onToast}
+                />
               </Panel>
             </>
           ) : null}

@@ -65,6 +65,8 @@ interface SidebarProps {
   onCreateWorktree: () => void;
   /** Open the Merge dialog: merge `source` into the current branch `into`. */
   onMerge: (source: string, into: string) => void;
+  /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
+  onInteractiveRebase: (base: string | null, label: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string) => void;
 }
@@ -112,7 +114,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateWorktree, onMerge, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateWorktree, onMerge, onInteractiveRebase, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -344,7 +346,22 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   };
 
   const branchMenu = (b: Branch): MenuItem[] => {
-    if (b.is_head) return [{ label: 'Current branch', disabled: true, onSelect: () => {} }];
+    if (b.is_head) {
+      // Interactive rebase over the commits this branch is ahead of its
+      // upstream (`upstream..HEAD`) — the unpushed work it's safe to edit.
+      const up = b.upstream?.name;
+      return [
+        { label: 'Current branch', disabled: true, onSelect: () => {} },
+        {
+          label: 'Interactive rebase…',
+          icon: 'rebase',
+          onSelect: () =>
+            up
+              ? onInteractiveRebase(up, up)
+              : onToast('No upstream configured — use “Rebase from here” on a commit'),
+        },
+      ];
+    }
     const items: MenuItem[] = [
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
     ];

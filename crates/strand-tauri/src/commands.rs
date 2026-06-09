@@ -1,7 +1,8 @@
 use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
-    diff::FileDiff, file::{FileContent, FileHistoryEntry}, history::MergeMode, log::Commit,
+    diff::FileDiff, file::{FileContent, FileHistoryEntry},
+    history::{MergeMode, RebaseEntry, RebaseStep}, log::Commit,
     network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
     refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
@@ -422,6 +423,25 @@ pub fn repo_rebase(path: String, onto: String) -> CmdResult<bool> {
 pub fn repo_abort_operation(path: String) -> CmdResult<()> {
     Repo::discover(&path)?.abort_operation()?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn repo_continue_operation(path: String) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.continue_operation()?)
+}
+
+#[tauri::command]
+pub fn repo_rebase_todo(path: String, base: Option<String>) -> CmdResult<Vec<RebaseEntry>> {
+    Ok(Repo::discover(&path)?.rebase_todo(base.as_deref())?)
+}
+
+#[tauri::command]
+pub fn repo_interactive_rebase(
+    path: String,
+    base: Option<String>,
+    steps: Vec<RebaseStep>,
+) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.interactive_rebase(base.as_deref(), &steps)?)
 }
 
 #[tauri::command]

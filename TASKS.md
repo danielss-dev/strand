@@ -121,7 +121,25 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Abort in-progress op (`Repo::abort_operation` — detects rebase / cherry-pick
   / revert / merge from `.git/` markers and runs the matching `--abort`; surfaced
   by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)
-- ☐ Interactive rebase (custom sequence-editor; shells out)
+- ☑ Continue in-progress op (`Repo::continue_operation` — same marker detection,
+  runs the matching `--continue` with `GIT_EDITOR=true` so it never blocks; a
+  paused rebase only advances this way, not via a commit. Surfaced by the
+  `OpBanner` "Continue" button, gated until conflicts clear.)
+- ☑ Interactive rebase (custom sequence-editor; shells out) — `Repo::rebase_todo`
+  lists `base..HEAD`; `Repo::interactive_rebase(base, steps)` drives `git rebase
+  -i` with **no editor**: the todo is fed via `GIT_SEQUENCE_EDITOR=cat
+  "$STRAND_REBASE_PLAN" >`, `GIT_EDITOR=true` keeps squash on git's default
+  combined message, and `reword` is `pick` + `exec git commit --amend -F <msg>`
+  so a new message maps to the right commit. UI = `views/RebaseEditor.tsx`
+  (keyboard-operable reorder/pick/reword/squash/fixup/drop), launched from the
+  commit context menu + `CommitDetail` ("Rebase from here…"), the current-branch
+  sidebar menu, and ⌘K "Interactive rebase…". Conflicts route to Local Changes
+  → resolve → Continue. (Std-only round-trip + conflict/continue tests in
+  `history.rs`.)
+- ☐ Interactive rebase: `edit` (pause-to-amend) action — needs an amend-during-
+  rebase flow on top of the continue path
+- ☐ Interactive rebase: preserve merges (`--rebase-merges`) — v1 flattens; the
+  editor warns when the range contains a merge
 - ☐ Cherry-pick / revert a merge commit (mainline `-m` selection UI)
 - ☑ Submodule init / update / sync (`Repo::submodule_update` — `git submodule
   update [--init] [--recursive] [-- paths]`, shelled out + streamed like the
@@ -167,7 +185,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
   `repo_branch_delete`, `repo_tag_create`, `repo_tag_delete`,
   `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,
-  `repo_abort_operation`, `repo_read_conflict_file`, `repo_resolve_conflict`,
+  `repo_rebase_todo`, `repo_interactive_rebase`,
+  `repo_abort_operation`, `repo_continue_operation`,
+  `repo_read_conflict_file`, `repo_resolve_conflict`,
   `repo_stash_list`, `repo_stash_save`,
   `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
@@ -526,11 +546,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ## Conflict resolution
 
-- ◐ In-progress op surfaced + abort: `RepoMeta.operation` (rebase / cherry-pick
-  / revert / merge, read from `.git/` markers) drives an `OpBanner` above the
-  main view with an Abort button + ⌘K "Abort <op>". The three-way *resolution*
-  UI below is still the open work; today conflicts are resolved in Local Changes
-  (conflicted files show via the `CONFLICTED` status) and committed by hand.
+- ◐ In-progress op surfaced + abort/continue: `RepoMeta.operation` (rebase /
+  cherry-pick / revert / merge, read from `.git/` markers) drives an `OpBanner`
+  above the main view with **Continue** + **Abort** buttons (⌘K "Abort <op>").
+  Continue (`Repo::continue_operation`) is gated until no `CONFLICTED` files
+  remain — the correct way to advance a paused rebase, which a commit can't do.
+  The three-way *resolution* UI below is still the open work; today conflicts are
+  resolved in Local Changes (conflicted files show via the `CONFLICTED` status).
 - ☑ Detect conflicted files from `status` (`status.rs` now emits every
   `is_conflicted()` entry as a single `CONFLICTED` row — a pure unmerged entry
   has no wt/index bit and was otherwise dropped; the Local Changes **conflict

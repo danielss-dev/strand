@@ -236,10 +236,11 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Stashes (create, apply, pop, drop)
 - ☑ Tags (lightweight + annotated) — create / delete / checkout, plus push /
   delete on a remote
-- ☑ Cherry-pick, revert, merge (ff / no-ff / squash), rebase
+- ☑ Cherry-pick, revert, merge (ff / no-ff / squash), rebase + **interactive
+  rebase** (reorder / pick / reword / squash / fixup / drop)
 - ☑ Conflict resolution UI (three-way view) — Pierre `<UnresolvedFile>` resolver
-  with accept current/incoming/both; in-progress banner + Abort. (External
-  mergetool fallback still ☐ in TASKS.)
+  with accept current/incoming/both; in-progress banner + Abort + Continue.
+  (External mergetool fallback still ☐ in TASKS.)
 - ☑ Discard changes (hunk / file) with single-undo — file-level + per-change-block
   Discard, both with the 6s Undo toast; per-row Discard in the file-tree right-click
   menu. (Line-level sub-block discard needs a line-selection UI — deferred, tracked
@@ -581,6 +582,23 @@ repo asserting the topo invariant holds), `clippy`, and a before/after `perfchec
 (numbers above). Remaining perf items (webview cold start, diff render, idle memory)
 need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` reads,
 `repo_snapshot` batch, diff `collect()`) stay tracked under TASKS → Performance.
+
+**Interactive rebase (2026-06-09):** Closed the last big history-editing gap. A
+custom sequence editor (`views/RebaseEditor.tsx`) drives `git rebase -i` with **no
+editor in the loop**: the todo plan is fed via `GIT_SEQUENCE_EDITOR=cat
+"$STRAND_REBASE_PLAN" >` (git runs the editor through its own shell, so the trailing
+`>` plus the appended todo path forms a redirect — no helper script, no path
+quoting), `GIT_EDITOR=true` keeps `squash` on git's default combined message, and a
+`reword` is applied as `pick` + `exec git commit --amend -F <msg>` so the new message
+maps to the right commit deterministically. v1 covers reorder / pick / reword / squash
+/ fixup / drop (no `edit`; merges are flattened with a warning). The editor is
+keyboard-operable (listbox + ⌥↑/⌥↓ reorder + `p`/`r`/`s`/`f`/`d`), launched from the
+commit context menu + `CommitDetail` ("Rebase from here…"), the current-branch sidebar
+menu, and ⌘K. A necessary companion landed too: **`Repo::continue_operation`** + an
+`OpBanner` **Continue** button — a paused rebase only advances via `git rebase
+--continue` (not a commit), which the banner's old "resolve and commit" guidance got
+wrong. Verified with `cargo test -p strand-core` (+5 history tests: reorder/drop,
+fixup/squash, reword, and a conflict → resolve → continue round-trip) and `tsc`.
 
 ---
 

@@ -18,10 +18,13 @@ import type { Commit, DiffStatus, FileDiff, Stash } from '../lib/types';
  */
 export function CommitDetail({
   onCreateTag,
+  onInteractiveRebase,
   onToast,
 }: {
   /** Open the New-tag dialog targeting this commit (revspec + label). */
   onCreateTag: (target: string, label: string) => void;
+  /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
+  onInteractiveRebase: (base: string | null, label: string) => void;
   /** Surface cherry-pick / revert success or git's conflict message. */
   onToast: (msg: string) => void;
 }) {
@@ -255,6 +258,18 @@ export function CommitDetail({
               >
                 <Icon name="history" size={12} />
                 Revert
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={historyBusy}
+                onClick={() =>
+                  onInteractiveRebase(commit.parents.length ? `${hash}^` : null, commit.short_hash)
+                }
+                title="Reorder, squash, reword, or drop this commit and everything newer"
+              >
+                <Icon name="rebase" size={12} />
+                Rebase from here…
               </button>
             </>
           )}

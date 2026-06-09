@@ -101,6 +101,13 @@ pnpm tauri:build   # signed installers in target/release/bundle
   worktrees. A sidebar Worktrees section and a create dialog (new/existing branch +
   default sibling path) round it out, and worktree tabs of one repo group together
   in the tab strip with a shared color
+- History ops: cherry-pick, revert, merge (ff / no-ff / squash), and rebase —
+  plus **interactive rebase**: a keyboard-operable sequence editor (reorder with
+  ⌥↑/⌥↓, set each commit to pick / reword / squash / fixup / drop) launched from
+  a commit's right-click menu or detail panel ("Rebase from here…"), the
+  current-branch sidebar menu, or ⌘K. When an op pauses on a conflict, a banner
+  offers Abort and Continue (resolve in Local Changes, then Continue — the way a
+  paused rebase actually advances)
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker
@@ -132,10 +139,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Commit graph: full-history and `-G`/`-S` content search (in-graph
   message/author/hash search is wired; see above), and Files-tab re-rooting to
   the selected commit
-- Rebase, cherry-pick, merge, revert — mutating commands wrap
-  `git2` and shell out as PRD §4 describes. Branch checkout/create/delete
-  and stashes are wired; stash branch-from and checkout from an arbitrary
-  commit (detached HEAD) still pending.
+- Mutating commands wrap `git2` and shell out as PRD §4 describes (history ops
+  are wired — see above). Still pending: stash branch-from, interactive-rebase
+  `edit` (pause-to-amend), and preserving merges across a rebase.
 
 ## Design source
 

@@ -13,6 +13,8 @@ import type {
   MergeMode,
   NetworkOutcome,
   Progress,
+  RebaseEntry,
+  RebaseStep,
   Refs,
   ReflogEntry,
   RepoMeta,
@@ -184,6 +186,15 @@ export const tauri = {
     invoke<boolean>('repo_merge', { path, refname, mode }),
   repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),
   repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
+  // Resume a paused merge/rebase/cherry-pick/revert after resolving conflicts
+  // (`--continue`, not a commit). `true` = paused again on a fresh conflict.
+  repoContinueOperation: (path: string) => invoke<boolean>('repo_continue_operation', { path }),
+  // The editable commit range for an interactive rebase (oldest→newest);
+  // `base` null = rebase from the root.
+  repoRebaseTodo: (path: string, base: string | null) =>
+    invoke<RebaseEntry[]>('repo_rebase_todo', { path, base }),
+  repoInteractiveRebase: (path: string, base: string | null, steps: RebaseStep[]) =>
+    invoke<boolean>('repo_interactive_rebase', { path, base, steps }),
   repoReadConflictFile: (path: string, file: string) =>
     invoke<string>('repo_read_conflict_file', { path, file }),
   repoResolveConflict: (path: string, file: string, contents: string) =>

@@ -578,3 +578,45 @@ because the row set never changes.
   log`-backed `Repo` command (can't be client-side). If you add it, prefer a
   *flat results mode* (no lanes drawn) over filtering the graph — same conclusion,
   arrived at differently: when you're showing a subset, don't pretend it's a graph.
+
+---
+
+## Interactive rebase drives `git rebase -i` with no editor; rebase resumes via `--continue`, never a commit
+
+**Rule.** `Repo::interactive_rebase` (`history.rs`) runs real `git rebase -i` but
+never lets an editor open — the plan is precomputed in the UI
+(`views/RebaseEditor.tsx`) and fed in non-interactively:
+
+- **Sequence editor:** git launches the configured editor through *its own shell*
+  as `sh -c '<editor> "<todofile>"'` (on every platform — Git-for-Windows uses its
+  bundled sh). So set `GIT_SEQUENCE_EDITOR=cat "$STRAND_REBASE_PLAN" >`: the trailing
+  `>` plus git's appended `"<todofile>"` becomes a redirect that overwrites the todo
+  with our plan. The plan path travels in the `STRAND_REBASE_PLAN` env var (sh
+  expands it), so there's **no helper script and no path quoting** — and pass the
+  path forward-slashed (`sh_path`) so Windows backslashes don't break inside sh.
+- **Message editor:** force `GIT_EDITOR=true` for the whole run. `squash` then keeps
+  git's default combined message (all subjects concatenated) — no message UI needed.
+- **Reword:** don't use a `reword` todo line (it would invoke the editor and you'd
+  have to sequence which message goes where). Emit `pick <oid>` + `exec git <safe>
+  commit --amend --no-edit -F <msgfile>` instead — the new message maps to the right
+  commit by construction, still editor-free. (`<safe>` = `GIT_SAFE_CONFIG` joined,
+  because the `exec`'d git is a fresh process that could otherwise re-trigger
+  fsmonitor.)
+- **Drop** = omit the line. Reject an all-drop plan (git aborts on an empty todo).
+
+**Why `continue` had to come along.** There was only `--abort`; the `OpBanner` told
+users to "resolve conflicts and commit." That's wrong for rebase — a paused rebase
+**only advances via `git rebase --continue`**, not a commit (committing mid-rebase
+just adds a stray commit). So `Repo::continue_operation` detects the live op from the
+same `.git/` markers as `abort_operation` and runs the matching `--continue` with
+`GIT_EDITOR=true`; the banner gained a **Continue** button gated until no
+`CONFLICTED` files remain. This fixed the latent gap for plain rebase too.
+
+**How to apply.** Reuse the conflict-aware mapping (`run_sequencer_env` → `Ok(true)`
+when the index has unmerged entries, so conflicts route to Local Changes like every
+other history op — see the conflict-is-an-outcome learning). The editable range comes
+from `Repo::rebase_todo(base)` (a `git log --reverse base..HEAD`, base validated as a
+HEAD ancestor) — **not** the loaded graph, which spans all refs and isn't linear.
+Out of v1 and tracked in TASKS: `edit` (pause-to-amend, needs an amend-during-rebase
+state machine on top of continue) and `--rebase-merges` (v1 flattens merges; the
+editor warns when the range has any).

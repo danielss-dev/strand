@@ -18,6 +18,7 @@ import { SettingsDialog } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
+import { RebaseEditor } from './views/RebaseEditor';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -133,6 +134,9 @@ export function App() {
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
   const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
+  // null = closed; otherwise the interactive-rebase base (revspec before the
+  // first editable commit, null ⇒ root) + a short label for the blurb.
+  const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -549,6 +553,12 @@ export function App() {
           })();
         } },
         { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: '⌘⇧S', run: onSync },
+        { id: 'rebase-i', label: 'Interactive rebase…', group: 'Actions', keywords: 'rebase reorder squash fixup reword drop history edit', run: () => {
+          const st = useRepo.getState();
+          const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
+          if (!c) { showToast('Select a commit in the graph first'); return; }
+          setRebaseDialog({ base: c.parents.length ? `${c.hash}^` : null, label: c.short_hash });
+        } },
       );
     }
     base.push(
@@ -586,7 +596,7 @@ export function App() {
     }));
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch, repoActions]);
+      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch, repoActions, setRebaseDialog]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -624,6 +634,7 @@ export function App() {
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
                 onCreateWorktree={() => setWorktreeOpen(true)}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
+                onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onToast={showToast}
               />
             </Panel>
@@ -643,6 +654,7 @@ export function App() {
                   {(view === 'commits' || view === 'branch') && (
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
+                      onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                       onToast={showToast}
                     />
                   )}
@@ -721,6 +733,15 @@ export function App() {
         />
       )}
 
+      {rebaseDialog && (
+        <RebaseEditor
+          base={rebaseDialog.base}
+          label={rebaseDialog.label}
+          onClose={() => setRebaseDialog(null)}
+          onToast={showToast}
+        />
+      )}
+
       {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}
 
       {!isTauri() && !meta && (
@@ -788,27 +809,50 @@ const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
 
 /**
  * Banner shown above the main view whenever a merge/rebase/cherry-pick/revert
- * is paused (typically on a conflict). Offers an Abort that restores the
- * pre-op state — the in-app escape hatch until the three-way resolution UI
- * lands. Resolving + committing the conflict (via Local Changes) clears
- * `operation` on the next refresh, which hides the banner.
+ * is paused (typically on a conflict). Offers **Continue** (resume once the
+ * conflicts are resolved in Local Changes — `git … --continue`, which is the
+ * only way a paused rebase advances; committing doesn't) and **Abort** (restore
+ * the pre-op state). Continue is disabled while any conflict remains. The op
+ * clears `operation` on the next refresh, which hides the banner.
  */
 function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
   const operation = useRepo((s) => s.meta?.operation ?? null);
+  const status = useRepo((s) => s.status);
   const abortOperation = useRepo((s) => s.abortOperation);
-  const [busy, setBusy] = useState(false);
+  const continueOperation = useRepo((s) => s.continueOperation);
+  const [busy, setBusy] = useState<null | 'continue' | 'abort'>(null);
+
+  const hasConflicts = useMemo(() => status.some((s) => s.kind === 'CONFLICTED'), [status]);
+
   if (!operation) return null;
 
   const onAbort = async () => {
     if (busy) return;
-    setBusy(true);
+    setBusy('abort');
     try {
       await abortOperation();
       onToast('Operation aborted');
     } catch (e) {
       onToast(`Abort failed: ${errMessage(e)}`);
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  const onContinue = async () => {
+    if (busy) return;
+    setBusy('continue');
+    try {
+      const stillConflicted = await continueOperation();
+      onToast(
+        stillConflicted
+          ? 'Paused again on conflicts — resolve them in Local Changes'
+          : `${OP_LABEL[operation].replace(' in progress', '')} complete`,
+      );
+    } catch (e) {
+      onToast(`Continue failed: ${errMessage(e)}`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -816,9 +860,27 @@ function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
     <div className="op-banner" role="status">
       <Icon name="rebase" size={13} />
       <span className="op-label">{OP_LABEL[operation]}</span>
-      <span className="op-hint">Resolve the conflicts in Local Changes and commit, or</span>
-      <button type="button" className="btn ghost op-abort" disabled={busy} onClick={() => void onAbort()}>
-        {busy ? 'Aborting…' : 'Abort'}
+      <span className="op-hint">
+        {hasConflicts
+          ? 'Resolve the conflicts in Local Changes, then'
+          : 'Conflicts resolved —'}
+      </span>
+      <button
+        type="button"
+        className="btn op-continue"
+        disabled={busy !== null || hasConflicts}
+        title={hasConflicts ? 'Resolve all conflicts first' : undefined}
+        onClick={() => void onContinue()}
+      >
+        {busy === 'continue' ? 'Continuing…' : 'Continue'}
+      </button>
+      <button
+        type="button"
+        className="btn ghost op-abort"
+        disabled={busy !== null}
+        onClick={() => void onAbort()}
+      >
+        {busy === 'abort' ? 'Aborting…' : 'Abort'}
       </button>
     </div>
   );
