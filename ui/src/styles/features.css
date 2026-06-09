@@ -3469,3 +3469,160 @@ textarea.clone-input {
   display: flex;
   flex-direction: column;
 }
+
+/* ── Worktrees overview ─────────────────────────────────────────────────── */
+.wt-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wt-actions {
+  display: flex;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--border);
+}
+.wt-list {
+  flex: 1;
+  overflow-y: auto;
+  outline: none;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wt-list:focus-visible {
+  box-shadow: 0 0 0 1.5px var(--accent) inset;
+}
+.wt-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 0.5px solid var(--border);
+  background: var(--bg-elev);
+  cursor: pointer;
+}
+.wt-card:hover {
+  background: var(--bg-hover);
+}
+.wt-card.focused {
+  box-shadow: 0 0 0 1.5px var(--accent) inset;
+}
+.wt-card.current {
+  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
+}
+.wt-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wt-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wt-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-active);
+  color: var(--text-muted);
+}
+.wt-tag.current {
+  color: var(--accent);
+}
+.wt-drift {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.wt-drift .drift-ahead {
+  color: var(--add);
+}
+.wt-drift .drift-behind {
+  color: var(--del);
+}
+.wt-card-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--type-ui-sm);
+}
+.wt-dirty {
+  color: var(--warn);
+}
+.wt-clean {
+  color: var(--text-muted);
+}
+.wt-dim {
+  color: var(--text-dim);
+}
+.wt-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.wt-path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wt-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wt-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+}
+.wt-empty p {
+  margin: 0;
+  color: var(--text-2);
+}
+.wt-empty span {
+  font-size: var(--type-ui-sm);
+  max-width: 360px;
+}
+
+/* New-worktree dialog reuses the clone-dialog shell; the select matches the
+   text inputs. */
+.worktree-dialog .clone-input {
+  width: 100%;
+}
+select.clone-input {
+  appearance: none;
+  cursor: pointer;
+}

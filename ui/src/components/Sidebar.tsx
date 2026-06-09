@@ -6,7 +6,7 @@ import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
 import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag } from '../lib/types';
+import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
 
 type SideTab = 'git' | 'files';
 
@@ -61,6 +61,8 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  /** Open the New-worktree dialog. */
+  onCreateWorktree: () => void;
   /** Open the Merge dialog: merge `source` into the current branch `into`. */
   onMerge: (source: string, into: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
@@ -110,7 +112,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onMerge, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateWorktree, onMerge, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -138,13 +140,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const stashDrop = useRepo((s) => s.stashDrop);
   const submodules = useRepo((s) => s.submodules);
   const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
+  const worktrees = useRepo((s) => s.worktrees);
+  const openWorktree = useRepo((s) => s.openWorktree);
+  const removeWorktree = useRepo((s) => s.removeWorktree);
+  const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const rebase = useRepo((s) => s.rebase);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
   const [sections, setSections] = useState({
-    branches: true, remotes: true, tags: false, stashes: true, submods: false,
+    worktrees: true, branches: true, remotes: true, tags: false, stashes: true, submods: false,
   });
   // Folders are expanded by default — track which ones the user collapsed.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -229,6 +235,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       (s) => s.message.toLowerCase().includes(q) || (s.branch?.toLowerCase().includes(q) ?? false),
     );
   }, [stashes, filter]);
+
+  // Worktrees are a flat list filtered on branch + path.
+  const filteredWorktrees = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return worktrees;
+    return worktrees.filter(
+      (w) => (w.branch?.toLowerCase().includes(q) ?? false) || w.path.toLowerCase().includes(q),
+    );
+  }, [worktrees, filter]);
 
   // Submodules are a flat list filtered on path + name.
   const filteredSubmodules = useMemo(() => {
@@ -407,6 +422,39 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return items;
   };
 
+  // Remove a worktree, surfacing git's reason on failure (it refuses a dirty
+  // worktree without --force, so the menu offers a separate Force remove).
+  const runWorktreeRemove = (w: Worktree, force: boolean) => {
+    void (async () => {
+      try {
+        await removeWorktree(w.path, force);
+        onToast(`Removed worktree ${w.branch ?? leafName(w.path)}`);
+      } catch (e) {
+        onToast(`Remove failed: ${errMessage(e)}`);
+      }
+    })();
+  };
+  const worktreeMenu = (w: Worktree): MenuItem[] => {
+    const items: MenuItem[] = [
+      {
+        label: w.is_current ? 'Focus tab' : 'Open in new tab',
+        icon: 'folder-open',
+        onSelect: () => void openWorktree(w.path),
+      },
+      { label: 'Show in overview', icon: 'worktree', onSelect: () => setView('worktrees') },
+      { label: 'Copy path', icon: 'file', onSelect: () => void copyToClipboard(w.path) },
+    ];
+    // The main worktree and the one you're in can't be removed.
+    if (!w.is_main && !w.is_current) {
+      items.push({ label: 'Remove worktree', icon: 'trash', danger: true, confirm: true, onSelect: () => runWorktreeRemove(w, false) });
+      items.push({ label: 'Force remove (discard changes)', icon: 'trash', danger: true, confirm: true, onSelect: () => runWorktreeRemove(w, true) });
+    }
+    if (w.is_prunable) {
+      items.push({ label: 'Prune stale entries', icon: 'sync', onSelect: () => void pruneWorktrees() });
+    }
+    return items;
+  };
+
   const renderBranchLeaf = (b: Branch, depth: number) => (
     <SideLeaf
       key={b.full_name}
@@ -495,6 +543,29 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         </div>
       ) : tab === 'git' ? (
         <div className="side-scroll">
+          <SideSection
+            label="Worktrees"
+            collapsed={!sections.worktrees}
+            onToggle={() => toggle('worktrees')}
+            count={filteredWorktrees.length}
+            action={{ icon: 'plus', title: 'New worktree…', onClick: onCreateWorktree }}
+          />
+          {sections.worktrees &&
+            filteredWorktrees.map((w) => (
+              <SideLeaf
+                key={w.path}
+                depth={0}
+                icon={w.is_current ? 'check' : 'worktree'}
+                label={w.branch ?? leafName(w.path)}
+                active={w.is_current}
+                meta={w.is_locked ? 'locked' : w.is_detached ? 'detached' : undefined}
+                title={`${w.path}${w.is_main ? ' — main worktree' : ''}${w.is_current ? ' — current' : ' — double-click to open in a tab'}`}
+                onActivate={() => void openWorktree(w.path)}
+                onSelect={() => setView('worktrees')}
+                onMenu={(x, y) => openMenu(x, y, worktreeMenu(w))}
+              />
+            ))}
+
           <SideSection
             label="Branches"
             collapsed={!sections.branches}

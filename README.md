@@ -93,6 +93,12 @@ pnpm tauri:build   # signed installers in target/release/bundle
   newest-first — `HEAD@{n}`, an op badge (commit / checkout / reset / merge / …),
   message, time, and short OID; ↑/↓ + Enter or a click jumps to the entry's
   commit in the graph, so commits orphaned by a reset/rebase/amend are recoverable
+- Worktrees: a Worktrees overview (⌘4 / ⌘K) lists every worktree with its branch,
+  ahead/behind, dirty-file count, and last commit, with one-click Review (opens the
+  worktree as a tab on Local Changes) — built for reviewing AI agents' per-feature
+  worktrees. A sidebar Worktrees section and a create dialog (new/existing branch +
+  default sibling path) round it out, and worktree tabs of one repo group together
+  in the tab strip with a shared color
 - Network: fetch / pull / push with ahead/behind counts
 - Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
   branches, and tags — feeds the topbar branch picker

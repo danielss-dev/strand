@@ -20,6 +20,7 @@ import type {
   StashOutcome,
   Submodule,
   WorkTreeEntry,
+  Worktree,
 } from './types';
 
 /**
@@ -128,6 +129,12 @@ export const tauri = {
       recursive,
       onEvent: progressChannel(onProgress),
     }),
+  repoWorktrees: (path: string) => invoke<Worktree[]>('repo_worktrees', { path }),
+  repoWorktreeAdd: (path: string, dest: string, branch: string, newBranch: boolean) =>
+    invoke<void>('repo_worktree_add', { path, dest, branch, newBranch }),
+  repoWorktreeRemove: (path: string, dest: string, force: boolean) =>
+    invoke<void>('repo_worktree_remove', { path, dest, force }),
+  repoWorktreePrune: (path: string) => invoke<void>('repo_worktree_prune', { path }),
   repoBranchCreate: (
     path: string,
     name: string,

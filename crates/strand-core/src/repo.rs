@@ -63,6 +63,18 @@ impl Repo {
             .and_then(Self::compute_ahead_behind)
             .unwrap_or((0, 0));
 
+        // The shared git dir is identical across every worktree of one repo, so
+        // the UI groups worktree tabs on it. `is_worktree` marks a linked
+        // worktree (vs the main one). Both come from the git2 handle opened
+        // above; fall back to gix's git dir when git2 didn't open.
+        let common_dir = self.gix.common_dir().to_path_buf();
+        let common_dir = common_dir
+            .canonicalize()
+            .unwrap_or(common_dir)
+            .to_string_lossy()
+            .into_owned();
+        let is_linked_worktree = g2.as_ref().map(|r| r.is_worktree()).unwrap_or(false);
+
         Ok(RepoMeta {
             name: self
                 .path
@@ -76,6 +88,8 @@ impl Repo {
             behind,
             detached,
             operation: self.operation_in_progress(),
+            common_dir,
+            is_linked_worktree,
         })
     }
 
@@ -167,4 +181,9 @@ pub struct RepoMeta {
     /// `"revert"` / `"merge"`), or `None` when the repo is in a normal state.
     /// Drives the in-progress banner + Abort affordance.
     pub operation: Option<String>,
+    /// The shared git dir (`commondir`), identical for every worktree of the
+    /// same repository. The tab strip groups worktree tabs on this value.
+    pub common_dir: String,
+    /// True when this is a *linked* worktree rather than the main one.
+    pub is_linked_worktree: bool,
 }

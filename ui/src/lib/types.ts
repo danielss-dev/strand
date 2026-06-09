@@ -16,6 +16,13 @@ export interface RepoMeta {
    * Drives the in-progress banner + Abort affordance.
    */
   operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | null;
+  /**
+   * The shared git dir (`commondir`), identical for every worktree of the same
+   * repository. The tab strip groups worktree tabs on this value.
+   */
+  common_dir: string;
+  /** True when this tab is a *linked* worktree rather than the main one. */
+  is_linked_worktree: boolean;
 }
 
 /** Merge strategy chosen in the Merge dialog. */
@@ -164,6 +171,26 @@ export interface Submodule {
   workdir_id: string | null;
   initialized: boolean;
   status: SubmoduleState;
+}
+
+/** One entry in the repository's worktree registry (`git worktree list`). */
+export interface Worktree {
+  /** Absolute worktree directory, forward-slashed. */
+  path: string;
+  /** Short branch name; `null` when detached/bare. */
+  branch: string | null;
+  /** Checked-out HEAD oid; `null` for a bare entry. */
+  head: string | null;
+  is_bare: boolean;
+  is_detached: boolean;
+  is_locked: boolean;
+  lock_reason: string | null;
+  /** git considers this worktree's directory missing/removable. */
+  is_prunable: boolean;
+  /** The primary worktree (holds the repo's own `.git`). */
+  is_main: boolean;
+  /** Matches the currently-open repo path. */
+  is_current: boolean;
 }
 
 /** One line of `git blame` output for a file at HEAD. */

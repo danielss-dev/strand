@@ -24,6 +24,7 @@ pub mod stash;
 pub mod tag;
 pub mod tree;
 pub mod submodule;
+pub mod worktree;
 pub mod blame;
 pub mod file;
 pub mod reflog;

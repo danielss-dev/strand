@@ -22,6 +22,8 @@ import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
+import { Worktrees } from './views/Worktrees';
+import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 import type { Progress, RepoMeta, StatusKind } from './lib/types';
 
@@ -131,6 +133,7 @@ export function App() {
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
   const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
+  const [worktreeOpen, setWorktreeOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -396,6 +399,8 @@ export function App() {
         e.preventDefault(); setView('commits'); selectFile(null);
       } else if (mod && e.key === '3') {
         e.preventDefault(); setView('reflog'); selectFile(null);
+      } else if (mod && e.key === '4') {
+        e.preventDefault(); setView('worktrees'); selectFile(null);
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         const next = cycleTheme();
@@ -524,6 +529,8 @@ export function App() {
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: '⌘3', keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
+        { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: '⌘4', keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
+        { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
@@ -615,6 +622,7 @@ export function App() {
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onCreateWorktree={() => setWorktreeOpen(true)}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onToast={showToast}
               />
@@ -629,6 +637,9 @@ export function App() {
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {view === 'reflog' && <Reflog />}
+                  {view === 'worktrees' && (
+                    <Worktrees onCreateWorktree={() => setWorktreeOpen(true)} onToast={showToast} />
+                  )}
                   {(view === 'commits' || view === 'branch') && (
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
@@ -709,6 +720,8 @@ export function App() {
           onToast={showToast}
         />
       )}
+
+      {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}
 
       {!isTauri() && !meta && (
         <div style={{
@@ -842,9 +855,11 @@ function MainHeader() {
   }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
 
   const reflog = useRepo((s) => s.reflog);
+  const worktrees = useRepo((s) => s.worktrees);
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'
     : view === 'reflog' ? 'Reflog'
+    : view === 'worktrees' ? 'Worktrees'
     : view === 'branch' ? 'Branch'
     : '';
   const sub = view === 'local'
@@ -853,7 +868,9 @@ function MainHeader() {
       ? `${commits.length} commits across all branches`
       : view === 'reflog'
         ? `${reflog.length} HEAD movements`
-        : '';
+        : view === 'worktrees'
+          ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
+          : '';
 
   return (
     <div className="main-header">

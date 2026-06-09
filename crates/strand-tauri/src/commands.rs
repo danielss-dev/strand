@@ -5,7 +5,7 @@ use strand_core::{
     network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
     refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
-    submodule::Submodule, tree::WorkTreeEntry, Repo,
+    submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
 };
 use tauri::ipc::Channel;
 use tauri::State;
@@ -289,6 +289,31 @@ pub async fn repo_submodule_update(
     })
     .await
     .map_err(|e| CmdError { message: format!("submodule update task failed: {e}") })?
+}
+
+#[tauri::command]
+pub fn repo_worktrees(path: String) -> CmdResult<Vec<Worktree>> {
+    Ok(Repo::discover(&path)?.worktrees()?)
+}
+
+#[tauri::command]
+pub fn repo_worktree_add(
+    path: String,
+    dest: String,
+    branch: String,
+    new_branch: bool,
+) -> CmdResult<()> {
+    Ok(Repo::discover(&path)?.add_worktree(&dest, &branch, new_branch)?)
+}
+
+#[tauri::command]
+pub fn repo_worktree_remove(path: String, dest: String, force: bool) -> CmdResult<()> {
+    Ok(Repo::discover(&path)?.remove_worktree(&dest, force)?)
+}
+
+#[tauri::command]
+pub fn repo_worktree_prune(path: String) -> CmdResult<()> {
+    Ok(Repo::discover(&path)?.prune_worktrees()?)
 }
 
 #[tauri::command]

@@ -245,6 +245,21 @@
     text-overflow: ellipsis;
     font-weight: 500;
 }
+/* Worktree tabs of one repo cluster tightly after their main tab. */
+.repo-tab.same-group {
+    margin-left: -4px;
+}
+.repo-tab.worktree .repo-name {
+    font-weight: 450;
+    color: var(--text-2);
+}
+.repo-tab .repo-wt-ico {
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    margin-left: -3px;
+}
 .tab-add-wrap {
     position: relative;
     display: flex;

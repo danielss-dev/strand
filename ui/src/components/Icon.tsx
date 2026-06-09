@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
-  | 'edit' | 'graph' | 'branch' | 'tag' | 'stash' | 'remote' | 'submodule'
+  | 'edit' | 'graph' | 'branch' | 'tag' | 'stash' | 'remote' | 'submodule' | 'worktree'
   | 'file' | 'folder' | 'folder-open' | 'changes' | 'search' | 'command'
   | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
   | 'chev-down' | 'chev-right' | 'chev-up' | 'chev-left' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
@@ -42,6 +42,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'stash':       return <svg {...p}><rect x="1.5" y="6" width="13" height="8" rx="1.5"/><path d="M3 4h10M4.5 2h7"/></svg>;
     case 'remote':      return <svg {...p}><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 1.7 3 4 3 6s-1 4.3-3 6c-2-1.7-3-4-3-6s1-4.3 3-6Z"/></svg>;
     case 'submodule':   return <svg {...p}><rect x="2" y="2" width="12" height="12" rx="1.5"/><rect x="5" y="5" width="6" height="6" rx="0.5"/></svg>;
+    case 'worktree':    return <svg {...p}><circle cx="4" cy="3.5" r="1.6"/><path d="M4 5.1v4.4M4 9.5c0 1.6 2.2 1.5 4 1.5"/><rect x="8" y="8.5" width="6" height="5" rx="1"/></svg>;
     case 'file':        return <svg {...p}><path d="M3 1.5h7l3 3v10H3v-13Z"/><path d="M10 1.5v3h3"/></svg>;
     case 'folder':      return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4Z"/></svg>;
     case 'folder-open': return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v1.5H1.5V4Z"/><path d="M1.5 6h13l-1.2 6.6a1 1 0 0 1-1 .9H3.7a1 1 0 0 1-1-.9L1.5 6Z"/></svg>;

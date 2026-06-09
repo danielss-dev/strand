@@ -587,6 +587,8 @@ need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` 
 ## 1.0 — Stable (≈ 20 weeks)
 
 - ☑ Submodules (list + status, init/update --recursive)
+- ☑ Worktree management (overview dashboard + sidebar section + grouped tabs +
+  create/remove) — the AI-review workflow's primary organizing unit
 - ☐ Interactive rebase (custom sequence-editor protocol)
 - ☑ Blame view (per-line author + commit jump)
 - ☑ Reflog browser
@@ -704,6 +706,30 @@ body search for a common substring ("auth") would light up nearly the whole log.
 `-G`/`-S` pickaxe search (a `git log`-backed `Repo` command) stay open under
 TASKS → strand-core → Reads. Verified with `tsc` + `vite build` (frontend-only;
 no Rust change).
+
+**Worktree management (2026-06-09):** Built around Strand's differentiating use
+case — reviewing what AI agents change, where agents commonly run one worktree
+per feature in the same repo. The design leans on **reuse**: a linked worktree's
+directory is itself a valid repo path, so opening one is just `openRepo`, and the
+overview's per-worktree stats reuse the existing `repo_status`/`repo_meta`/
+`repo_log` commands against each worktree path — no dedicated stat backend.
+`strand-core::worktree` shells out to `git worktree list --porcelain` / `add` /
+`remove` / `prune` (module-local `run_git` + `GIT_SAFE_CONFIG`, per the shell-out
+rules); `RepoMeta` gained `common_dir` (gix `common_dir()`) + `is_linked_worktree`
+(git2 `is_worktree()`) so the tab strip can group. Four IPC commands + store slice
+(`worktrees`, eager-refreshed on open/tab-switch). Three UI surfaces: a **Worktrees
+overview** (`views/Worktrees.tsx`, ⌘4 / ⌘K) listing each worktree with branch,
+ahead/behind, dirty count, last commit, and one-click **Review** (opens the worktree
+tab on Local Changes); a **sidebar Worktrees section** (first in the Git tab,
+current marked with the accent check, context-menu open/remove/force-remove/prune,
+header `+` to create); **grouped tabs** (`Topbar.groupTabs` clusters a repo's
+worktrees by `common_dir` with a shared dot color, linked tabs labelled by branch);
+and a **create dialog** (`views/WorktreeDialog.tsx`, new/existing branch + default
+sibling `<repo>.worktrees/<branch>` path + open-in-tab). Verified with
+`cargo test -p strand-core` (35 pass, +2 worktree tests), `cargo check`, `tsc`, and
+`vite build`. **Open:** "Review worktree vs base branch" (a committed-diff
+comparison surface) is tracked under TASKS → Worktrees; a live in-app pass on the
+Tauri window is still pending (the webview can't be driven by the browser harness).
 
 ---
 

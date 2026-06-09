@@ -387,6 +387,33 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   commit in the graph via `revealInGraph`. Recovery path for commits orphaned by
   reset/rebase/amend.)
 
+### Worktrees
+- ☑ Worktree engine (`strand-core/src/worktree.rs` — `Repo::worktrees()` parses
+  `git worktree list --porcelain`; `add_worktree` / `remove_worktree` /
+  `prune_worktrees` shell out via a module-local `run_git` + `GIT_SAFE_CONFIG`;
+  `Worktree` struct carries branch/head/bare/detached/locked/prunable/main/current.
+  +2 tests: list→add→remove round-trip, dash-arg rejection.)
+- ☑ `RepoMeta.common_dir` + `is_linked_worktree` (gix `common_dir()` + git2
+  `is_worktree()`) so the tab strip can group a repo's worktrees.
+- ☑ IPC `repo_worktrees` / `repo_worktree_add` / `repo_worktree_remove` /
+  `repo_worktree_prune` + `tauri.ts` wrappers + store slice (`worktrees`,
+  `refreshWorktrees` eager on open/tab-switch, `addWorktree` / `removeWorktree` /
+  `pruneWorktrees` / `openWorktree` = `openRepo` reuse). Removing/pruning a
+  worktree closes its open tab (`samePath` match) so no dead tab lingers.
+- ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘4 + ⌘K "Show:
+  Worktrees"; each row enriches lazily via `repoStatus`/`repoMeta`/`repoLog` on
+  the worktree path → dirty count, ahead/behind, last commit; Review opens the
+  worktree tab on Local Changes; keyboard `role=listbox` + ↑/↓ + Enter).
+- ☑ Sidebar Worktrees section (first section in the Git tab; current marked with
+  the accent check; single-click → overview, double-click/Enter → open as tab;
+  context menu open/show/copy/remove/force-remove/prune; header `+` opens dialog).
+- ☑ Grouped worktree tabs (`Topbar.tsx` `groupTabs` clusters by `common_dir`,
+  shared dot color via `groupColor`, linked tabs show branch + worktree glyph).
+- ☑ Create dialog (`views/WorktreeDialog.tsx` — new/existing branch, default
+  sibling `<repo>.worktrees/<branch>` path, "open in new tab" toggle).
+- ☐ Review worktree vs base branch (a committed-diff comparison surface — opening
+  a worktree currently shows its uncommitted Local Changes + branch history only).
+
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)

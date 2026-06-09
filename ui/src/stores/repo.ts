@@ -24,6 +24,7 @@ import type {
   StashOutcome,
   Submodule,
   WorkTreeEntry,
+  Worktree,
 } from '../lib/types';
 
 interface PersistedSession {
@@ -32,7 +33,7 @@ interface PersistedSession {
 }
 const SESSION_KEY = 'session.tabs';
 
-export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog';
+export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'worktrees';
 
 /** Active tab within the 4-tab file view. */
 export type FileTab = 'content' | 'history' | 'compare' | 'blame';
@@ -125,6 +126,10 @@ export interface RepoState {
   /** Submodules of the active repo (list + status), for the sidebar section. */
   submodules: Submodule[];
 
+  /** Worktrees of the active repo (main + linked), for the sidebar section and
+   * the Worktrees overview. */
+  worktrees: Worktree[];
+
   /** HEAD reflog for the active tab, newest first. Lazy: only the Reflog view
    * triggers {@link RepoState.refreshReflog}. */
   reflog: ReflogEntry[];
@@ -173,6 +178,21 @@ export interface RepoState {
     recursive: boolean,
     onProgress?: (p: Progress) => void,
   ): Promise<string>;
+  /** Re-read the worktree registry for the active tab. */
+  refreshWorktrees(): Promise<void>;
+  /**
+   * Create a worktree at `dest`. `newBranch` ⇒ create + check out a new branch
+   * `branch` at HEAD; otherwise check out the existing `branch`. Refreshes the
+   * worktree list and refs (a new branch may appear).
+   */
+  addWorktree(dest: string, branch: string, newBranch: boolean): Promise<void>;
+  /** Remove the worktree at `dest` (force past local changes when `force`). */
+  removeWorktree(dest: string, force: boolean): Promise<void>;
+  /** Prune registry entries whose directories are gone. */
+  pruneWorktrees(): Promise<void>;
+  /** Open a worktree's directory as its own repo tab (a worktree path is a
+   * valid repo path — this is just {@link RepoState.openRepo}). */
+  openWorktree(path: string): Promise<void>;
   /** Re-read the recent commit messages for the active repo. */
   refreshRecentMessages(): Promise<void>;
 
@@ -342,6 +362,17 @@ const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags:
  * (no remote — callers surface that to the user). Tags have no per-tag
  * upstream of their own, so this mirrors what `git push <remote> <tag>` needs.
  */
+/**
+ * Whether two filesystem paths point at the same directory, tolerating
+ * separator (`\` vs `/`) and trailing-slash differences. Used to match an open
+ * tab (whose path is the canonical workdir) against a worktree's porcelain path
+ * — the same directory for a normal worktree, but not always byte-identical.
+ */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+  return norm(a) === norm(b);
+}
+
 export function defaultRemote(refs: Refs): string | null {
   const head = refs.branches.find((b) => b.is_head);
   if (head?.upstream?.remote) return head.upstream.remote;
@@ -405,6 +436,7 @@ const EMPTY_ACTIVE = {
   stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
   submodules: [] as Submodule[],
+  worktrees: [] as Worktree[],
   reflog: [] as ReflogEntry[],
   recentMessages: [] as StoredMessage[],
 };
@@ -534,6 +566,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      worktrees: [],
       reflog: [],
       recentMessages: [],
     }));
@@ -552,6 +585,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRefs(),
       get().refreshStashes(),
       get().refreshSubmodules(),
+      get().refreshWorktrees(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -590,6 +624,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      worktrees: [],
       reflog: [],
       recentMessages: [],
     });
@@ -626,6 +661,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       stashes: [],
       workTree: [],
       submodules: [],
+      worktrees: [],
       reflog: [],
       recentMessages: [],
     });
@@ -637,6 +673,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRefs(),
       get().refreshStashes(),
       get().refreshSubmodules(),
+      get().refreshWorktrees(),
       get().refreshRecentMessages(),
     ]);
   },
@@ -747,6 +784,59 @@ export const useRepo = create<RepoState>((set, get) => ({
     // submodule list and the superproject's status.
     await Promise.all([get().refreshSubmodules(), get().refreshLocalChanges()]);
     return res.output;
+  },
+
+  async refreshWorktrees() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const worktrees = await tauri.repoWorktrees(path);
+      // Bail if the active repo changed while the listing was in flight.
+      if (get().activePath !== path) return;
+      set({ worktrees });
+    } catch (e) {
+      console.warn('repoWorktrees failed', e);
+    }
+  },
+  async addWorktree(dest, branch, newBranch) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoWorktreeAdd(path, dest, branch, newBranch);
+    // A new branch may have been created — refresh refs alongside the list.
+    await Promise.all([get().refreshWorktrees(), get().refreshRefs()]);
+  },
+  async removeWorktree(dest, force) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoWorktreeRemove(path, dest, force);
+    // The worktree's directory is gone now — close its tab if it was open, so a
+    // dead tab doesn't linger pointing at a removed worktree.
+    const tab = get().tabs.find((t) => samePath(t.path, dest));
+    if (tab) get().closeTab(tab.path);
+    await get().refreshWorktrees();
+  },
+  async pruneWorktrees() {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoWorktreePrune(path);
+    await get().refreshWorktrees();
+    // Prune drops registry entries whose directories are gone; close any open
+    // tabs that no longer correspond to a live worktree of this repo.
+    const live = get().worktrees;
+    for (const t of get().tabs) {
+      if (
+        t.meta.is_linked_worktree &&
+        t.meta.common_dir === get().meta?.common_dir &&
+        !live.some((w) => samePath(w.path, t.path))
+      ) {
+        get().closeTab(t.path);
+      }
+    }
+  },
+  async openWorktree(path) {
+    // A worktree directory is a valid repo path; opening it reuses the normal
+    // tab flow (dedupe + canonicalize handled there).
+    await get().openRepo(path);
   },
 
   async refreshRecentMessages() {

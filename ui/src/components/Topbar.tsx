@@ -55,6 +55,10 @@ export function Topbar({
   const ahead = meta?.ahead ?? 0;
   const behind = meta?.behind ?? 0;
 
+  // Group worktree tabs of the same repo together (by shared common git dir),
+  // preserving first-open order, main worktree first within each group.
+  const orderedTabs = useMemo(() => groupTabs(tabs), [tabs]);
+
   // In Tauri the host window draws real macOS traffic lights / Win11 controls.
   // The HTML fakes are only for browser-only preview (`pnpm dev`).
   const showFakeChrome = !isTauri();
@@ -70,24 +74,38 @@ export function Topbar({
       )}
 
       <div className="repo-tabs">
-        {tabs.map((t) => (
-          <div
-            key={t.path}
-            className={'repo-tab' + (t.path === activeTabPath ? ' active' : '')}
-            title={t.path}
-            onClick={() => { void setActiveTab(t.path); }}
-          >
-            <div className="repo-dot" style={{ background: 'var(--b-1)' }} />
-            <div className="repo-name">{t.meta.name}</div>
+        {orderedTabs.map((t, i) => {
+          // Linked worktrees of the same repo share a dot color and sit
+          // contiguously; mark a tab that continues its predecessor's group so
+          // CSS can tighten the gap into a visual cluster.
+          const prev = orderedTabs[i - 1];
+          const sameGroup = !!prev && prev.meta.common_dir === t.meta.common_dir;
+          const linked = t.meta.is_linked_worktree;
+          return (
             <div
-              className="repo-x"
-              title="Close repository"
-              onClick={(e) => { e.stopPropagation(); closeTab(t.path); }}
+              key={t.path}
+              className={
+                'repo-tab' +
+                (t.path === activeTabPath ? ' active' : '') +
+                (sameGroup ? ' same-group' : '') +
+                (linked ? ' worktree' : '')
+              }
+              title={linked ? `${t.meta.name} · worktree on ${t.meta.branch}` : t.path}
+              onClick={() => { void setActiveTab(t.path); }}
             >
-              <Icon name="x" size={9} stroke={2} />
+              <div className="repo-dot" style={{ background: groupColor(t.meta.common_dir) }} />
+              {linked && <span className="repo-wt-ico"><Icon name="worktree" size={11} /></span>}
+              <div className="repo-name">{linked ? (t.meta.branch || t.meta.name) : t.meta.name}</div>
+              <div
+                className="repo-x"
+                title="Close repository"
+                onClick={(e) => { e.stopPropagation(); closeTab(t.path); }}
+              >
+                <Icon name="x" size={9} stroke={2} />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <RepoSwitcherButton
           onOpenRepo={onOpenRepo}
@@ -177,6 +195,39 @@ export function Topbar({
       )}
     </div>
   );
+}
+
+/**
+ * Order tabs so worktrees of the same repository cluster together: groups keyed
+ * by `common_dir` in first-open order, and within a group the main worktree
+ * leads its linked ones. Render-only — the store's tab order is untouched.
+ */
+function groupTabs<T extends { meta: { common_dir: string; is_linked_worktree: boolean } }>(
+  tabs: T[],
+): T[] {
+  const order: string[] = [];
+  const groups = new Map<string, T[]>();
+  for (const t of tabs) {
+    const key = t.meta.common_dir;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(t);
+  }
+  return order.flatMap((key) => {
+    const g = groups.get(key)!;
+    // Main worktree (not linked) first, the rest in open order.
+    return [...g.filter((t) => !t.meta.is_linked_worktree), ...g.filter((t) => t.meta.is_linked_worktree)];
+  });
+}
+
+/** Stable dot color for a repo group, hashed from its common git dir into the
+ *  branch-lane palette (`--b-1…--b-7`). */
+function groupColor(commonDir: string): string {
+  let h = 0;
+  for (let i = 0; i < commonDir.length; i++) h = (h * 31 + commonDir.charCodeAt(i)) | 0;
+  return `var(--b-${(Math.abs(h) % 7) + 1})`;
 }
 
 /**
