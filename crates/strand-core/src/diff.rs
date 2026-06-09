@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{error::Result, repo::Repo};
@@ -103,6 +105,19 @@ impl Repo {
         collect(diff)
     }
 
+    /// Everything that changed since `baseline` (a commit-ish): baseline tree
+    /// vs the working tree overlaid with the index. This is the "review
+    /// since…" view for agent sessions — unlike `diff_unstaged` it keeps
+    /// showing work the agent already staged or committed away from the
+    /// baseline, so the reviewer sees the whole session in one diff.
+    pub fn diff_since(&self, baseline: &str) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
+        let mut opts = diff_options();
+        let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts))?;
+        collect(diff)
+    }
+
     /// Diff one path's working-tree state against HEAD — the net uncommitted
     /// change (staged + unstaged combined) for a single file. Powers the file
     /// view's "Uncommitted changes" history entry. Compares the HEAD tree
@@ -132,7 +147,9 @@ fn diff_options() -> git2::DiffOptions {
 /// Walk a `git2::Diff` and produce one `FileDiff` per delta. We build the
 /// per-file unified-patch text ourselves (git2's `print` callback is
 /// per-line and global, so we slot lines into the matching FileDiff as we
-/// go).
+/// go). Line counts are accumulated in the same pass, and deltas are looked
+/// up through a path→index map — a 500-file changeset used to pay a second
+/// full walk plus an O(files×lines) linear search here.
 fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     let mut find = git2::DiffFindOptions::new();
     find.renames(true).copies(true);
@@ -165,31 +182,29 @@ fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
         })
         .collect();
 
-    // Per-file line counts via the stats walker.
-    diff.foreach(
-        &mut |_, _| true,
-        None,
-        None,
-        Some(&mut |delta, _hunk, line| {
-            let idx = delta_index(&delta, &files);
-            if let Some(i) = idx {
-                match line.origin() {
-                    '+' => files[i].adds += 1,
-                    '-' => files[i].dels += 1,
-                    _ => {}
-                }
-            }
-            true
-        }),
-    )?;
+    let index_by_path: HashMap<String, usize> = files
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.path.clone(), i))
+        .collect();
+    let delta_index = |delta: &git2::DiffDelta<'_>| -> Option<usize> {
+        let new_path = delta.new_file().path()?.to_string_lossy();
+        index_by_path.get(new_path.as_ref()).copied()
+    };
 
-    // Build per-file patch text by re-printing the diff and routing each
-    // line into the right file. This mirrors what `git diff` emits.
+    // Single pass: route each printed line into the right file's patch text
+    // and bump its add/del counters as we go. This mirrors what `git diff`
+    // emits.
     diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
-        let Some(i) = delta_index(&delta, &files) else { return true; };
+        let Some(i) = delta_index(&delta) else { return true; };
         let f = &mut files[i];
         let origin = line.origin();
         if matches!(origin, 'F' | 'H' | ' ' | '+' | '-' | '=' | '<' | '>') {
+            match origin {
+                '+' => f.adds += 1,
+                '-' => f.dels += 1,
+                _ => {}
+            }
             if matches!(origin, ' ' | '+' | '-') {
                 f.patch.push(origin);
             }
@@ -201,11 +216,6 @@ fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     Ok(files)
 }
 
-fn delta_index(delta: &git2::DiffDelta<'_>, files: &[FileDiff]) -> Option<usize> {
-    let new_path = delta.new_file().path()?.to_string_lossy();
-    files.iter().position(|f| f.path == new_path)
-}
-
 fn map_status(s: git2::Delta) -> DiffStatus {
     match s {
         git2::Delta::Added | git2::Delta::Untracked => DiffStatus::Added,
@@ -214,5 +224,94 @@ fn map_status(s: git2::Delta) -> DiffStatus {
         git2::Delta::Copied => DiffStatus::Copied,
         git2::Delta::Typechange => DiffStatus::Typechange,
         _ => DiffStatus::Modified,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_repo() -> (Repo, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-diff-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo = git2::Repository::init(&dir).unwrap();
+        {
+            let mut cfg = repo.config().unwrap();
+            cfg.set_str("user.name", "Test").unwrap();
+            cfg.set_str("user.email", "test@example.com").unwrap();
+        }
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let tree_oid = repo.index().unwrap().write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
+        (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    #[test]
+    fn unstaged_diff_counts_lines_and_builds_patch() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("add a", None, false).unwrap();
+
+        std::fs::write(dir.join("a.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+        std::fs::write(dir.join("new.txt"), "hello\n").unwrap();
+
+        let mut diffs = repo.diff_unstaged().unwrap();
+        diffs.sort_by(|x, y| x.path.cmp(&y.path));
+        assert_eq!(diffs.len(), 2);
+
+        let a = &diffs[0];
+        assert_eq!(a.path, "a.txt");
+        assert_eq!(a.status, DiffStatus::Modified);
+        assert_eq!((a.adds, a.dels), (2, 1)); // TWO replaces two, four added
+        assert!(a.patch.contains("+TWO"), "patch carries added line: {}", a.patch);
+        assert!(a.patch.contains("-two"), "patch carries removed line: {}", a.patch);
+
+        let n = &diffs[1];
+        assert_eq!(n.path, "new.txt");
+        assert_eq!(n.status, DiffStatus::Added);
+        assert_eq!((n.adds, n.dels), (1, 0));
+        assert!(n.patch.contains("+hello"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn diff_since_spans_commits_and_worktree() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "base\n").unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("baseline", None, false).unwrap();
+        let baseline = repo.git2().unwrap().head().unwrap().target().unwrap().to_string();
+
+        // Agent session: one committed change, one staged, one loose on disk.
+        std::fs::write(dir.join("a.txt"), "base\ncommitted\n").unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("agent commit", None, false).unwrap();
+        std::fs::write(dir.join("b.txt"), "staged\n").unwrap();
+        repo.stage_paths(&["b.txt".into()]).unwrap();
+        std::fs::write(dir.join("c.txt"), "loose\n").unwrap();
+
+        let mut paths: Vec<String> = repo
+            .diff_since(&baseline)
+            .unwrap()
+            .into_iter()
+            .map(|d| d.path)
+            .collect();
+        paths.sort();
+        assert_eq!(paths, vec!["a.txt", "b.txt", "c.txt"]);
+
+        // diff_unstaged would only see c.txt — that's the gap diff_since fills.
+        let unstaged: Vec<String> =
+            repo.diff_unstaged().unwrap().into_iter().map(|d| d.path).collect();
+        assert_eq!(unstaged, vec!["c.txt"]);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

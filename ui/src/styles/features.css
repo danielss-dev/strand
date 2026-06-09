@@ -1050,6 +1050,14 @@
 .graph-table tbody tr.match {
   background: var(--accent-glow);
 }
+/* AI-agent chip: commits carrying an agent Co-Authored-By trailer. */
+.graph-table .ref-chip.agent {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-base));
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 .graph-table .search-hl {
   color: var(--accent);
   background: transparent;
@@ -3208,6 +3216,242 @@ textarea.clone-input {
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12.5px;
+}
+
+/* ─── Review view (AI-change review) ───────────────────────────────────── */
+
+.rv-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.rv-main {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Toolbar: mode chip + progress + verdict actions. */
+.rv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border);
+  font-size: 11.5px;
+}
+.rv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rv-chip code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.rv-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.rv-progress-bar {
+  width: 90px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+.rv-progress-bar .fill {
+  display: block;
+  height: 100%;
+  background: var(--add);
+  transition: width 160ms ease;
+}
+.rv-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rv-toolbar .h-link {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+}
+.rv-toolbar .h-link:hover {
+  color: var(--accent-2);
+}
+.rv-toolbar .h-link.danger {
+  color: var(--del);
+}
+
+/* File queue (left panel). */
+.rv-list {
+  height: 100%;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.rv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.rv-row:hover {
+  background: var(--bg-hover);
+}
+.rv-row.active {
+  background: var(--bg-sel);
+  box-shadow: 2px 0 0 var(--accent) inset;
+}
+.rv-row.done .rv-name {
+  color: var(--text-dim);
+}
+.rv-status {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.rv-status.added { color: var(--add); }
+.rv-status.deleted { color: var(--del); }
+.rv-status.renamed, .rv-status.copied, .rv-status.typechange { color: var(--accent); }
+.rv-status.modified { color: var(--warn, var(--accent)); }
+.rv-pathwrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+.rv-name {
+  color: var(--text);
+  white-space: nowrap;
+}
+.rv-dir {
+  color: var(--text-dim);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* ellipsize the front of long dirs, keep the tail */
+}
+.rv-stale {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--warn, var(--accent));
+}
+.rv-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.rv-check:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.rv-check.on {
+  color: var(--add);
+}
+.rv-check.wide {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.rv-check.wide.on {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--add) 50%, transparent) inset;
+}
+
+/* Diff pane (right). */
+.rv-diff {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.rv-file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.rv-file-head .path {
+  color: var(--text);
+  font-weight: 500;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-file-head .stat-add { color: var(--add); font-variant-numeric: tabular-nums; }
+.rv-file-head .stat-del { color: var(--del); font-variant-numeric: tabular-nums; }
+.rv-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+}
+.rv-head-actions .h-link {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+}
+.rv-head-actions .h-link:hover { color: var(--accent-2); }
+.rv-head-actions .h-link.danger { color: var(--del); }
+.rv-diff-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Commit-form failure line (lock contention, hooks, empty index, …). */
+.cb-error {
+  padding: 4px 2px 0;
+  font-size: 11px;
+  color: var(--del);
+}
+
+/* Keyboard-hint footer. */
+.rv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  box-shadow: 0 -0.5px 0 var(--border);
+}
+.rv-foot .kbd-inline {
+  margin-left: 10px;
+}
+.rv-foot .kbd-inline:first-child {
+  margin-left: 0;
 }
 
 /* ─── Conflict resolution ──────────────────────────────────────────────── */

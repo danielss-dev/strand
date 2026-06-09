@@ -8,6 +8,7 @@ description = "Strand's git engine: gix for reads, git2 for writes."
 [dependencies]
 gix.workspace = true
 git2.workspace = true
+notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

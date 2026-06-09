@@ -17,6 +17,9 @@ repository = "https://github.com/danielss/strand"
 gix = { version = "0.66", default-features = false, features = ["max-performance-safe", "blocking-network-client"] }
 git2 = { version = "0.19", default-features = false }
 
+# Filesystem watching (working-tree auto-refresh)
+notify = "6"
+
 # Serialization / errors / async
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

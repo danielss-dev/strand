@@ -557,7 +557,10 @@ mod tests {
         assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("merge"));
         repo.abort_operation().unwrap();
         assert_eq!(repo.meta().unwrap().operation, None);
-        assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "main side\n");
+        // `git merge --abort` re-checks-out the file, so a global
+        // core.autocrlf=true (the Windows default) yields CRLF — normalize.
+        let restored = std::fs::read_to_string(dir.join("f.txt")).unwrap().replace("\r\n", "\n");
+        assert_eq!(restored, "main side\n");
 
         let _ = std::fs::remove_dir_all(dir);
     }

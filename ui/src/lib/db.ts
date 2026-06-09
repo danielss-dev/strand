@@ -130,6 +130,36 @@ export const remoteTagsCache = {
   },
 };
 
+/** A pinned review baseline: "show me everything since this commit". */
+export interface StoredBaseline {
+  /** Full OID of the baseline commit. */
+  oid: string;
+  short: string;
+  /** Unix ms when the baseline was pinned (drives the chip's time label). */
+  setAt: number;
+}
+
+/**
+ * Per-repo review session state: the pinned baseline and the reviewed-file
+ * map (`path → hash of the reviewed diff`). Persisted so an app restart
+ * mid-review doesn't lose your place. A file whose diff changes after being
+ * marked reviewed naturally flips back — its stored hash no longer matches.
+ */
+export const reviewSession = {
+  getBaseline(repoPath: string): Promise<StoredBaseline | null> {
+    return settings.get<StoredBaseline>(`baseline:${repoPath}`);
+  },
+  setBaseline(repoPath: string, baseline: StoredBaseline | null): Promise<void> {
+    return settings.set(`baseline:${repoPath}`, baseline);
+  },
+  getReviewed(repoPath: string): Promise<Record<string, string> | null> {
+    return settings.get<Record<string, string>>(`reviewed:${repoPath}`);
+  },
+  setReviewed(repoPath: string, reviewed: Record<string, string>): Promise<void> {
+    return settings.set(`reviewed:${repoPath}`, reviewed);
+  },
+};
+
 /**
  * Per-repo diff layout (stacked / split). A null means the repo has no explicit
  * choice yet, in which case the live `useSettings.diffMode` (the last-used

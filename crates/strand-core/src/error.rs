@@ -17,6 +17,11 @@ pub enum Error {
     #[error("git2 error: {0}")]
     Git2(#[from] git2::Error),
 
+    /// The user cancelled a long-running op (clone/fetch/pull/push). Not a
+    /// failure — the UI shows it quietly instead of as an error toast.
+    #[error("cancelled")]
+    Cancelled,
+
     #[error("{0}")]
     Other(String),
 }

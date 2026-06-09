@@ -19,6 +19,8 @@ export interface ProgressPopupProps {
   error?: string | null;
   /** Dismiss the (error) popup. */
   onDismiss?: () => void;
+  /** When set, show a Cancel button while the op runs (cancellable op). */
+  onCancel?: () => void;
 }
 
 /**
@@ -30,7 +32,7 @@ export interface ProgressPopupProps {
  * Determinate bar + ETA when the caller has a percentage (clone); indeterminate
  * sweep + elapsed time when it doesn't (opening a repo has no streamed progress).
  */
-export function ProgressPopup({ title, subject, detail, percent, eta, startedAt, error, onDismiss }: ProgressPopupProps) {
+export function ProgressPopup({ title, subject, detail, percent, eta, startedAt, error, onDismiss, onCancel }: ProgressPopupProps) {
   const failed = error != null;
   const dismissRef = useRef<HTMLButtonElement>(null);
 
@@ -86,10 +88,15 @@ export function ProgressPopup({ title, subject, detail, percent, eta, startedAt,
   // flood a screen reader — aria-hidden on descendants doesn't stop that).
   return (
     <div className="op-progress">
-      <div className="op-progress-head" aria-hidden="true">
-        <span className="op-progress-spin"><Icon name="refresh" size={13} /></span>
-        <span className="op-progress-title">{title}</span>
-        <span className="op-progress-subject">{subject}</span>
+      <div className="op-progress-head">
+        <span aria-hidden="true" className="op-progress-spin"><Icon name="refresh" size={13} /></span>
+        <span aria-hidden="true" className="op-progress-title">{title}</span>
+        <span aria-hidden="true" className="op-progress-subject">{subject}</span>
+        {onCancel && (
+          <button type="button" className="op-dismiss" onClick={onCancel} aria-label={`Cancel ${title.toLowerCase()}`}>
+            Cancel
+          </button>
+        )}
       </div>
       <div className="op-progress-bar" aria-hidden="true">
         <div

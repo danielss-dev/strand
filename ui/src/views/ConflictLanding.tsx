@@ -22,6 +22,7 @@ export function ConflictLanding({
   const activePath = useRepo((s) => s.activePath);
   const oursBranch = useRepo((s) => s.meta?.branch ?? 'HEAD');
   const resolveConflict = useRepo((s) => s.resolveConflict);
+  const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
 
   const [raw, setRaw] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,24 @@ export function ConflictLanding({
       for (let i = 0; i < parsed.total; i++) res.set(i, side);
       await resolveConflict(path, buildViews(parsed, res).resultText);
       // The file leaves the conflicts list → the parent closes this landing.
+    } catch (e) {
+      setError(errMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // External tool fallback (`git config merge.tool`) for conflicts the
+  // pick-sides model can't express. Blocks until the tool exits; when the
+  // tool resolved the file, git already staged it — the refresh drops it
+  // from the conflicts list and the parent closes this landing.
+  async function openExternal() {
+    if (!activePath || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tauri.repoOpenMergetool(activePath, path);
+      await refreshLocalChanges();
     } catch (e) {
       setError(errMessage(e));
     } finally {
@@ -99,6 +118,15 @@ export function ConflictLanding({
           </button>
           <button type="button" className="btn" disabled={busy} onClick={onOpenEditor}>
             <Icon name="split" size={13} /> Open merge editor{total > 1 ? ` (${total} conflicts)` : ''}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void openExternal()}
+            title="Launch the tool from git config merge.tool and wait for it"
+          >
+            <Icon name="external" size={13} /> External tool
           </button>
         </div>
       </div>

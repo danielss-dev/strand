@@ -1,4 +1,20 @@
 /**
+ * Cheap, stable content hash (FNV-1a, hex) for diff text. Keys the
+ * reviewed-file map: a file is "reviewed" only while its current diff hashes
+ * to the value recorded when the reviewer marked it — any later edit by the
+ * agent flips it back to unreviewed. Not cryptographic; collisions just mean
+ * a stale checkmark, never data loss.
+ */
+export function hashPatch(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+/**
  * Direction in which the resulting patch will be applied:
  * - `forward` for Stage (apply to index, source = pre-change side).
  * - `reverse` for Discard/Unstage (Rust will reverse before apply, so the

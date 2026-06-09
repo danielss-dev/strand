@@ -39,6 +39,36 @@ impl Repo {
         Ok(())
     }
 
+    /// Launch the user's configured external merge tool on `rel_path`
+    /// (`git mergetool --no-prompt -- <file>`) and block until it exits.
+    /// The escape hatch for conflicts the pick-sides resolver can't express;
+    /// honors `merge.tool` per PRD §6.4. When the tool reports a successful
+    /// resolution, git stages the file itself — callers just refresh.
+    pub fn open_mergetool(&self, rel_path: &str) -> Result<()> {
+        // Same traversal guard as the read/write paths, and the `--`
+        // separator keeps the path out of option parsing.
+        let _ = self.workdir_path(rel_path)?;
+        let out = std::process::Command::new("git")
+            .current_dir(self.path())
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .args(crate::GIT_SAFE_CONFIG)
+            .args(["mergetool", "--no-prompt", "--", rel_path])
+            .output()
+            .map_err(|e| Error::Other(format!("spawn git mergetool failed: {e}")))?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            let info = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            return Err(Error::Other(if !err.is_empty() {
+                err
+            } else if !info.is_empty() {
+                info
+            } else {
+                "git mergetool failed — is merge.tool configured?".to_string()
+            }));
+        }
+        Ok(())
+    }
+
     /// Resolve `rel_path` against the working directory, rejecting absolute
     /// paths and `..` traversal so a crafted path can't read/write outside the
     /// repo.

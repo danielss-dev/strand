@@ -18,6 +18,7 @@ import type {
   Refs,
   ReflogEntry,
   RepoMeta,
+  Snapshot,
   Stash,
   StashOutcome,
   Submodule,
@@ -64,6 +65,10 @@ export const tauri = {
   repoOpen: (path: string) => invoke<RepoMeta>('repo_open', { path }),
   repoMeta: (path: string) => invoke<RepoMeta>('repo_meta', { path }),
   repoStatus: (path: string) => invoke<FileStatus[]>('repo_status', { path }),
+  repoSnapshot: (path: string) => invoke<Snapshot>('repo_snapshot', { path }),
+  repoWatch: (path: string) => invoke<void>('repo_watch', { path }),
+  repoUnwatch: (path: string) => invoke<void>('repo_unwatch', { path }),
+  repoCancelOp: (opId: string) => invoke<void>('repo_cancel_op', { opId }),
   repoLog: (path: string, limit?: number) => invoke<Commit[]>('repo_log', { path, limit }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
@@ -76,6 +81,8 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_commit_file', { path, oid, file }),
   repoDiffWorkdirFile: (path: string, file: string) =>
     invoke<FileDiff[]>('repo_diff_workdir_file', { path, file }),
+  repoDiffSince: (path: string, baseline: string) =>
+    invoke<FileDiff[]>('repo_diff_since', { path, baseline }),
   repoFileContent: (path: string, file: string, rev: string | null) =>
     invoke<FileContent>('repo_file_content', { path, file, rev }),
   repoFileHistory: (path: string, file: string, limit?: number) =>
@@ -99,18 +106,39 @@ export const tauri = {
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
   repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
     invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
-  repoFetch: (path: string, remote: string | null, onProgress?: (p: Progress) => void) =>
-    invoke<NetworkOutcome>('repo_fetch', { path, remote, onEvent: progressChannel(onProgress) }),
-  repoPull: (path: string, rebase: boolean, onProgress?: (p: Progress) => void) =>
-    invoke<NetworkOutcome>('repo_pull', { path, rebase, onEvent: progressChannel(onProgress) }),
-  repoPush: (path: string, forceWithLease: boolean, onProgress?: (p: Progress) => void) =>
+  repoFetch: (
+    path: string,
+    remote: string | null,
+    onProgress?: (p: Progress) => void,
+    opId?: string,
+  ) =>
+    invoke<NetworkOutcome>('repo_fetch', {
+      path,
+      remote,
+      opId,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoPull: (path: string, rebase: boolean, onProgress?: (p: Progress) => void, opId?: string) =>
+    invoke<NetworkOutcome>('repo_pull', {
+      path,
+      rebase,
+      opId,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoPush: (
+    path: string,
+    forceWithLease: boolean,
+    onProgress?: (p: Progress) => void,
+    opId?: string,
+  ) =>
     invoke<NetworkOutcome>('repo_push', {
       path,
       forceWithLease,
+      opId,
       onEvent: progressChannel(onProgress),
     }),
-  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void) =>
-    invoke<CloneOutcome>('repo_clone', { url, dest, onEvent: progressChannel(onProgress) }),
+  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void, opId?: string) =>
+    invoke<CloneOutcome>('repo_clone', { url, dest, opId, onEvent: progressChannel(onProgress) }),
   repoCheckout: (path: string, branch: string) =>
     invoke<CheckoutOutcome>('repo_checkout', { path, branch }),
   repoCheckoutCommit: (path: string, rev: string) =>
@@ -199,6 +227,9 @@ export const tauri = {
     invoke<string>('repo_read_conflict_file', { path, file }),
   repoResolveConflict: (path: string, file: string, contents: string) =>
     invoke<void>('repo_resolve_conflict', { path, file, contents }),
+  /** Blocks until the external merge tool exits. */
+  repoOpenMergetool: (path: string, file: string) =>
+    invoke<void>('repo_open_mergetool', { path, file }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,
@@ -213,6 +244,24 @@ export const tauri = {
   repoStashPop: (path: string, index: number) => invoke<void>('repo_stash_pop', { path, index }),
   repoStashDrop: (path: string, index: number) => invoke<void>('repo_stash_drop', { path, index }),
 };
+
+/** True when a rejected op was user-cancelled (`Error::Cancelled`) — show it
+ * quietly instead of as an error toast. */
+export const isCancelled = (e: unknown): boolean => errMessage(e) === 'cancelled';
+
+/**
+ * `errMessage` plus a plain-language hint for the failure modes users hit in
+ * the wild. The big one: a stale `.git/index.lock` (an interrupted git
+ * process — common when agents run git) blocks every index write, which
+ * otherwise reads as "staging mysteriously does nothing".
+ */
+export function gitErrorHint(e: unknown): string {
+  const msg = errMessage(e);
+  if (/index\.lock|failed to lock/i.test(msg)) {
+    return `${msg} — another git process is using this repo, or a crashed one left .git/index.lock behind (safe to delete when no git command is running).`;
+  }
+  return msg;
+}
 
 /** True when running inside the Tauri webview (vs. plain `vite dev`). */
 export const isTauri = (): boolean => '__TAURI_INTERNALS__' in window;

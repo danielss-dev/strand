@@ -5,6 +5,37 @@ mod state;
 
 use tauri::Manager;
 
+/// Append Rust panics to a local crash log so alpha bug reports come with
+/// evidence. Local-only — nothing leaves the machine (PRD §10); opt-in
+/// remote crash reporting is separate future work. The previous hook still
+/// runs, so panics keep reaching stderr/tracing too.
+fn install_crash_log(app: &tauri::App) {
+    let dir = app
+        .path()
+        .app_log_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let _ = std::fs::create_dir_all(&dir);
+    let log_path = dir.join("crash.log");
+
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let when = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let entry = format!(
+            "=== panic at unix:{when} (strand {})\n{info}\n{backtrace}\n\n",
+            env!("CARGO_PKG_VERSION"),
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            use std::io::Write;
+            let _ = f.write_all(entry.as_bytes());
+        }
+        previous(info);
+    }));
+}
+
 fn main() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("strand=info,strand_core=info"));
@@ -25,6 +56,11 @@ fn main() {
             commands::repo_open,
             commands::repo_meta,
             commands::repo_status,
+            commands::repo_snapshot,
+            commands::repo_watch,
+            commands::repo_unwatch,
+            commands::repo_cancel_op,
+            commands::repo_diff_since,
             commands::repo_log,
             commands::repo_refs,
             commands::repo_diff_unstaged,
@@ -75,6 +111,7 @@ fn main() {
             commands::repo_interactive_rebase,
             commands::repo_read_conflict_file,
             commands::repo_resolve_conflict,
+            commands::repo_open_mergetool,
             commands::repo_stash_list,
             commands::repo_stash_save,
             commands::repo_stash_snapshot,
@@ -83,6 +120,7 @@ fn main() {
             commands::repo_stash_drop,
         ])
         .setup(|app| {
+            install_crash_log(app);
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
             }

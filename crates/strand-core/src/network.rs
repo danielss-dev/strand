@@ -16,10 +16,42 @@
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{error::Error, error::Result, repo::Repo};
+
+/// Cooperative cancellation for a shelled-out git op. The streaming runner
+/// parks the spawned child here; `cancel()` kills it, which EOFs the pipes
+/// and unwinds the runner with [`Error::Cancelled`]. Cancelling before the
+/// child spawns also works — the runner checks the flag at install time.
+#[derive(Clone, Default)]
+pub struct CancelHandle(Arc<Mutex<CancelInner>>);
+
+#[derive(Default)]
+struct CancelInner {
+    cancelled: bool,
+    child: Option<std::process::Child>,
+}
+
+impl CancelHandle {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        let mut inner = self.0.lock().expect("cancel handle lock");
+        inner.cancelled = true;
+        if let Some(child) = inner.child.as_mut() {
+            let _ = child.kill();
+        }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.lock().expect("cancel handle lock").cancelled
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkOutcome {
@@ -54,6 +86,7 @@ impl Repo {
         &self,
         remote: Option<&str>,
         on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
         let mut args = vec!["fetch", "--prune", "--progress"];
         if let Some(r) = remote {
@@ -63,15 +96,20 @@ impl Repo {
             args.push("--");
             args.push(r);
         }
-        run_git_streaming(&self.path, &args, on_progress)
+        run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
-    pub fn pull(&self, rebase: bool, on_progress: impl FnMut(Progress)) -> Result<NetworkOutcome> {
+    pub fn pull(
+        &self,
+        rebase: bool,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
         let mut args = vec!["pull", "--progress"];
         if rebase {
             args.push("--rebase");
         }
-        run_git_streaming(&self.path, &args, on_progress)
+        run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
     /// Push the current branch. If `force_with_lease` is set, uses the safer
@@ -80,12 +118,13 @@ impl Repo {
         &self,
         force_with_lease: bool,
         on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
         let mut args = vec!["push", "--progress"];
         if force_with_lease {
             args.push("--force-with-lease");
         }
-        run_git_streaming(&self.path, &args, on_progress)
+        run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
     /// Push a single tag to `remote`, or delete it there when `delete` is set
@@ -110,7 +149,7 @@ impl Repo {
         args.push("--");
         args.push(remote);
         args.push(refspec.as_str());
-        run_git_streaming(&self.path, &args, on_progress)
+        run_git_streaming(&self.path, &args, on_progress, None)
     }
 
     /// Push every local tag to `remote` (`git push <remote> --tags`).
@@ -121,7 +160,7 @@ impl Repo {
     ) -> Result<NetworkOutcome> {
         validate_remote_arg(remote, "remote")?;
         let args = vec!["push", "--progress", "--tags", "--", remote];
-        run_git_streaming(&self.path, &args, on_progress)
+        run_git_streaming(&self.path, &args, on_progress, None)
     }
 
     /// Short names of the tags that exist on `remote` (`git ls-remote --tags`).
@@ -171,6 +210,7 @@ pub fn clone(
     url: &str,
     dest: &str,
     on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
 ) -> Result<CloneOutcome> {
     // The URL is pasted by the user. Make sure git can't read it as an option
     // (`--upload-pack=…`, `-c …`) or as a command-executing transport
@@ -185,8 +225,8 @@ pub fn clone(
     let cwd = dest_path.parent().filter(|p| !p.as_os_str().is_empty());
     let args = ["clone", "--progress", "--", url, dest];
     let outcome = match cwd {
-        Some(parent) => run_git_streaming(parent, &args, on_progress),
-        None => run_git_streaming(Path::new("."), &args, on_progress),
+        Some(parent) => run_git_streaming(parent, &args, on_progress, cancel),
+        None => run_git_streaming(Path::new("."), &args, on_progress, cancel),
     }?;
     Ok(CloneOutcome {
         path: dest.to_string(),
@@ -218,11 +258,14 @@ fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
 /// disable a configured `credential.helper` (e.g. Git Credential Manager's GUI
 /// dialog), `GIT_ASKPASS`/`SSH_ASKPASS`, or an SSH key passphrase prompt —
 /// those are intentionally left working so the user can still authenticate.
-/// A wall-clock timeout / cancel path for a genuinely stuck op is future work.
+///
+/// When `cancel` is given, the spawned child is parked in it so the caller
+/// can kill a hung op; cancellation surfaces as [`Error::Cancelled`].
 pub(crate) fn run_git_streaming(
     cwd: &Path,
     args: &[&str],
     mut on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
 ) -> Result<NetworkOutcome> {
     let mut child = Command::new("git")
         .current_dir(cwd)
@@ -245,9 +288,24 @@ pub(crate) fn run_git_streaming(
             s
         })
     });
+    let stderr = child.stderr.take();
+
+    // Park the child in the cancel handle (pipes already taken) so a
+    // concurrent `cancel()` can kill it. A cancel that raced the spawn is
+    // honored here, before we start reading.
+    let handle = cancel.cloned().unwrap_or_default();
+    {
+        let mut inner = handle.0.lock().expect("cancel handle lock");
+        if inner.cancelled {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error::Cancelled);
+        }
+        inner.child = Some(child);
+    }
 
     let mut collected = String::new();
-    if let Some(stderr) = child.stderr.take() {
+    if let Some(stderr) = stderr {
         // `git` delimits progress updates with '\r' and ends phases with
         // '\n', so we split on either. BufRead::lines would coalesce all the
         // '\r' updates into one line — we want each fragment.
@@ -262,9 +320,19 @@ pub(crate) fn run_git_streaming(
     }
 
     let stdout_str = stdout_handle.and_then(|h| h.join().ok()).unwrap_or_default();
-    let status = child
-        .wait()
-        .map_err(|e| Error::Other(format!("git wait failed: {e}")))?;
+    // Stderr hit EOF, so the process is done (or killed) — take the child
+    // back out and reap it. After this point a late `cancel()` is a no-op.
+    let status = {
+        let mut taken = handle.0.lock().expect("cancel handle lock").child.take();
+        taken
+            .as_mut()
+            .expect("child parked above")
+            .wait()
+            .map_err(|e| Error::Other(format!("git wait failed: {e}")))?
+    };
+    if handle.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
 
     let combined = format!("{stdout_str}{collected}").trim().to_string();
     if !status.success() {

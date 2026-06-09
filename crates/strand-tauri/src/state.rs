@@ -1,8 +1,9 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::Mutex,
 };
 
+use strand_core::{network::CancelHandle, watch::RepoWatcher};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 /// Process-wide app state.
@@ -15,6 +16,12 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 #[derive(Default)]
 pub struct AppState {
     pub open_paths: Mutex<HashSet<String>>,
+    /// One live working-tree watcher per open repo path; dropping an entry
+    /// stops the watcher.
+    pub watchers: Mutex<HashMap<String, RepoWatcher>>,
+    /// In-flight cancellable ops (clone/fetch/pull/push), keyed by the
+    /// frontend-generated op id.
+    pub ops: Mutex<HashMap<String, CancelHandle>>,
 }
 
 pub fn migrations() -> Vec<Migration> {

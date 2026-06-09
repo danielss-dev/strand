@@ -41,6 +41,10 @@ export function Diff({
         theme: pierreTheme,
         disableBackground: true,
         disableFileHeader: hideFileHeader,
+        // Intra-line (word-level) emphasis. This is Pierre's current default,
+        // but agent review leans on it hard (single-identifier edits on long
+        // lines), so pin it rather than ride the default.
+        lineDiffType: 'word-alt',
       }}
       className={className}
       style={style}

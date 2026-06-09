@@ -11,6 +11,7 @@ import type { GitStatusEntry } from '@pierre/trees';
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
+import { gitErrorHint } from '../lib/tauri';
 import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
@@ -74,9 +75,12 @@ export function LocalChanges() {
 
   // The conflicted file open in the full-screen merge editor, if any.
   const [resolverFile, setResolverFile] = useState<string | null>(null);
+  const resolverOpen = useRef(false);
   useEffect(() => {
     if (resolverFile && !conflicts.includes(resolverFile)) setResolverFile(null);
   }, [resolverFile, conflicts]);
+  // Mirror into a ref so the keyboard handler (stable listener) sees it.
+  resolverOpen.current = resolverFile != null;
 
   // Default to showing *all* changes (unstaged, else staged) whenever nothing
   // is selected — on open, and after an operation clears the selection.
@@ -86,9 +90,9 @@ export function LocalChanges() {
     else if (stagedView.length) selectLocalFile({ file: '', staged: true, all: true });
   }, [selection, unstagedView, stagedView, selectLocalFile]);
 
-  // The diff(s) the selection drives. "Show all" → the whole side. A file row →
-  // just that file. A folder row (Pierre reports directory paths with a
-  // trailing slash, no exact file match) → every changed file beneath it.
+  // The diff(s) the selection drives. "Show all" → the whole side. A file
+  // row → just that file. A folder row (Pierre reports directory paths with
+  // a trailing slash, no exact file match) → every changed file beneath it.
   const selectedDiffs = useMemo<FileDiff[]>(() => {
     if (!selection) return [];
     const pool = selection.staged ? stagedView : unstagedView;
@@ -99,6 +103,113 @@ export function LocalChanges() {
     return pool.filter((d) => d.path.startsWith(prefix));
   }, [selection, unstagedView, stagedView]);
 
+  // ── Staging keyboard loop ─────────────────────────────────────────────
+  // j/k file step · n/p change-block step · s stage (unstage on the staged
+  // side) · d-d discard · c focus the commit subject. Review marking lives
+  // in the Review view. Inactive while typing, while a dialog/palette is
+  // open, and while the merge resolver has the screen.
+  // A failed write op (stage/unstage/discard) surfaces here as a persistent-
+  // enough toast. These used to be fire-and-forget `void` calls, which made
+  // failures (e.g. a stale .git/index.lock blocking every index write) look
+  // like the buttons silently doing nothing.
+  const [opError, setOpError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!opError) return;
+    const t = setTimeout(() => setOpError(null), 8000);
+    return () => clearTimeout(t);
+  }, [opError]);
+  const fail = useCallback(
+    (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
+    [],
+  );
+
+  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
+  const confirmTimer = useRef<number | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t?.closest(
+          'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"], .recent-pop',
+        )
+      ) {
+        return;
+      }
+      if (resolverOpen.current) return;
+
+      const state = useRepo.getState();
+      const sel = state.localSelection;
+
+      // Flat nav order: unstaged → staged.
+      const nav: { file: string; staged: boolean }[] = [
+        ...state.unstagedDiffs.map((d) => ({ file: d.path, staged: false })),
+        ...state.stagedDiffs.map((d) => ({ file: d.path, staged: true })),
+      ];
+      const curIdx =
+        sel && !sel.all
+          ? nav.findIndex((x) => x.file === sel.file && x.staged === sel.staged)
+          : -1;
+
+      const selectIdx = (i: number) => {
+        const next = nav[Math.max(0, Math.min(nav.length - 1, i))];
+        if (next) state.selectLocalFile(next);
+      };
+
+      switch (e.key) {
+        case 'j':
+          if (nav.length === 0) return;
+          e.preventDefault();
+          selectIdx(curIdx === -1 ? 0 : curIdx + 1);
+          break;
+        case 'k':
+          if (nav.length === 0) return;
+          e.preventDefault();
+          selectIdx(curIdx === -1 ? 0 : curIdx - 1);
+          break;
+        case 'n':
+        case 'p': {
+          e.preventDefault();
+          stepChangeBlock(e.key === 'n' ? 1 : -1);
+          break;
+        }
+        case 's': {
+          if (!sel || sel.all) return;
+          e.preventDefault();
+          const file = sel.file;
+          if (sel.staged) void state.unstageMany([file]).catch(fail('Unstage'));
+          else void state.stageMany([file]).catch(fail('Stage'));
+          break;
+        }
+        case 'd': {
+          if (!sel || sel.all || sel.staged) return;
+          e.preventDefault();
+          if (confirmDiscard === sel.file) {
+            if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
+            setConfirmDiscard(null);
+            void state.discardMany([sel.file]).catch(fail('Discard'));
+          } else {
+            setConfirmDiscard(sel.file);
+            if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
+            confirmTimer.current = window.setTimeout(() => setConfirmDiscard(null), 2500);
+          }
+          break;
+        }
+        case 'c': {
+          e.preventDefault();
+          document
+            .querySelector<HTMLInputElement>('.lc-commit-bar .subject')
+            ?.focus();
+          break;
+        }
+        default:
+          return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmDiscard, fail]);
+
   return (
     <div className="lc-stack">
       {conflicts.length > 0 && (
@@ -107,6 +218,21 @@ export function LocalChanges() {
           activeFile={activeConflict}
           onSelect={(file) => setActiveConflict(file)}
         />
+      )}
+      {confirmDiscard && (
+        <div className="toast" role="status">
+          <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="trash" size={13} /></span>
+          <span>Press <strong>d</strong> again to discard {confirmDiscard.split('/').pop()}</span>
+        </div>
+      )}
+      {opError && (
+        <div className="toast" role="alert">
+          <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="x" size={13} stroke={2} /></span>
+          <span>{opError}</span>
+          <button type="button" className="toast-action" onClick={() => setOpError(null)}>
+            Dismiss
+          </button>
+        </div>
       )}
       <div className="lc-main">
         <PanelGroup direction="horizontal" autoSaveId="strand:lc-main">
@@ -120,10 +246,10 @@ export function LocalChanges() {
                     staged={false}
                     selection={selection}
                     onSelect={selectFileRow}
-                    onAction={(files) => void stageMany(files)}
+                    onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                     actionLabel="Stage"
-                    onDiscard={(files) => void discardMany(files)}
-                    onBulk={() => void stageAll()}
+                    onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
+                    onBulk={() => void stageAll().catch(fail('Stage all'))}
                     bulkLabel="Stage all"
                   />
                 </Panel>
@@ -135,9 +261,9 @@ export function LocalChanges() {
                     staged={true}
                     selection={selection}
                     onSelect={selectFileRow}
-                    onAction={(files) => void unstageMany(files)}
+                    onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
                     actionLabel="Unstage"
-                    onBulk={() => void unstageAll()}
+                    onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                     bulkLabel="Unstage all"
                   />
                 </Panel>
@@ -166,6 +292,38 @@ export function LocalChanges() {
       )}
     </div>
   );
+}
+
+/**
+ * Scroll the diff pane to the next/previous change block (or, in read-only
+ * views with no block markers, the next file header). Powers the n/p keys
+ * here and in the Review view (which passes its own scroll-host selector).
+ */
+export function stepChangeBlock(dir: 1 | -1, hostSelector = '.lc-diff-scroll'): void {
+  const host = document.querySelector<HTMLElement>(hostSelector);
+  if (!host) return;
+  const markers = Array.from(host.querySelectorAll<HTMLElement>('[data-block-marker]'));
+  const anchors = markers.length
+    ? markers
+    : Array.from(host.querySelectorAll<HTMLElement>('.lc-hunkfile'));
+  if (anchors.length === 0) {
+    // Read-only renders (session diffs) expose no markers — page through.
+    host.scrollBy({ top: dir * host.clientHeight * 0.8, behavior: 'smooth' });
+    return;
+  }
+
+  const hostTop = host.getBoundingClientRect().top;
+  const PAD = 60; // breathing room above the block after the jump
+  const EPS = 6;
+  const positions = anchors
+    .map((el) => Math.max(0, el.getBoundingClientRect().top - hostTop + host.scrollTop - PAD))
+    .sort((a, b) => a - b);
+  const cur = host.scrollTop;
+  const target =
+    dir === 1
+      ? positions.find((p) => p > cur + EPS)
+      : [...positions].reverse().find((p) => p < cur - EPS);
+  if (target != null) host.scrollTo({ top: target, behavior: 'smooth' });
 }
 
 /**
@@ -482,7 +640,7 @@ const blockKey = (m: { hunkIndex: number; contentIndex: number }): string =>
  * - Discard → `apply --reverse` (`workdir_reverse`) slices reverse
  * - Unstage → `apply --cached --reverse` (`index_reverse`) slices reverse
  */
-function HunkAnnotatedDiff({
+export function HunkAnnotatedDiff({
   diff,
   layout,
   side,
@@ -495,6 +653,9 @@ function HunkAnnotatedDiff({
   const discardPatch = useRepo((s) => s.discardPatch);
   const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const [pending, setPending] = useState<string | null>(null);
+  // Hunk-level apply failures render inline above the diff (this component
+  // is shared with the Review view, so it carries its own error surface).
+  const [applyError, setApplyError] = useState<string | null>(null);
   // Two independent hover sources. `lineHovered` follows Pierre's
   // onLineEnter (set when the cursor is on a block line, null on a
   // context line); `slotHovered` follows the overlay button's own
@@ -636,10 +797,10 @@ function HunkAnnotatedDiff({
     observer = new ResizeObserver(measure);
     observer.observe(wrapper);
 
-    // The diff scrolls inside `.lc-diff-scroll` (our wrapper's parent),
-    // so listen there for scroll updates. The container itself doesn't
-    // scroll.
-    scrollHost = wrapper.closest('.lc-diff-scroll');
+    // The diff scrolls inside `.lc-diff-scroll` (here) or `.rv-diff-scroll`
+    // (the Review view reuses this component) — listen on whichever hosts
+    // us. The container itself doesn't scroll.
+    scrollHost = wrapper.closest('.lc-diff-scroll, .rv-diff-scroll');
     if (scrollHost) scrollHost.addEventListener('scroll', measure, { passive: true });
 
     return () => {
@@ -683,6 +844,8 @@ function HunkAnnotatedDiff({
       theme: pierreTheme,
       disableBackground: true,
       disableFileHeader: true,
+      // Pin word-level intra-line emphasis (Pierre's default) — see Diff.tsx.
+      lineDiffType: 'word-alt' as const,
       onLineEnter,
     }),
     [layout, pierreTheme, onLineEnter],
@@ -692,6 +855,7 @@ function HunkAnnotatedDiff({
     const key = `${blockKey(meta)}:${target}`;
     if (pending != null) return;
     setPending(key);
+    setApplyError(null);
     try {
       const slice = sliceChangeBlock(diff.patch, meta.hunkIndex, meta.contentIndex, direction);
       // Discard routes through discardPatch so it records a single-undo
@@ -704,6 +868,7 @@ function HunkAnnotatedDiff({
       }
     } catch (e) {
       console.error('apply patch failed', e);
+      setApplyError(gitErrorHint(e));
     } finally {
       setPending(null);
     }
@@ -718,6 +883,11 @@ function HunkAnnotatedDiff({
 
   return (
     <>
+      {applyError && (
+        <div className="lc-file-note" role="alert">
+          Couldn’t apply the change: {applyError}
+        </div>
+      )}
       <div
         className="lc-diff-wrap"
         ref={wrapperRef}
@@ -866,6 +1036,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   const [body, setBody] = useState('');
   const [amend, setAmend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   // Recent-messages dropdown state.
   const [recentOpen, setRecentOpen] = useState(false);
@@ -921,6 +1092,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
     if (!trimmed || submitting) return;
     if (!canCommit && !amend) return;
     setSubmitting(true);
+    setCommitError(null);
     try {
       await commit(trimmed, body.trim() || null, amend);
       setSubject('');
@@ -928,6 +1100,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
       setAmend(false);
     } catch (e) {
       console.error('commit failed', e);
+      setCommitError(gitErrorHint(e));
     } finally {
       setSubmitting(false);
     }
@@ -1041,6 +1214,11 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
+      {commitError && (
+        <div className="cb-error" role="alert">
+          Commit failed: {commitError}
+        </div>
+      )}
     </div>
   );
 }

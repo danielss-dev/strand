@@ -117,7 +117,7 @@ impl Repo {
                 args.push(p.as_str());
             }
         }
-        crate::network::run_git_streaming(&self.path, &args, on_progress)
+        crate::network::run_git_streaming(&self.path, &args, on_progress, None)
     }
 }
 

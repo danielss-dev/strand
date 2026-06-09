@@ -7,6 +7,8 @@ export interface RepoMeta {
   name: string;
   path: string;
   branch: string;
+  /** Full OID HEAD resolves to; `null` on an unborn branch. Pins baselines. */
+  head_oid: string | null;
   ahead: number;
   behind: number;
   /** True when HEAD is detached; `branch` then holds the short OID. */
@@ -275,4 +277,16 @@ export interface RecentRepo {
   path: string;
   name: string;
   last_opened: number;
+}
+
+/**
+ * One-call refresh bundle (`repo_snapshot`): meta + status + work tree +
+ * refs + submodules from a single repo open and one statuses walk.
+ */
+export interface Snapshot {
+  meta: RepoMeta;
+  status: FileStatus[];
+  work_tree: WorkTreeEntry[];
+  refs: Refs;
+  submodules: Submodule[];
 }

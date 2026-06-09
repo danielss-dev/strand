@@ -620,3 +620,61 @@ HEAD ancestor) — **not** the loaded graph, which spans all refs and isn't line
 Out of v1 and tracked in TASKS: `edit` (pause-to-amend, needs an amend-during-rebase
 state machine on top of continue) and `--rebase-merges` (v1 flattens merges; the
 editor warns when the range has any).
+
+---
+
+## Watcher events filter on .git internals, not just the workdir
+
+**Rule.** The working-tree watcher (`strand-core/src/watch.rs`) must treat a
+small allowlist of `.git` entries as refresh-worthy — `HEAD`, `index`,
+`packed-refs`, `refs/`, and the in-progress-op markers — and ignore everything
+else under `.git` (objects, logs, `*.lock`, `FETCH_HEAD`, `COMMIT_EDITMSG`).
+Watch the whole workdir recursively; debounce trailing (fire only after a
+quiet period), never leading.
+
+**Why.** An agent's `git add`/`git commit` from a terminal changes the index
+and refs *without* touching tracked files, so a workdir-only filter misses
+exactly the events the review workflow exists for. Conversely, git's atomic
+writes churn `*.lock` and `.git/objects` constantly — refresh on those and
+every commit double- or triple-fires. The trailing debounce is what collapses
+an agent's multi-file write burst into one ~90ms snapshot refresh.
+
+**How to apply.** New repo-state files (e.g. `MERGE_MSG`-driven features)
+that should trigger a repaint must be added to `relevant_path` explicitly —
+and tested in `watch.rs`'s table tests. The watch is `.gitignore`-blind by
+design (documented tradeoff); revisit only if build storms show up in perf.
+
+---
+
+## Keep palette/parse logic in lib/ — view modules can't be unit-tested
+
+**Rule.** Pure logic (scoring, parsing, slicing) lives in `ui/src/lib/`, not
+in view modules. Views may import lib, never the reverse. Tests import lib
+modules only.
+
+**Why.** Importing any `views/*.tsx` into a Vitest node run drags in
+`stores/settings`, which touches `window` at module-init
+(`detectPlatform`) — the suite dies on `ReferenceError: window is not
+defined` before a single test runs. The palette's fuzzy scorer had to move to
+`lib/fuzzy.ts` for exactly this. A jsdom environment would paper over it at
+the cost of slower tests and a false sense that view modules are import-safe.
+
+**How to apply.** When a view grows a testable pure function, extract it to
+`lib/` immediately (the function, not the component). Vitest is pinned to a
+major that supports the workspace's Vite (vitest 2.x ↔ vite 5 — the latest
+vitest requires vite 6+ and will not run here).
+
+---
+
+## Virtualized rows: the row-height constant must track the CSS
+
+**Rule.** The commit graph table renders only a viewport slice with spacer
+rows; the math reads `ROW_PX` in `views/Commits.tsx`, which **must** equal
+`.graph-table tbody tr` heights in `features.css` per density (26 / 32 / 38).
+Change one → change both. Blame's virtual list has the same coupling (18px).
+
+**Why.** A drifted constant doesn't crash — it makes the scrollbar lie and
+rows land under the wrong mouse position, which reads as "selection is
+flaky" and is miserable to bisect. Focus/reveal jumps also fall back to
+index × rowH math when the target row isn't mounted (`scrollIntoView` can't
+reach an unmounted row), so the constant is correctness, not just layout.

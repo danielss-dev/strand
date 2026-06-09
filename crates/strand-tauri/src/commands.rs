@@ -3,15 +3,29 @@ use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{FileContent, FileHistoryEntry},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::Commit,
-    network::{clone as core_clone, CloneOutcome, NetworkOutcome, Progress},
+    network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
-    refs::Refs, repo::RepoMeta, stash::{Stash, StashOutcome}, status::FileStatus,
-    submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
+    refs::Refs, repo::RepoMeta, snapshot::Snapshot, stash::{Stash, StashOutcome},
+    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
 };
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::state::AppState;
+
+/// Register / clear a cancellable op's handle under `op_id` so
+/// `repo_cancel_op` can find it while the blocking task runs.
+fn register_op(state: &AppState, op_id: &Option<String>, cancel: &CancelHandle) {
+    if let (Some(id), Ok(mut ops)) = (op_id.as_deref(), state.ops.lock()) {
+        ops.insert(id.to_string(), cancel.clone());
+    }
+}
+
+fn deregister_op(state: &AppState, op_id: &Option<String>) {
+    if let (Some(id), Ok(mut ops)) = (op_id.as_deref(), state.ops.lock()) {
+        ops.remove(id);
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct CmdError {
@@ -44,6 +58,58 @@ pub fn repo_meta(path: String) -> CmdResult<RepoMeta> {
 #[tauri::command]
 pub fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
     Ok(Repo::discover(&path)?.status()?)
+}
+
+/// One-call refresh bundle: meta + status + work tree + refs + submodules
+/// from a single repo open and a single statuses walk. The frontend's
+/// post-change refresh path calls this instead of five separate commands.
+#[tauri::command]
+pub fn repo_snapshot(path: String) -> CmdResult<Snapshot> {
+    Ok(Repo::discover(&path)?.snapshot()?)
+}
+
+/// Start watching `path`'s working tree; emits a `repo://changed` event with
+/// the repo path as payload after each (debounced) change burst. Idempotent —
+/// re-watching an already-watched path keeps the existing watcher.
+#[tauri::command]
+pub fn repo_watch(
+    path: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<()> {
+    {
+        let watchers = state.watchers.lock().map_err(|_| CmdError {
+            message: "watcher registry poisoned".into(),
+        })?;
+        if watchers.contains_key(&path) {
+            return Ok(());
+        }
+    }
+    let repo = Repo::discover(&path)?;
+    let workdir = repo.path().to_path_buf();
+    let git_dir = repo.git_dir().to_path_buf();
+    let event_path = path.clone();
+    let watcher = strand_core::watch::watch(
+        &workdir,
+        &git_dir,
+        std::time::Duration::from_millis(400),
+        move || {
+            let _ = app.emit("repo://changed", &event_path);
+        },
+    )?;
+    if let Ok(mut watchers) = state.watchers.lock() {
+        watchers.insert(path, watcher);
+    }
+    Ok(())
+}
+
+/// Stop watching `path` (dropping the watcher ends its threads).
+#[tauri::command]
+pub fn repo_unwatch(path: String, state: State<'_, AppState>) -> CmdResult<()> {
+    if let Ok(mut watchers) = state.watchers.lock() {
+        watchers.remove(&path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -84,6 +150,13 @@ pub fn repo_diff_commit_file(path: String, oid: String, file: String) -> CmdResu
 #[tauri::command]
 pub fn repo_diff_workdir_file(path: String, file: String) -> CmdResult<Vec<FileDiff>> {
     Ok(Repo::discover(&path)?.diff_workdir_file(&file)?)
+}
+
+/// Diff everything (committed + staged + unstaged) since a baseline
+/// commit-ish — the "review since…" view for agent sessions.
+#[tauri::command]
+pub fn repo_diff_since(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_since(&baseline)?)
 }
 
 // ── File view (Content / History / Blame tabs) ──
@@ -188,67 +261,120 @@ pub fn repo_commit(
 pub async fn repo_fetch(
     path: String,
     remote: Option<String>,
+    op_id: Option<String>,
     on_event: Channel<Progress>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, &cancel);
+    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
         let repo = Repo::discover(&path)?;
-        repo.fetch(remote.as_deref(), |p| {
-            let _ = on_event.send(p);
-        })
+        repo.fetch(
+            remote.as_deref(),
+            |p| {
+                let _ = on_event.send(p);
+            },
+            Some(&cancel),
+        )
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("fetch task failed: {e}") })?
+    .map_err(|e| CmdError { message: format!("fetch task failed: {e}") });
+    deregister_op(&state, &op_id);
+    result?
 }
 
 #[tauri::command]
 pub async fn repo_pull(
     path: String,
     rebase: bool,
+    op_id: Option<String>,
     on_event: Channel<Progress>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, &cancel);
+    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
         let repo = Repo::discover(&path)?;
-        repo.pull(rebase, |p| {
-            let _ = on_event.send(p);
-        })
+        repo.pull(
+            rebase,
+            |p| {
+                let _ = on_event.send(p);
+            },
+            Some(&cancel),
+        )
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("pull task failed: {e}") })?
+    .map_err(|e| CmdError { message: format!("pull task failed: {e}") });
+    deregister_op(&state, &op_id);
+    result?
 }
 
 #[tauri::command]
 pub async fn repo_push(
     path: String,
     force_with_lease: bool,
+    op_id: Option<String>,
     on_event: Channel<Progress>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, &cancel);
+    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
         let repo = Repo::discover(&path)?;
-        repo.push(force_with_lease, |p| {
-            let _ = on_event.send(p);
-        })
+        repo.push(
+            force_with_lease,
+            |p| {
+                let _ = on_event.send(p);
+            },
+            Some(&cancel),
+        )
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("push task failed: {e}") })?
+    .map_err(|e| CmdError { message: format!("push task failed: {e}") });
+    deregister_op(&state, &op_id);
+    result?
 }
 
 #[tauri::command]
 pub async fn repo_clone(
     url: String,
     dest: String,
+    op_id: Option<String>,
     on_event: Channel<Progress>,
+    state: State<'_, AppState>,
 ) -> CmdResult<CloneOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<CloneOutcome> {
-        core_clone(&url, &dest, |p| {
-            let _ = on_event.send(p);
-        })
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, &cancel);
+    let result = tokio::task::spawn_blocking(move || -> CmdResult<CloneOutcome> {
+        core_clone(
+            &url,
+            &dest,
+            |p| {
+                let _ = on_event.send(p);
+            },
+            Some(&cancel),
+        )
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("clone task failed: {e}") })?
+    .map_err(|e| CmdError { message: format!("clone task failed: {e}") });
+    deregister_op(&state, &op_id);
+    result?
+}
+
+/// Kill the in-flight cancellable op registered under `op_id`. A no-op when
+/// the op already finished (its handle is gone from the registry).
+#[tauri::command]
+pub fn repo_cancel_op(op_id: String, state: State<'_, AppState>) -> CmdResult<()> {
+    if let Ok(ops) = state.ops.lock() {
+        if let Some(handle) = ops.get(&op_id) {
+            handle.cancel();
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -453,6 +579,16 @@ pub fn repo_read_conflict_file(path: String, file: String) -> CmdResult<String> 
 pub fn repo_resolve_conflict(path: String, file: String, contents: String) -> CmdResult<()> {
     Repo::discover(&path)?.resolve_conflict(&file, &contents)?;
     Ok(())
+}
+
+// Blocks until the external tool exits, so it runs off the IPC thread.
+#[tauri::command]
+pub async fn repo_open_mergetool(path: String, file: String) -> CmdResult<()> {
+    tokio::task::spawn_blocking(move || -> CmdResult<()> {
+        Repo::discover(&path)?.open_mergetool(&file).map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("mergetool task failed: {e}") })?
 }
 
 #[tauri::command]

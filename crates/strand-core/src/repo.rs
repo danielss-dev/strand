@@ -32,6 +32,12 @@ impl Repo {
         &self.path
     }
 
+    /// The `.git` directory — needed by the file watcher to tell repo-state
+    /// writes apart from working-tree writes.
+    pub fn git_dir(&self) -> &Path {
+        self.gix.git_dir()
+    }
+
     /// Lightweight metadata about the repo's HEAD, used by the topbar.
     pub fn meta(&self) -> Result<RepoMeta> {
         // Detect detached HEAD via git2 (gix's `head_name()` returns None for
@@ -75,6 +81,12 @@ impl Repo {
             .into_owned();
         let is_linked_worktree = g2.as_ref().map(|r| r.is_worktree()).unwrap_or(false);
 
+        let head_oid = g2
+            .as_ref()
+            .and_then(|r| r.head().ok())
+            .and_then(|h| h.target())
+            .map(|oid| oid.to_string());
+
         Ok(RepoMeta {
             name: self
                 .path
@@ -84,6 +96,7 @@ impl Repo {
                 .to_string(),
             path: self.path.to_string_lossy().into_owned(),
             branch,
+            head_oid,
             ahead,
             behind,
             detached,
@@ -172,6 +185,9 @@ pub struct RepoMeta {
     pub name: String,
     pub path: String,
     pub branch: String,
+    /// Full OID HEAD currently resolves to; `None` on an unborn branch.
+    /// Used by the frontend to pin a review baseline.
+    pub head_oid: Option<String>,
     pub ahead: u32,
     pub behind: u32,
     /// True when HEAD is detached (parked on a commit, not a branch). The

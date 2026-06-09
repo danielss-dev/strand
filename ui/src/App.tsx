@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
@@ -11,7 +12,7 @@ import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { pickRepoDirectory } from './lib/dialog';
-import { errMessage, isTauri, tauri } from './lib/tauri';
+import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
 import { SettingsDialog } from './views/SettingsDialog';
@@ -23,6 +24,7 @@ import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
+import { Review } from './views/Review';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
@@ -104,9 +106,6 @@ export function App() {
   const restoreSession = useRepo((s) => s.restoreSession);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
-  const refreshMeta = useRepo((s) => s.refreshMeta);
-  const refreshRefs = useRepo((s) => s.refreshRefs);
-  const refreshSubmodules = useRepo((s) => s.refreshSubmodules);
 
   // Repo data the command palette indexes (branches / files / commits).
   const refs = useRepo((s) => s.refs);
@@ -124,6 +123,15 @@ export function App() {
   const pushRepo = useRepo((s) => s.push);
   const pushAllTags = useRepo((s) => s.pushAllTags);
   const abortOperation = useRepo((s) => s.abortOperation);
+  const stashes = useRepo((s) => s.stashes);
+  const submodules = useRepo((s) => s.submodules);
+  const stashApply = useRepo((s) => s.stashApply);
+  const stashPop = useRepo((s) => s.stashPop);
+  const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
+  const baseline = useRepo((s) => s.baseline);
+  const setBaseline = useRepo((s) => s.setBaseline);
+  const clearBaseline = useRepo((s) => s.clearBaseline);
+  const stageReviewed = useRepo((s) => s.stageReviewed);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -150,8 +158,14 @@ export function App() {
   // Live network-op progress (fetch/pull/push) shown as a pill while a
   // transfer is in flight. Null when idle.
   const [netProgress, setNetProgress] = useState<string | null>(null);
+  // Cancellable-op id for the in-flight fetch/pull/push (the pill's ✕).
+  const [netOpId, setNetOpId] = useState<string | null>(null);
+  const opIdSeq = useRef(0);
+  const nextOpId = useCallback(() => `op-${Date.now()}-${++opIdSeq.current}`, []);
   // Persistent clone/open progress popup — stays until the op completes.
   const [opProgress, setOpProgress] = useState<OpProgress | null>(null);
+  // Cancellable-op id for the in-flight clone (the popup's Cancel button).
+  const [cloneCancelId, setCloneCancelId] = useState<string | null>(null);
   // Monotonic op id so a finished op only clears its *own* popup — concurrent
   // opens (drag-drop while a recent is loading) or a drop mid-clone can't
   // stomp each other's progress.
@@ -217,6 +231,8 @@ export function App() {
   // as a toast (there's no dialog to return to).
   const runClone = useCallback(async (url: string, dest: string) => {
     const id = ++opGen.current;
+    const cancelId = nextOpId();
+    setCloneCancelId(cancelId);
     const startedAt = Date.now();
     // Per-phase ETA: git's percent resets each phase (Counting → Compressing →
     // Receiving → Resolving), so time the current phase and extrapolate from it
@@ -248,15 +264,23 @@ export function App() {
         }
         const detail = pct != null ? `${p.phase || 'Working'} ${pct}%` : p.raw || p.phase || 'Cloning…';
         setOpProgress((cur) => (cur && cur.id === id && cur.kind === 'clone' ? { ...cur, percent: pct, detail, eta } : cur));
-      });
+      }, cancelId);
       clonedPath = res.path;
     } catch (e) {
-      // Surface the failure in the popup itself (persistent + dismissible) so a
-      // clone that dies isn't a popup that just vanishes with a fleeting toast.
+      setCloneCancelId(null);
+      // A user cancel just clears the popup; a real failure surfaces in the
+      // popup itself (persistent + dismissible) so a clone that dies isn't a
+      // popup that just vanishes with a fleeting toast.
+      if (isCancelled(e)) {
+        setOpProgress((cur) => (cur && cur.id === id ? null : cur));
+        showToast('Clone cancelled');
+        return;
+      }
       const msg = errMessage(e);
       setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg, percent: null, eta: null } : cur));
       return;
     }
+    setCloneCancelId(null);
     // Switch the same popup to "Opening" in place (no delay, no flicker) and
     // open the freshly cloned repo.
     setOpProgress((cur) =>
@@ -271,7 +295,7 @@ export function App() {
       const msg = errMessage(e);
       setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
     }
-  }, [openRepo, showToast]);
+  }, [openRepo, showToast, nextOpId]);
 
   const openViaDialog = useCallback(async () => {
     const path = await pickRepoDirectory();
@@ -282,49 +306,61 @@ export function App() {
     if (syncing) return;
     setSyncing(true);
     setNetProgress('Fetching…');
+    const opId = nextOpId();
+    setNetOpId(opId);
     await waitForPaint();
     try {
-      await fetchRepo(onNetProgress);
+      await fetchRepo(onNetProgress, opId);
       flashDone(setSyncDone);
     } catch (e) {
-      showToast(`Fetch failed: ${errMessage(e)}`);
+      if (isCancelled(e)) showToast('Fetch cancelled');
+      else showToast(`Fetch failed: ${errMessage(e)}`);
     } finally {
       setSyncing(false);
       setNetProgress(null);
+      setNetOpId(null);
     }
-  }, [fetchRepo, onNetProgress, showToast, flashDone, syncing]);
+  }, [fetchRepo, onNetProgress, showToast, flashDone, syncing, nextOpId]);
 
   const onPull = useCallback(async () => {
     if (pulling) return;
     setPulling(true);
     setNetProgress('Pulling…');
+    const opId = nextOpId();
+    setNetOpId(opId);
     await waitForPaint();
     try {
-      await pullRepo(false, onNetProgress);
+      await pullRepo(false, onNetProgress, opId);
       flashDone(setPullDone);
     } catch (e) {
-      showToast(`Pull failed: ${errMessage(e)}`);
+      if (isCancelled(e)) showToast('Pull cancelled');
+      else showToast(`Pull failed: ${errMessage(e)}`);
     } finally {
       setPulling(false);
       setNetProgress(null);
+      setNetOpId(null);
     }
-  }, [pullRepo, onNetProgress, showToast, flashDone, pulling]);
+  }, [pullRepo, onNetProgress, showToast, flashDone, pulling, nextOpId]);
 
   const onPush = useCallback(async () => {
     if (pushing) return;
     setPushing(true);
     setNetProgress('Pushing…');
+    const opId = nextOpId();
+    setNetOpId(opId);
     await waitForPaint();
     try {
-      await pushRepo(false, onNetProgress);
+      await pushRepo(false, onNetProgress, opId);
       flashDone(setPushDone);
     } catch (e) {
-      showToast(`Push failed: ${errMessage(e)}`);
+      if (isCancelled(e)) showToast('Push cancelled');
+      else showToast(`Push failed: ${errMessage(e)}`);
     } finally {
       setPushing(false);
       setNetProgress(null);
+      setNetOpId(null);
     }
-  }, [pushRepo, onNetProgress, showToast, flashDone, pushing]);
+  }, [pushRepo, onNetProgress, showToast, flashDone, pushing, nextOpId]);
 
   // Load recents + restore the tabs the user had open last time. Both run
   // once on first mount; restoreSession is idempotent so StrictMode's
@@ -358,11 +394,23 @@ export function App() {
     return () => { void unlisten.then((fn) => fn()); };
   }, [openByPath]);
 
-  // Refresh git state whenever the user returns to the app. The OS may
-  // have changed files behind our back (CLI commits, editor saves, branch
-  // switches from another tool) — pulling fresh status + log on focus
-  // keeps Strand from drifting out of sync. A small debounce avoids a
-  // double-fetch when both events fire close together.
+  // Primary freshness signal: the Rust file watcher. It debounces write
+  // bursts and emits `repo://changed` with the repo path — exactly what an
+  // AI agent editing files in a terminal produces. The store ignores events
+  // for non-active tabs.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const unlisten = listen<string>('repo://changed', (event) => {
+      void useRepo.getState().handleExternalChange(event.payload);
+    });
+    return () => { void unlisten.then((fn) => fn()); };
+  }, []);
+
+  // Fallback freshness signal: refresh when the user returns to the app, in
+  // case the watcher missed something (network drives, watcher start
+  // failure). refreshLocalChanges is snapshot-based, so meta/refs/submodules
+  // ride along. A small debounce avoids a double-fetch when focus and
+  // visibilitychange fire together.
   useEffect(() => {
     if (!isTauri()) return;
     let lastAt = 0;
@@ -374,9 +422,6 @@ export function App() {
       if (!activePath) return;
       void refreshLocalChanges();
       void refreshLog();
-      void refreshMeta();
-      void refreshRefs();
-      void refreshSubmodules();
     };
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -385,7 +430,7 @@ export function App() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
+  }, [refreshLocalChanges, refreshLog]);
 
   // Global ⌘K / Ctrl+K
   useEffect(() => {
@@ -404,6 +449,8 @@ export function App() {
       } else if (mod && e.key === '3') {
         e.preventDefault(); setView('reflog'); selectFile(null);
       } else if (mod && e.key === '4') {
+        e.preventDefault(); setView('review'); selectFile(null);
+      } else if (mod && e.key === '5') {
         e.preventDefault(); setView('worktrees'); selectFile(null);
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
@@ -516,9 +563,49 @@ export function App() {
       });
     }
 
+    // Stashes — apply (keep on stack) or pop. Same ops as the sidebar rows.
+    for (const st of stashes) {
+      out.push({
+        id: `stash-apply:${st.oid}`,
+        label: `Apply stash: ${st.message}`,
+        group: 'Stashes',
+        keywords: `stash apply ${st.branch ?? ''}`,
+        meta: `stash@{${st.index}}`,
+        run: () => {
+          void stashApply(st.index).catch((e) => showToast(`Apply failed: ${errMessage(e)}`));
+        },
+      });
+      out.push({
+        id: `stash-pop:${st.oid}`,
+        label: `Pop stash: ${st.message}`,
+        group: 'Stashes',
+        keywords: `stash pop ${st.branch ?? ''}`,
+        meta: `stash@{${st.index}}`,
+        run: () => {
+          void stashPop(st.index).catch((e) => showToast(`Pop failed: ${errMessage(e)}`));
+        },
+      });
+    }
+
+    // Submodules — recursive init + update, same as the sidebar action.
+    for (const sm of submodules) {
+      out.push({
+        id: `submodule:${sm.path}`,
+        label: `Update submodule: ${sm.name}`,
+        group: 'Actions',
+        keywords: `submodule init update ${sm.path}`,
+        meta: sm.status,
+        run: () => {
+          void submoduleUpdate([sm.path], true, true).catch((e) =>
+            showToast(`Submodule update failed: ${errMessage(e)}`));
+        },
+      });
+    }
+
     return out;
-  }, [paletteOpen, meta, refs, workTree, commits, checkout, createBranch,
-      revealInGraph, selectCommit, selectFile, showToast]);
+  }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
+      createBranch, revealInGraph, selectCommit, selectFile, showToast,
+      stashApply, stashPop, submoduleUpdate]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
@@ -533,9 +620,18 @@ export function App() {
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: '⌘3', keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
-        { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: '⌘4', keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
+        { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: '⌘4', keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
+        { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: '⌘5', keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
+        { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: pin baseline at HEAD', group: 'Actions', keywords: 'ai agent session since diff review baseline', run: () => {
+          void setBaseline().then(() => { setView('review'); selectFile(null); })
+            .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`));
+        } },
+        ...(baseline ? [{ id: 'review-clear', label: 'Review: clear baseline', group: 'Actions', keywords: 'ai agent session review baseline', run: () => { void clearBaseline(); } } satisfies PaletteAction] : []),
+        { id: 'review-stage', label: 'Review: stage reviewed files', group: 'Actions', keywords: 'accept reviewed stage bulk', run: () => {
+          void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`));
+        } },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
@@ -596,7 +692,8 @@ export function App() {
     }));
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch, repoActions, setRebaseDialog]);
+      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
+      repoActions, setRebaseDialog, baseline, setBaseline, clearBaseline, stageReviewed]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -647,6 +744,7 @@ export function App() {
                   <MainHeader />
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
+                  {view === 'review' && <Review />}
                   {view === 'reflog' && <Reflog />}
                   {view === 'worktrees' && (
                     <Worktrees onCreateWorktree={() => setWorktreeOpen(true)} onToast={showToast} />
@@ -675,9 +773,19 @@ export function App() {
         </div>
 
         {netProgress && (
-          <div className="toast progress" aria-hidden="true">
-            <span className="icon-spin"><Icon name="refresh" size={13} /></span>
-            <span>{netProgress}</span>
+          <div className="toast progress" aria-hidden={netOpId ? undefined : 'true'}>
+            <span aria-hidden="true" className="icon-spin"><Icon name="refresh" size={13} /></span>
+            <span aria-hidden="true">{netProgress}</span>
+            {netOpId && (
+              <button
+                type="button"
+                className="toast-action"
+                aria-label="Cancel network operation"
+                onClick={() => { void tauri.repoCancelOp(netOpId); }}
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
 
@@ -698,10 +806,16 @@ export function App() {
             startedAt={opProgress.startedAt}
             error={opProgress.error ?? null}
             onDismiss={() => setOpProgress((cur) => (cur && cur.id === opProgress.id ? null : cur))}
+            onCancel={
+              opProgress.kind === 'clone' && !opProgress.error && cloneCancelId
+                ? () => { void tauri.repoCancelOp(cloneCancelId); }
+                : undefined
+            }
           />
         )}
 
         <UndoToast />
+        <BulkUndoToast onToast={showToast} />
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
@@ -794,6 +908,56 @@ function UndoToast() {
       <span>{lastDiscard.label}</span>
       <button type="button" className="toast-action" onClick={() => void undoDiscard()}>
         Undo
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Undo affordance for a bulk (multi-file) discard. The store stashed a
+ * safety snapshot just before discarding; Restore applies it back. A longer
+ * window than the single-hunk toast — a 30-file discard deserves more than
+ * six seconds of regret. The snapshot also stays on the stash stack after
+ * the toast expires, so even a missed window is recoverable by hand.
+ */
+const BULK_UNDO_WINDOW_MS = 15000;
+
+function BulkUndoToast({ onToast }: { onToast: (msg: string) => void }) {
+  const lastBulkDiscard = useRepo((s) => s.lastBulkDiscard);
+  const undoBulkDiscard = useRepo((s) => s.undoBulkDiscard);
+  const clearBulkUndo = useRepo((s) => s.clearBulkUndo);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!lastBulkDiscard) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const t = setTimeout(() => {
+      setVisible(false);
+      clearBulkUndo();
+    }, BULK_UNDO_WINDOW_MS);
+    return () => clearTimeout(t);
+  }, [lastBulkDiscard, clearBulkUndo]);
+
+  if (!visible || !lastBulkDiscard) return null;
+
+  const restore = async () => {
+    try {
+      await undoBulkDiscard();
+      onToast('Changes restored from safety snapshot');
+    } catch (e) {
+      onToast(`Restore failed: ${errMessage(e)}`);
+    }
+  };
+
+  return (
+    <div className="toast undo">
+      <span style={{ color: 'var(--text-2)' }}><Icon name="trash" size={13} /></span>
+      <span>Discarded {lastBulkDiscard.count} files (snapshot saved)</span>
+      <button type="button" className="toast-action" onClick={() => void restore()}>
+        Restore
       </button>
     </div>
   );
@@ -894,9 +1058,6 @@ function MainHeader() {
   const activePath = useRepo((s) => s.activePath);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
-  const refreshMeta = useRepo((s) => s.refreshMeta);
-  const refreshRefs = useRepo((s) => s.refreshRefs);
-  const refreshSubmodules = useRepo((s) => s.refreshSubmodules);
   const diffMode = useSettings((s) => s.diffMode);
   const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const setSetting = useSettings((s) => s.set);
@@ -908,19 +1069,23 @@ function MainHeader() {
     setRefreshing(true);
     await waitForPaint();
     try {
-      await Promise.all([
-        refreshLocalChanges(), refreshLog(), refreshMeta(), refreshRefs(), refreshSubmodules(),
-      ]);
+      // refreshLocalChanges is snapshot-based — meta/refs/tree/submodules
+      // come along with status + diffs in one walk.
+      await Promise.all([refreshLocalChanges(), refreshLog()]);
     } finally {
       setRefreshing(false);
     }
-  }, [activePath, refreshing, refreshLocalChanges, refreshLog, refreshMeta, refreshRefs, refreshSubmodules]);
+  }, [activePath, refreshing, refreshLocalChanges, refreshLog]);
 
   const reflog = useRepo((s) => s.reflog);
   const worktrees = useRepo((s) => s.worktrees);
+  const baseline = useRepo((s) => s.baseline);
+  const baselineDiffs = useRepo((s) => s.baselineDiffs);
+  const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'
     : view === 'reflog' ? 'Reflog'
+    : view === 'review' ? 'Review'
     : view === 'worktrees' ? 'Worktrees'
     : view === 'branch' ? 'Branch'
     : '';
@@ -930,9 +1095,13 @@ function MainHeader() {
       ? `${commits.length} commits across all branches`
       : view === 'reflog'
         ? `${reflog.length} HEAD movements`
-        : view === 'worktrees'
-          ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
-          : '';
+        : view === 'review'
+          ? baseline
+            ? `${baselineDiffs.length} files since ${baseline.short}`
+            : `${unstagedCount} unstaged files`
+          : view === 'worktrees'
+            ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
+            : '';
 
   return (
     <div className="main-header">
@@ -946,7 +1115,7 @@ function MainHeader() {
       </div>
       <div className="h-actions">
         {(view === 'commits' || view === 'reflog') && <HistoryModeToggle />}
-        {view === 'local' && (
+        {(view === 'local' || view === 'review') && (
           <>
             <button
               type="button"
@@ -966,17 +1135,19 @@ function MainHeader() {
             >
               <Icon name="split" size={13} />
             </button>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => setSetting('diffsCollapsed', !diffsCollapsed)}
-              title={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
-              aria-label={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
-              aria-pressed={diffsCollapsed}
-            >
-              <Icon name={diffsCollapsed ? 'expand-all' : 'collapse-all'} size={13} />
-            </button>
           </>
+        )}
+        {view === 'local' && (
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setSetting('diffsCollapsed', !diffsCollapsed)}
+            title={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+            aria-label={diffsCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+            aria-pressed={diffsCollapsed}
+          >
+            <Icon name={diffsCollapsed ? 'expand-all' : 'collapse-all'} size={13} />
+          </button>
         )}
         <button
           type="button"

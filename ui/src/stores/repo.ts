@@ -5,9 +5,13 @@ import {
   recents as recentsDb,
   remoteTagsCache,
   repoDiffMode,
+  reviewSession,
   settings as settingsDb,
+  type StoredBaseline,
   type StoredMessage,
 } from '../lib/db';
+import { hashPatch } from '../lib/patch';
+import { logColdStart, timed } from '../lib/perf';
 import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -35,7 +39,7 @@ interface PersistedSession {
 }
 const SESSION_KEY = 'session.tabs';
 
-export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'worktrees';
+export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees';
 
 /** Active tab within the 4-tab file view. */
 export type FileTab = 'content' | 'history' | 'compare' | 'blame';
@@ -80,6 +84,40 @@ export interface RepoState {
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
   localSelection: LocalSelection | null;
+
+  /**
+   * Review-session baseline for the active repo: "show me everything since
+   * this commit". Pinned by the user (or restored from SQLite); drives the
+   * Review view's session mode and {@link RepoState.baselineDiffs}. Without
+   * a baseline the Review view falls back to the unstaged set (inbox mode).
+   */
+  baseline: StoredBaseline | null;
+  /** `diff_since(baseline)` result — committed + staged + unstaged changes. */
+  baselineDiffs: FileDiff[];
+
+  /**
+   * File selected in the Review view's list, or `null` for "nothing yet" —
+   * the view auto-selects the first pending file. Separate from
+   * `localSelection` so flipping between Review and Local Changes doesn't
+   * fight over one selection.
+   */
+  reviewSelection: string | null;
+  selectReviewFile(path: string | null): void;
+
+  /**
+   * Reviewed-file map for the active repo: `path → hash of the reviewed
+   * diff`. A file counts as reviewed only while its *current* diff hashes to
+   * the recorded value, so an agent touching a reviewed file flips it back.
+   * Persisted per-repo (see `reviewSession` in lib/db).
+   */
+  reviewed: Record<string, string>;
+
+  /**
+   * Undo handle for the most recent *multi-file* discard: the safety
+   * snapshot taken just before. Applying the stash restores everything the
+   * bulk discard removed. Like `lastDiscard`, pinned to its repo path.
+   */
+  lastBulkDiscard: { oid: string; count: number; path: string } | null;
 
   /**
    * Single-undo handle for the most recent discard. Discarding a change
@@ -201,6 +239,41 @@ export interface RepoState {
   /** Refresh status + diffs together — what every write op runs afterward. */
   refreshLocalChanges(): Promise<void>;
 
+  /**
+   * One-call refresh of meta + status + work tree + refs + submodules from
+   * `repo_snapshot` — one repo open, one statuses walk, one IPC round-trip.
+   * The post-change and watcher-driven refresh paths use this instead of
+   * five separate commands.
+   */
+  refreshSnapshot(): Promise<void>;
+
+  /**
+   * Entry point for the file watcher's `repo://changed` event: refresh
+   * everything the on-disk change could have moved (snapshot, diffs, log,
+   * baseline diff). Ignores events for repos that aren't the active tab.
+   */
+  handleExternalChange(path: string): Promise<void>;
+
+  /** Pin the review baseline at the current HEAD. */
+  setBaseline(): Promise<void>;
+  /** Clear the review baseline (and its persisted record). */
+  clearBaseline(): Promise<void>;
+  /** Re-run `diff_since(baseline)` into {@link RepoState.baselineDiffs}. */
+  refreshBaselineDiffs(): Promise<void>;
+  /** Load the persisted baseline + reviewed map when a repo becomes active. */
+  loadReviewSession(): Promise<void>;
+  /**
+   * Toggle a file's reviewed mark. `hash` is the current diff's
+   * {@link hashPatch} value — recorded on mark, compared on render.
+   */
+  toggleReviewed(file: string, hash: string): void;
+  /** Stage every unstaged file whose reviewed mark matches its current diff. */
+  stageReviewed(): Promise<void>;
+  /** Re-apply the safety snapshot from the last bulk discard. */
+  undoBulkDiscard(): Promise<void>;
+  /** Drop the bulk-discard undo handle (toast timeout). */
+  clearBulkUndo(): void;
+
   stage(file: string): Promise<void>;
   unstage(file: string): Promise<void>;
   discard(file: string): Promise<void>;
@@ -245,9 +318,10 @@ export interface RepoState {
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
-  fetch(onProgress?: (p: Progress) => void): Promise<string>;
-  pull(rebase?: boolean, onProgress?: (p: Progress) => void): Promise<string>;
-  push(forceWithLease?: boolean, onProgress?: (p: Progress) => void): Promise<string>;
+  /** `opId` (when given) registers the op as cancellable via `repoCancelOp`. */
+  fetch(onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pull(rebase?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  push(forceWithLease?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
 
   checkout(branch: string): Promise<void>;
   /** Check out an arbitrary commit as a detached HEAD. */
@@ -444,6 +518,11 @@ const EMPTY_ACTIVE = {
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
+  baseline: null as StoredBaseline | null,
+  baselineDiffs: [] as FileDiff[],
+  reviewSelection: null as string | null,
+  reviewed: {} as Record<string, string>,
+  lastBulkDiscard: null as { oid: string; count: number; path: string } | null,
   lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
   fileReturn: null as string | null,
@@ -469,12 +548,9 @@ const EMPTY_ACTIVE = {
  * post-abort cleanup share it.
  */
 async function refreshAfterHistoryOp(get: () => RepoState): Promise<void> {
-  await Promise.all([
-    get().refreshMeta(),
-    get().refreshLocalChanges(),
-    get().refreshLog(),
-    get().refreshRefs(),
-  ]);
+  // refreshLocalChanges is snapshot-based, so meta (the `operation` banner)
+  // and refs (moved tips) ride along with status + diffs.
+  await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
 }
 
 /**
@@ -567,28 +643,11 @@ export const useRepo = create<RepoState>((set, get) => ({
 
     const tab: RepoTab = { path: meta.path, meta };
     set((s) => ({
+      ...EMPTY_ACTIVE,
       tabs: [...s.tabs, tab],
       activeTabPath: meta.path,
       activePath: meta.path,
       meta,
-      status: [],
-      commits: [],
-      unstagedDiffs: [],
-      stagedDiffs: [],
-      localSelection: null,
-      selectedFile: null,
-      fileReturn: null,
-      selectedCommit: null,
-      selectedCommitDiffs: [],
-      selectedCommitDiffsLoading: false,
-      refs: EMPTY_REFS,
-      remoteTags: null,
-      stashes: [],
-      workTree: [],
-      submodules: [],
-      worktrees: [],
-      reflog: [],
-      recentMessages: [],
     }));
 
     try {
@@ -599,14 +658,19 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
     void persistSession(get());
     void get().loadRepoDiffMode();
+    // Start the working-tree watcher so agent/CLI writes refresh the view
+    // without waiting for window focus. Best-effort — a watcher failure
+    // (e.g. exotic filesystem) degrades to focus-refresh, not an error.
+    tauri.repoWatch(meta.path).catch((e) => console.warn('repoWatch failed', e));
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
-      get().refreshRefs(),
       get().refreshStashes(),
-      get().refreshSubmodules(),
+      // refreshLocalChanges is snapshot-based (covers meta/refs/submodules);
+      // worktrees aren't in the snapshot, so refresh them explicitly.
       get().refreshWorktrees(),
       get().refreshRecentMessages(),
+      get().loadReviewSession(),
     ]);
   },
 
@@ -615,6 +679,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     const idx = tabs.findIndex((t) => t.path === path);
     if (idx === -1) return;
     const nextTabs = tabs.filter((t) => t.path !== path);
+
+    // Stop the closed tab's watcher (best-effort).
+    tauri.repoUnwatch(path).catch((e) => console.warn('repoUnwatch failed', e));
 
     if (activeTabPath !== path) {
       set({ tabs: nextTabs });
@@ -625,36 +692,19 @@ export const useRepo = create<RepoState>((set, get) => ({
     // Closed the active tab — pick a neighbor, or fall back to empty state.
     const neighbor = nextTabs[idx] ?? nextTabs[idx - 1] ?? null;
     set({
+      ...EMPTY_ACTIVE,
       tabs: nextTabs,
       activeTabPath: neighbor?.path ?? null,
       activePath: neighbor?.path ?? null,
       meta: neighbor?.meta ?? null,
-      status: [],
-      commits: [],
-      unstagedDiffs: [],
-      stagedDiffs: [],
-      localSelection: null,
-      selectedFile: null,
-      fileReturn: null,
-      selectedCommit: null,
-      selectedCommitDiffs: [],
-      selectedCommitDiffsLoading: false,
-      refs: EMPTY_REFS,
-      remoteTags: null,
-      stashes: [],
-      workTree: [],
-      submodules: [],
-      worktrees: [],
-      reflog: [],
-      recentMessages: [],
     });
     void persistSession(get());
     if (neighbor) {
       void Promise.all([
         get().refreshLocalChanges(),
         get().refreshLog(),
-        get().refreshRefs(),
         get().refreshRecentMessages(),
+        get().loadReviewSession(),
       ]);
     }
   },
@@ -663,38 +713,20 @@ export const useRepo = create<RepoState>((set, get) => ({
     const tab = get().tabs.find((t) => t.path === path);
     if (!tab || get().activeTabPath === path) return;
     set({
+      ...EMPTY_ACTIVE,
       activeTabPath: path,
       activePath: path,
       meta: tab.meta,
-      status: [],
-      commits: [],
-      unstagedDiffs: [],
-      stagedDiffs: [],
-      localSelection: null,
-      selectedFile: null,
-      fileReturn: null,
-      selectedCommit: null,
-      selectedCommitDiffs: [],
-      selectedCommitDiffsLoading: false,
-      refs: EMPTY_REFS,
-      remoteTags: null,
-      stashes: [],
-      workTree: [],
-      submodules: [],
-      worktrees: [],
-      reflog: [],
-      recentMessages: [],
     });
     void persistSession(get());
     void get().loadRepoDiffMode();
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
-      get().refreshRefs(),
       get().refreshStashes(),
-      get().refreshSubmodules(),
       get().refreshWorktrees(),
       get().refreshRecentMessages(),
+      get().loadReviewSession(),
     ]);
   },
 
@@ -710,17 +742,16 @@ export const useRepo = create<RepoState>((set, get) => ({
   async refreshLog(limit) {
     const path = get().activePath;
     if (!path) return;
-    const commits = await tauri.repoLog(path, limit ?? 500);
+    const commits = await timed('log', () => tauri.repoLog(path, limit ?? 500));
     if (get().activePath !== path) return;
     set({ commits });
   },
   async refreshDiffs() {
     const path = get().activePath;
     if (!path) return;
-    const [unstaged, staged] = await Promise.all([
-      tauri.repoDiffUnstaged(path),
-      tauri.repoDiffStaged(path),
-    ]);
+    const [unstaged, staged] = await timed('diffs', () =>
+      Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
+    );
     if (get().activePath !== path) return;
     set({ unstagedDiffs: unstaged, stagedDiffs: staged });
 
@@ -741,9 +772,145 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
   },
 
+  // Snapshot-based: one statuses walk covers status + work tree + meta +
+  // refs + submodules, so every write op's refresh also keeps the topbar
+  // (ahead/behind), sidebar, and Files tab in sync for free.
   async refreshLocalChanges() {
-    await Promise.all([get().refreshStatus(), get().refreshDiffs()]);
+    await Promise.all([
+      get().refreshSnapshot(),
+      get().refreshDiffs(),
+      ...(get().baseline ? [get().refreshBaselineDiffs()] : []),
+    ]);
   },
+
+  async refreshSnapshot() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const snap = await timed('snapshot', () => tauri.repoSnapshot(path));
+      logColdStart();
+      if (get().activePath !== path) {
+        // Tab switched mid-flight — still patch the per-tab meta.
+        set((s) => ({ tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t)) }));
+        return;
+      }
+      set((s) => ({
+        meta: snap.meta,
+        status: snap.status,
+        workTree: snap.work_tree,
+        refs: snap.refs,
+        submodules: snap.submodules,
+        tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t)),
+      }));
+    } catch (e) {
+      console.warn('repoSnapshot failed', e);
+    }
+  },
+
+  async handleExternalChange(path) {
+    // Only the active tab repaints; a background tab catches up when
+    // activated (setActiveTab refreshes everything anyway).
+    if (get().activePath !== path) return;
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
+
+  async setBaseline() {
+    const path = get().activePath;
+    const oid = get().meta?.head_oid;
+    if (!path || !oid) return;
+    const baseline: StoredBaseline = { oid, short: oid.slice(0, 7), setAt: Date.now() };
+    set({ baseline });
+    void reviewSession.setBaseline(path, baseline).catch((e) =>
+      console.warn('baseline persist failed', e));
+    await get().refreshBaselineDiffs();
+  },
+
+  async clearBaseline() {
+    const path = get().activePath;
+    set({ baseline: null, baselineDiffs: [] });
+    if (path) {
+      void reviewSession.setBaseline(path, null).catch((e) =>
+        console.warn('baseline clear failed', e));
+    }
+  },
+
+  selectReviewFile: (reviewSelection) => set({ reviewSelection }),
+
+  async refreshBaselineDiffs() {
+    const path = get().activePath;
+    const baseline = get().baseline;
+    if (!path || !baseline) return;
+    try {
+      const diffs = await tauri.repoDiffSince(path, baseline.oid);
+      if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
+      set({ baselineDiffs: diffs });
+    } catch (e) {
+      // Typical cause: the baseline commit was rebased/gc'd away. Surface by
+      // clearing — the chip disappears rather than showing stale data.
+      console.warn('repoDiffSince failed', e);
+      if (get().activePath === path) void get().clearBaseline();
+    }
+  },
+
+  async loadReviewSession() {
+    const path = get().activePath;
+    if (!path) return;
+    try {
+      const [baseline, reviewed] = await Promise.all([
+        reviewSession.getBaseline(path),
+        reviewSession.getReviewed(path),
+      ]);
+      if (get().activePath !== path) return;
+      set({ baseline: baseline ?? null, reviewed: reviewed ?? {} });
+      if (baseline) await get().refreshBaselineDiffs();
+    } catch (e) {
+      console.warn('review session load failed', e);
+    }
+  },
+
+  toggleReviewed(file, hash) {
+    const path = get().activePath;
+    if (!path) return;
+    const cur = get().reviewed;
+    const next = { ...cur };
+    // Marked with a matching hash → unmark; anything else → (re)mark at the
+    // current hash (covers both "not reviewed" and "stale review").
+    if (next[file] === hash) delete next[file];
+    else next[file] = hash;
+    set({ reviewed: next });
+    void reviewSession.setReviewed(path, next).catch((e) =>
+      console.warn('reviewed persist failed', e));
+  },
+
+  async stageReviewed() {
+    const path = get().activePath;
+    if (!path) return;
+    const reviewed = get().reviewed;
+    const files = get()
+      .unstagedDiffs.filter((d) => reviewed[d.path] === hashPatch(d.patch))
+      .map((d) => d.path);
+    if (files.length === 0) return;
+    await tauri.repoStageMany(path, files);
+    await get().refreshLocalChanges();
+  },
+
+  async undoBulkDiscard() {
+    const last = get().lastBulkDiscard;
+    const path = get().activePath;
+    if (!last || !path || last.path !== path) {
+      set({ lastBulkDiscard: null });
+      return;
+    }
+    set({ lastBulkDiscard: null });
+    // Find the safety snapshot on the (fresh) stash stack and apply it.
+    await get().refreshStashes();
+    const entry = get().stashes.find((s) => s.oid === last.oid);
+    if (!entry) throw new Error('Safety snapshot is no longer on the stash stack');
+    await tauri.repoStashApply(path, entry.index);
+    await Promise.all([get().refreshLocalChanges(), get().refreshStashes()]);
+  },
+
+  clearBulkUndo: () => set({ lastBulkDiscard: null }),
 
   async refreshRefs() {
     const path = get().activePath;
@@ -892,7 +1059,15 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
-    await tauri.repoStageMany(path, files);
+    // A renamed file's diff carries old_path; staging only the new path
+    // records the add but leaves the old path's deletion unstaged (and it
+    // was invisible — rename detection had folded it into the R row).
+    // Stage both halves so the rename lands atomically.
+    const expand = new Set(files);
+    for (const d of get().unstagedDiffs) {
+      if (d.old_path && expand.has(d.path)) expand.add(d.old_path);
+    }
+    await tauri.repoStageMany(path, [...expand]);
     await get().refreshLocalChanges();
   },
   async unstageMany(files) {
@@ -904,6 +1079,20 @@ export const useRepo = create<RepoState>((set, get) => ({
   async discardMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
+    // Multi-file discards get an automatic safety snapshot first: a stash
+    // entry that keeps the working tree intact, recorded as the bulk-undo
+    // handle. Single-file discards stay cheap (the per-hunk/-file undo path
+    // covers those). If the snapshot itself fails, abort — never run a bulk
+    // destructive op without its net.
+    if (files.length > 1) {
+      const outcome = await tauri.repoStashSnapshot(
+        path,
+        `Safety: before discarding ${files.length} files`,
+        true,
+      );
+      if (outcome.oid) set({ lastBulkDiscard: { oid: outcome.oid, count: files.length, path } });
+      void get().refreshStashes();
+    }
     await tauri.repoDiscardMany(path, files);
     await get().refreshLocalChanges();
   },
@@ -953,7 +1142,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageAll() {
     const path = get().activePath;
     if (!path) return;
-    const files = get().unstagedDiffs.map((d) => d.path);
+    // Include rename sources (see stageMany).
+    const files = get().unstagedDiffs.flatMap((d) =>
+      d.old_path ? [d.path, d.old_path] : [d.path],
+    );
     if (files.length === 0) return;
     await tauri.repoStageMany(path, files);
     await get().refreshLocalChanges();
@@ -980,8 +1172,6 @@ export const useRepo = create<RepoState>((set, get) => ({
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
-      get().refreshMeta(),
-      get().refreshRefs(),
       get().refreshStashes(),
       get().refreshRecentMessages(),
     ]);
@@ -1003,30 +1193,25 @@ export const useRepo = create<RepoState>((set, get) => ({
       tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
     }));
   },
-  async fetch(onProgress) {
+  async fetch(onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoFetch(path, null, onProgress);
-    await Promise.all([get().refreshMeta(), get().refreshRefs()]);
+    const res = await tauri.repoFetch(path, null, onProgress, opId);
+    await get().refreshSnapshot();
     return res.output;
   },
-  async pull(rebase = false, onProgress) {
+  async pull(rebase = false, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPull(path, rebase, onProgress);
-    await Promise.all([
-      get().refreshMeta(),
-      get().refreshLocalChanges(),
-      get().refreshLog(),
-      get().refreshRefs(),
-    ]);
+    const res = await tauri.repoPull(path, rebase, onProgress, opId);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
-  async push(forceWithLease = false, onProgress) {
+  async push(forceWithLease = false, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPush(path, forceWithLease, onProgress);
-    await Promise.all([get().refreshMeta(), get().refreshRefs()]);
+    const res = await tauri.repoPush(path, forceWithLease, onProgress, opId);
+    await get().refreshSnapshot();
     return res.output;
   },
 
@@ -1034,34 +1219,21 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoCheckout(path, branch);
-    await Promise.all([
-      get().refreshMeta(),
-      get().refreshRefs(),
-      get().refreshLocalChanges(),
-      get().refreshLog(),
-      get().refreshSubmodules(),
-    ]);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
   async checkoutCommit(rev) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoCheckoutCommit(path, rev);
-    await Promise.all([
-      get().refreshMeta(),
-      get().refreshRefs(),
-      get().refreshLocalChanges(),
-      get().refreshLog(),
-      get().refreshSubmodules(),
-    ]);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
   async createBranch(name, startPoint, checkout) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchCreate(path, name, startPoint, checkout);
     await Promise.all([
-      get().refreshMeta(),
-      get().refreshRefs(),
-      ...(checkout ? [get().refreshLocalChanges(), get().refreshLog()] : []),
+      get().refreshSnapshot(),
+      ...(checkout ? [get().refreshDiffs(), get().refreshLog()] : []),
     ]);
   },
   async deleteBranch(name, force) {
@@ -1135,8 +1307,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoResolveConflict(path, file, contents);
-    // Status drives the Conflicts list; diffs/meta keep the rest in sync.
-    await Promise.all([get().refreshStatus(), get().refreshDiffs(), get().refreshMeta()]);
+    // Status drives the Conflicts list; the snapshot inside also re-reads
+    // meta (`operation`) so the banner clears as soon as all are resolved.
+    await get().refreshLocalChanges();
   },
 
   async createTag(name, target, message) {

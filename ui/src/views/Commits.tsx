@@ -6,11 +6,37 @@ import { computeGraph } from '../lib/graph';
 import { errMessage } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon } from '../components/Icon';
 import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
+
+/**
+ * Row heights per density — must match `.graph-table tbody tr` in
+ * features.css. The table is virtualized (only the viewport slice renders),
+ * so the spacer math needs the exact row height.
+ */
+const ROW_PX: Record<string, number> = { compact: 26, default: 32, relaxed: 38 };
+/** `.graph-table thead th` height (features.css). */
+const HEADER_PX = 28;
+/** Rows rendered beyond each viewport edge so fast scrolls meet content. */
+const OVERSCAN = 12;
+
+/**
+ * Was this commit (co-)authored by an AI coding agent? Detected from the
+ * `Co-Authored-By:` trailer agents append (Claude Code, Copilot, Cursor, …)
+ * or an obviously bot-flavored author. Heuristic — a chip, not a judgment.
+ */
+export function isAgentCommit(c: Commit): boolean {
+  const agents = /\b(claude|copilot|cursor|aider|devin|codex|gemini|chatgpt|gpt-?\d)\b/i;
+  if (/^co-authored-by:.*$/im.test(c.body)) {
+    const trailer = c.body.match(/^co-authored-by:(.*)$/gim)?.join('\n') ?? '';
+    if (agents.test(trailer)) return true;
+  }
+  return agents.test(c.author_name) || /\[bot\]|noreply@anthropic\.com/i.test(c.author_email);
+}
 
 interface CommitsProps {
   /** Open the New-tag dialog targeting a commit (revspec + label). */
@@ -175,6 +201,31 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   // and the sidebar Stashes section) — see mergeStashRows.
   const rows = useMemo(() => mergeStashRows(commits, stashes), [commits, stashes]);
   const graph = useMemo(() => computeGraph(rows), [rows]);
+
+  // ── Virtualization ────────────────────────────────────────────────────
+  // Only the viewport slice (plus overscan) renders; spacer rows keep the
+  // scrollbar honest. 500 rows was fine un-virtualized, but "load more" /
+  // full-history graphs aren't. Slices `rows` (commits + stash rows), which
+  // is what the table body renders.
+  const density = useSettings((s) => s.density);
+  const rowH = ROW_PX[density] ?? ROW_PX.default;
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(800);
+  useEffect(() => {
+    const host = graphMainRef.current;
+    if (!host) return;
+    const onScroll = () => setScrollTop(host.scrollTop);
+    const ro = new ResizeObserver(() => setViewH(host.clientHeight));
+    setViewH(host.clientHeight);
+    host.addEventListener('scroll', onScroll, { passive: true });
+    ro.observe(host);
+    return () => {
+      host.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, []);
+  const firstRow = Math.max(0, Math.floor((scrollTop - HEADER_PX) / rowH) - OVERSCAN);
+  const lastRow = Math.min(rows.length, Math.ceil((scrollTop - HEADER_PX + viewH) / rowH) + OVERSCAN);
   // Inclusive range of hashes between two commits, by their row order.
   const rangeBetween = useCallback(
     (a: string, b: string): string[] => {
@@ -401,8 +452,24 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   }, [revealCommit, commits, clearReveal]);
 
   useEffect(() => {
-    focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [focusedCommit]);
+    // With virtualization the focused row may not be mounted; fall back to
+    // scrolling the container by index so reveal/search jumps still land.
+    const el = focusedRowRef.current;
+    if (el) {
+      el.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (!focusedCommit) return;
+    const host = graphMainRef.current;
+    // Index into `rows` (commits + injected stash rows) — that's the visual
+    // order the spacer math uses.
+    const idx = rows.findIndex((c) => c.hash === focusedCommit);
+    if (!host || idx === -1) return;
+    const top = HEADER_PX + idx * rowH;
+    if (top < host.scrollTop || top + rowH > host.scrollTop + host.clientHeight) {
+      host.scrollTop = Math.max(0, top - host.clientHeight / 2);
+    }
+  }, [focusedCommit, rows, rowH]);
 
   // `/` focuses the search field (unless the user is typing somewhere else).
   // Scoped to this view: the listener only exists while the graph is mounted.
@@ -540,7 +607,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
                   </tr>
                 </thead>
                 <tbody role="rowgroup">
-                  {rows.map((c, i) => {
+                  {firstRow > 0 && (
+                    <tr aria-hidden="true" style={{ height: firstRow * rowH }} />
+                  )}
+                  {rows.slice(firstRow, lastRow).map((c, sliceIdx) => {
+                    const i = firstRow + sliceIdx;
                     const row = graph.rows[i];
                     const stash = c.stash;
                     const chips = stash ? undefined : refsByOid.get(c.hash);
@@ -548,6 +619,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
                     const focused = focusedCommit === c.hash;
                     const selected = multi.has(c.hash);
                     const isMatch = matchSet.has(c.hash);
+                    const agent = isAgentCommit(c);
                     return (
                       <tr
                         key={c.hash}
@@ -592,6 +664,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
                               ))}
                             </span>
                           ) : null}
+                          {agent ? (
+                            <span
+                              className="ref-chip agent"
+                              title="Co-authored by an AI coding agent"
+                              aria-label="Co-authored by an AI coding agent"
+                            >
+                              ai
+                            </span>
+                          ) : null}
                           {row?.isMerge ? <span className="merge">⊕</span> : null}
                           <span className="msg-text">
                             {stash ? c.subject : highlight(c.subject, query, searchMode === 'message')}
@@ -607,6 +688,9 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
                       </tr>
                     );
                   })}
+                  {lastRow < rows.length && (
+                    <tr aria-hidden="true" style={{ height: (rows.length - lastRow) * rowH }} />
+                  )}
                 </tbody>
               </table>
             </div>

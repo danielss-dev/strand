@@ -24,37 +24,45 @@ impl Repo {
     /// change status, plus untracked files. Ignored files are excluded.
     pub fn work_tree(&self) -> Result<Vec<WorkTreeEntry>> {
         let repo = self.git2()?;
-
-        // Start from the index — the canonical set of tracked paths. A
-        // BTreeMap keeps the output path-sorted and dedupes conflict entries
-        // (which appear once per stage).
-        let mut map: BTreeMap<String, Option<StatusKind>> = BTreeMap::new();
-        let index = repo.index()?;
-        for entry in index.iter() {
-            if let Ok(p) = std::str::from_utf8(&entry.path) {
-                map.entry(p.to_string()).or_insert(None);
-            }
-        }
-
-        // Overlay status: untracked files get inserted, changed tracked files
-        // get a kind. `statuses()` only returns changed entries, so clean
-        // tracked files keep the `None` from the index pass above.
-        let mut opts = git2::StatusOptions::new();
-        opts.include_untracked(true).recurse_untracked_dirs(true);
-        for e in repo.statuses(Some(&mut opts))?.iter() {
-            let Some(path) = e.path() else { continue };
-            let s = e.status();
-            if s.is_ignored() {
-                continue;
-            }
-            map.insert(path.to_string(), Some(classify(s)));
-        }
-
-        Ok(map
-            .into_iter()
-            .map(|(path, status)| WorkTreeEntry { path, status })
-            .collect())
+        let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
+        from_index_and_statuses(&repo, &statuses)
     }
+}
+
+/// Build the work-tree listing from an already-open repo and an already-run
+/// `statuses()` walk. Split out so [`Repo::snapshot`](crate::snapshot) can
+/// share one walk between this and the staging-status rows.
+pub(crate) fn from_index_and_statuses(
+    repo: &git2::Repository,
+    statuses: &git2::Statuses<'_>,
+) -> Result<Vec<WorkTreeEntry>> {
+    // Start from the index — the canonical set of tracked paths. A
+    // BTreeMap keeps the output path-sorted and dedupes conflict entries
+    // (which appear once per stage).
+    let mut map: BTreeMap<String, Option<StatusKind>> = BTreeMap::new();
+    let index = repo.index()?;
+    for entry in index.iter() {
+        if let Ok(p) = std::str::from_utf8(&entry.path) {
+            map.entry(p.to_string()).or_insert(None);
+        }
+    }
+
+    // Overlay status: untracked files get inserted, changed tracked files
+    // get a kind. `statuses()` only returns changed entries, so clean
+    // tracked files keep the `None` from the index pass above.
+    for e in statuses.iter() {
+        let Some(path) = e.path() else { continue };
+        let s = e.status();
+        if s.is_ignored() {
+            continue;
+        }
+        map.insert(path.to_string(), Some(classify(s)));
+    }
+
+    Ok(map
+        .into_iter()
+        .map(|(path, status)| WorkTreeEntry { path, status })
+        .collect())
 }
 
 /// Reduce a git2 status bitset to the single badge that best describes the

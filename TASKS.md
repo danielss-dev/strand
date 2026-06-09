@@ -164,6 +164,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Remote tag listing (`Repo::remote_tags` via `git ls-remote --tags` —
   fetched tags share `refs/tags/`, so ls-remote is the only way to know which
   tags a remote has; used to gray out "delete on remote" for absent tags)
+- ☑ Cancellation for clone/fetch/pull/push (`network::CancelHandle` parks the
+  spawned child so `cancel()` can kill it → `Error::Cancelled`; ops register
+  under a frontend op id in `AppState.ops`, `repo_cancel_op` kills by id;
+  Cancel button on the network pill + clone popup, cancelled ops toast
+  quietly instead of erroring)
 
 ### Hybrid concerns
 - ☑ Write-engine policy decided: `git2` for index/commit ops (stable
@@ -544,6 +549,58 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ---
 
+## AI-change review (primary use case — added 2026-06-09)
+
+Strand's main focus is reviewing changes AI coding agents make to a working
+tree: watch the agent work, review fast, accept or reject safely.
+
+- ☑ Working-tree file watcher (`strand-core/src/watch.rs`, `notify`-based:
+  recursive workdir watch, `.git` noise filtered down to HEAD/index/refs/op
+  markers, 400ms trailing debounce; `repo_watch`/`repo_unwatch` per open tab
+  in `AppState.watchers`; emits `repo://changed`, the store's
+  `handleExternalChange` refreshes the active tab — no more waiting for
+  window focus while an agent edits next door. Focus-refresh kept as fallback.
+  Known tradeoff: doesn't consult `.gitignore`, so build storms in `target/`
+  cost one debounced status walk per quiet period.)
+- ☑ **Dedicated Review view** (`views/Review.tsx`, sidebar "Review" row with
+  a pending-count badge, ⌘4, palette "Show: Review") — review lives in its
+  own surface; Local Changes stays a pure staging workspace. Two modes:
+  **inbox** (no baseline → the unstaged set; diffs keep per-hunk
+  Stage/Discard via the shared `HunkAnnotatedDiff`) and **session** (baseline
+  pinned → everything since that commit incl. the agent's commits, rendered
+  read-only with file-level actions). Queue on the left (status, name,
+  reviewed check, "changed" stale badge), one file at a time on the right,
+  progress bar + verdict actions in the toolbar, keyboard-hint footer.
+- ☑ Review baseline ("everything since this commit"): `Repo::diff_since`
+  (`diff_tree_to_workdir_with_index` against the baseline tree, so committed +
+  staged + unstaged agent work shows in one diff), `repo_diff_since` IPC,
+  `RepoMeta.head_oid` to pin it, persisted per-repo (`reviewSession` in
+  `lib/db.ts`); pin/move/clear from the Review toolbar or the palette.
+- ☑ Review-state tracking: reviewed map (`path → FNV hash of the diff`,
+  `hashPatch` in `lib/patch.ts`) — a file the agent touches after review
+  flips back to unreviewed (row shows "changed"); persisted per-repo in
+  SQLite; drives the sidebar badge + toolbar progress bar.
+- ☑ Review keyboard loop (Review view): `j`/`k` queue step, Space = mark
+  reviewed **and advance to the next pending file**, `n`/`p` change-block
+  step (page-scroll fallback on read-only session diffs), `s` stage, `d`-`d`
+  discard, `c` jump to the commit form. Local Changes keeps its own staging
+  loop (j/k/n/p/s/d-d/c, no review marking).
+- ☑ Bulk verdicts with a safety net: "Stage reviewed (n)" stages files whose
+  review mark still matches; "Discard unreviewed (n)" is two-step-armed; any
+  multi-file `discardMany` takes an automatic snapshot stash first
+  (`Safety: before discarding N files`) and surfaces a 15s Restore toast
+  (`BulkUndoToast`) — and the snapshot stays on the stash stack after the
+  toast, so a missed window is still recoverable.
+- ☑ AI commit chips in the graph (`isAgentCommit` in `Commits.tsx`:
+  `Co-Authored-By` trailer / bot-flavored author → an `ai` chip next to the
+  ref chips).
+- ☐ "Select all commits since baseline" in the graph (one-click review of an
+  agent session's commits; pairs with `diff_since`).
+- ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
+  up in profiles.
+
+---
+
 ## Conflict resolution
 
 - ◐ In-progress op surfaced + abort/continue: `RepoMeta.operation` (rebase /
@@ -576,7 +633,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   bar or clicking a side's highlighted block; per-side bulk via the header
   checkboxes; result assembled from picks, "Resolve" writes + stages once all
   are picked. Pick-sides only — no free editing.)
-- ☐ Fallback to external mergetool (`git config merge.tool`)
+- ☑ Fallback to external mergetool (`Repo::open_mergetool` shells out to
+  `git mergetool --no-prompt -- <file>` with the path-traversal guard;
+  `repo_open_mergetool` runs it off the IPC thread; "External tool" button in
+  `ConflictLanding`, refreshes on exit since a successful tool run stages the file)
 
 ---
 
@@ -597,6 +657,16 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   GitHub Release. Secrets documented in `docs/packaging.md` § "Release CI".
   Not yet run end-to-end — needs the Apple signing secrets added + a first
   `v*` tag to validate.)
+- ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
+  `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
+  -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed
+  crate-wide with rationale in `lib.rs`), `tsc --noEmit`, `vitest run`.
+  The review backstop for agent-authored changes.)
+- ☑ Frontend unit tests (Vitest: `lib/patch.test.ts` — slice rules, marker
+  travel, header recount, the file-corrupting failure modes; `lib/graph.test.ts`
+  — lanes/merges/invariants; `lib/conflictParse.test.ts` — parse + resolution
+  assembly; `lib/fuzzy.test.ts` — palette scoring, extracted to `lib/fuzzy.ts`.
+  `pnpm --filter ./ui test`.)
 - ☐ Auto-update beta channel + stable channel
 - ☑ Windows 11 platform pass — Rust compiles clean and the MSI builds on a
   Windows 11 box (2026-06-07: `Strand_0.0.1_x64_en-US.msi`, 10.5 MB, via
@@ -620,7 +690,10 @@ and the `crates/strand-core/examples/perfcheck.rs` harness (100k-commit + 10k-fi
 synthetic fixtures). Engine-measurable targets pass; webview/app targets still need
 a running-app pass.
 
-- ☐ Cold start < 1.0s on M-series Mac (webview/app — not yet measured)
+- ◐ Cold start < 1.0s on M-series Mac (webview measurement harness landed:
+  `ui/src/lib/perf.ts` logs cold-start→first-snapshot plus per-refresh
+  snapshot/diffs/log timings — on in dev, opt-in via `localStorage['strand:perf']='1'`
+  in release. Numbers still need to be recorded in `docs/perf-baseline.md`.)
 - ☑ Open 100k-commit repo < 2.0s (was ~0.5s on the git2 path; the ~0.46s topo-sort
   floor that was the 1M-commit scaling risk is now gone — `log` shells out to an
   incremental `git log`, so `discover + log(5000)` is ~47ms on the 100k fixture)
@@ -657,16 +730,21 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   reuses one git2 handle.)
 - ☐ Move CPU/disk-bound read commands (`repo_log`/`status`/`diff_*`/`tree`/`refs`)
   to `spawn_blocking` so a slow op can't head-of-line-block the IPC thread.
-- ☐ `repo_snapshot(path)` batch command (meta + status + diffs + refs in one
-  open) to collapse the ~6 IPC round-trips per post-commit/checkout refresh.
-- ☐ Virtualize the commit-graph table (`Commits.tsx`) — every row mounts today;
-  prerequisite for the 100k-commit target. Preserve `scrollIntoView` +
-  `aria-activedescendant` + ⌘A.
-- ☐ Diff `collect()` (`diff.rs`): index deltas by a map (drop the
-  O(files×lines) linear scan + per-line alloc), merge the adds/dels count into
-  the print pass, and route by delta index (also fixes deleted-file mis-routing).
-- ☐ Share one `statuses()` walk between `status` and `work_tree` (the UI calls
-  both for one refresh).
+- ☑ `repo_snapshot(path)` batch command (`snapshot.rs`: meta + status +
+  work-tree + refs + submodules from one open and **one statuses walk**;
+  `refreshLocalChanges`/`refreshSnapshot` in `stores/repo.ts` route every
+  post-op and watcher refresh through it — the old five-call bundle is gone).
+- ☑ Virtualize the commit-graph table (`Commits.tsx` — viewport slice +
+  spacer `<tr>`s keyed to the density row height; `scrollIntoView` falls back
+  to index-math scrolling when the focused row isn't mounted;
+  `aria-activedescendant` + ⌘A preserved since selection state never left).
+- ☑ Diff `collect()` (`diff.rs`): single `print` pass with adds/dels counted
+  inline and a path→index `HashMap` (the foreach pre-pass and O(files×lines)
+  linear scan are gone).
+- ☑ Share one `statuses()` walk between `status` and `work_tree`
+  (`status::from_statuses` + `tree::from_index_and_statuses`, shared by
+  `Repo::snapshot`; the standalone methods still walk independently when
+  called directly).
 - ☐ Sidebar: memoize ref-tree builds / `leafCount`; debounce `refreshTree` off
   the `status` dep so stage toggles don't re-walk the whole tree.
 - ☑ Wire commit-graph search (`Commits.tsx`). Resolved by **highlighting matches
@@ -678,7 +756,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 
 ## Security & privacy
 
-- ☐ Opt-in crash reporting (off by default)
+- ◐ Opt-in crash reporting (off by default) — local half landed: a panic hook
+  (`install_crash_log` in `main.rs`) appends panics + backtraces to
+  `app_log_dir()/crash.log`, nothing leaves the machine. Opt-in *remote*
+  reporting still ☐.
 - ☐ Opt-in telemetry (off by default, clearly disclosed at first launch)
 - ☐ SSH passphrase prompts via OS-native dialogs
 - ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)

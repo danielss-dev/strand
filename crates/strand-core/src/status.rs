@@ -27,47 +27,60 @@ impl Repo {
     /// the public type intentionally hides which engine produced it.
     pub fn status(&self) -> Result<Vec<FileStatus>> {
         let repo = self.git2()?;
-        let mut opts = git2::StatusOptions::new();
-        opts.include_untracked(true).recurse_untracked_dirs(true);
-
-        let mut out = Vec::new();
-        for entry in repo.statuses(Some(&mut opts))?.iter() {
-            let path = match entry.path() {
-                Some(p) => p.to_string(),
-                None => continue,
-            };
-            let s = entry.status();
-
-            // An unmerged (conflicted) entry carries the CONFLICTED bit but not
-            // necessarily any wt/index-modified bit, so it would otherwise be
-            // dropped. Emit it once as a single conflicted row — the conflict
-            // resolver keys off this.
-            if s.is_conflicted() {
-                out.push(FileStatus {
-                    path,
-                    kind: StatusKind::Conflicted,
-                    staged: false,
-                });
-                continue;
-            }
-
-            if s.is_index_modified() || s.is_index_new() || s.is_index_deleted() || s.is_index_renamed() {
-                out.push(FileStatus {
-                    path: path.clone(),
-                    kind: classify(s, true),
-                    staged: true,
-                });
-            }
-            if s.is_wt_modified() || s.is_wt_new() || s.is_wt_deleted() || s.is_wt_renamed() {
-                out.push(FileStatus {
-                    path,
-                    kind: classify(s, false),
-                    staged: false,
-                });
-            }
-        }
-        Ok(out)
+        let statuses = repo.statuses(Some(&mut status_options()))?;
+        Ok(from_statuses(&statuses))
     }
+}
+
+/// The status options every walk in this crate uses, so `status`,
+/// `work_tree`, and `snapshot` can't drift apart.
+pub(crate) fn status_options() -> git2::StatusOptions {
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true).recurse_untracked_dirs(true);
+    opts
+}
+
+/// Convert an already-run `statuses()` walk into staging-UI rows. Split out
+/// so [`Repo::snapshot`](crate::snapshot) can share one walk between this
+/// and the work-tree listing.
+pub(crate) fn from_statuses(statuses: &git2::Statuses<'_>) -> Vec<FileStatus> {
+    let mut out = Vec::new();
+    for entry in statuses.iter() {
+        let path = match entry.path() {
+            Some(p) => p.to_string(),
+            None => continue,
+        };
+        let s = entry.status();
+
+        // An unmerged (conflicted) entry carries the CONFLICTED bit but not
+        // necessarily any wt/index-modified bit, so it would otherwise be
+        // dropped. Emit it once as a single conflicted row — the conflict
+        // resolver keys off this.
+        if s.is_conflicted() {
+            out.push(FileStatus {
+                path,
+                kind: StatusKind::Conflicted,
+                staged: false,
+            });
+            continue;
+        }
+
+        if s.is_index_modified() || s.is_index_new() || s.is_index_deleted() || s.is_index_renamed() {
+            out.push(FileStatus {
+                path: path.clone(),
+                kind: classify(s, true),
+                staged: true,
+            });
+        }
+        if s.is_wt_modified() || s.is_wt_new() || s.is_wt_deleted() || s.is_wt_renamed() {
+            out.push(FileStatus {
+                path,
+                kind: classify(s, false),
+                staged: false,
+            });
+        }
+    }
+    out
 }
 
 fn classify(s: git2::Status, staged: bool) -> StatusKind {

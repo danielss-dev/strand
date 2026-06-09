@@ -7,6 +7,12 @@
 //! This crate is intentionally UI-agnostic: it returns plain data types that
 //! the Tauri layer serializes to the frontend.
 
+// `Error` embeds gix's (large) open/discover errors by value, which trips
+// clippy's result_large_err on every fallible function. Boxing them would
+// touch every `?` conversion for a moot win — these are user-action-scale
+// ops (not per-line hot loops), so the move cost is irrelevant.
+#![allow(clippy::result_large_err)]
+
 pub mod error;
 pub mod repo;
 pub mod status;
@@ -28,6 +34,8 @@ pub mod worktree;
 pub mod blame;
 pub mod file;
 pub mod reflog;
+pub mod snapshot;
+pub mod watch;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

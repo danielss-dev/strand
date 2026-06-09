@@ -524,6 +524,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           onClick={() => { setView('local'); selectFile(null); }}
         />
         <SideRow
+          icon="check"
+          label="Review"
+          active={view === 'review'}
+          onClick={() => { setView('review'); selectFile(null); }}
+        />
+        <SideRow
           icon="graph"
           label="All Commits"
           active={view === 'commits' || view === 'reflog'}
