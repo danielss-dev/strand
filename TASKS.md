@@ -371,6 +371,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   name/email, hash prefix — body is excluded so `Co-Authored-By:`/`Signed-off-by:`
   trailers don't match nearly every commit) — full-history + `-G`/`-S` content
   search remain ☐ under Reads.
+- ☑ Stashes shown inline on the graph (`mergeStashRows` in `Commits.tsx` splices a
+  synthetic node per stash above its base commit; `Stash` gained `base` + `time_unix`
+  from `stash_list`; `GraphRow.isStash` → neutral diamond in `CommitGraphCell`;
+  `stash@{n}` chip; right-click Apply/Pop/Drop/Copy SHA. Stashes off-window are
+  dropped from the graph but stay in the sidebar.)
 - ☐ Graph style preset switching (classic / bold / subtle)
 - ☐ GPG sign status indicator in commit-detail meta
 

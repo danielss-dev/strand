@@ -1,5 +1,3 @@
-import type { Commit } from './types';
-
 /**
  * Lane layout for the All Commits graph. Computed top-down (newest first)
  * in a single pass over `repo_log`'s topologically-sorted output. Each
@@ -10,6 +8,16 @@ import type { Commit } from './types';
  * which segments cross the row, and their colors. The SVG cell knows
  * nothing about commits — it just draws these segments.
  */
+
+/**
+ * Minimal commit shape the lane layout needs. Real commits (`Commit`) satisfy
+ * it; synthetic stash nodes set `isStash` so the cell can mark them.
+ */
+export interface GraphInput {
+  hash: string;
+  parents: string[];
+  isStash?: boolean;
+}
 
 export type SegmentKind = 'in' | 'out' | 'pass';
 
@@ -30,6 +38,8 @@ export interface GraphRow {
   color: number;
   /** True when the commit has 2+ parents. */
   isMerge: boolean;
+  /** True for a synthetic stash node (distinct marker in the cell). */
+  isStash: boolean;
   /** All connector lines that cross this row. */
   segments: GraphSegment[];
 }
@@ -58,7 +68,7 @@ function allocLane(slot: LaneSlot, arr: (LaneSlot | null)[]): number {
   return arr.length - 1;
 }
 
-export function computeGraph(commits: Commit[]): GraphLayout {
+export function computeGraph(commits: GraphInput[]): GraphLayout {
   const rows: GraphRow[] = [];
   let lanes: (LaneSlot | null)[] = [];
   let laneCount = 0;
@@ -138,6 +148,7 @@ export function computeGraph(commits: Commit[]): GraphLayout {
       lane: myLane,
       color: myColor,
       isMerge: c.parents.length > 1,
+      isStash: !!c.isStash,
       segments,
     });
 

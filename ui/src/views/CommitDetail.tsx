@@ -5,7 +5,7 @@ import { Icon } from '../components/Icon';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import type { DiffStatus, FileDiff } from '../lib/types';
+import type { Commit, DiffStatus, FileDiff, Stash } from '../lib/types';
 
 /**
  * Right-side panel shown when a commit is selected in the All Commits
@@ -29,16 +29,26 @@ export function CommitDetail({
   const diffs = useRepo((s) => s.selectedCommitDiffs);
   const loading = useRepo((s) => s.selectedCommitDiffsLoading);
   const commits = useRepo((s) => s.commits);
+  const stashes = useRepo((s) => s.stashes);
   const selectCommit = useRepo((s) => s.selectCommit);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const cherryPick = useRepo((s) => s.cherryPick);
   const revert = useRepo((s) => s.revert);
+  const stashApply = useRepo((s) => s.stashApply);
+  const stashPop = useRepo((s) => s.stashPop);
   const diffMode = useSettings((s) => s.diffMode);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
+  // A stash node selected in the graph isn't in `commits`; resolve it from the
+  // stash list and render a synthetic commit (its diff is base→stash, already
+  // loaded via repo_diff_commit) with stash-specific actions.
+  const stash = useMemo(
+    () => stashes.find((s) => s.oid === selectedCommit) ?? null,
+    [stashes, selectedCommit],
+  );
   const commit = useMemo(
-    () => commits.find((c) => c.hash === selectedCommit) ?? null,
-    [commits, selectedCommit],
+    () => commits.find((c) => c.hash === selectedCommit) ?? (stash ? stashCommit(stash) : null),
+    [commits, selectedCommit, stash],
   );
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -55,6 +65,13 @@ export function CommitDetail({
     setCheckoutError(null);
     setCheckingOut(false);
   }, [selectedCommit]);
+
+  // Cherry-pick / revert (commit) + apply / pop (stash) in-flight guards. These
+  // must sit *above* the early return below: a selected stash can leave the
+  // list while the panel is mounted (pop / drop), flipping `commit` to null —
+  // and hooks after a conditional return would change in count and crash React.
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [stashBusy, setStashBusy] = useState(false);
 
   if (!commit) return null;
 
@@ -74,7 +91,6 @@ export function CommitDetail({
 
   // Cherry-pick / revert this commit onto HEAD. Both can conflict — surface
   // git's message via a toast rather than the inline (single-line) slot.
-  const [historyBusy, setHistoryBusy] = useState(false);
   async function onCherryPick() {
     if (historyBusy) return;
     setHistoryBusy(true);
@@ -108,6 +124,26 @@ export function CommitDetail({
     }
   }
 
+  // Apply / Pop the selected stash. Pop drops it on success, so the panel
+  // closes itself (the oid leaves the stash list → `commit` becomes null).
+  // Drop (unrecoverable) stays behind the right-click menu's confirm step.
+  async function onStashApply(pop: boolean) {
+    if (stashBusy || !stash) return;
+    setStashBusy(true);
+    try {
+      if (pop) await stashPop(stash.index);
+      else await stashApply(stash.index);
+      onToast(`${pop ? 'Popped' : 'Applied'} stash@{${stash.index}}`);
+      // Pop removes the stash, so this panel's subject no longer resolves —
+      // close it rather than leaving an empty strip.
+      if (pop) void selectCommit(null);
+    } catch (e) {
+      onToast(`${pop ? 'Pop' : 'Apply'} failed: ${errMessage(e)}`);
+    } finally {
+      setStashBusy(false);
+    }
+  }
+
   const focused = diffs.find((d) => d.path === selectedFile) ?? null;
 
   return (
@@ -126,11 +162,15 @@ export function CommitDetail({
         </div>
         {commit.body ? <pre className="msg-body">{commit.body}</pre> : null}
         <div className="cd-meta">
-          <span className="k">author</span>
-          <span className="v">
-            {commit.author_name}
-            {commit.author_email ? ` <${commit.author_email}>` : ''}
-          </span>
+          {commit.author_name ? (
+            <>
+              <span className="k">author</span>
+              <span className="v">
+                {commit.author_name}
+                {commit.author_email ? ` <${commit.author_email}>` : ''}
+              </span>
+            </>
+          ) : null}
           <span className="k">date</span>
           <span className="v">{formatFullDate(commit.time_unix)}</span>
           <span className="k">commit</span>
@@ -152,45 +192,72 @@ export function CommitDetail({
           ) : null}
         </div>
         <div className="cd-actions">
-          <button
-            type="button"
-            className="btn ghost cd-action-btn"
-            disabled={checkingOut}
-            onClick={() => void onCheckout()}
-            title="Check out this commit (detached HEAD)"
-          >
-            <Icon name="branch" size={12} />
-            {checkingOut ? 'Checking out…' : 'Checkout'}
-          </button>
-          <button
-            type="button"
-            className="btn ghost cd-action-btn"
-            onClick={() => onCreateTag(hash, commit.short_hash)}
-            title="Create a tag at this commit"
-          >
-            <Icon name="tag" size={12} />
-            Tag…
-          </button>
-          <button
-            type="button"
-            className="btn ghost cd-action-btn"
-            disabled={historyBusy}
-            onClick={() => void onCherryPick()}
-            title="Apply this commit's changes onto the current branch"
-          >
-            <Icon name="arrow-down" size={12} />
-            Cherry-pick
-          </button>
-          <button
-            type="button"
-            className="btn ghost cd-action-btn"
-            disabled={historyBusy}
-            onClick={() => void onRevert()}
-            title="Create a commit that undoes this commit"
-          >
-            <Icon name="history" size={12} />
-            Revert
-          </button>
+          {stash ? (
+            <>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={stashBusy}
+                onClick={() => void onStashApply(false)}
+                title="Apply this stash, keeping it on the stack"
+              >
+                <Icon name="arrow-down" size={12} />
+                Apply
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={stashBusy}
+                onClick={() => void onStashApply(true)}
+                title="Apply this stash and drop it from the stack"
+              >
+                <Icon name="stash" size={12} />
+                Pop
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={checkingOut}
+                onClick={() => void onCheckout()}
+                title="Check out this commit (detached HEAD)"
+              >
+                <Icon name="branch" size={12} />
+                {checkingOut ? 'Checking out…' : 'Checkout'}
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                onClick={() => onCreateTag(hash, commit.short_hash)}
+                title="Create a tag at this commit"
+              >
+                <Icon name="tag" size={12} />
+                Tag…
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={historyBusy}
+                onClick={() => void onCherryPick()}
+                title="Apply this commit's changes onto the current branch"
+              >
+                <Icon name="arrow-down" size={12} />
+                Cherry-pick
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={historyBusy}
+                onClick={() => void onRevert()}
+                title="Create a commit that undoes this commit"
+              >
+                <Icon name="history" size={12} />
+                Revert
+              </button>
+            </>
+          )}
         </div>
         {checkoutError ? <div className="cd-action-error">{checkoutError}</div> : null}
       </div>
@@ -251,6 +318,21 @@ function CdFileRow({
       </span>
     </div>
   );
+}
+
+/** Synthetic commit for a stash node so the detail panel can render its header.
+ *  Its diff (base→stash) is loaded separately via `repo_diff_commit`. */
+function stashCommit(s: Stash): Commit {
+  return {
+    hash: s.oid,
+    short_hash: s.oid.slice(0, 7),
+    subject: s.message,
+    body: '',
+    author_name: '',
+    author_email: '',
+    time_unix: s.time_unix,
+    parents: s.base ? [s.base] : [],
+  };
 }
 
 function statusLetter(s: DiffStatus): 'A' | 'M' | 'D' | 'R' | 'C' | 'T' {

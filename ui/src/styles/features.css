@@ -1334,6 +1334,16 @@
   color: var(--text-2);
   background: color-mix(in oklch, var(--accent) 12%, var(--bg-elev));
 }
+.ref-chip.stash {
+  color: var(--text-muted);
+  background: var(--bg-base);
+}
+/* Stash rows are auxiliary — dim the synthetic subject + hash slightly so the
+   diamond node and chip carry the emphasis. */
+.graph-table tr.stash-row td.msg .msg-text,
+.graph-table tr.stash-row td.hash {
+  color: var(--text-muted);
+}
 .ref-chip .dot {
   width: 6px;
   height: 6px;

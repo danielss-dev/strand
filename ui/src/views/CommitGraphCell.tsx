@@ -50,15 +50,31 @@ export function CommitGraphCell({ row, laneCount }: { row: GraphRow; laneCount: 
             />
           );
         })}
-        <circle
-          cx={lx(row.lane)}
-          cy={cy}
-          r={NODE_R}
-          fill={row.isMerge ? 'var(--bg-base)' : laneColorVar(row.color)}
-          stroke={laneColorVar(row.color)}
-          strokeWidth={STROKE}
-          vectorEffect="non-scaling-stroke"
-        />
+        {row.isStash ? (
+          // Stash nodes aren't on a branch — a neutral hollow diamond reads as
+          // auxiliary, distinct from the lane-colored commit/merge circles.
+          <rect
+            x={lx(row.lane) - NODE_R}
+            y={cy - NODE_R}
+            width={NODE_R * 2}
+            height={NODE_R * 2}
+            transform={`rotate(45 ${lx(row.lane)} ${cy})`}
+            fill="var(--bg-base)"
+            stroke="var(--text-muted)"
+            strokeWidth={STROKE}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : (
+          <circle
+            cx={lx(row.lane)}
+            cy={cy}
+            r={NODE_R}
+            fill={row.isMerge ? 'var(--bg-base)' : laneColorVar(row.color)}
+            stroke={laneColorVar(row.color)}
+            strokeWidth={STROKE}
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
     </div>
   );

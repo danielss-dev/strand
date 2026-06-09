@@ -596,7 +596,8 @@ need a running-app pass; engine follow-ups (repo-handle cache, `spawn_blocking` 
 - ◐ Commit search — in-graph message/author/hash search shipped (highlight + ‹/›
   nav, lanes intact); `-G` / `-S` content search still pending (needs a backend
   `git log` search)
-- ☐ Stashes shown inline on the graph
+- ☑ Stashes shown inline on the graph (synthetic node per stash, attached to its
+  base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
 - ☐ Drag-and-drop renames in file tree
 - ☐ Compact / default / relaxed density (settings UI; CSS already supports it)
 - ☐ Crash reporting (opt-in, off by default)
@@ -730,6 +731,37 @@ sibling `<repo>.worktrees/<branch>` path + open-in-tab). Verified with
 `vite build`. **Open:** "Review worktree vs base branch" (a committed-diff
 comparison surface) is tracked under TASKS → Worktrees; a live in-app pass on the
 Tauri window is still pending (the webview can't be driven by the browser harness).
+
+**Stashes inline on the graph (2026-06-09):** Stashes now render as nodes in the
+All Commits graph, not just the sidebar list. The design avoids touching the
+hot `log()` path: rather than adding `refs/stash` to the `git log` walk (which
+would drag in git's synthetic "index on…"/"untracked files on…" parent commits
+and regress the tuned first-page latency), the backend exposes each stash's
+**base** (first parent) + **commit time** (two new `Stash` fields filled in
+`stash_list` after the `stash_foreach` walk, since the closure holds a `&mut`
+borrow), and the **frontend injects** a synthetic row per stash. `mergeStashRows`
+(in `Commits.tsx`) splices each stash immediately above the commit it was taken
+on, with that base as its only parent — so the lane algorithm draws it hanging
+off that point and the topological invariant holds with no re-sort (the base
+always sorts below). Stashes whose base isn't in the loaded window are dropped
+from the graph (still listed in the sidebar). The merged list feeds both
+`computeGraph` and the row map so they stay index-aligned; navigation,
+multi-select, and search continue to run over the real `commits` only — stash
+rows are mouse-reachable and their actions (Apply / Pop / Drop / Copy SHA) live
+in the right-click `ContextMenu`, mirroring the sidebar (keyboard path to stash
+ops stays the sidebar Stashes section). `GraphRow` gained `isStash`, rendered as
+a neutral hollow **diamond** (vs the lane-colored commit/merge circles) in
+`CommitGraphCell`; the message cell shows a `stash@{n}` chip + the stash message.
+Clicking a stash opens the **detail panel** showing its content — `CommitDetail`
+resolves the (off-`commits`) stash from the stash list into a synthetic header,
+and the diff is the base→stash tree diff (`repo_diff_commit` against the first
+parent = `git stash show -p`), with **Apply / Pop** actions in place of
+Checkout/Tag/Cherry-pick/Revert (Pop/Drop close the panel as the stash leaves
+the stack). Verified with
+`cargo test -p strand-core` (+1 `stash` test asserting `base`/`time_unix`),
+`cargo check`, `clippy` (no new warnings), `tsc`, and `vite build`. **Open:** a
+live in-app pass on the Tauri window (the webview can't be driven by the browser
+harness).
 
 ---
 

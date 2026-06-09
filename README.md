@@ -83,7 +83,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
 - Commit graph: SVG lanes + branch/tag chips inline; click a commit to
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
-  through commits, Enter opens details, and Esc closes them
+  through commits, Enter opens details, and Esc closes them. Stashes appear
+  inline as a neutral diamond node hanging off their base commit (with a
+  `stash@{n}` chip) — right-click to Apply / Pop / Drop
 - Commit search: search the loaded graph by message, author, or hash (field
   picker in the header). Matches are highlighted in place — lanes stay intact —
   and ‹/› (or ↵ / ⇧↵) step through them with an N/M counter; `/` focuses the

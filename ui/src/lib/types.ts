@@ -122,6 +122,11 @@ export interface Stash {
   message: string;
   /** Branch the stash was taken on, parsed from the message when possible. */
   branch: string | null;
+  /** First parent of the stash commit — the commit it was taken on. The graph
+   *  attaches the stash node here. */
+  base: string | null;
+  /** Committer time of the stash commit (Unix seconds). */
+  time_unix: number;
 }
 
 export interface StashOutcome {

@@ -4,7 +4,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
 import { errMessage } from '../lib/tauri';
-import type { Commit, Refs } from '../lib/types';
+import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon } from '../components/Icon';
@@ -22,9 +22,13 @@ interface CommitsProps {
 /** All Commits view: graph + selectable rows + right-side detail panel. */
 export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
+  const stashes = useRepo((s) => s.stashes);
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const selectCommit = useRepo((s) => s.selectCommit);
+  const stashApply = useRepo((s) => s.stashApply);
+  const stashPop = useRepo((s) => s.stashPop);
+  const stashDrop = useRepo((s) => s.stashDrop);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const cherryPick = useRepo((s) => s.cherryPick);
   const revert = useRepo((s) => s.revert);
@@ -88,6 +92,51 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
     },
     [checkoutCommit, cherryPick, revert, onCreateTag, onToast],
   );
+
+  // Clicking a stash node shows its changes (base→stash diff) in the detail
+  // panel — it doesn't touch arrow-key focus or the multi-selection, which
+  // stay over real commits only.
+  const onStashClick = useCallback(
+    (s: Stash) => void selectCommit(selectedCommit === s.oid ? null : s.oid),
+    [selectCommit, selectedCommit],
+  );
+
+  // Right-click (or Menu / Shift+F10) on a stash node — the same actions the
+  // sidebar Stashes section offers, reachable straight from the graph.
+  const openStashMenu = useCallback(
+    (s: Stash, x: number, y: number) => {
+      // `removes` ops (pop / drop) take the stash off the stack; if it was the
+      // one open in the detail panel, close the now-stale panel.
+      const run = (verb: string, op: () => Promise<void>, removes: boolean) =>
+        void (async () => {
+          try {
+            await op();
+            onToast(`${verb} stash@{${s.index}}`);
+            if (removes && selectedCommit === s.oid) void selectCommit(null);
+          } catch (e) {
+            onToast(`${verb} failed: ${errMessage(e)}`);
+          }
+        })();
+      const items: MenuItem[] = [
+        { label: 'Apply', icon: 'arrow-down', onSelect: () => run('Applied', () => stashApply(s.index), false) },
+        { label: 'Pop', icon: 'stash', onSelect: () => run('Popped', () => stashPop(s.index), true) },
+        {
+          label: 'Drop',
+          icon: 'trash',
+          danger: true,
+          confirm: true,
+          onSelect: () => run('Dropped', () => stashDrop(s.index), true),
+        },
+        {
+          label: 'Copy SHA',
+          icon: 'file',
+          onSelect: () => { void copyToClipboard(s.oid); onToast('Copied stash hash'); },
+        },
+      ];
+      setMenu({ x, y, items });
+    },
+    [stashApply, stashPop, stashDrop, onToast, selectedCommit, selectCommit],
+  );
   const graphMainRef = useRef<HTMLDivElement>(null);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
   const didInitialFocus = useRef(false);
@@ -108,7 +157,14 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>('message');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const graph = useMemo(() => computeGraph(commits), [commits]);
+  // Inject stash nodes inline: each stash becomes a synthetic row right above
+  // the commit it was taken on, so it visibly hangs off that point. The merged
+  // list feeds both the graph layout and the row map so they stay index-aligned.
+  // Navigation, multi-selection, and search still run over the real `commits`
+  // (stash rows are mouse-reachable; their actions live in the right-click menu
+  // and the sidebar Stashes section) — see mergeStashRows.
+  const rows = useMemo(() => mergeStashRows(commits, stashes), [commits, stashes]);
+  const graph = useMemo(() => computeGraph(rows), [rows]);
   // Inclusive range of hashes between two commits, by their row order.
   const rangeBetween = useCallback(
     (a: string, b: string): string[] => {
@@ -474,9 +530,10 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                   </tr>
                 </thead>
                 <tbody role="rowgroup">
-                  {commits.map((c, i) => {
-                    const chips = refsByOid.get(c.hash);
+                  {rows.map((c, i) => {
                     const row = graph.rows[i];
+                    const stash = c.stash;
+                    const chips = stash ? undefined : refsByOid.get(c.hash);
                     const active = selectedCommit === c.hash;
                     const focused = focusedCommit === c.hash;
                     const selected = multi.has(c.hash);
@@ -488,6 +545,7 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                         role="row"
                         ref={focused ? focusedRowRef : undefined}
                         className={[
+                          stash ? 'stash-row' : null,
                           active ? 'active' : null,
                           focused ? 'focused' : null,
                           selected ? 'selected' : null,
@@ -496,18 +554,26 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                           .filter(Boolean)
                           .join(' ') || undefined}
                         aria-selected={selected}
-                        onClick={(e) => onRowClick(c.hash, e)}
+                        onClick={(e) => (stash ? onStashClick(stash) : onRowClick(c.hash, e))}
                         onContextMenu={(e) => {
                           e.preventDefault();
-                          setFocusedCommit(c.hash);
-                          openCommitMenu(c, e.clientX, e.clientY);
+                          if (stash) {
+                            openStashMenu(stash, e.clientX, e.clientY);
+                          } else {
+                            setFocusedCommit(c.hash);
+                            openCommitMenu(c, e.clientX, e.clientY);
+                          }
                         }}
                       >
                         <td role="gridcell" className="graph-col" style={{ width: colWidth }}>
                           {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} /> : null}
                         </td>
                         <td role="gridcell" className="msg">
-                          {chips && chips.length > 0 ? (
+                          {stash ? (
+                            <span className="ref-chips">
+                              <span className="ref-chip stash">stash@{`{${stash.index}}`}</span>
+                            </span>
+                          ) : chips && chips.length > 0 ? (
                             <span className="ref-chips">
                               {chips.map((chip) => (
                                 <span key={chip.key} className={`ref-chip ${chip.kind}`}>
@@ -518,15 +584,15 @@ export function Commits({ onCreateTag, onToast }: CommitsProps) {
                           ) : null}
                           {row?.isMerge ? <span className="merge">⊕</span> : null}
                           <span className="msg-text">
-                            {highlight(c.subject, query, searchMode === 'message')}
+                            {stash ? c.subject : highlight(c.subject, query, searchMode === 'message')}
                           </span>
                         </td>
                         <td role="gridcell" className="author">
-                          {highlight(c.author_name, query, searchMode === 'author')}
+                          {stash ? null : highlight(c.author_name, query, searchMode === 'author')}
                         </td>
                         <td role="gridcell" className="date">{relativeDate(c.time_unix)}</td>
                         <td role="gridcell" className="hash">
-                          {highlight(c.short_hash, query, searchMode === 'hash')}
+                          {stash ? c.short_hash : highlight(c.short_hash, query, searchMode === 'hash')}
                         </td>
                       </tr>
                     );
@@ -600,6 +666,52 @@ function highlight(text: string, query: string, enabled: boolean): ReactNode {
       {text.slice(i + q.length)}
     </>
   );
+}
+
+/** A graph row: a real commit, or a synthetic stash node (`stash` set). */
+type Row = Commit & { stash?: Stash; isStash?: boolean };
+
+/**
+ * Splice stash nodes into the commit list. Each stash becomes a synthetic row
+ * placed immediately above the commit it was taken on (its `base`), with that
+ * base as its only parent — so the graph draws it hanging off that point, and
+ * the topological invariant the lane algo needs (every parent below its child)
+ * holds without re-sorting. Stashes whose base isn't in the loaded window are
+ * dropped (they still show in the sidebar). Newest-first order is preserved, so
+ * `stash@{0}` sits above `stash@{1}` when they share a base.
+ */
+function mergeStashRows(commits: Commit[], stashes: Stash[]): Row[] {
+  if (stashes.length === 0) return commits;
+  const byBase = new Map<string, Stash[]>();
+  for (const s of stashes) {
+    if (!s.base) continue;
+    const arr = byBase.get(s.base);
+    if (arr) arr.push(s);
+    else byBase.set(s.base, [s]);
+  }
+  if (byBase.size === 0) return commits;
+  const out: Row[] = [];
+  for (const c of commits) {
+    const here = byBase.get(c.hash);
+    if (here) for (const s of here) out.push(stashRow(s));
+    out.push(c);
+  }
+  return out;
+}
+
+function stashRow(s: Stash): Row {
+  return {
+    hash: s.oid,
+    short_hash: s.oid.slice(0, 7),
+    subject: s.message,
+    body: '',
+    author_name: '',
+    author_email: '',
+    time_unix: s.time_unix,
+    parents: s.base ? [s.base] : [],
+    isStash: true,
+    stash: s,
+  };
 }
 
 interface RefChip {

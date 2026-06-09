@@ -34,6 +34,13 @@ pub struct Stash {
     /// Branch the stash was taken on, parsed from the message when git's
     /// default format is recognisable.
     pub branch: Option<String>,
+    /// First parent of the stash commit — the commit the stash was taken on.
+    /// The graph attaches the stash node here. `None` only if the commit can't
+    /// be read, which shouldn't happen for a valid stash.
+    pub base: Option<String>,
+    /// Committer time of the stash commit (Unix seconds), for the graph row's
+    /// relative-date column.
+    pub time_unix: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,9 +62,22 @@ impl Repo {
                 oid: oid.to_string(),
                 message: message.to_string(),
                 branch: parse_stash_branch(message),
+                base: None,
+                time_unix: 0,
             });
             true
         })?;
+        // Enrich each entry with its base (first parent) + commit time. Done
+        // after the walk because `stash_foreach` holds a `&mut` borrow of repo,
+        // so we can't look up commits inside the closure.
+        for s in &mut out {
+            if let Ok(oid) = git2::Oid::from_str(&s.oid) {
+                if let Ok(commit) = repo.find_commit(oid) {
+                    s.time_unix = commit.time().seconds();
+                    s.base = commit.parent_ids().next().map(|p| p.to_string());
+                }
+            }
+        }
         Ok(out)
     }
 
@@ -223,6 +243,43 @@ fn parse_stash_branch(message: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn stash_list_reports_base_and_time() {
+        let dir = std::env::temp_dir().join(format!("strand-stash-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "base"]);
+        let base = git(&dir, &["rev-parse", "HEAD"]);
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        git(&dir, &["stash", "push", "-q", "-m", "wip"]);
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        let stashes = repo.stash_list().unwrap();
+        assert_eq!(stashes.len(), 1);
+        // The stash node attaches to the commit it was taken on.
+        assert_eq!(stashes[0].base.as_deref(), Some(base.as_str()));
+        assert!(stashes[0].time_unix > 0, "commit time populated");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn parses_default_wip_message() {
