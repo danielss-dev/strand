@@ -69,6 +69,12 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   // One-shot signal from the command palette's "Search commits…" action.
   const commitSearchFocus = useRepo((s) => s.commitSearchFocus);
   const clearCommitSearchFocus = useRepo((s) => s.clearCommitSearchFocus);
+  // Review baseline — when pinned, the toolbar offers one-click selection of
+  // every commit since it (the agent session), and the palette's "Select
+  // commits since baseline" raises the matching one-shot signal.
+  const baseline = useRepo((s) => s.baseline);
+  const selectSinceBaselineSignal = useRepo((s) => s.selectSinceBaseline);
+  const clearSelectSinceBaseline = useRepo((s) => s.clearSelectSinceBaseline);
 
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
@@ -240,6 +246,28 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   const refsByOid = useMemo(() => indexRefs(refs), [refs]);
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
   const colWidth = graphColWidth(graph.laneCount);
+
+  // Hashes of the commits since the review baseline (`baseline..HEAD` over
+  // the loaded log) — the agent session's commits. Empty when no baseline.
+  const sinceBaseline = useMemo(
+    () => (baseline ? commitsSinceBaseline(commits, currentCommit, baseline.oid) : []),
+    [commits, currentCommit, baseline],
+  );
+
+  // One-click "select the agent session": put `baseline..HEAD` in the
+  // multi-selection (ready for bulk ops) and focus the newest commit.
+  const applySinceBaseline = useCallback(() => {
+    if (!baseline) return;
+    if (sinceBaseline.length === 0) {
+      onToast(`No commits since baseline ${baseline.short}`);
+      return;
+    }
+    const newest = sinceBaseline[0]; // the walk starts at HEAD
+    setMulti(new Set(sinceBaseline));
+    setFocusedCommit(newest);
+    anchorRef.current = newest;
+    graphMainRef.current?.focus();
+  }, [baseline, sinceBaseline, onToast]);
 
   // Hashes of commits matching the query, in row order. Empty when the query
   // is blank — no highlighting, full graph as usual.
@@ -495,6 +523,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
     clearCommitSearchFocus();
   }, [commitSearchFocus, clearCommitSearchFocus]);
 
+  // The palette's "Select commits since baseline" sets a one-shot store flag;
+  // wait for the log to load before consuming so a view switch (which renders
+  // an empty graph for a beat) doesn't apply it against nothing.
+  useEffect(() => {
+    if (!selectSinceBaselineSignal || commits.length === 0) return;
+    applySinceBaseline();
+    clearSelectSinceBaseline();
+  }, [selectSinceBaselineSignal, commits, applySinceBaseline, clearSelectSinceBaseline]);
+
   return (
     <div className="graph-wrap">
       <div className="graph-toolbar">
@@ -510,6 +547,17 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
           </button>
         )}
         <div className="graph-toolbar-spacer" />
+        {baseline && (
+          <button
+            type="button"
+            className="since-baseline-btn"
+            onClick={applySinceBaseline}
+            title={`Select all commits since the review baseline (${baseline.short})`}
+          >
+            <Icon name="graph" size={13} />
+            <span>Select since {baseline.short}</span>
+          </button>
+        )}
         {multi.size > 1 && (
           <div className="graph-sel-count" role="status">
             <span>{multi.size} selected</span>
@@ -764,6 +812,36 @@ function highlight(text: string, query: string, enabled: boolean): ReactNode {
       {text.slice(i + q.length)}
     </>
   );
+}
+
+/**
+ * Hashes of the commits since the review baseline: walk parents from HEAD
+ * over the loaded log, stopping at (and excluding) the baseline commit —
+ * the client-side view of `baseline..HEAD`. Commits below the loaded window
+ * aren't walked (they aren't selectable rows anyway); if the baseline was
+ * rebased away, the walk selects every loaded ancestor of HEAD, which is the
+ * honest upper bound. First element is HEAD — the natural focus target.
+ */
+function commitsSinceBaseline(
+  commits: Commit[],
+  head: string | null,
+  baselineOid: string,
+): string[] {
+  if (!head) return [];
+  const byHash = new Map(commits.map((c) => [c.hash, c]));
+  const out: string[] = [];
+  const seen = new Set<string>([baselineOid]);
+  const queue = [head];
+  for (let i = 0; i < queue.length; i++) {
+    const hash = queue[i];
+    if (seen.has(hash)) continue;
+    seen.add(hash);
+    const c = byHash.get(hash);
+    if (!c) continue; // beyond the loaded window
+    out.push(hash);
+    queue.push(...c.parents);
+  }
+  return out;
 }
 
 /** A graph row: a real commit, or a synthetic stash node (`stash` set). */

@@ -2495,6 +2495,25 @@ button {
 }
 
 /* ─── Commit graph multi-select ─── */
+/* "Select since <baseline>" — selects the review session's commits
+   (baseline..HEAD). Shown in the graph toolbar while a baseline is pinned. */
+.since-baseline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px 4px 7px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: var(--type-ui-sm);
+  cursor: pointer;
+}
+.since-baseline-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 .graph-sel-count {
   display: flex;
   align-items: center;

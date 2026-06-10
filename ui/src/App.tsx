@@ -116,6 +116,7 @@ export function App() {
   const createBranch = useRepo((s) => s.createBranch);
   const revealInGraph = useRepo((s) => s.revealInGraph);
   const requestCommitSearch = useRepo((s) => s.requestCommitSearch);
+  const requestSelectSinceBaseline = useRepo((s) => s.requestSelectSinceBaseline);
   const selectCommit = useRepo((s) => s.selectCommit);
 
   const fetchRepo = useRepo((s) => s.fetch);
@@ -629,6 +630,7 @@ export function App() {
             .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`));
         } },
         ...(baseline ? [{ id: 'review-clear', label: 'Review: clear baseline', group: 'Actions', keywords: 'ai agent session review baseline', run: () => { void clearBaseline(); } } satisfies PaletteAction] : []),
+        ...(baseline ? [{ id: 'review-select-commits', label: `Review: select commits since baseline (${baseline.short})`, group: 'Actions', keywords: 'ai agent session graph commits baseline select', run: () => { selectFile(null); requestSelectSinceBaseline(); } } satisfies PaletteAction] : []),
         { id: 'review-stage', label: 'Review: stage reviewed files', group: 'Actions', keywords: 'accept reviewed stage bulk', run: () => {
           void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`));
         } },
@@ -693,6 +695,7 @@ export function App() {
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
+      requestSelectSinceBaseline,
       repoActions, setRebaseDialog, baseline, setBaseline, clearBaseline, stageReviewed]);
 
   const rootStyle = {

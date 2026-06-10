@@ -781,6 +781,17 @@ the stack). Verified with
 live in-app pass on the Tauri window (the webview can't be driven by the browser
 harness).
 
+**Select commits since baseline (2026-06-10):** Closed the open AI-review
+graph item. With a review baseline pinned, the All Commits toolbar shows a
+"Select since <short>" button (and ⌘K gains "Review: select commits since
+baseline") that selects the agent session's commits — `commitsSinceBaseline`
+in `Commits.tsx` walks parents from HEAD over the loaded log, stopping at the
+baseline (the client-side `baseline..HEAD`), and feeds the existing
+multi-selection, focusing HEAD. The palette path uses a one-shot
+`selectSinceBaseline` store signal (mirrors `commitSearchFocus`) so it
+survives the view switch; an empty range toasts instead of clearing the
+selection. Verified with `tsc`, `vitest` (29 pass), and `vite build`.
+
 ---
 
 ## 1.1+ — Post-1.0

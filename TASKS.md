@@ -594,8 +594,15 @@ tree: watch the agent work, review fast, accept or reject safely.
 - ☑ AI commit chips in the graph (`isAgentCommit` in `Commits.tsx`:
   `Co-Authored-By` trailer / bot-flavored author → an `ai` chip next to the
   ref chips).
-- ☐ "Select all commits since baseline" in the graph (one-click review of an
-  agent session's commits; pairs with `diff_since`).
+- ☑ "Select all commits since baseline" in the graph (one-click review of an
+  agent session's commits; pairs with `diff_since`. `commitsSinceBaseline` in
+  `Commits.tsx` walks parents from HEAD over the loaded log, stopping at the
+  baseline — the client-side `baseline..HEAD` — and puts the result in the
+  existing multi-selection. A "Select since <short>" toolbar button shows in
+  the graph while a baseline is pinned; ⌘K "Review: select commits since
+  baseline" routes through a one-shot `selectSinceBaseline` store signal,
+  mirroring `commitSearchFocus`. Empty range toasts "No commits since
+  baseline".)
 - ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
   up in profiles.
 

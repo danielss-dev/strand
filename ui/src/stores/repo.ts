@@ -432,6 +432,16 @@ export interface RepoState {
   requestCommitSearch(): void;
   clearCommitSearchFocus(): void;
 
+  /**
+   * One-shot signal: select every commit since the review baseline in the
+   * All Commits graph (an agent session's commits, pairing with
+   * {@link RepoState.baselineDiffs}). Consumed + cleared by the graph once
+   * the log is loaded (mirrors {@link RepoState.commitSearchFocus}).
+   */
+  selectSinceBaseline: boolean;
+  requestSelectSinceBaseline(): void;
+  clearSelectSinceBaseline(): void;
+
   refreshRecents(): Promise<void>;
   forgetRecent(path: string): Promise<void>;
 
@@ -597,6 +607,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   fileTab: 'content',
   selectedRef: null,
   commitSearchFocus: false,
+  selectSinceBaseline: false,
 
   async restoreSession() {
     let saved: PersistedSession | null = null;
@@ -1485,6 +1496,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   clearReveal: () => set({ revealCommit: null }),
   requestCommitSearch: () => set({ view: 'commits', commitSearchFocus: true }),
   clearCommitSearchFocus: () => set({ commitSearchFocus: false }),
+  requestSelectSinceBaseline: () => set({ view: 'commits', selectSinceBaseline: true }),
+  clearSelectSinceBaseline: () => set({ selectSinceBaseline: false }),
   // Opening a file resets the file-view tab to Content and drops any stale
   // back-target; closing (null) just drops the back-target.
   selectFile: (selectedFile) =>
