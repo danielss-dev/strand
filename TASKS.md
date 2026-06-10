@@ -510,7 +510,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Refresh button in MainHeader wired with spinner
 - ☑ Tweaks panel UI → **multi-section Settings dialog** (`views/SettingsDialog.tsx`
   shell + `views/settings/*Section.tsx`): sidebar `role="tablist"` (↑/↓ move &
-  select, Home/End, focus trap kept) over five sections —
+  select, Home/End, focus trap kept) over five sections; compact controls render
+  as label-left / control-right rows grouped in `.settings-rows` hairline cards
+  (`SegRow`/`SelectRow`/`CheckRow` in `views/settings/shared.tsx`) so sections
+  fill the pane width —
   - ☑ **Appearance**: theme + accent (moved from the old single-section dialog),
     plus the previously UI-less `density` / `uiFont` / `monoFont` store fields
     (segmented `SegRow` + selects in `views/settings/shared.tsx`)

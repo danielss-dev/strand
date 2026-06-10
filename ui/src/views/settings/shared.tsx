@@ -5,6 +5,10 @@ import { useRef } from 'react';
  * keyboard helper plus the small form controls (segmented radio row,
  * labeled checkbox) every section composes. Styles live in features.css
  * under "Settings dialog".
+ *
+ * Compact controls render as horizontal rows (label left, control right)
+ * meant to live inside a `.settings-rows` hairline card, so the pane width
+ * is used instead of stacking everything down the left edge.
  */
 
 /** Roving arrow-key nav within a radiogroup: ←/→/↑/↓ move + select the
@@ -29,15 +33,27 @@ export function moveSelection<T extends { id: string }>(
   });
 }
 
+/** Label plus optional hint — the left half of every settings row. */
+function RowText({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <span className="settings-frow-text">
+      <span className="settings-field-label">{label}</span>
+      {hint && <span className="settings-frow-hint">{hint}</span>}
+    </span>
+  );
+}
+
 /** Segmented radio row (density, diff layout, indicators…): one Tab stop,
  * arrows move + select. */
 export function SegRow<Id extends string>({
   label,
+  hint,
   options,
   value,
   onChange,
 }: {
   label: string;
+  hint?: string;
   options: readonly { id: Id; label: string }[];
   value: Id;
   onChange: (id: Id) => void;
@@ -45,8 +61,8 @@ export function SegRow<Id extends string>({
   const ref = useRef<HTMLDivElement>(null);
   const tabId = options.some((o) => o.id === value) ? value : options[0].id;
   return (
-    <div className="settings-field">
-      <span className="settings-field-label">{label}</span>
+    <div className="settings-frow">
+      <RowText label={label} hint={hint} />
       <div
         className="settings-seg"
         role="radiogroup"
@@ -73,7 +89,7 @@ export function SegRow<Id extends string>({
   );
 }
 
-/** Labeled checkbox with an optional hint line underneath. */
+/** Labeled checkbox row — text left, checkbox right. */
 export function CheckRow({
   label,
   hint,
@@ -86,12 +102,9 @@ export function CheckRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="settings-check">
+    <label className="settings-frow settings-check">
+      <RowText label={label} hint={hint} />
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span>
-        {label}
-        {hint && <span className="hint">{hint}</span>}
-      </span>
     </label>
   );
 }
@@ -99,18 +112,20 @@ export function CheckRow({
 /** Labeled `<select>` on the shared dialog styles. */
 export function SelectRow<Id extends string>({
   label,
+  hint,
   options,
   value,
   onChange,
 }: {
   label: string;
+  hint?: string;
   options: readonly { id: Id; label: string }[];
   value: Id;
   onChange: (id: Id) => void;
 }) {
   return (
-    <div className="settings-field">
-      <span className="settings-field-label">{label}</span>
+    <div className="settings-frow">
+      <RowText label={label} hint={hint} />
       <select
         className="settings-select"
         aria-label={label}

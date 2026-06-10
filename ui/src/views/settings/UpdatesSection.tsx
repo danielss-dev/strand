@@ -84,17 +84,19 @@ export function UpdatesSection() {
 
       <div className="settings-field">
         <span className="settings-field-label">Automatic updates</span>
-        <CheckRow
-          label="Check for updates on launch"
-          checked={autoCheck}
-          onChange={(v) => set('updateAutoCheck', v)}
-        />
-        <CheckRow
-          label="Download and install automatically"
-          hint="Updates apply on the next restart; Strand never restarts itself."
-          checked={autoInstall}
-          onChange={(v) => set('updateAutoInstall', v)}
-        />
+        <div className="settings-rows">
+          <CheckRow
+            label="Check for updates on launch"
+            checked={autoCheck}
+            onChange={(v) => set('updateAutoCheck', v)}
+          />
+          <CheckRow
+            label="Download and install automatically"
+            hint="Updates apply on the next restart; Strand never restarts itself."
+            checked={autoInstall}
+            onChange={(v) => set('updateAutoInstall', v)}
+          />
+        </div>
       </div>
     </section>
   );

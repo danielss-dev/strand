@@ -59,38 +59,38 @@ export function DiffSection() {
 
   return (
     <section className="settings-section" aria-label="Diff">
-      <SegRow
-        label="Default layout"
-        options={LAYOUT_OPTIONS}
-        value={defaultLayout}
-        onChange={(id) => void setDefaultLayout(id)}
-      />
-      <p className="settings-hint">
-        Repos where you’ve toggled the layout in the header keep their own choice.
-      </p>
-      <SelectRow
-        label="Diff font"
-        options={DIFF_FONT_OPTIONS}
-        value={diffFont}
-        onChange={(id) => set('diffFont', id)}
-      />
-      <SegRow
-        label="Change indicators"
-        options={INDICATOR_OPTIONS}
-        value={indicators}
-        onChange={(id) => set('diffIndicators', id)}
-      />
-      <CheckRow
-        label="Line numbers"
-        checked={lineNumbers}
-        onChange={(v) => set('diffLineNumbers', v)}
-      />
-      <CheckRow
-        label="Highlight changed words"
-        hint="Emphasize the changed part of a line, not just the line."
-        checked={wordHighlight}
-        onChange={(v) => set('diffWordHighlight', v)}
-      />
+      <div className="settings-rows">
+        <SegRow
+          label="Default layout"
+          hint="Repos with their own header toggle keep that choice."
+          options={LAYOUT_OPTIONS}
+          value={defaultLayout}
+          onChange={(id) => void setDefaultLayout(id)}
+        />
+        <SelectRow
+          label="Diff font"
+          options={DIFF_FONT_OPTIONS}
+          value={diffFont}
+          onChange={(id) => set('diffFont', id)}
+        />
+        <SegRow
+          label="Change indicators"
+          options={INDICATOR_OPTIONS}
+          value={indicators}
+          onChange={(id) => set('diffIndicators', id)}
+        />
+        <CheckRow
+          label="Line numbers"
+          checked={lineNumbers}
+          onChange={(v) => set('diffLineNumbers', v)}
+        />
+        <CheckRow
+          label="Highlight changed words"
+          hint="Emphasize the changed part of a line, not just the line."
+          checked={wordHighlight}
+          onChange={(v) => set('diffWordHighlight', v)}
+        />
+      </div>
       <div className="settings-field">
         <span className="settings-field-label">Preview</span>
         <div className="settings-diff-preview">

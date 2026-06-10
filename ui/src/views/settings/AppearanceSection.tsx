@@ -82,33 +82,34 @@ export function AppearanceSection() {
             />
           ))}
         </div>
+        <p className="settings-hint">
+          {pref === 'system'
+            ? `Following the system — currently ${resolved}.`
+            : `Using the ${pref} theme.`}
+          {' '}Change anytime with <kbd className="kbd">⌘⇧T</kbd>.
+        </p>
       </div>
 
-      <p className="settings-hint">
-        {pref === 'system'
-          ? `Following the system — currently ${resolved}.`
-          : `Using the ${pref} theme.`}
-        {' '}Change anytime with <kbd className="kbd">⌘⇧T</kbd>.
-      </p>
-
-      <SegRow
-        label="Density"
-        options={DENSITY_OPTIONS}
-        value={density}
-        onChange={(id) => set('density', id)}
-      />
-      <SelectRow
-        label="UI font"
-        options={UI_FONT_OPTIONS}
-        value={uiFont}
-        onChange={(id) => set('uiFont', id)}
-      />
-      <SelectRow
-        label="Mono font"
-        options={MONO_FONT_OPTIONS}
-        value={monoFont}
-        onChange={(id) => set('monoFont', id)}
-      />
+      <div className="settings-rows">
+        <SegRow
+          label="Density"
+          options={DENSITY_OPTIONS}
+          value={density}
+          onChange={(id) => set('density', id)}
+        />
+        <SelectRow
+          label="UI font"
+          options={UI_FONT_OPTIONS}
+          value={uiFont}
+          onChange={(id) => set('uiFont', id)}
+        />
+        <SelectRow
+          label="Mono font"
+          options={MONO_FONT_OPTIONS}
+          value={monoFont}
+          onChange={(id) => set('monoFont', id)}
+        />
+      </div>
     </section>
   );
 }

@@ -63,30 +63,32 @@ export function GitSection() {
           Written to your global git config — used as the author of new commits
           everywhere, not just in Strand.
         </p>
-        <input
-          type="text"
-          className="clone-input"
-          aria-label="Name"
-          placeholder="Name"
-          value={name}
-          disabled={!loaded}
-          onChange={(e) => {
-            setName(e.target.value);
-            setDirty(true);
-          }}
-        />
-        <input
-          type="email"
-          className="clone-input"
-          aria-label="Email"
-          placeholder="Email"
-          value={email}
-          disabled={!loaded}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            setDirty(true);
-          }}
-        />
+        <div className="settings-row">
+          <input
+            type="text"
+            className="clone-input"
+            aria-label="Name"
+            placeholder="Name"
+            value={name}
+            disabled={!loaded}
+            onChange={(e) => {
+              setName(e.target.value);
+              setDirty(true);
+            }}
+          />
+          <input
+            type="email"
+            className="clone-input"
+            aria-label="Email"
+            placeholder="Email"
+            value={email}
+            disabled={!loaded}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setDirty(true);
+            }}
+          />
+        </div>
         <div className="settings-row">
           <button
             type="button"
