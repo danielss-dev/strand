@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
+import type { GitStatusEntry } from '@pierre/trees';
 
-import { Diff } from '../components/Diff';
+import { Diff, parseCacheablePatch } from '../components/Diff';
 import { Icon } from '../components/Icon';
+import {
+  copyToClipboard,
+  diffStatusToGit,
+  PierreTree,
+  type TreeMenuItem,
+  type TreeRowDecoration,
+} from '../components/PierreTree';
 import { hashPatch } from '../lib/patch';
 import { gitErrorHint } from '../lib/tauri';
 import type { FileDiff } from '../lib/types';
@@ -13,7 +22,9 @@ import { HunkAnnotatedDiff, stepChangeBlock } from './LocalChanges';
 /**
  * The Review view — the surface for reviewing an AI agent's changes, built
  * around a verdict loop instead of a staging loop (PRD-adjacent; see
- * docs/improvements.md §1).
+ * docs/improvements.md §1). Unlike Local Changes (the staging workbench),
+ * diffs here carry *whole-file* context — the agent's edits read inside the
+ * entire file — and the queue is a Pierre file tree.
  *
  * Two modes, decided by whether a baseline is pinned:
  *
@@ -26,19 +37,21 @@ import { HunkAnnotatedDiff, stepChangeBlock } from './LocalChanges';
  *   read-only (the changes may already be committed; stage/discard don't
  *   apply uniformly), with file-level actions where they do.
  *
- * One file at a time on the right, the queue on the left: `j`/`k` walk it,
- * Space marks reviewed *and advances to the next pending file*, `s` stages,
- * `d`-`d` discards, `n`/`p` step change blocks, `c` jumps to the commit form.
+ * One file at a time on the right, the queue on the left: `j`/`k` (or ↑/↓ in
+ * the tree, which follows focus) walk it, Space toggles the reviewed mark and
+ * *stays on the file*, `s` stages, `d`-`d` discards, `n`/`p` step change
+ * blocks, `c` jumps to the commit form.
  */
 export function Review() {
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
+  const reviewUnstagedDiffs = useRepo((s) => s.reviewUnstagedDiffs);
   const unstagedDiffs = useRepo((s) => s.unstagedDiffs);
   const reviewed = useRepo((s) => s.reviewed);
   const toggleReviewed = useRepo((s) => s.toggleReviewed);
   const setBaseline = useRepo((s) => s.setBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
-  const refreshBaselineDiffs = useRepo((s) => s.refreshBaselineDiffs);
+  const refreshReviewDiffs = useRepo((s) => s.refreshReviewDiffs);
   const stageReviewed = useRepo((s) => s.stageReviewed);
   const stageMany = useRepo((s) => s.stageMany);
   const unstageMany = useRepo((s) => s.unstageMany);
@@ -50,21 +63,21 @@ export function Review() {
   const diffMode = useSettings((s) => s.diffMode);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
-  // Session mode's diff set can be stale when the view opens (it only
-  // auto-refreshes while a baseline is pinned) — pull it on entry.
+  // The pool only auto-refreshes while this view is open (or a baseline is
+  // pinned) — pull it on entry, and again whenever the baseline moves.
   useEffect(() => {
-    if (baseline) void refreshBaselineDiffs();
-  }, [baseline, refreshBaselineDiffs]);
+    void refreshReviewDiffs();
+  }, [baseline, refreshReviewDiffs]);
 
   const sessionMode = baseline != null;
-  const pool: FileDiff[] = sessionMode ? baselineDiffs : unstagedDiffs;
+  const pool: FileDiff[] = sessionMode ? baselineDiffs : reviewUnstagedDiffs;
 
   // Review state per file, derived once per pool/marks change.
   type Verdict = 'pending' | 'reviewed' | 'stale';
   const verdicts = useMemo(() => {
     const m = new Map<string, { hash: string; verdict: Verdict }>();
     for (const d of pool) {
-      const hash = hashPatch(d.patch);
+      const hash = hashOf(d);
       const mark = reviewed[d.path];
       m.set(d.path, {
         hash,
@@ -97,6 +110,48 @@ export function Review() {
     () => pool.find((d) => d.path === selected) ?? null,
     [pool, selected],
   );
+  // The pane renders whole files, which is too heavy to mount per keystroke —
+  // while j/k is scrubbing, the selection (tree highlight, verdict actions)
+  // tracks `current` instantly and the diff pane swaps on `displayed` once
+  // the queue position settles.
+  const displayed = useSettled(current);
+  // Each file starts at its top. Without this, the virtualized pane keeps the
+  // previous file's scroll offset — deep into bun.lock, then a short file
+  // lands in an empty window.
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
+  }, [displayed]);
+
+  // While the reviewer reads the displayed file, pre-highlight the next few
+  // queue entries in Pierre's worker pool, so landing on them paints with
+  // syntax colors already cached. Delayed past the settle window and
+  // cancelled while scrubbing.
+  const workerPool = useWorkerPool();
+  useEffect(() => {
+    if (!workerPool?.isWorkingPool() || pool.length < 2) return;
+    const idx = Math.max(0, pool.findIndex((d) => d.path === selected));
+    // Huge patches (lockfiles…) are excluded: parsing them here would jank
+    // the main thread, and the worker renders them plain-text anyway.
+    const primable = (d: FileDiff) =>
+      !d.binary && d.patch.length > 0 && d.patch.length < 1_000_000;
+    const targets: FileDiff[] = [];
+    for (let i = 1; i < pool.length && targets.length < 3; i++) {
+      const d = pool[(idx + i) % pool.length];
+      if (primable(d)) targets.push(d);
+    }
+    const prev = pool[(idx - 1 + pool.length) % pool.length];
+    if (prev && primable(prev)) targets.push(prev);
+    const t = window.setTimeout(() => {
+      for (const d of targets) {
+        try {
+          workerPool.primeDiffHighlightCache(primedParse(d));
+        } catch {
+          // Unparseable patches fall back at render time; nothing to prime.
+        }
+      }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [workerPool, pool, selected]);
 
   const step = useCallback(
     (dir: 1 | -1) => {
@@ -108,18 +163,13 @@ export function Review() {
     [pool, selected, selectReviewFile],
   );
 
-  /** Mark the current file reviewed and move on to the next pending one. */
-  const markAndAdvance = useCallback(() => {
+  /** Toggle the current file's reviewed mark — and stay on the file, so the
+   * verdict can be double-checked before moving on with j/k or the arrows. */
+  const markReviewed = useCallback(() => {
     if (!current) return;
     const v = verdicts.get(current.path);
-    if (!v) return;
-    toggleReviewed(current.path, v.hash);
-    if (v.verdict === 'reviewed') return; // it was an unmark — stay put
-    const idx = pool.findIndex((d) => d.path === current.path);
-    const after = [...pool.slice(idx + 1), ...pool.slice(0, idx)];
-    const nextPending = after.find((d) => verdicts.get(d.path)?.verdict !== 'reviewed');
-    if (nextPending) selectReviewFile(nextPending.path);
-  }, [current, verdicts, pool, toggleReviewed, selectReviewFile]);
+    if (v) toggleReviewed(current.path, v.hash);
+  }, [current, verdicts, toggleReviewed]);
 
   // Failed write ops surface here instead of vanishing into the console.
   const [opError, setOpError] = useState<string | null>(null);
@@ -147,15 +197,112 @@ export function Review() {
     return () => clearTimeout(t);
   }, [confirmDiscard]);
 
+  const discardFile = useCallback(
+    (path: string) => {
+      if (!unstagedSet.has(path)) return;
+      if (confirmDiscard === path) {
+        setConfirmDiscard(null);
+        void discardMany([path]).catch(fail('Discard'));
+      } else {
+        setConfirmDiscard(path);
+      }
+    },
+    [unstagedSet, confirmDiscard, discardMany, fail],
+  );
   const discardCurrent = useCallback(() => {
-    if (!current || !unstagedSet.has(current.path)) return;
-    if (confirmDiscard === current.path) {
-      setConfirmDiscard(null);
-      void discardMany([current.path]).catch(fail('Discard'));
-    } else {
-      setConfirmDiscard(current.path);
-    }
-  }, [current, unstagedSet, confirmDiscard, discardMany]);
+    if (current) discardFile(current.path);
+  }, [current, discardFile]);
+
+  // ── File queue (Pierre tree) ──────────────────────────────────────────
+  const treePaths = useMemo(() => pool.map((d) => d.path), [pool]);
+  const treeStatus = useMemo<GitStatusEntry[]>(
+    () => pool.map((d) => ({ path: d.path, status: diffStatusToGit(d.status) })),
+    [pool],
+  );
+  // Verdicts render as a row decoration; bump the key so the tree repaints
+  // when a mark (or a file's diff) changes.
+  const rowDecoration = useCallback(
+    (path: string, kind: 'file' | 'directory'): TreeRowDecoration | null => {
+      if (kind !== 'file') return null;
+      switch (verdicts.get(path)?.verdict) {
+        case 'reviewed':
+          return { text: '✓', title: 'Reviewed' };
+        case 'stale':
+          return { text: 'changed', title: 'Changed since reviewed — review again' };
+        default:
+          return null;
+      }
+    },
+    [verdicts],
+  );
+  const decorationKey = useMemo(
+    () => pool.map((d) => `${d.path}:${verdicts.get(d.path)?.verdict}`).join('|'),
+    [pool, verdicts],
+  );
+
+  // Activate (double-click / Enter): one file toggles its reviewed mark; a
+  // folder or multi-selection marks everything under it reviewed.
+  const activateFiles = useCallback(
+    (paths: string[]) => {
+      if (paths.length === 1) {
+        const v = verdicts.get(paths[0]);
+        if (v) toggleReviewed(paths[0], v.hash);
+        return;
+      }
+      for (const p of paths) {
+        const v = verdicts.get(p);
+        if (v && v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
+      }
+    },
+    [verdicts, toggleReviewed],
+  );
+
+  const treeMenuItems = useCallback(
+    (targets: string[]): TreeMenuItem[] => {
+      const known = targets.filter((p) => verdicts.has(p));
+      if (known.length === 0) return [];
+      const n = known.length;
+      const suffix = n > 1 ? ` ${n} files` : '';
+      const allReviewed = known.every((p) => verdicts.get(p)!.verdict === 'reviewed');
+      const items: TreeMenuItem[] = [
+        {
+          label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
+          icon: 'check',
+          onSelect: () => {
+            for (const p of known) {
+              const v = verdicts.get(p)!;
+              if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
+            }
+          },
+        },
+      ];
+      const unstagedTargets = known.filter((p) => unstagedSet.has(p));
+      if (unstagedTargets.length > 0) {
+        const un = unstagedTargets.length;
+        items.push(
+          {
+            label: 'Stage' + (un > 1 ? ` ${un} files` : ''),
+            icon: 'plus',
+            onSelect: () => void stageMany(unstagedTargets).catch(fail('Stage')),
+          },
+          {
+            label: (un > 1 ? `Discard ${un} files` : 'Discard') + '…',
+            icon: 'trash',
+            danger: true,
+            confirm: true,
+            onSelect: () => void discardMany(unstagedTargets).catch(fail('Discard')),
+          },
+        );
+      }
+      items.push({
+        label: n > 1 ? 'Copy paths' : 'Copy path',
+        icon: 'file',
+        onSelect: () => copyToClipboard(known.join('\n')),
+      });
+      return items;
+    },
+    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail],
+  );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -165,14 +312,14 @@ export function Review() {
       if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"]')) {
         return;
       }
+      // Arrow keys stay with the Pierre tree (its own focus model handles
+      // them); j/k walk the queue from anywhere.
       switch (e.key) {
         case 'j':
-        case 'ArrowDown':
           e.preventDefault();
           step(1);
           break;
         case 'k':
-        case 'ArrowUp':
           e.preventDefault();
           step(-1);
           break;
@@ -183,7 +330,7 @@ export function Review() {
           break;
         case ' ':
           e.preventDefault();
-          markAndAdvance();
+          markReviewed();
           break;
         case 's':
           if (current && unstagedSet.has(current.path)) {
@@ -208,15 +355,23 @@ export function Review() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, markAndAdvance, current, unstagedSet, stageMany, discardCurrent, setView]);
+  }, [step, markReviewed, current, unstagedSet, stageMany, discardCurrent, setView]);
 
+  // Marks hash the pool's whole-file patches; both bulk actions only touch
+  // files that are actually unstaged right now.
   const stageableReviewed = useMemo(
-    () => unstagedDiffs.filter((d) => reviewed[d.path] === hashPatch(d.patch)).length,
-    [unstagedDiffs, reviewed],
+    () =>
+      pool.filter(
+        (d) => unstagedSet.has(d.path) && verdicts.get(d.path)?.verdict === 'reviewed',
+      ).length,
+    [pool, unstagedSet, verdicts],
   );
   const unreviewedUnstaged = useMemo(
-    () => unstagedDiffs.filter((d) => reviewed[d.path] !== hashPatch(d.patch)).map((d) => d.path),
-    [unstagedDiffs, reviewed],
+    () =>
+      pool
+        .filter((d) => unstagedSet.has(d.path) && verdicts.get(d.path)?.verdict !== 'reviewed')
+        .map((d) => d.path),
+    [pool, unstagedSet, verdicts],
   );
 
   const when = baseline
@@ -287,87 +442,59 @@ export function Review() {
       <div className="rv-main">
         <PanelGroup direction="horizontal" autoSaveId="strand:review">
           <Panel defaultSize={26} minSize={15} maxSize={50}>
-            <div className="rv-list" role="listbox" aria-label="Files to review">
-              {pool.map((d) => {
-                const v = verdicts.get(d.path)!;
-                const active = d.path === selected;
-                return (
-                  <div
-                    key={d.path}
-                    role="option"
-                    aria-selected={active}
-                    tabIndex={0}
-                    className={
-                      'rv-row' + (active ? ' active' : '') + (v.verdict === 'reviewed' ? ' done' : '')
-                    }
-                    onClick={() => selectReviewFile(d.path)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') selectReviewFile(d.path);
-                    }}
-                    title={d.path}
-                  >
-                    <span className={`rv-status ${d.status}`}>{statusAbbr(d)}</span>
-                    <span className="rv-pathwrap">
-                      <span className="rv-name">{fileName(d.path)}</span>
-                      <span className="rv-dir">{dirName(d.path)}</span>
-                    </span>
-                    {v.verdict === 'stale' && <span className="rv-stale">changed</span>}
-                    <button
-                      type="button"
-                      className={'rv-check' + (v.verdict === 'reviewed' ? ' on' : '')}
-                      aria-pressed={v.verdict === 'reviewed'}
-                      aria-label={
-                        v.verdict === 'reviewed'
-                          ? `Mark ${d.path} as not reviewed`
-                          : `Mark ${d.path} as reviewed`
-                      }
-                      title={v.verdict === 'reviewed' ? 'Reviewed — click to unmark' : 'Mark as reviewed (Space)'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleReviewed(d.path, v.hash);
-                      }}
-                    >
-                      <Icon name="check" size={11} stroke={2.4} />
-                    </button>
-                  </div>
-                );
-              })}
+            <div className="rv-tree">
+              <PierreTree
+                paths={treePaths}
+                gitStatus={treeStatus}
+                selectedPath={selected}
+                onSelect={(p) => {
+                  // Ignore the tree's "selection emptied" — the view always
+                  // keeps a current file.
+                  if (p) selectReviewFile(p);
+                }}
+                onActivate={activateFiles}
+                menuItems={treeMenuItems}
+                followFocus
+                rowDecoration={rowDecoration}
+                rowDecorationKey={decorationKey}
+                toggleDirOnRowClick={false}
+              />
             </div>
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            {current ? (
+            {displayed ? (
               <div className="rv-diff">
                 <div className="rv-file-head">
-                  <span className="path">{current.path}</span>
-                  <span className="stat-del">−{current.dels}</span>
-                  <span className="stat-add">+{current.adds}</span>
+                  <span className="path">{displayed.path}</span>
+                  <span className="stat-del">−{displayed.dels}</span>
+                  <span className="stat-add">+{displayed.adds}</span>
                   <span className="rv-head-actions">
-                    {unstagedSet.has(current.path) && (
+                    {unstagedSet.has(displayed.path) && (
                       <>
                         <button
                           type="button"
                           className="h-link"
-                          onClick={() => void stageMany([current.path]).catch(fail('Stage'))}
+                          onClick={() => void stageMany([displayed.path]).catch(fail('Stage'))}
                           title="Stage this file (s)"
                         >
                           Stage
                         </button>
                         <button
                           type="button"
-                          className={'h-link' + (confirmDiscard === current.path ? ' danger' : '')}
-                          onClick={discardCurrent}
+                          className={'h-link' + (confirmDiscard === displayed.path ? ' danger' : '')}
+                          onClick={() => discardFile(displayed.path)}
                           title="Discard this file's working-tree changes (d d)"
                         >
-                          {confirmDiscard === current.path ? 'Really discard?' : 'Discard'}
+                          {confirmDiscard === displayed.path ? 'Really discard?' : 'Discard'}
                         </button>
                       </>
                     )}
-                    {sessionMode && !unstagedSet.has(current.path) && stagedSet.has(current.path) && (
+                    {sessionMode && !unstagedSet.has(displayed.path) && stagedSet.has(displayed.path) && (
                       <button
                         type="button"
                         className="h-link"
-                        onClick={() => void unstageMany([current.path]).catch(fail('Unstage'))}
+                        onClick={() => void unstageMany([displayed.path]).catch(fail('Unstage'))}
                         title="Unstage this file"
                       >
                         Unstage
@@ -376,31 +503,47 @@ export function Review() {
                     <button
                       type="button"
                       className={
-                        'rv-check wide' + (verdicts.get(current.path)?.verdict === 'reviewed' ? ' on' : '')
+                        'rv-check wide' + (verdicts.get(displayed.path)?.verdict === 'reviewed' ? ' on' : '')
                       }
-                      aria-pressed={verdicts.get(current.path)?.verdict === 'reviewed'}
-                      onClick={markAndAdvance}
-                      title="Mark reviewed and jump to the next pending file (Space)"
+                      aria-pressed={verdicts.get(displayed.path)?.verdict === 'reviewed'}
+                      onClick={markReviewed}
+                      title="Mark reviewed (Space)"
                     >
                       <Icon name="check" size={12} stroke={2.2} />
-                      {verdicts.get(current.path)?.verdict === 'reviewed' ? 'Reviewed' : 'Mark reviewed'}
+                      {verdicts.get(displayed.path)?.verdict === 'reviewed' ? 'Reviewed' : 'Mark reviewed'}
                     </button>
                   </span>
                 </div>
-                <div className="rv-diff-scroll">
-                  {current.binary || current.patch.length === 0 ? (
+                {/* Pierre's Virtualizer makes it the scroll container and
+                    window-renders the diff rows — whole-file patches of any
+                    size (lockfiles…) mount only what's on screen. */}
+                <Virtualizer className="rv-diff-scroll">
+                  {displayed.binary || displayed.patch.length === 0 ? (
                     <div className="lc-file-note">
-                      {current.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+                      {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
                     </div>
                   ) : sessionMode ? (
-                    // Session diffs span commits — render read-only.
-                    <Diff patch={current.patch} layout={layout} hideFileHeader />
+                    // Session diffs span commits — render read-only. Keyed by
+                    // file + content: VirtualizedFileDiff pins the first
+                    // fileDiff it renders (`this.fileDiff ??=`), so swapping
+                    // files must remount the instance, not re-prop it.
+                    <Diff
+                      key={`${displayed.path}:${hashOf(displayed)}`}
+                      patch={displayed.patch}
+                      layout={layout}
+                      hideFileHeader
+                    />
                   ) : (
                     // Inbox diffs are pure unstaged changes — full hunk
-                    // Stage / Discard actions apply.
-                    <HunkAnnotatedDiff diff={current} layout={layout} side="unstaged" />
+                    // Stage / Discard actions apply. Same remount-on-swap key.
+                    <HunkAnnotatedDiff
+                      key={`${displayed.path}:${hashOf(displayed)}`}
+                      diff={displayed}
+                      layout={layout}
+                      side="unstaged"
+                    />
                   )}
-                </div>
+                </Virtualizer>
               </div>
             ) : (
               <div className="lc-empty">
@@ -414,7 +557,7 @@ export function Review() {
 
       <div className="rv-foot" aria-hidden="true">
         <span className="kbd-inline">↑ ↓ j k</span> files
-        <span className="kbd-inline">space</span> reviewed → next
+        <span className="kbd-inline">space</span> reviewed
         <span className="kbd-inline">n p</span> blocks
         <span className="kbd-inline">s</span> stage
         <span className="kbd-inline">d d</span> discard
@@ -432,6 +575,59 @@ export function Review() {
       )}
     </div>
   );
+}
+
+/**
+ * Follow `value`, but while it changes in rapid succession (held-down j/k)
+ * wait for a pause before swapping. The first change after an idle stretch
+ * applies immediately, so a single step still feels instant; only scrubbing
+ * defers, and the intermediate values are never rendered at all.
+ */
+function useSettled<T>(value: T, delay = 120, idleGap = 250): T {
+  const [settled, setSettled] = useState(value);
+  const lastSwap = useRef(0);
+  useEffect(() => {
+    if (Object.is(value, settled)) return;
+    const now = performance.now();
+    if (now - lastSwap.current > idleGap) {
+      lastSwap.current = now;
+      setSettled(value);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      lastSwap.current = performance.now();
+      setSettled(value);
+    }, delay);
+    return () => window.clearTimeout(t);
+  }, [value, settled, delay, idleGap]);
+  return settled;
+}
+
+// Verdict hashes are FNV over the whole-file patch text — pennies for source
+// files, tens of milliseconds for a multi-megabyte lockfile. Cache per
+// FileDiff object (one per fetch) so each pool refresh hashes once, not once
+// per verdicts recompute.
+const patchHashCache = new WeakMap<FileDiff, string>();
+function hashOf(d: FileDiff): string {
+  let h = patchHashCache.get(d);
+  if (h === undefined) {
+    h = hashPatch(d.patch);
+    patchHashCache.set(d, h);
+  }
+  return h;
+}
+
+// Parsed-patch memo for prefetch priming, keyed by the FileDiff object (one
+// per fetch), so repeated pauses on the same queue don't re-parse whole-file
+// patches on the main thread.
+const primedParseCache = new WeakMap<FileDiff, ReturnType<typeof parseCacheablePatch>>();
+function primedParse(d: FileDiff) {
+  let parsed = primedParseCache.get(d);
+  if (!parsed) {
+    parsed = parseCacheablePatch(d.patch);
+    primedParseCache.set(d, parsed);
+  }
+  return parsed;
 }
 
 function ReviewToolbar({
@@ -499,28 +695,3 @@ function ReviewToolbar({
   );
 }
 
-function statusAbbr(d: FileDiff): string {
-  switch (d.status) {
-    case 'added':
-      return 'A';
-    case 'deleted':
-      return 'D';
-    case 'renamed':
-      return 'R';
-    case 'copied':
-      return 'C';
-    case 'typechange':
-      return 'T';
-    default:
-      return 'M';
-  }
-}
-
-function fileName(p: string): string {
-  return p.slice(p.lastIndexOf('/') + 1);
-}
-
-function dirName(p: string): string {
-  const i = p.lastIndexOf('/');
-  return i === -1 ? '' : p.slice(0, i);
-}

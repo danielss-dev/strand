@@ -17,6 +17,10 @@ export default defineConfig(async () => ({
     },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
+  // Pierre's highlight worker (`@pierre/diffs/worker/worker.js?worker`) code-
+  // splits internally (lazy wasm chunk), which rules out Vite's default iife
+  // worker output.
+  worker: { format: 'es' as const },
   build: {
     target: 'esnext',
     minify: 'esbuild',

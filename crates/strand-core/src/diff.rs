@@ -118,6 +118,25 @@ impl Repo {
         collect(diff)
     }
 
+    /// `diff_unstaged` with whole-file context: every changed file's patch
+    /// carries the entire file, not just hunks. Powers the Review view, which
+    /// shows an agent's edits in the context of the full file.
+    pub fn diff_unstaged_full(&self) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
+        let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
+        collect(diff)
+    }
+
+    /// `diff_since` with whole-file context — see `diff_unstaged_full`.
+    pub fn diff_since_full(&self, baseline: &str) -> Result<Vec<FileDiff>> {
+        let repo = self.git2()?;
+        let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
+        let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
+        let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts))?;
+        collect(diff)
+    }
+
     /// Diff one path's working-tree state against HEAD — the net uncommitted
     /// change (staged + unstaged combined) for a single file. Powers the file
     /// view's "Uncommitted changes" history entry. Compares the HEAD tree
@@ -133,14 +152,22 @@ impl Repo {
     }
 }
 
+/// "Whole file" context: big enough that one hunk swallows any real file,
+/// small enough to stay clear of libgit2's u32 line arithmetic.
+const WHOLE_FILE_CONTEXT: u32 = 1_000_000;
+
 fn diff_options() -> git2::DiffOptions {
+    diff_options_with(3)
+}
+
+fn diff_options_with(context: u32) -> git2::DiffOptions {
     let mut opts = git2::DiffOptions::new();
     opts.include_untracked(true)
         .recurse_untracked_dirs(true)
         // Without this, untracked deltas land in the diff but their patch
         // bodies are empty — Pierre then renders "No textual diff".
         .show_untracked_content(true)
-        .context_lines(3);
+        .context_lines(context);
     opts
 }
 
@@ -278,6 +305,30 @@ mod tests {
         assert_eq!(n.status, DiffStatus::Added);
         assert_eq!((n.adds, n.dels), (1, 0));
         assert!(n.patch.contains("+hello"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn full_context_diff_carries_the_whole_file() {
+        let (repo, dir) = scratch_repo();
+        // Enough lines that a context-3 patch could never cover them all.
+        let base: String = (1..=20).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(dir.join("a.txt"), &base).unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("add a", None, false).unwrap();
+
+        std::fs::write(dir.join("a.txt"), base.replace("line 10\n", "LINE 10\n")).unwrap();
+
+        let diffs = repo.diff_unstaged_full().unwrap();
+        assert_eq!(diffs.len(), 1);
+        let a = &diffs[0];
+        assert_eq!((a.adds, a.dels), (1, 1)); // context lines don't count
+        // First and last lines are far from the change — only whole-file
+        // context includes them.
+        assert!(a.patch.contains(" line 1\n"), "patch starts at the top: {}", a.patch);
+        assert!(a.patch.contains(" line 20\n"), "patch runs to the bottom: {}", a.patch);
+        assert!(a.patch.contains("+LINE 10"));
 
         let _ = std::fs::remove_dir_all(dir);
     }

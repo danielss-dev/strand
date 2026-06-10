@@ -84,6 +84,12 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_workdir_file', { path, file }),
   repoDiffSince: (path: string, baseline: string) =>
     invoke<FileDiff[]>('repo_diff_since', { path, baseline }),
+  // Whole-file-context variants for the Review view: each patch carries the
+  // entire file, so an agent's changes read in full context.
+  repoDiffUnstagedFull: (path: string) =>
+    invoke<FileDiff[]>('repo_diff_unstaged_full', { path }),
+  repoDiffSinceFull: (path: string, baseline: string) =>
+    invoke<FileDiff[]>('repo_diff_since_full', { path, baseline }),
   repoMergeBase: (path: string, a: string, b: string) =>
     invoke<string>('repo_merge_base', { path, a, b }),
   repoFileContent: (path: string, file: string, rev: string | null) =>

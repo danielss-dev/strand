@@ -643,6 +643,40 @@ menubar stays tracked in TASKS. The status-bar settings button also swapped
 its sun glyph for a proper gear (Feather `settings`, 24-grid with compensated
 stroke).
 
+**Review view, sharpened for AI review (2026-06-10):** The Review tab now
+reads like a review of what the agent did, not a second staging surface.
+Diffs carry **whole-file context** — every changed file renders in its
+entirety with the edits inline (`diff_unstaged_full`/`diff_since_full` +
+`repo_diff_*_full` IPC; the inbox pool lives in its own
+`reviewUnstagedDiffs` store slice, refreshed only while the view is live so
+Local Changes' diff hot path is untouched). The flat file queue became a
+Pierre tree, matching Local Changes: git-status colors, a new `rowDecoration`
+lane on the `PierreTree` wrapper showing ✓ (reviewed) / "changed" (stale),
+right-click verdict + stage/discard actions, double-click/Enter to toggle
+reviewed (folders mark their subtree). Verified: `cargo test -p strand-core`
+(new whole-file-context test), `tsc`.
+
+A same-day follow-up made it **fast**: whole-file patches had made j/k
+navigation stall, because `@pierre/diffs` was tokenizing every file with
+Shiki *synchronously on the main thread*. Pierre's highlight worker pool is
+now mounted app-wide (`DiffWorkerPool`, 2 workers, dual pierre-dark/light
+themes; vite `worker.format = 'es'` for its lazy wasm chunk), parsed patches
+carry a `cacheKey` so the pool's AST cache makes revisits free, the Review
+pane defers its heavy mount until the queue position settles (`useSettled` —
+single steps stay instant, scrubbing renders nothing in between), and the
+next few queue entries pre-highlight in the background while the reviewer
+reads. Verified: `tsc`, `vite build`, `vitest` (36).
+
+Round two of the same push: ↑/↓ in the queue tree now *select* the file they
+land on (`followFocus` on `PierreTree` — armed on keydown, resolved via a
+model subscription so it can't race Pierre's own focus move), Space toggles
+the reviewed mark without auto-advancing, programmatic navigation replaces
+the tree selection instead of accumulating highlighted rows, and the diff
+pane is wrapped in Pierre's `<Virtualizer>` so multi-megabyte whole-file
+diffs (bun.lock) window-render instead of freezing the app. Verdict hashing
+is cached per fetch and prefetch priming skips >1 MB patches. Verified:
+`tsc`, `vite build`, `vitest` (36).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

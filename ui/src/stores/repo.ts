@@ -92,8 +92,18 @@ export interface RepoState {
    * a baseline the Review view falls back to the unstaged set (inbox mode).
    */
   baseline: StoredBaseline | null;
-  /** `diff_since(baseline)` result — committed + staged + unstaged changes. */
+  /**
+   * `diff_since_full(baseline)` result — committed + staged + unstaged
+   * changes, with whole-file context so the Review view shows each change
+   * inside the entire file.
+   */
   baselineDiffs: FileDiff[];
+  /**
+   * Inbox-mode counterpart: the unstaged set with whole-file context
+   * (`diff_unstaged_full`). Only refreshed while the Review view is open (or
+   * on entry), so the regular `unstagedDiffs` hot path doesn't pay for it.
+   */
+  reviewUnstagedDiffs: FileDiff[];
 
   /**
    * File selected in the Review view's list, or `null` for "nothing yet" —
@@ -258,8 +268,12 @@ export interface RepoState {
   setBaseline(oid?: string): Promise<void>;
   /** Clear the review baseline (and its persisted record). */
   clearBaseline(): Promise<void>;
-  /** Re-run `diff_since(baseline)` into {@link RepoState.baselineDiffs}. */
-  refreshBaselineDiffs(): Promise<void>;
+  /**
+   * Refresh the Review view's diff pool (whole-file context): with a baseline
+   * → `diff_since_full` into {@link RepoState.baselineDiffs}; without →
+   * `diff_unstaged_full` into {@link RepoState.reviewUnstagedDiffs}.
+   */
+  refreshReviewDiffs(): Promise<void>;
   /** Load the persisted baseline + reviewed map when a repo becomes active. */
   loadReviewSession(): Promise<void>;
   /**
@@ -530,6 +544,7 @@ const EMPTY_ACTIVE = {
   localSelection: null as LocalSelection | null,
   baseline: null as StoredBaseline | null,
   baselineDiffs: [] as FileDiff[],
+  reviewUnstagedDiffs: [] as FileDiff[],
   reviewSelection: null as string | null,
   reviewed: {} as Record<string, string>,
   lastBulkDiscard: null as { oid: string; count: number; path: string } | null,
@@ -787,10 +802,14 @@ export const useRepo = create<RepoState>((set, get) => ({
   // refs + submodules, so every write op's refresh also keeps the topbar
   // (ahead/behind), sidebar, and Files tab in sync for free.
   async refreshLocalChanges() {
+    // The review pool follows along live while a session baseline is pinned,
+    // or while the Review view itself is on screen (inbox mode). Otherwise
+    // skip it — full-context diffs are strictly review-view payload.
+    const reviewLive = get().baseline != null || get().view === 'review';
     await Promise.all([
       get().refreshSnapshot(),
       get().refreshDiffs(),
-      ...(get().baseline ? [get().refreshBaselineDiffs()] : []),
+      ...(reviewLive ? [get().refreshReviewDiffs()] : []),
     ]);
   },
 
@@ -833,7 +852,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     set({ baseline });
     void reviewSession.setBaseline(path, baseline).catch((e) =>
       console.warn('baseline persist failed', e));
-    await get().refreshBaselineDiffs();
+    await get().refreshReviewDiffs();
   },
 
   async clearBaseline() {
@@ -847,19 +866,29 @@ export const useRepo = create<RepoState>((set, get) => ({
 
   selectReviewFile: (reviewSelection) => set({ reviewSelection }),
 
-  async refreshBaselineDiffs() {
+  async refreshReviewDiffs() {
     const path = get().activePath;
+    if (!path) return;
     const baseline = get().baseline;
-    if (!path || !baseline) return;
+    if (baseline) {
+      try {
+        const diffs = await tauri.repoDiffSinceFull(path, baseline.oid);
+        if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
+        set({ baselineDiffs: diffs });
+      } catch (e) {
+        // Typical cause: the baseline commit was rebased/gc'd away. Surface by
+        // clearing — the chip disappears rather than showing stale data.
+        console.warn('repoDiffSinceFull failed', e);
+        if (get().activePath === path) void get().clearBaseline();
+      }
+      return;
+    }
     try {
-      const diffs = await tauri.repoDiffSince(path, baseline.oid);
-      if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
-      set({ baselineDiffs: diffs });
+      const diffs = await tauri.repoDiffUnstagedFull(path);
+      if (get().activePath !== path || get().baseline != null) return;
+      set({ reviewUnstagedDiffs: diffs });
     } catch (e) {
-      // Typical cause: the baseline commit was rebased/gc'd away. Surface by
-      // clearing — the chip disappears rather than showing stale data.
-      console.warn('repoDiffSince failed', e);
-      if (get().activePath === path) void get().clearBaseline();
+      console.warn('repoDiffUnstagedFull failed', e);
     }
   },
 
@@ -873,7 +902,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       ]);
       if (get().activePath !== path) return;
       set({ baseline: baseline ?? null, reviewed: reviewed ?? {} });
-      if (baseline) await get().refreshBaselineDiffs();
+      if (baseline) await get().refreshReviewDiffs();
     } catch (e) {
       console.warn('review session load failed', e);
     }
@@ -897,8 +926,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     const reviewed = get().reviewed;
-    const files = get()
-      .unstagedDiffs.filter((d) => reviewed[d.path] === hashPatch(d.patch))
+    // Marks hash the review pool's whole-file patches; stage the matching
+    // files that are actually unstaged right now.
+    const pool = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
+    const unstaged = new Set(get().unstagedDiffs.map((d) => d.path));
+    const files = pool
+      .filter((d) => unstaged.has(d.path) && reviewed[d.path] === hashPatch(d.patch))
       .map((d) => d.path);
     if (files.length === 0) return;
     await tauri.repoStageMany(path, files);

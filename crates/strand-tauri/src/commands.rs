@@ -160,6 +160,19 @@ pub fn repo_diff_since(path: String, baseline: String) -> CmdResult<Vec<FileDiff
     Ok(Repo::discover(&path)?.diff_since(&baseline)?)
 }
 
+/// Whole-file-context variants of `repo_diff_unstaged` / `repo_diff_since`:
+/// each patch carries the entire file, not just hunks. The Review view uses
+/// these so an agent's edits read in the context of the full file.
+#[tauri::command]
+pub fn repo_diff_unstaged_full(path: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_unstaged_full()?)
+}
+
+#[tauri::command]
+pub fn repo_diff_since_full(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
+    Ok(Repo::discover(&path)?.diff_since_full(&baseline)?)
+}
+
 /// Best common ancestor of two commit-ishes. Pairs with `repo_diff_since` to
 /// review a worktree against the branch it forked from.
 #[tauri::command]

@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
-  getSingularPatch,
   type DiffLineAnnotation,
   type SelectedLineRange,
 } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
-import { Diff, diffAppearanceOptions } from '../components/Diff';
+import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/Diff';
 import { Icon } from '../components/Icon';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { gitErrorHint } from '../lib/tauri';
@@ -670,15 +669,15 @@ export function HunkAnnotatedDiff({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [tops, setTops] = useState<Map<string, number>>(() => new Map());
 
-  // Parse once per patch string. `getSingularPatch` is cheap, but keeping
-  // a stable identity helps Pierre's worker pool cache the render.
+  // Parse once per patch string. The cacheKey lets the worker pool reuse the
+  // highlighted AST across remounts (see parseCacheablePatch).
   const fileDiff = useMemo(() => {
     try {
-      return getSingularPatch(diff.patch);
+      return parseCacheablePatch(diff.patch);
     } catch (e) {
       // Mode-only changes, binary, or otherwise unparseable patches: let
       // the fallback `<Diff/>` branch below render them.
-      console.warn('getSingularPatch failed', e);
+      console.warn('parseCacheablePatch failed', e);
       return null;
     }
   }, [diff.patch]);

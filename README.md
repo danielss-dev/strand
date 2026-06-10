@@ -90,6 +90,13 @@ pnpm tauri:build   # signed installers in target/release/bundle
   per-change-block Stage / Discard (and Unstage on the staged side)
   inline in the diff via Pierre annotations; stacked / split diff layout
   toggle remembered per repo
+- Review (⌘4): a dedicated surface for reading an AI agent's changes —
+  diffs show the **whole file** with the edits inline (not isolated hunks),
+  the queue is a file tree with reviewed ✓ / "changed" badges, and a
+  pinnable baseline tracks everything since a commit, including what the
+  agent already staged or committed. Arrows / j k walk the queue, Space
+  toggles a file's reviewed mark; marks flip back if the agent touches the
+  file again
 - Commit graph: SVG lanes + branch/tag chips inline; click a commit to
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
@@ -105,7 +112,7 @@ pnpm tauri:build   # signed installers in target/release/bundle
   newest-first — `HEAD@{n}`, an op badge (commit / checkout / reset / merge / …),
   message, time, and short OID; ↑/↓ + Enter or a click jumps to the entry's
   commit in the graph, so commits orphaned by a reset/rebase/amend are recoverable
-- Worktrees: a Worktrees overview (⌘4 / ⌘K) lists every worktree with its branch,
+- Worktrees: a Worktrees overview (⌘5 / ⌘K) lists every worktree with its branch,
   ahead/behind, dirty-file count, and last commit, with one-click Review — opens
   the worktree as a tab on the Review view with the baseline pinned where the
   branch diverged from the main worktree's branch (merge-base), so the session

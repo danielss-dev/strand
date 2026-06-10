@@ -62,6 +62,8 @@ fn main() {
             commands::repo_unwatch,
             commands::repo_cancel_op,
             commands::repo_diff_since,
+            commands::repo_diff_since_full,
+            commands::repo_diff_unstaged_full,
             commands::repo_merge_base,
             commands::repo_log,
             commands::repo_refs,

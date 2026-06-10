@@ -620,9 +620,41 @@ tree: watch the agent work, review fast, accept or reject safely.
   **inbox** (no baseline → the unstaged set; diffs keep per-hunk
   Stage/Discard via the shared `HunkAnnotatedDiff`) and **session** (baseline
   pinned → everything since that commit incl. the agent's commits, rendered
-  read-only with file-level actions). Queue on the left (status, name,
-  reviewed check, "changed" stale badge), one file at a time on the right,
-  progress bar + verdict actions in the toolbar, keyboard-hint footer.
+  read-only with file-level actions). Queue on the left (Pierre tree),
+  one file at a time on the right, progress bar + verdict actions in the
+  toolbar, keyboard-hint footer.
+- ☑ Review diffs carry **whole-file context** — the agent's edits read
+  inside the entire file, not isolated hunks (`diff_unstaged_full` /
+  `diff_since_full` in `strand-core/src/diff.rs`,
+  `repo_diff_unstaged_full` / `repo_diff_since_full` IPC; inbox pool lives
+  in `reviewUnstagedDiffs`, refreshed only while the Review view is live so
+  Local Changes' hot path doesn't pay for it).
+- ☑ Review queue is a Pierre tree (`PierreTree` with the new
+  `rowDecoration` lane: ✓ = reviewed, "changed" = stale; right-click →
+  Mark reviewed / Stage / Discard / Copy path; double-click or Enter
+  toggles the reviewed mark, a folder marks everything under it).
+- ☑ Fast review navigation: Pierre's highlight **worker pool** is mounted
+  app-wide (`components/DiffWorkerPool.tsx` + `worker: { format: 'es' }`
+  in vite config) so Shiki runs off the main thread; parsed patches carry a
+  `cacheKey` (`parseCacheablePatch` in `components/Diff.tsx`) so the pool's
+  LRU makes revisits instant; the Review pane defers its whole-file mount
+  until j/k settles (`useSettled` in `views/Review.tsx`) and pre-highlights
+  the next queue entries while the reviewer reads
+  (`primeDiffHighlightCache`).
+- ☑ Review pane is virtualized: Pierre's `<Virtualizer>` wraps
+  `.rv-diff-scroll` (Review.tsx), so a whole-file lockfile diff mounts only
+  the rows on screen instead of freezing the app. `stepChangeBlock` already
+  page-scrolls when markers are absent, and `HunkAnnotatedDiff`'s overlay
+  re-measures on scroll, so both degrade gracefully to the mounted window.
+  Gotcha: `VirtualizedFileDiff` pins the first `fileDiff` it renders
+  (`this.fileDiff ??=`), so the diff components are keyed by
+  `path:contentHash` to remount on file swap, and the pane scrolls back to
+  the top per file (a stale deep offset would land a short file in an
+  empty virtual window).
+  Verdict hashes are cached per `FileDiff` (`hashOf`) and prefetch priming
+  skips >1 MB patches — both were main-thread costs that scaled with file
+  size. (Local Changes keeps non-virtualized rendering: its patches are
+  hunk-sized.)
 - ☑ Review baseline ("everything since this commit"): `Repo::diff_since`
   (`diff_tree_to_workdir_with_index` against the baseline tree, so committed +
   staged + unstaged agent work shows in one diff), `repo_diff_since` IPC,
@@ -632,8 +664,10 @@ tree: watch the agent work, review fast, accept or reject safely.
   `hashPatch` in `lib/patch.ts`) — a file the agent touches after review
   flips back to unreviewed (row shows "changed"); persisted per-repo in
   SQLite; drives the sidebar badge + toolbar progress bar.
-- ☑ Review keyboard loop (Review view): `j`/`k` or ↑/↓ queue step, Space = mark
-  reviewed **and advance to the next pending file**, `n`/`p` change-block
+- ☑ Review keyboard loop (Review view): `j`/`k` queue step, ↑/↓ in the tree
+  follow focus and drive the diff pane (`followFocus` on `PierreTree`;
+  plain arrows only — Shift-extend keeps Pierre's native behavior), Space =
+  toggle the reviewed mark **and stay on the file**, `n`/`p` change-block
   step (page-scroll fallback on read-only session diffs), `s` stage, `d`-`d`
   discard, `c` jump to the commit form. Local Changes keeps its own staging
   loop (j/k/n/p/s/d-d/c, no review marking).

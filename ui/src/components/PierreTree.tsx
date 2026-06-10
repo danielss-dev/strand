@@ -56,6 +56,13 @@ export function copyToClipboard(text: string): void {
 /** Right-click menu item — the same shape the app's ContextMenu consumes. */
 export type TreeMenuItem = MenuItem;
 
+/** Per-row text badge rendered in Pierre's decoration lane (before the git
+ * status lane). */
+export interface TreeRowDecoration {
+  text: string;
+  title?: string;
+}
+
 /** Imperative handle so a host can open Pierre's in-tree search on demand. */
 export interface PierreTreeHandle {
   openSearch(): void;
@@ -76,6 +83,13 @@ interface PierreTreeProps {
   /** Fired with the active (last-selected) path, or `null` when the selection empties. */
   onSelect?: (path: string | null) => void;
   /**
+   * Make plain ↑/↓/Home/End keyboard focus *select* the file it lands on
+   * (firing {@link onSelect}), instead of just moving Pierre's focus ring.
+   * Modified arrows (Shift-extend, etc.) keep Pierre's native behavior.
+   * Used by Review, where walking the queue should drive the diff pane.
+   */
+  followFocus?: boolean;
+  /**
    * Activate (double-click, or Enter on a focused file) — receives the resolved
    * file set to act on: the current multi-selection when a selected row is
    * activated, every file under a folder, or just the one file.
@@ -85,6 +99,15 @@ interface PierreTreeProps {
   menuItems?: (paths: string[]) => MenuItem[];
   /** Enable Pierre's in-tree fuzzy search (also bound to ⌘F / Ctrl+F). */
   search?: boolean;
+  /**
+   * Per-row decoration (e.g. the Review view's reviewed ✓). Called for every
+   * visible row; return `null` for none. Pair with {@link rowDecorationKey} —
+   * Pierre only repaints rows on data pushes, so decoration-only changes need
+   * the key to bump.
+   */
+  rowDecoration?: (path: string, kind: 'file' | 'directory') => TreeRowDecoration | null;
+  /** Fingerprint of the decoration inputs; a change forces a row repaint. */
+  rowDecorationKey?: string;
   /**
    * Whether folders start expanded or collapsed. Defaults to `'open'`. Pierre
    * re-applies this on every `resetPaths`, so a `'closed'` tree stays collapsed
@@ -164,6 +187,9 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     onActivate,
     menuItems,
     search,
+    followFocus = false,
+    rowDecoration,
+    rowDecorationKey,
     initialExpansion = 'open',
     toggleDirOnRowClick = true,
     className,
@@ -179,6 +205,11 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   onActivateRef.current = onActivate;
   const selectedRef = useRef(selectedPath);
   selectedRef.current = selectedPath;
+  const rowDecorationRef = useRef(rowDecoration);
+  rowDecorationRef.current = rowDecoration;
+  // True while the reflection effect is rewriting Pierre's selection — the
+  // intermediate selection-change events it causes must not echo to the host.
+  const reflecting = useRef(false);
 
   const pathsKey = useMemo(() => pathsKeyOf(paths), [paths]);
   const statusKey = useMemo(() => statusKeyOf(gitStatus), [gitStatus]);
@@ -198,8 +229,11 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     itemHeight: 24,
     icons: { set: 'complete', colored: true },
     search: search ?? false,
+    renderRowDecoration: (ctx) =>
+      rowDecorationRef.current?.(ctx.item.path, ctx.item.kind) ?? null,
     initialSelectedPaths: selectedPath ? [selectedPath] : undefined,
     onSelectionChange: (sel) => {
+      if (reflecting.current) return; // our own rewrite, not a user gesture
       const next = sel.length ? sel[sel.length - 1] : null;
       // Ignore the echo of our own reflection (covers null === null too).
       if (next === selectedRef.current) return;
@@ -230,6 +264,28 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     [model],
   );
 
+  // ── Follow focus (Review) ──
+  // Promote the keyboard-focused file to the active selection. Timing is the
+  // hard part: Pierre moves its focus inside its own (shadow-root) keydown
+  // listener, so reading `getFocusedPath` from our handler races it. Instead,
+  // a nav keydown only *arms* a short window; the model subscription fires on
+  // the focus mutation itself — strictly after the move — and reads the
+  // settled focus. Folder rows are skipped (the pane keeps the last file).
+  const followArmedAt = useRef(0);
+  const followFromFocus = useCallback(() => {
+    const focused = model.getFocusedPath();
+    if (focused && fileSetRef.current.has(focused) && focused !== selectedRef.current) {
+      onSelectRef.current?.(focused);
+    }
+  }, [model]);
+  useEffect(() => {
+    if (!followFocus) return;
+    return model.subscribe(() => {
+      if (performance.now() - followArmedAt.current > 300) return;
+      followFromFocus();
+    });
+  }, [followFocus, model, followFromFocus]);
+
   // Sync data into the once-created model. The model already holds the
   // first-render values, so both keys start "unchanged" and the first run
   // no-ops. `resetPaths` (a coarse whole-tree reset that preserves selection
@@ -238,31 +294,47 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   // expansion and selection intact.
   const prevPathsKey = useRef(pathsKey);
   const prevStatusKey = useRef(statusKey);
+  const prevDecoKey = useRef(rowDecorationKey);
   useEffect(() => {
     const pathsChanged = prevPathsKey.current !== pathsKey;
     const statusChanged = prevStatusKey.current !== statusKey;
+    const decoChanged = prevDecoKey.current !== rowDecorationKey;
     prevPathsKey.current = pathsKey;
     prevStatusKey.current = statusKey;
+    prevDecoKey.current = rowDecorationKey;
     if (pathsChanged) {
       model.resetPaths(paths as string[]);
       model.setGitStatus(gitStatus as GitStatusEntry[] | undefined);
-    } else if (statusChanged) {
+    } else if (statusChanged || decoChanged) {
+      // setGitStatus repaints every visible row, which is also how a
+      // decoration-only change (same paths, same statuses) lands on screen.
       model.setGitStatus(gitStatus as GitStatusEntry[] | undefined);
     }
-  }, [pathsKey, statusKey, paths, gitStatus, model]);
+  }, [pathsKey, statusKey, rowDecorationKey, paths, gitStatus, model]);
 
-  // Reflect the active selection. When `selectedPath` is set, ensure it is
-  // selected (additively — never clobbering a Ctrl/Shift multi-selection) and
-  // scrolled into view. When it is null, this tree is the inactive side, so
-  // clear its selection (so only one side is ever highlighted at a time).
+  // Reflect the active selection. When `selectedPath` lands on a path Pierre
+  // doesn't already have selected (programmatic navigation: j/k, follow-
+  // focus, auto-advance), it becomes the *only* selection — accumulating one
+  // highlighted row per step looked like a runaway multi-select. A
+  // `selectedPath` that is already inside a Ctrl/Shift multi-selection leaves
+  // it untouched. When it is null, this tree is the inactive side, so clear
+  // its selection (so only one side is ever highlighted at a time).
   useEffect(() => {
     const current = model.getSelectedPaths();
-    if (selectedPath) {
-      if (!current.includes(selectedPath)) model.getItem(selectedPath)?.select();
-      model.scrollToPath(selectedPath, { offset: 'nearest' });
-    } else {
-      for (const p of current) model.getItem(p)?.deselect();
+    reflecting.current = true;
+    try {
+      if (selectedPath) {
+        if (!current.includes(selectedPath)) {
+          model.getItem(selectedPath)?.select();
+          for (const p of current) model.getItem(p)?.deselect();
+        }
+      } else {
+        for (const p of current) model.getItem(p)?.deselect();
+      }
+    } finally {
+      reflecting.current = false;
     }
+    if (selectedPath) model.scrollToPath(selectedPath, { offset: 'nearest' });
   }, [selectedPath, pathsKey, model]);
 
   // Double-click a row to activate it (stage / unstage). Single-click still
@@ -308,22 +380,38 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   );
 
   // Keyboard equivalent of double-click: Enter on a focused *file* row (Enter
-  // on a folder stays Pierre's expand/collapse).
+  // on a folder stays Pierre's expand/collapse). With `followFocus`, plain
+  // ↑/↓/Home/End also promote the row they land on to the active selection.
   const onKeyDownCapture = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (!onActivateRef.current || e.key !== 'Enter') return;
-      const onRow = e.nativeEvent
-        .composedPath()
-        .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
-      if (!onRow) return; // focus is in the search box, not a row
-      const focused = model.getFocusedPath();
-      if (focused && fileSetRef.current.has(focused)) {
-        e.preventDefault();
-        e.stopPropagation();
-        onActivateRef.current(resolveTargets(focused));
+      if (e.key === 'Enter') {
+        if (!onActivateRef.current) return;
+        const onRow = e.nativeEvent
+          .composedPath()
+          .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
+        if (!onRow) return; // focus is in the search box, not a row
+        const focused = model.getFocusedPath();
+        if (focused && fileSetRef.current.has(focused)) {
+          e.preventDefault();
+          e.stopPropagation();
+          onActivateRef.current(resolveTargets(focused));
+        }
+        return;
+      }
+      if (
+        followFocus &&
+        !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey &&
+        (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End')
+      ) {
+        // Arm the follow window. Pierre moves the focus in its own listener;
+        // the model subscription below fires right after and promotes the
+        // newly focused file. The microtask is a fallback in case the move
+        // produced no notification.
+        followArmedAt.current = performance.now();
+        queueMicrotask(followFromFocus);
       }
     },
-    [model, resolveTargets],
+    [model, resolveTargets, followFocus, followFromFocus],
   );
 
   // ── Right-click menu (the app's own viewport-clamped ContextMenu) ──

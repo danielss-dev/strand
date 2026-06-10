@@ -752,3 +752,66 @@ which allows all menu commands including `set-as-app-menu`. Repo-scoped
 items take `enabled: hasRepo`; App reinstalls the menu when that flips
 (menu handlers read the latest callbacks through a ref, so no rebuild per
 render).
+
+---
+
+## Pierre tree rows only repaint on data pushes — decoration changes need a key bump
+
+**Rule.** `PierreTree`'s `rowDecoration` callback (the per-row badge lane,
+e.g. the Review view's reviewed ✓) is read through a ref, so the *values* are
+always fresh — but Pierre only re-renders rows when data is pushed into the
+model. Any state that feeds `rowDecoration` must also be fingerprinted into
+`rowDecorationKey`, or the badges go stale on screen.
+
+**Why.** `@pierre/trees` renders into a shadow root outside React; props
+changing on our wrapper doesn't reach it. The wrapper repaints rows by
+calling `model.setGitStatus(...)` (which unconditionally re-renders the row
+tree) when `pathsKey` / `statusKey` / `rowDecorationKey` change. A decoration
+callback whose inputs aren't in the key silently skips that path.
+
+**How to apply.** Build `rowDecorationKey` from exactly the state the
+callback reads (e.g. `pool.map(d => `${d.path}:${verdict}`).join('|')`).
+Same pattern applies to any future per-row state we surface through the
+decoration lane.
+
+---
+
+## Pierre diffs highlight on the main thread unless the worker pool is mounted
+
+**Rule.** Every diff surface must run under `DiffWorkerPool`
+(`components/DiffWorkerPool.tsx`, mounted at the root in `main.tsx`), and any
+parsed patch handed to Pierre must carry a `cacheKey` — use
+`parseCacheablePatch` (`components/Diff.tsx`), never raw `getSingularPatch`,
+and never `PatchDiff` with a patch string when the diff can be large.
+
+**Why.** Without a `WorkerPoolContextProvider`, `@pierre/diffs` tokenizes
+with Shiki synchronously on the main thread at mount — fine for hunk-sized
+patches, a per-keystroke stall for the Review view's whole-file patches.
+Without a `cacheKey`, the pool's highlight LRU never hits (it keys solely on
+`diff.cacheKey`, which Pierre's own patch parsing leaves unset), so every
+remount re-tokenizes.
+
+**How to apply.** Pool render options (theme, `lineDiffType`,
+`tokenizeMaxLineLength`) are *global* while a pool is active — per-instance
+options are ignored for tokenization. Theme is registered dual
+(pierre-dark + pierre-light), so theme flips don't re-highlight; settings
+that affect tokenization must be pushed via `pool.setRenderOptions(...)`
+(see `RenderOptionsSync`). The pool self-heals after `terminate()` (Strict
+Mode's dev double-mount), re-initializing on the next task. Vite needs
+`worker: { format: 'es' }` because the worker code-splits a lazy wasm chunk.
+
+---
+
+## Pierre's VirtualizedFileDiff pins its first fileDiff — key it to swap content
+
+**Rule.** Any Pierre diff component rendered inside a `<Virtualizer>` must
+get a React `key` derived from the content it shows (we use
+`path:contentHash`). Swapping the `patch`/`fileDiff` prop on a mounted
+instance silently renders the old file.
+
+**Why.** `VirtualizedFileDiff.render` assigns `this.fileDiff ??= fileDiff` —
+nullish-assign — so the first diff wins for the life of the instance. The
+non-virtualized `FileDiff` path re-reads the prop, which masks the bug until
+virtualization is enabled (Review's diff pane). Also reset the scroll
+container to the top on swap: the virtualizer keeps the previous file's
+offset, and a deep offset into a short file shows an empty window.
