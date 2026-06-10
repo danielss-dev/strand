@@ -580,7 +580,7 @@ tree: watch the agent work, review fast, accept or reject safely.
   `hashPatch` in `lib/patch.ts`) — a file the agent touches after review
   flips back to unreviewed (row shows "changed"); persisted per-repo in
   SQLite; drives the sidebar badge + toolbar progress bar.
-- ☑ Review keyboard loop (Review view): `j`/`k` queue step, Space = mark
+- ☑ Review keyboard loop (Review view): `j`/`k` or ↑/↓ queue step, Space = mark
   reviewed **and advance to the next pending file**, `n`/`p` change-block
   step (page-scroll fallback on read-only session diffs), `s` stage, `d`-`d`
   discard, `c` jump to the commit form. Local Changes keeps its own staging

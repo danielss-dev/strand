@@ -167,10 +167,12 @@ export function Review() {
       }
       switch (e.key) {
         case 'j':
+        case 'ArrowDown':
           e.preventDefault();
           step(1);
           break;
         case 'k':
+        case 'ArrowUp':
           e.preventDefault();
           step(-1);
           break;
@@ -411,7 +413,7 @@ export function Review() {
       </div>
 
       <div className="rv-foot" aria-hidden="true">
-        <span className="kbd-inline">j k</span> files
+        <span className="kbd-inline">↑ ↓ j k</span> files
         <span className="kbd-inline">space</span> reviewed → next
         <span className="kbd-inline">n p</span> blocks
         <span className="kbd-inline">s</span> stage
