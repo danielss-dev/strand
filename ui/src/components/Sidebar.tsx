@@ -176,20 +176,28 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     const q = filter.trim().toLowerCase();
     const match = (s: string) => !q || s.toLowerCase().includes(q);
 
-    // Hide remote-tracking branches that already have a local counterpart —
-    // the local row already shows the upstream drift counts.
-    const trackedRemotes = new Set(
-      refs.branches.map((b) => b.upstream?.name).filter((n): n is string => Boolean(n)),
-    );
-
+    // All remote-tracking branches show, including ones a local branch
+    // already tracks (origin/main must stay visible and actionable even when
+    // main is the only local branch) — tracked rows just act differently
+    // (checkout the local instead of creating a duplicate; see remoteMenu).
     return {
       branches: refs.branches.filter((b) => match(b.name)),
-      remotes: refs.remote_branches
-        .filter((rb) => !trackedRemotes.has(rb.name))
-        .filter((rb) => match(rb.name)),
+      remotes: refs.remote_branches.filter((rb) => match(rb.name)),
       tags: refs.tags.filter((t) => match(t.name)),
     };
   }, [refs, filter]);
+
+  // Local branch tracking a given remote-tracking ref (`origin/main` → local
+  // `main`), used to route remote-row actions to the local when one exists.
+  const localByUpstream = useMemo(
+    () =>
+      new Map(
+        refs.branches
+          .filter((b) => b.upstream)
+          .map((b) => [b.upstream!.name, b] as const),
+      ),
+    [refs.branches],
+  );
 
   // Local branches render flat with their full name (`feat/foo`). Remote
   // branches group one level under their remote (`origin`), then list flat —
@@ -373,9 +381,23 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return items;
   };
 
-  const remoteMenu = (rb: RemoteBranch): MenuItem[] => [
-    { label: 'Create local branch & track', icon: 'branch', onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)) },
-  ];
+  const remoteMenu = (rb: RemoteBranch): MenuItem[] => {
+    const local = localByUpstream.get(rb.name);
+    const items: MenuItem[] = [];
+    if (local) {
+      items.push(
+        local.is_head
+          ? { label: `Tracked by current branch (${local.name})`, disabled: true, onSelect: () => {} }
+          : { label: `Checkout ${local.name}`, icon: 'branch', onSelect: () => void runBranchOp(() => checkout(local.name)) },
+      );
+    }
+    items.push({
+      label: 'Create local branch & track',
+      icon: 'branch',
+      onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)),
+    });
+    return items;
+  };
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
@@ -487,17 +509,37 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     />
   );
 
-  const renderRemoteLeaf = (rb: RemoteBranch, depth: number) => (
-    <SideLeaf
-      key={rb.full_name}
-      depth={depth}
-      icon="branch"
-      label={rb.branch}
-      onActivate={() => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true))}
-      onSelect={() => revealInGraph(rb.target)}
-      onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
-    />
-  );
+  // Remote rows with a local tracking branch check the local out on
+  // activate; only untracked ones create-and-track (avoids accidentally
+  // minting a local literally named `origin/main`). Both via the menu too.
+  const renderRemoteLeaf = (rb: RemoteBranch, depth: number) => {
+    const local = localByUpstream.get(rb.name);
+    return (
+      <SideLeaf
+        key={rb.full_name}
+        depth={depth}
+        icon="branch"
+        label={rb.branch}
+        meta={local ? 'tracked' : undefined}
+        title={
+          local
+            ? `${rb.name} — tracked by ${local.name}; double-click to check ${local.name} out`
+            : `${rb.name} — double-click to create a tracking branch`
+        }
+        onActivate={() =>
+          void runBranchOp(() =>
+            local
+              ? local.is_head
+                ? Promise.resolve()
+                : checkout(local.name)
+              : createBranch(localBranchName(rb), rb.name, true),
+          )
+        }
+        onSelect={() => revealInGraph(rb.target)}
+        onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
+      />
+    );
+  };
 
   const renderTagLeaf = (tg: Tag, depth: number) => (
     <SideLeaf

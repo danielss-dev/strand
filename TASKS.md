@@ -292,8 +292,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   onto this (confirm) / Delete branch (confirm). HEAD shows a disabled "Current
   branch".
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
-  the top folder; click a leaf — or its menu's "Create local branch & track" —
-  to create + track locally)
+  the top folder). **All** remote-tracking branches show, including ones a
+  local branch already tracks (`origin/main` stays visible with only `main`
+  local, so you can branch from it). Tracked leaves activate by checking out
+  their local branch (`tracked` meta tag, disabled "Tracked by current
+  branch" when it's HEAD); untracked leaves — or the menu's "Create local
+  branch & track" — create + track locally (name collision → `remote/branch`
+  local name)
 - ☑ Tags list (folder tree). Click checks out the tagged commit (detached HEAD
   via `checkoutCommit`); right-click menu = Checkout / Push to <remote> /
   Delete on <remote> (confirm) / Delete tag (confirm) — the two remote items
