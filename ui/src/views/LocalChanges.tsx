@@ -8,7 +8,7 @@ import {
 import { FileDiff as PierreFileDiff } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
-import { Diff } from '../components/Diff';
+import { Diff, diffAppearanceOptions } from '../components/Diff';
 import { Icon } from '../components/Icon';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { gitErrorHint } from '../lib/tauri';
@@ -838,17 +838,22 @@ export function HunkAnnotatedDiff({
     ),
     [],
   );
+  // Appearance settings (Settings → Diff) — subscribed individually and kept
+  // inside the memo deps so the options object stays referentially stable
+  // (see the onLineEnter note above: unstable options force re-virtualization).
+  const diffIndicators = useSettings((s) => s.diffIndicators);
+  const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
+  const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
   const fileDiffOptions = useMemo(
     () => ({
       diffStyle: layout,
       theme: pierreTheme,
       disableBackground: true,
       disableFileHeader: true,
-      // Pin word-level intra-line emphasis (Pierre's default) — see Diff.tsx.
-      lineDiffType: 'word-alt' as const,
+      ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
       onLineEnter,
     }),
-    [layout, pierreTheme, onLineEnter],
+    [layout, pierreTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {

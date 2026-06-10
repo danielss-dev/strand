@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { pickDirectory } from '../lib/dialog';
+import { useSettings } from '../stores/settings';
 
 /**
  * Modal for configuring a clone. The user pastes a URL and picks a destination;
@@ -17,7 +18,8 @@ export function CloneDialog({
   onStartClone: (url: string, dest: string) => void;
 }) {
   const [url, setUrl] = useState('');
-  const [parent, setParent] = useState('');
+  // Seed the destination with the configured default folder (Settings → Git).
+  const [parent, setParent] = useState(() => useSettings.getState().defaultCloneDir ?? '');
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
@@ -76,7 +78,7 @@ export function CloneDialog({
   const canClone = Boolean(url.trim() && dest);
 
   async function chooseParent() {
-    const dir = await pickDirectory('Clone into…');
+    const dir = await pickDirectory('Clone into…', parent || undefined);
     if (dir) setParent(dir);
   }
 

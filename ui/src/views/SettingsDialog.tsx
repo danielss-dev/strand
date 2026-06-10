@@ -1,38 +1,47 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { Icon } from '../components/Icon';
-import {
-  accentSwatch,
-  ACCENT_OPTIONS,
-  systemTheme,
-  THEME_OPTIONS,
-  type AccentOption,
-  type ThemeOption,
-} from '../lib/theme';
-import { useSettings, type AccentId, type ThemePref } from '../stores/settings';
+import { Icon, type IconName } from '../components/Icon';
+import { AppearanceSection } from './settings/AppearanceSection';
+import { DiffSection } from './settings/DiffSection';
+import { GitSection } from './settings/GitSection';
+import { IntegrationsSection } from './settings/IntegrationsSection';
+import { UpdatesSection } from './settings/UpdatesSection';
 
 /**
- * Settings modal. Reuses the `.clone-dialog` shell like the other dialogs.
- * Today it hosts the **Appearance** controls — theme (dark / light / system)
- * and accent color; density / font sections slot in alongside later.
- * Selecting applies live (CSS variables are token-driven), so there's no Save
- * step — the picker *is* the preview.
+ * Settings modal — a sidebar of sections (Appearance / Diff / Git /
+ * Integrations / Updates) with the active section's controls on the right.
+ * Reuses the `.clone-dialog` shell like the other dialogs; section content
+ * lives in `./settings/*Section.tsx`.
+ *
+ * Keyboard model: the sidebar is a vertical tablist with a roving tabindex —
+ * ↑/↓ move *and* select (select-on-focus, same as the radiogroups inside),
+ * Home/End jump, Tab moves between the close button, the tablist, the active
+ * panel's controls, and Done. Escape closes.
  *
  * Reachable from the status-bar gear, ⌘, and the command palette.
  */
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  // Read preferences from the store (App's useTheme keeps `resolvedTheme`
-  // current); selecting just writes the preference and re-themes live.
-  const pref = useSettings((s) => s.theme);
-  const resolved = useSettings((s) => s.resolvedTheme);
-  const accent = useSettings((s) => s.accent);
-  const set = useSettings((s) => s.set);
-  const setPref = (next: ThemePref) => set('theme', next);
-  const setAccent = (next: AccentId) => set('accent', next);
+
+export type SettingsSectionId = 'appearance' | 'diff' | 'git' | 'integrations' | 'updates';
+
+const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
+  { id: 'appearance', label: 'Appearance', icon: 'eye' },
+  { id: 'diff', label: 'Diff', icon: 'compare' },
+  { id: 'git', label: 'Git', icon: 'branch' },
+  { id: 'integrations', label: 'Integrations', icon: 'external' },
+  { id: 'updates', label: 'Updates', icon: 'sync' },
+];
+
+export function SettingsDialog({
+  onClose,
+  initialSection = 'appearance',
+}: {
+  onClose: () => void;
+  initialSection?: SettingsSectionId;
+}) {
+  const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
   const dialogRef = useRef<HTMLDivElement>(null);
-  const themesRef = useRef<HTMLDivElement>(null);
-  const accentsRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
   // Restore focus to whatever opened the dialog when it closes, so keyboard
   // flow returns to the status bar / palette instead of falling to <body>.
@@ -46,7 +55,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     if (e.key !== 'Tab' || !dialogRef.current) return;
     const focusables = Array.from(
       dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
     );
     if (focusables.length === 0) return;
@@ -69,33 +78,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Roving arrow-key nav within a radiogroup: ←/→/↑/↓ move + select the
-  // adjacent option, wrapping. Shared by the theme + accent groups (both
-  // tag their items with `data-opt-id`).
-  function moveSelection<T extends { id: string }>(
-    e: React.KeyboardEvent<HTMLDivElement>,
-    options: T[],
-    currentId: string,
-    select: (id: T['id']) => void,
-    container: HTMLDivElement | null,
-  ) {
-    const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown';
-    const back = e.key === 'ArrowLeft' || e.key === 'ArrowUp';
-    if (!fwd && !back) return;
+  // Sidebar roving nav: ↑/↓ move + select, Home/End jump.
+  function onNavKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const i = SECTIONS.findIndex((s) => s.id === section);
+    let next: SettingsSectionId | null = null;
+    if (e.key === 'ArrowDown') next = SECTIONS[(i + 1) % SECTIONS.length].id;
+    else if (e.key === 'ArrowUp') next = SECTIONS[(i + SECTIONS.length - 1) % SECTIONS.length].id;
+    else if (e.key === 'Home') next = SECTIONS[0].id;
+    else if (e.key === 'End') next = SECTIONS[SECTIONS.length - 1].id;
+    if (!next) return;
     e.preventDefault();
-    const i = options.findIndex((o) => o.id === currentId);
-    const base = i === -1 ? 0 : i;
-    const next = options[(base + (fwd ? 1 : options.length - 1)) % options.length];
-    select(next.id);
+    setSection(next);
+    const id = next;
     requestAnimationFrame(() => {
-      container?.querySelector<HTMLElement>(`[data-opt-id="${next.id}"]`)?.focus();
+      navRef.current?.querySelector<HTMLElement>(`[data-opt-id="${id}"]`)?.focus();
     });
   }
-
-  // The single Tab-reachable item per group (roving tabindex), with a fallback
-  // to the first if the stored value isn't a registered option.
-  const themeTab = THEME_OPTIONS.some((o) => o.id === pref) ? pref : THEME_OPTIONS[0].id;
-  const accentTab = ACCENT_OPTIONS.some((o) => o.id === accent) ? accent : ACCENT_OPTIONS[0].id;
 
   return (
     <div
@@ -105,7 +103,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
-        className="clone-dialog settings-dialog"
+        className="clone-dialog settings-dialog settings-dialog-lg"
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
@@ -120,59 +118,46 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="clone-body settings-body">
-          <section className="settings-section">
-            <span className="settings-section-label">Appearance</span>
-
-            <div className="settings-field">
-              <span className="settings-field-label">Theme</span>
-              <div
-                className="theme-grid"
-                role="radiogroup"
-                aria-label="Theme"
-                ref={themesRef}
-                onKeyDown={(e) => moveSelection(e, THEME_OPTIONS, pref, setPref, themesRef.current)}
+        <div className="settings-layout">
+          <div
+            className="settings-nav"
+            role="tablist"
+            aria-orientation="vertical"
+            aria-label="Settings sections"
+            ref={navRef}
+            onKeyDown={onNavKeyDown}
+          >
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                id={`settings-tab-${s.id}`}
+                aria-selected={section === s.id}
+                aria-controls="settings-pane"
+                data-opt-id={s.id}
+                tabIndex={s.id === section ? 0 : -1}
+                className={'settings-nav-item' + (section === s.id ? ' on' : '')}
+                onClick={() => setSection(s.id)}
               >
-                {THEME_OPTIONS.map((opt) => (
-                  <ThemeCard
-                    key={opt.id}
-                    option={opt}
-                    selected={pref === opt.id}
-                    tabbable={opt.id === themeTab}
-                    onSelect={() => setPref(opt.id)}
-                  />
-                ))}
-              </div>
-            </div>
+                <Icon name={s.icon} size={13} />
+                {s.label}
+              </button>
+            ))}
+          </div>
 
-            <div className="settings-field">
-              <span className="settings-field-label">Accent</span>
-              <div
-                className="accent-row"
-                role="radiogroup"
-                aria-label="Accent color"
-                ref={accentsRef}
-                onKeyDown={(e) => moveSelection(e, ACCENT_OPTIONS, accent, setAccent, accentsRef.current)}
-              >
-                {ACCENT_OPTIONS.map((opt) => (
-                  <AccentDot
-                    key={opt.id}
-                    option={opt}
-                    selected={accent === opt.id}
-                    tabbable={opt.id === accentTab}
-                    onSelect={() => setAccent(opt.id)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <p className="settings-hint">
-              {pref === 'system'
-                ? `Following the system — currently ${resolved}.`
-                : `Using the ${pref} theme.`}
-              {' '}Change anytime with <kbd className="kbd">⌘⇧T</kbd>.
-            </p>
-          </section>
+          <div
+            className="settings-pane"
+            id="settings-pane"
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${section}`}
+          >
+            {section === 'appearance' && <AppearanceSection />}
+            {section === 'diff' && <DiffSection />}
+            {section === 'git' && <GitSection />}
+            {section === 'integrations' && <IntegrationsSection />}
+            {section === 'updates' && <UpdatesSection />}
+          </div>
         </div>
 
         <div className="clone-foot">
@@ -182,81 +167,5 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function ThemeCard({
-  option,
-  selected,
-  tabbable,
-  onSelect,
-}: {
-  option: ThemeOption;
-  selected: boolean;
-  tabbable: boolean;
-  onSelect: () => void;
-}) {
-  // 'auto' swatches preview whichever theme the OS currently resolves to.
-  const swatchTheme = option.swatch === 'auto' ? systemTheme() : option.swatch;
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      data-opt-id={option.id}
-      tabIndex={tabbable ? 0 : -1}
-      className={'theme-card' + (selected ? ' selected' : '')}
-      onClick={onSelect}
-    >
-      <span className="theme-swatch" data-theme={swatchTheme} aria-hidden="true">
-        <span className="ts-bar" />
-        <span className="ts-body">
-          <span className="ts-side" />
-          <span className="ts-main">
-            <span className="ts-line a" />
-            <span className="ts-line b" />
-          </span>
-        </span>
-      </span>
-      <span className="theme-card-text">
-        <span className="theme-card-label">
-          {option.label}
-          {option.id === 'system' && <Icon name="eye" size={11} />}
-        </span>
-        <span className="theme-card-hint">{option.hint}</span>
-      </span>
-      <span className={'theme-check' + (selected ? ' on' : '')} aria-hidden="true">
-        {selected && <Icon name="check" size={12} stroke={2.2} />}
-      </span>
-    </button>
-  );
-}
-
-function AccentDot({
-  option,
-  selected,
-  tabbable,
-  onSelect,
-}: {
-  option: AccentOption;
-  selected: boolean;
-  tabbable: boolean;
-  onSelect: () => void;
-}) {
-  // The dot paints a fixed-lightness swatch of its hue (theme-independent);
-  // selection is a ring in the same hue (`--dot`).
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      aria-label={option.label}
-      title={option.label}
-      data-opt-id={option.id}
-      tabIndex={tabbable ? 0 : -1}
-      className={'accent-dot' + (selected ? ' selected' : '')}
-      style={{ '--dot': accentSwatch(option.h) } as React.CSSProperties}
-      onClick={onSelect}
-    />
   );
 }

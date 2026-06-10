@@ -201,7 +201,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags`,
   `repo_submodule_update` (all `async`; streaming progress over a `Channel`
   where applicable)
-- ☑ Plugins: sql, updater, dialog, shell, os
+- ☑ Plugins: sql, updater, dialog, shell, os, process (relaunch for updates)
 - ☑ SQLite migrations stub (`recent_repos`, `settings`)
 - ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
   (`sql:default` only covers reads — silent failure trap, see
@@ -495,7 +495,36 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `strand:lc-files`)
 - ☑ Auto-refresh on window focus / visibility (status + diffs + log + meta)
 - ☑ Refresh button in MainHeader wired with spinner
-- ☐ Tweaks panel UI (settings exposed, no UI to change them yet)
+- ☑ Tweaks panel UI → **multi-section Settings dialog** (`views/SettingsDialog.tsx`
+  shell + `views/settings/*Section.tsx`): sidebar `role="tablist"` (↑/↓ move &
+  select, Home/End, focus trap kept) over five sections —
+  - ☑ **Appearance**: theme + accent (moved from the old single-section dialog),
+    plus the previously UI-less `density` / `uiFont` / `monoFont` store fields
+    (segmented `SegRow` + selects in `views/settings/shared.tsx`)
+  - ☑ **Diff**: default layout (`defaultDiffLayout`, seeds repos without a
+    per-repo `diff-mode:` row — `loadRepoDiffMode` falls back to it), diff font
+    (`--diffs-font-family`, pierces Pierre's shadow DOM), change indicators
+    (`classic`/`bars`/`none`), line numbers, word-level highlight; live Pierre
+    preview. Options flow through `diffAppearanceOptions()` (`components/Diff.tsx`)
+    into both `Diff` and LocalChanges' `fileDiffOptions` memo. MergeResolver
+    deliberately stays pinned (gutter measurement).
+  - ☑ **Git**: global `user.name`/`user.email` read/write
+    (`gitconfig::global_identity` / `set_global_identity`, IPC
+    `git_global_identity` / `git_set_global_identity`) + default clone/open
+    folder (`defaultCloneDir`, seeds CloneDialog parent + dialog `defaultPath`)
+  - ☑ **Integrations**: external editor + terminal — per-OS presets + custom
+    template (`lib/integrations.ts`), safe tokenize-then-substitute launcher
+    (`strand-core::external::build_argv`/`spawn_detached`, IPC
+    `repo_open_in_editor` / `repo_open_in_terminal`); wired to the MainHeader
+    Terminal / Open-externally buttons (formerly disabled stubs) and palette
+    "Open in editor" / "Open in terminal"
+  - ☑ **Updates**: version + check/download/restart (`stores/updates.ts` on
+    plugin-updater/plugin-process) + `updateAutoCheck` / `updateAutoInstall`
+    prefs read by App's delayed launch auto-check (soft-fails while the
+    endpoint is offline)
+- ☐ Verify editor/terminal presets launch correctly on Windows and Linux
+  (`code.cmd` PATHEXT shim, `wt -d`, gnome-terminal/konsole/alacritty/kitty —
+  written blind on macOS)
 - ☑ **Theme management**
   - ☑ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets
     (`[data-theme]` token blocks in `tokens.css`; `system` resolves to one of

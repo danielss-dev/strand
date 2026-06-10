@@ -70,7 +70,14 @@ pnpm tauri:build   # signed installers in target/release/bundle
   (Tab cycles them), match highlighting, and full keyboard + screen-reader
   operability. Branch entries check out (remote branches checkout-and-track),
   tags/commits reveal in the graph, files open in the file view.
-- Theme + density + platform + font tweaks (persisted via Zustand)
+- Settings (⌘,): a five-section dialog — Appearance (theme, accent, density,
+  fonts), Diff (default layout, diff font, +/− indicators, line numbers, word
+  highlight, live preview), Git (global user.name/email, default clone/open
+  folder), Integrations (external editor + terminal: presets or a custom
+  command template), Updates (check / download / restart, auto-check +
+  auto-install). All persisted; fully keyboard-operable
+- Open in editor / terminal: header buttons + ⌘K actions launch the configured
+  apps on the current file (with line) or repo folder
 - Open-repo flow with multi-repo tabs, recent repos, and palette nav
 - Clone / open progress: a persistent bottom popup shows a loading bar until the
   op completes — a determinate bar with an ETA while cloning (then it rolls into
@@ -133,7 +140,8 @@ pnpm tauri:build   # signed installers in target/release/bundle
   `repo_refs`, `repo_diff_commit`, plus the staging, network, branch,
   and tag commands above
 - SQLite plugin (recent repos + settings schema)
-- Updater plugin (endpoint stub)
+- Updater plugin + in-app update UI (Settings → Updates; the update endpoint
+  itself isn't live yet, so checks soft-fail until it is)
 
 ## What's still stubbed
 

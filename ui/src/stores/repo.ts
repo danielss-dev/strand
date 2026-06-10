@@ -1148,7 +1148,10 @@ export const useRepo = create<RepoState>((set, get) => ({
     const mode = await repoDiffMode.get(path);
     // Guard against a tab switch landing mid-read (e.g. several repos opening
     // during session restore): only the still-active repo's layout may win.
-    if (mode && get().activePath === path) useSettings.getState().set('diffMode', mode);
+    // No per-repo override → the configured default (Settings → Diff) applies.
+    if (get().activePath !== path) return;
+    const settings = useSettings.getState();
+    settings.set('diffMode', mode ?? settings.defaultDiffLayout);
   },
   async stageAll() {
     const path = get().activePath;

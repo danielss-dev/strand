@@ -17,6 +17,17 @@ export type GraphStyle = 'classic' | 'bold' | 'mono';
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
 
+/** Pierre's change-marker style: `classic` = +/− signs, `bars` = colored
+ * edge bars (Pierre's default), `none` = background tint only. */
+export type DiffIndicators = 'classic' | 'bars' | 'none';
+
+/** An external app integration (editor / terminal): a preset from
+ * `lib/integrations.ts`, a custom command template, or unconfigured. */
+export type ExternalTool =
+  | { kind: 'preset'; id: string }
+  | { kind: 'custom'; template: string }
+  | null;
+
 /** The concrete theme already applied to `<html>` by the pre-paint inline
  * script in index.html — the exact (pref + OS) resolution, with no second
  * computation here. `useTheme` keeps it in sync from React's first commit. */
@@ -61,6 +72,21 @@ export interface SettingsState {
   graphStyle: GraphStyle;
   uiFont: UiFont;
   monoFont: MonoFont;
+  /** Diff layout used for repos with no per-repo override (the header toggle
+   * writes a per-repo row; see `repo.ts` `loadRepoDiffMode`). */
+  defaultDiffLayout: DiffMode;
+  /** Font for diff/code panes; `inherit` follows `monoFont`. */
+  diffFont: MonoFont | 'inherit';
+  diffLineNumbers: boolean;
+  diffIndicators: DiffIndicators;
+  /** Intra-line (word-level) change emphasis in diffs. */
+  diffWordHighlight: boolean;
+  /** Directory the clone dialog and open-repo picker start in. */
+  defaultCloneDir: string | null;
+  editorTool: ExternalTool;
+  terminalTool: ExternalTool;
+  updateAutoCheck: boolean;
+  updateAutoInstall: boolean;
   set: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
 }
 
@@ -80,6 +106,29 @@ export const FONTS = {
   } satisfies Record<MonoFont, string>,
 };
 
+/** Picker registries — bundled fonts only (the app ships these families;
+ * arbitrary system fonts would render fallbacks unpredictably). */
+export const UI_FONT_OPTIONS: { id: UiFont; label: string }[] = [
+  { id: 'geist', label: 'Geist' },
+  { id: 'inter', label: 'Inter' },
+  { id: 'iaq', label: 'IBM Plex Sans' },
+  { id: 'system', label: 'System' },
+];
+
+export const MONO_FONT_OPTIONS: { id: MonoFont; label: string }[] = [
+  { id: 'jetbrains', label: 'JetBrains Mono' },
+  { id: 'geist', label: 'Geist Mono' },
+  { id: 'plex', label: 'IBM Plex Mono' },
+  { id: 'commit', label: 'Commit Mono' },
+  { id: 'sfmono', label: 'SF Mono / system' },
+];
+
+export const DENSITY_OPTIONS: { id: Density; label: string }[] = [
+  { id: 'compact', label: 'Compact' },
+  { id: 'default', label: 'Default' },
+  { id: 'relaxed', label: 'Relaxed' },
+];
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -93,6 +142,16 @@ export const useSettings = create<SettingsState>()(
       graphStyle: 'classic',
       uiFont: 'geist',
       monoFont: 'jetbrains',
+      defaultDiffLayout: 'stacked',
+      diffFont: 'inherit',
+      diffLineNumbers: true,
+      diffIndicators: 'bars',
+      diffWordHighlight: true,
+      defaultCloneDir: null,
+      editorTool: null,
+      terminalTool: null,
+      updateAutoCheck: true,
+      updateAutoInstall: false,
       set: (key, value) => set({ [key]: value } as Partial<SettingsState>),
     }),
     {

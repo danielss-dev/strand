@@ -151,6 +151,9 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     }
   }
 
+  // Pierre options stay pinned here — deliberately NOT following the
+  // Settings → Diff appearance options: HighlightLayer measures gutter rows
+  // inside Pierre's shadow root, which `disableLineNumbers` would break.
   const fileOpts = (
     side: 'theirs' | 'ours' | 'result',
     onPick?: (index: number) => void,

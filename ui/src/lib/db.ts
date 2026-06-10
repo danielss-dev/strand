@@ -162,10 +162,10 @@ export const reviewSession = {
 
 /**
  * Per-repo diff layout (stacked / split). A null means the repo has no explicit
- * choice yet, in which case the live `useSettings.diffMode` (the last-used
- * layout) stands as the default. Stored in the generic `settings` table, keyed
- * by repo path. Only an explicit toggle writes a row, so a repo follows the
- * default until the user picks a layout for it.
+ * choice yet, in which case `useSettings.defaultDiffLayout` (Settings → Diff)
+ * applies. Stored in the generic `settings` table, keyed by repo path. Only an
+ * explicit toggle writes a row, so a repo follows the default until the user
+ * picks a layout for it.
  */
 export const repoDiffMode = {
   get(repoPath: string): Promise<DiffMode | null> {

@@ -2,6 +2,7 @@ use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{FileContent, FileHistoryEntry},
+    gitconfig::{self, GlobalIdentity},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::Commit,
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
@@ -596,6 +597,33 @@ pub async fn repo_open_mergetool(path: String, file: String) -> CmdResult<()> {
     })
     .await
     .map_err(|e| CmdError { message: format!("mergetool task failed: {e}") })?
+}
+
+// Detached spawns — they return as soon as the app launches, so no
+// spawn_blocking needed (Settings → Integrations supplies the template).
+#[tauri::command]
+pub fn repo_open_in_editor(
+    path: String,
+    file: Option<String>,
+    line: Option<u32>,
+    template: String,
+) -> CmdResult<()> {
+    Ok(Repo::discover(&path)?.open_in_editor(file.as_deref(), line, &template)?)
+}
+
+#[tauri::command]
+pub fn repo_open_in_terminal(path: String, template: String) -> CmdResult<()> {
+    Ok(Repo::discover(&path)?.open_in_terminal(&template)?)
+}
+
+#[tauri::command]
+pub fn git_global_identity() -> CmdResult<GlobalIdentity> {
+    Ok(gitconfig::global_identity()?)
+}
+
+#[tauri::command]
+pub fn git_set_global_identity(name: String, email: String) -> CmdResult<()> {
+    Ok(gitconfig::set_global_identity(&name, &email)?)
 }
 
 #[tauri::command]

@@ -80,7 +80,7 @@ impl Repo {
     /// `canonicalize` needs an existing path, so for a not-yet-created file
     /// (the `resolve_conflict` write of a brand-new file) we canonicalize the
     /// parent directory instead.
-    fn workdir_path(&self, rel_path: &str) -> Result<std::path::PathBuf> {
+    pub(crate) fn workdir_path(&self, rel_path: &str) -> Result<std::path::PathBuf> {
         let p = Path::new(rel_path);
         if p.is_absolute() || p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
             return Err(Error::Other(format!("invalid path: {rel_path}")));

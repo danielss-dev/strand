@@ -46,6 +46,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::default().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:strand.db", state::migrations())
@@ -113,6 +114,10 @@ fn main() {
             commands::repo_read_conflict_file,
             commands::repo_resolve_conflict,
             commands::repo_open_mergetool,
+            commands::repo_open_in_editor,
+            commands::repo_open_in_terminal,
+            commands::git_global_identity,
+            commands::git_set_global_identity,
             commands::repo_stash_list,
             commands::repo_stash_save,
             commands::repo_stash_snapshot,

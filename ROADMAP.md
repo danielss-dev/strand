@@ -258,7 +258,14 @@ also pending (only `aarch64-apple-darwin` is installed).
   validated on Windows 11 (see 2026-06-07 below)
 - ☐ Linux build (deb / rpm / AppImage)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
-  wired, `createUpdaterArtifacts` on); real endpoint still pending
+  wired, `createUpdaterArtifacts` on); in-app UI done (Settings → Updates:
+  check / download / restart + auto-check & auto-install prefs); real endpoint
+  still pending
+- ☑ **Settings view** — multi-section dialog (Appearance / Diff / Git /
+  Integrations / Updates): density + fonts exposed, diff appearance (layout
+  default, font, indicators, line numbers, word highlight), global git
+  identity, default clone/open folder, external editor + terminal
+  (presets + custom command, wired to header buttons + palette)
 - ◐ Performance pass to hit PRD §8 targets on medium repos
   (open <2s for 100k commits ☑, status refresh <200ms on 10k files ☑; webview-side
   targets — cold start, diff render, memory — still need a running-app pass)
@@ -600,6 +607,27 @@ menu, and ⌘K. A necessary companion landed too: **`Repo::continue_operation`**
 wrong. Verified with `cargo test -p strand-core` (+5 history tests: reorder/drop,
 fixup/squash, reword, and a conflict → resolve → continue round-trip) and `tsc`.
 
+**Settings view shipped (2026-06-10):** The single-section settings modal grew
+into a five-section dialog — sidebar `tablist` (↑/↓ select-on-focus, Home/End,
+same focus trap) over **Appearance** (theme + accent moved over; density / UI
+font / mono font finally get UI), **Diff** (default layout — now the fallback
+`loadRepoDiffMode` applies when a repo has no per-repo row — plus diff font via
+`--diffs-font-family`, `classic`/`bars`/`none` indicators, line numbers, word
+highlight, all flowing through `diffAppearanceOptions()` into `Diff` and
+LocalChanges with a live Pierre preview; MergeResolver deliberately pinned),
+**Git** (global `user.name`/`user.email` via `git2::Config` — new
+`strand-core::gitconfig` + `git_global_identity`/`git_set_global_identity`
+IPC — and a default clone/open folder seeding CloneDialog + the open picker),
+**Integrations** (editor/terminal per-OS presets + custom `{file}`/`{line}`/
+`{dir}` templates; `strand-core::external` tokenizes *before* substituting so
+repo paths can't inject argv, spawns detached; the MainHeader Terminal /
+Open-externally stubs are finally live, plus palette actions), and **Updates**
+(version, check / download / restart on plugin-updater + new plugin-process,
+auto-check-on-launch + auto-install prefs; soft-fails while the endpoint is
+offline). Verified: `cargo test -p strand-core` (57 tests, +7 new),
+`vitest` (36, +7 for integrations), `tsc`, and a keyboard-only Playwright
+pass over all five sections in browser mode.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)
@@ -618,7 +646,6 @@ fixup/squash, reword, and a conflict → resolve → continue round-trip) and `t
 - ☑ Stashes shown inline on the graph (synthetic node per stash, attached to its
   base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
 - ☐ Drag-and-drop renames in file tree
-- ☐ Compact / default / relaxed density (settings UI; CSS already supports it)
 - ☐ Crash reporting (opt-in, off by default)
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline

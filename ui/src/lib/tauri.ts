@@ -10,6 +10,7 @@ import type {
   FileDiff,
   FileHistoryEntry,
   FileStatus,
+  GlobalIdentity,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -232,6 +233,15 @@ export const tauri = {
   /** Blocks until the external merge tool exits. */
   repoOpenMergetool: (path: string, file: string) =>
     invoke<void>('repo_open_mergetool', { path, file }),
+  /** Detached spawn of the configured editor — `file: null` opens the repo
+   * directory. `template` comes from Settings → Integrations. */
+  repoOpenInEditor: (path: string, file: string | null, line: number | null, template: string) =>
+    invoke<void>('repo_open_in_editor', { path, file, line, template }),
+  repoOpenInTerminal: (path: string, template: string) =>
+    invoke<void>('repo_open_in_terminal', { path, template }),
+  gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
+  gitSetGlobalIdentity: (name: string, email: string) =>
+    invoke<void>('git_set_global_identity', { name, email }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,

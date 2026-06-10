@@ -27,6 +27,12 @@ export interface RepoMeta {
   is_linked_worktree: boolean;
 }
 
+/** Global git identity (`user.name` / `user.email`), Settings → Git. */
+export interface GlobalIdentity {
+  name: string | null;
+  email: string | null;
+}
+
 /** Merge strategy chosen in the Merge dialog. */
 export type MergeMode = 'auto' | 'no_ff' | 'squash';
 

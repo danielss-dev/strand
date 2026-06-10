@@ -25,6 +25,8 @@ pub mod network;
 pub mod refs;
 pub mod branch;
 pub mod conflict;
+pub mod external;
+pub mod gitconfig;
 pub mod history;
 pub mod stash;
 pub mod tag;

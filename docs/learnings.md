@@ -678,3 +678,50 @@ rows land under the wrong mouse position, which reads as "selection is
 flaky" and is miserable to bisect. Focus/reveal jumps also fall back to
 index × rowH math when the target row isn't mounted (`scrollIntoView` can't
 reach an unmounted row), so the constant is correctness, not just layout.
+
+---
+
+## Diff appearance settings flow through one helper — and never into MergeResolver
+
+**Rule.** User-facing diff appearance (change indicators, line numbers,
+word-level highlight) is computed by `diffAppearanceOptions()` in
+`components/Diff.tsx` and consumed by exactly two call sites: the `Diff`
+wrapper and LocalChanges' `fileDiffOptions` memo (where the three settings
+must stay **inside the existing `useMemo` deps** — an unstable options object
+forces Pierre re-virtualization and the documented scroll-snap bug).
+`MergeResolver` keeps its own pinned options and must NOT adopt them.
+
+**Why.** MergeResolver's `HighlightLayer` measures gutter rows inside
+Pierre's shadow root; `disableLineNumbers` removes the gutter and silently
+breaks conflict-range highlighting. The single helper exists so the real
+panes and the Settings → Diff live preview can't drift apart.
+
+**How to apply.** A new diff appearance setting = one field in
+`stores/settings.ts`, one line in `diffAppearanceOptions()`, a control in
+`views/settings/DiffSection.tsx`, and the field added to LocalChanges' memo
+deps. The diff *font* is different: Pierre reads the `--diffs-font-family`
+CSS custom property (custom properties pierce shadow DOM), set on `<html>`
+in App's font effect — no Pierre option involved.
+
+---
+
+## External app launches: tokenize the template before substituting
+
+**Rule.** Editor/terminal command templates (`code -g {file}:{line}`) are
+launched by `strand-core::external::build_argv`, which splits the template
+into argv tokens **first** and substitutes `{file}`/`{line}`/`{dir}` inside
+tokens **afterwards**, then spawns directly (never via a shell). File paths
+additionally pass the `workdir_path` traversal/symlink guard.
+
+**Why.** The template is the user's own setting (same trust as git's
+`merge.tool`), but `{file}` is repo content — a path like
+`a'; rm -rf /;'b.txt` must stay a single argv element. Substituting before
+tokenizing (or going through a shell) turns a hostile filename into command
+injection.
+
+**How to apply.** New placeholders or launch surfaces go through
+`build_argv` + `spawn_detached`; never `format!` a command string. Presets
+live in `ui/src/lib/integrations.ts` per OS — macOS editor presets use CLI
+shims (`code`, `zed`…) because `open -a` can't pass file:line; Windows names
+`code.cmd` explicitly (std `Command` doesn't apply PATHEXT). Windows/Linux
+presets are untested on real machines (tracked ☐ in TASKS).

@@ -11,11 +11,13 @@ import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
+import { useUpdates } from './stores/updates';
 import { pickRepoDirectory } from './lib/dialog';
+import { editorTemplate, terminalTemplate } from './lib/integrations';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
-import { SettingsDialog } from './views/SettingsDialog';
+import { SettingsDialog, type SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
@@ -89,6 +91,7 @@ export function App() {
   const platform = useSettings((s) => s.platform);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
+  const diffFont = useSettings((s) => s.diffFont);
   const accent = useSettings((s) => s.accent);
   // Theme preference → resolved theme; `useTheme` applies `data-theme` on
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
@@ -136,6 +139,7 @@ export function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
@@ -176,6 +180,41 @@ export function App() {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
   }, []);
+
+  const openSettingsAt = useCallback((section: SettingsSectionId) => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  }, []);
+
+  // Launch the configured terminal / editor (Settings → Integrations) on the
+  // active repo. Unconfigured routes to Settings instead of silently no-oping.
+  const openInTerminal = useCallback(() => {
+    const path = useRepo.getState().activePath;
+    if (!path) return;
+    const template = terminalTemplate(useSettings.getState().terminalTool);
+    if (!template) {
+      showToast('Choose a terminal in Settings → Integrations');
+      openSettingsAt('integrations');
+      return;
+    }
+    tauri.repoOpenInTerminal(path, template)
+      .catch((e) => showToast(`Open terminal failed: ${errMessage(e)}`));
+  }, [showToast, openSettingsAt]);
+
+  const openInEditor = useCallback(() => {
+    const path = useRepo.getState().activePath;
+    if (!path) return;
+    const template = editorTemplate(useSettings.getState().editorTool);
+    if (!template) {
+      showToast('Choose an editor in Settings → Integrations');
+      openSettingsAt('integrations');
+      return;
+    }
+    // With no file selected the repo directory opens instead.
+    const file = useRepo.getState().selectedFile;
+    tauri.repoOpenInEditor(path, file, null, template)
+      .catch((e) => showToast(`Open editor failed: ${errMessage(e)}`));
+  }, [showToast, openSettingsAt]);
 
   // Flash a button's check pulse for ~1.6s. The duration outlasts the
   // pop-in animation so the check lingers briefly before reverting.
@@ -381,7 +420,37 @@ export function App() {
     root.dataset.accent = accent;
     root.style.setProperty('--font-ui', FONTS.ui[uiFont]);
     root.style.setProperty('--font-mono', FONTS.mono[monoFont]);
-  }, [density, platform, accent, uiFont, monoFont]);
+    // Pierre reads `--diffs-font-family` inside its shadow DOM (custom
+    // properties pierce shadow roots), so the diff font is just this var.
+    root.style.setProperty('--diffs-font-family', FONTS.mono[diffFont === 'inherit' ? monoFont : diffFont]);
+  }, [density, platform, accent, uiFont, monoFont, diffFont]);
+
+  // Update auto-check on launch (Settings → Updates). Delayed a few seconds
+  // so it never competes with cold-start work, and soft-fails quietly — the
+  // update endpoint may not be reachable. One-shot by design: prefs read at
+  // fire time, not subscribed.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const timer = setTimeout(() => {
+      const { updateAutoCheck, updateAutoInstall } = useSettings.getState();
+      if (!updateAutoCheck) return;
+      void (async () => {
+        const updates = useUpdates.getState();
+        await updates.check();
+        const { status, version } = useUpdates.getState();
+        if (status !== 'available') return;
+        if (updateAutoInstall) {
+          await updates.downloadAndInstall();
+          if (useUpdates.getState().status === 'ready') {
+            showToast(`Update ${version} ready — restart from Settings → Updates`);
+          }
+        } else {
+          showToast(`Update ${version} available — see Settings → Updates`);
+        }
+      })().catch((e) => console.warn('update auto-check failed', e));
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [showToast]);
 
   // Native drag-and-drop: drop a folder onto the window to open it.
   useEffect(() => {
@@ -459,14 +528,14 @@ export function App() {
         showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
       } else if (mod && e.key === ',') {
         e.preventDefault();
-        setSettingsOpen(true);
+        openSettingsAt('appearance');
       } else if (e.key === 'Escape') {
         setPaletteOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setView, selectFile, openViaDialog, cycleTheme, showToast]);
+  }, [setView, selectFile, openViaDialog, cycleTheme, showToast, openSettingsAt]);
 
   // The working-tree file list is otherwise lazy (only the Files sidebar tab
   // loads it). Pull it when the palette opens so file search has data; keyed on
@@ -634,6 +703,8 @@ export function App() {
         { id: 'review-stage', label: 'Review: stage reviewed files', group: 'Actions', keywords: 'accept reviewed stage bulk', run: () => {
           void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`));
         } },
+        { id: 'open-editor', label: 'Open in editor', group: 'Actions', keywords: 'external code reveal vscode editor', run: openInEditor },
+        { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', keywords: 'shell console cwd iterm terminal', run: openInTerminal },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
@@ -660,7 +731,7 @@ export function App() {
       );
     }
     base.push(
-      { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: '⌘,', run: () => setSettingsOpen(true) },
+      { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: '⌘,', run: () => openSettingsAt('appearance') },
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: '⌘⇧T', run: () => setTheme('system') },
@@ -695,12 +766,13 @@ export function App() {
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
-      requestSelectSinceBaseline,
+      requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, baseline, setBaseline, clearBaseline, stageReviewed]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
     '--font-mono': FONTS.mono[monoFont],
+    '--diffs-font-family': FONTS.mono[diffFont === 'inherit' ? monoFont : diffFont],
   } as React.CSSProperties;
 
   return (
@@ -744,7 +816,7 @@ export function App() {
                 <FileView path={selectedFile} />
               ) : (
                 <div className="main">
-                  <MainHeader />
+                  <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {view === 'review' && <Review />}
@@ -765,7 +837,7 @@ export function App() {
           </PanelGroup>
         </div>
 
-        <StatusBar onOpenSettings={() => setSettingsOpen(true)} />
+        <StatusBar onOpenSettings={() => openSettingsAt('appearance')} />
 
         {/* Persistent live region: the visible pills below mount/unmount, which
             is unreliable for screen readers, so announce the active message
@@ -823,7 +895,9 @@ export function App() {
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
 
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsDialog initialSection={settingsSection} onClose={() => setSettingsOpen(false)} />
+      )}
 
       {cloneOpen && (
         <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
@@ -1053,12 +1127,19 @@ function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
   );
 }
 
-function MainHeader() {
+function MainHeader({
+  onOpenEditor,
+  onOpenTerminal,
+}: {
+  onOpenEditor: () => void;
+  onOpenTerminal: () => void;
+}) {
   const view = useRepo((s) => s.view);
   const meta = useRepo((s) => s.meta);
   const status = useRepo((s) => s.status);
   const commits = useRepo((s) => s.commits);
   const activePath = useRepo((s) => s.activePath);
+  const selectedFile = useRepo((s) => s.selectedFile);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
   const diffMode = useSettings((s) => s.diffMode);
@@ -1164,10 +1245,28 @@ function MainHeader() {
             <Icon name="refresh" size={13} />
           </span>
         </button>
-        {/* Planned, not yet wired — disabled so they don't present a dead
-            affordance (a click that silently does nothing). */}
-        <button type="button" className="icon-btn" title="Terminal (coming soon)" aria-label="Open terminal (coming soon)" disabled><Icon name="terminal" size={13} /></button>
-        <button type="button" className="icon-btn" title="Open externally (coming soon)" aria-label="Open externally (coming soon)" disabled><Icon name="external" size={13} /></button>
+        {/* Unconfigured tools route to Settings → Integrations (with a toast)
+            rather than silently no-oping; only "no repo" disables. */}
+        <button
+          type="button"
+          className={'icon-btn' + (!activePath ? ' disabled' : '')}
+          onClick={onOpenTerminal}
+          title="Open in terminal"
+          aria-label="Open repository in terminal"
+          disabled={!activePath}
+        >
+          <Icon name="terminal" size={13} />
+        </button>
+        <button
+          type="button"
+          className={'icon-btn' + (!activePath ? ' disabled' : '')}
+          onClick={onOpenEditor}
+          title={selectedFile ? 'Open file in editor' : 'Open repository in editor'}
+          aria-label={selectedFile ? 'Open file in external editor' : 'Open repository in external editor'}
+          disabled={!activePath}
+        >
+          <Icon name="external" size={13} />
+        </button>
       </div>
     </div>
   );
