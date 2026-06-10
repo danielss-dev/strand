@@ -80,7 +80,10 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'lock':        return <svg {...p}><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 1 1 6 0v2"/></svg>;
     case 'star':        return <svg {...p}><path d="M8 2l1.8 3.8 4.2.6-3 2.9.7 4.1L8 11.5 4.3 13.4 5 9.3 2 6.4l4.2-.6L8 2Z"/></svg>;
     case 'gpg':         return <svg {...p}><path d="M3 7V5a5 5 0 0 1 10 0v2"/><rect x="2.5" y="7" width="11" height="6.5" rx="1"/><circle cx="8" cy="10" r="1"/></svg>;
-    case 'settings':    return <svg {...p}><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>;
+    // Gear (Feather "settings"). Drawn in its native 24-grid — the tooth
+    // outline doesn't survive a hand-scale to 16 — with the stroke widened
+    // 1.5× so the rendered weight matches the 16-grid icons exactly.
+    case 'settings':    return <svg {...p} viewBox="0 0 24 24" strokeWidth={stroke * 1.5}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
     case 'win-min':     return <svg {...p} viewBox="0 0 10 10" strokeWidth={1}><path d="M1 5h8"/></svg>;
     case 'win-max':     return <svg {...p} viewBox="0 0 10 10" strokeWidth={1}><rect x="1.5" y="1.5" width="7" height="7"/></svg>;
     case 'win-close':   return <svg {...p} viewBox="0 0 10 10" strokeWidth={1}><path d="M1 1l8 8M9 1l-8 8"/></svg>;
