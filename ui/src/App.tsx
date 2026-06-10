@@ -20,6 +20,7 @@ import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
 import { SettingsDialog, type SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
+import { BranchDialog } from './views/BranchDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
 import { RebaseEditor } from './views/RebaseEditor';
@@ -146,6 +147,7 @@ export function App() {
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
+  const [branchDialog, setBranchDialog] = useState<{ start: string | null; label: string } | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
   const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
   // null = closed; otherwise the interactive-rebase base (revspec before the
@@ -749,6 +751,7 @@ export function App() {
         { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', keywords: 'shell console cwd iterm terminal', run: openInTerminal },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
+        { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
         { id: 'push-tags', label: 'Push all tags', group: 'Actions', run: () => {
           void (async () => {
@@ -846,6 +849,7 @@ export function App() {
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onCreateBranch={(start, label) => setBranchDialog({ start, label })}
                 onCreateWorktree={() => setWorktreeOpen(true)}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
@@ -954,6 +958,14 @@ export function App() {
           target={tagDialog.target}
           targetLabel={tagDialog.label}
           onClose={() => setTagDialog(null)}
+        />
+      )}
+
+      {branchDialog && (
+        <BranchDialog
+          start={branchDialog.start}
+          startLabel={branchDialog.label}
+          onClose={() => setBranchDialog(null)}
         />
       )}
 

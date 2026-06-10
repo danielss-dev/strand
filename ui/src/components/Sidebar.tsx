@@ -61,6 +61,9 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
+   * human name shown in the blurb. */
+  onCreateBranch: (start: string | null, label: string) => void;
   /** Open the New-worktree dialog. */
   onCreateWorktree: () => void;
   /** Open the Merge dialog: merge `source` into the current branch `into`. */
@@ -114,7 +117,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateWorktree, onMerge, onInteractiveRebase, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -354,12 +357,18 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   };
 
   const branchMenu = (b: Branch): MenuItem[] => {
+    const newBranchItem: MenuItem = {
+      label: 'New branch from here…',
+      icon: 'plus',
+      onSelect: () => onCreateBranch(b.name, b.name),
+    };
     if (b.is_head) {
       // Interactive rebase over the commits this branch is ahead of its
       // upstream (`upstream..HEAD`) — the unpushed work it's safe to edit.
       const up = b.upstream?.name;
       return [
         { label: 'Current branch', disabled: true, onSelect: () => {} },
+        newBranchItem,
         {
           label: 'Interactive rebase…',
           icon: 'rebase',
@@ -372,6 +381,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     }
     const items: MenuItem[] = [
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+      newBranchItem,
     ];
     if (currentBranch) {
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
@@ -395,6 +405,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       label: 'Create local branch & track',
       icon: 'branch',
       onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)),
+    });
+    // Same create, but with a chosen name (auto-tracks — core wires upstream
+    // when the start point is a remote-tracking branch).
+    items.push({
+      label: 'New branch from here…',
+      icon: 'plus',
+      onSelect: () => onCreateBranch(rb.name, rb.name),
     });
     return items;
   };
@@ -636,6 +653,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             collapsed={!sections.branches}
             onToggle={() => toggle('branches')}
             count={filtered.branches.length}
+            action={{ icon: 'plus', title: 'New branch…', onClick: () => onCreateBranch(null, 'HEAD') }}
           />
           {sections.branches &&
             renderTreeChildren(branchTree, 0, collapsed, toggleCollapsed, renderBranchLeaf, 'branches')}

@@ -288,9 +288,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Branches list from real data — names with `/` render as nested
   folders (e.g. `feature/foo` lives under a `feature/` folder), default
   expanded, click chev to collapse. Leaf rows checkout on click; right-click
-  menu = Checkout / Merge into <current> (opens `MergeDialog`) / Rebase <current>
-  onto this (confirm) / Delete branch (confirm). HEAD shows a disabled "Current
-  branch".
+  menu = Checkout / New branch from here… (opens `BranchDialog` — named branch
+  from any start point, optional checkout; also on remote rows, the Branches
+  section `+`, and palette "Create branch…" from HEAD) / Merge into <current>
+  (opens `MergeDialog`) / Rebase <current> onto this (confirm) / Delete branch
+  (confirm). HEAD shows a disabled "Current branch".
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
   the top folder). **All** remote-tracking branches show, including ones a
   local branch already tracks (`origin/main` stays visible with only `main`
