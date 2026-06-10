@@ -73,8 +73,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   // every commit since it (the agent session), and the palette's "Select
   // commits since baseline" raises the matching one-shot signal.
   const baseline = useRepo((s) => s.baseline);
+  const setBaseline = useRepo((s) => s.setBaseline);
   const selectSinceBaselineSignal = useRepo((s) => s.selectSinceBaseline);
   const clearSelectSinceBaseline = useRepo((s) => s.clearSelectSinceBaseline);
+  const setView = useRepo((s) => s.setView);
+  const selectFile = useRepo((s) => s.selectFile);
 
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
@@ -125,6 +128,19 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
             onInteractiveRebase(c.parents.length ? `${c.hash}^` : null, c.short_hash),
         },
         {
+          // Pin the review baseline here and jump to the Review view — review
+          // everything (commits + working tree) done since this commit.
+          label: 'Review changes since this',
+          icon: 'check',
+          onSelect: () => void (async () => {
+            try {
+              await setBaseline(c.hash);
+              setView('review');
+              selectFile(null);
+            } catch (e) { fail('Set baseline', e); }
+          })(),
+        },
+        {
           label: 'Copy SHA',
           icon: 'file',
           onSelect: () => { void copyToClipboard(c.hash); onToast('Copied commit hash'); },
@@ -132,7 +148,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
       ];
       setMenu({ x, y, items });
     },
-    [checkoutCommit, cherryPick, revert, onCreateTag, onInteractiveRebase, onToast],
+    [checkoutCommit, cherryPick, revert, onCreateTag, onInteractiveRebase, onToast,
+      setBaseline, setView, selectFile],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail

@@ -254,8 +254,8 @@ export interface RepoState {
    */
   handleExternalChange(path: string): Promise<void>;
 
-  /** Pin the review baseline at the current HEAD. */
-  setBaseline(): Promise<void>;
+  /** Pin the review baseline at `oid` (default: the current HEAD). */
+  setBaseline(oid?: string): Promise<void>;
   /** Clear the review baseline (and its persisted record). */
   clearBaseline(): Promise<void>;
   /** Re-run `diff_since(baseline)` into {@link RepoState.baselineDiffs}. */
@@ -825,9 +825,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
 
-  async setBaseline() {
+  async setBaseline(at) {
     const path = get().activePath;
-    const oid = get().meta?.head_oid;
+    const oid = at ?? get().meta?.head_oid;
     if (!path || !oid) return;
     const baseline: StoredBaseline = { oid, short: oid.slice(0, 7), setAt: Date.now() };
     set({ baseline });

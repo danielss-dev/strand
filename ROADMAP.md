@@ -791,6 +791,10 @@ multi-selection, focusing HEAD. The palette path uses a one-shot
 `selectSinceBaseline` store signal (mirrors `commitSearchFocus`) so it
 survives the view switch; an empty range toasts instead of clearing the
 selection. Verified with `tsc`, `vitest` (29 pass), and `vite build`.
+A same-day follow-up made the baseline pinnable at **any commit**, not just
+HEAD: `setBaseline(oid?)` takes an optional target, and the commit
+right-click menu gained "Review changes since this" — pin there + jump to
+the Review view in one step.
 
 ---
 

@@ -603,6 +603,11 @@ tree: watch the agent work, review fast, accept or reject safely.
   baseline" routes through a one-shot `selectSinceBaseline` store signal,
   mirroring `commitSearchFocus`. Empty range toasts "No commits since
   baseline".)
+- ☑ Review changes since an arbitrary commit (commit right-click menu →
+  "Review changes since this": pins the baseline at that commit and jumps to
+  the Review view. `setBaseline(oid?)` in `stores/repo.ts` takes an optional
+  target, defaulting to HEAD — the pin-at-HEAD palette/toolbar paths are
+  unchanged.)
 - ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
   up in profiles.
 
