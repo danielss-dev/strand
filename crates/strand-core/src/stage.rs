@@ -71,19 +71,39 @@ impl Repo {
     }
 
     /// Discard working-tree changes for many paths in one `checkout_index`
-    /// (each path added as a pathspec). **Destructive** — undo is a frontend
+    /// (each path added as a pathspec). Untracked paths have no index entry
+    /// for checkout to restore from — `checkout_index` would silently skip
+    /// them — so "discard" for those means deleting the file from disk, the
+    /// same way `git clean` would. **Destructive** — undo is a frontend
     /// concern, as in [`discard_path`](Repo::discard_path).
     pub fn discard_paths(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }
         let repo = self.git2()?;
-        let mut opts = git2::build::CheckoutBuilder::new();
-        opts.force();
+        let index = repo.index()?;
+        let workdir = repo.workdir().map(Path::to_path_buf);
+        let mut tracked: Vec<&str> = Vec::new();
         for path in paths {
-            opts.path(path);
+            if index.get_path(Path::new(path), 0).is_some() {
+                tracked.push(path);
+            } else if let Some(w) = workdir.as_deref() {
+                match std::fs::remove_file(w.join(path)) {
+                    Ok(()) => {}
+                    // Already gone (e.g. a stale status entry) — nothing to do.
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
+                }
+            }
         }
-        repo.checkout_index(None, Some(&mut opts))?;
+        if !tracked.is_empty() {
+            let mut opts = git2::build::CheckoutBuilder::new();
+            opts.force();
+            for path in tracked {
+                opts.path(path);
+            }
+            repo.checkout_index(None, Some(&mut opts))?;
+        }
         Ok(())
     }
 
@@ -108,16 +128,12 @@ impl Repo {
     }
 
     /// Discard working-tree changes for `path` — restore the file from the
-    /// index. Mirrors `git checkout -- <path>`.
+    /// index (mirrors `git checkout -- <path>`), or delete it if untracked.
     ///
     /// **Destructive.** The UI is responsible for offering an undo affordance
     /// (we don't snapshot here; the toast undo path is a frontend concern).
     pub fn discard_path(&self, path: &str) -> Result<()> {
-        let repo = self.git2()?;
-        let mut opts = git2::build::CheckoutBuilder::new();
-        opts.force().path(path);
-        repo.checkout_index(None, Some(&mut opts))?;
-        Ok(())
+        self.discard_paths(&[path.to_owned()])
     }
 }
 
@@ -171,6 +187,29 @@ mod tests {
         // One batched unstage call clears them all again.
         repo.unstage_paths(&files).unwrap();
         assert!(repo.status().unwrap().iter().all(|s| !s.staged), "nothing staged after unstage");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn discard_paths_deletes_untracked_and_restores_tracked() {
+        let (repo, dir) = scratch_repo();
+        // Tracked file with a local edit…
+        std::fs::write(dir.join("tracked.txt"), "clean\n").unwrap();
+        repo.stage_paths(&["tracked.txt".into()]).unwrap();
+        repo.commit("add tracked", None, false).unwrap();
+        std::fs::write(dir.join("tracked.txt"), "dirty\n").unwrap();
+        // …plus an untracked file, discarded together in one call.
+        std::fs::write(dir.join("untracked.txt"), "new\n").unwrap();
+
+        repo.discard_paths(&["tracked.txt".into(), "untracked.txt".into()]).unwrap();
+
+        let restored = std::fs::read_to_string(dir.join("tracked.txt")).unwrap();
+        // autocrlf may rewrite line endings on checkout — compare normalized.
+        assert_eq!(restored.replace("\r\n", "\n"), "clean\n");
+        assert!(!dir.join("untracked.txt").exists(), "untracked file deleted from disk");
+        // Discarding an already-gone path is a no-op, not an error.
+        repo.discard_paths(&["untracked.txt".into()]).unwrap();
 
         let _ = std::fs::remove_dir_all(dir);
     }

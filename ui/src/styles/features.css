@@ -2550,6 +2550,7 @@ button {
 /* ─── Commit detail — checkout action ─── */
 .cd-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
@@ -2557,6 +2558,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 .cd-action-error {
   margin-top: 8px;

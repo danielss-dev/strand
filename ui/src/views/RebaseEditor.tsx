@@ -311,9 +311,14 @@ export function RebaseEditor({
                       (i === focused ? ' focused' : '') +
                       (r.action === 'drop' ? ' dropped' : '')
                     }
-                    onClick={() => {
+                    onClick={(e) => {
                       setFocused(i);
-                      listRef.current?.focus();
+                      // Don't yank focus back to the list when the click landed on
+                      // the row's own controls — refocusing closes the just-opened
+                      // <select> dropdown and blurs the reword input.
+                      if (!(e.target as HTMLElement).closest('select, input, button')) {
+                        listRef.current?.focus();
+                      }
                     }}
                   >
                     <span className="rb-move">
