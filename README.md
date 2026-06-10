@@ -70,6 +70,9 @@ pnpm tauri:build   # signed installers in target/release/bundle
   (Tab cycles them), match highlighting, and full keyboard + screen-reader
   operability. Branch entries check out (remote branches checkout-and-track),
   tags/commits reveal in the graph, files open in the file view.
+- Native macOS menubar: Strand (Settings, Check for Updates), File (Open ⌘O,
+  Clone), Edit, View (palette + views), Repository (Sync/Pull/Push, Open in
+  Editor/Terminal), Window — wired to the same actions as the in-app UI
 - Settings (⌘,): a five-section dialog — Appearance (theme, accent, density,
   fonts), Diff (default layout, diff font, +/− indicators, line numbers, word
   highlight, live preview), Git (global user.name/email, default clone/open

@@ -628,6 +628,21 @@ offline). Verified: `cargo test -p strand-core` (57 tests, +7 new),
 `vitest` (36, +7 for integrations), `tsc`, and a keyboard-only Playwright
 pass over all five sections in browser mode.
 
+**Native macOS menubar (2026-06-10):** The default Tauri menu (About/Hide/Quit
+only) is replaced with a real one (`ui/src/lib/menu.ts`, JS `Menu.new` +
+`setAsAppMenu`): Strand (About, Settings ⌘,, Check for Updates), File (Open
+Repository ⌘O, Clone), Edit (native clipboard), View (palette ⌘K, the five
+views ⌘1–5, theme toggle ⌘⇧T), Repository (Sync ⌘⇧S — previously shown in the
+palette but never actually bound — Pull, Push, Open in Editor/Terminal), and
+Window. Items call the same callbacks as the in-app UI through a ref, so the
+menu only reinstalls when repo-scoped items flip enabled/disabled (repo
+open/close). AppKit dispatches menu accelerators before the webview sees the
+keydown; App's key handler also skips menu-owned combos (`appMenuInstalled()`)
+so handling is single-fire either way. macOS only — the Win/Linux in-window
+menubar stays tracked in TASKS. The status-bar settings button also swapped
+its sun glyph for a proper gear (Feather `settings`, 24-grid with compensated
+stroke).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

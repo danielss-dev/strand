@@ -13,7 +13,8 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { useUpdates } from './stores/updates';
 import { pickRepoDirectory } from './lib/dialog';
-import { editorTemplate, terminalTemplate } from './lib/integrations';
+import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
+import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
@@ -410,6 +411,37 @@ export function App() {
     void restoreSession();
   }, [refreshRecents, restoreSession]);
 
+  // Native macOS menubar. Menu item actions read the latest callbacks
+  // through this ref, so the menu itself only rebuilds when the repo-scoped
+  // items' enabled state flips (repo opened/closed) — not on every render.
+  const menuHandlersRef = useRef<MenuHandlers>(null!);
+  menuHandlersRef.current = {
+    openRepo: () => { void openViaDialog(); },
+    cloneRepo: () => setCloneOpen(true),
+    openSettings: () => openSettingsAt('appearance'),
+    checkUpdates: () => {
+      openSettingsAt('updates');
+      void useUpdates.getState().check();
+    },
+    openPalette: () => setPaletteOpen((o) => !o),
+    showView: (v) => { setView(v); selectFile(null); },
+    cycleTheme: () => {
+      const next = cycleTheme();
+      showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
+    },
+    sync: () => { void onSync(); },
+    pull: () => { void onPull(); },
+    push: () => { void onPush(); },
+    openInEditor,
+    openInTerminal,
+  };
+  const hasRepo = Boolean(meta);
+  useEffect(() => {
+    if (!isTauri() || osType() !== 'macos') return;
+    installAppMenu(() => menuHandlersRef.current, hasRepo)
+      .catch((e) => console.warn('app menu install failed', e));
+  }, [hasRepo]);
+
   // Density, platform, and font tokens live on the document root so
   // portal-rendered popovers (which attach to document.body, outside .os-bg)
   // still see them. `data-theme` is applied separately by `useTheme`.
@@ -506,6 +538,16 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      // Combos registered as native-menu accelerators (macOS): AppKit fires
+      // the menu action before the webview sees the key, so skip them here —
+      // belt-and-braces against double-handling either way.
+      if (appMenuInstalled() && mod) {
+        const k = e.key.toLowerCase();
+        if (
+          k === 'k' || k === 'o' || k === ',' || ['1', '2', '3', '4', '5'].includes(e.key) ||
+          (e.shiftKey && (k === 't' || k === 's'))
+        ) return;
+      }
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);

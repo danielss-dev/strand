@@ -725,3 +725,30 @@ live in `ui/src/lib/integrations.ts` per OS — macOS editor presets use CLI
 shims (`code`, `zed`…) because `open -a` can't pass file:line; Windows names
 `code.cmd` explicitly (std `Command` doesn't apply PATHEXT). Windows/Linux
 presets are untested on real machines (tracked ☐ in TASKS).
+
+---
+
+## Keyboard shortcuts on macOS belong to the native menu, not the keydown handler
+
+**Rule.** Any global shortcut that exists as a native-menu accelerator
+(`ui/src/lib/menu.ts`) must be skipped by App's window keydown handler when
+`appMenuInstalled()` is true. Adding a new global shortcut means deciding its
+owner: put it in the menu (gets discoverability + the gate) or in the JS
+handler (works on Win/Linux + browser dev), and if both, gate the JS side.
+
+**Why.** AppKit dispatches menu key equivalents through
+`performKeyEquivalent` *before* the webview receives the keydown — the menu
+action fires and the JS handler usually never sees the key. "Usually" is the
+trap: relying on that ordering invites double-fire bugs if dispatch changes
+(or the menu fails to install), and a dead shortcut if you remove the JS
+path entirely. The explicit `appMenuInstalled()` gate makes handling
+single-fire deterministically, and shortcuts keep working in browser mode
+and on Win/Linux where no native menu is installed.
+
+**How to apply.** Menu accelerators use muda syntax (`Cmd+Comma`, `Cmd+1`,
+`Cmd+Shift+S` — `,` and `1` aliases also parse). Menu permissions need no
+capability change: `core:default` already includes `core:menu:default`,
+which allows all menu commands including `set-as-app-menu`. Repo-scoped
+items take `enabled: hasRepo`; App reinstalls the menu when that flips
+(menu handlers read the latest callbacks through a ref, so no rebuild per
+render).

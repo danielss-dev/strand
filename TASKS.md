@@ -217,7 +217,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (2026-06-07: on the Windows box the `TAURI_SIGNING_PRIVATE_KEY` in env does
   **not** match this pubkey — Tauri warns the generated `.sig` won't validate at
   runtime. Reconcile the key/config before shipping Windows auto-updates.)
-- ☐ Native menus (PRD §7): full macOS menubar, in-window Win/Linux menubar
+- ◐ Native menus (PRD §7): **macOS menubar done** (`ui/src/lib/menu.ts`, built
+  via `@tauri-apps/api/menu` + `setAsAppMenu`; Strand/File/Edit/View/Repository/
+  Window menus wired to the same callbacks as the in-app UI — Settings ⌘,,
+  Open ⌘O, Clone, palette ⌘K, views ⌘1–5, theme ⌘⇧T, Sync ⌘⇧S, Pull/Push,
+  Open in Editor/Terminal; repo-scoped items disable when no repo is open and
+  the menu reinstalls when that flips; App's keydown handler skips menu-owned
+  accelerators via `appMenuInstalled()`). In-window Win/Linux menubar still ☐.
 - ☐ Window state persistence (size, position, maximized)
 - ☐ Multi-window for "open file detached" if needed
 - ☑ Drag-and-drop folder onto window → opens repo
