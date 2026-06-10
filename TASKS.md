@@ -54,6 +54,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   against HEAD, per-commit summary cache, 50k-line cap)
 - ☑ File history for a path (`Repo::file_history` — `git log --follow --numstat`,
   rename-following with per-path add/del counts)
+- ☑ Merge base of two commit-ishes (`Repo::merge_base` in `refs.rs` — git2
+  `revparse_single` + `merge_base`; powers the worktree review-vs-base baseline)
 - ☐ Tree listing for a commit (powers file tree at a revision)
 - ☑ File content at a revision (`Repo::file_content` — working tree from disk via
   `safe_workdir_path`, or a blob at a revision; binary heuristic + 2 MB cap)
@@ -184,7 +186,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
   `repo_submodules`, `repo_blame`, `repo_reflog`, `repo_file_content`,
-  `repo_file_history`, `repo_diff_commit_file`
+  `repo_file_history`, `repo_diff_commit_file`, `repo_merge_base`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
   `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
@@ -441,8 +443,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   shared dot color via `groupColor`, linked tabs show branch + worktree glyph).
 - ☑ Create dialog (`views/WorktreeDialog.tsx` — new/existing branch, default
   sibling `<repo>.worktrees/<branch>` path, "open in new tab" toggle).
-- ☐ Review worktree vs base branch (a committed-diff comparison surface — opening
-  a worktree currently shows its uncommitted Local Changes + branch history only).
+- ☑ Review worktree vs base branch (the overview's **Review** button pins the
+  review baseline at `merge-base(worktree, main worktree's branch)` — new
+  `Repo::merge_base` in `refs.rs` (git2 `revparse` + `merge_base`),
+  `repo_merge_base` IPC + `repoMergeBase` wrapper — then opens the worktree tab
+  on the Review view in session mode, so committed + uncommitted work since the
+  fork point shows in one diff via the existing `diff_since`. The main worktree,
+  or a failed merge-base (toast), falls back to Local Changes as before.)
 
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;

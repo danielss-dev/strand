@@ -607,7 +607,8 @@ fixup/squash, reword, and a conflict → resolve → continue round-trip) and `t
 - ☑ Submodules (list + status, init/update --recursive)
 - ☑ Worktree management (overview dashboard + sidebar section + grouped tabs +
   create/remove) — the AI-review workflow's primary organizing unit
-- ☐ Interactive rebase (custom sequence-editor protocol)
+- ☑ Interactive rebase (custom sequence-editor protocol) — shipped 2026-06-09
+  under the 0.5 history-ops line; see that milestone's changelog entry
 - ☑ Blame view (per-line author + commit jump)
 - ☑ Reflog browser
 - ☑ File history (log for a path)
@@ -746,9 +747,9 @@ worktrees by `common_dir` with a shared dot color, linked tabs labelled by branc
 and a **create dialog** (`views/WorktreeDialog.tsx`, new/existing branch + default
 sibling `<repo>.worktrees/<branch>` path + open-in-tab). Verified with
 `cargo test -p strand-core` (35 pass, +2 worktree tests), `cargo check`, `tsc`, and
-`vite build`. **Open:** "Review worktree vs base branch" (a committed-diff
-comparison surface) is tracked under TASKS → Worktrees; a live in-app pass on the
+`vite build`. **Open:** a live in-app pass on the
 Tauri window is still pending (the webview can't be driven by the browser harness).
+("Review worktree vs base branch" shipped 2026-06-10 — see below.)
 
 **Stashes inline on the graph (2026-06-09):** Stashes now render as nodes in the
 All Commits graph, not just the sidebar list. The design avoids touching the
@@ -795,6 +796,19 @@ A same-day follow-up made the baseline pinnable at **any commit**, not just
 HEAD: `setBaseline(oid?)` takes an optional target, and the commit
 right-click menu gained "Review changes since this" — pin there + jump to
 the Review view in one step.
+
+**Review worktree vs base branch (2026-06-10):** Closed the worktree vertical's
+last open item by composing existing pieces. The Worktrees overview's **Review**
+button now computes `merge-base(worktree, main worktree's branch)` — a new
+`Repo::merge_base` (`refs.rs`, git2 `revparse_single` + `merge_base`; pure
+read) exposed as `repo_merge_base` — pins the review baseline there, and opens
+the worktree tab on the **Review view in session mode**: committed + staged +
+unstaged work since the fork point in one diff, via the existing `diff_since`
+path (per-worktree baselines already persist per repo path, so each worktree
+keeps its own session). The main worktree, or a worktree where no merge-base
+resolves (toasted), falls back to opening on Local Changes as before. Verified
+with `cargo test -p strand-core` (+1 `refs` test: fork-point, same-commit, and
+unknown-revspec cases), `clippy`, `tsc`, `vitest` (29 pass), and `vite build`.
 
 ---
 

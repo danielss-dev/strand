@@ -73,6 +73,17 @@ pub struct Refs {
 }
 
 impl Repo {
+    /// Best common ancestor of two commit-ishes (`git merge-base <a> <b>`).
+    /// Powers "review a worktree against its base branch": pinning the review
+    /// baseline at merge-base(worktree HEAD, base) shows only the branch's own
+    /// work, even after the base branch has moved on.
+    pub fn merge_base(&self, a: &str, b: &str) -> Result<String> {
+        let repo = self.git2()?;
+        let a = repo.revparse_single(a)?.peel_to_commit()?.id();
+        let b = repo.revparse_single(b)?.peel_to_commit()?.id();
+        Ok(repo.merge_base(a, b)?.to_string())
+    }
+
     /// All resolvable refs, grouped for the sidebar + branch picker.
     pub fn refs(&self) -> Result<Refs> {
         let repo = self.git2()?;
@@ -260,4 +271,62 @@ fn collect_tags(repo: &git2::Repository) -> Vec<Tag> {
 
     out.sort_by_key(|a| a.name.to_lowercase());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+    use std::process::Command;
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn merge_base_finds_the_fork_point() {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-merge-base-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "fork point"]);
+        let fork = git(&dir, &["rev-parse", "HEAD"]);
+
+        // Diverge: one commit on feature, one on main.
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        std::fs::write(dir.join("f.txt"), "f\n").unwrap();
+        git(&dir, &["add", "f.txt"]);
+        git(&dir, &["commit", "-q", "-m", "feature work"]);
+        git(&dir, &["checkout", "-q", "main"]);
+        std::fs::write(dir.join("m.txt"), "m\n").unwrap();
+        git(&dir, &["add", "m.txt"]);
+        git(&dir, &["commit", "-q", "-m", "main moved on"]);
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        assert_eq!(repo.merge_base("feature", "main").unwrap(), fork);
+        // Same-commit degenerate case: merge-base(X, X) = X.
+        assert_eq!(repo.merge_base("main", "main").unwrap(), git(&dir, &["rev-parse", "main"]));
+        // Unknown revspec surfaces as an error, not a panic.
+        assert!(repo.merge_base("no-such-branch", "main").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

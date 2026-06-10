@@ -83,6 +83,8 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_workdir_file', { path, file }),
   repoDiffSince: (path: string, baseline: string) =>
     invoke<FileDiff[]>('repo_diff_since', { path, baseline }),
+  repoMergeBase: (path: string, a: string, b: string) =>
+    invoke<string>('repo_merge_base', { path, a, b }),
   repoFileContent: (path: string, file: string, rev: string | null) =>
     invoke<FileContent>('repo_file_content', { path, file, rev }),
   repoFileHistory: (path: string, file: string, limit?: number) =>

@@ -96,11 +96,13 @@ pnpm tauri:build   # signed installers in target/release/bundle
   message, time, and short OID; ↑/↓ + Enter or a click jumps to the entry's
   commit in the graph, so commits orphaned by a reset/rebase/amend are recoverable
 - Worktrees: a Worktrees overview (⌘4 / ⌘K) lists every worktree with its branch,
-  ahead/behind, dirty-file count, and last commit, with one-click Review (opens the
-  worktree as a tab on Local Changes) — built for reviewing AI agents' per-feature
-  worktrees. A sidebar Worktrees section and a create dialog (new/existing branch +
-  default sibling path) round it out, and worktree tabs of one repo group together
-  in the tab strip with a shared color
+  ahead/behind, dirty-file count, and last commit, with one-click Review — opens
+  the worktree as a tab on the Review view with the baseline pinned where the
+  branch diverged from the main worktree's branch (merge-base), so the session
+  shows everything the agent did, committed or not — built for reviewing AI
+  agents' per-feature worktrees. A sidebar Worktrees section and a create dialog
+  (new/existing branch + default sibling path) round it out, and worktree tabs of
+  one repo group together in the tab strip with a shared color
 - History ops: cherry-pick, revert, merge (ff / no-ff / squash), and rebase —
   plus **interactive rebase**: a keyboard-operable sequence editor (reorder with
   ⌥↑/⌥↓, set each commit to pick / reword / squash / fixup / drop) launched from

@@ -159,6 +159,13 @@ pub fn repo_diff_since(path: String, baseline: String) -> CmdResult<Vec<FileDiff
     Ok(Repo::discover(&path)?.diff_since(&baseline)?)
 }
 
+/// Best common ancestor of two commit-ishes. Pairs with `repo_diff_since` to
+/// review a worktree against the branch it forked from.
+#[tauri::command]
+pub fn repo_merge_base(path: String, a: String, b: String) -> CmdResult<String> {
+    Ok(Repo::discover(&path)?.merge_base(&a, &b)?)
+}
+
 // ── File view (Content / History / Blame tabs) ──
 
 #[tauri::command]
