@@ -59,6 +59,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Tree listing for a commit (powers file tree at a revision)
 - ☑ File content at a revision (`Repo::file_content` — working tree from disk via
   `safe_workdir_path`, or a blob at a revision; binary heuristic + 2 MB cap)
+- ☑ Raw file blob at worktree / index / revision (`Repo::file_blob` in `file.rs` —
+  `FileBlob` + `BlobSource`, base64 over IPC via a std-only `base64_encode`, 8 MB
+  cap with a metadata pre-check on the worktree path, behind `safe_workdir_path`;
+  powers the image diff preview)
 - ◐ Commit search (message, author, hash) — in-graph highlight over the loaded
   log is done **client-side** (no backend; `Commits.tsx` `commitMatches`), so no
   `Repo` search command exists yet. Full-history search + `-G` / `-S` content
@@ -84,11 +88,44 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   forward-applies the same slice back, surfaced as an Undo toast for 6s via
   `discardPatch` / `undoDiscard` + `lastDiscard` handle. Line-level discard
   still pending.)
-- ☑ Commit (subject + body + amend; no GPG signing yet)
+- ☑ Commit (subject + body + amend). **Signing works** (`commit.rs` rewrite):
+  when `commit.gpgSign=true` in the merged config (`signing_enabled`), the
+  commit shells out via `commit_via_git` — the user's real `git commit -F
+  <tempfile> --cleanup=whitespace [--amend]` — so gpg/ssh format config, key
+  lookup, and hooks come for free, and a signing failure surfaces as `Err`
+  instead of a silent unsigned commit. Default (unsigned) path stays git2,
+  byte-identical to before. (The GPG sign *status indicator* is still ☐ under
+  Commits view.)
 - ◐ Create / delete branch (`Repo::create_branch` from any revspec —
   HEAD, commit, remote-tracking branch; auto-sets upstream when starting
   from a remote branch. `Repo::delete_branch` refuses HEAD. Checkout
   from commit still pending.)
+- ☑ Rename branch (`Repo::rename_branch` in `branch.rs` — git2 `find_branch` +
+  `rename`, no force; upstream config moves with the rename and HEAD follows a
+  current-branch rename for free. Sidebar branch menu "Rename branch…" + palette
+  "Rename current branch…" → `RenameBranchDialog`.)
+- ☑ Remote add / remove / rename / set-url (`remote.rs` via git2 — blank-input
+  validation, URL/name safety gates (no `ext::`/`fd::`, no leading `-`),
+  duplicate name mapped to "remote X already exists", rename "problems"
+  returned for a warning toast (the rename has already happened by then).
+  Sidebar Remotes `+` + the remote folder row's
+  context menu — Edit URL… / Rename… / Copy URL / Remove remote (confirm) —
+  → `RemoteDialog` (add | rename | url modes); palette "Add remote…".)
+- ☑ Reset soft / mixed / hard (`Repo::reset` in `reset.rs` — `ResetMode` /
+  `ResetOutcome`; refuses while a merge/rebase/cherry-pick/revert is paused; a
+  hard reset of a tracked-dirty tree first stashes a safety snapshot ("Safety:
+  before hard reset to <short>", tracked changes only — `reset --hard` never
+  touches untracked files), reported in the outcome + toast.
+  UI: graph context menu "Reset <branch|HEAD> to here…" → `ResetDialog`
+  (radiogroup, mixed default, danger-styled hard) and the Reflog's "Reset HEAD
+  here…"; palette "Undo last commit (soft reset)" = soft reset to `HEAD~1`,
+  gated on a non-root HEAD.)
+- ☑ Gitignore quick-add (`Repo::gitignore_add` in `ignore.rs` — validates
+  (non-empty, no `\n`/`\r`), no-ops on an exact duplicate line, newline-safe
+  append to the workdir-root `.gitignore`, creating it if absent. Context menus
+  on a *single untracked* file — Local Changes Unstaged tree + sidebar Files
+  tab — offer "Add to .gitignore" (root-anchored `/path`) and "Ignore all
+  *.<ext> files"; patterns built by `ignorePatterns` in `lib/ignore.ts`.)
 - ☑ Checkout branch / commit (`Repo::checkout_branch` — safe checkout,
   errors on dirty conflicts; `Repo::checkout_commit` — safe detached-HEAD
   checkout of any revspec via `set_head_detached`.)
@@ -138,6 +175,14 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   sidebar menu, and ⌘K "Interactive rebase…". Conflicts route to Local Changes
   → resolve → Continue. (Std-only round-trip + conflict/continue tests in
   `history.rs`.)
+- ☑ fixup! commits + autosquash (frontend-only). Graph context menu "Create
+  fixup! commit" commits the staged set as `fixup! <subject>` via the existing
+  store `commit` (disabled with a "(stage changes first)" hint). Opening the
+  rebase editor then auto-arranges the plan like `git rebase --autosquash`:
+  `autosquashPlan` in `lib/rebase.ts` (pure; exact-subject → subject-prefix →
+  oid-prefix target resolution, stacked prefixes stripped, unmatched stay
+  `pick`) seeds `RebaseEditor.tsx`, which shows an "Autosquash: N fixup
+  commits moved…" notice; the seeded plan stays fully editable.
 - ☐ Interactive rebase: `edit` (pause-to-amend) action — needs an amend-during-
   rebase flow on top of the continue path
 - ☐ Interactive rebase: preserve merges (`--rebase-merges`) — v1 flattens; the
@@ -175,7 +220,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Hybrid concerns
 - ☑ Write-engine policy decided: `git2` for index/commit ops (stable
   Rust API, no spawn overhead); shell-out to user's `git` for network
-  ops (credentials, hooks, LFS, GPG come for free)
+  ops (credentials, hooks, LFS, GPG come for free) — and, since the signing
+  work, for commits when `commit.gpgSign=true` (see Writes → Commit)
 - ☐ Repo cache to avoid re-`discover` per command on hot paths
 - ☐ Tracing spans on every public fn for perf diagnostics
 
@@ -186,11 +232,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
   `repo_submodules`, `repo_blame`, `repo_reflog`, `repo_file_content`,
-  `repo_file_history`, `repo_diff_commit_file`, `repo_merge_base`
+  `repo_file_blob`, `repo_file_history`, `repo_diff_commit_file`,
+  `repo_merge_base`
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
   `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
-  `repo_branch_delete`, `repo_tag_create`, `repo_tag_delete`,
+  `repo_branch_delete`, `repo_branch_rename`, `repo_remote_add`,
+  `repo_remote_remove`, `repo_remote_rename`, `repo_remote_set_url`,
+  `repo_reset`, `repo_gitignore_add`,
+  `repo_tag_create`, `repo_tag_delete`,
   `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,
   `repo_rebase_todo`, `repo_interactive_rebase`,
   `repo_abort_operation`, `repo_continue_operation`,
@@ -381,6 +431,27 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   inline Stage / Discard pair on each change block — Unstage on the
   staged side. `sliceChangeBlock` carves the synthetic single-hunk patch
   routed through `useRepo.applyPatch`.)
+- ☑ Copy diff as patch / Markdown (`concatPatches` / `patchesToMarkdown` in
+  `lib/patchExport.ts` — raw multi-file patch with trailing-newline
+  normalization, or `### path` + ```` ```diff ```` fences with CommonMark
+  backtick-run lengthening and `_binary file changed_` notes. Context menu on
+  any file/folder/multi-selection in Local Changes (both sides) and the Review
+  queue; palette "Copy unstaged/staged/review diff" actions gated on
+  length-only selectors and reading the live arrays via `useRepo.getState()`.)
+- ☑ In-diff text search (⌘F in Local Changes + Review, also palette "Search in
+  diff…" via the one-shot `diffSearchSignal`/`requestDiffSearch` store signal.
+  `searchDiffs` in `lib/diffSearch.ts` scans every patch in the pool — both
+  staging sides here, the whole review set there — tracking old/new line
+  numbers across hunks; `DiffSearchBar.tsx` floats over the diff pane with
+  Enter/⇧Enter wrap-stepping, i/N counter, and a path+line preview of the
+  current match. Stepping selects the matched *file*; scrolling to the exact
+  line inside Pierre's virtualized diff is a deliberate cut.)
+- ☑ Image diff preview (binary images — png/jpg/gif/webp/bmp/ico/avif/svg —
+  render side-by-side Before/After panes (`components/ImageDiff.tsx`, blobs
+  via `repo_file_blob`) instead of "Binary file": token-based checkerboard,
+  dims + byte size, single pane for added/deleted. Wired in Local Changes
+  (unstaged HEAD→worktree, staged HEAD→index), Review (inbox + session), and
+  CommitDetail (`hash^`→`hash`); `isImagePath`/`imageMime` in `lib/image.ts`.)
 - ☐ Line-level (sub-change-block) stage / unstage — current smallest
   unit is the change block. Would require a line/char selection UI.
 
@@ -431,6 +502,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `aria-activedescendant`, ↑/↓ to move focus, Enter or click jumps to the entry's
   commit in the graph via `revealInGraph`. Recovery path for commits orphaned by
   reset/rebase/amend.)
+- ☑ Reflog recovery actions (`Reflog.tsx` context menu — right-click or
+  ContextMenu key / Shift+F10 on the focused row: Jump to in graph / Checkout
+  (detached) / Create branch here… (`BranchDialog`) / Reset HEAD here…
+  (`ResetDialog` targeting `HEAD@{n}`) — so an orphaned commit is actually
+  recoverable, not just visible, keyboard included.)
 
 ### Worktrees
 - ☑ Worktree engine (`strand-core/src/worktree.rs` — `Repo::worktrees()` parses
@@ -694,6 +770,27 @@ tree: watch the agent work, review fast, accept or reject safely.
   the Review view. `setBaseline(oid?)` in `stores/repo.ts` takes an optional
   target, defaulting to HEAD — the pin-at-HEAD palette/toolbar paths are
   unchanged.)
+- ☑ Review annotations (`m` key — or the file-head / per-hunk "Note" buttons —
+  opens an inline editor in `Review.tsx`; Enter saves, Esc cancels, editor
+  captures its target path at open so j/k scrubbing can't re-target. Notes
+  show as a compact list above the diff with `L<line>` chips + × removal and
+  as `✎N` badges in the queue tree (count folded into `decorationKey`).
+  UI-only `ReviewNote` type; `reviewNotes` store slice with
+  `addReviewNote`/`removeReviewNote`/`clearReviewNotes`, persisted per-repo in
+  SQLite via `reviewSession.getNotes/setNotes` (`review-notes:<repoPath>`),
+  loaded in `loadReviewSession`. The per-hunk button rides the existing
+  `HunkAnnotatedDiff` via an optional `onNoteBlock` — Local Changes untouched.)
+- ☑ Feedback export (`buildReviewFeedback` in `lib/reviewExport.ts` — one
+  markdown prompt: header + branch + baseline, per noted file `## path`, line
+  notes quote a ±4-line hunk-clipped excerpt in a fenced diff block (shared
+  `fencedDiff` from `patchExport.ts`), file notes as bullets, closing
+  instruction line — ready to paste back into the coding agent. Toolbar "Copy
+  feedback (N)" + palette "Review: copy feedback as prompt" / "Review: clear
+  notes". Exports the *union* via `collectFeedbackFiles`: pool files with
+  notes plus noted paths that left the pool (those skip the excerpt), so a
+  stored note never silently drops. Notes on deletion-only blocks anchor
+  old-side (`ReviewNote.side`) and the excerpt locator counts the matching
+  side.)
 - ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
   up in profiles.
 

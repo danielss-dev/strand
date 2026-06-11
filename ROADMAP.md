@@ -886,6 +886,8 @@ resolves (toasted), falls back to opening on Local Changes as before. Verified
 with `cargo test -p strand-core` (+1 `refs` test: fork-point, same-commit, and
 unknown-revspec cases), `clippy`, `tsc`, `vitest` (29 pass), and `vite build`.
 
+**Second pass, ten features (2026-06-11):** git reset (soft/mixed/hard + safety snapshot) with reflog recovery + undo-last-commit, remote add/rename/set-url/remove + branch rename, signed commits via shell-out when `commit.gpgSign=true`, gitignore quick-add, fixup! creation + autosquash in the rebase editor, copy diff as patch/Markdown, in-diff ⌘F search, image diff previews, and review annotations with feedback export — see `docs/improvements.md` § "Second pass" and TASKS for the per-item detail.
+
 ---
 
 ## 1.1+ — Post-1.0

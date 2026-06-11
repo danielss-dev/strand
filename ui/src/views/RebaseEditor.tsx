@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { autosquashPlan } from '../lib/rebase';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import type { RebaseAction, RebaseStep } from '../lib/types';
@@ -64,6 +65,9 @@ export function RebaseEditor({
   const interactiveRebase = useRepo((s) => s.interactiveRebase);
 
   const [rows, setRows] = useState<Row[] | null>(null);
+  // How many fixup!/squash! commits autosquash moved under their targets
+  // (0 = none, no notice). The seeded plan stays fully editable.
+  const [autosquashed, setAutosquashed] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -91,17 +95,25 @@ export function RebaseEditor({
       .then((entries) => {
         if (!alive) return;
         origOrderRef.current = entries.map((e) => e.oid);
-        setRows(
-          entries.map((e) => ({
-            oid: e.oid,
-            short: e.short,
-            subject: e.subject,
-            author: e.author,
-            isMerge: e.is_merge,
-            action: 'pick',
-            message: e.subject,
-          })),
-        );
+        let next: Row[] = entries.map((e) => ({
+          oid: e.oid,
+          short: e.short,
+          subject: e.subject,
+          author: e.author,
+          isMerge: e.is_merge,
+          action: 'pick',
+          message: e.subject,
+        }));
+        // Seed the plan like `git rebase --autosquash`: fixup!/squash! commits
+        // move under their targets with the matching verb. Still just a seed —
+        // every row stays editable, and isNoop correctly sees a non-noop plan.
+        const plan = autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
+        if (plan) {
+          const byOid = new Map(next.map((r) => [r.oid, r]));
+          next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
+        }
+        setAutosquashed(plan ? plan.filter((s) => s.action !== 'pick').length : 0);
+        setRows(next);
         setFocused(0);
       })
       .catch((e) => {
@@ -277,6 +289,13 @@ export function RebaseEditor({
                 <kbd>p</kbd>/<kbd>r</kbd>/<kbd>s</kbd>/<kbd>f</kbd>/<kbd>d</kbd>.
               </p>
 
+              {autosquashed > 0 ? (
+                <div className="rebase-warn" role="note">
+                  Autosquash: {autosquashed} fixup commit{autosquashed === 1 ? '' : 's'} moved under{' '}
+                  {autosquashed === 1 ? 'its target' : 'their targets'} — review the plan before
+                  running.
+                </div>
+              ) : null}
               {hasMerges ? (
                 <div className="rebase-warn" role="note">
                   This range contains a merge commit — interactive rebase flattens merges into a

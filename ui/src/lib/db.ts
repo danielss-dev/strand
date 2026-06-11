@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { RecentRepo } from './types';
+import type { RecentRepo, ReviewNote } from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -157,6 +157,12 @@ export const reviewSession = {
   },
   setReviewed(repoPath: string, reviewed: Record<string, string>): Promise<void> {
     return settings.set(`reviewed:${repoPath}`, reviewed);
+  },
+  getNotes(repoPath: string): Promise<Record<string, ReviewNote[]> | null> {
+    return settings.get<Record<string, ReviewNote[]>>(`review-notes:${repoPath}`);
+  },
+  setNotes(repoPath: string, notes: Record<string, ReviewNote[]>): Promise<void> {
+    return settings.set(`review-notes:${repoPath}`, notes);
   },
 };
 

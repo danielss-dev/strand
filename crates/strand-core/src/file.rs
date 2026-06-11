@@ -22,6 +22,10 @@ use crate::{
 /// blob.
 const MAX_CONTENT_BYTES: usize = 2_000_000;
 
+/// Cap on raw bytes returned by [`Repo::file_blob`] (image previews). Past
+/// this the blob comes back empty with `too_large = true`.
+const MAX_BLOB_BYTES: usize = 8_000_000;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileContent {
     pub path: String,
@@ -31,6 +35,25 @@ pub struct FileContent {
     pub binary: bool,
     /// True when the file exceeded [`MAX_CONTENT_BYTES`] and `text` is a prefix.
     pub truncated: bool,
+}
+
+/// Raw file bytes (base64) for the image diff preview.
+#[derive(Debug, Clone, Serialize)]
+pub struct FileBlob {
+    /// Standard base64 (RFC 4648, padded). Empty when `too_large`.
+    pub base64: String,
+    /// Byte size of the file — reported even when `too_large`.
+    pub size: usize,
+    /// True when the file exceeded [`MAX_BLOB_BYTES`] and `base64` is empty.
+    pub too_large: bool,
+}
+
+/// Where [`Repo::file_blob`] reads from. Internal — the IPC layer maps its
+/// `(rev: Option<String>, index: bool)` arguments onto this.
+pub enum BlobSource<'a> {
+    Worktree,
+    Index,
+    Rev(&'a str),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +91,45 @@ impl Repo {
                     .find_blob(entry.id())
                     .map_err(|_| Error::Other(format!("{rel_path} is not a file at {spec}")))?;
                 Ok(build_content(rel_path, blob.content(), blob.is_binary()))
+            }
+        }
+    }
+
+    /// Read a file's raw bytes for the image preview: the working-tree copy,
+    /// the staged (index) copy, or the blob at a revision. Oversized files
+    /// return `too_large` instead of bytes (the worktree branch checks the
+    /// fs metadata size before reading anything).
+    pub fn file_blob(&self, rel_path: &str, source: BlobSource) -> Result<FileBlob> {
+        match source {
+            BlobSource::Worktree => {
+                let full = self.safe_workdir_path(rel_path)?;
+                let size = std::fs::metadata(&full)?.len();
+                if size as usize > MAX_BLOB_BYTES {
+                    return Ok(FileBlob { base64: String::new(), size: size as usize, too_large: true });
+                }
+                Ok(build_blob(&std::fs::read(&full)?))
+            }
+            BlobSource::Index => {
+                let repo = self.git2()?;
+                let entry = repo
+                    .index()?
+                    .get_path(Path::new(rel_path), 0)
+                    .ok_or_else(|| Error::Other(format!("{rel_path} is not in the index")))?;
+                let blob = repo
+                    .find_blob(entry.id)
+                    .map_err(|_| Error::Other(format!("{rel_path} is not a file in the index")))?;
+                Ok(build_blob(blob.content()))
+            }
+            BlobSource::Rev(spec) => {
+                let repo = self.git2()?;
+                let tree = repo.revparse_single(spec)?.peel_to_commit()?.tree()?;
+                let entry = tree.get_path(Path::new(rel_path)).map_err(|_| {
+                    Error::Other(format!("{rel_path} does not exist at {spec}"))
+                })?;
+                let blob = repo
+                    .find_blob(entry.id())
+                    .map_err(|_| Error::Other(format!("{rel_path} is not a file at {spec}")))?;
+                Ok(build_blob(blob.content()))
             }
         }
     }
@@ -140,6 +202,31 @@ fn build_content(path: &str, bytes: &[u8], binary: bool) -> FileContent {
 /// does). Avoids scanning a huge file in full.
 fn looks_binary(bytes: &[u8]) -> bool {
     bytes.iter().take(8192).any(|&b| b == 0)
+}
+
+fn build_blob(bytes: &[u8]) -> FileBlob {
+    if bytes.len() > MAX_BLOB_BYTES {
+        return FileBlob { base64: String::new(), size: bytes.len(), too_large: true };
+    }
+    FileBlob { base64: base64_encode(bytes), size: bytes.len(), too_large: false }
+}
+
+/// Standard base64 (RFC 4648 alphabet, `=`-padded). Std-only — the crate has
+/// no base64 dependency and this is the lone encoder use.
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16)
+            | (u32::from(chunk.get(1).copied().unwrap_or(0)) << 8)
+            | u32::from(chunk.get(2).copied().unwrap_or(0));
+        out.push(ALPHABET[(n >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { ALPHABET[n as usize & 63] as char } else { '=' });
+    }
+    out
 }
 
 /// Parse `git log --numstat --format=<MARKER>…` output into history entries.
@@ -253,6 +340,65 @@ mod tests {
 
         // Path traversal is rejected.
         assert!(repo.file_content("../escape.txt", None).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn base64_matches_known_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        // Binary bytes (not valid UTF-8).
+        assert_eq!(base64_encode(&[0x00, 0xff, 0x10]), "AP8Q");
+    }
+
+    #[test]
+    fn blob_reads_worktree_index_and_rev() {
+        let (repo, dir) = scratch();
+        // Bytes with a NUL so the file is unambiguously binary.
+        let v1: &[u8] = b"\x89PNG\x00\n";
+        std::fs::write(dir.join("img.png"), v1).unwrap();
+        git(&dir, &["add", "img.png"]);
+        git(&dir, &["commit", "-q", "-m", "v1"]);
+
+        // Stage v2, then write v3 to the working tree — three distinct copies.
+        let v2: &[u8] = b"\x89PNG\x00\x01";
+        std::fs::write(dir.join("img.png"), v2).unwrap();
+        git(&dir, &["add", "img.png"]);
+        let v3: &[u8] = b"\x89PNG\x00\x02";
+        std::fs::write(dir.join("img.png"), v3).unwrap();
+
+        let wt = repo.file_blob("img.png", BlobSource::Worktree).unwrap();
+        assert_eq!(wt.base64, "iVBORwAC", "worktree bytes, precomputed base64");
+        assert_eq!(wt.size, v3.len());
+        assert!(!wt.too_large);
+
+        let idx = repo.file_blob("img.png", BlobSource::Index).unwrap();
+        assert_eq!(idx.base64, "iVBORwAB");
+
+        let head = repo.file_blob("img.png", BlobSource::Rev("HEAD")).unwrap();
+        assert_eq!(head.base64, "iVBORwAK");
+
+        assert!(repo.file_blob("missing.png", BlobSource::Index).is_err());
+        assert!(repo.file_blob("missing.png", BlobSource::Rev("HEAD")).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn blob_caps_oversized_files() {
+        let (repo, dir) = scratch();
+        let big = vec![0u8; MAX_BLOB_BYTES + 1];
+        std::fs::write(dir.join("big.bin"), &big).unwrap();
+
+        let blob = repo.file_blob("big.bin", BlobSource::Worktree).unwrap();
+        assert!(blob.too_large);
+        assert_eq!(blob.base64, "");
+        assert_eq!(blob.size, MAX_BLOB_BYTES + 1);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

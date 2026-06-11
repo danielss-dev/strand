@@ -5,6 +5,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { Icon } from './components/Icon';
+import { copyToClipboard } from './components/PierreTree';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
@@ -14,6 +15,8 @@ import { useRepo } from './stores/repo';
 import { useUpdates } from './stores/updates';
 import { pickRepoDirectory } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
+import { concatPatches, patchesToMarkdown } from './lib/patchExport';
+import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
@@ -24,6 +27,10 @@ import { BranchDialog } from './views/BranchDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
 import { RebaseEditor } from './views/RebaseEditor';
+import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
+import { RenameBranchDialog } from './views/RenameBranchDialog';
+import { ResetDialog } from './views/ResetDialog';
+import { IgnoreDialog } from './views/IgnoreDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -32,7 +39,7 @@ import { Review } from './views/Review';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
-import type { Progress, RepoMeta, StatusKind } from './lib/types';
+import type { FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -121,6 +128,7 @@ export function App() {
   const createBranch = useRepo((s) => s.createBranch);
   const revealInGraph = useRepo((s) => s.revealInGraph);
   const requestCommitSearch = useRepo((s) => s.requestCommitSearch);
+  const requestDiffSearch = useRepo((s) => s.requestDiffSearch);
   const requestSelectSinceBaseline = useRepo((s) => s.requestSelectSinceBaseline);
   const selectCommit = useRepo((s) => s.selectCommit);
 
@@ -138,6 +146,18 @@ export function App() {
   const setBaseline = useRepo((s) => s.setBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
   const stageReviewed = useRepo((s) => s.stageReviewed);
+  const clearReviewNotes = useRepo((s) => s.clearReviewNotes);
+  // Count-only selector (like the diff counts below): gates the feedback
+  // actions without re-rendering App on unrelated store churn.
+  const reviewNoteCount = useRepo((s) =>
+    Object.values(s.reviewNotes).reduce((n, list) => n + list.length, 0));
+  const resetTo = useRepo((s) => s.reset);
+  // Length-only selectors: they gate the "Copy … diff" palette actions without
+  // re-rendering App on every diff-content refresh (the actions read the
+  // actual diffs from the store at run time).
+  const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
+  const stagedCount = useRepo((s) => s.stagedDiffs.length);
+  const baselineDiffCount = useRepo((s) => s.baselineDiffs.length);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -148,11 +168,21 @@ export function App() {
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   const [branchDialog, setBranchDialog] = useState<{ start: string | null; label: string } | null>(null);
+  // null = closed; otherwise which remote-management flavour (add/rename/url).
+  const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
+  // null = closed; otherwise the branch to rename.
+  const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
   const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
   // null = closed; otherwise the interactive-rebase base (revspec before the
   // first editable commit, null ⇒ root) + a short label for the blurb.
   const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
+  // null = closed; otherwise the commit-ish to reset to + its human label.
+  const [resetDialog, setResetDialog] = useState<{ target: string; label: string } | null>(null);
+  // The "Add ignore pattern…" dialog is opened from two surfaces (Local Changes
+  // + the Files tab), so its draft lives in the store; App renders the one modal.
+  const ignoreDraft = useRepo((s) => s.ignoreDraft);
+  const closeIgnoreDialog = useRepo((s) => s.closeIgnoreDialog);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -218,6 +248,17 @@ export function App() {
     tauri.repoOpenInEditor(path, file, null, template)
       .catch((e) => showToast(`Open editor failed: ${errMessage(e)}`));
   }, [showToast, openSettingsAt]);
+
+  // Copy a diff list to the clipboard (raw patch or Markdown) and confirm
+  // with a file count — powers the palette's "Copy … diff" actions.
+  const copyDiffs = useCallback(
+    (diffs: FileDiff[], markdown: boolean, title?: string) => {
+      copyToClipboard(markdown ? patchesToMarkdown(diffs, { title }) : concatPatches(diffs));
+      const n = diffs.filter((d) => d.patch.length > 0).length;
+      showToast(`Copied diff — ${n} file${n === 1 ? '' : 's'}`);
+    },
+    [showToast],
+  );
 
   // Flash a button's check pulse for ~1.6s. The duration outlasts the
   // pop-in animation so the check lingers briefly before reverting.
@@ -738,6 +779,13 @@ export function App() {
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: '⌘5', keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
+        // Opens the ⌘F bar in whichever diff view is showing; other views
+        // route to Local Changes first (the signal is consumed on mount).
+        { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: '⌘F', keywords: 'find in diff grep text content search', run: () => {
+          const v = useRepo.getState().view;
+          if (v !== 'local' && v !== 'review') setView('local');
+          requestDiffSearch();
+        } },
         { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: pin baseline at HEAD', group: 'Actions', keywords: 'ai agent session since diff review baseline', run: () => {
           void setBaseline().then(() => { setView('review'); selectFile(null); })
             .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`));
@@ -747,11 +795,54 @@ export function App() {
         { id: 'review-stage', label: 'Review: stage reviewed files', group: 'Actions', keywords: 'accept reviewed stage bulk', run: () => {
           void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`));
         } },
+        // Notes → one Markdown prompt to paste back into the coding agent.
+        ...(reviewNoteCount > 0 ? [
+          { id: 'review-copy-feedback', label: 'Review: copy feedback as prompt', group: 'Actions', keywords: 'ai agent review notes feedback prompt export clipboard', run: () => {
+            const st = useRepo.getState();
+            const pool = st.baseline ? st.baselineDiffs : st.reviewUnstagedDiffs;
+            // Union: pool files with notes + noted paths outside the pool
+            // (staged away, or Review never populated the pool this session) —
+            // a stored note always exports, just without an excerpt.
+            const files = collectFeedbackFiles(pool, st.reviewNotes);
+            if (!st.activePath || files.length === 0) {
+              showToast('No review notes to copy');
+              return;
+            }
+            copyToClipboard(buildReviewFeedback({
+              repoName: st.activePath.split(/[\\/]/).filter(Boolean).pop() ?? st.activePath,
+              branch: st.meta?.branch ?? null,
+              baselineShort: st.baseline?.short ?? null,
+              files,
+            }));
+            const n = files.reduce((a, f) => a + f.notes.length, 0);
+            showToast(`Copied feedback — ${n} note${n === 1 ? '' : 's'} across ${files.length} file${files.length === 1 ? '' : 's'}`);
+          } } satisfies PaletteAction,
+          { id: 'review-clear-notes', label: 'Review: clear notes', group: 'Actions', keywords: 'ai agent review notes clear remove reset', run: () => {
+            clearReviewNotes();
+            showToast('Review notes cleared');
+          } } satisfies PaletteAction,
+        ] : []),
+        // Diff export — paste a patch into an AI agent / PR comment. Markdown
+        // for staged/review stays reachable via the file-tree context menus.
+        ...(unstagedCount > 0 ? [
+          { id: 'copy-unstaged-diff', label: 'Copy unstaged diff', group: 'Actions', keywords: 'patch clipboard export unstaged', run: () => copyDiffs(useRepo.getState().unstagedDiffs, false) } satisfies PaletteAction,
+          { id: 'copy-unstaged-diff-md', label: 'Copy unstaged diff as Markdown', group: 'Actions', keywords: 'patch clipboard export unstaged markdown', run: () => copyDiffs(useRepo.getState().unstagedDiffs, true, 'Unstaged changes') } satisfies PaletteAction,
+        ] : []),
+        ...(stagedCount > 0 ? [{ id: 'copy-staged-diff', label: 'Copy staged diff', group: 'Actions', keywords: 'patch clipboard export staged', run: () => copyDiffs(useRepo.getState().stagedDiffs, false) } satisfies PaletteAction] : []),
+        ...(baseline && baselineDiffCount > 0
+          ? [{ id: 'copy-review-diff', label: `Copy review diff (since ${baseline.short})`, group: 'Actions', keywords: 'patch clipboard export review baseline session', run: () => copyDiffs(useRepo.getState().baselineDiffs, false) } satisfies PaletteAction]
+          : []),
         { id: 'open-editor', label: 'Open in editor', group: 'Actions', keywords: 'external code reveal vscode editor', run: openInEditor },
         { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', keywords: 'shell console cwd iterm terminal', run: openInTerminal },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
+        // Renaming the short OID HEAD shows while detached is meaningless —
+        // only offer the rename on a real branch.
+        ...(meta.branch && !meta.detached
+          ? [{ id: 'branch-rename', label: 'Rename current branch…', group: 'Actions', keywords: 'branch rename move', run: () => setRenameBranchDialog({ name: meta.branch }) } satisfies PaletteAction]
+          : []),
+        { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
         { id: 'push-tags', label: 'Push all tags', group: 'Actions', run: () => {
           void (async () => {
@@ -767,6 +858,21 @@ export function App() {
           })();
         } },
         { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: '⌘⇧S', run: onSync },
+        // Gated on a non-root HEAD commit — HEAD~1 must exist to reset to.
+        ...(meta.head_oid && commits.find((c) => c.hash === meta.head_oid)?.parents.length
+          ? [{
+              id: 'undo-commit',
+              label: 'Undo last commit (soft reset)',
+              group: 'Actions',
+              keywords: 'uncommit rollback reset soft head',
+              icon: 'history',
+              run: () => {
+                void resetTo('HEAD~1', 'soft')
+                  .then(() => showToast('Last commit undone — changes kept staged'))
+                  .catch((e) => showToast(`Undo failed: ${errMessage(e)}`));
+              },
+            } satisfies PaletteAction]
+          : []),
         { id: 'rebase-i', label: 'Interactive rebase…', group: 'Actions', keywords: 'rebase reorder squash fixup reword drop history edit', run: () => {
           const st = useRepo.getState();
           const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
@@ -811,8 +917,11 @@ export function App() {
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
-      requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
-      repoActions, setRebaseDialog, baseline, setBaseline, clearBaseline, stageReviewed]);
+      requestDiffSearch, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
+      repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
+      baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
+      unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
+      reviewNoteCount, clearReviewNotes]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -853,6 +962,8 @@ export function App() {
                 onCreateWorktree={() => setWorktreeOpen(true)}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+                onManageRemote={(mode) => setRemoteDialog(mode)}
+                onRenameBranch={(name) => setRenameBranchDialog({ name })}
                 onToast={showToast}
               />
             </Panel>
@@ -866,7 +977,13 @@ export function App() {
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {view === 'review' && <Review />}
-                  {view === 'reflog' && <Reflog />}
+                  {view === 'reflog' && (
+                    <Reflog
+                      onResetTo={(target, label) => setResetDialog({ target, label })}
+                      onCreateBranch={(start, label) => setBranchDialog({ start, label })}
+                      onToast={showToast}
+                    />
+                  )}
                   {view === 'worktrees' && (
                     <Worktrees onCreateWorktree={() => setWorktreeOpen(true)} onToast={showToast} />
                   )}
@@ -874,6 +991,7 @@ export function App() {
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
                       onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+                      onResetTo={(target, label) => setResetDialog({ target, label })}
                       onToast={showToast}
                     />
                   )}
@@ -969,6 +1087,18 @@ export function App() {
         />
       )}
 
+      {remoteDialog && (
+        <RemoteDialog mode={remoteDialog} onClose={() => setRemoteDialog(null)} onToast={showToast} />
+      )}
+
+      {renameBranchDialog && (
+        <RenameBranchDialog
+          name={renameBranchDialog.name}
+          onClose={() => setRenameBranchDialog(null)}
+          onToast={showToast}
+        />
+      )}
+
       {mergeDialog && (
         <MergeDialog
           source={mergeDialog.source}
@@ -985,6 +1115,19 @@ export function App() {
           onClose={() => setRebaseDialog(null)}
           onToast={showToast}
         />
+      )}
+
+      {resetDialog && (
+        <ResetDialog
+          target={resetDialog.target}
+          label={resetDialog.label}
+          onClose={() => setResetDialog(null)}
+          onToast={showToast}
+        />
+      )}
+
+      {ignoreDraft != null && (
+        <IgnoreDialog initial={ignoreDraft} onClose={closeIgnoreDialog} onToast={showToast} />
       )}
 
       {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}

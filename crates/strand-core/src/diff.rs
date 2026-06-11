@@ -226,6 +226,15 @@ fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
         let Some(i) = delta_index(&delta) else { return true; };
         let f = &mut files[i];
         let origin = line.origin();
+        // `DiffFile::is_binary()` is only populated once content is examined —
+        // which happens *here*, during print — so the pre-pass that builds
+        // `files` reads false for every delta. libgit2 emits one 'B' line
+        // ("Binary files … differ") per binary delta; flag it now so the UI
+        // routes images to the preview and other binaries to the note instead
+        // of rendering a header-only patch as an empty diff.
+        if origin == 'B' {
+            f.binary = true;
+        }
         if matches!(origin, 'F' | 'H' | ' ' | '+' | '-' | '=' | '<' | '>') {
             match origin {
                 '+' => f.adds += 1,
@@ -305,6 +314,24 @@ mod tests {
         assert_eq!(n.status, DiffStatus::Added);
         assert_eq!((n.adds, n.dels), (1, 0));
         assert!(n.patch.contains("+hello"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn untracked_binary_file_is_flagged_binary() {
+        let (repo, dir) = scratch_repo();
+        // A PNG-ish blob: a NUL byte in the first 8 KiB is what git (and our
+        // heuristic) treat as binary. is_binary() on the DiffFile is false
+        // until print examines the content, so this regressed to a header-only
+        // text patch (blank image preview) before the print-time flag.
+        std::fs::write(dir.join("1.png"), [0x89, b'P', b'N', b'G', 0x00, 0x01, 0x02]).unwrap();
+
+        let diffs = repo.diff_unstaged().unwrap();
+        let img = diffs.iter().find(|d| d.path == "1.png").expect("untracked png listed");
+        assert_eq!(img.status, DiffStatus::Added);
+        assert!(img.binary, "untracked binary must be flagged binary");
+        assert_eq!((img.adds, img.dels), (0, 0));
 
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -43,13 +43,16 @@ interface CommitsProps {
   onCreateTag: (target: string, label: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
+  /** Open the Reset dialog targeting a commit (revspec + label). */
+  onResetTo: (target: string, label: string) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string) => void;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
+  const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
   const refs = useRepo((s) => s.refs);
   const selectedCommit = useRepo((s) => s.selectedCommit);
@@ -60,6 +63,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const cherryPick = useRepo((s) => s.cherryPick);
   const revert = useRepo((s) => s.revert);
+  // "Create fixup! commit" commits the staged set against a graph commit.
+  // Boolean selector, not the array — the graph must not re-render on every
+  // diff-content refresh just to gate one menu item.
+  const hasStaged = useRepo((s) => s.stagedDiffs.length > 0);
+  const commit = useRepo((s) => s.commit);
   const revealCommit = useRepo((s) => s.revealCommit);
   const clearReveal = useRepo((s) => s.clearReveal);
   // After a blame/history → commit jump, offer a way back to the file (at the
@@ -120,12 +128,30 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
           })(),
         },
         {
+          label: hasStaged
+            ? 'Create fixup! commit'
+            : 'Create fixup! commit (stage changes first)',
+          icon: 'plus',
+          disabled: !hasStaged,
+          onSelect: () => void (async () => {
+            try {
+              await commit(`fixup! ${c.subject}`, null, false);
+              onToast(`Fixup of ${c.short_hash} committed — run interactive rebase to fold it`);
+            } catch (e) { fail('Fixup commit', e); }
+          })(),
+        },
+        {
           label: 'Rebase from here…',
           icon: 'rebase',
           // Edit this commit and everything newer: base is its parent (or root
           // when it has none, so the commit itself is still editable).
           onSelect: () =>
             onInteractiveRebase(c.parents.length ? `${c.hash}^` : null, c.short_hash),
+        },
+        {
+          label: `Reset ${meta && !meta.detached ? meta.branch : 'HEAD'} to here…`,
+          icon: 'history',
+          onSelect: () => onResetTo(c.hash, c.short_hash),
         },
         {
           // Pin the review baseline here and jump to the Review view — review
@@ -148,8 +174,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onToast }: CommitsPr
       ];
       setMenu({ x, y, items });
     },
-    [checkoutCommit, cherryPick, revert, onCreateTag, onInteractiveRebase, onToast,
-      setBaseline, setView, selectFile],
+    [checkoutCommit, cherryPick, revert, hasStaged, commit, onCreateTag,
+      onInteractiveRebase, onResetTo, meta, onToast, setBaseline, setView, selectFile],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail

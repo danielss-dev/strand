@@ -26,6 +26,9 @@ import type {
   Refs,
   ReflogEntry,
   RepoMeta,
+  ReviewNote,
+  ResetMode,
+  ResetOutcome,
   Stash,
   StashOutcome,
   Submodule,
@@ -121,6 +124,13 @@ export interface RepoState {
    * Persisted per-repo (see `reviewSession` in lib/db).
    */
   reviewed: Record<string, string>;
+
+  /**
+   * Reviewer notes for the active repo: `path → notes` in the order they were
+   * added. Feed for the "copy feedback as prompt" export. Persisted per-repo
+   * (see `reviewSession` in lib/db).
+   */
+  reviewNotes: Record<string, ReviewNote[]>;
 
   /**
    * Undo handle for the most recent *multi-file* discard: the safety
@@ -281,6 +291,14 @@ export interface RepoState {
    * {@link hashPatch} value — recorded on mark, compared on render.
    */
   toggleReviewed(file: string, hash: string): void;
+  /** Attach a note to `file` (`line` = anchor line, null = whole file;
+   * `side` = which diff side the line counts on, default `'new'` — a
+   * deletion-only block anchors old-side). Empty text is ignored. */
+  addReviewNote(file: string, text: string, line: number | null, side?: 'new' | 'old'): void;
+  /** Remove one note from `file` by id. */
+  removeReviewNote(file: string, id: string): void;
+  /** Drop every note for the active repo (after a feedback export, usually). */
+  clearReviewNotes(): void;
   /** Stage every unstaged file whose reviewed mark matches its current diff. */
   stageReviewed(): Promise<void>;
   /** Re-apply the safety snapshot from the last bulk discard. */
@@ -295,6 +313,9 @@ export interface RepoState {
   stageMany(files: string[]): Promise<void>;
   unstageMany(files: string[]): Promise<void>;
   discardMany(files: string[]): Promise<void>;
+  /** Append `pattern` to the workdir root `.gitignore` — the "Add to
+   * .gitignore" quick action on untracked files. */
+  gitignoreAdd(pattern: string): Promise<void>;
   /**
    * Apply a unified-diff patch (typically a single hunk sliced out of a
    * file's full patch) to either the index or the working tree in reverse.
@@ -342,6 +363,33 @@ export interface RepoState {
   checkoutCommit(rev: string): Promise<void>;
   createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
   deleteBranch(name: string, force: boolean): Promise<void>;
+  /** Rename a local branch; its upstream config moves along, HEAD follows. */
+  renameBranch(oldName: string, newName: string): Promise<void>;
+
+  /** Add a remote (`git remote add`). */
+  addRemote(name: string, url: string): Promise<void>;
+  /** Remove a remote and its remote-tracking refs. */
+  removeRemote(name: string): Promise<void>;
+  /**
+   * Rename a remote (config section + remote-tracking refs move along).
+   * Resolves to the refspecs git could not rewrite ("problems") — the rename
+   * has already happened by then; empty means a clean rename.
+   */
+  renameRemote(oldName: string, newName: string): Promise<string[]>;
+  /** Change a remote's fetch URL (`git remote set-url`). */
+  setRemoteUrl(name: string, url: string): Promise<void>;
+  /**
+   * Fetch a specific remote by name (the sidebar remote-row action — how a
+   * just-added remote gets its first refs). The topbar Fetch with its progress
+   * pill stays App-owned; this is the lightweight no-progress path.
+   */
+  fetchRemote(name: string): Promise<void>;
+  /**
+   * Reset HEAD (the current branch, or HEAD itself when detached) to `target`.
+   * A hard reset of a dirty tree stashes a safety snapshot first — returned in
+   * the outcome's `snapshot_oid` so callers can toast about it.
+   */
+  reset(target: string, mode: ResetMode): Promise<ResetOutcome>;
 
   /**
    * History ops — all shell out to `git`. Each resolves to `true` when it
@@ -447,6 +495,33 @@ export interface RepoState {
   clearCommitSearchFocus(): void;
 
   /**
+   * One-shot signal: the palette's "Search in diff…" action asks the mounted
+   * diff view (Local Changes or Review) to open its ⌘F in-diff search bar.
+   * Consumed + cleared by the view (mirrors {@link RepoState.commitSearchFocus});
+   * the palette action switches the view itself when neither is showing.
+   */
+  diffSearchSignal: boolean;
+  requestDiffSearch(): void;
+  clearDiffSearch(): void;
+
+  /**
+   * The "Add ignore pattern…" dialog's draft pattern, or `null` when closed.
+   * Opened from the Local Changes / Files-tab context menus (prefilled with
+   * the picked file's path); App renders the single shared dialog.
+   */
+  ignoreDraft: string | null;
+  openIgnoreDialog(initial: string): void;
+  closeIgnoreDialog(): void;
+
+  /**
+   * Bumped on every diff refresh (local + review). Consumers showing
+   * *worktree/index-derived* content outside the diff arrays (the image
+   * preview's blob fetches) re-validate on it — the FileDiff for a binary
+   * file is otherwise indistinguishable across content changes.
+   */
+  diffsTick: number;
+
+  /**
    * One-shot signal: select every commit since the review baseline in the
    * All Commits graph (an agent session's commits, pairing with
    * {@link RepoState.baselineDiffs}). Consumed + cleared by the graph once
@@ -534,6 +609,16 @@ function setRemoteTags(
   })();
 }
 
+/** Review-note id: a UUID when the webview provides one, else a
+ * timestamp-plus-counter string (still unique within a session). */
+let noteSeq = 0;
+function noteId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${++noteSeq}`;
+}
+
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
@@ -547,6 +632,7 @@ const EMPTY_ACTIVE = {
   reviewUnstagedDiffs: [] as FileDiff[],
   reviewSelection: null as string | null,
   reviewed: {} as Record<string, string>,
+  reviewNotes: {} as Record<string, ReviewNote[]>,
   lastBulkDiscard: null as { oid: string; count: number; path: string } | null,
   lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
@@ -622,7 +708,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   fileTab: 'content',
   selectedRef: null,
   commitSearchFocus: false,
+  diffSearchSignal: false,
   selectSinceBaseline: false,
+  diffsTick: 0,
+  ignoreDraft: null,
 
   async restoreSession() {
     let saved: PersistedSession | null = null;
@@ -779,7 +868,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
     );
     if (get().activePath !== path) return;
-    set({ unstagedDiffs: unstaged, stagedDiffs: staged });
+    set({ unstagedDiffs: unstaged, stagedDiffs: staged, diffsTick: get().diffsTick + 1 });
 
     // If the selected file is no longer present (it was just staged in full,
     // for example) move the selection to a sibling so the middle pane keeps
@@ -874,7 +963,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       try {
         const diffs = await tauri.repoDiffSinceFull(path, baseline.oid);
         if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
-        set({ baselineDiffs: diffs });
+        set({ baselineDiffs: diffs, diffsTick: get().diffsTick + 1 });
       } catch (e) {
         // Typical cause: the baseline commit was rebased/gc'd away. Surface by
         // clearing — the chip disappears rather than showing stale data.
@@ -886,7 +975,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     try {
       const diffs = await tauri.repoDiffUnstagedFull(path);
       if (get().activePath !== path || get().baseline != null) return;
-      set({ reviewUnstagedDiffs: diffs });
+      set({ reviewUnstagedDiffs: diffs, diffsTick: get().diffsTick + 1 });
     } catch (e) {
       console.warn('repoDiffUnstagedFull failed', e);
     }
@@ -896,12 +985,13 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     try {
-      const [baseline, reviewed] = await Promise.all([
+      const [baseline, reviewed, notes] = await Promise.all([
         reviewSession.getBaseline(path),
         reviewSession.getReviewed(path),
+        reviewSession.getNotes(path),
       ]);
       if (get().activePath !== path) return;
-      set({ baseline: baseline ?? null, reviewed: reviewed ?? {} });
+      set({ baseline: baseline ?? null, reviewed: reviewed ?? {}, reviewNotes: notes ?? {} });
       if (baseline) await get().refreshReviewDiffs();
     } catch (e) {
       console.warn('review session load failed', e);
@@ -920,6 +1010,46 @@ export const useRepo = create<RepoState>((set, get) => ({
     set({ reviewed: next });
     void reviewSession.setReviewed(path, next).catch((e) =>
       console.warn('reviewed persist failed', e));
+  },
+
+  addReviewNote(file, text, line, side) {
+    const path = get().activePath;
+    const trimmed = text.trim();
+    if (!path || !trimmed) return;
+    const note: ReviewNote = {
+      id: noteId(),
+      text: trimmed,
+      line,
+      ...(side === 'old' ? { side } : {}),
+      createdAt: Date.now(),
+    };
+    const cur = get().reviewNotes;
+    const next = { ...cur, [file]: [...(cur[file] ?? []), note] };
+    set({ reviewNotes: next });
+    void reviewSession.setNotes(path, next).catch((e) =>
+      console.warn('review notes persist failed', e));
+  },
+
+  removeReviewNote(file, id) {
+    const path = get().activePath;
+    if (!path) return;
+    const cur = get().reviewNotes;
+    if (!cur[file]) return;
+    const remaining = cur[file].filter((n) => n.id !== id);
+    const next = { ...cur };
+    if (remaining.length === 0) delete next[file];
+    else next[file] = remaining;
+    set({ reviewNotes: next });
+    void reviewSession.setNotes(path, next).catch((e) =>
+      console.warn('review notes persist failed', e));
+  },
+
+  clearReviewNotes() {
+    const path = get().activePath;
+    if (!path) return;
+    set({ reviewNotes: {} });
+    void reviewSession.setNotes(path, {}).catch((e) =>
+      console.warn('review notes persist failed', e));
   },
 
   async stageReviewed() {
@@ -1140,6 +1270,14 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoDiscardMany(path, files);
     await get().refreshLocalChanges();
   },
+  async gitignoreAdd(pattern) {
+    const path = get().activePath;
+    if (!path) return;
+    await tauri.repoGitignoreAdd(path, pattern);
+    // The ignored file drops out of untracked and .gitignore itself shows up
+    // as modified/untracked — both ride the snapshot refresh.
+    await get().refreshLocalChanges();
+  },
   async applyPatch(patch, target) {
     const path = get().activePath;
     if (!path) return;
@@ -1288,6 +1426,59 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchDelete(path, name, force);
     await get().refreshRefs();
+  },
+  async renameBranch(oldName, newName) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoBranchRename(path, oldName, newName);
+    // Refs ride along in the snapshot; the graph's ref chips read the log.
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async addRemote(name, url) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoRemoteAdd(path, name, url);
+    await get().refreshLocalChanges();
+  },
+  async removeRemote(name) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoRemoteRemove(path, name);
+    await get().refreshLocalChanges();
+  },
+  async renameRemote(oldName, newName) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const problems = await tauri.repoRemoteRename(path, oldName, newName);
+    await get().refreshLocalChanges();
+    return problems;
+  },
+  async setRemoteUrl(name, url) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoRemoteSetUrl(path, name, url);
+    await get().refreshLocalChanges();
+  },
+  async fetchRemote(name) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoFetch(path, name);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async reset(target, mode) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const outcome = await tauri.repoReset(path, target, mode);
+    // A reset moves HEAD/refs and rewrites local changes; the reflog records
+    // the move (it's the recovery path back), and a hard-reset snapshot adds
+    // a stash entry.
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshReflog(),
+      ...(outcome.snapshot_oid ? [get().refreshStashes()] : []),
+    ]);
+    return outcome;
   },
 
   // History ops change HEAD, the working tree, the log and refs — refresh all
@@ -1532,6 +1723,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   clearReveal: () => set({ revealCommit: null }),
   requestCommitSearch: () => set({ view: 'commits', commitSearchFocus: true }),
   clearCommitSearchFocus: () => set({ commitSearchFocus: false }),
+  requestDiffSearch: () => set({ diffSearchSignal: true }),
+  clearDiffSearch: () => set({ diffSearchSignal: false }),
+  openIgnoreDialog: (initial) => set({ ignoreDraft: initial }),
+  closeIgnoreDialog: () => set({ ignoreDraft: null }),
   requestSelectSinceBaseline: () => set({ view: 'commits', selectSinceBaseline: true }),
   clearSelectSinceBaseline: () => set({ selectSinceBaseline: false }),
   // Opening a file resets the file-view tab to Content and drops any stale

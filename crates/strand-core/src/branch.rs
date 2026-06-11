@@ -120,4 +120,81 @@ impl Repo {
         branch.delete()?;
         Ok(())
     }
+
+    /// Rename a local branch (`git branch -m <old> <new>`). git2 moves the
+    /// branch's config section (upstream) along, and HEAD follows when the
+    /// renamed branch is checked out. No force — errors if `new` exists.
+    pub fn rename_branch(&self, old: &str, new: &str) -> Result<()> {
+        let new = new.trim();
+        if new.is_empty() {
+            return Err(crate::Error::Other("branch name is required".into()));
+        }
+        let repo = self.git2()?;
+        let mut branch = repo.find_branch(old, git2::BranchType::Local)?;
+        branch.rename(new, false)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    /// Throwaway repo built with shell git (so `--set-upstream-to` is
+    /// available), std-only temp dir — same fixture as `history.rs`.
+    fn scratch_repo() -> (Repo, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-branch-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn rename_branch_moves_upstream_config_and_head_follows() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+
+        // Non-head branch with an upstream: the config moves with the rename.
+        git(&dir, &["branch", "feature"]);
+        git(&dir, &["branch", "--set-upstream-to=main", "feature"]);
+        repo.rename_branch("feature", "renamed").unwrap();
+        assert_eq!(git(&dir, &["config", "branch.renamed.merge"]), "refs/heads/main");
+        let branches = repo.refs().unwrap().branches;
+        assert!(branches.iter().any(|b| b.name == "renamed"));
+        assert!(!branches.iter().any(|b| b.name == "feature"));
+
+        // Renaming onto an existing name errors (no force).
+        assert!(repo.rename_branch("renamed", "main").is_err());
+        // Blank target is rejected.
+        assert!(repo.rename_branch("renamed", "  ").is_err());
+
+        // Renaming the HEAD branch works and HEAD follows.
+        repo.rename_branch("main", "trunk").unwrap();
+        assert_eq!(git(&dir, &["symbolic-ref", "HEAD"]), "refs/heads/trunk");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

@@ -2182,6 +2182,15 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Submenu disclosure chevron, pinned to the row's right edge. */
+.context-menu-item .cm-sub-arrow {
+  margin-left: auto;
+  display: flex;
+  color: var(--text-muted);
+}
+.context-menu-item.active .cm-sub-arrow {
+  color: var(--text);
+}
 
 /* ─── Create-branch inline field (branch picker dropdown footer) ─── */
 .branch-create {
@@ -3590,6 +3599,75 @@ textarea.clone-input {
   overflow-y: auto;
 }
 
+/* Review notes: the per-file list between the file head and the diff, and
+   the inline editor the m key opens above it. */
+.rv-notes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.rv-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rv-note-line {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.rv-note-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.rv-note-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.rv-note-x:hover {
+  color: var(--del);
+  background: var(--bg-hover);
+}
+.rv-note-editor {
+  flex: none;
+  padding: 6px 12px;
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.rv-note-editor textarea {
+  width: 100%;
+  resize: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.rv-note-editor textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* Commit-form failure line (lock contention, hooks, empty index, …). */
 .cb-error {
   padding: 4px 2px 0;
@@ -4159,4 +4237,164 @@ textarea.clone-input {
 select.clone-input {
   appearance: none;
   cursor: pointer;
+}
+
+/* ─── In-diff text search (⌘F, Local Changes + Review) ─────────────────── */
+
+/* Positioning anchor wrapping the diff pane, so the floating bar pins to its
+   top-right regardless of which pane variant renders inside. */
+.diff-search-host {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.diff-search-bar {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  /* Above the sticky file headers (.lc-hunkfile, z-index 4) and the
+     per-block actions overlay. */
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 360px;
+  max-width: calc(100% - 32px);
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop), 0 0 0 0.5px var(--border);
+  color: var(--text-muted);
+}
+.diff-search-bar .ds-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.diff-search-bar input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: var(--type-ui-sm);
+  color: var(--text);
+}
+.ds-count {
+  flex-shrink: 0;
+  font-size: var(--type-ui-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ds-nav,
+.ds-close {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ds-nav:hover:not(:disabled),
+.ds-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.ds-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Current match context: ±/· marker, path, matched line — one ellipsized row. */
+.ds-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.ds-preview .ds-kind { flex-shrink: 0; }
+.ds-preview .ds-kind.add { color: var(--add); }
+.ds-preview .ds-kind.del { color: var(--del); }
+.ds-preview .ds-kind.ctx { color: var(--text-dim); }
+.ds-preview .ds-path {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.ds-preview .ds-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+/* ─── Image diff preview (components/ImageDiff.tsx) ───
+ * Before/after panes for binary image files, on a checkerboard so
+ * transparency reads against both themes. */
+.img-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+}
+/* Single-image preview (File view Content tab) — give it room to breathe. */
+.img-diff-single {
+  padding: 16px;
+}
+.img-diff-single .img-diff-checker {
+  min-height: 200px;
+}
+.img-diff-pane {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.img-diff-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.img-diff-label.del { color: var(--del); }
+.img-diff-label.add { color: var(--add); }
+.img-diff-checker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: repeating-conic-gradient(var(--bg-elev) 0% 25%, var(--bg-base) 0% 50%)
+    0 0 / 16px 16px;
+}
+.img-diff-checker img {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+.img-diff-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+}
+.img-diff-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
