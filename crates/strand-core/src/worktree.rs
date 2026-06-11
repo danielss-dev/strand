@@ -15,8 +15,6 @@
 //! only owns the worktree *registry* (list + lifecycle).
 
 use std::path::Path;
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -173,7 +171,7 @@ fn reject_dash(what: &str, value: &str) -> Result<()> {
 /// failure. A module-local free fn (not a `Repo` method) so it doesn't collide
 /// with `stash`'s same-named inherent helper — the shape matches `history`'s.
 fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
-    let out = Command::new("git")
+    let out = crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(std::process::Stdio::null())
@@ -198,6 +196,7 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::process::Command;
 
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = Command::new("git").current_dir(dir).args(args).output().unwrap();

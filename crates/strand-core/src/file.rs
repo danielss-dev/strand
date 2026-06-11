@@ -8,8 +8,6 @@
 //! it's an on-demand view, not a hot path.
 
 use std::path::Path;
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -149,7 +147,7 @@ impl Repo {
         // Record separator (\x1f) between fields; a marker prefix distinguishes
         // the format line from the interleaved `--numstat` lines.
         let format = format!("--format={MARKER}%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%s");
-        let out = Command::new("git")
+        let out = crate::git_command()
             .current_dir(&self.path)
             .env("GIT_TERMINAL_PROMPT", "0")
             .args(crate::GIT_SAFE_CONFIG)

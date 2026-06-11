@@ -19,8 +19,6 @@
 //! [`network`]: crate::network
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -391,7 +389,7 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
 /// [`run_git`] with extra environment variables layered on (the interactive
 /// rebase editor overrides). Same stdin/safe-config/error handling.
 fn run_git_env(cwd: &Path, args: &[&str], envs: &[(&str, &str)]) -> Result<String> {
-    let mut cmd = Command::new("git");
+    let mut cmd = crate::git_command();
     cmd.current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Detach stdin so git can never block reading from a TTY/pipe we don't
@@ -425,7 +423,7 @@ fn run_git_env(cwd: &Path, args: &[&str], envs: &[(&str, &str)]) -> Result<Strin
 /// --is-ancestor` exits 0 = yes, 1 = no; any non-zero (including a bad ref) we
 /// treat as "no" — `interactive_rebase`/`rebase_todo` validate the ref anyway.
 fn is_ancestor(cwd: &Path, maybe_ancestor: &str) -> Result<bool> {
-    let status = Command::new("git")
+    let status = crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(std::process::Stdio::null())

@@ -48,6 +48,10 @@ impl Repo {
         // Same traversal guard as the read/write paths, and the `--`
         // separator keeps the path out of option parsing.
         let _ = self.workdir_path(rel_path)?;
+        // Deliberately NOT `crate::git_command()`: a console-based merge tool
+        // (vimdiff — git's default) needs the console window that default
+        // creation flags provide. This only spawns on explicit user action,
+        // so a one-off console for GUI tools is acceptable.
         let out = std::process::Command::new("git")
             .current_dir(self.path())
             .env("GIT_TERMINAL_PROMPT", "0")

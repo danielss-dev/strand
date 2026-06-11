@@ -13,8 +13,6 @@
 //!
 //! [`network`]: crate::network
 
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -194,7 +192,7 @@ impl Repo {
     /// the `git`-subprocess approach in [`network`](crate::network);
     /// `GIT_TERMINAL_PROMPT=0` stops a stuck auth prompt from blocking.
     fn run_git(&self, args: &[&str]) -> Result<String> {
-        let out = Command::new("git")
+        let out = crate::git_command()
             .current_dir(self.path())
             .env("GIT_TERMINAL_PROMPT", "0")
             // Neutralize repo-local config that would run code as a side effect.
@@ -244,6 +242,7 @@ fn parse_stash_branch(message: &str) -> Option<String> {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::process::Command;
 
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = Command::new("git").current_dir(dir).args(args).output().unwrap();

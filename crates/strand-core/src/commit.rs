@@ -1,6 +1,4 @@
 use std::path::Path;
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -143,7 +141,7 @@ fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
 /// (not a `Repo` method) so it doesn't collide with `stash`'s same-named
 /// helper on the same type.
 fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
-    let out = Command::new("git")
+    let out = crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Detach stdin so git can never block reading from a TTY/pipe we don't

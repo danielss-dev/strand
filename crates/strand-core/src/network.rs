@@ -15,7 +15,7 @@
 
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
@@ -171,7 +171,7 @@ impl Repo {
     /// there. A network call, so callers run it off the hot path.
     pub fn remote_tags(&self, remote: &str) -> Result<Vec<String>> {
         validate_remote_arg(remote, "remote")?;
-        let out = Command::new("git")
+        let out = crate::git_command()
             .current_dir(&self.path)
             .env("GIT_TERMINAL_PROMPT", "0")
             .args(crate::GIT_SAFE_CONFIG)
@@ -269,7 +269,7 @@ pub(crate) fn run_git_streaming(
     mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<NetworkOutcome> {
-    let mut child = Command::new("git")
+    let mut child = crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Neutralize repo-local config that would run code as a side effect.

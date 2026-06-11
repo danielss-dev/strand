@@ -56,3 +56,24 @@ pub use repo::Repo;
 /// three per-module `run_git` helpers can't drift.
 pub(crate) const GIT_SAFE_CONFIG: &[&str] =
     &["-c", "core.fsmonitor=", "-c", "core.pager=cat"];
+
+/// Construct a `git` [`std::process::Command`] for shell-outs. Every spawn
+/// must start here: the release build is a GUI-subsystem process with no
+/// console, so on Windows a child `git.exe` spawned with default flags
+/// allocates a **visible** console window — one flash per call, stealing
+/// focus from the app (which re-triggers the focus-refresh loop and reads as
+/// a freeze). `CREATE_NO_WINDOW` gives the child a console with no window;
+/// descendants that show GUI dialogs (credential helpers, askpass) still do.
+/// Exception: `mergetool` keeps default flags — a console-based merge tool
+/// needs a real console window to be usable.
+pub(crate) fn git_command() -> std::process::Command {
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut cmd = std::process::Command::new("git");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}

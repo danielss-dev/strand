@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -54,7 +52,7 @@ impl Repo {
         // record. `%ct` is committer time (what git2's `commit.time()` returned);
         // `%P` is space-separated full parent hashes (empty for a root commit).
         let format = format!("--format=%H{FS}%an{FS}%ae{FS}%ct{FS}%P{FS}%s{FS}%b");
-        let out = Command::new("git")
+        let out = crate::git_command()
             .current_dir(&self.path)
             .env("GIT_TERMINAL_PROMPT", "0")
             .args(crate::GIT_SAFE_CONFIG)
@@ -145,6 +143,7 @@ fn parse_log(stdout: &str, limit: usize) -> Vec<Commit> {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::process::Command;
 
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
