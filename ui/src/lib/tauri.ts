@@ -6,6 +6,7 @@ import type {
   CloneOutcome,
   Commit,
   CommitOutcome,
+  FileBlob,
   FileContent,
   FileDiff,
   FileHistoryEntry,
@@ -19,6 +20,8 @@ import type {
   Refs,
   ReflogEntry,
   RepoMeta,
+  ResetMode,
+  ResetOutcome,
   Snapshot,
   Stash,
   StashOutcome,
@@ -94,6 +97,8 @@ export const tauri = {
     invoke<string>('repo_merge_base', { path, a, b }),
   repoFileContent: (path: string, file: string, rev: string | null) =>
     invoke<FileContent>('repo_file_content', { path, file, rev }),
+  repoFileBlob: (path: string, file: string, rev: string | null, index: boolean) =>
+    invoke<FileBlob>('repo_file_blob', { path, file, rev, index }),
   repoFileHistory: (path: string, file: string, limit?: number) =>
     invoke<FileHistoryEntry[]>('repo_file_history', { path, file, limit }),
   repoBlame: (path: string, file: string) => invoke<BlameLine[]>('repo_blame', { path, file }),
@@ -108,6 +113,8 @@ export const tauri = {
   repoDiscardMany: (path: string, files: string[]) =>
     invoke<void>('repo_discard_many', { path, files }),
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
+  repoGitignoreAdd: (path: string, pattern: string) =>
+    invoke<void>('repo_gitignore_add', { path, pattern }),
   repoApplyPatch: (
     path: string,
     patch: string,
@@ -182,6 +189,18 @@ export const tauri = {
   ) => invoke<CheckoutOutcome>('repo_branch_create', { path, name, startPoint, checkout }),
   repoBranchDelete: (path: string, name: string, force: boolean) =>
     invoke<void>('repo_branch_delete', { path, name, force }),
+  repoBranchRename: (path: string, oldName: string, newName: string) =>
+    invoke<void>('repo_branch_rename', { path, oldName, newName }),
+  repoRemoteAdd: (path: string, name: string, url: string) =>
+    invoke<void>('repo_remote_add', { path, name, url }),
+  repoRemoteRemove: (path: string, name: string) =>
+    invoke<void>('repo_remote_remove', { path, name }),
+  // Resolves to the refspecs git could not rewrite ("problems") — the rename
+  // has already happened by then; empty means a clean rename.
+  repoRemoteRename: (path: string, oldName: string, newName: string) =>
+    invoke<string[]>('repo_remote_rename', { path, oldName, newName }),
+  repoRemoteSetUrl: (path: string, name: string, url: string) =>
+    invoke<void>('repo_remote_set_url', { path, name, url }),
   repoTagCreate: (
     path: string,
     name: string,
@@ -222,6 +241,10 @@ export const tauri = {
   repoMerge: (path: string, refname: string, mode: MergeMode) =>
     invoke<boolean>('repo_merge', { path, refname, mode }),
   repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),
+  // Hard resets of a dirty tree stash a safety snapshot first; the outcome's
+  // `snapshot_oid` reports it so the UI can point at the stash stack.
+  repoReset: (path: string, target: string, mode: ResetMode) =>
+    invoke<ResetOutcome>('repo_reset', { path, target, mode }),
   repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
   // Resume a paused merge/rebase/cherry-pick/revert after resolving conflicts
   // (`--continue`, not a commit). `true` = paused again on a fresh conflict.

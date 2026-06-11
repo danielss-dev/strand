@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
+import { ImageDiff } from '../components/ImageDiff';
+import { isImagePath } from '../lib/image';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -294,7 +296,21 @@ export function CommitDetail({
       </div>
       <div className="cd-diff">
         {focused ? (
-          focused.binary || focused.patch.length === 0 ? (
+          focused.binary && isImagePath(focused.path) ? (
+            <div className="cd-diff-scroll">
+              {/* Old side: the first parent (a root commit / added file has none).
+                  New side: this commit. */}
+              <ImageDiff
+                path={focused.path}
+                oldSrc={
+                  focused.status === 'added' || commit.parents.length === 0
+                    ? null
+                    : { rev: `${hash}^` }
+                }
+                newSrc={focused.status === 'deleted' ? null : { rev: hash }}
+              />
+            </div>
+          ) : focused.binary || focused.patch.length === 0 ? (
             <div className="cd-empty">
               {focused.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}
             </div>

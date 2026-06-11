@@ -34,6 +34,40 @@ reliability hole · **P1** = strong improvement, schedule soon · **P2** = nice 
 >
 > Details per item below are the original proposals, kept for rationale.
 
+## Second pass (2026-06-11)
+
+A ten-item implementation pass over the next ring of gaps — mostly "real git
+client" table stakes plus two review-loop features. Everything landed in the
+working tree in one batch:
+
+- **git reset** (soft/mixed/hard, safety snapshot before a dirty hard reset) +
+  reflog recovery menu + "Undo last commit" — `crates/strand-core/src/reset.rs`,
+  `ui/src/views/ResetDialog.tsx`, `ui/src/views/Reflog.tsx`
+- **Remote management** (add/rename/set-url/remove) + **branch rename** —
+  `crates/strand-core/src/remote.rs`, `branch.rs`, `ui/src/views/RemoteDialog.tsx`,
+  `RenameBranchDialog.tsx`, `ui/src/components/Sidebar.tsx`
+- **Commit signing** via shell-out when `commit.gpgSign=true` —
+  `crates/strand-core/src/commit.rs` (default unsigned path stays git2)
+- **Gitignore quick-add** for untracked files (root-anchored + `*.<ext>`) —
+  `crates/strand-core/src/ignore.rs`, `ui/src/lib/ignore.ts`
+- **fixup! commit creation + autosquash** in the rebase editor —
+  `ui/src/lib/rebase.ts`, `ui/src/views/RebaseEditor.tsx`, `Commits.tsx`
+- **Copy diff as patch / Markdown** (tree menus + palette) —
+  `ui/src/lib/patchExport.ts`
+- **In-diff text search** (⌘F over the whole diff pool in Local Changes +
+  Review) — `ui/src/lib/diffSearch.ts`, `ui/src/components/DiffSearchBar.tsx`
+- **Image diff preview** (side-by-side Before/After in Local Changes, Review,
+  CommitDetail) — `crates/strand-core/src/file.rs` (`file_blob`),
+  `ui/src/components/ImageDiff.tsx`
+- **Review annotations + feedback export** (notes on files/hunks → one
+  markdown prompt for the agent) — `ui/src/lib/reviewExport.ts`,
+  `ui/src/views/Review.tsx`, `ui/src/stores/repo.ts`
+
+Still deliberately open (assessed as on-radar, pulled-forward priorities — not
+part of this pass): line-level staging, the rebase `edit` action, the
+multi-repo-tab architecture work, full-history / `-G` content search, and a
+GitHub/GitLab PR review surface.
+
 ---
 
 ## 1. AI-change review as a first-class surface

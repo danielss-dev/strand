@@ -4,7 +4,10 @@ import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parseCacheablePatch } from '../components/Diff';
+import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
+import { ImageDiff } from '../components/ImageDiff';
+import { isImagePath } from '../lib/image';
 import {
   copyToClipboard,
   diffStatusToGit,
@@ -13,6 +16,8 @@ import {
   type TreeRowDecoration,
 } from '../components/PierreTree';
 import { hashPatch } from '../lib/patch';
+import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
+import { buildReviewFeedback } from '../lib/reviewExport';
 import { gitErrorHint } from '../lib/tauri';
 import type { FileDiff } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -49,6 +54,11 @@ export function Review() {
   const unstagedDiffs = useRepo((s) => s.unstagedDiffs);
   const reviewed = useRepo((s) => s.reviewed);
   const toggleReviewed = useRepo((s) => s.toggleReviewed);
+  const reviewNotes = useRepo((s) => s.reviewNotes);
+  const addReviewNote = useRepo((s) => s.addReviewNote);
+  const removeReviewNote = useRepo((s) => s.removeReviewNote);
+  const activePath = useRepo((s) => s.activePath);
+  const meta = useRepo((s) => s.meta);
   const setBaseline = useRepo((s) => s.setBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
   const refreshReviewDiffs = useRepo((s) => s.refreshReviewDiffs);
@@ -171,6 +181,19 @@ export function Review() {
     if (v) toggleReviewed(current.path, v.hash);
   }, [current, verdicts, toggleReviewed]);
 
+  // In-diff text search (⌘F): floats over the diff pane, searches the whole
+  // pool, and a jump selects the matched file in the queue.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
+  const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
+  useEffect(() => {
+    if (!diffSearchSignal) return;
+    setSearchOpen(true);
+    // The palette restores focus on close — claim it back for the input.
+    focusDiffSearchInput();
+    clearDiffSearch();
+  }, [diffSearchSignal, clearDiffSearch]);
+
   // Failed write ops surface here instead of vanishing into the console.
   const [opError, setOpError] = useState<string | null>(null);
   useEffect(() => {
@@ -182,6 +205,50 @@ export function Review() {
     (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
     [],
   );
+
+  // ── Review notes (the agent feedback loop) ────────────────────────────
+  // The m editor: which file the note attaches to and the optional new-file
+  // line it anchors at (pre-set by a per-hunk "Note" button).
+  const [noteEditor, setNoteEditor] = useState<{ path: string; line: number | null } | null>(null);
+  const closeNoteEditor = useCallback((el?: HTMLTextAreaElement) => {
+    // Blur before unmounting so focus falls back to the window and the
+    // j/k/space loop resumes immediately, no click needed.
+    el?.blur();
+    setNoteEditor(null);
+  }, []);
+
+  // Success notice ("Copied feedback …"); opError takes the toast slot first.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2600);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const displayedNotes = displayed ? (reviewNotes[displayed.path] ?? []) : [];
+  const notedFiles = useMemo(
+    () => pool.filter((d) => (reviewNotes[d.path]?.length ?? 0) > 0),
+    [pool, reviewNotes],
+  );
+  const noteCount = useMemo(
+    () => notedFiles.reduce((n, d) => n + reviewNotes[d.path].length, 0),
+    [notedFiles, reviewNotes],
+  );
+  const copyFeedback = useCallback(() => {
+    if (!activePath || notedFiles.length === 0) return;
+    copyToClipboard(
+      buildReviewFeedback({
+        repoName: basename(activePath),
+        branch: meta?.branch ?? null,
+        baselineShort: baseline?.short ?? null,
+        files: notedFiles.map((d) => ({ path: d.path, patch: d.patch, notes: reviewNotes[d.path] })),
+      }),
+    );
+    setNotice(
+      `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
+        `${notedFiles.length} file${notedFiles.length === 1 ? '' : 's'}`,
+    );
+  }, [activePath, notedFiles, noteCount, reviewNotes, meta, baseline]);
 
   // Two-step confirms for the destructive actions.
   const [armDiscardAll, setArmDiscardAll] = useState(false);
@@ -224,20 +291,30 @@ export function Review() {
   const rowDecoration = useCallback(
     (path: string, kind: 'file' | 'directory'): TreeRowDecoration | null => {
       if (kind !== 'file') return null;
+      const notes = reviewNotes[path]?.length ?? 0;
+      const pen = notes > 0 ? ` ✎${notes}` : '';
+      const penTitle = notes > 0 ? ` · ${notes} note${notes === 1 ? '' : 's'}` : '';
       switch (verdicts.get(path)?.verdict) {
         case 'reviewed':
-          return { text: '✓', title: 'Reviewed' };
+          return { text: '✓' + pen, title: 'Reviewed' + penTitle };
         case 'stale':
-          return { text: 'changed', title: 'Changed since reviewed — review again' };
+          return { text: 'changed' + pen, title: 'Changed since reviewed — review again' + penTitle };
         default:
-          return null;
+          return notes > 0
+            ? { text: `✎${notes}`, title: `${notes} note${notes === 1 ? '' : 's'}` }
+            : null;
       }
     },
-    [verdicts],
+    [verdicts, reviewNotes],
   );
+  // Note counts feed the decoration, so they're folded into the key — Pierre
+  // only repaints rows when this fingerprint moves (see docs/learnings.md).
   const decorationKey = useMemo(
-    () => pool.map((d) => `${d.path}:${verdicts.get(d.path)?.verdict}`).join('|'),
-    [pool, verdicts],
+    () =>
+      pool
+        .map((d) => `${d.path}:${verdicts.get(d.path)?.verdict}:${reviewNotes[d.path]?.length ?? 0}`)
+        .join('|'),
+    [pool, verdicts, reviewNotes],
   );
 
   // Activate (double-click / Enter): one file toggles its reviewed mark; a
@@ -299,14 +376,33 @@ export function Review() {
         icon: 'file',
         onSelect: () => copyToClipboard(known.join('\n')),
       });
+      const diffs = known
+        .map((p) => pool.find((d) => d.path === p))
+        .filter((d): d is FileDiff => d != null);
+      if (diffs.some((d) => d.patch.length > 0)) {
+        items.push(
+          { label: 'Copy diff', icon: 'file', onSelect: () => copyToClipboard(concatPatches(diffs)) },
+          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => copyToClipboard(patchesToMarkdown(diffs)) },
+        );
+      }
       return items;
     },
-    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail],
+    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool],
   );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘F / Ctrl+F opens the in-diff search — checked before the mod-combo
+      // guard below. Inert while a dialog or the palette is up.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+        const ft = e.target as HTMLElement | null;
+        if (ft?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
+        e.preventDefault();
+        setSearchOpen(true);
+        focusDiffSearchInput(); // already open → refocus + select
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"]')) {
@@ -331,6 +427,14 @@ export function Review() {
         case ' ':
           e.preventDefault();
           markReviewed();
+          break;
+        case 'm':
+          // The input/textarea guard above keeps this inert while the note
+          // editor itself (or any other field) has focus.
+          if (current) {
+            e.preventDefault();
+            setNoteEditor({ path: current.path, line: null });
+          }
           break;
         case 's':
           if (current && unstagedSet.has(current.path)) {
@@ -412,6 +516,16 @@ export function Review() {
         onClear={() => void clearBaseline()}
         extra={
           <>
+            {noteCount > 0 && (
+              <button
+                type="button"
+                className="h-link"
+                onClick={copyFeedback}
+                title="Copy every note as one Markdown prompt for the agent"
+              >
+                Copy feedback ({noteCount})
+              </button>
+            )}
             {stageableReviewed > 0 && (
               <button type="button" className="h-link" onClick={() => void stageReviewed().catch(fail('Stage reviewed'))}>
                 Stage reviewed ({stageableReviewed})
@@ -463,94 +577,174 @@ export function Review() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            {displayed ? (
-              <div className="rv-diff">
-                <div className="rv-file-head">
-                  <span className="path">{displayed.path}</span>
-                  <span className="stat-del">−{displayed.dels}</span>
-                  <span className="stat-add">+{displayed.adds}</span>
-                  <span className="rv-head-actions">
-                    {unstagedSet.has(displayed.path) && (
-                      <>
-                        <button
-                          type="button"
-                          className="h-link"
-                          onClick={() => void stageMany([displayed.path]).catch(fail('Stage'))}
-                          title="Stage this file (s)"
-                        >
-                          Stage
-                        </button>
-                        <button
-                          type="button"
-                          className={'h-link' + (confirmDiscard === displayed.path ? ' danger' : '')}
-                          onClick={() => discardFile(displayed.path)}
-                          title="Discard this file's working-tree changes (d d)"
-                        >
-                          {confirmDiscard === displayed.path ? 'Really discard?' : 'Discard'}
-                        </button>
-                      </>
-                    )}
-                    {sessionMode && !unstagedSet.has(displayed.path) && stagedSet.has(displayed.path) && (
+            <div className="diff-search-host">
+              {displayed ? (
+                <div className="rv-diff">
+                  <div className="rv-file-head">
+                    <span className="path">{displayed.path}</span>
+                    <span className="stat-del">−{displayed.dels}</span>
+                    <span className="stat-add">+{displayed.adds}</span>
+                    <span className="rv-head-actions">
                       <button
                         type="button"
                         className="h-link"
-                        onClick={() => void unstageMany([displayed.path]).catch(fail('Unstage'))}
-                        title="Unstage this file"
+                        onClick={() => setNoteEditor({ path: displayed.path, line: null })}
+                        title="Add a review note to this file (m)"
                       >
-                        Unstage
+                        Note
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className={
-                        'rv-check wide' + (verdicts.get(displayed.path)?.verdict === 'reviewed' ? ' on' : '')
-                      }
-                      aria-pressed={verdicts.get(displayed.path)?.verdict === 'reviewed'}
-                      onClick={markReviewed}
-                      title="Mark reviewed (Space)"
-                    >
-                      <Icon name="check" size={12} stroke={2.2} />
-                      {verdicts.get(displayed.path)?.verdict === 'reviewed' ? 'Reviewed' : 'Mark reviewed'}
-                    </button>
-                  </span>
-                </div>
-                {/* Pierre's Virtualizer makes it the scroll container and
-                    window-renders the diff rows — whole-file patches of any
-                    size (lockfiles…) mount only what's on screen. */}
-                <Virtualizer className="rv-diff-scroll">
-                  {displayed.binary || displayed.patch.length === 0 ? (
-                    <div className="lc-file-note">
-                      {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+                      {unstagedSet.has(displayed.path) && (
+                        <>
+                          <button
+                            type="button"
+                            className="h-link"
+                            onClick={() => void stageMany([displayed.path]).catch(fail('Stage'))}
+                            title="Stage this file (s)"
+                          >
+                            Stage
+                          </button>
+                          <button
+                            type="button"
+                            className={'h-link' + (confirmDiscard === displayed.path ? ' danger' : '')}
+                            onClick={() => discardFile(displayed.path)}
+                            title="Discard this file's working-tree changes (d d)"
+                          >
+                            {confirmDiscard === displayed.path ? 'Really discard?' : 'Discard'}
+                          </button>
+                        </>
+                      )}
+                      {sessionMode && !unstagedSet.has(displayed.path) && stagedSet.has(displayed.path) && (
+                        <button
+                          type="button"
+                          className="h-link"
+                          onClick={() => void unstageMany([displayed.path]).catch(fail('Unstage'))}
+                          title="Unstage this file"
+                        >
+                          Unstage
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={
+                          'rv-check wide' + (verdicts.get(displayed.path)?.verdict === 'reviewed' ? ' on' : '')
+                        }
+                        aria-pressed={verdicts.get(displayed.path)?.verdict === 'reviewed'}
+                        onClick={markReviewed}
+                        title="Mark reviewed (Space)"
+                      >
+                        <Icon name="check" size={12} stroke={2.2} />
+                        {verdicts.get(displayed.path)?.verdict === 'reviewed' ? 'Reviewed' : 'Mark reviewed'}
+                      </button>
+                    </span>
+                  </div>
+                  {noteEditor && (
+                    <div className="rv-note-editor">
+                      <textarea
+                        rows={2}
+                        autoFocus
+                        placeholder={
+                          (noteEditor.line != null
+                            ? `Note on L${noteEditor.line} of ${noteEditor.path}`
+                            : `Note ${noteEditor.path}`) + ' — Enter saves, Esc cancels'
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            const text = e.currentTarget.value;
+                            closeNoteEditor(e.currentTarget);
+                            addReviewNote(noteEditor.path, text, noteEditor.line);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            closeNoteEditor(e.currentTarget);
+                          }
+                        }}
+                      />
                     </div>
-                  ) : sessionMode ? (
-                    // Session diffs span commits — render read-only. Keyed by
-                    // file + content: VirtualizedFileDiff pins the first
-                    // fileDiff it renders (`this.fileDiff ??=`), so swapping
-                    // files must remount the instance, not re-prop it.
-                    <Diff
-                      key={`${displayed.path}:${hashOf(displayed)}`}
-                      patch={displayed.patch}
-                      layout={layout}
-                      hideFileHeader
-                    />
-                  ) : (
-                    // Inbox diffs are pure unstaged changes — full hunk
-                    // Stage / Discard actions apply. Same remount-on-swap key.
-                    <HunkAnnotatedDiff
-                      key={`${displayed.path}:${hashOf(displayed)}`}
-                      diff={displayed}
-                      layout={layout}
-                      side="unstaged"
-                    />
                   )}
-                </Virtualizer>
-              </div>
-            ) : (
-              <div className="lc-empty">
-                <strong>Pick a file</strong>
-                Select something on the left to review its diff.
-              </div>
-            )}
+                  {displayedNotes.length > 0 && (
+                    <div className="rv-notes">
+                      {displayedNotes.map((n) => (
+                        <div key={n.id} className="rv-note">
+                          {n.line != null && <span className="rv-note-line">L{n.line}</span>}
+                          <span className="rv-note-text" title={n.text}>
+                            {n.text}
+                          </span>
+                          <button
+                            type="button"
+                            className="rv-note-x"
+                            aria-label="Remove note"
+                            onClick={() => removeReviewNote(displayed.path, n.id)}
+                          >
+                            <Icon name="x" size={11} stroke={2} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Pierre's Virtualizer makes it the scroll container and
+                      window-renders the diff rows — whole-file patches of any
+                      size (lockfiles…) mount only what's on screen. */}
+                  <Virtualizer className="rv-diff-scroll">
+                    {displayed.binary && isImagePath(displayed.path) ? (
+                      // Old side: the session baseline, or HEAD in inbox mode
+                      // (an added file has no old side). New side: worktree.
+                      <ImageDiff
+                        path={displayed.path}
+                        oldSrc={
+                          displayed.status === 'added'
+                            ? null
+                            : { rev: sessionMode ? baseline!.oid : 'HEAD' }
+                        }
+                        newSrc={displayed.status === 'deleted' ? null : { rev: null }}
+                      />
+                    ) : displayed.binary || displayed.patch.length === 0 ? (
+                      <div className="lc-file-note">
+                        {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+                      </div>
+                    ) : sessionMode ? (
+                      // Session diffs span commits — render read-only. Keyed by
+                      // file + content: VirtualizedFileDiff pins the first
+                      // fileDiff it renders (`this.fileDiff ??=`), so swapping
+                      // files must remount the instance, not re-prop it.
+                      <Diff
+                        key={`${displayed.path}:${hashOf(displayed)}`}
+                        patch={displayed.patch}
+                        layout={layout}
+                        hideFileHeader
+                      />
+                    ) : (
+                      // Inbox diffs are pure unstaged changes — full hunk
+                      // Stage / Discard actions apply. Same remount-on-swap key.
+                      <HunkAnnotatedDiff
+                        key={`${displayed.path}:${hashOf(displayed)}`}
+                        diff={displayed}
+                        layout={layout}
+                        side="unstaged"
+                        onNoteBlock={(m) =>
+                          setNoteEditor({
+                            path: displayed.path,
+                            line: m.addRange?.start ?? m.delRange?.start ?? null,
+                          })
+                        }
+                      />
+                    )}
+                  </Virtualizer>
+                </div>
+              ) : (
+                <div className="lc-empty">
+                  <strong>Pick a file</strong>
+                  Select something on the left to review its diff.
+                </div>
+              )}
+              {searchOpen && (
+                <DiffSearchBar
+                  diffs={pool}
+                  onJump={(m) => selectReviewFile(m.path)}
+                  onClose={() => setSearchOpen(false)}
+                  placeholder="Search review diffs…"
+                />
+              )}
+            </div>
           </Panel>
         </PanelGroup>
       </div>
@@ -558,13 +752,15 @@ export function Review() {
       <div className="rv-foot" aria-hidden="true">
         <span className="kbd-inline">↑ ↓ j k</span> files
         <span className="kbd-inline">space</span> reviewed
+        <span className="kbd-inline">m</span> note
         <span className="kbd-inline">n p</span> blocks
         <span className="kbd-inline">s</span> stage
         <span className="kbd-inline">d d</span> discard
         <span className="kbd-inline">c</span> commit
+        <span className="kbd-inline">⌘F</span> search
       </div>
 
-      {opError && (
+      {opError ? (
         <div className="toast" role="alert">
           <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="x" size={13} stroke={2} /></span>
           <span>{opError}</span>
@@ -572,7 +768,12 @@ export function Review() {
             Dismiss
           </button>
         </div>
-      )}
+      ) : notice ? (
+        <div className="toast" role="status">
+          <span style={{ color: 'var(--add, #57ab5a)' }}><Icon name="check" size={13} stroke={2} /></span>
+          <span>{notice}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -601,6 +802,11 @@ function useSettled<T>(value: T, delay = 120, idleGap = 250): T {
     return () => window.clearTimeout(t);
   }, [value, settled, delay, idleGap]);
   return settled;
+}
+
+/** Last path segment — the repo's directory name from its absolute path. */
+function basename(p: string): string {
+  return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 }
 
 // Verdict hashes are FNV over the whole-file patch text — pennies for source

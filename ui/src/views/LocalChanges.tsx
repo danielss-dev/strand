@@ -8,8 +8,13 @@ import { FileDiff as PierreFileDiff } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/Diff';
+import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
+import { ImageDiff } from '../components/ImageDiff';
+import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
+import { ignorePatterns } from '../lib/ignore';
+import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { gitErrorHint } from '../lib/tauri';
 import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
 import type { LocalSelection } from '../stores/repo';
@@ -36,6 +41,7 @@ export function LocalChanges() {
   const stageMany = useRepo((s) => s.stageMany);
   const unstageMany = useRepo((s) => s.unstageMany);
   const discardMany = useRepo((s) => s.discardMany);
+  const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const stageAll = useRepo((s) => s.stageAll);
   const unstageAll = useRepo((s) => s.unstageAll);
   const selectLocalFile = useRepo((s) => s.selectLocalFile);
@@ -48,6 +54,14 @@ export function LocalChanges() {
     return [...set];
   }, [status]);
   const conflictSet = useMemo(() => new Set(conflicts), [conflicts]);
+
+  // Untracked paths, also from status — FileSection's diffs don't carry
+  // StatusKind, so the .gitignore quick actions key off this set instead.
+  const untracked = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of status) if (s.kind === 'UNTRACKED') set.add(s.path);
+    return set;
+  }, [status]);
 
   // Conflicted files are handled by the Conflicts bar + landing, so keep them
   // out of the normal Unstaged/Staged lists (git lists them on both sides,
@@ -89,6 +103,34 @@ export function LocalChanges() {
     else if (stagedView.length) selectLocalFile({ file: '', staged: true, all: true });
   }, [selection, unstagedView, stagedView, selectLocalFile]);
 
+  // ── In-diff text search (⌘F) ──────────────────────────────────────────
+  // The bar floats over the diff pane and searches both sides at once; a
+  // jump selects the matched file on its side. A path can sit on both sides
+  // (partially staged) — jumps prefer the unstaged copy, whose hunk actions
+  // are live.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
+  const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
+  useEffect(() => {
+    if (!diffSearchSignal) return;
+    setSearchOpen(true);
+    // The palette restores focus on close — claim it back for the input.
+    focusDiffSearchInput();
+    clearDiffSearch();
+  }, [diffSearchSignal, clearDiffSearch]);
+  const searchPool = useMemo(() => [...unstagedView, ...stagedView], [unstagedView, stagedView]);
+  const searchSide = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const d of stagedView) m.set(d.path, true);
+    for (const d of unstagedView) m.set(d.path, false); // unstaged wins
+    return m;
+  }, [unstagedView, stagedView]);
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    // Hand focus back to the diff pane host so the j/k loop reads naturally.
+    document.querySelector<HTMLElement>('.lc-diff-scroll')?.focus();
+  }, []);
+
   // The diff(s) the selection drives. "Show all" → the whole side. A file
   // row → just that file. A folder row (Pierre reports directory paths with
   // a trailing slash, no exact file match) → every changed file beneath it.
@@ -126,6 +168,17 @@ export function LocalChanges() {
   const confirmTimer = useRef<number | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘F / Ctrl+F opens the in-diff search — checked before the mod-combo
+      // guard below. Inert while a dialog/palette or the resolver is up.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+        const ft = e.target as HTMLElement | null;
+        if (ft?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
+        if (resolverOpen.current) return;
+        e.preventDefault();
+        setSearchOpen(true);
+        focusDiffSearchInput(); // already open → refocus + select
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (
@@ -248,6 +301,8 @@ export function LocalChanges() {
                     onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                     actionLabel="Stage"
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
+                    isUntracked={(p) => untracked.has(p)}
+                    onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
                     onBulk={() => void stageAll().catch(fail('Stage all'))}
                     bulkLabel="Stage all"
                   />
@@ -271,15 +326,27 @@ export function LocalChanges() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
-            {activeConflict ? (
-              <ConflictLanding
-                key={activeConflict}
-                path={activeConflict}
-                onOpenEditor={() => setResolverFile(activeConflict)}
-              />
-            ) : (
-              <DiffPane diffs={selectedDiffs} staged={selection?.staged ?? false} />
-            )}
+            <div className="diff-search-host">
+              {activeConflict ? (
+                <ConflictLanding
+                  key={activeConflict}
+                  path={activeConflict}
+                  onOpenEditor={() => setResolverFile(activeConflict)}
+                />
+              ) : (
+                <DiffPane diffs={selectedDiffs} staged={selection?.staged ?? false} />
+              )}
+              {searchOpen && (
+                <DiffSearchBar
+                  diffs={searchPool}
+                  onJump={(m) =>
+                    selectFileRow({ file: m.path, staged: searchSide.get(m.path) ?? false })
+                  }
+                  onClose={closeSearch}
+                  placeholder="Search changes…"
+                />
+              )}
+            </div>
           </Panel>
         </PanelGroup>
       </div>
@@ -375,6 +442,11 @@ interface SectionProps {
   actionLabel: string;
   /** Discard the given files' working-tree changes — unstaged section only. */
   onDiscard?: (files: string[]) => void;
+  /** Whether a path is untracked — gates the .gitignore quick actions
+   * (FileDiff rows don't carry StatusKind). Unstaged section only. */
+  isUntracked?: (path: string) => boolean;
+  /** Append a pattern to the repo's root .gitignore. */
+  onIgnore?: (pattern: string) => void;
   onBulk(): void;
   bulkLabel: string;
 }
@@ -396,6 +468,8 @@ function FileSection({
   onAction,
   actionLabel,
   onDiscard,
+  isUntracked,
+  onIgnore,
   onBulk,
   bulkLabel,
 }: SectionProps) {
@@ -426,14 +500,34 @@ function FileSection({
           onSelect: () => onDiscard(targets),
         });
       }
+      if (n === 1 && onIgnore && isUntracked?.(targets[0])) {
+        const { exact, extension } = ignorePatterns(targets[0]);
+        items.push({ label: 'Add to .gitignore', icon: 'file', onSelect: () => onIgnore(exact) });
+        if (extension) {
+          items.push({
+            label: `Ignore all ${extension} files`,
+            icon: 'file',
+            onSelect: () => onIgnore(extension),
+          });
+        }
+      }
       items.push({
         label: n > 1 ? 'Copy paths' : 'Copy path',
         icon: 'file',
         onSelect: () => copyToClipboard(targets.join('\n')),
       });
+      const diffs = targets
+        .map((p) => files.find((f) => f.path === p))
+        .filter((f): f is FileDiff => f != null);
+      if (diffs.some((f) => f.patch.length > 0)) {
+        items.push(
+          { label: 'Copy diff', icon: 'file', onSelect: () => copyToClipboard(concatPatches(diffs)) },
+          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => copyToClipboard(patchesToMarkdown(diffs)) },
+        );
+      }
       return items;
     },
-    [actionLabel, staged, onAction, onDiscard],
+    [actionLabel, staged, onAction, onDiscard, isUntracked, onIgnore, files],
   );
 
   return (
@@ -503,7 +597,9 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
 
   return (
     <div className="lc-diff">
-      <div className="lc-diff-scroll">
+      {/* tabIndex so closing the ⌘F bar can park focus here (not an input,
+          so the staging keyboard loop stays live). */}
+      <div className="lc-diff-scroll" tabIndex={-1}>
         {diffs.length === 0 ? (
           <div className="lc-empty">
             <strong>Select a file</strong>
@@ -584,7 +680,17 @@ function FileDiffSection({
     <div className="lc-file-block" ref={blockRef}>
       <FileHeaderStrip diff={diff} collapsed={collapsed} onToggle={onToggle} />
       {!collapsed &&
-        (empty ? (
+        (diff.binary && isImagePath(diff.path) ? (
+          // Old side: HEAD for both sections (an added file has no old side).
+          // New side: the working tree (unstaged) or the index (staged).
+          <ImageDiff
+            path={diff.path}
+            oldSrc={diff.status === 'added' ? null : { rev: 'HEAD' }}
+            newSrc={
+              diff.status === 'deleted' ? null : staged ? { rev: null, index: true } : { rev: null }
+            }
+          />
+        ) : empty ? (
           <div className="lc-file-note">
             {diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
           </div>
@@ -643,10 +749,14 @@ export function HunkAnnotatedDiff({
   diff,
   layout,
   side,
+  onNoteBlock,
 }: {
   diff: FileDiff;
   layout: 'unified' | 'split';
   side: 'unstaged' | 'staged';
+  /** When provided (the Review view), each change block grows a "Note"
+   * action that hands its meta back for a line-anchored review note. */
+  onNoteBlock?: (meta: BlockMeta) => void;
 }) {
   const applyPatch = useRepo((s) => s.applyPatch);
   const discardPatch = useRepo((s) => s.discardPatch);
@@ -931,6 +1041,7 @@ export function HunkAnnotatedDiff({
                   side={side}
                   pending={pending}
                   onRun={(d, t) => void run(a.metadata, d, t)}
+                  onNote={onNoteBlock && (() => onNoteBlock(a.metadata))}
                 />
               </div>
             ))}
@@ -980,11 +1091,13 @@ function BlockActions({
   side,
   pending,
   onRun,
+  onNote,
 }: {
   meta: BlockMeta;
   side: 'unstaged' | 'staged';
   pending: string | null;
   onRun(direction: SliceDirection, target: ApplyTarget): void;
+  onNote?: () => void;
 }) {
   const busy = pending != null;
   const myKey = (target: ApplyTarget) => `${blockKey(meta)}:${target}`;
@@ -1026,6 +1139,17 @@ function BlockActions({
       >
         {discardingMe ? 'Discarding…' : 'Discard'}
       </button>
+      {onNote && (
+        <button
+          type="button"
+          className="hbtn"
+          disabled={busy}
+          onClick={onNote}
+          title="Attach a review note to this change"
+        >
+          Note
+        </button>
+      )}
     </div>
   );
 }

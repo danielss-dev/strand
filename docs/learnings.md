@@ -815,3 +815,49 @@ non-virtualized `FileDiff` path re-reads the prop, which masks the bug until
 virtualization is enabled (Review's diff pane). Also reset the scroll
 container to the top on swap: the virtualizer keeps the previous file's
 offset, and a deep offset into a short file shows an empty window.
+
+---
+
+## A palette-triggered surface that focuses an input must re-claim focus itself
+
+**Rule.** When a one-shot store signal (the `commitSearchFocus` /
+`diffSearchSignal` pattern) is fired from a palette action and the consumer
+mounts something with an `autoFocus` input, the consumer must *re-claim* focus
+after the palette unmounts — e.g. via a `requestAnimationFrame` call to an
+exported focus helper (`focusDiffSearchInput()` in
+`components/DiffSearchBar.tsx`). `autoFocus` alone is not enough.
+
+**Why.** The palette restores focus to its opener on unmount (a deliberate
+a11y behavior — see the palette learning above). The order is: action runs →
+signal consumer mounts and autofocuses → palette unmounts → focus snaps back
+to the opener, silently stealing it from the input you just focused. The bug
+is invisible if you only test the direct-shortcut path (⌘F), which never goes
+through the palette.
+
+**How to apply.** Export a `focusX()` helper from the component that owns the
+input; in the signal-consuming effect, clear the signal and call the helper
+inside `requestAnimationFrame` so it lands after the palette's unmount
+refocus. Any new `requestX()` one-shot signal whose consumer wants focus needs
+the same treatment.
+
+---
+
+## Palette actions over big store slices: gate on counts, read content at run time
+
+**Rule.** A `PaletteAction` whose availability depends on a large store array
+(diffs, review notes, the log) must subscribe `App.tsx` only to a cheap
+derived value — a length/count selector like `s.unstagedDiffs.length` — and
+have its `run` read the live data via `useRepo.getState()` at invocation time.
+Never subscribe App to the array itself just to build a palette entry.
+
+**Why.** `App.tsx` is the app's root; subscribing it to diff *content* means a
+whole-app re-render on every watcher-driven refresh (which, with the file
+watcher, is every agent write burst). Length-only selectors keep the gating
+reactive while content churn stays free, and `getState()` at run time
+guarantees the action still operates on fresh data. The copy-diff and
+review-feedback palette actions are the canonical sites.
+
+**How to apply.** New action: add a count-only selector for the gate
+(`useRepo(s => s.xs.length)`), spread the action conditionally, and inside
+`run` call `useRepo.getState().xs`. If the action needs multiple slices,
+read them all at run time rather than widening the subscription.

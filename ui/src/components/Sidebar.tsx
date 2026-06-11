@@ -4,9 +4,11 @@ import type { GitStatusEntry } from '@pierre/trees';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
+import { ignorePatterns } from '../lib/ignore';
 import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
+import type { RemoteDialogMode } from '../views/RemoteDialog';
 
 type SideTab = 'git' | 'files';
 
@@ -70,6 +72,10 @@ interface SidebarProps {
   onMerge: (source: string, into: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
+  /** Open the remote-management dialog in the given mode (add/rename/url). */
+  onManageRemote: (mode: RemoteDialogMode) => void;
+  /** Open the Rename-branch dialog for the branch `name`. */
+  onRenameBranch: (name: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string) => void;
 }
@@ -117,7 +123,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -132,6 +138,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const revealInGraph = useRepo((s) => s.revealInGraph);
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
+  const removeRemote = useRepo((s) => s.removeRemote);
   const deleteTag = useRepo((s) => s.deleteTag);
   const pushTag = useRepo((s) => s.pushTag);
   const deleteRemoteTag = useRepo((s) => s.deleteRemoteTag);
@@ -139,6 +146,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
+  const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const stashes = useRepo((s) => s.stashes);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
@@ -297,15 +305,35 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     [workTree],
   );
   const fileMenu = useCallback(
-    (targets: string[]): TreeMenuItem[] => [
-      { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0]) },
-      {
+    (targets: string[]): TreeMenuItem[] => {
+      const items: TreeMenuItem[] = [
+        { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0]) },
+      ];
+      // .gitignore quick actions for a single untracked file.
+      if (
+        targets.length === 1 &&
+        workTree.some((e) => e.path === targets[0] && e.status === 'UNTRACKED')
+      ) {
+        const ignore = (pattern: string) =>
+          void gitignoreAdd(pattern).catch((e) => onToast(`Ignore failed: ${errMessage(e)}`));
+        const { exact, extension } = ignorePatterns(targets[0]);
+        items.push({ label: 'Add to .gitignore', icon: 'file', onSelect: () => ignore(exact) });
+        if (extension) {
+          items.push({
+            label: `Ignore all ${extension} files`,
+            icon: 'file',
+            onSelect: () => ignore(extension),
+          });
+        }
+      }
+      items.push({
         label: targets.length > 1 ? 'Copy paths' : 'Copy path',
         icon: 'file',
         onSelect: () => copyToClipboard(targets.join('\n')),
-      },
-    ],
-    [selectFile],
+      });
+      return items;
+    },
+    [selectFile, workTree, gitignoreAdd, onToast],
   );
 
   const runBranchOp = async (fn: () => Promise<void>) => {
@@ -362,6 +390,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon: 'plus',
       onSelect: () => onCreateBranch(b.name, b.name),
     };
+    const renameItem: MenuItem = {
+      label: 'Rename branch…',
+      icon: 'edit',
+      onSelect: () => onRenameBranch(b.name),
+    };
     if (b.is_head) {
       // Interactive rebase over the commits this branch is ahead of its
       // upstream (`upstream..HEAD`) — the unpushed work it's safe to edit.
@@ -369,6 +402,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       return [
         { label: 'Current branch', disabled: true, onSelect: () => {} },
         newBranchItem,
+        renameItem,
         {
           label: 'Interactive rebase…',
           icon: 'rebase',
@@ -382,6 +416,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     const items: MenuItem[] = [
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
       newBranchItem,
+      renameItem,
     ];
     if (currentBranch) {
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
@@ -412,6 +447,27 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       label: 'New branch from here…',
       icon: 'plus',
       onSelect: () => onCreateBranch(rb.name, rb.name),
+    });
+    return items;
+  };
+
+  // Menu for a remotes-tree top-level folder — the remote itself (`origin`),
+  // not one of its branches.
+  const remoteFolderMenu = (name: string): MenuItem[] => {
+    const url = refs.remotes.find((r) => r.name === name)?.url ?? null;
+    const items: MenuItem[] = [
+      { label: 'Edit URL…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '' }) },
+      { label: 'Rename…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'rename', name }) },
+    ];
+    if (url) {
+      items.push({ label: 'Copy URL', icon: 'file', onSelect: () => { void copyToClipboard(url); onToast('Copied'); } });
+    }
+    items.push({
+      label: 'Remove remote',
+      icon: 'trash',
+      danger: true,
+      confirm: true,
+      onSelect: () => void removeRemote(name).catch((e) => onToast(`Remove failed: ${errMessage(e)}`)),
     });
     return items;
   };
@@ -663,11 +719,14 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             collapsed={!sections.remotes}
             onToggle={() => toggle('remotes')}
             count={refs.remotes.length}
+            action={{ icon: 'plus', title: 'Add remote…', onClick: () => onManageRemote({ kind: 'add' }) }}
           />
           {sections.remotes &&
             renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes', {
               folderIcon: 'remote',
               showFolderCount: false,
+              folderMenu: remoteFolderMenu,
+              openMenu,
             })}
 
           <SideSection
@@ -760,8 +819,17 @@ function renderTreeChildren<T>(
   toggleCollapsed: (path: string) => void,
   renderLeaf: (item: T, depth: number) => React.ReactNode,
   keyPrefix: string,
-  folderOpts?: { folderIcon?: IconName; showFolderCount?: boolean },
+  folderOpts?: {
+    folderIcon?: IconName;
+    showFolderCount?: boolean;
+    /** Context-menu items for a *top-level* (depth-0) folder — the remotes
+     * tree's remote-name rows. Opened via `openMenu` (the owner's menu state). */
+    folderMenu?: (name: string) => MenuItem[];
+    openMenu?: (x: number, y: number, items: MenuItem[]) => void;
+  },
 ): React.ReactNode {
+  const open = folderOpts?.openMenu;
+  const menuFor = depth === 0 ? folderOpts?.folderMenu : undefined;
   return node.children.map((child) => {
     if (child.children.length === 0 && child.leaf != null) {
       return renderLeaf(child.leaf, depth);
@@ -777,6 +845,7 @@ function renderTreeChildren<T>(
           icon={folderOpts?.folderIcon ?? 'folder'}
           count={folderOpts?.showFolderCount === false ? undefined : leafCount(child)}
           onToggle={() => toggleCollapsed(collapseKey)}
+          onMenu={menuFor && open ? (x, y) => open(x, y, menuFor(child.name)) : undefined}
         />
         {!isCollapsed &&
           renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf, keyPrefix, folderOpts)}
@@ -829,15 +898,42 @@ interface FolderRowProps {
   /** Child count shown on the right; omit to hide it (e.g. remote groups). */
   count?: number;
   onToggle: () => void;
+  /** Open the folder's action menu at the given viewport coordinates —
+   * wired like SideLeaf's (right-click, or ContextMenu / Shift+F10). */
+  onMenu?: (x: number, y: number) => void;
 }
 
-function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle }: FolderRowProps) {
+function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle, onMenu }: FolderRowProps) {
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const openKeyboardMenu = () => {
+    const r = rowRef.current?.getBoundingClientRect();
+    if (r) onMenu?.(r.left + 12, r.bottom - 4);
+  };
   return (
     <button
+      ref={rowRef}
       type="button"
       className={'side-row branch-folder' + (collapsed ? ' collapsed' : '')}
       style={{ paddingLeft: 16 + depth * 14 }}
       onClick={onToggle}
+      onContextMenu={
+        onMenu
+          ? (e) => {
+              e.preventDefault();
+              onMenu(e.clientX, e.clientY);
+            }
+          : undefined
+      }
+      onKeyDown={
+        onMenu
+          ? (e) => {
+              if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                e.preventDefault();
+                openKeyboardMenu();
+              }
+            }
+          : undefined
+      }
       title={name}
     >
       <span className="folder-chev"><Icon name="chev-down" size={8} stroke={2} /></span>

@@ -237,7 +237,9 @@ pub fn clone(
 /// Reject a user-supplied remote/URL that git would mis-read as an option or
 /// a command-executing transport. Paired with an explicit `--` separator at
 /// the call site, this closes the "paste a malicious clone URL" vector.
-fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
+/// `pub(crate)` so `remote.rs` applies the same gate when a URL is *stored*
+/// (add / set-url) — a saved `ext::` URL would execute on the next fetch.
+pub(crate) fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
     if arg.starts_with('-') {
         return Err(Error::Other(format!("{what} may not start with '-': {arg}")));
     }

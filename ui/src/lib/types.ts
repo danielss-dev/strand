@@ -36,6 +36,17 @@ export interface GlobalIdentity {
 /** Merge strategy chosen in the Merge dialog. */
 export type MergeMode = 'auto' | 'no_ff' | 'squash';
 
+/** Reset flavour: what happens to the index + working tree. */
+export type ResetMode = 'soft' | 'mixed' | 'hard';
+
+export interface ResetOutcome {
+  /** Short hash of the commit HEAD now points at. */
+  target_short: string;
+  /** OID of the safety snapshot stash taken before a hard reset of a dirty
+   *  tree; `null` for soft/mixed or a clean tree. */
+  snapshot_oid: string | null;
+}
+
 /** A git interactive-rebase verb the sequence editor exposes (no `edit` in v1). */
 export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop';
 
@@ -86,6 +97,18 @@ export interface FileDiff {
   binary: boolean;
   /** Unified-diff text for this single file. Feed to `<Diff />`. */
   patch: string;
+}
+
+/**
+ * A reviewer note attached to a file in the Review view. UI-only (never
+ * crosses IPC); persisted per-repo via `reviewSession` in lib/db.
+ */
+export interface ReviewNote {
+  id: string;
+  text: string;
+  /** New-file line number the note anchors to, or `null` for a whole-file note. */
+  line: number | null;
+  createdAt: number;
 }
 
 export interface CommitOutcome {
@@ -248,6 +271,16 @@ export interface FileContent {
   text: string;
   binary: boolean;
   truncated: boolean;
+}
+
+/** Raw file bytes (worktree / index / revision) for the image diff preview. */
+export interface FileBlob {
+  /** Standard base64 (padded). Empty when `too_large`. */
+  base64: string;
+  /** Byte size of the file — reported even when `too_large`. */
+  size: number;
+  /** True when the file exceeded the server-side cap (8 MB). */
+  too_large: boolean;
 }
 
 /** One commit in a file's history (`git log --follow -- path`). */

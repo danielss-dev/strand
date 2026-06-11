@@ -1,12 +1,13 @@
 use serde::Serialize;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
-    diff::FileDiff, file::{FileContent, FileHistoryEntry},
+    diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::Commit,
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
-    refs::Refs, repo::RepoMeta, snapshot::Snapshot, stash::{Stash, StashOutcome},
+    refs::Refs, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
+    snapshot::Snapshot, stash::{Stash, StashOutcome},
     status::FileStatus, submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
 };
 use tauri::ipc::Channel;
@@ -187,6 +188,27 @@ pub fn repo_file_content(path: String, file: String, rev: Option<String>) -> Cmd
     Ok(Repo::discover(&path)?.file_content(&file, rev.as_deref())?)
 }
 
+/// Raw file bytes (base64) for the image diff preview. `index = true` reads
+/// the staged copy; otherwise `rev = None` reads the working tree and
+/// `rev = Some(spec)` the blob at that revision.
+#[tauri::command]
+pub fn repo_file_blob(
+    path: String,
+    file: String,
+    rev: Option<String>,
+    index: bool,
+) -> CmdResult<FileBlob> {
+    let source = if index {
+        BlobSource::Index
+    } else {
+        match rev.as_deref() {
+            Some(spec) => BlobSource::Rev(spec),
+            None => BlobSource::Worktree,
+        }
+    };
+    Ok(Repo::discover(&path)?.file_blob(&file, source)?)
+}
+
 #[tauri::command]
 pub fn repo_file_history(
     path: String,
@@ -243,6 +265,12 @@ pub fn repo_discard_many(path: String, files: Vec<String>) -> CmdResult<()> {
 #[tauri::command]
 pub fn repo_discard(path: String, file: String) -> CmdResult<()> {
     Repo::discover(&path)?.discard_path(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_gitignore_add(path: String, pattern: String) -> CmdResult<()> {
+    Repo::discover(&path)?.gitignore_add(&pattern)?;
     Ok(())
 }
 
@@ -481,6 +509,38 @@ pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<
 }
 
 #[tauri::command]
+pub fn repo_branch_rename(path: String, old_name: String, new_name: String) -> CmdResult<()> {
+    Repo::discover(&path)?.rename_branch(&old_name, &new_name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_remote_add(path: String, name: String, url: String) -> CmdResult<()> {
+    Repo::discover(&path)?.add_remote(&name, &url)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn repo_remote_remove(path: String, name: String) -> CmdResult<()> {
+    Repo::discover(&path)?.remove_remote(&name)?;
+    Ok(())
+}
+
+/// Returns the refspecs git2 could not rewrite ("problems") — the rename has
+/// already happened by then, so the UI warns instead of erroring; empty means
+/// a clean rename.
+#[tauri::command]
+pub fn repo_remote_rename(path: String, old_name: String, new_name: String) -> CmdResult<Vec<String>> {
+    Ok(Repo::discover(&path)?.rename_remote(&old_name, &new_name)?)
+}
+
+#[tauri::command]
+pub fn repo_remote_set_url(path: String, name: String, url: String) -> CmdResult<()> {
+    Repo::discover(&path)?.set_remote_url(&name, &url)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn repo_tag_create(
     path: String,
     name: String,
@@ -564,6 +624,11 @@ pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<bool
 #[tauri::command]
 pub fn repo_rebase(path: String, onto: String) -> CmdResult<bool> {
     Ok(Repo::discover(&path)?.rebase(&onto)?)
+}
+
+#[tauri::command]
+pub fn repo_reset(path: String, target: String, mode: ResetMode) -> CmdResult<ResetOutcome> {
+    Ok(Repo::discover(&path)?.reset(&target, mode)?)
 }
 
 #[tauri::command]
