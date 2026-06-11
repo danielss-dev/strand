@@ -3,6 +3,8 @@ import { File as PierreFile } from '@pierre/diffs/react';
 
 import { Diff } from '../components/Diff';
 import { Icon, type IconName } from '../components/Icon';
+import { ImageDiff, ImagePreview } from '../components/ImageDiff';
+import { isImagePath } from '../lib/image';
 import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
@@ -125,7 +127,17 @@ function ContentTab({ path, repoPath }: { path: string; repoPath: string | null 
   if (loading) return <FvEmpty>Loading…</FvEmpty>;
   if (error) return <FvEmpty>{error}</FvEmpty>;
   if (!data) return <FvEmpty>No content.</FvEmpty>;
-  if (data.binary) return <FvEmpty>Binary file — no preview.</FvEmpty>;
+  if (data.binary) {
+    // Images get a checkerboard preview of the working-tree file; other
+    // binaries stay a note.
+    return isImagePath(path) ? (
+      <div className="fv-tab">
+        <ImagePreview path={path} src={{ rev: null }} />
+      </div>
+    ) : (
+      <FvEmpty>Binary file — no preview.</FvEmpty>
+    );
+  }
 
   // `disableBackground` keeps Pierre's surface on our tokens (honored at
   // runtime; not in `FileOptions`' type, so we build the object outside the
@@ -437,8 +449,26 @@ function HistoryDiff({
       </FvEmpty>
     );
   }
-  if (file.binary || file.patch.length === 0) {
-    return <FvEmpty>{file.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}</FvEmpty>;
+  if (file.binary) {
+    // Before = this file at the parent commit (or HEAD for the working-tree
+    // entry); After = the version at this commit (or the worktree). An added
+    // file has no before, a deleted one no after.
+    return isImagePath(path) ? (
+      <div className="fv-pierre">
+        <ImageDiff
+          path={path}
+          oldSrc={file.status === 'added' ? null : { rev: isWorking ? 'HEAD' : `${oid}^` }}
+          newSrc={
+            file.status === 'deleted' ? null : isWorking ? { rev: null } : { rev: oid }
+          }
+        />
+      </div>
+    ) : (
+      <FvEmpty>Binary file — no textual diff.</FvEmpty>
+    );
+  }
+  if (file.patch.length === 0) {
+    return <FvEmpty>No textual diff.</FvEmpty>;
   }
   return (
     <div className="fv-pierre">
@@ -534,8 +564,20 @@ function CompareTab({ path, repoPath }: { path: string; repoPath: string | null 
           <FvEmpty>Loading diff…</FvEmpty>
         ) : diff === null ? (
           <FvEmpty>No change to this file between the selected revisions.</FvEmpty>
-        ) : diff.binary || diff.patch.length === 0 ? (
-          <FvEmpty>{diff.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}</FvEmpty>
+        ) : diff.binary ? (
+          isImagePath(path) ? (
+            // Before = the file at the base revision, After = at the compare
+            // revision; a side is absent when the file didn't exist there.
+            <ImageDiff
+              path={path}
+              oldSrc={diff.status === 'added' ? null : { rev: from }}
+              newSrc={diff.status === 'deleted' ? null : { rev: to }}
+            />
+          ) : (
+            <FvEmpty>Binary file — no textual diff.</FvEmpty>
+          )
+        ) : diff.patch.length === 0 ? (
+          <FvEmpty>No textual diff.</FvEmpty>
         ) : (
           <Diff patch={diff.patch} layout={layout} />
         )}

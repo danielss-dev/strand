@@ -63,9 +63,10 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const cherryPick = useRepo((s) => s.cherryPick);
   const revert = useRepo((s) => s.revert);
-  // "Create fixup! commit" commits the staged set against a graph commit;
-  // stagedDiffs gates the item (nothing staged → disabled with a hint).
-  const stagedDiffs = useRepo((s) => s.stagedDiffs);
+  // "Create fixup! commit" commits the staged set against a graph commit.
+  // Boolean selector, not the array — the graph must not re-render on every
+  // diff-content refresh just to gate one menu item.
+  const hasStaged = useRepo((s) => s.stagedDiffs.length > 0);
   const commit = useRepo((s) => s.commit);
   const revealCommit = useRepo((s) => s.revealCommit);
   const clearReveal = useRepo((s) => s.clearReveal);
@@ -127,11 +128,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
           })(),
         },
         {
-          label: stagedDiffs.length
+          label: hasStaged
             ? 'Create fixup! commit'
             : 'Create fixup! commit (stage changes first)',
           icon: 'plus',
-          disabled: stagedDiffs.length === 0,
+          disabled: !hasStaged,
           onSelect: () => void (async () => {
             try {
               await commit(`fixup! ${c.subject}`, null, false);
@@ -173,7 +174,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
       ];
       setMenu({ x, y, items });
     },
-    [checkoutCommit, cherryPick, revert, stagedDiffs.length, commit, onCreateTag,
+    [checkoutCommit, cherryPick, revert, hasStaged, commit, onCreateTag,
       onInteractiveRebase, onResetTo, meta, onToast, setBaseline, setView, selectFile],
   );
 

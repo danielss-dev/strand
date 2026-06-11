@@ -16,6 +16,32 @@ export interface ReviewFeedbackFile {
 }
 
 /**
+ * Assemble the export's file list: every pool file that has notes (with its
+ * patch, so line notes can quote an excerpt) PLUS noted paths that have left
+ * the pool — a note taken in inbox mode survives the file being staged away,
+ * so it must still export (with an empty patch → no excerpt) rather than
+ * silently dropping. Pool order first, then orphaned paths sorted.
+ */
+export function collectFeedbackFiles(
+  pool: { path: string; patch: string }[],
+  notes: Record<string, ReviewNote[]>,
+): ReviewFeedbackFile[] {
+  const out: ReviewFeedbackFile[] = [];
+  const seen = new Set<string>();
+  for (const d of pool) {
+    const n = notes[d.path];
+    if (!n || n.length === 0) continue;
+    out.push({ path: d.path, patch: d.patch, notes: n });
+    seen.add(d.path);
+  }
+  const orphans = Object.keys(notes)
+    .filter((p) => !seen.has(p) && notes[p].length > 0)
+    .sort();
+  for (const p of orphans) out.push({ path: p, patch: '', notes: notes[p] });
+  return out;
+}
+
+/**
  * Build the feedback prompt: a header naming the repo (and branch / baseline
  * when known), then per noted file a `## path` section where each
  * line-anchored note quotes a ±4-line window of the patch around its NEW-side
@@ -43,7 +69,7 @@ export function buildReviewFeedback(input: {
         else parts.push(`- ${note.text}`);
         continue;
       }
-      const excerpt = excerptAround(file.patch, note.line);
+      const excerpt = excerptAround(file.patch, note.line, note.side ?? 'new');
       if (excerpt != null) parts.push(fencedDiff(excerpt));
       parts.push(`**Note:** ${note.text}`);
     }
@@ -54,17 +80,25 @@ export function buildReviewFeedback(input: {
 }
 
 /**
- * Quote a ±4-line window of `patch` around the NEW-side line `target`,
- * clipped to the hunk that contains it (windows never bleed into another
- * hunk's header or body). Returns `null` when no hunk covers the line —
- * the caller then emits the note without an excerpt.
+ * Quote a ±4-line window of `patch` around line `target` on the given side
+ * (`'new'` counts `+`/context lines, `'old'` counts `-`/context — a note on a
+ * deletion-only block anchors to an old-side number, since the line has no
+ * new-side home). Windows are clipped to the hunk that contains the hit and
+ * never bleed into another hunk's header or body. Returns `null` when no
+ * hunk covers the line — the caller then emits the note without an excerpt.
  */
-function excerptAround(patch: string, target: number, context = 4): string | null {
+function excerptAround(
+  patch: string,
+  target: number,
+  side: 'new' | 'old',
+  context = 4,
+): string | null {
   const lines = patch.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const m = /^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(lines[i]);
+    const m = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(lines[i]);
     if (!m) continue;
-    let newLine = parseInt(m[1], 10);
+    let oldLine = parseInt(m[1], 10);
+    let newLine = parseInt(m[2], 10);
     const bodyStart = i + 1;
     let bodyEnd = bodyStart; // exclusive
     let hit = -1;
@@ -75,8 +109,12 @@ function excerptAround(patch: string, target: number, context = 4): string | nul
       if (c !== '+' && c !== '-' && c !== ' ' && c !== '\\') break;
       bodyEnd = j + 1;
       if (c === '+' || c === ' ') {
-        if (newLine === target && hit === -1) hit = j;
+        if (side === 'new' && newLine === target && hit === -1) hit = j;
         newLine++;
+      }
+      if (c === '-' || c === ' ') {
+        if (side === 'old' && oldLine === target && hit === -1) hit = j;
+        oldLine++;
       }
     }
     if (hit !== -1) {

@@ -14,33 +14,47 @@ export interface MenuItem {
    * right-click equivalent of the old inline-confirm on destructive rows.
    */
   confirm?: boolean;
-  onSelect: () => void;
+  /**
+   * Nested items. The row renders a "›" and opens a child menu to its right
+   * on hover, → , or Enter; the parent item is a disclosure, not an action.
+   */
+  submenu?: MenuItem[];
+  /** Run on activation. Optional only when `submenu` is set (a parent row). */
+  onSelect?: () => void;
 }
 
 /**
  * A right-click menu for sidebar rows, rendered in a portal at the cursor (or,
  * when opened from the keyboard, at the row's corner). Keyboard-operable:
- * ↑/↓ move, Enter/Space select, Esc closes (or cancels a pending confirm).
- * Destructive items with `confirm` swap to a "Confirm: …" step before running,
- * so a delete still takes two deliberate actions. Closes on outside click,
- * right-click elsewhere, or selection; restores focus to the opener on close.
+ * ↑/↓ move, Enter/Space select, → opens a submenu, ← / Esc closes it (or the
+ * whole menu). Destructive items with `confirm` swap to a "Confirm: …" step
+ * before running. Closes on outside click, right-click elsewhere, or
+ * selection; restores focus to the opener on close.
+ *
+ * `onBack` is set only on a nested submenu: it returns to the parent (← / Esc)
+ * without tearing down the whole chain, and tells the component to skip its own
+ * backdrop (the root menu's backdrop already catches outside clicks).
  */
 export function ContextMenu({
   x,
   y,
   items,
   onClose,
+  onBack,
 }: {
   x: number;
   y: number;
   items: MenuItem[];
   onClose: () => void;
+  onBack?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
   const firstEnabled = items.findIndex((it) => !it.disabled);
   const [active, setActive] = useState(firstEnabled);
   const [confirming, setConfirming] = useState<number | null>(null);
+  // The open submenu: which parent index, and where to anchor the child.
+  const [sub, setSub] = useState<{ index: number; x: number; y: number } | null>(null);
 
   // Clamp into the viewport once the menu has a measured size.
   useLayoutEffect(() => {
@@ -70,17 +84,123 @@ export function ContextMenu({
     setActive(enabled[(base + dir + enabled.length) % enabled.length]);
   };
 
+  // Anchor a child menu to the right edge of item `i`'s row.
+  const openSub = (i: number) => {
+    const el = ref.current?.querySelector<HTMLElement>(`[data-idx="${i}"]`);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setActive(i);
+    setSub({ index: i, x: r.right - 4, y: r.top - 4 });
+  };
+
   const choose = (i: number) => {
     const it = items[i];
     if (!it || it.disabled) return;
+    if (it.submenu && it.submenu.length > 0) {
+      openSub(i);
+      return;
+    }
     if (it.confirm && confirming !== i) {
       setConfirming(i);
       setActive(i);
       return;
     }
     onClose();
-    it.onSelect();
+    it.onSelect?.();
   };
+
+  const menu = (
+    <div
+      ref={ref}
+      className="context-menu"
+      role="menu"
+      tabIndex={-1}
+      style={onBack ? { left: pos.x, top: pos.y, zIndex: 201 } : { left: pos.x, top: pos.y }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          move(1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          move(-1);
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          if (items[active]?.submenu?.length) openSub(active);
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          if (sub) setSub(null);
+          else onBack?.();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          choose(active);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          if (confirming != null) setConfirming(null);
+          else if (sub) setSub(null);
+          else if (onBack) onBack();
+          else onClose();
+        }
+      }}
+    >
+      {items.map((it, i) => {
+        const isConfirm = confirming === i;
+        const hasSub = !!it.submenu?.length;
+        return (
+          <button
+            key={i}
+            type="button"
+            role="menuitem"
+            data-idx={i}
+            disabled={it.disabled}
+            aria-haspopup={hasSub || undefined}
+            aria-expanded={hasSub ? sub?.index === i : undefined}
+            className={
+              'context-menu-item' +
+              (it.danger || isConfirm ? ' danger' : '') +
+              (i === active ? ' active' : '') +
+              (it.disabled ? ' disabled' : '')
+            }
+            onMouseEnter={() => {
+              if (it.disabled) return;
+              setActive(i);
+              if (hasSub) openSub(i);
+              else setSub(null);
+            }}
+            onClick={() => choose(i)}
+          >
+            {it.icon && (
+              <span className="ico">
+                <Icon name={isConfirm ? 'check' : it.icon} size={13} />
+              </span>
+            )}
+            <span className="label">{isConfirm ? `Confirm: ${it.label}` : it.label}</span>
+            {hasSub && (
+              <span className="cm-sub-arrow" aria-hidden="true">
+                <Icon name="chev-right" size={12} />
+              </span>
+            )}
+          </button>
+        );
+      })}
+
+      {sub && items[sub.index]?.submenu && (
+        <ContextMenu
+          x={sub.x}
+          y={sub.y}
+          items={items[sub.index].submenu!}
+          onClose={onClose}
+          onBack={() => {
+            setSub(null);
+            ref.current?.focus();
+          }}
+        />
+      )}
+    </div>
+  );
+
+  // A submenu skips its own backdrop and rides at a higher z-index above the
+  // parent (whose backdrop still catches outside clicks for the whole chain).
+  if (onBack) return createPortal(menu, document.body);
 
   return createPortal(
     <div
@@ -93,56 +213,7 @@ export function ContextMenu({
         onClose();
       }}
     >
-      <div
-        ref={ref}
-        className="context-menu"
-        role="menu"
-        tabIndex={-1}
-        style={{ left: pos.x, top: pos.y }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            move(1);
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            move(-1);
-          } else if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            choose(active);
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            if (confirming != null) setConfirming(null);
-            else onClose();
-          }
-        }}
-      >
-        {items.map((it, i) => {
-          const isConfirm = confirming === i;
-          return (
-            <button
-              key={i}
-              type="button"
-              role="menuitem"
-              disabled={it.disabled}
-              className={
-                'context-menu-item' +
-                (it.danger || isConfirm ? ' danger' : '') +
-                (i === active ? ' active' : '') +
-                (it.disabled ? ' disabled' : '')
-              }
-              onMouseEnter={() => !it.disabled && setActive(i)}
-              onClick={() => choose(i)}
-            >
-              {it.icon && (
-                <span className="ico">
-                  <Icon name={isConfirm ? 'check' : it.icon} size={13} />
-                </span>
-              )}
-              <span className="label">{isConfirm ? `Confirm: ${it.label}` : it.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {menu}
     </div>,
     document.body,
   );

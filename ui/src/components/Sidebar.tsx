@@ -139,6 +139,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
   const removeRemote = useRepo((s) => s.removeRemote);
+  const fetchRemote = useRepo((s) => s.fetchRemote);
   const deleteTag = useRepo((s) => s.deleteTag);
   const pushTag = useRepo((s) => s.pushTag);
   const deleteRemoteTag = useRepo((s) => s.deleteRemoteTag);
@@ -147,6 +148,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
+  const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
   const stashes = useRepo((s) => s.stashes);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
@@ -224,9 +226,20 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
 
   const remoteTree = useMemo(() => {
     const t = buildTree<RemoteBranch>(filtered.remotes, (rb) => [rb.remote, rb.branch]);
+    // Every *configured* remote gets a top-level row, even with zero
+    // remote-tracking refs (just added, or never fetched) — otherwise the
+    // remote exists in the section count but renders nowhere, and its
+    // management menu (Fetch / Edit URL / Rename / Remove) is unreachable.
+    const q = filter.trim().toLowerCase();
+    for (const r of refs.remotes) {
+      if (q && !r.name.toLowerCase().includes(q)) continue;
+      if (!t.children.some((c) => c.name === r.name)) {
+        t.children.push({ name: r.name, fullPath: r.name, children: [] });
+      }
+    }
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
     return t;
-  }, [filtered.remotes]);
+  }, [filtered.remotes, refs.remotes, filter]);
 
   const tagTree = useMemo(() => {
     const t = buildTree<Tag>(filtered.tags, (tg) => tg.name.split('/'));
@@ -316,15 +329,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       ) {
         const ignore = (pattern: string) =>
           void gitignoreAdd(pattern).catch((e) => onToast(`Ignore failed: ${errMessage(e)}`));
-        const { exact, extension } = ignorePatterns(targets[0]);
-        items.push({ label: 'Add to .gitignore', icon: 'file', onSelect: () => ignore(exact) });
+        const target = targets[0];
+        const base = target.slice(target.lastIndexOf('/') + 1);
+        const { exact, extension } = ignorePatterns(target);
+        const submenu: MenuItem[] = [
+          { label: `Ignore “${base}”`, onSelect: () => ignore(exact) },
+        ];
         if (extension) {
-          items.push({
-            label: `Ignore all ${extension} files`,
-            icon: 'file',
-            onSelect: () => ignore(extension),
-          });
+          submenu.push({ label: `Ignore all ${extension} files`, onSelect: () => ignore(extension) });
         }
+        submenu.push({ label: 'Custom pattern…', onSelect: () => openIgnoreDialog(target) });
+        items.push({ label: 'Ignore', icon: 'file', submenu });
       }
       items.push({
         label: targets.length > 1 ? 'Copy paths' : 'Copy path',
@@ -333,7 +348,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       });
       return items;
     },
-    [selectFile, workTree, gitignoreAdd, onToast],
+    [selectFile, workTree, gitignoreAdd, openIgnoreDialog, onToast],
   );
 
   const runBranchOp = async (fn: () => Promise<void>) => {
@@ -456,6 +471,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const remoteFolderMenu = (name: string): MenuItem[] => {
     const url = refs.remotes.find((r) => r.name === name)?.url ?? null;
     const items: MenuItem[] = [
+      {
+        label: 'Fetch',
+        icon: 'arrow-down',
+        onSelect: () =>
+          void fetchRemote(name).then(
+            () => onToast(`Fetched ${name}`),
+            (e) => onToast(`Fetch failed: ${errMessage(e)}`),
+          ),
+      },
       { label: 'Edit URL…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '' }) },
       { label: 'Rename…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'rename', name }) },
     ];

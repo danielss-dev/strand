@@ -17,7 +17,7 @@ import {
 } from '../components/PierreTree';
 import { hashPatch } from '../lib/patch';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
-import { buildReviewFeedback } from '../lib/reviewExport';
+import { buildReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
 import { gitErrorHint } from '../lib/tauri';
 import type { FileDiff } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -209,7 +209,12 @@ export function Review() {
   // ── Review notes (the agent feedback loop) ────────────────────────────
   // The m editor: which file the note attaches to and the optional new-file
   // line it anchors at (pre-set by a per-hunk "Note" button).
-  const [noteEditor, setNoteEditor] = useState<{ path: string; line: number | null } | null>(null);
+  const [noteEditor, setNoteEditor] = useState<{
+    path: string;
+    line: number | null;
+    /** Diff side `line` counts on — 'old' for deletion-only blocks. */
+    side: 'new' | 'old';
+  } | null>(null);
   const closeNoteEditor = useCallback((el?: HTMLTextAreaElement) => {
     // Blur before unmounting so focus falls back to the window and the
     // j/k/space loop resumes immediately, no click needed.
@@ -226,29 +231,32 @@ export function Review() {
   }, [notice]);
 
   const displayedNotes = displayed ? (reviewNotes[displayed.path] ?? []) : [];
-  const notedFiles = useMemo(
-    () => pool.filter((d) => (reviewNotes[d.path]?.length ?? 0) > 0),
+  // The export is the UNION of pool files with notes and noted paths that
+  // left the pool (staged away in inbox mode, …) — a stored note must never
+  // silently drop from the feedback. Counts follow the same union.
+  const feedbackFiles = useMemo(
+    () => collectFeedbackFiles(pool, reviewNotes),
     [pool, reviewNotes],
   );
   const noteCount = useMemo(
-    () => notedFiles.reduce((n, d) => n + reviewNotes[d.path].length, 0),
-    [notedFiles, reviewNotes],
+    () => feedbackFiles.reduce((n, f) => n + f.notes.length, 0),
+    [feedbackFiles],
   );
   const copyFeedback = useCallback(() => {
-    if (!activePath || notedFiles.length === 0) return;
+    if (!activePath || feedbackFiles.length === 0) return;
     copyToClipboard(
       buildReviewFeedback({
         repoName: basename(activePath),
         branch: meta?.branch ?? null,
         baselineShort: baseline?.short ?? null,
-        files: notedFiles.map((d) => ({ path: d.path, patch: d.patch, notes: reviewNotes[d.path] })),
+        files: feedbackFiles,
       }),
     );
     setNotice(
       `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
-        `${notedFiles.length} file${notedFiles.length === 1 ? '' : 's'}`,
+        `${feedbackFiles.length} file${feedbackFiles.length === 1 ? '' : 's'}`,
     );
-  }, [activePath, notedFiles, noteCount, reviewNotes, meta, baseline]);
+  }, [activePath, feedbackFiles, noteCount, meta, baseline]);
 
   // Two-step confirms for the destructive actions.
   const [armDiscardAll, setArmDiscardAll] = useState(false);
@@ -433,7 +441,7 @@ export function Review() {
           // editor itself (or any other field) has focus.
           if (current) {
             e.preventDefault();
-            setNoteEditor({ path: current.path, line: null });
+            setNoteEditor({ path: current.path, line: null, side: 'new' });
           }
           break;
         case 's':
@@ -588,7 +596,7 @@ export function Review() {
                       <button
                         type="button"
                         className="h-link"
-                        onClick={() => setNoteEditor({ path: displayed.path, line: null })}
+                        onClick={() => setNoteEditor({ path: displayed.path, line: null, side: 'new' })}
                         title="Add a review note to this file (m)"
                       >
                         Note
@@ -644,7 +652,7 @@ export function Review() {
                         autoFocus
                         placeholder={
                           (noteEditor.line != null
-                            ? `Note on L${noteEditor.line} of ${noteEditor.path}`
+                            ? `Note on ${noteEditor.side === 'old' ? 'old ' : ''}L${noteEditor.line} of ${noteEditor.path}`
                             : `Note ${noteEditor.path}`) + ' — Enter saves, Esc cancels'
                         }
                         onKeyDown={(e) => {
@@ -652,7 +660,7 @@ export function Review() {
                             e.preventDefault();
                             const text = e.currentTarget.value;
                             closeNoteEditor(e.currentTarget);
-                            addReviewNote(noteEditor.path, text, noteEditor.line);
+                            addReviewNote(noteEditor.path, text, noteEditor.line, noteEditor.side);
                           } else if (e.key === 'Escape') {
                             e.preventDefault();
                             closeNoteEditor(e.currentTarget);
@@ -665,7 +673,14 @@ export function Review() {
                     <div className="rv-notes">
                       {displayedNotes.map((n) => (
                         <div key={n.id} className="rv-note">
-                          {n.line != null && <span className="rv-note-line">L{n.line}</span>}
+                          {n.line != null && (
+                            <span
+                              className="rv-note-line"
+                              title={n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
+                            >
+                              {n.side === 'old' ? '−' : ''}L{n.line}
+                            </span>
+                          )}
                           <span className="rv-note-text" title={n.text}>
                             {n.text}
                           </span>
@@ -686,14 +701,18 @@ export function Review() {
                       size (lockfiles…) mount only what's on screen. */}
                   <Virtualizer className="rv-diff-scroll">
                     {displayed.binary && isImagePath(displayed.path) ? (
-                      // Old side: the session baseline, or HEAD in inbox mode
-                      // (an added file has no old side). New side: worktree.
+                      // Old side: the session baseline, or the *index* in
+                      // inbox mode — the unstaged diff's base (HEAD would lie
+                      // for a partially staged image). Added files have no
+                      // old side. New side: worktree.
                       <ImageDiff
                         path={displayed.path}
                         oldSrc={
                           displayed.status === 'added'
                             ? null
-                            : { rev: sessionMode ? baseline!.oid : 'HEAD' }
+                            : sessionMode
+                              ? { rev: baseline!.oid }
+                              : { rev: null, index: true }
                         }
                         newSrc={displayed.status === 'deleted' ? null : { rev: null }}
                       />
@@ -721,9 +740,13 @@ export function Review() {
                         layout={layout}
                         side="unstaged"
                         onNoteBlock={(m) =>
+                          // A deletion-only block has no new-side line — its
+                          // anchor counts on the OLD side, and the exporter
+                          // locates the excerpt with the matching counter.
                           setNoteEditor({
                             path: displayed.path,
                             line: m.addRange?.start ?? m.delRange?.start ?? null,
+                            side: m.addRange ? 'new' : m.delRange ? 'old' : 'new',
                           })
                         }
                       />

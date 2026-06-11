@@ -84,4 +84,17 @@ describe('searchDiffs', () => {
     expect(matches.every((m) => m.path === 'src/app.ts')).toBe(true);
     expect(matches).toHaveLength(3);
   });
+
+  it('copies each entry tag onto its matches (mixed staged/unstaged pools)', () => {
+    const pool = [
+      { ...FILE, tag: false },
+      { ...FILE, path: FILE.path, tag: true },
+    ];
+    const { matches } = searchDiffs(pool, 'beta');
+    expect(matches.length).toBeGreaterThan(0);
+    const tags = new Set(matches.map((m) => m.tag));
+    expect(tags).toEqual(new Set([false, true]));
+    // Same path on both sides — only the tag disambiguates.
+    expect(matches.every((m) => m.path === FILE.path)).toBe(true);
+  });
 });

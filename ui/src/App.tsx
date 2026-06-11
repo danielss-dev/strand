@@ -16,7 +16,7 @@ import { useUpdates } from './stores/updates';
 import { pickRepoDirectory } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
-import { buildReviewFeedback } from './lib/reviewExport';
+import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
@@ -30,6 +30,7 @@ import { RebaseEditor } from './views/RebaseEditor';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
+import { IgnoreDialog } from './views/IgnoreDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -178,6 +179,10 @@ export function App() {
   const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
   // null = closed; otherwise the commit-ish to reset to + its human label.
   const [resetDialog, setResetDialog] = useState<{ target: string; label: string } | null>(null);
+  // The "Add ignore pattern…" dialog is opened from two surfaces (Local Changes
+  // + the Files tab), so its draft lives in the store; App renders the one modal.
+  const ignoreDraft = useRepo((s) => s.ignoreDraft);
+  const closeIgnoreDialog = useRepo((s) => s.closeIgnoreDialog);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -795,11 +800,12 @@ export function App() {
           { id: 'review-copy-feedback', label: 'Review: copy feedback as prompt', group: 'Actions', keywords: 'ai agent review notes feedback prompt export clipboard', run: () => {
             const st = useRepo.getState();
             const pool = st.baseline ? st.baselineDiffs : st.reviewUnstagedDiffs;
-            const files = pool
-              .filter((d) => (st.reviewNotes[d.path]?.length ?? 0) > 0)
-              .map((d) => ({ path: d.path, patch: d.patch, notes: st.reviewNotes[d.path] }));
+            // Union: pool files with notes + noted paths outside the pool
+            // (staged away, or Review never populated the pool this session) —
+            // a stored note always exports, just without an excerpt.
+            const files = collectFeedbackFiles(pool, st.reviewNotes);
             if (!st.activePath || files.length === 0) {
-              showToast('No notes on the current review files');
+              showToast('No review notes to copy');
               return;
             }
             copyToClipboard(buildReviewFeedback({
@@ -1118,6 +1124,10 @@ export function App() {
           onClose={() => setResetDialog(null)}
           onToast={showToast}
         />
+      )}
+
+      {ignoreDraft != null && (
+        <IgnoreDialog initial={ignoreDraft} onClose={closeIgnoreDialog} onToast={showToast} />
       )}
 
       {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}

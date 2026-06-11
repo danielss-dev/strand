@@ -786,7 +786,13 @@ tree: watch the agent work, review fast, accept or reject safely.
   `fencedDiff` from `patchExport.ts`), file notes as bullets, closing
   instruction line — ready to paste back into the coding agent. Toolbar "Copy
   feedback (N)" + palette "Review: copy feedback as prompt" / "Review: clear
-  notes"; only notes on files currently in the review pool export.)
+  notes". Exports the *union* via `collectFeedbackFiles`: pool files with
+  notes plus noted paths that left the pool (those skip the excerpt), so a
+  stored note never silently drops. Notes on deletion-only blocks anchor
+  old-side (`ReviewNote.side`) and the excerpt locator counts the matching
+  side.)
+- ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
+  up in profiles.
 
 ---
 

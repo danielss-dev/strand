@@ -42,6 +42,7 @@ export function LocalChanges() {
   const unstageMany = useRepo((s) => s.unstageMany);
   const discardMany = useRepo((s) => s.discardMany);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
+  const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
   const stageAll = useRepo((s) => s.stageAll);
   const unstageAll = useRepo((s) => s.unstageAll);
   const selectLocalFile = useRepo((s) => s.selectLocalFile);
@@ -104,10 +105,10 @@ export function LocalChanges() {
   }, [selection, unstagedView, stagedView, selectLocalFile]);
 
   // ── In-diff text search (⌘F) ──────────────────────────────────────────
-  // The bar floats over the diff pane and searches both sides at once; a
-  // jump selects the matched file on its side. A path can sit on both sides
-  // (partially staged) — jumps prefer the unstaged copy, whose hunk actions
-  // are live.
+  // The bar floats over the diff pane and searches both sides at once; each
+  // pool entry is tagged with its side, so a jump lands on the copy that
+  // actually contains the match (a partially staged path sits on both sides
+  // with different hunks in each).
   const [searchOpen, setSearchOpen] = useState(false);
   const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
   const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
@@ -118,13 +119,16 @@ export function LocalChanges() {
     focusDiffSearchInput();
     clearDiffSearch();
   }, [diffSearchSignal, clearDiffSearch]);
-  const searchPool = useMemo(() => [...unstagedView, ...stagedView], [unstagedView, stagedView]);
-  const searchSide = useMemo(() => {
-    const m = new Map<string, boolean>();
-    for (const d of stagedView) m.set(d.path, true);
-    for (const d of unstagedView) m.set(d.path, false); // unstaged wins
-    return m;
-  }, [unstagedView, stagedView]);
+  // Tag each entry with its side so a jump lands on the diff that actually
+  // contains the match — a path can appear on BOTH sides (partially staged)
+  // with different hunks in each copy.
+  const searchPool = useMemo(
+    () => [
+      ...unstagedView.map((d) => ({ ...d, tag: false })),
+      ...stagedView.map((d) => ({ ...d, tag: true })),
+    ],
+    [unstagedView, stagedView],
+  );
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     // Hand focus back to the diff pane host so the j/k loop reads naturally.
@@ -303,6 +307,7 @@ export function LocalChanges() {
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                     isUntracked={(p) => untracked.has(p)}
                     onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
+                    onIgnoreCustom={openIgnoreDialog}
                     onBulk={() => void stageAll().catch(fail('Stage all'))}
                     bulkLabel="Stage all"
                   />
@@ -339,9 +344,7 @@ export function LocalChanges() {
               {searchOpen && (
                 <DiffSearchBar
                   diffs={searchPool}
-                  onJump={(m) =>
-                    selectFileRow({ file: m.path, staged: searchSide.get(m.path) ?? false })
-                  }
+                  onJump={(m) => selectFileRow({ file: m.path, staged: m.tag === true })}
                   onClose={closeSearch}
                   placeholder="Search changes…"
                 />
@@ -447,6 +450,8 @@ interface SectionProps {
   isUntracked?: (path: string) => boolean;
   /** Append a pattern to the repo's root .gitignore. */
   onIgnore?: (pattern: string) => void;
+  /** Open the custom ignore-pattern dialog, prefilled with the given path. */
+  onIgnoreCustom?: (initial: string) => void;
   onBulk(): void;
   bulkLabel: string;
 }
@@ -470,6 +475,7 @@ function FileSection({
   onDiscard,
   isUntracked,
   onIgnore,
+  onIgnoreCustom,
   onBulk,
   bulkLabel,
 }: SectionProps) {
@@ -501,15 +507,19 @@ function FileSection({
         });
       }
       if (n === 1 && onIgnore && isUntracked?.(targets[0])) {
-        const { exact, extension } = ignorePatterns(targets[0]);
-        items.push({ label: 'Add to .gitignore', icon: 'file', onSelect: () => onIgnore(exact) });
+        const target = targets[0];
+        const base = target.slice(target.lastIndexOf('/') + 1);
+        const { exact, extension } = ignorePatterns(target);
+        const submenu: TreeMenuItem[] = [
+          { label: `Ignore “${base}”`, onSelect: () => onIgnore(exact) },
+        ];
         if (extension) {
-          items.push({
-            label: `Ignore all ${extension} files`,
-            icon: 'file',
-            onSelect: () => onIgnore(extension),
-          });
+          submenu.push({ label: `Ignore all ${extension} files`, onSelect: () => onIgnore(extension) });
         }
+        if (onIgnoreCustom) {
+          submenu.push({ label: 'Custom pattern…', onSelect: () => onIgnoreCustom(target) });
+        }
+        items.push({ label: 'Ignore', icon: 'file', submenu });
       }
       items.push({
         label: n > 1 ? 'Copy paths' : 'Copy path',
@@ -527,7 +537,7 @@ function FileSection({
       }
       return items;
     },
-    [actionLabel, staged, onAction, onDiscard, isUntracked, onIgnore, files],
+    [actionLabel, staged, onAction, onDiscard, isUntracked, onIgnore, onIgnoreCustom, files],
   );
 
   return (
@@ -641,6 +651,7 @@ function FileDiffSection({
   onToggle: () => void;
 }) {
   const empty = diff.binary || diff.patch.length === 0;
+  const image = diff.binary && isImagePath(diff.path);
 
   // Viewport-lazy mount: the "show all" view can stack hundreds of files, and
   // mounting every Pierre diff at once froze the app on open / after a big
@@ -648,11 +659,13 @@ function FileDiffSection({
   // the viewport, and keep it mounted thereafter (mounting is the cost, not
   // staying mounted). Until then a placeholder reserves the file's estimated
   // height so the scrollbar stays honest and far-off diffs aren't counted as
-  // near. Empty/binary bodies are trivial, so they skip the gating.
+  // near. Empty/binary bodies are trivial, so they skip the gating — except
+  // images, whose preview costs an IPC blob fetch per side: they gate like
+  // text diffs so a "show all" stack doesn't fire N fetches on open.
   const blockRef = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
   useEffect(() => {
-    if (seen || collapsed || empty) return;
+    if (seen || collapsed || (empty && !image)) return;
     const el = blockRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -667,7 +680,7 @@ function FileDiffSection({
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [seen, collapsed, empty]);
+  }, [seen, collapsed, empty, image]);
 
   // Rough body-height estimate (changed lines, no context) so the placeholder
   // reserves space close to the real diff height.
@@ -680,12 +693,22 @@ function FileDiffSection({
     <div className="lc-file-block" ref={blockRef}>
       <FileHeaderStrip diff={diff} collapsed={collapsed} onToggle={onToggle} />
       {!collapsed &&
-        (diff.binary && isImagePath(diff.path) ? (
-          // Old side: HEAD for both sections (an added file has no old side).
+        (image && !seen ? (
+          <div className="lc-file-pending" style={{ height: 180 }} aria-hidden />
+        ) : image ? (
+          // Old side: the unstaged diff's base is the *index* (a partially
+          // staged image's HEAD copy would lie); the staged diff's base is
+          // HEAD. An added file has no old side.
           // New side: the working tree (unstaged) or the index (staged).
           <ImageDiff
             path={diff.path}
-            oldSrc={diff.status === 'added' ? null : { rev: 'HEAD' }}
+            oldSrc={
+              diff.status === 'added'
+                ? null
+                : staged
+                  ? { rev: 'HEAD' }
+                  : { rev: null, index: true }
+            }
             newSrc={
               diff.status === 'deleted' ? null : staged ? { rev: null, index: true } : { rev: null }
             }

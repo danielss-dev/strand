@@ -10,6 +10,12 @@ export interface DiffMatch {
   /** Line number on the old side; `null` for added lines. */
   oldLine: number | null;
   kind: 'add' | 'del' | 'ctx';
+  /**
+   * The input entry's `tag`, copied through verbatim. Lets a caller searching
+   * a mixed pool (Local Changes feeds unstaged + staged copies of the same
+   * path) know which entry a match came from — a path alone is ambiguous.
+   */
+  tag?: unknown;
 }
 
 export interface DiffSearchResult {
@@ -26,7 +32,7 @@ export interface DiffSearchResult {
  * done on the line text *without* its `+`/`-`/space prefix.
  */
 export function searchDiffs(
-  diffs: Pick<FileDiff, 'path' | 'patch' | 'binary'>[],
+  diffs: (Pick<FileDiff, 'path' | 'patch' | 'binary'> & { tag?: unknown })[],
   query: string,
   limit = 400,
 ): DiffSearchResult {
@@ -75,7 +81,7 @@ export function searchDiffs(
       const text = line.slice(1);
       if (text.toLowerCase().includes(q)) {
         if (matches.length >= limit) return { matches, truncated: true };
-        matches.push({ path: d.path, lineText: text, newLine: nl, oldLine: ol, kind });
+        matches.push({ path: d.path, lineText: text, newLine: nl, oldLine: ol, kind, tag: d.tag });
       }
     }
   }

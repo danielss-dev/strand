@@ -106,8 +106,14 @@ export interface FileDiff {
 export interface ReviewNote {
   id: string;
   text: string;
-  /** New-file line number the note anchors to, or `null` for a whole-file note. */
+  /** Line number the note anchors to, or `null` for a whole-file note. */
   line: number | null;
+  /**
+   * Which side `line` counts on: `'old'` for a note on a deletion-only block
+   * (the deleted line has no new-side number). Absent = `'new'` — notes
+   * persisted before this field existed are all new-side.
+   */
+  side?: 'new' | 'old';
   createdAt: number;
 }
 

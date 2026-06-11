@@ -32,7 +32,8 @@ export function DiffSearchBar({
   onClose,
   placeholder,
 }: {
-  diffs: Pick<FileDiff, 'path' | 'patch' | 'binary'>[];
+  /** `tag` rides through to each match (see {@link DiffMatch.tag}). */
+  diffs: (Pick<FileDiff, 'path' | 'patch' | 'binary'> & { tag?: unknown })[];
   onJump: (m: DiffMatch) => void;
   onClose: () => void;
   placeholder?: string;
@@ -74,7 +75,19 @@ export function DiffSearchBar({
   const total = `${matches.length}${result.truncated ? '+' : ''}`;
 
   return (
-    <div className="diff-search-bar" role="search" aria-label="Search in diff">
+    <div
+      className="diff-search-bar"
+      role="search"
+      aria-label="Search in diff"
+      // On the container, not the input, so Esc also closes while a nav or
+      // close button holds focus (Tab + Esc must not strand the bar open).
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
       <div className="ds-row">
         <Icon name="search" size={13} />
         <input
@@ -94,10 +107,8 @@ export function DiffSearchBar({
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
               step(-1);
-            } else if (e.key === 'Escape') {
-              e.preventDefault();
-              onClose();
             }
+            // Escape is handled by the container (works from the buttons too).
           }}
         />
         <span className="ds-count" role="status" aria-live="polite">

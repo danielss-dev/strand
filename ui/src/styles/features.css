@@ -2182,6 +2182,15 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Submenu disclosure chevron, pinned to the row's right edge. */
+.context-menu-item .cm-sub-arrow {
+  margin-left: auto;
+  display: flex;
+  color: var(--text-muted);
+}
+.context-menu-item.active .cm-sub-arrow {
+  color: var(--text);
+}
 
 /* ─── Create-branch inline field (branch picker dropdown footer) ─── */
 .branch-create {
@@ -4337,6 +4346,13 @@ select.clone-input {
   flex-wrap: wrap;
   gap: 12px;
   padding: 12px;
+}
+/* Single-image preview (File view Content tab) — give it room to breathe. */
+.img-diff-single {
+  padding: 16px;
+}
+.img-diff-single .img-diff-checker {
+  min-height: 200px;
 }
 .img-diff-pane {
   flex: 1 1 220px;

@@ -23,21 +23,27 @@ type SideState =
 
 function useBlob(path: string, src: BlobRef | null): SideState {
   const activePath = useRepo((s) => s.activePath);
+  const diffsTick = useRepo((s) => s.diffsTick);
   const [state, setState] = useState<SideState>({ kind: 'loading' });
   // Primitive deps so inline-object props don't refetch every render.
   const absent = src == null;
   const rev = src?.rev ?? null;
   const index = src?.index ?? false;
+  // Worktree/index sources are mutable — refetch when the diffs refresh (the
+  // agent-watch loop edits files under us). Rev-pinned blobs are immutable.
+  const refetchKey = rev == null ? diffsTick : 0;
   useEffect(() => {
     if (absent || !activePath) return;
     let cancelled = false;
-    setState({ kind: 'loading' });
+    // Keep the previous image while revalidating so watcher refreshes don't
+    // flash "Loading…" when the bytes are unchanged.
+    setState((s) => (s.kind === 'ok' ? s : { kind: 'loading' }));
     tauri
       .repoFileBlob(activePath, path, rev, index)
       .then((b) => { if (!cancelled) setState({ kind: 'ok', blob: b }); })
       .catch((e) => { if (!cancelled) setState({ kind: 'error', message: errMessage(e) }); });
     return () => { cancelled = true; };
-  }, [activePath, path, absent, rev, index]);
+  }, [activePath, path, absent, rev, index, refetchKey]);
   return state;
 }
 
@@ -65,14 +71,28 @@ export function ImageDiff({
   );
 }
 
+/**
+ * Single-image preview (no before/after) — the File view's Content tab for a
+ * binary image, where there's just the one version to show.
+ */
+export function ImagePreview({ path, src }: { path: string; src: BlobRef }) {
+  const state = useBlob(path, src);
+  return (
+    <div className="img-diff img-diff-single">
+      <ImagePane path={path} state={state} />
+    </div>
+  );
+}
+
 function ImagePane({
   label,
-  tone,
+  tone = 'add',
   path,
   state,
 }: {
-  label: string;
-  tone: 'del' | 'add';
+  /** Omit for a single-image preview (no before/after caption). */
+  label?: string;
+  tone?: 'del' | 'add';
   path: string;
   state: SideState;
 }) {
@@ -86,7 +106,7 @@ function ImagePane({
 
   return (
     <figure className="img-diff-pane">
-      <figcaption className={`img-diff-label ${tone}`}>{label}</figcaption>
+      {label && <figcaption className={`img-diff-label ${tone}`}>{label}</figcaption>}
       <div className="img-diff-checker">
         {state.kind === 'loading' ? (
           <span className="img-diff-note">Loading…</span>

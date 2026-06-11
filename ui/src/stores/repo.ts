@@ -291,9 +291,10 @@ export interface RepoState {
    * {@link hashPatch} value — recorded on mark, compared on render.
    */
   toggleReviewed(file: string, hash: string): void;
-  /** Attach a note to `file` (`line` = new-file line, null = whole file).
-   * Empty / whitespace-only text is ignored. */
-  addReviewNote(file: string, text: string, line: number | null): void;
+  /** Attach a note to `file` (`line` = anchor line, null = whole file;
+   * `side` = which diff side the line counts on, default `'new'` — a
+   * deletion-only block anchors old-side). Empty text is ignored. */
+  addReviewNote(file: string, text: string, line: number | null, side?: 'new' | 'old'): void;
   /** Remove one note from `file` by id. */
   removeReviewNote(file: string, id: string): void;
   /** Drop every note for the active repo (after a feedback export, usually). */
@@ -377,6 +378,12 @@ export interface RepoState {
   renameRemote(oldName: string, newName: string): Promise<string[]>;
   /** Change a remote's fetch URL (`git remote set-url`). */
   setRemoteUrl(name: string, url: string): Promise<void>;
+  /**
+   * Fetch a specific remote by name (the sidebar remote-row action — how a
+   * just-added remote gets its first refs). The topbar Fetch with its progress
+   * pill stays App-owned; this is the lightweight no-progress path.
+   */
+  fetchRemote(name: string): Promise<void>;
   /**
    * Reset HEAD (the current branch, or HEAD itself when detached) to `target`.
    * A hard reset of a dirty tree stashes a safety snapshot first — returned in
@@ -496,6 +503,23 @@ export interface RepoState {
   diffSearchSignal: boolean;
   requestDiffSearch(): void;
   clearDiffSearch(): void;
+
+  /**
+   * The "Add ignore pattern…" dialog's draft pattern, or `null` when closed.
+   * Opened from the Local Changes / Files-tab context menus (prefilled with
+   * the picked file's path); App renders the single shared dialog.
+   */
+  ignoreDraft: string | null;
+  openIgnoreDialog(initial: string): void;
+  closeIgnoreDialog(): void;
+
+  /**
+   * Bumped on every diff refresh (local + review). Consumers showing
+   * *worktree/index-derived* content outside the diff arrays (the image
+   * preview's blob fetches) re-validate on it — the FileDiff for a binary
+   * file is otherwise indistinguishable across content changes.
+   */
+  diffsTick: number;
 
   /**
    * One-shot signal: select every commit since the review baseline in the
@@ -686,6 +710,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   commitSearchFocus: false,
   diffSearchSignal: false,
   selectSinceBaseline: false,
+  diffsTick: 0,
+  ignoreDraft: null,
 
   async restoreSession() {
     let saved: PersistedSession | null = null;
@@ -842,7 +868,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
     );
     if (get().activePath !== path) return;
-    set({ unstagedDiffs: unstaged, stagedDiffs: staged });
+    set({ unstagedDiffs: unstaged, stagedDiffs: staged, diffsTick: get().diffsTick + 1 });
 
     // If the selected file is no longer present (it was just staged in full,
     // for example) move the selection to a sibling so the middle pane keeps
@@ -937,7 +963,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       try {
         const diffs = await tauri.repoDiffSinceFull(path, baseline.oid);
         if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
-        set({ baselineDiffs: diffs });
+        set({ baselineDiffs: diffs, diffsTick: get().diffsTick + 1 });
       } catch (e) {
         // Typical cause: the baseline commit was rebased/gc'd away. Surface by
         // clearing — the chip disappears rather than showing stale data.
@@ -949,7 +975,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     try {
       const diffs = await tauri.repoDiffUnstagedFull(path);
       if (get().activePath !== path || get().baseline != null) return;
-      set({ reviewUnstagedDiffs: diffs });
+      set({ reviewUnstagedDiffs: diffs, diffsTick: get().diffsTick + 1 });
     } catch (e) {
       console.warn('repoDiffUnstagedFull failed', e);
     }
@@ -986,11 +1012,17 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('reviewed persist failed', e));
   },
 
-  addReviewNote(file, text, line) {
+  addReviewNote(file, text, line, side) {
     const path = get().activePath;
     const trimmed = text.trim();
     if (!path || !trimmed) return;
-    const note: ReviewNote = { id: noteId(), text: trimmed, line, createdAt: Date.now() };
+    const note: ReviewNote = {
+      id: noteId(),
+      text: trimmed,
+      line,
+      ...(side === 'old' ? { side } : {}),
+      createdAt: Date.now(),
+    };
     const cur = get().reviewNotes;
     const next = { ...cur, [file]: [...(cur[file] ?? []), note] };
     set({ reviewNotes: next });
@@ -1427,6 +1459,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoRemoteSetUrl(path, name, url);
     await get().refreshLocalChanges();
   },
+  async fetchRemote(name) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoFetch(path, name);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
   async reset(target, mode) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
@@ -1687,6 +1725,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   clearCommitSearchFocus: () => set({ commitSearchFocus: false }),
   requestDiffSearch: () => set({ diffSearchSignal: true }),
   clearDiffSearch: () => set({ diffSearchSignal: false }),
+  openIgnoreDialog: (initial) => set({ ignoreDraft: initial }),
+  closeIgnoreDialog: () => set({ ignoreDraft: null }),
   requestSelectSinceBaseline: () => set({ view: 'commits', selectSinceBaseline: true }),
   clearSelectSinceBaseline: () => set({ selectSinceBaseline: false }),
   // Opening a file resets the file-view tab to Content and drops any stale

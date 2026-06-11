@@ -3,57 +3,49 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
-import type { ResetMode } from '../lib/types';
 
 /**
- * Modal for `git reset` to a chosen commit — opened from a commit row's
- * "Reset … to here…" and the Reflog's "Reset HEAD here…".
+ * Append a custom pattern to the repo's root `.gitignore`. Opened from the
+ * "Add ignore pattern…" context-menu item (Local Changes Unstaged tree +
+ * sidebar Files tab), prefilled with the picked file's path so the user can
+ * broaden it (`assets/1.png` → `*.png`, `build/`, `src/**​/*.tmp`, `!keep.txt`).
  *
- * `target` is the revspec to reset to; `label` is the human label shown in
- * the blurb (short hash or `HEAD@{n}`). Mode defaults to mixed; hard resets
- * stash a safety snapshot first (the backend does this for a dirty tree),
- * which the success toast points at.
+ * The pattern is written **verbatim** — gitignore glob syntax is the whole
+ * point here, so unlike the one-click "Add to .gitignore" path (which escapes
+ * metacharacters to match one literal file) nothing is escaped.
  */
-export function ResetDialog({
-  target,
-  label,
+export function IgnoreDialog({
+  initial,
   onClose,
   onToast,
 }: {
-  target: string;
-  label: string;
+  initial: string;
   onClose: () => void;
   onToast: (msg: string) => void;
 }) {
-  const reset = useRepo((s) => s.reset);
-  const meta = useRepo((s) => s.meta);
-  const headLabel = meta && !meta.detached ? meta.branch : 'HEAD';
+  const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
 
-  const [mode, setMode] = useState<ResetMode>('mixed');
+  const [pattern, setPattern] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  // Restore focus to whatever opened the dialog when it closes, so keyboard
-  // flow returns to the graph/reflog instead of falling to <body>.
+  // Restore focus to the opener (the context menu / row) when the dialog closes.
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     return () => prev?.focus?.();
   }, []);
 
-  // Move focus INTO the modal on open (after the opener is captured above —
-  // effect order matters). The other dialogs get this from an input's
-  // autoFocus; radios have none, and without it the keyboard keeps driving
-  // the view behind the backdrop.
+  // Prefilled with a path — select it so the user can retype a pattern at once.
   useEffect(() => {
-    dialogRef.current
-      ?.querySelector<HTMLInputElement>('input[type="radio"]:checked')
-      ?.focus();
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, []);
 
-  // Keep Tab focus inside the modal — same aria-modal contract as BranchDialog.
+  // Keep Tab focus inside the modal — same contract as the other dialogs.
   function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'Tab' || !dialogRef.current) return;
     const focusables = Array.from(
@@ -73,7 +65,7 @@ export function ResetDialog({
     }
   }
 
-  // Escape closes (unless an op is mid-flight).
+  // Escape closes (unless a write is mid-flight).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !busy) onClose();
@@ -83,15 +75,13 @@ export function ResetDialog({
   }, [busy, onClose]);
 
   async function submit() {
-    if (busy) return;
+    const p = pattern.trim();
+    if (busy || !p) return;
     setBusy(true);
     setError(null);
     try {
-      const outcome = await reset(target, mode);
-      onToast(
-        `Reset to ${label} (${mode})` +
-          (outcome.snapshot_oid ? ' — snapshot saved to stashes' : ''),
-      );
+      await gitignoreAdd(p);
+      onToast(`Added “${p}” to .gitignore`);
       onClose();
     } catch (e) {
       if (mountedRef.current) setError(errMessage(e));
@@ -99,24 +89,6 @@ export function ResetDialog({
       if (mountedRef.current) setBusy(false);
     }
   }
-
-  const option = (m: ResetMode, title: string, desc: string, danger?: boolean) => (
-    <label className="stash-check">
-      <input
-        type="radio"
-        name="reset-mode"
-        value={m}
-        checked={mode === m}
-        disabled={busy}
-        onChange={() => setMode(m)}
-      />
-      <span>
-        <strong style={danger ? { color: 'var(--del)' } : undefined}>{title}</strong>
-        {' — '}
-        {desc}
-      </span>
-    </label>
-  );
 
   return (
     <div
@@ -129,13 +101,13 @@ export function ResetDialog({
         className="clone-dialog stash-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Reset"
+        aria-label="Add ignore pattern"
         ref={dialogRef}
         onKeyDown={onTrapKeyDown}
       >
         <div className="clone-head">
-          <Icon name="history" size={15} />
-          <span className="title">Reset</span>
+          <Icon name="file" size={15} />
+          <span className="title">Add ignore pattern</span>
           <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={onClose}>
             ×
           </button>
@@ -143,15 +115,26 @@ export function ResetDialog({
 
         <div className="clone-body">
           <p className="stash-blurb">
-            Move <code>{headLabel}</code> to <code>{label}</code>.
+            Append a pattern to the repo&rsquo;s <code>.gitignore</code>.
           </p>
-
-          <div role="radiogroup" aria-label="Reset mode">
-            {option('soft', 'Soft', 'keep all changes staged')}
-            {option('mixed', 'Mixed', 'keep changes, unstaged')}
-            {option('hard', 'Hard', 'discard all changes (a safety snapshot stash is saved first)', true)}
-          </div>
-
+          <label className="clone-field">
+            <span className="lbl">Pattern</span>
+            <input
+              ref={inputRef}
+              className="clone-input"
+              placeholder="*.log"
+              value={pattern}
+              disabled={busy}
+              onChange={(e) => setPattern(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          </label>
+          <p className="stash-note">
+            Glob syntax: <code>*.log</code> · <code>build/</code> ·{' '}
+            <code>src/**​/*.tmp</code> · <code>!keep.txt</code> (un-ignore)
+          </p>
           {error ? <div className="clone-error">{error}</div> : null}
         </div>
 
@@ -161,11 +144,11 @@ export function ResetDialog({
           </button>
           <button
             type="button"
-            className={mode === 'hard' ? 'btn danger' : 'btn primary'}
-            disabled={busy}
+            className="btn primary"
+            disabled={busy || !pattern.trim()}
             onClick={() => void submit()}
           >
-            {busy ? 'Resetting…' : `Reset (${mode})`}
+            {busy ? 'Adding…' : 'Add pattern'}
           </button>
         </div>
       </div>
