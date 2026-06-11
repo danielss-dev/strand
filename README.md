@@ -97,6 +97,14 @@ pnpm tauri:build   # signed installers in target/release/bundle
   agent already staged or committed. Arrows / j k walk the queue, Space
   toggles a file's reviewed mark; marks flip back if the agent touches the
   file again
+- File view (from the Files sidebar tab or ⌘K): Content (highlighted source),
+  History (`--follow` revision list + per-commit diff), Compare (any two
+  revisions), Blame (virtualized, click to jump to the commit) — and a
+  Preview tab for renderable text files: SVG drawn as an image, markdown
+  rendered (links open the linked repo file in the file view or the browser
+  for external URLs; repo-relative images resolve off the worktree).
+  Whether such files open on Preview or raw Source is a setting
+  (Settings → Appearance → "Open files on"; default Preview)
 - Commit graph: SVG lanes + branch/tag chips inline; click a commit to
   open a resizable detail panel with the commit's metadata, file list,
   and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves

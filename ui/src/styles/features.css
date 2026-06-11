@@ -1770,6 +1770,144 @@
   background: var(--bg-base);
 }
 
+/* Preview tab: rendered markdown in a readable measure (SVG preview reuses
+   .img-diff). All type below uses the UI face — this is a document, not code. */
+.fv-md {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-base);
+}
+.md-render {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 28px 36px 64px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  overflow-wrap: break-word;
+}
+.md-render h1,
+.md-render h2,
+.md-render h3,
+.md-render h4,
+.md-render h5,
+.md-render h6 {
+  margin: 24px 0 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+.md-render h1:first-child,
+.md-render h2:first-child,
+.md-render h3:first-child {
+  margin-top: 0;
+}
+.md-render h1 { font-size: 1.7em; padding-bottom: 8px; border-bottom: 0.5px solid var(--border); }
+.md-render h2 { font-size: 1.35em; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
+.md-render h3 { font-size: 1.15em; }
+.md-render h4 { font-size: 1em; }
+.md-render h5 { font-size: 0.9em; }
+.md-render h6 { font-size: 0.85em; color: var(--text-muted); }
+.md-render p {
+  margin: 0 0 12px;
+}
+.md-render ul,
+.md-render ol {
+  margin: 0 0 12px;
+  padding-left: 26px;
+}
+.md-render li {
+  margin: 3px 0;
+}
+.md-render li > ul,
+.md-render li > ol,
+.md-render li > p {
+  margin-bottom: 0;
+}
+.md-render li.md-task {
+  list-style: none;
+  margin-left: -18px;
+}
+.md-render li.md-task > input[type='checkbox'] {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+  pointer-events: none;
+}
+.md-render code.md-code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.md-render pre.md-pre {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.md-render blockquote.md-quote {
+  margin: 0 0 12px;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+}
+.md-render blockquote.md-quote > :last-child {
+  margin-bottom: 0;
+}
+.md-render hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 0.5px solid var(--border);
+}
+.md-render a.md-link {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+.md-render a.md-link:hover {
+  text-decoration: underline;
+}
+.md-render a.md-link:focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+.md-render table.md-table {
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.md-render .md-table th,
+.md-render .md-table td {
+  border: 0.5px solid var(--border);
+  padding: 5px 11px;
+  text-align: left;
+}
+.md-render .md-table th {
+  background: var(--bg-panel);
+  font-weight: 600;
+  color: var(--text);
+}
+.md-render img.md-img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.md-render .md-img-fallback {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ─── Command palette ─── */
 .palette-backdrop {
   position: fixed;

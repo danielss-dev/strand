@@ -13,6 +13,7 @@
     "updater:default",
     "process:default",
     "sql:default",
-    "sql:allow-execute"
+    "sql:allow-execute",
+    "shell:default"
   ]
 }

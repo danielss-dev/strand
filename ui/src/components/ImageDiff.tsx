@@ -16,12 +16,12 @@ export interface BlobRef {
   index?: boolean;
 }
 
-type SideState =
+export type SideState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'ok'; blob: FileBlob };
 
-function useBlob(path: string, src: BlobRef | null): SideState {
+export function useBlob(path: string, src: BlobRef | null): SideState {
   const activePath = useRepo((s) => s.activePath);
   const diffsTick = useRepo((s) => s.diffsTick);
   const [state, setState] = useState<SideState>({ kind: 'loading' });

@@ -677,6 +677,26 @@ diffs (bun.lock) window-render instead of freezing the app. Verdict hashing
 is cached per fetch and prefetch priming skips >1 MB patches. Verified:
 `tsc`, `vite build`, `vitest` (36).
 
+**File-view Preview tab (2026-06-11):** Renderable text files get a rendered
+view next to their source. The file view grew a **Preview** tab (eye icon,
+offered only for SVG / markdown paths): SVG renders through the existing
+image pipeline (data-URL `<img>` — scripts can't run there), markdown through
+a new hand-rolled renderer (`ui/src/lib/markdown.tsx`) that emits React
+elements directly, so repo content can never inject HTML into the
+IPC-privileged webview (raw HTML shows as literal text; no sanitizer dep).
+GitHub-subset coverage: headings, fenced code, nested + task lists, quotes,
+pipe tables, emphasis/links/images/autolinks. Relative links open the target
+file in the file view (md → md stays in Preview), http(s)/mailto links open
+in the system browser (`shell:default` capability finally granted —
+the plugin was registered but unreachable), and repo-relative images load
+off the worktree. The preview revalidates on watcher ticks, so an agent
+editing docs updates it live. A same-day follow-up added the
+**"Open files on"** setting (Settings → Appearance: Preview / Source,
+default Preview): `selectFile` now picks the initial tab per the setting
+for renderable files (`lib/preview.ts` shared by the store and the view);
+doc → doc links stay in Preview either way. Verified: `vitest` (105, +17
+markdown), `tsc`, `cargo check -p strand-tauri`.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

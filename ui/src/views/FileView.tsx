@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
 import { Diff } from '../components/Diff';
 import { Icon, type IconName } from '../components/Icon';
-import { ImageDiff, ImagePreview } from '../components/ImageDiff';
-import { isImagePath } from '../lib/image';
+import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
+import { imageMime, isImagePath } from '../lib/image';
+import { renderMarkdown } from '../lib/markdown';
+import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type { BlameLine, FileContent, FileDiff, FileHistoryEntry } from '../lib/types';
 
-type Tab = 'content' | 'history' | 'compare' | 'blame';
+type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
 
 /** Sentinel "revision" for the working-tree (uncommitted) entry in History.
  *  Any non-hex string works — it never reaches git (the working-tree branch
@@ -20,14 +23,17 @@ const WORKING = 'working-tree';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'content', label: 'Content', icon: 'content' },
+  { id: 'preview', label: 'Preview', icon: 'eye' },
   { id: 'history', label: 'History', icon: 'history' },
   { id: 'compare', label: 'Compare', icon: 'compare' },
   { id: 'blame',   label: 'Blame',   icon: 'blame' },
 ];
 
 /**
- * Four-tab file view (PRD §6.5), wired to `strand-core`:
+ * Tabbed file view (PRD §6.5), wired to `strand-core`:
  * - **Content** — the working-tree file, syntax-highlighted via Pierre's `<File>`.
+ * - **Preview** — rendered form of a renderable text file (SVG as an image,
+ *   markdown as a document); the tab only shows for those files.
  * - **History** — `git log --follow` for the path; selecting a commit shows
  *   this file's change there, double-click jumps to it in the graph.
  * - **Compare** — diff this file between two of its revisions.
@@ -47,6 +53,13 @@ export function FileView({ path }: { path: string }) {
   const jumpToCommit = useRepo((s) => s.jumpFromFile);
 
   const close = () => { setView('local'); selectFile(null); };
+
+  const previewable = isPreviewablePath(path);
+  const tabs = previewable ? TABS : TABS.filter((t) => t.id !== 'preview');
+  // Defensive: the store can only hold 'preview' while a previewable file is
+  // open (selectFile only picks it for previewable paths), but fall back
+  // rather than render an empty body if that ever changes.
+  const active = tab === 'preview' && !previewable ? 'content' : tab;
 
   return (
     <div className="main">
@@ -73,13 +86,13 @@ export function FileView({ path }: { path: string }) {
         </div>
       </div>
       <div className="tab-strip" role="tablist">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             type="button"
             key={t.id}
             role="tab"
-            aria-selected={tab === t.id}
-            className={'tab' + (tab === t.id ? ' active' : '')}
+            aria-selected={active === t.id}
+            className={'tab' + (active === t.id ? ' active' : '')}
             onClick={() => setTab(t.id)}
           >
             <Icon name={t.icon} size={13} className="tab-ico" />
@@ -89,10 +102,11 @@ export function FileView({ path }: { path: string }) {
       </div>
       <div className="fv-body">
         {/* `key={path}` resets each tab's internal load state when the file changes. */}
-        {tab === 'content' && <ContentTab key={path} path={path} repoPath={activePath} />}
-        {tab === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
-        {tab === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
-        {tab === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
+        {active === 'content' && <ContentTab key={path} path={path} repoPath={activePath} />}
+        {active === 'preview' && <PreviewTab key={path} path={path} repoPath={activePath} />}
+        {active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
+        {active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
+        {active === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
       </div>
     </div>
   );
@@ -153,6 +167,134 @@ function ContentTab({ path, repoPath }: { path: string; repoPath: string | null 
       </div>
     </div>
   );
+}
+
+// ─── Preview ──────────────────────────────────────────────────────────────
+
+/**
+ * Rendered preview for renderable text files. SVG reuses the image pipeline
+ * (a data-URL'd SVG in an `<img>` never executes scripts); markdown renders
+ * through `lib/markdown` (React elements only — repo content can't inject
+ * HTML into the webview).
+ */
+function PreviewTab({ path, repoPath }: { path: string; repoPath: string | null }) {
+  if (isSvgPath(path)) {
+    return (
+      <div className="fv-tab">
+        <ImagePreview path={path} src={{ rev: null }} />
+      </div>
+    );
+  }
+  return <MarkdownPreview path={path} repoPath={repoPath} />;
+}
+
+function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | null }) {
+  const selectFile = useRepo((s) => s.selectFile);
+  const setFileTab = useRepo((s) => s.setFileTab);
+  // Re-fetch when the watcher refreshes — the agent-review loop edits docs
+  // under us, and a stale preview defeats its purpose.
+  const diffsTick = useRepo((s) => s.diffsTick);
+  const [data, setData] = useState<FileContent | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!repoPath) return;
+    let cancelled = false;
+    // Keep the previous render while revalidating; only the first load (data
+    // still null) shows the placeholder.
+    tauri
+      .repoFileContent(repoPath, path, null)
+      .then((c) => { if (!cancelled) { setData(c); setError(null); } })
+      .catch((e) => { if (!cancelled) setError(errMessage(e)); });
+    return () => { cancelled = true; };
+  }, [repoPath, path, diffsTick]);
+
+  const dir = useMemo(() => {
+    const i = path.lastIndexOf('/');
+    return i === -1 ? '' : path.slice(0, i);
+  }, [path]);
+
+  const rendered = useMemo(() => {
+    if (!data || data.binary) return null;
+    return renderMarkdown(data.text, {
+      onLinkClick: (href) => {
+        if (/^(https?:|mailto:)/i.test(href)) { void shellOpen(href); return; }
+        if (href.startsWith('#')) return; // in-document anchors: no heading ids in v1
+        const target = resolveRelative(dir, href);
+        if (!target) return;
+        selectFile(target);
+        // Stay in reading mode across doc → doc links even when the
+        // `fileOpenTab` setting opens files on the raw source.
+        if (isPreviewablePath(target)) setFileTab('preview');
+      },
+      renderImage: (src, alt, key) => {
+        if (/^(https?:|data:image\/)/i.test(src)) {
+          return <img key={key} className="md-img" src={src} alt={alt} loading="lazy" />;
+        }
+        const target = resolveRelative(dir, src);
+        return target && isImagePath(target) ? (
+          <RepoImage key={key} path={target} alt={alt} />
+        ) : (
+          <span key={key} className="md-img-fallback">{alt || src}</span>
+        );
+      },
+    });
+  }, [data, dir, selectFile, setFileTab]);
+
+  if (error && !data) return <FvEmpty>{error}</FvEmpty>;
+  if (!data) return <FvEmpty>Loading…</FvEmpty>;
+  if (data.binary) return <FvEmpty>Binary file — no preview.</FvEmpty>;
+
+  return (
+    <div className="fv-tab">
+      {data.truncated && (
+        <div className="fv-banner">Large file — previewing the first part only.</div>
+      )}
+      <div className="fv-md">
+        <div className="md-render">{rendered}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Repo-relative image referenced from a markdown file, read off the worktree. */
+function RepoImage({ path, alt }: { path: string; alt: string }) {
+  const state = useBlob(path, { rev: null });
+  if (state.kind === 'loading') return null;
+  if (state.kind !== 'ok' || state.blob.too_large) {
+    return <span className="md-img-fallback" title={path}>{alt || basename(path)}</span>;
+  }
+  return (
+    <img
+      className="md-img"
+      src={`data:${imageMime(path)};base64,${state.blob.base64}`}
+      alt={alt}
+    />
+  );
+}
+
+/**
+ * Resolve a markdown-relative href/src against the file's directory into a
+ * repo-relative path. Returns null for empty targets or ones that escape the
+ * repo root (the backend's canonicalize guard would reject them anyway).
+ */
+function resolveRelative(fromDir: string, href: string): string | null {
+  let target = href.split(/[?#]/)[0];
+  if (!target) return null;
+  try { target = decodeURI(target); } catch { /* keep the raw form */ }
+  target = target.replace(/\\/g, '/');
+  // A leading slash means repo-root-relative (the GitHub convention).
+  const parts = target.startsWith('/') ? [] : fromDir ? fromDir.split('/') : [];
+  for (const seg of target.replace(/^\//, '').split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') {
+      if (parts.length === 0) return null;
+      parts.pop();
+    } else {
+      parts.push(seg);
+    }
+  }
+  return parts.length ? parts.join('/') : null;
 }
 
 // ─── Blame ──────────────────────────────────────────────────────────────

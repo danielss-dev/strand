@@ -15,12 +15,19 @@ import {
   UI_FONT_OPTIONS,
   useSettings,
   type AccentId,
+  type FileOpenTab,
   type ThemePref,
 } from '../../stores/settings';
 import { moveSelection, SegRow, SelectRow } from './shared';
 
-/** Appearance — theme, accent, density, and the two app fonts. Selecting
- * applies live (token-driven CSS), so there's no Save step. */
+const FILE_OPEN_OPTIONS: { id: FileOpenTab; label: string }[] = [
+  { id: 'preview', label: 'Preview' },
+  { id: 'content', label: 'Source' },
+];
+
+/** Appearance — theme, accent, density, the two app fonts, and the file
+ * view's initial tab. Selecting applies live (token-driven CSS), so there's
+ * no Save step. */
 export function AppearanceSection() {
   const pref = useSettings((s) => s.theme);
   const resolved = useSettings((s) => s.resolvedTheme);
@@ -28,6 +35,7 @@ export function AppearanceSection() {
   const density = useSettings((s) => s.density);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
+  const fileOpenTab = useSettings((s) => s.fileOpenTab);
   const set = useSettings((s) => s.set);
   const setPref = (next: ThemePref) => set('theme', next);
   const setAccent = (next: AccentId) => set('accent', next);
@@ -108,6 +116,13 @@ export function AppearanceSection() {
           options={MONO_FONT_OPTIONS}
           value={monoFont}
           onChange={(id) => set('monoFont', id)}
+        />
+        <SegRow
+          label="Open files on"
+          hint="Renderable files (SVG, Markdown) start on the rendered preview or the raw source."
+          options={FILE_OPEN_OPTIONS}
+          value={fileOpenTab}
+          onChange={(id) => set('fileOpenTab', id)}
         />
       </div>
     </section>

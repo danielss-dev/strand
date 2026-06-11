@@ -546,6 +546,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`,
   rendered with Pierre's read-only `<File>` (syntax-highlighted, app-themed).
   Shiki-direct highlighting deferred — `<File>` already covers it.
+- ☑ Preview tab — rendered view for renderable text files, tab only offered
+  for them (`PreviewTab` in `FileView.tsx`): SVG through the image pipeline
+  (`ImagePreview`, data-URL `<img>`), markdown through `lib/markdown.tsx`
+  (hand-rolled → React elements, no raw HTML; unit-tested). Relative links
+  open the target file in the file view, http(s)/mailto open externally
+  (`shell:default` capability added), repo-relative images load off the
+  worktree (`RepoImage`). A `fileOpenTab` setting (Settings → Appearance,
+  "Open files on": Preview / Source, default Preview) picks the initial tab
+  for renderable files — applied in `selectFile` via `lib/preview.ts`.
 - ☑ History tab — `repo_file_history` (`--follow`) revision list; selecting a
   commit shows this file's change there (`repo_diff_commit_file`, pathspec-
   limited), double-click jumps to the commit in the graph

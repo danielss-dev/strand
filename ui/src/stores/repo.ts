@@ -12,6 +12,7 @@ import {
 } from '../lib/db';
 import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
+import { isPreviewablePath } from '../lib/preview';
 import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -44,8 +45,9 @@ const SESSION_KEY = 'session.tabs';
 
 export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees';
 
-/** Active tab within the 4-tab file view. */
-export type FileTab = 'content' | 'history' | 'compare' | 'blame';
+/** Active tab within the file view ('preview' only offered for renderable
+ *  files — SVG / markdown). */
+export type FileTab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
 
 /** One open repository in the topbar tab strip. */
 export interface RepoTab {
@@ -1729,14 +1731,22 @@ export const useRepo = create<RepoState>((set, get) => ({
   closeIgnoreDialog: () => set({ ignoreDraft: null }),
   requestSelectSinceBaseline: () => set({ view: 'commits', selectSinceBaseline: true }),
   clearSelectSinceBaseline: () => set({ selectSinceBaseline: false }),
-  // Opening a file resets the file-view tab to Content and drops any stale
-  // back-target; closing (null) just drops the back-target.
+  // Opening a file resets the file-view tab — Preview for renderable files
+  // when the `fileOpenTab` setting says so, Content otherwise — and drops any
+  // stale back-target; closing (null) just drops the back-target.
   selectFile: (selectedFile) =>
     set({
       selectedFile,
       view: selectedFile ? 'file' : get().view,
       fileReturn: null,
-      ...(selectedFile ? { fileTab: 'content' as FileTab } : {}),
+      ...(selectedFile
+        ? {
+            fileTab: (useSettings.getState().fileOpenTab === 'preview' &&
+            isPreviewablePath(selectedFile)
+              ? 'preview'
+              : 'content') as FileTab,
+          }
+        : {}),
     }),
   selectRef: (selectedRef) => set({ selectedRef }),
   setFileTab: (fileTab) => set({ fileTab }),

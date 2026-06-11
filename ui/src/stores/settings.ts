@@ -21,6 +21,11 @@ export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
  * edge bars (Pierre's default), `none` = background tint only. */
 export type DiffIndicators = 'classic' | 'bars' | 'none';
 
+/** Which tab the file view opens on for renderable files (SVG / markdown):
+ * the rendered preview or the raw source. Non-renderable files always open
+ * on Content. */
+export type FileOpenTab = 'preview' | 'content';
+
 /** An external app integration (editor / terminal): a preset from
  * `lib/integrations.ts`, a custom command template, or unconfigured. */
 export type ExternalTool =
@@ -81,6 +86,8 @@ export interface SettingsState {
   diffIndicators: DiffIndicators;
   /** Intra-line (word-level) change emphasis in diffs. */
   diffWordHighlight: boolean;
+  /** Initial file-view tab for renderable files (see {@link FileOpenTab}). */
+  fileOpenTab: FileOpenTab;
   /** Directory the clone dialog and open-repo picker start in. */
   defaultCloneDir: string | null;
   editorTool: ExternalTool;
@@ -147,6 +154,7 @@ export const useSettings = create<SettingsState>()(
       diffLineNumbers: true,
       diffIndicators: 'bars',
       diffWordHighlight: true,
+      fileOpenTab: 'preview',
       defaultCloneDir: null,
       editorTool: null,
       terminalTool: null,
