@@ -4,9 +4,10 @@
   "version": "0.0.1",
   "description": "Static landing page for strand.danielss.dev (no build step).",
   "scripts": {
+    "start": "serve . -l ${PORT:-4321}",
     "serve": "serve . -l 4321"
   },
-  "devDependencies": {
+  "dependencies": {
     "serve": "^14"
   }
 }

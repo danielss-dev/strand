@@ -1,11 +1,17 @@
 # Strand landing page
 
-Static site for `strand.danielss.dev`. No build step — deploy the folder as-is
-(GitHub Pages, Cloudflare Pages, any static host).
+Static site for `strand.danielss.dev`. No build step.
+
+**Deployed on Railway**: project `landings` → service `strand-landing`
+(`railway up` from this folder redeploys; `npm start` is what Railway runs —
+`serve . -l $PORT`). Test URL:
+<https://strand-landing-production.up.railway.app>. The custom domain
+`strand.danielss.dev` is registered on the service and needs the Porkbun CNAME
+for `strand` to point at `flzah3oz.up.railway.app` (it currently points at
+Porkbun parking).
 
 Preview locally with `pnpm site` from the repo root (serves on
-<http://localhost:4321> via [`serve`](https://github.com/vercel/serve); the
-`package.json` here exists only for that script — it isn't part of the deploy).
+<http://localhost:4321> via [`serve`](https://github.com/vercel/serve)).
 
 - `index.html` / `style.css` / `script.js` — the whole site. Design tokens are
   lifted from the app (`ui/src/styles/tokens.css`): same warm-charcoal OKLCH
@@ -28,6 +34,8 @@ Preview locally with `pnpm site` from the repo root (serves on
 
 ## Before launch
 
+- [ ] Flip the Porkbun DNS record: CNAME `strand` → `flzah3oz.up.railway.app`
+      (Railway then issues the cert automatically).
 - [ ] Point the download CTAs at real release assets (currently
       `github.com/danielss-dev/strand/releases`).
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow

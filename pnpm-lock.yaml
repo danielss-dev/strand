@@ -80,7 +80,7 @@ importers:
         version: 2.1.9
 
   website:
-    devDependencies:
+    dependencies:
       serve:
         specifier: ^14
         version: 14.2.6

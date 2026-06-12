@@ -994,6 +994,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Social handles (X, Mastodon)
 - ◐ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
-  from the app, live keyboard-driven Review-view mock, AGPL/honor-system pricing
-  section. Still pending: hosting on the domain, real download links once
-  releases exist, og:image, and serving the updater `latest.json`.)
+  from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
+  pricing section. **Deployed on Railway** — project `landings`, service
+  `strand-landing`, live at strand-landing-production.up.railway.app; the
+  custom domain is registered and waits on the Porkbun CNAME flip (`strand` →
+  `flzah3oz.up.railway.app`). Still pending: that DNS flip, real download
+  links once releases exist, og:image, and serving the updater `latest.json`.)
