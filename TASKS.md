@@ -992,4 +992,8 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Reserve `dev.danielss.strand` IDs in macOS App Store + Microsoft Store
 - ☐ Create GitHub org / repo + decide visibility
 - ☐ Social handles (X, Mastodon)
-- ☐ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
+- ◐ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
+  (site built: `website/` — static, no build step, design tokens + fonts lifted
+  from the app, live keyboard-driven Review-view mock, AGPL/honor-system pricing
+  section. Still pending: hosting on the domain, real download links once
+  releases exist, og:image, and serving the updater `latest.json`.)

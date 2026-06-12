@@ -22,6 +22,7 @@ strand/
 │   │   ├── lib/            # Tauri command wrappers, shared types
 │   │   └── styles/         # tokens, base, chrome, features
 │   └── index.html
+├── website/                # static landing page for strand.danielss.dev (no build step)
 ├── Cargo.toml              # workspace
 ├── package.json            # pnpm workspace root
 ├── pnpm-workspace.yaml
@@ -51,6 +52,7 @@ pnpm tauri icon path/to/source.png
 ```sh
 pnpm tauri:dev     # full app: Vite + Rust + native shell
 pnpm dev           # frontend only, in a regular browser
+pnpm site          # landing page (website/) on localhost:4321
 ```
 
 The frontend detects when it isn't running inside Tauri and disables IPC

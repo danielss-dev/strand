@@ -697,6 +697,38 @@ for renderable files (`lib/preview.ts` shared by the store and the view);
 doc → doc links stay in Preview either way. Verified: `vitest` (105, +17
 markdown), `tsc`, `cargo check -p strand-tauri`.
 
+**Landing page (2026-06-12):** First pass at the public face, ahead of the
+beta: `website/` holds a static, no-build-step landing page for
+`strand.danielss.dev`. It reuses the app's identity wholesale — the OKLCH
+token palette from `tokens.css`, self-hosted Geist + JetBrains Mono, the
+single-hue accent system (a row of hero dots rotates `--accent-h` live,
+exactly like Settings → Appearance) — so the site *is* the product's design
+system at poster scale. The hero is a keyboard-driven replica of the actual
+app shell — topbar (repo tab, sync group, stash split button, branch button,
+⌘K pill), sidebar (primary rows, Git/Files tabs, filter, ref sections),
+breadcrumb header, Review toolbar, queue tree with file-type icons, diff pane,
+hint footer, and statusbar, all built to `chrome.css`'s real metrics with
+pierre-dark's actual token colors. It's a working multi-view demo: the sidebar
+switches between **Local Changes** (staging header + the app's commit bar,
+which "commits"), **Review** (`j`/`k` queue, `space`/Mark-reviewed toggles,
+live progress + discard counts), and **All Commits** (hand-drawn lane graph
+with branch/tag/HEAD/ai chips and a stash diamond, `j`/`k` walks rows); tree
+folders collapse like the Pierre tree. **⌘K opens the app's command palette**
+(same grouped/fuzzy/highlighted UI) repurposed to drive the page — jump to
+sections, switch demo views, set the accent, open GitHub / @danielss_dev on X.
+The pitch is the demo. Content covers the agent-review
+loop (watch / baseline / whole-file context / feedback export), an
+accountability band ("the commits carry your signature" — a mock `git log`
+showing the agent's work signed by you, kicker "don't ship shit to prod"),
+the measured perf numbers (47ms / 42ms / 10MB, linked to
+`docs/perf-baseline.md`), the keyboard map, the full-client feature grid, and
+the AGPL-3.0 + honor-system commercial pricing. Degrades gracefully: no-JS gets a fully visible static
+page, reduced-motion is respected, mobile drops the keyboard affordances.
+Verified with a live Playwright pass (hero/sections/mobile screenshots, j/k +
+space interaction, accent switch). **Still pending:** hosting, real release
+links, og:image, and the updater manifest on the same domain (tracked in
+TASKS → Pre-launch checks).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

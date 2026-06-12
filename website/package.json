@@ -1,0 +1,12 @@
+{
+  "name": "strand-website",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Static landing page for strand.danielss.dev (no build step).",
+  "scripts": {
+    "serve": "serve . -l 4321"
+  },
+  "devDependencies": {
+    "serve": "^14"
+  }
+}

@@ -7,6 +7,7 @@
     "dev": "pnpm --filter strand-ui dev",
     "build": "pnpm --filter strand-ui build",
     "clean:js": "pnpm --filter strand-ui clean:js",
+    "site": "pnpm --filter strand-website serve",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

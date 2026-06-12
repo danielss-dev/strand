@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strand — Review what your AI agent did</title>
+  <meta name="description" content="Strand is a fast, keyboard-first Git client built for reviewing AI coding agents' changes. Whole-file context, live working-tree watch, feedback you can paste back. Free for individuals, open source under AGPL-3.0." />
+  <meta property="og:title" content="Strand — Review what your AI agent did" />
+  <meta property="og:description" content="A fast, keyboard-first Git client built around reviewing AI coding agents' changes. Free for individuals. Open source." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://strand.danielss.dev" />
+  <meta name="theme-color" content="#171511" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon.png" type="image/png" />
+  <link rel="preload" href="fonts/jetbrains-mono-600-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/geist-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="top">
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="strand-mark" viewBox="0 0 80 80">
+      <path fill="currentColor" d="m70.4 1.3c-2.4 0-4.7 1-6.2 3.7l-26.7 0.1c-5.5 0-9.9 1.1-13.9 3.9-4.4 3-9.6 8.9-10.3 15.8-1.2 10.1 3.5 21.1 14.7 24.6 3.7 1.2 7.6 1.6 13.9 2.8 1.7 0.3 3.4 0.6 4.8 2.1 2.3 2.2 2 5.1-0.2 8.8-2 3.1-5.1 6.4-10.1 6.5h-20.7c-1-2-3.1-3.7-6.1-3.6-3.1 0.1-6.1 2.6-6.1 6.5 0.1 3.4 2.7 6.5 6.2 6.5 2.6 0 5-1.2 6.1-4.1h20.7c5.4 0 9.2-1.8 12.4-5.2 2.9-3.2 5-7.5 4.9-11.6-0.1-4.5-3.5-9.1-8.6-10.4-4-1-9.6-1.7-13.2-2.5-8.1-1.7-13.2-8.7-13.2-17.1 0.1-7.5 5.9-17.1 17.7-17.6h27.8c1.1 2.2 3.1 3.7 6.1 3.7 3.3-0.1 6.1-2.5 6.1-6.2 0.1-3.3-2.5-6.7-6.1-6.7zm-60.7 74c-1.4 0-2.7-1.2-2.7-2.8 0-1.4 1.2-2.9 2.7-2.9 1.6 0 2.9 1.3 2.9 2.9 0 1.4-1.3 2.8-2.9 2.8zm60.6-64.8c-1.5 0.1-3-1-3-2.9 0-1.2 1.1-2.9 3-2.8 1.3 0 2.8 1.1 2.8 2.8 0 1.6-1.5 2.8-2.8 2.9z"/>
+      <path fill="currentColor" d="m53.2 17.9v5.3h-15.3c-4 0-5.8 3-5.8 5.5 0 2.6 2.1 5 4.8 5.9 2.3 0.7 9.3 1.8 13.8 2.8 7.7 1.5 15.9 8.5 16 19.7-0.1 6.6-3 13.4-10.1 19.1h-11.5c6.7-1.8 16-8.6 16.1-18.6 0-6.3-4.1-13.1-11.2-14.6-3.1-0.7-10-1.6-13.6-2.6-4.8-1.2-9.9-4.8-9.9-11.6 0-5 4.1-10.8 11.3-10.8h15.4v-0.1z"/>
+    </symbol>
+  </svg>
+
+  <header class="nav">
+    <div class="wrap nav-row">
+      <a class="brand" href="#top">
+        <svg class="brand-mark" aria-hidden="true"><use href="#strand-mark"/></svg>
+        <span>strand</span>
+      </a>
+      <nav class="nav-links" aria-label="Site">
+        <a href="#loop">Workflow</a>
+        <a href="#speed">Speed</a>
+        <a href="#keyboard">Keyboard</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">GitHub<span class="ext">↗</span></a>
+      </nav>
+      <a class="btn btn-accent btn-sm" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ============================== HERO ============================== -->
+    <section class="hero">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>A Git client for the agent era</p>
+        <h1 data-reveal>Agents write the code.<br /><em>Someone</em> has to review it.</h1>
+        <p class="hero-sub" data-reveal>
+          Strand is a fast, keyboard-first Git client built around one workflow: watch an AI coding
+          agent change your working tree, review every line with whole-file context, and send
+          feedback straight back to the agent. Free for individuals. Open source.
+        </p>
+        <div class="cta-row" data-reveal>
+          <a class="btn btn-accent" href="#download">Download the alpha</a>
+          <a class="btn btn-ghost" href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">View source</a>
+        </div>
+        <p class="cta-note" data-reveal>macOS &amp; Windows today · Linux soon · ~10&nbsp;MB</p>
+
+        <div class="accents" role="group" aria-label="Accent color" data-reveal>
+          <span class="accents-label">Make it yours</span>
+          <button class="dot" data-h="55"  style="--h:55"  aria-label="Amber accent" aria-pressed="true"></button>
+          <button class="dot" data-h="18"  style="--h:18"  aria-label="Rose accent" aria-pressed="false"></button>
+          <button class="dot" data-h="330" style="--h:330" aria-label="Magenta accent" aria-pressed="false"></button>
+          <button class="dot" data-h="290" style="--h:290" aria-label="Violet accent" aria-pressed="false"></button>
+          <button class="dot" data-h="250" style="--h:250" aria-label="Blue accent" aria-pressed="false"></button>
+          <button class="dot" data-h="210" style="--h:210" aria-label="Cyan accent" aria-pressed="false"></button>
+          <button class="dot" data-h="178" style="--h:178" aria-label="Teal accent" aria-pressed="false"></button>
+          <button class="dot" data-h="150" style="--h:150" aria-label="Green accent" aria-pressed="false"></button>
+        </div>
+      </div>
+
+      <!-- Live mock of the app's Review view (chrome metrics + Pierre palette
+           lifted from the real app). j/k steps the queue, space marks reviewed. -->
+      <div class="wrap mock-wrap" data-reveal>
+        <div class="mock" id="mock" data-view="review">
+
+          <div class="m-topbar">
+            <span class="traffic"><i class="tdot c"></i><i class="tdot mi"></i><i class="tdot mx"></i></span>
+            <span class="repo-tab"><i class="repo-dot"></i>acme/api</span>
+            <span class="tab-add">+</span>
+            <span class="m-spacer"></span>
+            <span class="sync-group">
+              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>0</span>
+              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>3</span>
+            </span>
+            <span class="sync-group">
+              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>Stash</span>
+              <span class="sync-btn chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+            </span>
+            <span class="branch-btn"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>feature/auth-retry<svg class="bchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+            <span class="cmd-pill" id="open-palette" role="button" tabindex="0"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Quick Launch<kbd>⌘K</kbd></span>
+          </div>
+
+          <div class="m-body">
+            <aside class="m-side">
+              <div class="m-side-primary">
+                <div class="side-row" data-view="local"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg><span class="label">Local Changes</span><span class="badge">8</span></div>
+                <div class="side-row active" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span class="label">Review</span></div>
+                <div class="side-row" data-view="commits"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M1.05 12H7M17 12h5.95"/></svg><span class="label">All Commits</span></div>
+              </div>
+              <div class="side-tabs">
+                <span class="side-tab on"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Git</span>
+                <span class="side-tab"><svg class="ico" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Files</span>
+              </div>
+              <div class="side-filter"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Filter branches, tags…</div>
+              <div class="side-scroll">
+                <div class="side-section"><i class="chev">▾</i>Worktrees<span class="ss-n">2</span></div>
+                <div class="side-row"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="label">main</span></div>
+                <div class="side-row"><i class="cur">✓</i><span class="label">feature/auth-retry</span></div>
+                <div class="side-section"><i class="chev">▾</i>Branches<span class="ss-n">3</span></div>
+                <div class="side-row"><i class="cur">✓</i><span class="label">feature/auth-retry</span></div>
+                <div class="side-row"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="label">main</span></div>
+                <div class="side-row"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="label">fix/token-cache</span></div>
+                <div class="side-section"><i class="chev">▾</i>Remotes<span class="ss-n">1</span></div>
+                <div class="side-row"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20z"/></svg><span class="label">origin</span></div>
+                <div class="side-section"><i class="chev">▸</i>Tags<span class="ss-n">2</span></div>
+                <div class="side-section"><i class="chev">▸</i>Stashes<span class="ss-n">1</span></div>
+                <div class="side-section"><i class="chev">▸</i>Submodules<span class="ss-n">0</span></div>
+              </div>
+            </aside>
+
+            <div class="m-right">
+              <div class="m-mainheader">
+                <span class="crumb">acme/api<i class="sep">›</i><b class="leaf" id="crumb-leaf">Review</b><span class="dim" id="crumb-note">· 8 unstaged files</span></span>
+                <span class="h-actions">
+                  <span class="icon-btn on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg></span>
+                  <span class="icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></span>
+                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg></span>
+                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg></span>
+                </span>
+              </div>
+              <div class="rv-toolbar only-review">
+                <span class="rv-chip"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Unstaged changes</span>
+                <span class="rv-progress"><span class="rv-bar"><i id="bar-fill"></i></span><span id="bar-text">4/8 reviewed</span></span>
+                <span class="rv-actions">
+                  <span class="h-link danger" id="discard-link">Discard unreviewed (4)</span>
+                  <span class="h-link">Pin baseline at HEAD</span>
+                </span>
+              </div>
+
+              <div class="lc-toolbar only-local">
+                <span class="lc-col">Unstaged<b>8</b></span>
+                <span class="h-link">Stage all</span>
+                <span class="m-spacer"></span>
+                <span class="lc-col dim2">Staged<b>0</b></span>
+              </div>
+
+              <div class="m-panes only-panes">
+                <div class="m-tree" id="mock-tree">
+                  <div class="q-dir"><i class="chev">▾</i><svg class="fold" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>src<i class="dirty"></i></div>
+                  <div class="q-kids">
+                    <div class="q-dir lv1"><i class="chev">▾</i><svg class="fold" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>auth<i class="dirty"></i></div>
+                    <div class="q-kids">
+                      <div class="q-row lv2 sel"  data-path="src/auth/session.ts" data-d="a"><i class="fico ts">TS</i><span class="q-name">session.ts</span><span class="q-note">✎1</span><span class="st m">M</span></div>
+                      <div class="q-row lv2"      data-path="src/auth/retry.ts" data-d="b"><i class="fico ts">TS</i><span class="q-name">retry.ts</span><span class="st a">A</span></div>
+                      <div class="q-row lv2 done" data-path="src/auth/errors.ts" data-d="c"><i class="fico ts">TS</i><span class="q-name">errors.ts</span><span class="q-ok">✓</span><span class="st m">M</span></div>
+                    </div>
+                    <div class="q-dir lv1"><i class="chev">▾</i><svg class="fold" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>api<i class="dirty"></i></div>
+                    <div class="q-kids">
+                      <div class="q-row lv2"      data-path="src/api/client.ts" data-d="c"><i class="fico ts">TS</i><span class="q-name">client.ts</span><span class="st m">M</span></div>
+                      <div class="q-row lv2 done" data-path="src/api/types.ts" data-d="c"><i class="fico ts">TS</i><span class="q-name">types.ts</span><span class="q-ok">✓</span><span class="st m">M</span></div>
+                    </div>
+                  </div>
+                  <div class="q-dir"><i class="chev">▾</i><svg class="fold" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>tests<i class="dirty"></i></div>
+                  <div class="q-kids">
+                    <div class="q-row lv1"      data-path="tests/retry.test.ts" data-d="e"><i class="fico ts">TS</i><span class="q-name">retry.test.ts</span><span class="st a">A</span></div>
+                    <div class="q-row lv1 done" data-path="tests/session.test.ts" data-d="e"><i class="fico ts">TS</i><span class="q-name">session.test.ts</span><span class="q-ok">✓</span><span class="st a">A</span></div>
+                  </div>
+                  <div class="q-dir"><i class="chev">▾</i><svg class="fold" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>docs<i class="dirty"></i></div>
+                  <div class="q-kids">
+                    <div class="q-row lv1 done" data-path="docs/auth.md" data-d="d"><i class="fico md">M↓</i><span class="q-name">auth.md</span><span class="q-ok">✓</span><span class="st m">M</span></div>
+                  </div>
+                </div>
+
+                <div class="m-diff">
+                  <div class="rv-file-head">
+                    <span class="path" id="d-path">src/auth/session.ts</span>
+                    <span class="stat-del" id="d-del">-2</span><span class="stat-add" id="d-add">+6</span>
+                    <span class="h-link-sm only-review-i">Note</span>
+                    <span class="h-link-sm">Stage</span>
+                    <span class="h-link-sm danger">Discard</span>
+                    <span class="rv-check only-review-i" id="mark-btn"><i>✓</i>Mark reviewed</span>
+                  </div>
+                  <div class="d-scroll" id="d-scroll">
+
+                <div class="mockdiff on" data-d="a" data-add="+6" data-del="-2">
+                  <div class="dnotes"><span class="dnote"><b class="ln">✎ L13</b>surface the retry count in the error message<i class="x">×</i></span></div>
+                  <div class="dline ctx"><span class="g">1</span><span class="g">1</span><span class="c"><i class="k">import</i> { getToken, refreshToken } <i class="k">from</i> <i class="str">'./token'</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">2</span><span class="c"><i class="k">import</i> { withRetry } <i class="k">from</i> <i class="str">'./retry'</i></span></div>
+                  <div class="dline ctx"><span class="g">2</span><span class="g">3</span><span class="c"></span></div>
+                  <div class="dline ctx"><span class="g">3</span><span class="g">4</span><span class="c"><i class="k">const</i> SESSION_MAX_AGE = <i class="num">15</i> * <i class="num">60</i> * <i class="num">1000</i></span></div>
+                  <div class="dline ctx"><span class="g">4</span><span class="g">5</span><span class="c"></span></div>
+                  <div class="dline ctx"><span class="g">5</span><span class="g">6</span><span class="c"><i class="k">export</i> <i class="k">async</i> <i class="k">function</i> <i class="fn">getSession</i>(url: <i class="typ">string</i>) {</span></div>
+                  <div class="dline ctx"><span class="g">6</span><span class="g">7</span><span class="c">  <i class="k">const</i> token = <i class="k">await</i> <i class="fn">getToken</i>()</span></div>
+                  <div class="dline ctx"><span class="g">7</span><span class="g">8</span><span class="c">  <i class="k">const</i> headers = { Authorization: <i class="str">`Bearer ${token}`</i> }</span></div>
+                  <div class="dline del"><span class="g">8</span><span class="g"></span><span class="c">  <i class="k">const</i> res = <i class="k">await</i> <i class="fn">fetch</i>(url, { headers })</span></div>
+                  <div class="dline del"><span class="g">9</span><span class="g"></span><span class="c">  <i class="k">if</i> (!res.ok) <i class="k">throw</i> <i class="k">new</i> <i class="typ">Error</i>(<i class="str">'auth failed'</i>)</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">9</span><span class="c">  <i class="k">const</i> res = <i class="k">await</i> <i class="fn">withRetry</i>(() =&gt; <i class="fn">fetch</i>(url, { headers }), {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">10</span><span class="c">    attempts: <i class="num">3</i>,</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">11</span><span class="c">    backoff: <i class="str">'exponential'</i>,</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">12</span><span class="c">  })</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">13</span><span class="c">  <i class="k">if</i> (!res.ok) <i class="k">throw</i> <i class="k">new</i> <i class="typ">AuthError</i>(res.status)</span></div>
+                  <div class="dline ctx"><span class="g">10</span><span class="g">14</span><span class="c">  <i class="k">return</i> res.<i class="fn">json</i>()</span></div>
+                  <div class="dline ctx"><span class="g">11</span><span class="g">15</span><span class="c">}</span></div>
+                </div>
+
+                <div class="mockdiff" data-d="b" data-add="+11" data-del="-0">
+                  <div class="dline add"><span class="g"></span><span class="g">1</span><span class="c"><i class="k">export</i> <i class="k">interface</i> <i class="typ">RetryOptions</i> {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">2</span><span class="c">  attempts: <i class="typ">number</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">3</span><span class="c">  backoff?: <i class="str">'linear'</i> | <i class="str">'exponential'</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">4</span><span class="c">}</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">5</span><span class="c"></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">6</span><span class="c"><i class="k">export</i> <i class="k">async</i> <i class="k">function</i> <i class="fn">withRetry</i>&lt;T&gt;(fn: () =&gt; <i class="typ">Promise</i>&lt;T&gt;, opts: <i class="typ">RetryOptions</i>) {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">7</span><span class="c">  <i class="k">let</i> delay = <i class="num">250</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">8</span><span class="c">  <i class="k">for</i> (<i class="k">let</i> i = <i class="num">0</i>; i &lt; opts.attempts; i++) {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">9</span><span class="c">    <i class="k">try</i> { <i class="k">return</i> <i class="k">await</i> <i class="fn">fn</i>() } <i class="k">catch</i> { <i class="k">await</i> <i class="fn">sleep</i>(delay); delay *= <i class="num">2</i> }</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">10</span><span class="c">  }</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">11</span><span class="c">  <i class="k">throw</i> <i class="k">new</i> <i class="typ">RetryExhausted</i>(opts.attempts)</span></div>
+                </div>
+
+                <div class="mockdiff" data-d="c" data-add="+2" data-del="-2">
+                  <div class="dline ctx"><span class="g">1</span><span class="g">1</span><span class="c"><i class="k">import</i> { request } <i class="k">from</i> <i class="str">'./request'</i></span></div>
+                  <div class="dline ctx"><span class="g">2</span><span class="g">2</span><span class="c"></span></div>
+                  <div class="dline ctx"><span class="g">3</span><span class="g">3</span><span class="c"><i class="k">export</i> <i class="k">class</i> <i class="typ">ApiClient</i> {</span></div>
+                  <div class="dline ctx"><span class="g">4</span><span class="g">4</span><span class="c">  <i class="fn">constructor</i>(<i class="k">private</i> base: <i class="typ">string</i>) {}</span></div>
+                  <div class="dline ctx"><span class="g">5</span><span class="g">5</span><span class="c"></span></div>
+                  <div class="dline del"><span class="g">6</span><span class="g"></span><span class="c">  <i class="fn">get</i>(path: <i class="typ">string</i>) {</span></div>
+                  <div class="dline del"><span class="g">7</span><span class="g"></span><span class="c">    <i class="k">return</i> <i class="fn">request</i>(<i class="k">this</i>.base + path)</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">6</span><span class="c">  <i class="fn">get</i>(path: <i class="typ">string</i>, signal?: <i class="typ">AbortSignal</i>) {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">7</span><span class="c">    <i class="k">return</i> <i class="fn">request</i>(<i class="k">this</i>.base + path, { signal })</span></div>
+                  <div class="dline ctx"><span class="g">8</span><span class="g">8</span><span class="c">  }</span></div>
+                  <div class="dline ctx"><span class="g">9</span><span class="g">9</span><span class="c">}</span></div>
+                </div>
+
+                <div class="mockdiff" data-d="d" data-add="+2" data-del="-1">
+                  <div class="dline ctx"><span class="g">1</span><span class="g">1</span><span class="c"><i class="k"># Auth</i></span></div>
+                  <div class="dline ctx"><span class="g">2</span><span class="g">2</span><span class="c"></span></div>
+                  <div class="dline del"><span class="g">3</span><span class="g"></span><span class="c">Requests fail hard on transient network errors.</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">3</span><span class="c">Requests retry up to 3 times with exponential backoff.</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">4</span><span class="c">See <i class="str">`withRetry`</i> in <i class="str">`src/auth/retry.ts`</i>.</span></div>
+                  <div class="dline ctx"><span class="g">4</span><span class="g">5</span><span class="c"></span></div>
+                  <div class="dline ctx"><span class="g">5</span><span class="g">6</span><span class="c"><i class="k">## Tokens</i></span></div>
+                </div>
+
+                <div class="mockdiff" data-d="e" data-add="+7" data-del="-0">
+                  <div class="dline add"><span class="g"></span><span class="g">1</span><span class="c"><i class="k">import</i> { withRetry } <i class="k">from</i> <i class="str">'../src/auth/retry'</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">2</span><span class="c"></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">3</span><span class="c"><i class="fn">test</i>(<i class="str">'retries transient failures'</i>, <i class="k">async</i> () =&gt; {</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">4</span><span class="c">  <i class="k">let</i> calls = <i class="num">0</i></span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">5</span><span class="c">  <i class="k">const</i> flaky = <i class="k">async</i> () =&gt; { <i class="k">if</i> (++calls &lt; <i class="num">3</i>) <i class="k">throw</i> <i class="k">new</i> <i class="typ">Error</i>(<i class="str">'ECONNRESET'</i>); <i class="k">return</i> <i class="str">'ok'</i> }</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">6</span><span class="c">  <i class="k">await</i> <i class="fn">expect</i>(<i class="fn">withRetry</i>(flaky, { attempts: <i class="num">3</i> })).resolves.<i class="fn">toBe</i>(<i class="str">'ok'</i>)</span></div>
+                  <div class="dline add"><span class="g"></span><span class="g">7</span><span class="c">})</span></div>
+                </div>
+
+                  </div>
+                </div>
+              </div>
+
+              <div class="commits only-commits">
+                <div class="c-row stash">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="22" x2="7" y2="32" stroke="var(--text-dim)" stroke-dasharray="2 3"/><rect x="3" y="12" width="8" height="8" rx="1" transform="rotate(45 7 16)" fill="var(--bg-base)" stroke="var(--text-dim)" stroke-width="1.5"/></svg></span>
+                  <span class="c-msg"><i class="rchip dimc">stash@{0}</i>WIP on feature/auth-retry</span>
+                  <span class="c-author">you</span><span class="c-time">2m</span><span class="c-hash">f31c0aa</span>
+                </div>
+                <div class="c-row sel">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="16" x2="7" y2="32" stroke="var(--b-1)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg"><i class="rchip c1">feature/auth-retry</i><i class="rchip head">HEAD</i><i class="ai-chip">ai</i>feat(auth): retry transient session failures</span>
+                  <span class="c-author">you</span><span class="c-time">5m</span><span class="c-hash">9c4e7a1</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg"><i class="ai-chip">ai</i>test: cover retry exhaustion + backoff timing</span>
+                  <span class="c-author">you</span><span class="c-time">12m</span><span class="c-hash">41d2c9f</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg"><i class="ai-chip">ai</i>feat(auth): add withRetry helper</span>
+                  <span class="c-author">you</span><span class="c-time">18m</span><span class="c-hash">b7a31e2</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><line x1="21" y1="16" x2="21" y2="32" stroke="var(--b-2)"/><circle cx="21" cy="16" r="4" fill="var(--b-2)"/></svg></span>
+                  <span class="c-msg"><i class="rchip c2">main</i>fix: invalidate stale token cache</span>
+                  <span class="c-author">dana</span><span class="c-time">2h</span><span class="c-hash">e91f44a</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><line x1="21" y1="0" x2="21" y2="32" stroke="var(--b-2)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg">chore(deps): bump tokio to 1.44</span>
+                  <span class="c-author">you</span><span class="c-time">3h</span><span class="c-hash">77ab210</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><path d="M21 0 C 21 12, 7 8, 7 16" fill="none" stroke="var(--b-2)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg"><i class="rchip c5">v0.4.0</i>release: v0.4.0</span>
+                  <span class="c-author">you</span><span class="c-time">1d</span><span class="c-hash">3d8e6b4</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="32" stroke="var(--b-1)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg">perf(log): incremental git log walk</span>
+                  <span class="c-author">dana</span><span class="c-time">2d</span><span class="c-hash">5376c21</span>
+                </div>
+                <div class="c-row">
+                  <span class="c-graph"><svg viewBox="0 0 28 32"><line x1="7" y1="0" x2="7" y2="16" stroke="var(--b-1)"/><circle cx="7" cy="16" r="4" fill="var(--b-1)"/></svg></span>
+                  <span class="c-msg">init: scaffold</span>
+                  <span class="c-author">you</span><span class="c-time">3w</span><span class="c-hash">a1b9c04</span>
+                </div>
+              </div>
+
+              <div class="lc-commit-bar only-local">
+                <div class="cb-top">
+                  <span class="subject-row"><input class="subject" type="text" placeholder="Commit subject" aria-label="Commit subject" /></span>
+                  <label class="amend"><input type="checkbox" class="cbx" />Amend</label>
+                  <span class="btn-commit">Commit<kbd>⌘↵</kbd></span>
+                </div>
+                <span class="subject-row desc-row"><input class="subject" type="text" placeholder="Description (optional)" aria-label="Commit description" /></span>
+              </div>
+
+              <div class="m-hints">
+                <span><b data-k="j">↑↓ j k</b> files</span>
+                <span><b data-k="space">space</b> reviewed</span>
+                <span class="only-review-i"><b>m</b> note</span>
+                <span><b>n p</b> blocks</span>
+                <span><b>s</b> stage</span>
+                <span><b>d d</b> discard</span>
+                <span><b>c</b> commit</span>
+                <span><b>⌘F</b> search</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="m-status">
+            <span class="sb branch"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>feature/auth-retry</span>
+            <span class="sb">3↑ 0↓</span>
+            <span class="sb-sep">·</span>
+            <span class="sb"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Up to date</span>
+            <span class="m-spacer"></span>
+            <span class="sb" id="sb-counts">8 modified · 0 staged</span>
+            <span class="sb-sep">·</span>
+            <span class="sb">UTF-8 · LF</span>
+            <span class="sb gear"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          </div>
+        </div>
+        <p class="try-hint">This one works — click around, press <kbd class="kbd kbd-xs" data-k="j">j</kbd> / <kbd class="kbd kbd-xs" data-k="k">k</kbd> to step the queue, <kbd class="kbd kbd-xs" data-k="space">space</kbd> to mark reviewed, <kbd class="kbd kbd-xs">⌘K</kbd> for the palette.</p>
+      </div>
+    </section>
+
+    <!-- ============================== WORKFLOW ============================== -->
+    <section class="section" id="loop">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>01 — The loop</p>
+        <h2 data-reveal>Built around the agent loop,<br />not bolted onto it.</h2>
+        <p class="lead" data-reveal>
+          Claude Code in one pane, Strand in the other. Most Git clients were designed for changes
+          <em>you</em> made and already understand. Strand assumes the opposite: the diff is new to
+          you, it's big, and it keeps moving.
+        </p>
+
+        <ol class="steps">
+          <li class="step" style="--node:var(--b-1)" data-reveal>
+            <h3>Watch it happen</h3>
+            <p>A native file watcher streams every change into Strand as the agent works — no refresh
+               button, no window-focus dance. Running agents in parallel? Worktrees get grouped tabs
+               and an overview dashboard: branch, dirty count, ahead/behind, one click to review.</p>
+            <span class="step-artifact mono">repo://changed · debounced 400ms</span>
+          </li>
+          <li class="step" style="--node:var(--b-2)" data-reveal>
+            <h3>Pin a baseline</h3>
+            <p>“Review everything since this commit.” Committed, staged, and unstaged agent work since
+               the fork point shows as one diff — agents commit as they go, and your review shouldn't
+               care. Per-worktree sessions pin themselves at the merge-base automatically.</p>
+            <span class="step-artifact mono">since 4f2c91d · committed + staged + unstaged</span>
+          </li>
+          <li class="step" style="--node:var(--b-3)" data-reveal>
+            <h3>Review with whole-file context</h3>
+            <p>Every changed file renders in its entirety with the edits inline — you judge changes
+               in context, not through a 3-line keyhole. <span class="mono-inline">j</span>/<span class="mono-inline">k</span>
+               through the queue, <span class="mono-inline">space</span> to mark reviewed. If the agent
+               touches a reviewed file again, it flips back to unreviewed on its own.</p>
+            <span class="step-artifact mono">highlighting off the main thread · 60fps on lockfiles</span>
+          </li>
+          <li class="step" style="--node:var(--b-4)" data-reveal>
+            <h3>Send feedback back</h3>
+            <p>Drop notes on lines as you read. “Copy feedback” builds one markdown prompt — quoted
+               diff excerpts included — ready to paste into the agent. Stage what's good; discard the
+               rest behind an automatic safety stash with a restore window.</p>
+            <span class="step-artifact mono">✎ Copy feedback (3) → paste into your agent</span>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================== ACCOUNTABILITY ============================== -->
+    <section class="section blame" id="blame">
+      <div class="wrap blame-grid">
+        <div>
+          <p class="eyebrow" data-reveal>git blame says it was you</p>
+          <h2 data-reveal>The commits carry<br /><em>your</em> signature.</h2>
+          <p class="lead" data-reveal>
+            The agent writes the code, but it ships under your name — your sign-off, your repo,
+            your pager at 2&nbsp;a.m. A <span class="mono-inline">Co-Authored-By</span> trailer
+            won't save you in the postmortem. Read it before it merges.
+          </p>
+          <p class="blame-kicker" data-reveal>Don't ship shit to prod.</p>
+        </div>
+        <div data-reveal>
+          <div class="commit-card mono">
+            <div class="cc-line dim">commit 9c4e7a14b2f08d3</div>
+            <div class="cc-line author">Author: <b>you &lt;you@acme.dev&gt;</b><span class="cc-tag">← signed by you</span></div>
+            <div class="cc-line dim">Date:   Fri Jun 12 16:32:08 2026</div>
+            <div class="cc-line">&nbsp;</div>
+            <div class="cc-line subject">    feat(auth): retry transient failures <i class="ai-chip">ai</i></div>
+            <div class="cc-line">&nbsp;</div>
+            <div class="cc-line">    <span class="dim">Co-Authored-By: Claude &lt;noreply@anthropic.com&gt;</span><span class="cc-tag dim2">← written by the agent</span></div>
+          </div>
+          <p class="cc-foot">Strand tags agent commits in the graph — the <i class="ai-chip">ai</i> chip — and
+            “select commits since baseline” rounds up the whole session for review.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== SPEED ============================== -->
+    <section class="section section-alt" id="speed">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>02 — Performance</p>
+        <h2 data-reveal>Fast is the feature.</h2>
+        <p class="lead" data-reveal>
+          Strand's prime directive — written into the repo, enforced in review: <em>stable, fast,
+          performance-first</em>. A Rust engine, your OS's native webview, and a standing rule that
+          no change ships if it regresses a hot path.
+        </p>
+        <div class="stats" data-reveal>
+          <div class="stat">
+            <div class="stat-num">47<small>ms</small></div>
+            <div class="stat-label">to open a 100k-commit repo</div>
+            <div class="stat-sub">discover + first 5,000 commits</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">42<small>ms</small></div>
+            <div class="stat-label">status refresh, 10k-file tree</div>
+            <div class="stat-sub">the path every agent edit touches</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">10<small>MB</small></div>
+            <div class="stat-label">installer, whole app</div>
+            <div class="stat-sub">macOS DMG · Windows MSI</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">0<small>&nbsp;</small></div>
+            <div class="stat-label">bytes of Electron</div>
+            <div class="stat-sub">Rust + Tauri + native webview</div>
+          </div>
+        </div>
+        <p class="stats-note" data-reveal>Engine benchmarks on an M1&nbsp;Pro against synthetic 100k-commit / 10k-file fixtures — methodology in <a href="https://github.com/danielss-dev/strand/blob/main/docs/perf-baseline.md" target="_blank" rel="noopener">docs/perf-baseline.md</a>.</p>
+      </div>
+    </section>
+
+    <!-- ============================== KEYBOARD ============================== -->
+    <section class="section" id="keyboard">
+      <div class="wrap kb-grid">
+        <div class="kb-copy">
+          <p class="eyebrow" data-reveal>03 — Keyboard</p>
+          <h2 data-reveal>Hands on home row.</h2>
+          <p class="lead" data-reveal>
+            Keyboard-first, never keyboard-only. Every surface in Strand has a focus model — lists,
+            trees, dialogs, menus — so reviewing an agent session never makes you reach for the
+            mouse. And when you forget a key, <span class="mono-inline">⌘K</span> finds everything:
+            branches, files, commits, actions, fuzzy-matched.
+          </p>
+          <p class="kb-foot" data-reveal>Menus open with <kbd class="kbd kbd-xs">⇧F10</kbd>, dialogs trap focus, screen readers get announced toasts. Accessibility isn't a mode.</p>
+        </div>
+        <ul class="kb-list" data-reveal>
+          <li><span class="keys"><kbd class="kbd" data-k="j">j</kbd><kbd class="kbd" data-k="k">k</kbd></span><span>step through the review queue</span></li>
+          <li><span class="keys"><kbd class="kbd" data-k="space">space</kbd></span><span>mark reviewed — and stay put</span></li>
+          <li><span class="keys"><kbd class="kbd">n</kbd><kbd class="kbd">p</kbd></span><span>jump between change blocks</span></li>
+          <li><span class="keys"><kbd class="kbd">s</kbd></span><span>stage the file</span></li>
+          <li><span class="keys"><kbd class="kbd">d</kbd><kbd class="kbd">d</kbd></span><span>discard — safety-stashed first</span></li>
+          <li><span class="keys"><kbd class="kbd">m</kbd></span><span>leave a note on the line</span></li>
+          <li><span class="keys"><kbd class="kbd">c</kbd></span><span>jump to the commit form</span></li>
+          <li class="kb-hero"><span class="keys"><kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd></span><span>everything else, fuzzy</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============================== FULL CLIENT ============================== -->
+    <section class="section section-alt" id="features">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>04 — Everything else</p>
+        <h2 data-reveal>A whole Git client.<br />Not just a review pane.</h2>
+        <p class="lead" data-reveal>
+          The review workflow sits on top of a complete, fast Git client — so accepting the agent's
+          work and shipping it never leaves the app.
+        </p>
+        <div class="grid" data-reveal>
+          <div class="card" style="--c:var(--b-1)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 14V7a3 3 0 0 1 3-3h8"/><path d="m11 1 3 3-3 3"/><circle cx="3" cy="16" r="1.6"/></svg></div>
+            <h3>Interactive rebase</h3>
+            <p>Reorder, reword, squash, fixup, drop — no editor in the loop. fixup! commits auto-arrange like <span class="mono-inline">--autosquash</span>.</p>
+          </div>
+          <div class="card" style="--c:var(--b-2)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 2v6a4 4 0 0 0 4 4h6"/><path d="M14 2v4a4 4 0 0 1-4 4"/><circle cx="14" cy="15" r="1.6"/></svg></div>
+            <h3>Three-way conflicts</h3>
+            <p>Theirs and ours side-by-side, the assembled result below. Pick per conflict or per side; resolve writes and stages.</p>
+          </div>
+          <div class="card" style="--c:var(--b-3)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 2v14"/><path d="M5 7c0-2 1.5-3 3.5-3H13"/><circle cx="13" cy="4" r="1.6"/><path d="M5 11c0 2 1.5 3 3.5 3H13"/><circle cx="13" cy="14" r="1.6"/></svg></div>
+            <h3>Worktrees, first-class</h3>
+            <p>One worktree per agent, grouped as tabs, with a dashboard and one-click review against the base branch's fork point.</p>
+          </div>
+          <div class="card" style="--c:var(--b-5)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 16 9 9 16 2 9Z"/></svg></div>
+            <h3>Stashes on the graph</h3>
+            <p>Stashes render as nodes hanging off their base commit — apply, pop, or drop them right where they live.</p>
+          </div>
+          <div class="card" style="--c:var(--b-7)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/></svg></div>
+            <h3>Time travel</h3>
+            <p>Blame with commit jump, a reflog browser with recovery actions, file history that follows renames. Nothing is ever lost.</p>
+          </div>
+          <div class="card" style="--c:var(--b-4)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="14" height="12" rx="2"/><circle cx="6.5" cy="7.5" r="1.4"/><path d="m2 13 4-4 3 3 3.5-3.5L16 12"/></svg></div>
+            <h3>Sees more than text</h3>
+            <p>Before/after image diffs, markdown and SVG previews that re-render live as the agent edits the docs.</p>
+          </div>
+          <div class="card" style="--c:var(--b-6)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 2a10 10 0 0 1 0 14M9 2a10 10 0 0 0 0 14M2.5 6.5h13M2.5 11.5h13"/></svg></div>
+            <h3>Light, dark, yours</h3>
+            <p>Light and dark themes, eight accent hues, three densities — one OKLCH hue rotation recolors the whole app live.</p>
+          </div>
+          <div class="card" style="--c:var(--accent)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m3 5 4 4-4 4"/><path d="M9 13h6"/></svg></div>
+            <h3>Honest git</h3>
+            <p>Network and signing shell out to <em>your</em> git — credentials, SSH agent, GPG, hooks, and LFS work on day one. No re-implementation surprises.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== PRICING ============================== -->
+    <section class="section" id="pricing">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>05 — Pricing</p>
+        <h2 data-reveal>Free for people.<br />Honor system for companies.</h2>
+        <p class="lead" data-reveal>
+          No feature gates. No license keys. No nag dialogs. The same full app for everyone — the
+          only question is whether a company is making money with it.
+        </p>
+        <div class="price-grid" data-reveal>
+          <div class="price-card price-free">
+            <p class="price-tag">For individuals</p>
+            <div class="price-num">$0</div>
+            <p class="price-line">Free. Forever. All of it.</p>
+            <ul>
+              <li>Every feature — nothing held back</li>
+              <li>No account, no trial clock</li>
+              <li>No telemetry unless you opt in</li>
+              <li>Open source under AGPL-3.0</li>
+            </ul>
+            <a class="btn btn-accent btn-wide" href="#download">Download</a>
+          </div>
+          <div class="price-card price-co">
+            <p class="price-tag">For companies</p>
+            <div class="price-num">Pay once</div>
+            <p class="price-line">A one-time commercial license.</p>
+            <ul>
+              <li>Same app, same features — it's support, not an upsell</li>
+              <li>Honor system: no keys, no activation, no phoning home</li>
+              <li>A commercial, non-AGPL grant for your lawyers</li>
+              <li>Keeps the project funded and independent</li>
+            </ul>
+            <a class="btn btn-ghost btn-wide" href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">Get a commercial license</a>
+          </div>
+        </div>
+        <p class="license-strip mono" data-reveal>AGPL-3.0 · dual-licensed for commercial use · the no-nag promise is enforceable: it's in the source</p>
+      </div>
+    </section>
+
+    <!-- ============================== DOWNLOAD ============================== -->
+    <section class="section cta-band" id="download">
+      <div class="wrap">
+        <svg class="cta-mark" aria-hidden="true" data-reveal><use href="#strand-mark"/></svg>
+        <h2 data-reveal>Your agent is already typing.</h2>
+        <p class="lead lead-center" data-reveal>Be ready to review it. Download the alpha — about 10&nbsp;MB, opens your biggest repo in well under a second.</p>
+        <div class="cta-row cta-row-center" data-reveal>
+          <a class="btn btn-accent" href="https://github.com/danielss-dev/strand/releases" target="_blank" rel="noopener"> Download for macOS</a>
+          <a class="btn btn-ghost" href="https://github.com/danielss-dev/strand/releases" target="_blank" rel="noopener">⊞ Download for Windows</a>
+          <span class="btn btn-soon" aria-disabled="true">🐧 Linux — soon</span>
+        </div>
+        <p class="cta-note" data-reveal>Alpha builds · auto-updates once you're in · free for individuals</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-row">
+      <div class="footer-brand">
+        <a class="brand" href="#top">
+          <svg class="brand-mark" aria-hidden="true"><use href="#strand-mark"/></svg>
+          <span>strand</span>
+        </a>
+        <p>The Git client for the agent era.<br />Stable, fast, performance-first.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#download">Download</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/danielss-dev/strand/blob/main/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a>
+      </div>
+      <div class="footer-col">
+        <h4>Project</h4>
+        <a href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/danielss-dev/strand/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.en.html" target="_blank" rel="noopener">AGPL-3.0</a>
+      </div>
+    </div>
+    <div class="wrap footer-fine">
+      <span>© 2026 Daniel Schwarz</span>
+      <span class="mono">rust + tauri · no electron was harmed</span>
+    </div>
+  </footer>
+
+  <!-- Command palette — the app's ⌘K, repurposed to drive this page. -->
+  <div class="palette-veil" id="palette-veil" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="palette-input">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="palette-q" type="text" placeholder="Type a command or search…" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="palette-list" id="palette-list" role="listbox"></div>
+      <div class="palette-foot">
+        <span class="grp"><kbd>↑↓</kbd> navigate</span>
+        <span class="grp"><kbd>↵</kbd> select</span>
+        <span class="grp"><kbd>esc</kbd> close</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
