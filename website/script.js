@@ -29,6 +29,46 @@
   }
   $$('.dot').forEach((dot) => dot.addEventListener('click', () => setAccent(dot.dataset.h)));
 
+  /* ── Nav scrollspy ── */
+  const navById = {};
+  $$('.nav-links a[href^="#"]').forEach((a) => {
+    const sec = $(a.getAttribute('href'));
+    if (sec) navById[sec.id] = a;
+  });
+  const spy = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        Object.values(navById).forEach((a) => a.classList.remove('active'));
+        navById[e.target.id].classList.add('active');
+      }
+    },
+    { rootMargin: '-25% 0px -65% 0px' }
+  );
+  Object.keys(navById).forEach((id) => spy.observe(document.getElementById(id)));
+
+  /* ── Stat count-up on reveal ── */
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cio = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        cio.unobserve(e.target);
+        const end = +e.target.dataset.count;
+        if (reduceMotion) continue; // markup already holds the final number
+        const t0 = performance.now();
+        const tick = (t) => {
+          const p = Math.min(1, (t - t0) / 900);
+          e.target.textContent = Math.round(end * (1 - Math.pow(1 - p, 3)));
+          if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+    },
+    { threshold: 0.4 }
+  );
+  $$('.stat-num [data-count]').forEach((n) => cio.observe(n));
+
   /* ══ App mock ══ */
   const mock = $('#mock');
   if (!mock) return;

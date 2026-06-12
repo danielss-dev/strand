@@ -350,14 +350,29 @@
 
     <!-- ============================== WORKFLOW ============================== -->
     <section class="section" id="loop">
-      <div class="wrap">
-        <p class="eyebrow" data-reveal>01 — The loop</p>
-        <h2 data-reveal>Built around the agent loop,<br />not bolted onto it.</h2>
-        <p class="lead" data-reveal>
-          Claude Code in one pane, Strand in the other. Most Git clients were designed for changes
-          <em>you</em> made and already understand. Strand assumes the opposite: the diff is new to
-          you, it's big, and it keeps moving.
-        </p>
+      <div class="wrap loop-grid">
+        <div class="loop-copy">
+          <p class="eyebrow" data-reveal>01 — The loop</p>
+          <h2 data-reveal>Built around the agent loop, not bolted onto it.</h2>
+          <p class="lead" data-reveal>
+            Claude Code in one pane, Strand in the other. Most Git clients were designed for changes
+            <em>you</em> made and already understand. Strand assumes the opposite: the diff is new to
+            you, it's big, and it keeps moving.
+          </p>
+          <div class="term mono" data-reveal aria-hidden="true">
+            <div class="term-bar"><i></i><i></i><i></i><span>the other pane — your agent</span></div>
+            <div class="term-body">
+              <div class="t-line t-prompt"><b>›</b> add retry with backoff to transient auth failures</div>
+              <div class="t-line t-dim">⏺ reading src/auth/session.ts…</div>
+              <div class="t-line"><b class="t-add">+</b> created src/auth/retry.ts</div>
+              <div class="t-line"><b class="t-mod">~</b> edited src/auth/session.ts</div>
+              <div class="t-line"><b class="t-add">+</b> created tests/retry.test.ts</div>
+              <div class="t-line"><b class="t-mod">~</b> updated docs/auth.md</div>
+              <div class="t-line t-dim">8 files changed · Strand is already showing the diff →</div>
+              <div class="t-line t-prompt"><b>›</b> <span class="t-paste">review feedback (3 notes) — pasted from Strand</span><i class="t-cursor"></i></div>
+            </div>
+          </div>
+        </div>
 
         <ol class="steps">
           <li class="step" style="--node:var(--b-1)" data-reveal>
@@ -434,17 +449,17 @@
         </p>
         <div class="stats" data-reveal>
           <div class="stat">
-            <div class="stat-num">47<small>ms</small></div>
+            <div class="stat-num"><span data-count="47">47</span><small>ms</small></div>
             <div class="stat-label">to open a 100k-commit repo</div>
             <div class="stat-sub">discover + first 5,000 commits</div>
           </div>
           <div class="stat">
-            <div class="stat-num">42<small>ms</small></div>
+            <div class="stat-num"><span data-count="42">42</span><small>ms</small></div>
             <div class="stat-label">status refresh, 10k-file tree</div>
             <div class="stat-sub">the path every agent edit touches</div>
           </div>
           <div class="stat">
-            <div class="stat-num">10<small>MB</small></div>
+            <div class="stat-num"><span data-count="10">10</span><small>MB</small></div>
             <div class="stat-label">installer, whole app</div>
             <div class="stat-sub">macOS DMG · Windows MSI</div>
           </div>

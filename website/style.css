@@ -141,6 +141,12 @@ p { margin: 0; }
   transition: color 0.15s;
 }
 .nav-links a:hover { color: var(--text); }
+.nav-links a { position: relative; }
+.nav-links a.active { color: var(--text); }
+.nav-links a.active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -20px;
+  height: 2px; border-radius: 1px; background: var(--accent);
+}
 .ext { font-size: 10px; margin-left: 3px; opacity: 0.7; }
 
 /* ─── Hero ─── */
@@ -156,6 +162,15 @@ p { margin: 0; }
   font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
   letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
   margin-bottom: 22px;
+}
+.hero::after {
+  /* faint commit-grid texture behind the headline */
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(color-mix(in oklab, var(--accent) 28%, var(--border-strong)) 1px, transparent 1.5px);
+  background-size: 30px 30px;
+  -webkit-mask-image: radial-gradient(ellipse 54% 46% at 50% 32%, black, transparent 72%);
+  mask-image: radial-gradient(ellipse 54% 46% at 50% 32%, black, transparent 72%);
+  opacity: 0.4;
 }
 .hero h1 {
   font-size: clamp(30px, 4.4vw, 62px);
@@ -565,11 +580,52 @@ p { margin: 0; }
 .lead em { font-style: normal; color: var(--accent); }
 .lead-center { margin-left: auto; margin-right: auto; }
 
+/* ─── Workflow: copy + agent terminal | steps ─── */
+.loop-grid {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 80px; align-items: start;
+}
+.loop-copy { position: sticky; top: 96px; }
+.loop-copy h2 { font-size: clamp(28px, 3vw, 38px); }
+
+/* the agent's pane — a faux terminal that mirrors the demo story */
+.term {
+  margin-top: 10px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  overflow: hidden; font-size: 12px;
+}
+.term-bar {
+  display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+  background: var(--bg-elev); border-bottom: 1px solid var(--border);
+}
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+.term-bar span { margin-left: 6px; font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.04em; }
+.term-body { padding: 14px 16px 16px; line-height: 2.1; }
+.t-line { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-line b { font-weight: 600; }
+.t-prompt b { color: var(--accent); }
+.t-dim { color: var(--text-dim); }
+.t-add { color: var(--add); }
+.t-mod { color: var(--mod); }
+.t-paste {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent) inset;
+  border-radius: 4px; padding: 1px 6px; color: var(--text);
+}
+.t-cursor {
+  display: inline-block; width: 7px; height: 14px; margin-left: 6px; vertical-align: -2px;
+  background: var(--accent); animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .t-cursor { animation: none; } }
+
 /* ─── Workflow steps ─── */
 .steps {
   list-style: none; margin: 64px 0 0; padding: 0;
   display: flex; flex-direction: column; gap: 56px;
 }
+.loop-grid .steps { margin-top: 6px; }
 .step { position: relative; padding-left: 64px; max-width: 640px; }
 .step::before {
   /* commit node */
@@ -669,7 +725,11 @@ p { margin: 0; }
   border-radius: var(--r-xl); padding: 22px 20px;
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
-.card:hover { transform: translateY(-3px); border-color: var(--border-strong); box-shadow: var(--shadow-2); }
+.card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--c, var(--accent)) 38%, var(--border));
+  box-shadow: var(--shadow-2), 0 8px 40px color-mix(in oklab, var(--c, var(--accent)) 8%, transparent);
+}
 .card-icon {
   width: 34px; height: 34px; border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
@@ -706,6 +766,12 @@ p { margin: 0; }
 
 /* ─── CTA band ─── */
 .cta-band { text-align: center; padding-bottom: 150px; }
+.cta-band::before {
+  content: ''; position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%);
+  width: 780px; height: 460px; pointer-events: none;
+  background: radial-gradient(ellipse at center, var(--accent-glow), transparent 65%);
+  filter: blur(44px); opacity: 0.9;
+}
 .cta-mark { width: 44px; height: 44px; color: var(--accent); margin-bottom: 28px; }
 .cta-band h2 { font-size: clamp(30px, 4.6vw, 50px); margin-bottom: 18px; }
 .cta-band .lead { margin-bottom: 34px; }
@@ -786,6 +852,8 @@ p { margin: 0; }
 /* ─── Responsive ─── */
 @media (max-width: 1000px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
+  .loop-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .loop-copy { position: static; }
   .kb-grid { grid-template-columns: 1fr; gap: 40px; }
   .blame-grid { grid-template-columns: 1fr; gap: 44px; }
   .stats { grid-template-columns: repeat(2, 1fr); gap: 36px 0; }
