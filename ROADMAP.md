@@ -729,6 +729,14 @@ space interaction, accent switch). **Still pending:** hosting, real release
 links, og:image, and the updater manifest on the same domain (tracked in
 TASKS → Pre-launch checks).
 
+**Open-sourced (2026-06-12):** The repo is public —
+`github.com/danielss-dev/strand`, AGPL-3.0 (`LICENSE` at root) with the
+honor-system commercial offer described in `COMMERCIAL.md`. The website's
+GitHub/releases/licensing/roadmap links now point at the real repo (the
+interim `strand-releases` placeholder was never created, so every link 404'd
+until this). Still open: CLA workflow before accepting outside contributions,
+and a first GitHub release so the download buttons resolve.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

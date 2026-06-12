@@ -14,8 +14,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   commit-graph rendering can proceed.
 - ☑ **PRD Q2: OSS vs source-available.** AGPL-3.0 for the public source
   + dual-license commercial SKU as the honor-system path for companies.
-  Still needs: LICENSE (AGPL-3.0), COMMERCIAL.md, and a CLA before the
-  repo opens to outside contributions.
+  LICENSE (AGPL-3.0) and COMMERCIAL.md landed 2026-06-12; still needs a
+  CLA before the repo opens to outside contributions.
 - ☑ **PRD Q5: Pricing model.** Free for all individuals; one-time
   commercial license available for companies that want to support the
   project. No feature gating, no nag dialogs.
@@ -980,8 +980,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Narrow `os:default` capability to the specific perms used (re-verify the
   mac/win platform toggle after).
 - ◐ License decided (AGPL-3.0 + dual-license commercial). Still need:
-  - ☐ `LICENSE` file (AGPL-3.0 text) at repo root
-  - ☐ `COMMERCIAL.md` describing the commercial-license offer
+  - ☑ `LICENSE` file (AGPL-3.0 text) at repo root (added 2026-06-12)
+  - ☑ `COMMERCIAL.md` describing the commercial-license offer (added
+    2026-06-12; linked from the website pricing card + footer)
   - ☐ CLA workflow before opening to outside contributions
 
 ---
@@ -990,16 +991,17 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 
 - ☐ Trademark search: USPTO, EUIPO, WIPO
 - ☐ Reserve `dev.danielss.strand` IDs in macOS App Store + Microsoft Store
-- ☐ Create GitHub org / repo + decide visibility
+- ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
+  made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
 - ◐ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
   pricing section. **Deployed on Railway** — project `landings`, service
-  `strand-landing`, live at strand-landing-production.up.railway.app; the
-  custom domain is registered and waits on the Porkbun CNAME flip (`strand` →
-  `flzah3oz.up.railway.app`). Still pending: that DNS flip, real download
-  links once releases exist, og:image, and serving the updater `latest.json`.)
+  `strand-landing`, live at https://strand.danielss.dev (custom domain DNS
+  flipped). Site links point at the public `danielss-dev/strand` repo as of
+  2026-06-12. Still pending: a first GitHub release so the download buttons
+  resolve, og:image, and serving the updater `latest.json`.)
 
 ---
 
