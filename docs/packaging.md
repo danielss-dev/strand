@@ -22,7 +22,7 @@ tree, recent messages, multi-select) is code-complete and verified.
   APPLE_SIGNING_IDENTITY="Developer ID Application: Daniel Schwarz Campos (57CBXS5P39)" \
     pnpm tauri build --target aarch64-apple-darwin
   ```
-  produces `target/aarch64-apple-darwin/release/bundle/dmg/Strand_0.0.1_aarch64.dmg`
+  produces `target/aarch64-apple-darwin/release/bundle/dmg/Strand_<version>_aarch64.dmg`
   (~10 MB). The DMG and the embedded `Strand.app` are both signed (chain to
   Apple Root CA); the app is `valid on disk` and `satisfies its Designated
   Requirement`. Tauri deletes the staged `.app` after bundling — the signed

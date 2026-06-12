@@ -948,6 +948,14 @@ unknown-revspec cases), `clippy`, `tsc`, `vitest` (29 pass), and `vite build`.
 
 **Second pass, ten features (2026-06-11):** git reset (soft/mixed/hard + safety snapshot) with reflog recovery + undo-last-commit, remote add/rename/set-url/remove + branch rename, signed commits via shell-out when `commit.gpgSign=true`, gitignore quick-add, fixup! creation + autosquash in the rebase editor, copy diff as patch/Markdown, in-diff ⌘F search, image diff previews, and review annotations with feedback export — see `docs/improvements.md` § "Second pass" and TASKS for the per-item detail.
 
+**Version bumped to 0.5.0 (2026-06-12):** First bump off the scaffold's
+`0.0.1`. The codebase matches the 0.5 milestone (with chunks of 1.0 already
+landed), and no public artifact ever shipped, so the version jumps straight to
+the milestone it reflects. Updated in lockstep: workspace `Cargo.toml`,
+`tauri.conf.json` (what the auto-updater compares), `ui/package.json`, root
+`package.json`, `Cargo.lock`. Build artifacts from here on are named
+`Strand_0.5.0_*`.
+
 ---
 
 ## 1.1+ — Post-1.0
