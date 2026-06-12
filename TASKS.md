@@ -1000,3 +1000,112 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   custom domain is registered and waits on the Porkbun CNAME flip (`strand` →
   `flzah3oz.up.railway.app`). Still pending: that DNS flip, real download
   links once releases exist, og:image, and serving the updater `latest.json`.)
+
+---
+
+## Remote repos over SSH (post-1.0 — designed 2026-06-12)
+
+Open a repo on a remote machine over SSH and use Strand locally against
+it. Design doc: [`docs/remote-ssh.md`](./docs/remote-ssh.md) — read it
+before starting any row here; it records the decided architecture
+(headless `strandd` daemon over JSON-RPC/stdio, system `ssh` for
+auth/transport) and the rejected alternatives. **Do not start before 1.0
+ships** (ROADMAP §1.1+).
+
+### Pre-1.0 guardrails (active now — the only rows not gated on 1.0)
+
+- ☐ Keep every engine call flowing through `tauri.ts` → `commands.rs`;
+  no side-channel filesystem access from the frontend
+- ☐ Treat repo `path` as an opaque key in UI code — never parse or
+  assume local-FS semantics on it
+- ☐ Keep local-OS-touching ops (dialogs, shell-outs, reveal) in
+  separated modules (`external.rs` pattern) so capability flags can
+  fence them later
+
+### Engine & daemon
+
+- ☐ P2 Extract command handlers from `strand-tauri` into a
+  transport-agnostic `strand-ops` crate (shared by Tauri shell + daemon)
+- ☐ P2 `strandd` headless binary: `strand-ops` behind JSON-RPC over
+  stdio; versioned handshake with capability flags; strict serde
+  (`deny_unknown_fields`), per-frame size limits
+- ☐ P2 Remote watcher: `watch.rs` runs inside `strandd`, events stream
+  back as notifications, remote-side debounce/coalescing
+- ☐ P2 Static builds of `strandd`: linux x86_64/aarch64 (musl) + darwin;
+  SHA-256 manifest baked into the signed app bundle
+
+### Transport & lifecycle
+
+- ☐ P2 Transport router in `strand-tauri`: plain path → in-proc (zero
+  overhead, no hot-path regression); `ssh://host/path` → host's stdio
+  channel
+- ☐ P2 SSH connection manager: spawn system `ssh` (inherits
+  `~/.ssh/config`, known_hosts, agent, ProxyJump — Strand never touches
+  credentials, never auto-accepts host keys); keepalives; one multiplexed
+  connection per host
+- ☐ P2 Bootstrap: probe/upload `strandd` over SFTP, verify SHA-256
+  before exec, re-bootstrap on version mismatch
+- ☐ P2 Reconnect: exponential backoff; reads retry transparently,
+  writes never auto-retry (re-query state, user confirms); per-op-class
+  timeouts; kill + respawn a hung daemon
+- ☐ P2 Connection health UI: topbar indicator, disconnected state for
+  remote tabs, manual "reconnect now"; local repos unaffected by a dead
+  link
+
+### UI surface
+
+- ☐ P2 Connect-to-host flow (host list from `~/.ssh/config` aliases) +
+  remote repo open; `ssh://` paths in recents/tabs
+- ☐ P2 Remote directory browser (native dialogs can't browse remote FS)
+- ☐ P2 Capability-flag gating: hide `external.rs` ops for remote repos
+  (v1); evaluate "open terminal" → `ssh -t` later
+
+---
+
+## `strand` CLI (post-1.0 — designed 2026-06-12)
+
+Headless companion binary: `strand <path>` opens the repo in the app,
+data subcommands (`diff`, `log`, `status`, `review`, …) print
+terminal-rendered or `--json` output for AI agents. **Read-only by
+design** — no push/pull/fetch, no writes (decided 2026-06-12).
+Design doc: [`docs/strand-cli.md`](./docs/strand-cli.md). **Same binary
+as the remote-SSH daemon** (`--stdio` mode) — shares the `strand-ops`
+extraction above as prerequisite. **Do not start before 1.0 ships**
+(ROADMAP §1.1+).
+
+### Pre-1.0 guardrails (active now)
+
+- ☐ Treat IPC serde types (`FileDiff`, `Commit`, `Snapshot`, …) as a
+  public contract in waiting — additive evolution preferred; renames
+  become breaking changes once `--json` ships
+
+### Binary & commands
+
+- ☐ P2 `strand-headless` crate: clap front-end over `strand-ops` with
+  `cli` + `--stdio` (daemon) entry modes; one static artifact, one hash
+  manifest shared with remote-SSH bootstrap
+- ☐ P2 Read commands: `status` (+ `--snapshot`), `diff` (`--staged`,
+  `--commit`, `--between`, `--since`, `--full-context` via the `*_full`
+  review ops), `log`, `blame`, `conflicts`
+- ☐ P2 Terminal diff renderer: Rust-native — `syntect` highlighting +
+  truecolor ANSI through a pager (the `delta` model), theme ported from
+  `tokens.css`. Decided: no JS runtime in the binary; OpenTUI/Pierre
+  rejected for in-process use (see `docs/strand-cli.md` open questions)
+- ☐ P2 `review` command: one payload (full-context diffs since base +
+  log + status) for agent/reviewer consumption
+- ☐ P2 Machine output contract: `--json` reusing IPC serde types,
+  `schemaVersion` envelope, `strand schema` dump, NDJSON progress
+  streaming, JSON errors on stderr + stable exit codes, no pager/locale
+  variance
+
+### App integration
+
+- ☐ P2 Wire `tauri-plugin-single-instance` into `strand-tauri` (second
+  launch forwards argv to the running instance) — prerequisite for
+  `strand <path>`
+- ☐ P2 `strand <path>`: forward to running app or launch it with the
+  path (macOS `open -a Strand --args`; exec elsewhere)
+- ☐ P2 Settings action: install `strand` shim/symlink on PATH (the VS
+  Code `code`-command pattern); Windows `strand.cmd` variant
+- ☐ P2 Ship the binary inside the app bundle + standalone per-release
+  download for headless boxes

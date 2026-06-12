@@ -944,10 +944,21 @@ unknown-revspec cases), `clippy`, `tsc`, `vitest` (29 pass), and `vite build`.
 
 ## 1.1+ — Post-1.0
 
+- **Remote repos over SSH** — open a repo on a remote machine (agent
+  devbox, VPS) and use Strand locally against it. Headless `strandd`
+  daemon over JSON-RPC/stdio, system `ssh` for auth/transport (Strand
+  never touches credentials). Designed 2026-06-12: `docs/remote-ssh.md`
+  + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
+  everything through the `commands.rs` seam) are active now.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
 - Git LFS (status badges + progress)
 - GPG / SSH commit signing UI
-- CLI companion binary (`strand`) over a local daemon
+- **CLI companion binary (`strand`)** — `strand <path>` opens the repo
+  in the app; `strand diff/log/status/review --json` gives AI agents
+  typed, full-context data the `git` porcelain can't (same serde types
+  as the IPC layer). Read-only by design — no push/pull, no writes.
+  Same static binary as the remote-SSH `strandd` (`--stdio` mode). Designed 2026-06-12:
+  `docs/strand-cli.md` + task breakdown in TASKS.md.
 - Plugin / extension surface
 - AI features (commit message suggestions, conflict hints) — PRD Q3
 - Built-in PR review surface for GitHub / GitLab — PRD Q4
