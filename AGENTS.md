@@ -141,9 +141,9 @@ After finishing any non-trivial task, before declaring "done":
    active phase when something substantial lands — it's the changelog
    for the milestone view.
 3. **Update `README.md`** when user-visible behavior changed. The
-   "What's wired up" / "What's still stubbed" sections should reflect
-   reality. New top-level files/folders → update the layout block. Keep
-   the README scannable — it isn't a changelog.
+   "Features" / "Status" sections should reflect reality. New top-level
+   files/folders → update the layout block. Keep the README scannable —
+   it isn't a changelog.
 4. **Memory.** Save durable things (conventions, "why we did it this
    way", policy decisions) to the agent memory system. Don't write
    transient task state there.

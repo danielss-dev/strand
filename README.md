@@ -1,185 +1,115 @@
 # Strand
 
-> A fast, friendly, cross-platform Git client.
+> A fast, keyboard-first Git client — built for reviewing what AI coding
+> agents do to your code.
 
-Tauri 2 + Rust + React. See [`PRD.md`](./PRD.md) for the product spec.
+[![CI](https://github.com/danielss-dev/strand/actions/workflows/ci.yml/badge.svg)](https://github.com/danielss-dev/strand/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 
-Keyboard-first: almost every action is operable from the keyboard alone —
-never keyboard-only, the mouse stays first-class.
+**[Website](https://strand.danielss.dev)** ·
+**[Download](https://github.com/danielss-dev/strand/releases/latest)** ·
+**[Roadmap](./ROADMAP.md)** ·
+**[Commercial license](./COMMERCIAL.md)**
 
-## Layout
+Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
+a dedicated surface for reviewing an agent's changes: whole-file-context
+diffs, a review queue, and worktree-aware baselines that include what the
+agent already staged or committed. It's also a complete everyday Git client
+— staging, commit graph, interactive rebase, stashes, tags — and it's
+keyboard-first, but never keyboard-only: almost every action works from the
+keyboard alone, and the mouse stays first-class.
 
-```
-strand/
-├── crates/
-│   ├── strand-core/        # Git engine (gix for reads, git2 for writes)
-│   └── strand-tauri/       # Tauri 2 app shell + IPC commands
-├── ui/                     # Vite + React + TypeScript frontend
-│   ├── src/
-│   │   ├── components/     # Topbar, Sidebar, StatusBar, Icon
-│   │   ├── views/          # LocalChanges, Commits, FileView, Palette
-│   │   ├── stores/         # Zustand: settings, repo
-│   │   ├── lib/            # Tauri command wrappers, shared types
-│   │   └── styles/         # tokens, base, chrome, features
-│   └── index.html
-├── website/                # static landing page for strand.danielss.dev (no build step)
-├── Cargo.toml              # workspace
-├── package.json            # pnpm workspace root
-├── pnpm-workspace.yaml
-├── LICENSE                 # AGPL-3.0
-├── COMMERCIAL.md           # the commercial dual-license offer
-└── AGENTS.md               # working agreement for AI/dev agents (CLAUDE.md → here)
-```
+## Features
 
-## Prerequisites
+- **Review view (⌘4)** — read an agent's changes as whole files with the
+  edits inline, not isolated hunks. A file-tree queue tracks what you've
+  reviewed, and a pinnable baseline captures everything since a commit —
+  including work the agent already staged or committed.
+- **Worktrees (⌘5)** — an overview of every worktree with its branch,
+  ahead/behind, dirty count, and one-click Review pinned where the branch
+  diverged from main — built for reviewing agents' per-feature worktrees.
+  Worktree tabs of one repo group together in the tab strip.
+- **Everyday Git** — staging with per-change-block stage / discard / unstage
+  inline in the diff, fetch / pull / push with streaming progress, branches,
+  tags, stashes, remotes, cherry-pick, revert, merge, and a fully
+  keyboard-operable interactive rebase (reorder, reword, squash, fixup,
+  drop) with conflict-pause Continue / Abort.
+- **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
+  resizable commit detail panel, in-graph search by message / author / hash,
+  and a reflog browser for recovering commits orphaned by a reset or rebase.
+- **Command palette (⌘K)** — fuzzy search across commands, branches, tags,
+  files, commits, and recent repos, with scope filtering and full keyboard +
+  screen-reader operability.
+- **File view** — highlighted source, `--follow` history, compare any two
+  revisions, blame, and rendered previews for markdown and SVG.
+- **Comfortable to live in** — multi-repo tabs persisted across launches,
+  native macOS menubar, open in your editor or terminal, settings (⌘,) for
+  appearance / diff / git / integrations, in-app updates.
+- **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
+  writes through git2 and your system `git`. Performance targets live in
+  [`PRD.md`](./PRD.md) §8 and are measured in
+  [`docs/perf-baseline.md`](./docs/perf-baseline.md).
+
+## Status
+
+Strand is in **alpha**. It opens and works on large real-world repos daily,
+but expect rough edges. The bigger known gaps: the file-tree sidebar,
+full-history content search (`-G`/`-S`), stash-to-branch, and
+interactive-rebase `edit` (pause to amend). Strand is currently dark-only;
+theming arrives with the public beta. See [`ROADMAP.md`](./ROADMAP.md) for
+the milestone view and [`TASKS.md`](./TASKS.md) for the granular list.
+
+## Install
+
+Download the latest release for macOS (universal), Windows, or Linux
+(`.deb` / `.rpm` / `.AppImage`) from
+[GitHub Releases](https://github.com/danielss-dev/strand/releases/latest).
+
+## Building from source
+
+Prerequisites:
 
 - **Rust** stable (`rustup default stable`)
 - **Node** ≥ 20 and **pnpm** ≥ 9
 - Platform deps for Tauri 2: see <https://v2.tauri.app/start/prerequisites/>
 
-## First-time setup
-
 ```sh
 pnpm install
-```
-
-Generate the icon set once (any 1024×1024 PNG works for now):
-
-```sh
-pnpm tauri icon path/to/source.png
-```
-
-## Develop
-
-```sh
 pnpm tauri:dev     # full app: Vite + Rust + native shell
 pnpm dev           # frontend only, in a regular browser
-pnpm site          # landing page (website/) on localhost:4321
+pnpm tauri:build   # installers in target/release/bundle
 ```
 
 The frontend detects when it isn't running inside Tauri and disables IPC
 calls, so `pnpm dev` is useful for UI work without a Rust build.
 
-## Build
+## Project layout
 
-```sh
-pnpm tauri:build   # signed installers in target/release/bundle
+```
+strand/
+├── crates/
+│   ├── strand-core/    # Git engine (gix for reads, git2 for writes)
+│   └── strand-tauri/   # Tauri 2 app shell + IPC commands
+├── ui/                 # Vite + React + TypeScript frontend
+├── website/            # landing page for strand.danielss.dev (no build step)
+├── docs/               # design notes, perf baseline, packaging
+├── PRD.md              # product spec
+├── ROADMAP.md          # milestones and status
+├── TASKS.md            # granular work list
+└── AGENTS.md           # working agreement for AI/dev agents
 ```
 
-## What's wired up
+## Contributing
 
-- Window chrome, sidebar, status bar
-- Command palette (⌘K): fuzzy search across commands, branches, tags, files,
-  commits, and recent repos — grouped under section headers with scope pills
-  (Tab cycles them), match highlighting, and full keyboard + screen-reader
-  operability. Branch entries check out (remote branches checkout-and-track),
-  tags/commits reveal in the graph, files open in the file view.
-- Native macOS menubar: Strand (Settings, Check for Updates), File (Open ⌘O,
-  Clone), Edit, View (palette + views), Repository (Sync/Pull/Push, Open in
-  Editor/Terminal), Window — wired to the same actions as the in-app UI
-- Settings (⌘,): a five-section dialog — Appearance (theme, accent, density,
-  fonts), Diff (default layout, diff font, +/− indicators, line numbers, word
-  highlight, live preview), Git (global user.name/email, default clone/open
-  folder), Integrations (external editor + terminal: presets or a custom
-  command template), Updates (check / download / restart, auto-check +
-  auto-install). All persisted; fully keyboard-operable
-- Open in editor / terminal: header buttons + ⌘K actions launch the configured
-  apps on the current file (with line) or repo folder
-- Open-repo flow with multi-repo tabs, recent repos, and palette nav
-- Clone / open progress: a persistent bottom popup shows a loading bar until the
-  op completes — a determinate bar with an ETA while cloning (then it rolls into
-  "Opening…"), and an indeterminate bar with elapsed time when opening a large
-  repo so it never looks hung
-- Staging: diff view + stage/unstage + commit loop with resizable panes;
-  per-change-block Stage / Discard (and Unstage on the staged side)
-  inline in the diff via Pierre annotations; stacked / split diff layout
-  toggle remembered per repo
-- Review (⌘4): a dedicated surface for reading an AI agent's changes —
-  diffs show the **whole file** with the edits inline (not isolated hunks),
-  the queue is a file tree with reviewed ✓ / "changed" badges, and a
-  pinnable baseline tracks everything since a commit, including what the
-  agent already staged or committed. Arrows / j k walk the queue, Space
-  toggles a file's reviewed mark; marks flip back if the agent touches the
-  file again
-- File view (from the Files sidebar tab or ⌘K): Content (highlighted source),
-  History (`--follow` revision list + per-commit diff), Compare (any two
-  revisions), Blame (virtualized, click to jump to the commit) — and a
-  Preview tab for renderable text files: SVG drawn as an image, markdown
-  rendered (links open the linked repo file in the file view or the browser
-  for external URLs; repo-relative images resolve off the worktree).
-  Whether such files open on Preview or raw Source is a setting
-  (Settings → Appearance → "Open files on"; default Preview)
-- Commit graph: SVG lanes + branch/tag chips inline; click a commit to
-  open a resizable detail panel with the commit's metadata, file list,
-  and per-file diff; keyboard focus starts on the current commit, ↑/↓ moves
-  through commits, Enter opens details, and Esc closes them. Stashes appear
-  inline as a neutral diamond node hanging off their base commit (with a
-  `stash@{n}` chip) — right-click to Apply / Pop / Drop
-- Commit search: search the loaded graph by message, author, or hash (field
-  picker in the header). Matches are highlighted in place — lanes stay intact —
-  and ‹/› (or ↵ / ⇧↵) step through them with an N/M counter; `/` focuses the
-  box, ⌘K → "Search commits…" jumps to it, Esc clears
-- Reflog browser: a second lens on history, reached from a `Graph | Reflog`
-  toggle in the All Commits header (also ⌘3 / ⌘K). Lists HEAD's movements
-  newest-first — `HEAD@{n}`, an op badge (commit / checkout / reset / merge / …),
-  message, time, and short OID; ↑/↓ + Enter or a click jumps to the entry's
-  commit in the graph, so commits orphaned by a reset/rebase/amend are recoverable
-- Worktrees: a Worktrees overview (⌘5 / ⌘K) lists every worktree with its branch,
-  ahead/behind, dirty-file count, and last commit, with one-click Review — opens
-  the worktree as a tab on the Review view with the baseline pinned where the
-  branch diverged from the main worktree's branch (merge-base), so the session
-  shows everything the agent did, committed or not — built for reviewing AI
-  agents' per-feature worktrees. A sidebar Worktrees section and a create dialog
-  (new/existing branch + default sibling path) round it out, and worktree tabs of
-  one repo group together in the tab strip with a shared color
-- History ops: cherry-pick, revert, merge (ff / no-ff / squash), and rebase —
-  plus **interactive rebase**: a keyboard-operable sequence editor (reorder with
-  ⌥↑/⌥↓, set each commit to pick / reword / squash / fixup / drop) launched from
-  a commit's right-click menu or detail panel ("Rebase from here…"), the
-  current-branch sidebar menu, or ⌘K. When an op pauses on a conflict, a banner
-  offers Abort and Continue (resolve in Local Changes, then Continue — the way a
-  paused rebase actually advances)
-- Network: fetch / pull / push with ahead/behind counts
-- Refs: branches (with upstream + ahead/behind), remotes, remote-tracking
-  branches, and tags — feeds the topbar branch picker
-- Branch writes: checkout a local branch, create a branch via an inline
-  field with prefix autocomplete (auto-tracks when started from a
-  remote), delete a branch via the sidebar — wired into the topbar
-  picker and sidebar Git tab
-- Stashes: list / apply / pop / drop in the sidebar Stashes section, plus
-  create from the topbar stash menu or a Save-snapshot dialog (message +
-  include-untracked + keep-changes-in-working-dir), reachable via the
-  sidebar `+`, the topbar menu, and ⌘K
-- Tags: create (lightweight or annotated) from the sidebar Tags `+`, ⌘K, or a
-  commit's detail panel; click a tag to check out its commit; right-click for
-  push to the default remote, delete on the remote (grayed out for tags the
-  remote doesn't have), or delete locally (each delete behind a confirm step);
-  ⌘K "Push all tags"
-- Sidebar row actions live in a right-click menu (branches, remotes, tags,
-  stashes) — keyboard-openable via the Menu key / Shift+F10; the primary
-  action also runs on click
-- Tauri IPC: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
-  `repo_refs`, `repo_diff_commit`, plus the staging, network, branch,
-  and tag commands above
-- SQLite plugin (recent repos + settings schema)
-- Updater plugin + in-app update UI (Settings → Updates; the update endpoint
-  itself isn't live yet, so checks soft-fail until it is)
+Issues and pull requests are welcome. Before diving in:
 
-## What's still stubbed
-
-- File tree — `@pierre/trees` integration pending
-- Commit graph: full-history and `-G`/`-S` content search (in-graph
-  message/author/hash search is wired; see above), and Files-tab re-rooting to
-  the selected commit
-- Mutating commands wrap `git2` and shell out as PRD §4 describes (history ops
-  are wired — see above). Still pending: stash branch-from, interactive-rebase
-  `edit` (pause-to-amend), and preserving merges across a rebase.
-
-## Design source
-
-The visual design originated as an HTML/CSS/JS prototype from Claude Design
-(see `Strand.zip`). Tokens and component-level CSS in `ui/src/styles/`
-are ported verbatim — when you tweak the visual identity, tweak it there.
+- [`PRD.md`](./PRD.md) explains what Strand is and the bar it has to clear —
+  performance targets in §8 are not aspirational.
+- [`AGENTS.md`](./AGENTS.md) is the working agreement. It's written for AI
+  agents but applies to humans too: surgical diffs, simplicity first, and
+  every new surface keyboard-operable.
+- The visual identity lives in `ui/src/styles/` as design tokens — no
+  hardcoded colors.
 
 ## License
 
@@ -192,4 +122,5 @@ Strand is dual-licensed:
 
 The app is fully functional for everyone — no feature gating, no nag dialogs,
 no trial period. The commercial license is honor-system: free for individuals,
-appreciated for company use. See `COMMERCIAL.md` for details.
+appreciated for company use. See [`COMMERCIAL.md`](./COMMERCIAL.md) for
+details.
