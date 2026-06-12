@@ -26,6 +26,8 @@ strand/
 ├── Cargo.toml              # workspace
 ├── package.json            # pnpm workspace root
 ├── pnpm-workspace.yaml
+├── LICENSE                 # AGPL-3.0
+├── COMMERCIAL.md           # the commercial dual-license offer
 └── AGENTS.md               # working agreement for AI/dev agents (CLAUDE.md → here)
 ```
 
