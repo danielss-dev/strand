@@ -4,7 +4,8 @@ Static site for `strand.danielss.dev`. No build step.
 
 **Deployed on Railway**: project `landings` → service `strand-landing`
 (`railway up` from this folder redeploys; `npm start` is what Railway runs —
-`serve . -l $PORT`). Test URL:
+`serve . -l $PORT`; `npm run build` is a no-op that exists only because the
+Railway image build wants a build command). Test URL:
 <https://strand-landing-production.up.railway.app>. The custom domain
 `strand.danielss.dev` is registered on the service and needs the Porkbun CNAME
 for `strand` to point at `flzah3oz.up.railway.app` (it currently points at
