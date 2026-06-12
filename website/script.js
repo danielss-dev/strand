@@ -29,6 +29,23 @@
   }
   $$('.dot').forEach((dot) => dot.addEventListener('click', () => setAccent(dot.dataset.h)));
 
+  /* ── Download buttons → direct latest-release assets ── */
+  /* Asset names embed the version (Strand_0.5.0_universal.dmg), so resolve
+   * them through the API; on any failure the hrefs keep pointing at the
+   * releases page. */
+  const dlBtns = $$('[data-artifact]');
+  if (dlBtns.length) {
+    fetch('https://api.github.com/repos/danielss-dev/strand/releases/latest')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((rel) => {
+        for (const btn of dlBtns) {
+          const asset = (rel.assets || []).find((a) => a.name.endsWith(btn.dataset.artifact));
+          if (asset) btn.href = asset.browser_download_url;
+        }
+      })
+      .catch(() => {});
+  }
+
   /* ── Nav scrollspy ── */
   const navById = {};
   $$('.nav-links a[href^="#"]').forEach((a) => {
