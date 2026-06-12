@@ -45,6 +45,13 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
+    # crates.io downloads flaked twice on 2026-06-12 (curl 16 "HTTP2 framing
+    # layer" on Linux, curl 18 "partial file" on macOS). More retries + no
+    # HTTP/2 multiplexing makes the registry fetch survivable.
+    env:
+      CARGO_NET_RETRY: 10
+      CARGO_HTTP_MULTIPLEXING: 'false'
+
     steps:
       - uses: actions/checkout@v4
 
