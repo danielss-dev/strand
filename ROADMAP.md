@@ -80,13 +80,13 @@ system ported verbatim. No real feature surface yet.
     primitives rather than pulling in `@pierre/trees` — no new dependency,
     matches the Branches/Local-Changes trees. (FileView's Content/History/
     Compare/Blame tabs are still placeholders — that's 0.5 work.)
-- ◐ **macOS packaging** — *signed DMG now builds on a Mac with the
-  Developer-ID cert in the Keychain; notarization + alpha distribution still
-  pending. See `docs/packaging.md` for the exact runbook.*
+- ☑ **macOS packaging** — *release CI builds, signs, and notarizes the
+  universal DMG (v0.5.0, 2026-06-12). See `docs/packaging.md` for the runbook.*
   - ☑ Real app icon (squircle on the Apple grid — commit `aefc189`)
-  - ◐ Apple Developer ID signing + notarization (signing done; notarization
-    pending Apple credentials)
-  - ☐ First DMG ships to a small alpha group
+  - ☑ Apple Developer ID signing + notarization (release CI signs + notarizes
+    `Strand_0.5.0_universal.dmg`)
+  - ☑ First DMG ships — superseded by the public v0.5.0 GitHub Release
+    (2026-06-12)
 
 **Blockers cleared (2026-05-25):** PRD Q1 (Pierre libraries approved),
 Q2 (license: AGPL-3.0 + dual-license commercial SKU), Q5 (pricing:
@@ -256,11 +256,13 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Windows 11 build — MSI builds on a Windows 11 box (`Strand_0.0.1_x64_en-US.msi`,
   10.5 MB) and the installed app's runtime chrome (titlebar, theme, window controls)
   validated on Windows 11 (see 2026-06-07 below)
-- ☐ Linux build (deb / rpm / AppImage)
+- ☑ Linux build (deb / rpm / AppImage) — built + published by release CI
+  (v0.5.0, 2026-06-12)
 - ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
   wired, `createUpdaterArtifacts` on); in-app UI done (Settings → Updates:
-  check / download / restart + auto-check & auto-install prefs); real endpoint
-  still pending
+  check / download / restart + auto-check & auto-install prefs); release CI
+  publishes a signed all-platform `latest.json` per release (since v0.5.0);
+  real endpoint still pending (`strand.danielss.dev/updates` isn't live)
 - ☑ **Settings view** — multi-section dialog (Appearance / Diff / Git /
   Integrations / Updates): density + fonts exposed, diff appearance (layout
   default, font, indicators, line numbers, word highlight), global git
@@ -759,7 +761,8 @@ and a first GitHub release so the download buttons resolve.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☐ Performance pass on 100k-commit repos
-- ☐ Signed installers on all three platforms
+- ◐ Signed installers on all three platforms (macOS signed + notarized via
+  release CI since v0.5.0; Windows EV cert + Linux signing still open)
 
 **File view + submodules (2026-06-06):** First 1.0 vertical — the four-tab file
 view (PRD §6.5) and submodules went from placeholders to wired features.
@@ -955,6 +958,18 @@ the milestone it reflects. Updated in lockstep: workspace `Cargo.toml`,
 `tauri.conf.json` (what the auto-updater compares), `ui/package.json`, root
 `package.json`, `Cargo.lock`. Build artifacts from here on are named
 `Strand_0.5.0_*`.
+
+**v0.5.0 released (2026-06-12):** First public release — installers for all
+three platforms on the [GitHub Release](https://github.com/danielss-dev/strand/releases/tag/v0.5.0):
+signed + notarized universal DMG, Windows MSI, Linux deb/rpm/AppImage, plus a
+signed `latest.json` covering every platform/arch key. Getting the pipeline
+green took three fixes: pnpm/action-setup vs `packageManager` version conflict
+(`22ee44e`), rebuilt `APPLE_CERTIFICATE`/`APPLE_CERTIFICATE_PASSWORD` secrets
+(the 2026-06-01 originals failed PKCS12 MAC verification on import; re-exported
+from the Keychain and repackaged Developer-ID-only), and
+`CARGO_NET_RETRY`/`CARGO_HTTP_MULTIPLEXING` hardening after two crates.io
+download flakes (`8a53544`). Auto-update remains endpoint-blocked: the manifest
+ships, the host doesn't.
 
 ---
 

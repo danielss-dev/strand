@@ -28,12 +28,15 @@ tree, recent messages, multi-select) is code-complete and verified.
   Requirement`. Tauri deletes the staged `.app` after bundling — the signed
   copy lives inside the DMG.
 
-## Still blocked here
+## Local-build caveats
 
-- **No notarization credentials.** `spctl` reports "Unnotarized Developer ID"
-  until the DMG is notarized + stapled. That needs `APPLE_ID` /
-  `APPLE_PASSWORD` / `APPLE_TEAM_ID` (or an App Store Connect API key), none
-  of which are in the environment — see §3.
+Releases go through CI (§ "Release CI" below), which signs, notarizes, and
+builds universal — validated end-to-end on v0.5.0 (2026-06-12). Building
+locally instead:
+
+- **No notarization credentials in the local env.** `spctl` reports
+  "Unnotarized Developer ID" until the DMG is notarized + stapled. CI gets
+  `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` from repo secrets — see §3.
 - **Apple-Silicon-only.** Only `aarch64-apple-darwin` is installed; the
   universal target needs `rustup target add x86_64-apple-darwin` — see §3.
 
@@ -164,6 +167,14 @@ Keychain) to a `.p12`, then base64 it:
 # Export… → .p12 (set a password = APPLE_CERTIFICATE_PASSWORD)
 base64 -i DeveloperID.p12 | pbcopy   # paste as APPLE_CERTIFICATE
 ```
+
+The current secrets were rebuilt 2026-06-12 (the originals failed PKCS12 MAC
+verification on `security import`): `security export -t identities -f pkcs12`,
+then filtered to the Developer-ID identity only and repackaged with
+`openssl pkcs12 -export -legacy` (legacy ciphers — macOS `security import`
+rejects OpenSSL 3 defaults). Verify a candidate p12 locally before setting the
+secret: import it into a throwaway keychain
+(`security create-keychain` → `security import` → `security find-identity`).
 
 ### Updater key (already generated)
 

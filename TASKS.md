@@ -262,7 +262,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ◐ Real updater pubkey + endpoint. Pubkey done: minisign keypair generated
   (key ID `84FCBFD2A981CE5D`, private key at `~/.strand/`, off-repo) and wired
   into `tauri.conf.json` → `plugins.updater.pubkey`; `bundle.createUpdaterArtifacts`
-  enabled so signed `latest.json` + bundles are produced. **Still pending:** the
+  enabled so signed `latest.json` + bundles are produced (and published per
+  release by CI since v0.5.0, all platforms). **Still pending:** the
   `endpoints` host `strand.danielss.dev` isn't live, so no updates are served yet.
   (2026-06-07: on the Windows box the `TAURI_SIGNING_PRIVATE_KEY` in env does
   **not** match this pubkey — Tauri warns the generated `.sig` won't validate at
@@ -848,19 +849,19 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 - ☑ Replace placeholder icon with a real 1024×1024 source (squircle on the
   Apple grid; commit `aefc189`)
-- ◐ Apple Developer ID + notarization pipeline. Signing works:
+- ☑ Apple Developer ID + notarization pipeline. Local signing:
   `pnpm tauri build --target aarch64-apple-darwin` + `APPLE_SIGNING_IDENTITY`
-  yields a Developer-ID-signed `Strand_0.0.1_aarch64.dmg`. Notarization +
-  stapling still pending Apple credentials (`APPLE_ID` / `APPLE_PASSWORD` /
-  `APPLE_TEAM_ID`); universal build pending `x86_64-apple-darwin` target.
+  yields a Developer-ID-signed DMG. Release CI signs **and notarizes** the
+  universal build (`Strand_0.5.0_universal.dmg` on the v0.5.0 GitHub Release,
+  2026-06-12).
 - ☐ Windows EV cert (~$300/yr — budget per PRD §12)
 - ☐ Linux sigstore signing for AppImage
-- ◐ CI: GitHub Actions matrix for mac/win/linux × x86_64/aarch64
+- ☑ CI: GitHub Actions matrix for mac/win/linux × x86_64/aarch64
   (`.github/workflows/release.yml` — tag-driven `tauri-action` matrix:
   macOS universal, Windows `.msi`, Linux `.deb`/`.rpm`/`.AppImage` → draft
   GitHub Release. Secrets documented in `docs/packaging.md` § "Release CI".
-  Not yet run end-to-end — needs the Apple signing secrets added + a first
-  `v*` tag to validate.)
+  Validated end-to-end on `v0.5.0`, 2026-06-12: all three platforms green,
+  installers + signed `latest.json` published.)
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed
