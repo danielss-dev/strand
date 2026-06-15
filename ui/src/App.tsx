@@ -18,6 +18,16 @@ import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
+import {
+  eventToBinding,
+  formatBinding,
+  isPlainKey,
+  MENU_COMMANDS,
+  REPO_COMMANDS,
+  resolveBindings,
+  toMudaAccelerator,
+  type CommandId,
+} from './lib/keys';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
@@ -102,6 +112,7 @@ export function App() {
   const monoFont = useSettings((s) => s.monoFont);
   const diffFont = useSettings((s) => s.diffFont);
   const accent = useSettings((s) => s.accent);
+  const keybindings = useSettings((s) => s.keybindings);
   // Theme preference → resolved theme; `useTheme` applies `data-theme` on
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
   const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
@@ -446,6 +457,55 @@ export function App() {
     }
   }, [pushRepo, onNetProgress, showToast, flashDone, pushing, nextOpId]);
 
+  // Keyboard refresh — same snapshot-based refresh the header button runs
+  // (meta/refs/tree/submodules ride along with status), guarded on an open repo.
+  const onRefresh = useCallback(() => {
+    if (!useRepo.getState().activePath) return;
+    void refreshLocalChanges();
+    void refreshLog();
+  }, [refreshLocalChanges, refreshLog]);
+
+  // Resolved keybindings: defaults from the registry overlaid with the user's
+  // overrides. Drives the window keydown handler, the palette shortcut chips,
+  // and the native-menu accelerators.
+  const keyMap = useMemo(() => resolveBindings(keybindings), [keybindings]);
+  /** Formatted binding for a command (e.g. "⌘P" / "Ctrl+P"), or undefined. */
+  const keyHint = useCallback(
+    (id: CommandId) => formatBinding(keyMap.byCommand.get(id) ?? null, platform) || undefined,
+    [keyMap, platform],
+  );
+
+  // One handler per global command. Rebuilt each render so it closes over the
+  // latest callbacks; the keydown effect reads it through a ref (below) so it
+  // never has to re-subscribe.
+  const commandHandlers = useMemo<Record<CommandId, () => void>>(() => ({
+    'palette': () => setPaletteOpen((o) => !o),
+    'open-repo': () => { void openViaDialog(); },
+    'clone-repo': () => setCloneOpen(true),
+    'settings': () => openSettingsAt('appearance'),
+    'view-local': () => { setView('local'); selectFile(null); },
+    'view-commits': () => { setView('commits'); selectFile(null); },
+    'view-reflog': () => { setView('reflog'); selectFile(null); },
+    'view-review': () => { setView('review'); selectFile(null); },
+    'view-worktrees': () => { setView('worktrees'); selectFile(null); },
+    'theme-toggle': () => {
+      const next = cycleTheme();
+      showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
+    },
+    'fetch': () => { void onSync(); },
+    'pull': () => { void onPull(); },
+    'push': () => { void onPush(); },
+    'sync': () => { void onSync(); },
+    'open-editor': openInEditor,
+    'open-terminal': openInTerminal,
+    'refresh': onRefresh,
+  }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
+       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh]);
+  const commandHandlersRef = useRef(commandHandlers);
+  commandHandlersRef.current = commandHandlers;
+  const keyMapRef = useRef(keyMap);
+  keyMapRef.current = keyMap;
+
   // Load recents + restore the tabs the user had open last time. Both run
   // once on first mount; restoreSession is idempotent so StrictMode's
   // double-invoke is harmless.
@@ -481,9 +541,13 @@ export function App() {
   const hasRepo = Boolean(meta);
   useEffect(() => {
     if (!isTauri() || osType() !== 'macos') return;
-    installAppMenu(() => menuHandlersRef.current, hasRepo)
+    // Accelerators track the resolved bindings, so a remap in Settings updates
+    // the menu too (this effect re-runs when `keyMap` changes).
+    const accel = (id: CommandId) =>
+      toMudaAccelerator(keyMap.byCommand.get(id) ?? null) ?? undefined;
+    installAppMenu(() => menuHandlersRef.current, hasRepo, accel)
       .catch((e) => console.warn('app menu install failed', e));
-  }, [hasRepo]);
+  }, [hasRepo, keyMap]);
 
   // Density, platform, and font tokens live on the document root so
   // portal-rendered popovers (which attach to document.body, outside .os-bg)
@@ -577,50 +641,38 @@ export function App() {
     };
   }, [refreshLocalChanges, refreshLog]);
 
-  // Global ⌘K / Ctrl+K
+  // Global keyboard dispatch — every binding is resolved from the registry +
+  // user overrides (see `lib/keys.ts`). Attached once; the latest bindings and
+  // handlers are read through refs so settings changes never re-subscribe.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      // Combos registered as native-menu accelerators (macOS): AppKit fires
-      // the menu action before the webview sees the key, so skip them here —
-      // belt-and-braces against double-handling either way.
-      if (appMenuInstalled() && mod) {
-        const k = e.key.toLowerCase();
-        if (
-          k === 'k' || k === 'o' || k === ',' || ['1', '2', '3', '4', '5'].includes(e.key) ||
-          (e.shiftKey && (k === 't' || k === 's'))
-        ) return;
+      // Esc always closes the palette (the palette's own handler covers the
+      // case where it has focus; this is the global fallback).
+      if (e.key === 'Escape') { setPaletteOpen(false); return; }
+      const binding = eventToBinding(e);
+      if (!binding) return;
+      const cmd = keyMapRef.current.byBinding.get(binding);
+      if (!cmd) return;
+      // On macOS the native menu owns its accelerators — AppKit fires the menu
+      // action before the webview sees the key — so defer to it for menu-owned,
+      // representable combos (no menu installed elsewhere ⇒ JS handles them).
+      if (appMenuInstalled() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)) return;
+      // A plain (modifier-less) binding must not steal keystrokes from a text
+      // field; mod-combos are safe to handle globally.
+      if (isPlainKey(binding)) {
+        const t = e.target as HTMLElement | null;
+        if (t?.closest('input, textarea, [contenteditable="true"], [role="combobox"]')) return;
       }
-      if (mod && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      } else if (mod && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        void openViaDialog();
-      } else if (mod && e.key === '1') {
-        e.preventDefault(); setView('local'); selectFile(null);
-      } else if (mod && e.key === '2') {
-        e.preventDefault(); setView('commits'); selectFile(null);
-      } else if (mod && e.key === '3') {
-        e.preventDefault(); setView('reflog'); selectFile(null);
-      } else if (mod && e.key === '4') {
-        e.preventDefault(); setView('review'); selectFile(null);
-      } else if (mod && e.key === '5') {
-        e.preventDefault(); setView('worktrees'); selectFile(null);
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
-        e.preventDefault();
-        const next = cycleTheme();
-        showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
-      } else if (mod && e.key === ',') {
-        e.preventDefault();
-        openSettingsAt('appearance');
-      } else if (e.key === 'Escape') {
-        setPaletteOpen(false);
-      }
+      // Repo-scoped commands no-op without a repository open.
+      if (REPO_COMMANDS.has(cmd) && !useRepo.getState().meta) return;
+      const handler = commandHandlersRef.current[cmd];
+      if (!handler) return;
+      e.preventDefault();
+      handler();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setView, selectFile, openViaDialog, cycleTheme, showToast, openSettingsAt]);
+  }, []);
 
   // The working-tree file list is otherwise lazy (only the Files sidebar tab
   // loads it). Pull it when the palette opens so file search has data; keyed on
@@ -765,23 +817,23 @@ export function App() {
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
-      { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: '⌘O', run: () => { void openViaDialog(); } },
-      { id: 'clone',   label: 'Clone repository…', group: 'Actions', run: () => setCloneOpen(true) },
+      { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
+      { id: 'clone',   label: 'Clone repository…', group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
     ];
     // Repo-scoped actions only make sense — and only succeed — with a repo
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
-        { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: '⌘1', run: () => { setView('local'); selectFile(null); } },
-        { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: '⌘2', run: () => { setView('commits'); selectFile(null); } },
-        { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: '⌘3', keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
-        { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: '⌘4', keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
-        { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: '⌘5', keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
+        { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
+        { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
+        { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
+        { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
+        { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         // Opens the ⌘F bar in whichever diff view is showing; other views
         // route to Local Changes first (the signal is consumed on mount).
-        { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: '⌘F', keywords: 'find in diff grep text content search', run: () => {
+        { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: formatBinding('Mod+F', platform), keywords: 'find in diff grep text content search', run: () => {
           const v = useRepo.getState().view;
           if (v !== 'local' && v !== 'review') setView('local');
           requestDiffSearch();
@@ -832,8 +884,8 @@ export function App() {
         ...(baseline && baselineDiffCount > 0
           ? [{ id: 'copy-review-diff', label: `Copy review diff (since ${baseline.short})`, group: 'Actions', keywords: 'patch clipboard export review baseline session', run: () => copyDiffs(useRepo.getState().baselineDiffs, false) } satisfies PaletteAction]
           : []),
-        { id: 'open-editor', label: 'Open in editor', group: 'Actions', keywords: 'external code reveal vscode editor', run: openInEditor },
-        { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', keywords: 'shell console cwd iterm terminal', run: openInTerminal },
+        { id: 'open-editor', label: 'Open in editor', group: 'Actions', shortcut: keyHint('open-editor'), keywords: 'external code reveal vscode editor', run: openInEditor },
+        { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', shortcut: keyHint('open-terminal'), keywords: 'shell console cwd iterm terminal', run: openInTerminal },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
         { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
@@ -857,7 +909,10 @@ export function App() {
             }
           })();
         } },
-        { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: '⌘⇧S', run: onSync },
+        { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onSync },
+        { id: 'pull',    label: 'Pull', group: 'Actions', shortcut: keyHint('pull'), keywords: 'pull merge remote download integrate', run: onPull },
+        { id: 'push',    label: 'Push', group: 'Actions', shortcut: keyHint('push'), keywords: 'push upload publish remote', run: onPush },
+        { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: keyHint('sync'), run: onSync },
         // Gated on a non-root HEAD commit — HEAD~1 must exist to reset to.
         ...(meta.head_oid && commits.find((c) => c.hash === meta.head_oid)?.parents.length
           ? [{
@@ -882,10 +937,11 @@ export function App() {
       );
     }
     base.push(
-      { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: '⌘,', run: () => openSettingsAt('appearance') },
+      { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
+      { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
-      { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: '⌘⇧T', run: () => setTheme('system') },
+      { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: keyHint('theme-toggle'), run: () => setTheme('system') },
     );
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
@@ -915,13 +971,13 @@ export function App() {
       run: () => { void openByPath(r.path); },
     }));
     return [...base, ...repoActions, ...recentActions];
-  }, [setView, selectFile, onSync, openViaDialog, openByPath, setTheme, recents,
+  }, [setView, selectFile, onSync, onPull, onPush, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
-      reviewNoteCount, clearReviewNotes]);
+      reviewNoteCount, clearReviewNotes, keyHint, platform]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],

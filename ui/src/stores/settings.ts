@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import type { KeyOverrides } from '../lib/keys';
+
 /** A concrete theme that maps to a `[data-theme]` token set in tokens.css. */
 export type Theme = 'dark' | 'light';
 /** The user's stored preference: a concrete theme, or `system` to follow the
@@ -94,7 +96,16 @@ export interface SettingsState {
   terminalTool: ExternalTool;
   updateAutoCheck: boolean;
   updateAutoInstall: boolean;
+  /** Per-command keyboard-shortcut overrides. A missing key uses the command's
+   * default from `lib/keys.ts`; a `null` value means the command is unbound.
+   * Resolved by `resolveBindings`. */
+  keybindings: KeyOverrides;
   set: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
+  /** Set (or, with `null`, unbind / with `undefined`, reset to default) the
+   * binding for one command. */
+  setKeybinding: (id: keyof KeyOverrides, binding: string | null | undefined) => void;
+  /** Clear every override, restoring all commands to their defaults. */
+  resetKeybindings: () => void;
 }
 
 export const FONTS = {
@@ -160,7 +171,18 @@ export const useSettings = create<SettingsState>()(
       terminalTool: null,
       updateAutoCheck: true,
       updateAutoInstall: false,
+      keybindings: {},
       set: (key, value) => set({ [key]: value } as Partial<SettingsState>),
+      setKeybinding: (id, binding) =>
+        set((s) => {
+          const next = { ...s.keybindings };
+          // `undefined` removes the override (back to default); anything else
+          // (a binding string or `null` to unbind) is stored explicitly.
+          if (binding === undefined) delete next[id];
+          else next[id] = binding;
+          return { keybindings: next };
+        }),
+      resetKeybindings: () => set({ keybindings: {} }),
     }),
     {
       name: 'strand.settings',

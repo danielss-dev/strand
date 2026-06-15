@@ -22,7 +22,8 @@ import { gitErrorHint } from '../lib/tauri';
 import type { FileDiff } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import { HunkAnnotatedDiff, stepChangeBlock } from './LocalChanges';
+import { treeFileOrder } from '../lib/treeOrder';
+import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
 
 /**
  * The Review view — the surface for reviewing an AI agent's changes, built
@@ -163,14 +164,18 @@ export function Review() {
     return () => window.clearTimeout(t);
   }, [workerPool, pool, selected]);
 
+  // Walk the queue in the same top-to-bottom order the tree *shows* (folders
+  // first, natural sort) — not the diff list's flat path order, which made j/k
+  // appear to jump into nested folders out of sequence. Matches the ↑/↓ arrows.
+  const navOrder = useMemo(() => treeFileOrder(pool.map((d) => d.path)), [pool]);
   const step = useCallback(
     (dir: 1 | -1) => {
-      if (pool.length === 0) return;
-      const idx = pool.findIndex((d) => d.path === selected);
-      const next = pool[Math.max(0, Math.min(pool.length - 1, idx === -1 ? 0 : idx + dir))];
-      if (next) selectReviewFile(next.path);
+      if (navOrder.length === 0) return;
+      const idx = selected ? navOrder.indexOf(selected) : -1;
+      const next = navOrder[Math.max(0, Math.min(navOrder.length - 1, idx === -1 ? 0 : idx + dir))];
+      if (next) selectReviewFile(next);
     },
-    [pool, selected, selectReviewFile],
+    [navOrder, selected, selectReviewFile],
   );
 
   /** Toggle the current file's reviewed mark — and stay on the file, so the
@@ -431,6 +436,12 @@ export function Review() {
         case 'p':
           e.preventDefault();
           stepChangeBlock(e.key === 'n' ? 1 : -1, '.rv-diff-scroll');
+          break;
+        // Shift+J / Shift+K scroll the diff pane (j/k stay queue nav).
+        case 'J':
+        case 'K':
+          e.preventDefault();
+          scrollDiff(e.key === 'J' ? 1 : -1, '.rv-diff-scroll');
           break;
         case ' ':
           e.preventDefault();

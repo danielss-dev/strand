@@ -676,10 +676,21 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   - ☑ Extension point for future custom themes — `THEME_OPTIONS` registry +
     `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
     + add-an-entry, no other code changes.
-- ☐ **Keyboard operability pass.** Almost every action reachable from the
+- ◐ **Keyboard operability pass.** Almost every action reachable from the
   keyboard, not just the palette (PRD §6.7, `docs/learnings.md`). Per-surface
   focus models + palette entries; audit for mouse-only actions. Drag-and-drop
   (folder open, tab / file reorder) may stay pointer-only.
+  - ☑ Configurable global-shortcut registry (`ui/src/lib/keys.ts` `COMMANDS` +
+    `resolveBindings`/`eventToBinding`/`formatBinding`/`toMudaAccelerator`,
+    tested in `keys.test.ts`). Window keydown (`App.tsx`), native menu
+    (`lib/menu.ts`), palette chips, and Settings all resolve through it.
+  - ☑ Push = `Mod+P`, Pull = `Mod+Shift+P` (+ Fetch `Mod+Shift+Y`, Sync
+    `Mod+Shift+S`, open-editor/terminal, refresh `Mod+R`).
+  - ☑ Settings → Keyboard section: rebind (record-a-combo) / unassign / reset /
+    restore-all, shared-binding warnings, context-shortcut reference
+    (`views/settings/KeyboardSection.tsx`). Persisted as `settings.keybindings`.
+  - ☐ Make surface-local keys (commit, in-diff search, commit search, Review
+    j/k) rebindable too — currently fixed + documented in the Keyboard section.
 - ☐ Status-bar: real GPG / LFS / sync state
 - ☐ Toast system → proper notification component
 - ☐ Empty-state copy for every panel (PRD §9: "no 'no data' labels")

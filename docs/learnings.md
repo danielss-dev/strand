@@ -753,6 +753,19 @@ items take `enabled: hasRepo`; App reinstalls the menu when that flips
 (menu handlers read the latest callbacks through a ref, so no rebuild per
 render).
 
+**Update (2026-06-15): accelerators come from the keybinding registry, not
+literals.** Global shortcuts now live in a single registry — `lib/keys.ts`,
+`COMMANDS` — resolved against the user's overrides (`settings.keybindings`) by
+`resolveBindings`. `lib/menu.ts` no longer hardcodes `accelerator:` strings; its
+`item()` helper takes a `cmd: CommandId` and looks the accelerator up through an
+`accel` resolver App passes in (`toMudaAccelerator(resolved)`), so a shortcut the
+user remaps in Settings → Keyboard updates the menu too — App's menu effect now
+deps on `keyMap` and reinstalls on change. The window keydown handler is also
+registry-driven: it computes `eventToBinding(e)`, looks up the command, and still
+defers to the native menu for menu-owned, representable combos
+(`appMenuInstalled() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)`).
+See the keybinding-registry learning below.
+
 ---
 
 ## Pierre tree rows only repaint on data pushes — decoration changes need a key bump
@@ -861,3 +874,80 @@ review-feedback palette actions are the canonical sites.
 (`useRepo(s => s.xs.length)`), spread the action conditionally, and inside
 `run` call `useRepo.getState().xs`. If the action needs multiple slices,
 read them all at run time rather than widening the subscription.
+
+---
+
+## Global shortcuts live in one registry; context shortcuts stay with their views
+
+**Rule.** Every *global* app shortcut is declared once in `ui/src/lib/keys.ts`
+(`COMMANDS`: id, label, category, `defaultBinding`, `menu`, `needsRepo`). Bindings
+use a canonical `Mod+Alt+Shift+<key>` string where `Mod` = ⌘/Ctrl. Three consumers
+resolve through the same module so they can never drift:
+
+- **Window keydown** (`App.tsx`): `eventToBinding(e)` → `resolveBindings(overrides)
+  .byBinding` → command id → a handler from the per-render `commandHandlers` map
+  (read via ref so settings changes don't re-subscribe the listener).
+- **Native menu** (`lib/menu.ts`): accelerators via `toMudaAccelerator` (see the
+  menu-ownership learning's 2026-06-15 update).
+- **Palette + Settings chips**: `formatBinding(binding, platform)` (⌘⇧P on mac,
+  Ctrl+Shift+P elsewhere).
+
+User overrides persist in `settings.keybindings` (`KeyOverrides`: id → binding, or
+`null` to unbind, or **absent** = default). `setKeybinding(id, undefined)` resets one
+row; `resetKeybindings()` clears all. Settings → Keyboard (`KeyboardSection.tsx`)
+records a combo by listening in the **capture** phase (fires before App's handler;
+`stopPropagation` keeps the in-progress chord from triggering an app command or the
+dialog's Esc), and flags clashes via `conflictingCommands`.
+
+**Why.** The push/pull request (⌘P / ⌘⇧P) plus "make shortcuts configurable" forced
+a single source of truth — the old hardcoded keydown chain + literal menu
+accelerators couldn't be remapped or kept in sync. Keeping the pure logic in `lib/`
+(not the view) follows the testable-logic learning; `keys.test.ts` covers
+event→binding folding, override resolution, conflict detection, and formatting.
+
+**Scope / how to apply.** Only *global* commands are in the registry. Surface-local
+keys that depend on what's focused — commit `Mod+Enter` (LocalChanges), in-diff
+search `Mod+F` (LocalChanges), commit search `/` (Commits), Review `j`/`k` — stay in
+their own components and are documented (not rebindable) in the Keyboard section's
+"Context shortcuts" card. To add a global command: add a `COMMANDS` row, a handler in
+App's `commandHandlers`, and (if it should sit on the macOS menu) a `cmd:` on the
+menu item + `menu: true`. Plain (modifier-less) bindings are suppressed while a text
+field/combobox is focused (`isPlainKey`); repo-scoped commands no-op without a repo
+(`REPO_COMMANDS`). `Mod+R` refresh calls `preventDefault`, so it doesn't reload the
+webview in dev.
+
+---
+
+## Tree keyboard nav must use Pierre's display order, not flat path order
+
+**Rule.** When walking a `@pierre/trees` file list by keyboard (the Review
+queue's `j`/`k`), step through the paths in the tree's **visible display order**,
+not the diff list's flat full-path sort. Use `treeFileOrder(paths)` /
+`compareTreePaths` (`ui/src/lib/treeOrder.ts`).
+
+**Why.** Pierre sorts **directories before files at each path level**, then by a
+**case-insensitive natural** comparison (`a2` < `a10`). A flat string sort of
+full paths interleaves nested files with their siblings differently — e.g.
+`[src/app.ts, src/lib/keys.ts, src/lib/menu.ts, src/zebra.ts]` flat vs.
+`[src/lib/keys.ts, src/lib/menu.ts, src/app.ts, src/zebra.ts]` in the tree. `j`
+over the flat order looked like it was "diving into folders" because the next
+flat entry was a nested file the user hadn't visually reached. The arrows were
+always correct because Pierre's own keydown (`focusNextItem` in
+`render/FileTreeView.js`) moves through the rendered rows.
+
+**Why we re-implement the comparator.** The public `model` from `useFileTree` is
+the render `FileTree` handle, which exposes `focusPath`/`getFocusedPath` but
+**not** `focusNextItem`/`getVisibleRows` (those are on the internal
+`FileTreeController`). And the tree renders into an **open shadow root with its
+own React root**, so synthesizing arrow keydowns to drive Pierre's handler is
+fragile. `treeOrder.ts` is a faithful port of Pierre's
+`path-store/src/sort.js` `comparePreparedPaths`, unit-tested
+(`treeOrder.test.ts`) so the two stay in agreement. It orders *files* only —
+folder flattening and collapsed-folder visibility don't change the relative
+order of files, so they're ignored (consistent with the old behavior, which
+also ignored collapse).
+
+**How to apply.** Any new tree keyboard walk sorts its candidate paths through
+`treeFileOrder` first, then indexes by the active path. Both the Review queue
+(`Review.tsx` `navOrder`) and Local Changes' `j`/`k` (`LocalChanges.tsx` `nav`,
+each of the unstaged + staged groups sorted independently) route through it.
