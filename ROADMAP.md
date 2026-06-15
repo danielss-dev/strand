@@ -971,6 +971,19 @@ from the Keychain and repackaged Developer-ID-only), and
 download flakes (`8a53544`). Auto-update remains endpoint-blocked: the manifest
 ships, the host doesn't.
 
+**Configurable keyboard shortcuts (2026-06-15):** Global shortcuts moved to a
+single registry (`ui/src/lib/keys.ts`) resolved against persisted user overrides
+(`settings.keybindings`); the window keydown handler, native menu accelerators,
+command-palette chips, and the new **Settings → Keyboard** section all read the
+same map, so a remap propagates everywhere and the palette/menu hints stay
+platform-correct (⌘ vs Ctrl). Push is `Mod+P` and pull `Mod+Shift+P` per request,
+plus fetch / sync / open-in-editor / open-in-terminal / refresh defaults. The
+Keyboard section records a combo by listening in the capture phase, with
+unassign / reset / restore-all and shared-binding warnings; surface-local keys
+(commit, in-diff search, commit search, Review j/k) stay with their views and are
+documented there. Verified with `tsc`, `vitest` (123 pass, +18 `keys.test.ts`).
+See `docs/learnings.md` "Global shortcuts live in one registry."
+
 ---
 
 ## 1.1+ — Post-1.0

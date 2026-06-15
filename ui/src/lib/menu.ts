@@ -6,6 +6,8 @@ import {
   type MenuItemOptions,
 } from '@tauri-apps/api/menu';
 
+import type { CommandId } from './keys';
+
 /**
  * Native macOS menubar, wired to the same callbacks the in-app UI uses.
  * macOS only — Windows/Linux get an in-window menubar later (PRD §7,
@@ -19,6 +21,13 @@ import {
  *
  * Repo-scoped items (views, sync, editor/terminal) are disabled with no
  * repo open; App reinstalls the menu when that flips.
+ *
+ * Accelerators are not hardcoded here — they come from the resolved keybinding
+ * registry via the `accel` resolver, so a shortcut the user remaps in Settings
+ * shows (and fires) consistently on the menu. App reinstalls the menu when the
+ * keybindings change. A binding that can't be represented as a muda accelerator
+ * yields `undefined`, so the menu shows none and the JS keydown handler keeps
+ * owning that combo.
  */
 
 export type MenuViewId = 'local' | 'commits' | 'reflog' | 'review' | 'worktrees';
@@ -46,12 +55,22 @@ export function appMenuInstalled(): boolean {
   return installed;
 }
 
+/** Resolve a command's muda accelerator string (or `undefined`). */
+export type AccelResolver = (id: CommandId) => string | undefined;
+
 export async function installAppMenu(
   handlers: () => MenuHandlers,
   hasRepo: boolean,
+  accel: AccelResolver,
 ): Promise<void> {
   const sep = () => PredefinedMenuItem.new({ item: 'Separator' });
-  const item = (opts: MenuItemOptions) => MenuItem.new(opts);
+  // muda rejects `accelerator: undefined`? It accepts an omitted key, so only
+  // include the field when we have a string.
+  const item = (opts: MenuItemOptions & { cmd?: CommandId }) => {
+    const { cmd, ...rest } = opts;
+    const a = cmd ? accel(cmd) : undefined;
+    return MenuItem.new(a ? { ...rest, accelerator: a } : rest);
+  };
 
   const appMenu = await Submenu.new({
     text: 'Strand',
@@ -61,7 +80,7 @@ export async function installAppMenu(
       await item({
         id: 'settings',
         text: 'Settings…',
-        accelerator: 'Cmd+Comma',
+        cmd: 'settings',
         action: () => handlers().openSettings(),
       }),
       await item({
@@ -86,7 +105,7 @@ export async function installAppMenu(
       await item({
         id: 'open-repo',
         text: 'Open Repository…',
-        accelerator: 'Cmd+O',
+        cmd: 'open-repo',
         action: () => handlers().openRepo(),
       }),
       await item({
@@ -113,12 +132,12 @@ export async function installAppMenu(
     ],
   });
 
-  const views: { id: MenuViewId; text: string; key: string }[] = [
-    { id: 'local', text: 'Local Changes', key: 'Cmd+1' },
-    { id: 'commits', text: 'All Commits', key: 'Cmd+2' },
-    { id: 'reflog', text: 'Reflog', key: 'Cmd+3' },
-    { id: 'review', text: 'Review', key: 'Cmd+4' },
-    { id: 'worktrees', text: 'Worktrees', key: 'Cmd+5' },
+  const views: { id: MenuViewId; text: string; cmd: CommandId }[] = [
+    { id: 'local', text: 'Local Changes', cmd: 'view-local' },
+    { id: 'commits', text: 'All Commits', cmd: 'view-commits' },
+    { id: 'reflog', text: 'Reflog', cmd: 'view-reflog' },
+    { id: 'review', text: 'Review', cmd: 'view-review' },
+    { id: 'worktrees', text: 'Worktrees', cmd: 'view-worktrees' },
   ];
   const viewMenu = await Submenu.new({
     text: 'View',
@@ -126,7 +145,7 @@ export async function installAppMenu(
       await item({
         id: 'palette',
         text: 'Command Palette…',
-        accelerator: 'Cmd+K',
+        cmd: 'palette',
         action: () => handlers().openPalette(),
       }),
       await sep(),
@@ -135,7 +154,7 @@ export async function installAppMenu(
           item({
             id: `view-${v.id}`,
             text: v.text,
-            accelerator: v.key,
+            cmd: v.cmd,
             enabled: hasRepo,
             action: () => handlers().showView(v.id),
           }),
@@ -145,7 +164,7 @@ export async function installAppMenu(
       await item({
         id: 'cycle-theme',
         text: 'Toggle Light/Dark Theme',
-        accelerator: 'Cmd+Shift+T',
+        cmd: 'theme-toggle',
         action: () => handlers().cycleTheme(),
       }),
     ],
@@ -157,12 +176,12 @@ export async function installAppMenu(
       await item({
         id: 'sync',
         text: 'Sync (Fetch + Pull + Push)',
-        accelerator: 'Cmd+Shift+S',
+        cmd: 'sync',
         enabled: hasRepo,
         action: () => handlers().sync(),
       }),
-      await item({ id: 'pull', text: 'Pull', enabled: hasRepo, action: () => handlers().pull() }),
-      await item({ id: 'push', text: 'Push', enabled: hasRepo, action: () => handlers().push() }),
+      await item({ id: 'pull', text: 'Pull', cmd: 'pull', enabled: hasRepo, action: () => handlers().pull() }),
+      await item({ id: 'push', text: 'Push', cmd: 'push', enabled: hasRepo, action: () => handlers().push() }),
       await sep(),
       await item({
         id: 'open-editor',

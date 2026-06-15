@@ -5,6 +5,7 @@ import { AppearanceSection } from './settings/AppearanceSection';
 import { DiffSection } from './settings/DiffSection';
 import { GitSection } from './settings/GitSection';
 import { IntegrationsSection } from './settings/IntegrationsSection';
+import { KeyboardSection } from './settings/KeyboardSection';
 import { UpdatesSection } from './settings/UpdatesSection';
 
 /**
@@ -21,11 +22,12 @@ import { UpdatesSection } from './settings/UpdatesSection';
  * Reachable from the status-bar gear, ⌘, and the command palette.
  */
 
-export type SettingsSectionId = 'appearance' | 'diff' | 'git' | 'integrations' | 'updates';
+export type SettingsSectionId = 'appearance' | 'diff' | 'keyboard' | 'git' | 'integrations' | 'updates';
 
 const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
   { id: 'appearance', label: 'Appearance', icon: 'eye' },
   { id: 'diff', label: 'Diff', icon: 'compare' },
+  { id: 'keyboard', label: 'Keyboard', icon: 'command' },
   { id: 'git', label: 'Git', icon: 'branch' },
   { id: 'integrations', label: 'Integrations', icon: 'external' },
   { id: 'updates', label: 'Updates', icon: 'sync' },
@@ -154,6 +156,7 @@ export function SettingsDialog({
           >
             {section === 'appearance' && <AppearanceSection />}
             {section === 'diff' && <DiffSection />}
+            {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}
             {section === 'integrations' && <IntegrationsSection />}
             {section === 'updates' && <UpdatesSection />}

@@ -17,6 +17,7 @@ import { ignorePatterns } from '../lib/ignore';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { gitErrorHint } from '../lib/tauri';
 import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
+import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -197,10 +198,12 @@ export function LocalChanges() {
       const state = useRepo.getState();
       const sel = state.localSelection;
 
-      // Flat nav order: unstaged → staged.
+      // Nav order: unstaged → staged, each in the tree's *display* order
+      // (folders first, natural sort) so j/k step straight down the list the
+      // user sees instead of the diff list's flat path order.
       const nav: { file: string; staged: boolean }[] = [
-        ...state.unstagedDiffs.map((d) => ({ file: d.path, staged: false })),
-        ...state.stagedDiffs.map((d) => ({ file: d.path, staged: true })),
+        ...treeFileOrder(state.unstagedDiffs.map((d) => d.path)).map((file) => ({ file, staged: false })),
+        ...treeFileOrder(state.stagedDiffs.map((d) => d.path)).map((file) => ({ file, staged: true })),
       ];
       const curIdx =
         sel && !sel.all
@@ -227,6 +230,13 @@ export function LocalChanges() {
         case 'p': {
           e.preventDefault();
           stepChangeBlock(e.key === 'n' ? 1 : -1);
+          break;
+        }
+        // Shift+J / Shift+K scroll the diff pane itself (j/k stay file nav).
+        case 'J':
+        case 'K': {
+          e.preventDefault();
+          scrollDiff(e.key === 'J' ? 1 : -1);
           break;
         }
         case 's': {
@@ -393,6 +403,17 @@ export function stepChangeBlock(dir: 1 | -1, hostSelector = '.lc-diff-scroll'): 
       ? positions.find((p) => p > cur + EPS)
       : [...positions].reverse().find((p) => p < cur - EPS);
   if (target != null) host.scrollTo({ top: target, behavior: 'smooth' });
+}
+
+/**
+ * Smoothly scroll the diff pane down (`dir: 1`) or up (`dir: -1`) by most of a
+ * viewport — powers Shift+J / Shift+K. Like {@link stepChangeBlock}, the host
+ * selector defaults to Local Changes' scroller; the Review view passes its own.
+ */
+export function scrollDiff(dir: 1 | -1, hostSelector = '.lc-diff-scroll'): void {
+  const host = document.querySelector<HTMLElement>(hostSelector);
+  if (!host) return;
+  host.scrollBy({ top: dir * host.clientHeight * 0.85, behavior: 'smooth' });
 }
 
 /**

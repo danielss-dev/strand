@@ -11,6 +11,36 @@
 **[Roadmap](./ROADMAP.md)** ·
 **[Commercial license](./COMMERCIAL.md)**
 
+Keyboard-first: almost every action is operable from the keyboard alone —
+never keyboard-only, the mouse stays first-class. Shortcuts are listed below
+and **every global one is rebindable** in Settings → Keyboard.
+
+### Keyboard shortcuts
+
+`Mod` is ⌘ on macOS, Ctrl elsewhere. All of the following are configurable in
+Settings → Keyboard (also reachable via the palette: "Settings: Keyboard
+shortcuts").
+
+| Shortcut | Action |
+| --- | --- |
+| `Mod+K` | Command palette |
+| `Mod+O` | Open repository |
+| `Mod+,` | Settings |
+| `Mod+1…5` | Local Changes · All Commits · Reflog · Review · Worktrees |
+| `Mod+P` | Push |
+| `Mod+Shift+P` | Pull |
+| `Mod+Shift+Y` | Fetch |
+| `Mod+Shift+S` | Sync (fetch + pull + push) |
+| `Mod+Shift+E` | Open in editor |
+| `Mod+Shift+C` | Open in terminal |
+| `Mod+R` | Refresh |
+| `Mod+Shift+T` | Toggle light/dark theme |
+
+Surface-local keys (not rebindable, documented in Settings → Keyboard):
+`Mod+Enter` commit · `Mod+F` search in diff · `/` search commits · `j`/`k`
+walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
+diff · palette `↑↓`/`↵`/`⇥`/`Esc`.
+
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
 a dedicated surface for reviewing an agent's changes: whole-file-context
 diffs, a review queue, and worktree-aware baselines that include what the
