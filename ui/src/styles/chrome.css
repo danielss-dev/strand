@@ -83,16 +83,12 @@
     padding-left: 78px;
     gap: 6px;
 }
-.topbar[data-native-chrome="win11"] {
-    height: 32px;
+/* Windows draws no native chrome — the toolbar *is* the title bar. Start
+ * content near the left edge and let the caption controls run flush into the
+ * top-right corner (matches native Windows hit targets). */
+[data-platform="win11"] .topbar {
     padding-left: 6px;
-    padding-right: 10px;
-    gap: 6px;
-}
-
-/* Browser preview on Windows: no traffic lights, tabs start at left */
-[data-platform="win11"] .topbar:not([data-native-chrome]) {
-    padding-left: 6px;
+    padding-right: 0;
 }
 
 .topbar[data-native-chrome] .sync-group,
@@ -160,6 +156,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 0;
+    padding: 0;
+    background: transparent;
     color: var(--text-2);
     -webkit-app-region: no-drag;
     cursor: pointer;
@@ -170,6 +169,21 @@
 .win-controls .wc.close:hover {
     background: #e81123;
     color: #fff;
+}
+
+/* Active repo name — the toolbar doubles as the title bar, so it carries the
+ * current repo like a window title. Sits in the drag region; non-selectable. */
+.topbar-title {
+    flex-shrink: 0;
+    max-width: 280px;
+    padding: 0 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
 }
 
 .topbar-spacer {

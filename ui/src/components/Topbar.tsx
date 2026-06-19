@@ -43,13 +43,26 @@ export function Topbar({
   const ahead = meta?.ahead ?? 0;
   const behind = meta?.behind ?? 0;
 
-  // In Tauri the host window draws real macOS traffic lights / Win11 controls.
-  // The HTML fakes are only for browser-only preview (`pnpm dev`).
-  const showFakeChrome = !isTauri();
+  const inTauri = isTauri();
+  // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:
+  // Overlay`), so we only pad to clear them. Windows has no native overlay —
+  // we strip the OS title bar (see main.rs) and draw our own controls here, in
+  // both Tauri and browser preview. The mac traffic lights are faked only in
+  // browser preview.
+  const macNativeChrome = inTauri && platform === 'mac';
+  const showFakeTraffic = !inTauri && platform === 'mac';
+  const showWinControls = platform === 'win11';
+  // On Windows the toolbar *is* the title bar, so it must drag the window.
+  // WebView2 ignores `-webkit-app-region`, so use Tauri's drag-region hook.
+  const dragRegion = inTauri && platform === 'win11' ? '' : undefined;
 
   return (
-    <div className="topbar" data-native-chrome={!showFakeChrome ? platform : undefined}>
-      {showFakeChrome && platform === 'mac' && (
+    <div
+      className="topbar"
+      data-native-chrome={macNativeChrome ? 'mac' : undefined}
+      data-tauri-drag-region={dragRegion}
+    >
+      {showFakeTraffic && (
         <div className="traffic">
           <div className="dot close" />
           <div className="dot min" />
@@ -57,7 +70,13 @@ export function Topbar({
         </div>
       )}
 
-      <div className="topbar-spacer" />
+      {meta && (
+        <div className="topbar-title" data-tauri-drag-region={dragRegion} title={meta.path}>
+          {meta.name}
+        </div>
+      )}
+
+      <div className="topbar-spacer" data-tauri-drag-region={dragRegion} />
 
       <div className="sync-group">
         <button
@@ -127,13 +146,64 @@ export function Topbar({
         <kbd>{platform === 'mac' ? '⌘K' : 'Ctrl K'}</kbd>
       </button>
 
-      {showFakeChrome && platform === 'win11' && (
-        <div className="win-controls">
-          <div className="wc"><Icon name="win-min" size={10} stroke={1} /></div>
-          <div className="wc"><Icon name="win-max" size={10} stroke={1} /></div>
-          <div className="wc close"><Icon name="win-close" size={10} stroke={1.2} /></div>
-        </div>
-      )}
+      {showWinControls && <WinControls functional={inTauri} />}
+    </div>
+  );
+}
+
+/**
+ * Windows 11 caption controls (minimize / maximize-restore / close). On Windows
+ * the toolbar replaces the native title bar, so these drive the real window via
+ * the Tauri window API. In browser preview (`functional` false) they render as
+ * inert affordances. The maximize glyph toggles to a restore glyph by tracking
+ * the live maximized state.
+ */
+function WinControls({ functional }: { functional: boolean }) {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!functional) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const win = getCurrentWindow();
+      setMaximized(await win.isMaximized());
+      const un = await win.onResized(async () => setMaximized(await win.isMaximized()));
+      if (cancelled) un();
+      else unlisten = un;
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [functional]);
+
+  const run = async (action: 'min' | 'max' | 'close') => {
+    if (!functional) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    const win = getCurrentWindow();
+    if (action === 'min') await win.minimize();
+    else if (action === 'max') await win.toggleMaximize();
+    else await win.close();
+  };
+
+  return (
+    <div className="win-controls">
+      <button type="button" className="wc" aria-label="Minimize" onClick={() => void run('min')}>
+        <Icon name="win-min" size={10} stroke={1} />
+      </button>
+      <button
+        type="button"
+        className="wc"
+        aria-label={maximized ? 'Restore' : 'Maximize'}
+        onClick={() => void run('max')}
+      >
+        <Icon name={maximized ? 'win-restore' : 'win-max'} size={10} stroke={1} />
+      </button>
+      <button type="button" className="wc close" aria-label="Close" onClick={() => void run('close')}>
+        <Icon name="win-close" size={10} stroke={1.2} />
+      </button>
     </div>
   );
 }

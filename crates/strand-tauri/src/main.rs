@@ -138,6 +138,19 @@ fn main() {
         .setup(|app| {
             install_crash_log(app);
             if let Some(win) = app.get_webview_window("main") {
+                // On Windows the native title bar would sit *above* our toolbar
+                // as a redundant second bar. Drop the OS decorations so the
+                // toolbar becomes the title bar (custom controls + drag region
+                // live in the UI). macOS keeps its decorations — `titleBarStyle:
+                // Overlay` already floats the traffic lights over the toolbar.
+                // The window is created hidden (`visible: false`), so stripping
+                // decorations before `show()` never flashes a frame; re-assert
+                // the drop shadow that borderless windows otherwise lose.
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = win.set_decorations(false);
+                    let _ = win.set_shadow(true);
+                }
                 let _ = win.show();
             }
             Ok(())
