@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { RecentRepo, ReviewNote } from './types';
+import type { RecentRepo, RepoIcon, ReviewNote } from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -163,6 +163,21 @@ export const reviewSession = {
   },
   setNotes(repoPath: string, notes: Record<string, ReviewNote[]>): Promise<void> {
     return settings.set(`review-notes:${repoPath}`, notes);
+  },
+};
+
+/**
+ * Per-repo rail tile customization (color / initials / emoji / image). A null
+ * means the repo uses the derived defaults. Stored in the generic `settings`
+ * table, keyed by repo path, so it survives relaunch and is shared by every
+ * tab/worktree pointing at that path.
+ */
+export const repoIcon = {
+  get(repoPath: string): Promise<RepoIcon | null> {
+    return settings.get<RepoIcon>(`repo-icon:${repoPath}`);
+  },
+  set(repoPath: string, icon: RepoIcon | null): Promise<void> {
+    return settings.set(`repo-icon:${repoPath}`, icon);
   },
 };
 

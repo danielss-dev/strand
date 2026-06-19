@@ -325,6 +325,24 @@ export interface RecentRepo {
 }
 
 /**
+ * User customization for a repo's square tile in the rail. Every field is
+ * optional — an unset field falls back to the derived default (initials from
+ * the repo name, a color hashed from the repo's git dir). `image`, when set,
+ * wins over `emoji`, which wins over `letter`; `color` is the tile background
+ * in all cases. Persisted per-repo path in the generic `settings` table.
+ */
+export interface RepoIcon {
+  /** 1–2 character glyph override (e.g. "PB"). Empty/unset ⇒ derived initials. */
+  letter?: string | null;
+  /** Tile background — a CSS color or palette var (`var(--b-3)`). Unset ⇒ hashed. */
+  color?: string | null;
+  /** Emoji glyph; takes precedence over `letter`. */
+  emoji?: string | null;
+  /** Downscaled image as a data URL; takes precedence over everything. */
+  image?: string | null;
+}
+
+/**
  * One-call refresh bundle (`repo_snapshot`): meta + status + work tree +
  * refs + submodules from a single repo open and one statuses walk.
  */

@@ -8,12 +8,15 @@ import { Icon } from './components/Icon';
 import { copyToClipboard } from './components/PierreTree';
 import { Presence } from './components/Presence';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
+import { RepoRail } from './components/RepoRail';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
+import { useRepoIcons } from './stores/repoIcons';
 import { useUpdates } from './stores/updates';
+import { accentHueForColor } from './lib/repoIdentity';
 import { pickRepoDirectory } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
@@ -42,6 +45,7 @@ import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
+import { RepoIconDialog } from './views/RepoIconDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -131,6 +135,12 @@ export function App() {
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
 
+  // Active repo group + custom icon colors, for re-theming the accent to the
+  // selected repo's color (see the --accent-h effect below).
+  const tabs = useRepo((s) => s.tabs);
+  const activeTabPath = useRepo((s) => s.activeTabPath);
+  const repoIcons = useRepoIcons((s) => s.icons);
+
   // Repo data the command palette indexes (branches / files / commits).
   const refs = useRepo((s) => s.refs);
   const commits = useRepo((s) => s.commits);
@@ -196,6 +206,8 @@ export function App() {
   const ignoreDraft = useRepo((s) => s.ignoreDraft);
   const closeIgnoreDialog = useRepo((s) => s.closeIgnoreDialog);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
+  // null = closed; otherwise the repo whose rail tile is being customized.
+  const [iconDialog, setIconDialog] = useState<{ path: string; name: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -558,6 +570,25 @@ export function App() {
     // properties pierce shadow roots), so the diff font is just this var.
     root.style.setProperty('--diffs-font-family', FONTS.mono[diffFont === 'inherit' ? monoFont : diffFont]);
   }, [density, platform, accent, uiFont, monoFont, diffFont]);
+
+  // Accent follows the active repo: if the selected repo group has a custom
+  // tile color, re-theme the whole app to that color's hue (an inline
+  // `--accent-h` that wins over the `[data-accent]` preset). Repos without a
+  // custom color keep the user's configured accent. Worktrees inherit their
+  // group's main tab color.
+  const activeAccentHue = useMemo(() => {
+    const active = tabs.find((t) => t.path === activeTabPath);
+    if (!active) return null;
+    const main = tabs.find(
+      (t) => t.meta.common_dir === active.meta.common_dir && !t.meta.is_linked_worktree,
+    );
+    return accentHueForColor(main ? repoIcons[main.path]?.color : undefined);
+  }, [tabs, activeTabPath, repoIcons]);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (activeAccentHue != null) root.style.setProperty('--accent-h', String(activeAccentHue));
+    else root.style.removeProperty('--accent-h');
+  }, [activeAccentHue]);
 
   // Update auto-check on launch (Settings → Updates). Delayed a few seconds
   // so it never competes with cold-start work, and soft-fails quietly — the
@@ -985,9 +1016,6 @@ export function App() {
       <div className="strand-window">
         <Topbar
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenRepo={openViaDialog}
-          onOpenRecent={openByPath}
-          onClone={() => setCloneOpen(true)}
           onSync={onSync}
           onPull={onPull}
           onPush={onPush}
@@ -1002,7 +1030,16 @@ export function App() {
         />
 
         <div className="body">
-          <PanelGroup direction="horizontal" autoSaveId="strand:body">
+          <RepoRail
+            onOpenRepo={openViaDialog}
+            onOpenRecent={openByPath}
+            onClone={() => setCloneOpen(true)}
+            onCustomize={(path) => {
+              const tab = useRepo.getState().tabs.find((t) => t.path === path);
+              setIconDialog({ path, name: tab?.meta.name ?? basename(path) });
+            }}
+          />
+          <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
             <Panel defaultSize={20} minSize={12} maxSize={40}>
               <Sidebar
                 onOpenRepo={openViaDialog}
@@ -1189,6 +1226,14 @@ export function App() {
       )}
 
       {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}
+
+      {iconDialog && (
+        <RepoIconDialog
+          path={iconDialog.path}
+          name={iconDialog.name}
+          onClose={() => setIconDialog(null)}
+        />
+      )}
 
       {!isTauri() && !meta && (
         <div style={{

@@ -18,6 +18,9 @@ ui/src/**/*.js
 .idea/
 .vscode/
 *.swp
+# Atomic-write temp files (editors/agents write `<name>.tmp.<pid>.<hash>` then
+# rename over the target; orphans linger if the rename races a lock on Windows).
+*.tmp.*
 
 # Local env
 .env

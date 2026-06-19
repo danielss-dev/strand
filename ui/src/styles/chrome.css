@@ -95,14 +95,6 @@
     padding-left: 6px;
 }
 
-.topbar[data-native-chrome] .repo-tab {
-    height: 24px;
-    padding: 0 10px 0 8px;
-}
-.topbar[data-native-chrome] .tab-add {
-    width: 22px;
-    height: 22px;
-}
 .topbar[data-native-chrome] .sync-group,
 .topbar[data-native-chrome] .branch-btn,
 .topbar[data-native-chrome] .cmd-pill {
@@ -178,109 +170,6 @@
 .win-controls .wc.close:hover {
     background: #e81123;
     color: #fff;
-}
-
-/* Repo tabs */
-.repo-tabs {
-    display: flex;
-    align-items: stretch;
-    gap: 2px;
-    height: 100%;
-    padding-left: 6px;
-    -webkit-app-region: no-drag;
-    min-width: 0;
-    overflow: hidden;
-    flex-shrink: 1;
-}
-.repo-tab {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 12px 0 10px;
-    height: 30px;
-    align-self: center;
-    border-radius: 7px;
-    font-size: var(--type-ui-sm);
-    color: var(--text-2);
-    cursor: pointer;
-    position: relative;
-    max-width: 200px;
-}
-.repo-tab:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-}
-.repo-tab.active {
-    background: var(--bg-elev);
-    color: var(--text);
-    box-shadow: 0 0 0 0.5px var(--border-strong) inset;
-}
-.repo-tab .repo-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-}
-.repo-tab .repo-x {
-    width: 16px;
-    height: 16px;
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    opacity: 0;
-}
-.repo-tab:hover .repo-x {
-    opacity: 1;
-}
-.repo-tab .repo-x:hover {
-    background: var(--bg-active);
-    color: var(--text);
-}
-.repo-tab .repo-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500;
-}
-/* Worktree tabs of one repo cluster tightly after their main tab. */
-.repo-tab.same-group {
-    margin-left: -4px;
-}
-.repo-tab.worktree .repo-name {
-    font-weight: 450;
-    color: var(--text-2);
-}
-.repo-tab .repo-wt-ico {
-    display: flex;
-    align-items: center;
-    color: var(--text-dim);
-    flex-shrink: 0;
-    margin-left: -3px;
-}
-.tab-add-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    align-self: stretch;
-}
-.tab-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    color: var(--text-muted);
-    cursor: pointer;
-    align-self: center;
-    margin-left: 2px;
-}
-.tab-add:hover {
-    background: var(--bg-hover);
-    color: var(--text);
 }
 
 .topbar-spacer {
@@ -523,6 +412,141 @@
     flex: 1;
     display: flex;
     min-height: 0;
+}
+/* The resizable Sidebar|Main group sits to the right of the repo rail and
+ * takes the remaining width. */
+.body-panels {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ─── Repo rail ─── */
+.repo-rail {
+    flex: none;
+    width: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 6px;
+    background: var(--bg-base);
+    border-right: 0.5px solid var(--border);
+    overflow: hidden;
+}
+.rail-tabs {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+}
+.rail-tabs::-webkit-scrollbar {
+    display: none;
+}
+.rail-tile {
+    flex: none;
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    cursor: pointer;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    transition: border-radius 120ms ease;
+}
+/* Active / hover accent bar to the left of the tile. */
+.rail-tile::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 0;
+    border-radius: 0 3px 3px 0;
+    background: var(--text);
+    transition: height 130ms ease;
+}
+.rail-tile:hover::before {
+    height: 16px;
+}
+.rail-tile.active::before {
+    height: 22px;
+}
+.rail-glyph {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.2px;
+    color: oklch(1 0 0 / 0.95);
+    text-transform: uppercase;
+    box-shadow: 0 0 0 0.5px oklch(0 0 0 / 0.25) inset;
+    transition: border-radius 120ms ease, box-shadow 120ms ease;
+    user-select: none;
+}
+.rail-glyph.emoji {
+    font-size: 19px;
+    line-height: 1;
+}
+.rail-glyph.image {
+    background: var(--bg-elev);
+    overflow: hidden;
+    padding: 0;
+}
+.rail-glyph.image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.rail-tile:hover .rail-glyph {
+    border-radius: 13px;
+}
+/* Worktree sub-tiles cluster tighter and read as secondary. */
+.rail-tile.worktree {
+    width: 34px;
+    height: 34px;
+    margin-top: -2px;
+}
+.rail-tile.worktree .rail-glyph {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: oklch(1 0 0 / 0.85);
+}
+
+.rail-add-wrap {
+    flex: none;
+}
+.rail-add {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    border: 0.5px dashed var(--border-strong);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.rail-add:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-dim);
 }
 
 /* ─── Sidebar ─── */

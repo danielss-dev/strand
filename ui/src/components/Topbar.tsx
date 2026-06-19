@@ -8,9 +8,6 @@ import { useRepo } from '../stores/repo';
 
 interface Props {
   onOpenPalette: () => void;
-  onOpenRepo: () => void;
-  onOpenRecent: (path: string) => void;
-  onClone: () => void;
   onSync: () => void;
   onPull: () => void;
   onPush: () => void;
@@ -27,9 +24,6 @@ interface Props {
 
 export function Topbar({
   onOpenPalette,
-  onOpenRepo,
-  onOpenRecent,
-  onClone,
   onSync,
   onPull,
   onPush,
@@ -43,21 +37,11 @@ export function Topbar({
   onSaveSnapshot,
 }: Props) {
   const platform = useSettings((s) => s.platform);
-  const tabs = useRepo((s) => s.tabs);
-  const activeTabPath = useRepo((s) => s.activeTabPath);
-  const setActiveTab = useRepo((s) => s.setActiveTab);
-  const closeTab = useRepo((s) => s.closeTab);
   const meta = useRepo((s) => s.meta);
-  const recents = useRepo((s) => s.recents);
-  const forgetRecent = useRepo((s) => s.forgetRecent);
 
   const branch = meta?.branch ?? 'no repo';
   const ahead = meta?.ahead ?? 0;
   const behind = meta?.behind ?? 0;
-
-  // Group worktree tabs of the same repo together (by shared common git dir),
-  // preserving first-open order, main worktree first within each group.
-  const orderedTabs = useMemo(() => groupTabs(tabs), [tabs]);
 
   // In Tauri the host window draws real macOS traffic lights / Win11 controls.
   // The HTML fakes are only for browser-only preview (`pnpm dev`).
@@ -72,49 +56,6 @@ export function Topbar({
           <div className="dot max" />
         </div>
       )}
-
-      <div className="repo-tabs">
-        {orderedTabs.map((t, i) => {
-          // Linked worktrees of the same repo share a dot color and sit
-          // contiguously; mark a tab that continues its predecessor's group so
-          // CSS can tighten the gap into a visual cluster.
-          const prev = orderedTabs[i - 1];
-          const sameGroup = !!prev && prev.meta.common_dir === t.meta.common_dir;
-          const linked = t.meta.is_linked_worktree;
-          return (
-            <div
-              key={t.path}
-              className={
-                'repo-tab' +
-                (t.path === activeTabPath ? ' active' : '') +
-                (sameGroup ? ' same-group' : '') +
-                (linked ? ' worktree' : '')
-              }
-              title={linked ? `${t.meta.name} · worktree on ${t.meta.branch}` : t.path}
-              onClick={() => { void setActiveTab(t.path); }}
-            >
-              <div className="repo-dot" style={{ background: groupColor(t.meta.common_dir) }} />
-              {linked && <span className="repo-wt-ico"><Icon name="worktree" size={11} /></span>}
-              <div className="repo-name">{linked ? (t.meta.branch || t.meta.name) : t.meta.name}</div>
-              <div
-                className="repo-x"
-                title="Close repository"
-                onClick={(e) => { e.stopPropagation(); closeTab(t.path); }}
-              >
-                <Icon name="x" size={9} stroke={2} />
-              </div>
-            </div>
-          );
-        })}
-
-        <RepoSwitcherButton
-          onOpenRepo={onOpenRepo}
-          onOpenRecent={onOpenRecent}
-          onClone={onClone}
-          recents={recents}
-          onForget={forgetRecent}
-        />
-      </div>
 
       <div className="topbar-spacer" />
 
@@ -192,151 +133,6 @@ export function Topbar({
           <div className="wc"><Icon name="win-max" size={10} stroke={1} /></div>
           <div className="wc close"><Icon name="win-close" size={10} stroke={1.2} /></div>
         </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Order tabs so worktrees of the same repository cluster together: groups keyed
- * by `common_dir` in first-open order, and within a group the main worktree
- * leads its linked ones. Render-only — the store's tab order is untouched.
- */
-function groupTabs<T extends { meta: { common_dir: string; is_linked_worktree: boolean } }>(
-  tabs: T[],
-): T[] {
-  const order: string[] = [];
-  const groups = new Map<string, T[]>();
-  for (const t of tabs) {
-    const key = t.meta.common_dir;
-    if (!groups.has(key)) {
-      groups.set(key, []);
-      order.push(key);
-    }
-    groups.get(key)!.push(t);
-  }
-  return order.flatMap((key) => {
-    const g = groups.get(key)!;
-    // Main worktree (not linked) first, the rest in open order.
-    return [...g.filter((t) => !t.meta.is_linked_worktree), ...g.filter((t) => t.meta.is_linked_worktree)];
-  });
-}
-
-/** Stable dot color for a repo group, hashed from its common git dir into the
- *  branch-lane palette (`--b-1…--b-7`). */
-function groupColor(commonDir: string): string {
-  let h = 0;
-  for (let i = 0; i < commonDir.length; i++) h = (h * 31 + commonDir.charCodeAt(i)) | 0;
-  return `var(--b-${(Math.abs(h) % 7) + 1})`;
-}
-
-/**
- * `+` button in the tab strip — opens a dropdown with "Open…" + recents.
- *
- * The menu is rendered via a portal because the tab strip uses
- * `overflow: hidden` to clip long lists of tabs; an in-tree absolute
- * positioned menu would be invisible.
- */
-function RepoSwitcherButton({
-  onOpenRepo,
-  onOpenRecent,
-  onClone,
-  recents,
-  onForget,
-}: {
-  onOpenRepo: () => void;
-  onOpenRecent: (path: string) => void;
-  onClone: () => void;
-  recents: ReturnType<typeof useRepo.getState>['recents'];
-  onForget: (path: string) => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!open || !wrapRef.current) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 6, left: r.left });
-  }, [open]);
-
-  useOutsideClose([wrapRef, menuRef], open, () => setOpen(false));
-
-  return (
-    <div ref={wrapRef} className="tab-add-wrap">
-      <button
-        type="button"
-        className="tab-add"
-        title="Open repository"
-        aria-label="Open repository"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name="plus" size={12} />
-      </button>
-      {open && pos && createPortal(
-        <div
-          ref={menuRef}
-          className="repo-menu"
-          role="menu"
-          style={{ position: 'fixed', top: pos.top, left: pos.left }}
-        >
-          <button
-            type="button"
-            className="repo-menu-item"
-            role="menuitem"
-            tabIndex={0}
-            onClick={() => { setOpen(false); onOpenRepo(); }}
-          >
-            <span className="ico"><Icon name="folder-open" size={13} /></span>
-            <span className="label">Open repository…</span>
-            <span className="meta">⌘O</span>
-          </button>
-
-          <button
-            type="button"
-            className="repo-menu-item"
-            role="menuitem"
-            tabIndex={0}
-            onClick={() => { setOpen(false); onClone(); }}
-          >
-            <span className="ico"><Icon name="remote" size={13} /></span>
-            <span className="label">Clone repository…</span>
-          </button>
-
-          <div className="repo-menu-divider" />
-
-          {recents.length === 0 ? (
-            <div className="repo-menu-empty">No recent repositories yet.</div>
-          ) : (
-            <>
-              <div className="repo-menu-sect">Recent</div>
-              {recents.map((r) => (
-                <button
-                  type="button"
-                  key={r.path}
-                  className="repo-menu-item"
-                  role="menuitem"
-                  tabIndex={0}
-                  title={r.path}
-                  onClick={() => { setOpen(false); onOpenRecent(r.path); }}
-                >
-                  <span className="ico"><Icon name="folder" size={13} /></span>
-                  <span className="label">{r.name}</span>
-                  <span className="meta">{r.path}</span>
-                  <span
-                    className="x"
-                    title="Remove from recents"
-                    onClick={(e) => { e.stopPropagation(); void onForget(r.path); }}
-                  >
-                    <Icon name="x" size={9} stroke={2} />
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
-        </div>,
-        document.body,
       )}
     </div>
   );
