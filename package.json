@@ -1,7 +1,7 @@
 {
   "name": "strand",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "Fast, friendly Git client (Tauri 2 + Rust + React).",
   "scripts": {
     "dev": "pnpm --filter strand-ui dev",
@@ -10,7 +10,8 @@
     "site": "pnpm --filter strand-website serve",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "version:set": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
