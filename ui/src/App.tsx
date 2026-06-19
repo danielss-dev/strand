@@ -6,6 +6,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { Icon } from './components/Icon';
 import { copyToClipboard } from './components/PierreTree';
+import { Presence } from './components/Presence';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
@@ -278,12 +279,6 @@ export function App() {
     setTimeout(() => set(false), 1600);
   }, []);
 
-  const onNetProgress = useCallback((p: Progress) => {
-    setNetProgress(
-      p.percent != null ? `${p.phase || 'Working'} · ${p.percent}%` : p.phase || p.raw || null,
-    );
-  }, []);
-
   const openByPath = useCallback(async (path: string) => {
     const id = ++opGen.current;
     const startedAt = Date.now();
@@ -405,7 +400,7 @@ export function App() {
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await fetchRepo(onNetProgress, opId);
+      await fetchRepo(undefined, opId);
       flashDone(setSyncDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Fetch cancelled');
@@ -415,7 +410,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [fetchRepo, onNetProgress, showToast, flashDone, syncing, nextOpId]);
+  }, [fetchRepo, showToast, flashDone, syncing, nextOpId]);
 
   const onPull = useCallback(async () => {
     if (pulling) return;
@@ -425,7 +420,7 @@ export function App() {
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pullRepo(false, onNetProgress, opId);
+      await pullRepo(false, undefined, opId);
       flashDone(setPullDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Pull cancelled');
@@ -435,7 +430,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [pullRepo, onNetProgress, showToast, flashDone, pulling, nextOpId]);
+  }, [pullRepo, showToast, flashDone, pulling, nextOpId]);
 
   const onPush = useCallback(async () => {
     if (pushing) return;
@@ -445,7 +440,7 @@ export function App() {
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pushRepo(false, onNetProgress, opId);
+      await pushRepo(false, undefined, opId);
       flashDone(setPushDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Push cancelled');
@@ -455,7 +450,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [pushRepo, onNetProgress, showToast, flashDone, pushing, nextOpId]);
+  }, [pushRepo, showToast, flashDone, pushing, nextOpId]);
 
   // Keyboard refresh — same snapshot-based refresh the header button runs
   // (meta/refs/tree/submodules ride along with status), guarded on an open repo.
@@ -900,7 +895,7 @@ export function App() {
           void (async () => {
             setNetProgress('Pushing tags…');
             try {
-              await pushAllTags(onNetProgress);
+              await pushAllTags();
               showToast('Pushed all tags');
             } catch (e) {
               showToast(`Push tags failed: ${errMessage(e)}`);
@@ -972,7 +967,7 @@ export function App() {
     }));
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, onPull, onPush, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, onNetProgress, showToast, meta, abortOperation, requestCommitSearch,
+      pushAllTags, showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
@@ -1067,47 +1062,54 @@ export function App() {
           {toast ?? netProgress ?? ''}
         </div>
 
-        {netProgress && (
-          <div className="toast progress" aria-hidden={netOpId ? undefined : 'true'}>
-            <span aria-hidden="true" className="icon-spin"><Icon name="refresh" size={13} /></span>
-            <span aria-hidden="true">{netProgress}</span>
-            {netOpId && (
-              <button
-                type="button"
-                className="toast-action"
-                aria-label="Cancel network operation"
-                onClick={() => { void tauri.repoCancelOp(netOpId); }}
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        )}
+        <Presence value={netProgress}>
+          {(msg, exiting) => (
+            <div className={`toast progress${exiting ? ' exiting' : ''}`} aria-hidden={netOpId && !exiting ? undefined : 'true'}>
+              <span aria-hidden="true" className="icon-spin"><Icon name="refresh" size={13} /></span>
+              <span aria-hidden="true">{msg}</span>
+              {netOpId && !exiting && (
+                <button
+                  type="button"
+                  className="toast-action"
+                  aria-label="Cancel network operation"
+                  onClick={() => { void tauri.repoCancelOp(netOpId); }}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
+        </Presence>
 
-        {toast && (
-          <div className="toast" aria-hidden="true">
-            <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
-            <span>{toast}</span>
-          </div>
-        )}
+        <Presence value={toast}>
+          {(msg, exiting) => (
+            <div className={`toast${exiting ? ' exiting' : ''}`} aria-hidden="true">
+              <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
+              <span>{msg}</span>
+            </div>
+          )}
+        </Presence>
 
-        {opProgress && (
-          <ProgressPopup
-            title={opProgress.title}
-            subject={opProgress.subject}
-            detail={opProgress.detail}
-            percent={opProgress.percent}
-            eta={opProgress.eta}
-            startedAt={opProgress.startedAt}
-            error={opProgress.error ?? null}
-            onDismiss={() => setOpProgress((cur) => (cur && cur.id === opProgress.id ? null : cur))}
-            onCancel={
-              opProgress.kind === 'clone' && !opProgress.error && cloneCancelId
-                ? () => { void tauri.repoCancelOp(cloneCancelId); }
-                : undefined
-            }
-          />
-        )}
+        <Presence value={opProgress}>
+          {(op, exiting) => (
+            <ProgressPopup
+              title={op.title}
+              subject={op.subject}
+              detail={op.detail}
+              percent={op.percent}
+              eta={op.eta}
+              startedAt={op.startedAt}
+              error={op.error ?? null}
+              exiting={exiting}
+              onDismiss={() => setOpProgress((cur) => (cur && cur.id === op.id ? null : cur))}
+              onCancel={
+                op.kind === 'clone' && !op.error && cloneCancelId
+                  ? () => { void tauri.repoCancelOp(cloneCancelId); }
+                  : undefined
+              }
+            />
+          )}
+        </Presence>
 
         <UndoToast />
         <BulkUndoToast onToast={showToast} />

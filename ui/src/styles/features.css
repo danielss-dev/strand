@@ -1943,6 +1943,34 @@
     transform: none;
   }
 }
+/* Pop-in for elements that are horizontally centered via translateX(-50%):
+   the keyframe must carry the -50% throughout, otherwise the element starts
+   at left:50% (shifted right) and snaps to center when the animation ends. */
+@keyframes popInCentered {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+/* Reverse of popInCentered — the exit animation for centered popups. Kept
+   symmetric so a popup leaves the same way it arrived (just backwards). The
+   180ms duration must match EXIT_MS in components/Presence.tsx, which holds
+   the element mounted that long before unmounting. Plain keyframes + forwards
+   so it behaves identically in WebView2 (Chromium) and WKWebView/WebKitGTK. */
+@keyframes popOutCentered {
+  from {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.985);
+  }
+}
 
 .palette {
   width: 640px;
@@ -2131,8 +2159,12 @@
   box-shadow:
     0 0 0 0.5px var(--border-strong),
     var(--shadow-2);
-  animation: popIn 0.2s cubic-bezier(0.2, 0.7, 0.4, 1);
+  animation: popInCentered 0.2s cubic-bezier(0.2, 0.7, 0.4, 1);
   z-index: 50;
+}
+.toast.exiting {
+  animation: popOutCentered 0.18s cubic-bezier(0.4, 0, 0.7, 0.9) forwards;
+  pointer-events: none;
 }
 /* Undo toast sits just above the plain toast so a discard landing on top
    of a sync message doesn't overlap it. */
@@ -2849,8 +2881,12 @@ textarea.clone-input {
   box-shadow:
     0 0 0 0.5px var(--border-strong),
     var(--shadow-3);
-  animation: popIn 0.2s cubic-bezier(0.2, 0.7, 0.4, 1);
+  animation: popInCentered 0.2s cubic-bezier(0.2, 0.7, 0.4, 1);
   z-index: 60;
+}
+.op-progress.exiting {
+  animation: popOutCentered 0.18s cubic-bezier(0.4, 0, 0.7, 0.9) forwards;
+  pointer-events: none;
 }
 .op-progress-head {
   display: flex;
