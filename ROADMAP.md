@@ -984,6 +984,17 @@ unassign / reset / restore-all and shared-binding warnings; surface-local keys
 documented there. Verified with `tsc`, `vitest` (123 pass, +18 `keys.test.ts`).
 See `docs/learnings.md` "Global shortcuts live in one registry."
 
+**Activity-timeline rail (2026-06-19):** The All Commits graph gained a vertical
+activity rail (`views/CommitTimeline.tsx`) down the right edge of the list — a
+commit-density histogram on a top→bottom time axis, so bursts read as long bars
+and quiet stretches as gaps. It doubles as a scrubber: a translucent band marks
+the currently-visible window and click/drag seeks the list to that point in time;
+hover surfaces the bucket's date span + commit count. A toolbar toggle persists
+as `settings.showTimeline`. The bars memoize so a scroll tick only reconciles the
+band (the graph's hot scroll path stays cheap); the rail is `aria-hidden` (a
+redundant pointer nav aid over arrow-key list navigation + search). Verified with
+`tsc` + `vite build`.
+
 ---
 
 ## 1.1+ — Post-1.0

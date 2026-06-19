@@ -999,11 +999,122 @@
   display: flex;
   min-height: 0;
 }
+.graph-pane {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+}
 .graph-main {
   flex: 1;
   height: 100%;
   overflow: auto;
   min-width: 0;
+}
+
+/* ─── Activity-timeline rail ─── */
+.graph-timeline {
+  position: relative;
+  flex-shrink: 0;
+  width: 76px;
+  height: 100%;
+  border-left: 0.5px solid var(--border);
+  background: var(--bg-base);
+  cursor: pointer;
+}
+/* Time-axis gridlines + date labels overlaid on the bars (pointer-events off
+   so scrubbing still hits the rail). This is what makes the rail legible as a
+   timeline: newest at top, older toward the bottom. */
+.graph-timeline .tl-axis {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.graph-timeline .tl-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 0.5px solid var(--border);
+}
+.graph-timeline .tl-tick-label {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-base);
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.graph-timeline .tl-tick.bottom .tl-tick-label {
+  top: auto;
+  bottom: 2px;
+}
+.graph-timeline.dragging {
+  cursor: grabbing;
+}
+.graph-timeline svg {
+  display: block;
+}
+.graph-timeline .tl-bar {
+  fill: var(--text-muted);
+  opacity: 0.55;
+}
+.graph-timeline:hover .tl-bar {
+  opacity: 0.7;
+}
+.graph-timeline .tl-bar.hot {
+  fill: var(--accent);
+  opacity: 1;
+}
+.graph-timeline .tl-band {
+  fill: var(--accent-glow);
+}
+/* Hover read-out: floats to the left of the rail, vertically centered on the
+   hovered bucket. `right: 100%` keeps it inside the list, off the window edge. */
+.graph-timeline .tl-tip {
+  position: absolute;
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--border), 0 4px 12px rgb(0 0 0 / 0.3);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.graph-timeline .tl-tip-date {
+  font-size: var(--type-ui-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.graph-timeline .tl-tip-count {
+  font-size: var(--type-ui-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.timeline-toggle {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.timeline-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.timeline-toggle.on {
+  background: var(--bg-active);
+  color: var(--text);
 }
 .graph-main:focus {
   outline: none;

@@ -79,6 +79,9 @@ export interface SettingsState {
   /** Whether the Local Changes diff pane shows file diffs collapsed (headers
    * only). A session-only view toggle — not persisted across launches. */
   diffsCollapsed: boolean;
+  /** Whether the All Commits graph shows the vertical activity-timeline rail
+   * (a commit-density histogram + scrubber down the right edge). */
+  showTimeline: boolean;
   graphStyle: GraphStyle;
   uiFont: UiFont;
   monoFont: MonoFont;
@@ -161,6 +164,7 @@ export const useSettings = create<SettingsState>()(
       zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,
+      showTimeline: true,
       graphStyle: 'classic',
       uiFont: 'geist',
       monoFont: 'jetbrains',

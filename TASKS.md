@@ -488,6 +488,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   from `stash_list`; `GraphRow.isStash` → neutral diamond in `CommitGraphCell`;
   `stash@{n}` chip; right-click Apply/Pop/Drop/Copy SHA. Stashes off-window are
   dropped from the graph but stay in the sidebar.)
+- ☑ Activity-timeline rail (`views/CommitTimeline.tsx` — vertical commit-density
+  histogram + scrubber down the right edge of the graph; time axis top→bottom with
+  date-labeled gridlines so it reads as a timeline, a translucent band marks the
+  visible window, hover shows the bucket's date span + count, click/drag seeks the
+  list to that time. Toolbar toggle persisted as
+  `settings.showTimeline`. Pointer-only/`aria-hidden` — a redundant nav aid over
+  arrow-key list navigation.)
 - ☐ Graph style preset switching (classic / bold / subtle)
 - ☐ GPG sign status indicator in commit-detail meta
 

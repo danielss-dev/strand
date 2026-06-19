@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon';
 import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
+import { CommitTimeline } from './CommitTimeline';
 
 /**
  * Row heights per density — must match `.graph-table tbody tr` in
@@ -257,6 +258,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   // full-history graphs aren't. Slices `rows` (commits + stash rows), which
   // is what the table body renders.
   const density = useSettings((s) => s.density);
+  const showTimeline = useSettings((s) => s.showTimeline);
+  const setSetting = useSettings((s) => s.set);
   const rowH = ROW_PX[density] ?? ROW_PX.default;
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(800);
@@ -285,6 +288,18 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
       return commits.slice(lo, hi + 1).map((c) => c.hash);
     },
     [commits],
+  );
+  // Timeline scrub target: scroll the list so row `idx` sits ~a quarter down
+  // from the top (leaving a little newer context above). Drives the rail's
+  // click/drag seek without touching focus or selection — it's pure navigation.
+  const seekToRow = useCallback(
+    (idx: number) => {
+      const host = graphMainRef.current;
+      if (!host) return;
+      const top = HEADER_PX + idx * rowH;
+      host.scrollTop = Math.max(0, top - host.clientHeight * 0.25);
+    },
+    [rowH],
   );
   const refsByOid = useMemo(() => indexRefs(refs), [refs]);
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
@@ -609,6 +624,16 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
             </button>
           </div>
         )}
+        <button
+          type="button"
+          className={`timeline-toggle${showTimeline ? ' on' : ''}`}
+          onClick={() => setSetting('showTimeline', !showTimeline)}
+          aria-pressed={showTimeline}
+          aria-label="Toggle activity timeline"
+          title="Toggle activity timeline"
+        >
+          <Icon name="history" size={14} />
+        </button>
         <div className="graph-search" role="search">
           <button
             type="button"
@@ -677,6 +702,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
       <div className="graph-split">
         <PanelGroup direction="horizontal" autoSaveId="strand:commits-split">
           <Panel defaultSize={selectedCommit ? 62 : 100} minSize={40}>
+            <div className="graph-pane">
             <div
               ref={graphMainRef}
               className="graph-main"
@@ -784,6 +810,17 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
                   )}
                 </tbody>
               </table>
+            </div>
+            {showTimeline && (
+              <CommitTimeline
+                rows={rows}
+                rowH={rowH}
+                headerPx={HEADER_PX}
+                scrollTop={scrollTop}
+                viewH={viewH}
+                onSeekToRow={seekToRow}
+              />
+            )}
             </div>
           </Panel>
           {selectedCommit ? (

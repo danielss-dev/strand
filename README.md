@@ -65,8 +65,10 @@ keyboard alone, and the mouse stays first-class.
   keyboard-operable interactive rebase (reorder, reword, squash, fixup,
   drop) with conflict-pause Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
-  resizable commit detail panel, in-graph search by message / author / hash,
-  and a reflog browser for recovering commits orphaned by a reset or rebase.
+  resizable commit detail panel, in-graph search by message / author / hash, a
+  vertical activity-timeline rail (commit-density histogram you can scrub to
+  seek by date), and a reflog browser for recovering commits orphaned by a
+  reset or rebase.
 - **Command palette (⌘K)** — fuzzy search across commands, branches, tags,
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
