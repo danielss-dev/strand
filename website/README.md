@@ -42,6 +42,8 @@ Preview locally with `pnpm site` from the repo root (serves on
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow
       once that exists (currently links to the repo).
 - [ ] Add an `og:image` (1200×630) for link unfurls.
-- [ ] Host the Tauri updater manifest (`latest.json`) on the same domain —
-      `tauri.conf.json` expects `strand.danielss.dev`.
+- [x] Tauri updater manifest (`latest.json`) is served from GitHub Releases
+      (`releases/latest/download/latest.json`), which `tauri-action` publishes
+      automatically — `tauri.conf.json` points the updater there. No custom
+      `/updates` route on `strand.danielss.dev` is needed.
 - [ ] Keep the perf numbers in §02 in sync with `docs/perf-baseline.md`.
