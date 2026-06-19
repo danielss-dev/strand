@@ -62,6 +62,10 @@
   --accent-2: oklch(0.84 0.13 var(--accent-h, 55));
   --accent-fg: oklch(0.15 0.01 var(--accent-h, 55));
   --accent-glow: oklch(0.74 0.165 var(--accent-h, 55) / 0.18);
+  /* The configured accent, immune to the active-repo re-theme (which only
+     overrides `--accent-h`). The repo rail uses this for default tiles so one
+     repo's color can't bleed onto the others. */
+  --accent-base: oklch(0.74 0.165 var(--accent-h-base, 55));
 
   --add: oklch(0.78 0.16 145);
   --add-bg: oklch(0.40 0.08 145 / 0.22);
@@ -110,6 +114,8 @@
   --accent-2: oklch(0.55 0.20 var(--accent-h, 55));
   --accent-fg: oklch(0.99 0 0);
   --accent-glow: oklch(0.62 0.18 var(--accent-h, 55) / 0.14);
+  /* See dark theme: the configured accent, immune to the active-repo re-theme. */
+  --accent-base: oklch(0.62 0.18 var(--accent-h-base, 55));
 
   --add: oklch(0.45 0.16 145);
   --add-bg: oklch(0.92 0.08 145 / 0.55);
@@ -139,15 +145,19 @@
  * in both themes (see the `--accent*` / `--bg-sel` / `--selection` definitions
  * above). Set by `[data-accent]` on <html>; registry in `lib/theme.ts`.
  * Theme-independent, so it composes with light/dark. Add one here + in
- * ACCENT_OPTIONS. */
-[data-accent="amber"]   { --accent-h: 55; }
-[data-accent="rose"]    { --accent-h: 18; }
-[data-accent="magenta"] { --accent-h: 330; }
-[data-accent="violet"]  { --accent-h: 290; }
-[data-accent="blue"]    { --accent-h: 250; }
-[data-accent="cyan"]    { --accent-h: 210; }
-[data-accent="teal"]    { --accent-h: 178; }
-[data-accent="green"]   { --accent-h: 150; }
+ * ACCENT_OPTIONS.
+ *
+ * `--accent-h-base` mirrors the configured hue but is NEVER overridden by the
+ * active-repo re-theme (which only touches `--accent-h`). The repo rail pins
+ * its tiles to it so a repo's custom color can't bleed onto the other tiles. */
+[data-accent="amber"]   { --accent-h: 55;  --accent-h-base: 55; }
+[data-accent="rose"]    { --accent-h: 18;  --accent-h-base: 18; }
+[data-accent="magenta"] { --accent-h: 330; --accent-h-base: 330; }
+[data-accent="violet"]  { --accent-h: 290; --accent-h-base: 290; }
+[data-accent="blue"]    { --accent-h: 250; --accent-h-base: 250; }
+[data-accent="cyan"]    { --accent-h: 210; --accent-h-base: 210; }
+[data-accent="teal"]    { --accent-h: 178; --accent-h-base: 178; }
+[data-accent="green"]   { --accent-h: 150; --accent-h-base: 150; }
 
 /* Branch line colors — classic colored graph. The default values are tuned
  * for the dark surface; they're also used as *text* (ref chips, status

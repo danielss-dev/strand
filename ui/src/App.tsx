@@ -603,7 +603,10 @@ export function App() {
   // tile color, re-theme the whole app to that color's hue (an inline
   // `--accent-h` that wins over the `[data-accent]` preset). Repos without a
   // custom color keep the user's configured accent. Worktrees inherit their
-  // group's main tab color.
+  // group's main tab color. The repo rail itself opts out — its default tiles
+  // use `--accent-base` (the configured accent, immune to this override; see
+  // tokens.css / RepoRail) so a custom color on one repo never bleeds onto the
+  // other rail tiles.
   const activeAccentHue = useMemo(() => {
     const active = tabs.find((t) => t.path === activeTabPath);
     if (!active) return null;

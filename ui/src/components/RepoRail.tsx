@@ -47,9 +47,11 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
   }, [tabs, ensure]);
 
   // Background color per group: the group's main (non-linked) tab's custom
-  // color if set, else the app accent. Worktrees inherit it. (When a repo with
-  // a custom color is active, App re-themes the accent to that color, so the
-  // default tiles track it too — the whole rail stays in one palette.)
+  // color if set, else the configured app accent. Worktrees inherit it. The
+  // default uses `--accent-base` (the configured accent), NOT `--accent` —
+  // `--accent` follows the active repo's re-theme, so using it would bleed one
+  // repo's custom color onto every other tile. `--accent-base` keeps the rail
+  // isolated: other repos always show the app's own accent.
   const colorForGroup = useMemo(() => {
     const m = new Map<string, string>();
     for (const t of ordered) {
@@ -58,7 +60,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
         (x) => x.meta.common_dir === t.meta.common_dir && !x.meta.is_linked_worktree,
       );
       const custom = main ? icons[main.path]?.color : undefined;
-      m.set(t.meta.common_dir, custom || 'var(--accent)');
+      m.set(t.meta.common_dir, custom || 'var(--accent-base)');
     }
     return m;
   }, [ordered, icons]);

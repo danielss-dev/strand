@@ -111,9 +111,10 @@ export function RepoIconDialog({
     () => ({ color, letter, emoji, image }),
     [color, letter, emoji, image],
   );
-  // No custom color ⇒ the tile shows the app accent (and selecting this repo
-  // keeps the accent as-is). A picked swatch re-themes the accent when active.
-  const previewColor = color || 'var(--accent)';
+  // No custom color ⇒ the tile shows the configured app accent (`--accent-base`,
+  // matching the rail) and selecting this repo keeps the accent as-is. A picked
+  // swatch re-themes the accent when active.
+  const previewColor = color || 'var(--accent-base)';
 
   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -177,7 +178,7 @@ export function RepoIconDialog({
                 title="Default (app accent)"
                 aria-label="Default color (app accent)"
                 onClick={() => setColor(null)}
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accent-base)' }}
               >
                 {color === null && <Icon name="check" size={12} stroke={2.4} />}
               </button>
