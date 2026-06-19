@@ -261,6 +261,17 @@ export function LocalChanges() {
           }
           break;
         }
+        // Delete / Backspace discard the selected file in a single press — no
+        // double-tap confirmation (that lives on the 'd' shortcut).
+        case 'Delete':
+        case 'Backspace': {
+          if (!sel || sel.all || sel.staged) return;
+          e.preventDefault();
+          if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
+          setConfirmDiscard(null);
+          void state.discardMany([sel.file]).catch(fail('Discard'));
+          break;
+        }
         case 'c': {
           e.preventDefault();
           document
@@ -590,6 +601,7 @@ function FileSection({
         onSelect={(p) => onSelect(p ? { file: p, staged } : null)}
         onActivate={onAction}
         menuItems={menuItems}
+        onDiscard={onDiscard}
         toggleDirOnRowClick={false}
         emptyLabel={staged ? 'Nothing staged.' : 'No unstaged changes.'}
       />

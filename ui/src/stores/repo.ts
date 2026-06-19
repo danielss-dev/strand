@@ -1255,20 +1255,9 @@ export const useRepo = create<RepoState>((set, get) => ({
   async discardMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
-    // Multi-file discards get an automatic safety snapshot first: a stash
-    // entry that keeps the working tree intact, recorded as the bulk-undo
-    // handle. Single-file discards stay cheap (the per-hunk/-file undo path
-    // covers those). If the snapshot itself fails, abort — never run a bulk
-    // destructive op without its net.
-    if (files.length > 1) {
-      const outcome = await tauri.repoStashSnapshot(
-        path,
-        `Safety: before discarding ${files.length} files`,
-        true,
-      );
-      if (outcome.oid) set({ lastBulkDiscard: { oid: outcome.oid, count: files.length, path } });
-      void get().refreshStashes();
-    }
+    // Discard straight through — no automatic safety stash, even for bulk
+    // discards. Users asked not to have a snapshot spawned on every
+    // multi-file delete; the per-hunk/-file undo path covers single edits.
     await tauri.repoDiscardMany(path, files);
     await get().refreshLocalChanges();
   },

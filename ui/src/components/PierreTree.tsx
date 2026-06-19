@@ -97,6 +97,13 @@ interface PierreTreeProps {
   onActivate?: (paths: string[]) => void;
   /** Right-click menu items for the resolved target file set. Omit to disable. */
   menuItems?: (paths: string[]) => MenuItem[];
+  /**
+   * Discard the resolved target file set — bound to the Delete / Backspace
+   * keys while a file row is focused. Resolves the same way the context menu
+   * does: a focused row inside a multi-selection discards the *whole*
+   * selection, not just the active row. Omit to disable.
+   */
+  onDiscard?: (paths: string[]) => void;
   /** Enable Pierre's in-tree fuzzy search (also bound to ⌘F / Ctrl+F). */
   search?: boolean;
   /**
@@ -186,6 +193,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     onSelect,
     onActivate,
     menuItems,
+    onDiscard,
     search,
     followFocus = false,
     rowDecoration,
@@ -203,6 +211,8 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   onSelectRef.current = onSelect;
   const onActivateRef = useRef(onActivate);
   onActivateRef.current = onActivate;
+  const onDiscardRef = useRef(onDiscard);
+  onDiscardRef.current = onDiscard;
   const selectedRef = useRef(selectedPath);
   selectedRef.current = selectedPath;
   const rowDecorationRef = useRef(rowDecoration);
@@ -395,6 +405,25 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
           e.preventDefault();
           e.stopPropagation();
           onActivateRef.current(resolveTargets(focused));
+        }
+        return;
+      }
+      // Delete / Backspace discard the focused row in a single press, acting on
+      // the whole multi-selection (resolveTargets) when the focused row is part
+      // of one. stopPropagation keeps the window-level shortcut from also firing
+      // and double-discarding. Guarded to file rows so Backspace in the search
+      // box still edits text.
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (!onDiscardRef.current) return;
+        const onRow = e.nativeEvent
+          .composedPath()
+          .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
+        if (!onRow) return; // focus is in the search box, not a row
+        const focused = model.getFocusedPath();
+        if (focused && fileSetRef.current.has(focused)) {
+          e.preventDefault();
+          e.stopPropagation();
+          onDiscardRef.current(resolveTargets(focused));
         }
         return;
       }
