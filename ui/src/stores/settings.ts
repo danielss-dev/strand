@@ -72,6 +72,9 @@ export interface SettingsState {
   accent: AccentId;
   platform: Platform;
   density: Density;
+  /** Whole-UI zoom factor (1 = 100%). Driven by the Ctrl/⌘ +/− shortcuts and
+   * applied as CSS `zoom` on `<html>` in App. Persisted across launches. */
+  zoom: number;
   diffMode: DiffMode;
   /** Whether the Local Changes diff pane shows file diffs collapsed (headers
    * only). A session-only view toggle — not persisted across launches. */
@@ -155,6 +158,7 @@ export const useSettings = create<SettingsState>()(
       accent: 'amber',
       platform: detectPlatform(),
       density: 'default',
+      zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,
       graphStyle: 'classic',

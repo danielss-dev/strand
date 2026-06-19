@@ -59,6 +59,14 @@ import type { FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
+/** Whole-UI zoom bounds + step for the browser-style Ctrl/⌘ +/− shortcuts.
+ *  Ctrl+= / Ctrl++ zoom in, Ctrl+- out, Ctrl+0 resets to 100%. */
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.1;
+/** Clamp to range and snap to one-decimal steps (avoids float drift like 0.7000001). */
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+
 /** Single-letter status badge shown as the palette meta for a working-tree file. */
 const STATUS_ABBR: Record<StatusKind, string> = {
   MODIFIED: 'M',
@@ -112,6 +120,7 @@ export function App() {
   // when one of the five fields it actually reads changes — not on every
   // diffMode / diffsCollapsed / theme write.
   const density = useSettings((s) => s.density);
+  const zoom = useSettings((s) => s.zoom);
   const platform = useSettings((s) => s.platform);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
@@ -237,6 +246,10 @@ export function App() {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
   }, []);
+  // The window keydown handler is attached once (empty deps); it reaches the
+  // latest showToast through this ref instead of re-subscribing.
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   const openSettingsAt = useCallback((section: SettingsSectionId) => {
     setSettingsSection(section);
@@ -571,6 +584,21 @@ export function App() {
     root.style.setProperty('--diffs-font-family', FONTS.mono[diffFont === 'inherit' ? monoFont : diffFont]);
   }, [density, platform, accent, uiFont, monoFont, diffFont]);
 
+  // Whole-UI zoom (Ctrl/⌘ +/−). Use the webview's *native* zoom — it reflows
+  // the page exactly like a browser's Ctrl +/−, so viewport-relative layout
+  // (the 100vh window shell, flex panels, the topbar) stays responsive and
+  // nothing gets clipped. CSS `zoom` was avoided here: it scales after layout,
+  // so the window-fill shell overflows and pushes the chrome off-screen.
+  // Browser dev (no Tauri) falls back to CSS `zoom` on <html> just for preview.
+  useEffect(() => {
+    if (isTauri()) {
+      void getCurrentWebviewWindow().setZoom(zoom).catch((e) =>
+        console.warn('set zoom failed', e));
+    } else {
+      document.documentElement.style.zoom = zoom === 1 ? '' : String(zoom);
+    }
+  }, [zoom]);
+
   // Accent follows the active repo: if the selected repo group has a custom
   // tile color, re-theme the whole app to that color's hue (an inline
   // `--accent-h` that wins over the `[data-accent]` preset). Repos without a
@@ -675,6 +703,23 @@ export function App() {
       // Esc always closes the palette (the palette's own handler covers the
       // case where it has focus; this is the global fallback).
       if (e.key === 'Escape') { setPaletteOpen(false); return; }
+      // Browser-style UI zoom — Ctrl/⌘ with +, −, or 0. These sit outside the
+      // rebindable registry: + / = (plus their Shift and numpad variants) don't
+      // map to a single canonical binding, and zoom keys are conventionally
+      // fixed. Allowed even in text fields, exactly like the browser's own zoom.
+      if (e.ctrlKey || e.metaKey) {
+        const cur = useSettings.getState().zoom;
+        let next: number | null = null;
+        if (e.key === '+' || e.key === '=' || e.key === 'Add') next = clampZoom(cur + ZOOM_STEP);
+        else if (e.key === '-' || e.key === '_' || e.key === 'Subtract') next = clampZoom(cur - ZOOM_STEP);
+        else if (e.key === '0') next = 1;
+        if (next !== null) {
+          e.preventDefault();
+          if (next !== cur) useSettings.getState().set('zoom', next);
+          showToastRef.current(`Zoom ${Math.round(next * 100)}%`);
+          return;
+        }
+      }
       const binding = eventToBinding(e);
       if (!binding) return;
       const cmd = keyMapRef.current.byBinding.get(binding);

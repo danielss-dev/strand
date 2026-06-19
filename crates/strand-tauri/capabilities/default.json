@@ -11,6 +11,7 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:webview:default",
+    "core:webview:allow-set-webview-zoom",
     "core:event:default",
     "dialog:default",
     "os:default",
