@@ -11,12 +11,36 @@ const SWATCHES = ['--b-1', '--b-2', '--b-3', '--b-4', '--b-5', '--b-6', '--b-7']
 /** Longest edge of a stored tile image — keeps the data URL small in SQLite. */
 const IMAGE_MAX = 96;
 
+/** Cap on a stored SVG's source so the data URL stays reasonable in SQLite. */
+const SVG_MAX_BYTES = 64 * 1024;
+
+/** True for SVG picks — kept as vector markup instead of rasterized. */
+const isSvgFile = (file: File): boolean =>
+  file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+
 /**
- * Downscale a picked image file to a square-ish PNG data URL (≤ IMAGE_MAX on
- * its longest edge) so it stays tiny in the settings table. Done entirely in
- * the webview (canvas) — no Tauri fs plugin needed.
+ * Store a picked SVG as a base64 `image/svg+xml` data URL — vector, so it stays
+ * crisp at any tile size, unlike the raster path below. Rendered through the
+ * same `<img>` the other formats use; loading SVG via `<img>` neuters scripts
+ * and external fetches, so untrusted files are safe to display.
+ */
+async function svgToTileDataUrl(file: File): Promise<string> {
+  const text = await file.text();
+  if (text.length > SVG_MAX_BYTES) throw new Error('SVG is too large (max 64 KB)');
+  if (!/<svg[\s>]/i.test(text)) throw new Error('Not a valid SVG');
+  // UTF-8-safe base64 (btoa is latin1-only).
+  const b64 = btoa(unescape(encodeURIComponent(text)));
+  return `data:image/svg+xml;base64,${b64}`;
+}
+
+/**
+ * Convert a picked image file to a small data URL for the tile. SVGs keep their
+ * vector markup; everything else is downscaled to a square-ish PNG (≤ IMAGE_MAX
+ * on its longest edge) so it stays tiny in the settings table. Done entirely in
+ * the webview — no Tauri fs plugin needed.
  */
 function fileToTileDataUrl(file: File): Promise<string> {
+  if (isSvgFile(file)) return svgToTileDataUrl(file);
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -208,7 +232,7 @@ export function RepoIconDialog({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.svg"
                 hidden
                 onChange={(e) => void onPickFile(e)}
               />

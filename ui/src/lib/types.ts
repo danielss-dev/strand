@@ -338,7 +338,8 @@ export interface RepoIcon {
   color?: string | null;
   /** Emoji glyph; takes precedence over `letter`. */
   emoji?: string | null;
-  /** Downscaled image as a data URL; takes precedence over everything. */
+  /** Tile image as a data URL — a downscaled PNG, or an SVG kept as vector
+   *  markup. Takes precedence over everything. */
   image?: string | null;
 }
 
