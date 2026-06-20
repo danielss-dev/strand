@@ -23,5 +23,5 @@ personal use, forever.
 
 ## How to get one
 
-Email <d.schwarzcampos@gmail.com> with your company name and you'll get an
+Email <contact@danielss.dev> with your company name and you'll get an
 invoice and a signed license agreement back.
