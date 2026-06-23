@@ -191,6 +191,18 @@ export const tauri = {
     invoke<void>('repo_branch_delete', { path, name, force }),
   repoBranchRename: (path: string, oldName: string, newName: string) =>
     invoke<void>('repo_branch_rename', { path, oldName, newName }),
+  repoBranchDeleteRemote: (
+    path: string,
+    remote: string,
+    branch: string,
+    onProgress?: (p: Progress) => void,
+  ) =>
+    invoke<NetworkOutcome>('repo_branch_delete_remote', {
+      path,
+      remote,
+      branch,
+      onEvent: progressChannel(onProgress),
+    }),
   repoRemoteAdd: (path: string, name: string, url: string) =>
     invoke<void>('repo_remote_add', { path, name, url }),
   repoRemoteRemove: (path: string, name: string) =>

@@ -525,6 +525,24 @@ pub fn repo_branch_rename(path: String, old_name: String, new_name: String) -> C
 }
 
 #[tauri::command(async)]
+pub async fn repo_branch_delete_remote(
+    path: String,
+    remote: String,
+    branch: String,
+    on_event: Channel<Progress>,
+) -> CmdResult<NetworkOutcome> {
+    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+        let repo = Repo::discover(&path)?;
+        repo.delete_remote_branch(&remote, &branch, |p| {
+            let _ = on_event.send(p);
+        })
+        .map_err(CmdError::from)
+    })
+    .await
+    .map_err(|e| CmdError { message: format!("branch delete task failed: {e}") })?
+}
+
+#[tauri::command(async)]
 pub fn repo_remote_add(path: String, name: String, url: String) -> CmdResult<()> {
     Repo::discover(&path)?.add_remote(&name, &url)?;
     Ok(())

@@ -127,6 +127,23 @@ impl Repo {
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
+    /// Delete `branch` on `remote` (`git push <remote> --delete refs/heads/<branch>`).
+    /// The push also drops the local `refs/remotes/<remote>/<branch>` tracking
+    /// ref, so a refs refresh afterward reflects the deletion on both sides. The
+    /// ref is fully-qualified to `refs/heads/` (plus a `--` separator) so a stray
+    /// branch name can never be read as a git option.
+    pub fn delete_remote_branch(
+        &self,
+        remote: &str,
+        branch: &str,
+        on_progress: impl FnMut(Progress),
+    ) -> Result<NetworkOutcome> {
+        validate_remote_arg(remote, "remote")?;
+        let refspec = format!("refs/heads/{branch}");
+        let args = vec!["push", "--progress", "--delete", "--", remote, refspec.as_str()];
+        run_git_streaming(&self.path, &args, on_progress, None)
+    }
+
     /// Push a single tag to `remote`, or delete it there when `delete` is set
     /// (`git push <remote> [--delete] refs/tags/<tag>`). Tags are local until
     /// pushed, and a tag deleted locally stays on the remote until deleted
