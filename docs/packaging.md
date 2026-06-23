@@ -94,10 +94,12 @@ locally instead:
    spctl -a -vvv -t install "Strand.app"
    xcrun stapler validate "Strand.app"
    ```
-2. Ship the stapled `.dmg`. (Auto-update is now wired on the signing side —
-   the updater pubkey is real and `bundle.createUpdaterArtifacts` is on — but
-   the `endpoints` host `strand.danielss.dev` isn't live yet, so updates won't
-   actually be served until that lands. See §5.)
+2. Ship the stapled `.dmg`. (Auto-update is fully wired: the updater pubkey is
+   real, `bundle.createUpdaterArtifacts` is on, and the `endpoints` point at the
+   GitHub Releases manifest — `releases/latest/download/latest.json`, which
+   `tauri-action` publishes per release. The old `strand.danielss.dev/updates`
+   host was dropped in 0.6.1 (`ce1ffd0`). Note: the release workflow opens a
+   **draft**, and `releases/latest/download/` only resolves once you publish it.)
 
 ---
 

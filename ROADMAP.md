@@ -258,11 +258,14 @@ also pending (only `aarch64-apple-darwin` is installed).
   validated on Windows 11 (see 2026-06-07 below)
 - ☑ Linux build (deb / rpm / AppImage) — built + published by release CI
   (v0.5.0, 2026-06-12)
-- ◐ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
+- ☑ Tauri auto-update: real pubkey + signed manifests done (minisign keypair
   wired, `createUpdaterArtifacts` on); in-app UI done (Settings → Updates:
   check / download / restart + auto-check & auto-install prefs); release CI
-  publishes a signed all-platform `latest.json` per release (since v0.5.0);
-  real endpoint still pending (`strand.danielss.dev/updates` isn't live)
+  publishes a signed all-platform `latest.json` per release (since v0.5.0); the
+  updater endpoint now points at the GitHub Releases manifest
+  (`releases/latest/download/latest.json`) — the dead `strand.danielss.dev/updates`
+  host was dropped in 0.6.1 (`ce1ffd0`). Operational note: CI opens a **draft**
+  release; `releases/latest/download/` only resolves once it's published.
 - ☑ **Settings view** — multi-section dialog (Appearance / Diff / Git /
   Integrations / Updates): density + fonts exposed, diff appearance (layout
   default, font, indicators, line numbers, word highlight), global git

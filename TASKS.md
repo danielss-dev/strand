@@ -264,15 +264,20 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ SQLite migration v2: `commit_messages` (per-repo commit message history)
 - ☑ Stream events for long-running ops (clone, fetch, push, pull) — via
   `tauri::ipc::Channel<Progress>`, no extra capability needed
-- ◐ Real updater pubkey + endpoint. Pubkey done: minisign keypair generated
+- ☑ Real updater pubkey + endpoint. Pubkey done: minisign keypair generated
   (key ID `84FCBFD2A981CE5D`, private key at `~/.strand/`, off-repo) and wired
   into `tauri.conf.json` → `plugins.updater.pubkey`; `bundle.createUpdaterArtifacts`
   enabled so signed `latest.json` + bundles are produced (and published per
-  release by CI since v0.5.0, all platforms). **Still pending:** the
-  `endpoints` host `strand.danielss.dev` isn't live, so no updates are served yet.
+  release by CI since v0.5.0, all platforms). **Endpoint resolved (0.6.1,
+  `ce1ffd0`):** the updater now points at the GitHub Releases manifest
+  (`https://github.com/danielss-dev/strand/releases/latest/download/latest.json`),
+  which `tauri-action` publishes per release — the dead `strand.danielss.dev/updates`
+  host (it only ever served the landing page, so checks 404'd) is gone. CI opens a
+  **draft** release; `releases/latest/download/` only resolves once it's published.
   (2026-06-07: on the Windows box the `TAURI_SIGNING_PRIVATE_KEY` in env does
-  **not** match this pubkey — Tauri warns the generated `.sig` won't validate at
-  runtime. Reconcile the key/config before shipping Windows auto-updates.)
+  **not** match this pubkey — Tauri warns the locally-built `.sig` won't validate
+  at runtime; CI builds sign with the matching secret. Reconcile the local
+  key/config before relying on locally-built Windows auto-updates.)
 - ◐ Native menus (PRD §7): **macOS menubar done** (`ui/src/lib/menu.ts`, built
   via `@tauri-apps/api/menu` + `setAsAppMenu`; Strand/File/Edit/View/Repository/
   Window menus wired to the same callbacks as the in-app UI — Settings ⌘,,
