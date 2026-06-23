@@ -103,6 +103,7 @@ fn main() {
             commands::repo_branch_create,
             commands::repo_branch_delete,
             commands::repo_branch_rename,
+            commands::repo_branch_delete_remote,
             commands::repo_remote_add,
             commands::repo_remote_remove,
             commands::repo_remote_rename,

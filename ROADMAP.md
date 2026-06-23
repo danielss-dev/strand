@@ -995,6 +995,20 @@ band (the graph's hot scroll path stays cheap); the rail is `aria-hidden` (a
 redundant pointer nav aid over arrow-key list navigation + search). Verified with
 `tsc` + `vite build`.
 
+**Delete a remote branch (2026-06-23):** The sidebar remote-branch menu gained
+**Delete branch on <remote>** (confirm, danger), closing the gap where a branch
+could be pruned locally but not on `origin`. `network.rs` adds
+`Repo::delete_remote_branch` — `git push <remote> --delete refs/heads/<branch>`,
+shelled out + streamed through `run_git_streaming` like the tag-delete sibling
+(credentials/progress free); the ref is fully-qualified to `refs/heads/` behind a
+`--` so a stray name can't be read as an option. The push also drops the local
+`refs/remotes/<remote>/<branch>` tracking ref, so the `refreshRefs` after a
+successful delete clears the row with no optimistic bookkeeping. New
+`repo_branch_delete_remote` async IPC + `repoBranchDeleteRemote` wrapper +
+`deleteRemoteBranch(remote, branch)` store action. Verified with `cargo check`,
+`tsc`, and an end-to-end bare-remote run confirming both the remote branch and
+the local tracking ref are removed.
+
 ---
 
 ## 1.1+ — Post-1.0

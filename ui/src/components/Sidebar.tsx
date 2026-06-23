@@ -138,6 +138,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const revealInGraph = useRepo((s) => s.revealInGraph);
   const createBranch = useRepo((s) => s.createBranch);
   const deleteBranch = useRepo((s) => s.deleteBranch);
+  const deleteRemoteBranch = useRepo((s) => s.deleteRemoteBranch);
   const removeRemote = useRepo((s) => s.removeRemote);
   const fetchRemote = useRepo((s) => s.fetchRemote);
   const deleteTag = useRepo((s) => s.deleteTag);
@@ -378,6 +379,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     })();
   };
 
+  const runRemoteBranchDelete = (rb: RemoteBranch) => {
+    void (async () => {
+      try {
+        await deleteRemoteBranch(rb.remote, rb.branch);
+        onToast(`Deleted ${rb.branch} on ${rb.remote}`);
+      } catch (e) {
+        onToast(`Remote delete failed: ${errMessage(e)}`);
+      }
+    })();
+  };
+
   // ── per-row menus — every action a row supports lives here ──
   const localBranchName = (rb: RemoteBranch) =>
     refs.branches.some((b) => b.name === rb.branch) ? `${rb.remote}/${rb.branch}` : rb.branch;
@@ -462,6 +474,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       label: 'New branch from here…',
       icon: 'plus',
       onSelect: () => onCreateBranch(rb.name, rb.name),
+    });
+    items.push({
+      label: `Delete branch on ${rb.remote}`,
+      icon: 'trash',
+      danger: true,
+      confirm: true,
+      onSelect: () => runRemoteBranchDelete(rb),
     });
     return items;
   };

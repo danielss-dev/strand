@@ -208,6 +208,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Push / delete tags on a remote (`Repo::push_tag` /
   `Repo::push_all_tags` — `git push <remote> [--delete] refs/tags/<tag>` and
   `git push <remote> --tags`, shelled out + streamed like the other net ops)
+- ☑ Delete a branch on a remote (`Repo::delete_remote_branch` —
+  `git push <remote> --delete refs/heads/<branch>`, shelled out + streamed; the
+  push drops the local `refs/remotes/<remote>/<branch>` tracking ref too, so a
+  refs refresh clears the sidebar row)
 - ☑ Remote tag listing (`Repo::remote_tags` via `git ls-remote --tags` —
   fetched tags share `refs/tags/`, so ls-remote is the only way to know which
   tags a remote has; used to gray out "delete on remote" for absent tags)
@@ -237,7 +241,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Write commands: `repo_stage`, `repo_unstage`, `repo_stage_many`,
   `repo_unstage_many`, `repo_discard_many`, `repo_discard`,
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
-  `repo_branch_delete`, `repo_branch_rename`, `repo_remote_add`,
+  `repo_branch_delete`, `repo_branch_delete_remote`, `repo_branch_rename`,
+  `repo_remote_add`,
   `repo_remote_remove`, `repo_remote_rename`, `repo_remote_set_url`,
   `repo_reset`, `repo_gitignore_add`,
   `repo_tag_create`, `repo_tag_delete`,
@@ -351,7 +356,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   their local branch (`tracked` meta tag, disabled "Tracked by current
   branch" when it's HEAD); untracked leaves — or the menu's "Create local
   branch & track" — create + track locally (name collision → `remote/branch`
-  local name)
+  local name). Leaf menu also has "Delete branch on <remote>" (confirm,
+  danger) → `deleteRemoteBranch` → `git push <remote> --delete`.
 - ☑ Tags list (folder tree). Click checks out the tagged commit (detached HEAD
   via `checkoutCommit`); right-click menu = Checkout / Push to <remote> /
   Delete on <remote> (confirm) / Delete tag (confirm) — the two remote items

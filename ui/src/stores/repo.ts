@@ -365,6 +365,12 @@ export interface RepoState {
   checkoutCommit(rev: string): Promise<void>;
   createBranch(name: string, startPoint: string | null, checkout: boolean): Promise<void>;
   deleteBranch(name: string, force: boolean): Promise<void>;
+  /**
+   * Delete a branch on its remote (`git push <remote> --delete`). The push also
+   * drops the local remote-tracking ref, so refs refresh afterward. Returns
+   * git's output.
+   */
+  deleteRemoteBranch(remote: string, branch: string, onProgress?: (p: Progress) => void): Promise<string>;
   /** Rename a local branch; its upstream config moves along, HEAD follows. */
   renameBranch(oldName: string, newName: string): Promise<void>;
 
@@ -1417,6 +1423,15 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchDelete(path, name, force);
     await get().refreshRefs();
+  },
+  async deleteRemoteBranch(remote, branch, onProgress) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoBranchDeleteRemote(path, remote, branch, onProgress);
+    // The push removes the local remote-tracking ref too, so the sidebar row
+    // disappears once refs reload.
+    await get().refreshRefs();
+    return res.output;
   },
   async renameBranch(oldName, newName) {
     const path = get().activePath;
