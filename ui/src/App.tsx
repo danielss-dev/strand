@@ -905,6 +905,7 @@ export function App() {
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
+        { id: 'search-content', label: 'Search file contents…', group: 'Actions', keywords: 'pickaxe content diff code history full grep -G -S', run: () => { requestCommitSearch('content'); } },
         // Opens the ⌘F bar in whichever diff view is showing; other views
         // route to Local Changes first (the signal is consumed on mount).
         { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: formatBinding('Mod+F', platform), keywords: 'find in diff grep text content search', run: () => {
