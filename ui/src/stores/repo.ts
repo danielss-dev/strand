@@ -17,6 +17,7 @@ import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
   Commit,
+  CommitSearchMode,
   FileDiff,
   FileStatus,
   MergeMode,
@@ -85,6 +86,13 @@ export interface RepoState {
   meta: RepoMeta | null;
   status: FileStatus[];
   commits: Commit[];
+  /**
+   * Results of the last full-history commit search ({@link RepoState.searchLog}).
+   * Held in the store (not just the All Commits view) so {@link CommitDetail}
+   * can render a commit the search surfaced that isn't in the loaded `commits`
+   * window. Reset per tab.
+   */
+  commitSearchResults: Commit[];
 
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
@@ -486,6 +494,14 @@ export interface RepoState {
   /** Open the commit-detail panel for `hash`, or close it when null. */
   selectCommit(hash: string | null): Promise<void>;
 
+  /**
+   * Run a full-history commit search (message / author / diff content) and
+   * stash the matches in {@link RepoState.commitSearchResults}. Returns the
+   * matches so the caller can drive its own UI (count, dropdown). A blank query
+   * clears the results and returns `[]`.
+   */
+  searchLog(query: string, mode: CommitSearchMode): Promise<Commit[]>;
+
   /** Switch to the All Commits graph and reveal (scroll to + highlight)
    * `hash` — the tip of a sidebar branch/remote/tag row. */
   revealInGraph(hash: string): void;
@@ -499,7 +515,13 @@ export interface RepoState {
    * graph once it mounts (mirrors {@link RepoState.revealCommit}).
    */
   commitSearchFocus: boolean;
-  requestCommitSearch(): void;
+  /**
+   * Field the search field should switch to when the focus signal is consumed —
+   * lets "Search file contents…" jump straight into Content mode. `null` leaves
+   * the current field. Cleared alongside {@link RepoState.commitSearchFocus}.
+   */
+  commitSearchMode: CommitSearchMode | null;
+  requestCommitSearch(mode?: CommitSearchMode): void;
   clearCommitSearchFocus(): void;
 
   /**
@@ -632,6 +654,7 @@ const EMPTY_ACTIVE = {
   meta: null as RepoMeta | null,
   status: [] as FileStatus[],
   commits: [] as Commit[],
+  commitSearchResults: [] as Commit[],
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
@@ -716,6 +739,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   fileTab: 'content',
   selectedRef: null,
   commitSearchFocus: false,
+  commitSearchMode: null,
   diffSearchSignal: false,
   selectSinceBaseline: false,
   diffsTick: 0,
@@ -1712,6 +1736,21 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
   },
 
+  async searchLog(query, mode) {
+    const path = get().activePath;
+    if (!path) return [];
+    const q = query.trim();
+    if (!q) {
+      set({ commitSearchResults: [] });
+      return [];
+    }
+    const results = await tauri.repoSearchLog(path, q, mode);
+    // Bail if the active repo changed mid-flight (mirrors refreshLog).
+    if (get().activePath !== path) return [];
+    set({ commitSearchResults: results });
+    return results;
+  },
+
   async refreshRecents() {
     try {
       set({ recents: await recentsDb.list() });
@@ -1727,8 +1766,9 @@ export const useRepo = create<RepoState>((set, get) => ({
   setView: (view) => set({ view }),
   revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
   clearReveal: () => set({ revealCommit: null }),
-  requestCommitSearch: () => set({ view: 'commits', commitSearchFocus: true }),
-  clearCommitSearchFocus: () => set({ commitSearchFocus: false }),
+  requestCommitSearch: (mode) =>
+    set({ view: 'commits', commitSearchFocus: true, commitSearchMode: mode ?? null }),
+  clearCommitSearchFocus: () => set({ commitSearchFocus: false, commitSearchMode: null }),
   requestDiffSearch: () => set({ diffSearchSignal: true }),
   clearDiffSearch: () => set({ diffSearchSignal: false }),
   openIgnoreDialog: (initial) => set({ ignoreDraft: initial }),

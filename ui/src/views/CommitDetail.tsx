@@ -34,6 +34,7 @@ export function CommitDetail({
   const diffs = useRepo((s) => s.selectedCommitDiffs);
   const loading = useRepo((s) => s.selectedCommitDiffsLoading);
   const commits = useRepo((s) => s.commits);
+  const searchResults = useRepo((s) => s.commitSearchResults);
   const stashes = useRepo((s) => s.stashes);
   const selectCommit = useRepo((s) => s.selectCommit);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
@@ -51,9 +52,15 @@ export function CommitDetail({
     () => stashes.find((s) => s.oid === selectedCommit) ?? null,
     [stashes, selectedCommit],
   );
+  // Prefer the loaded graph window; fall back to a full-history search result
+  // (so a commit the search surfaced from beyond the window still renders its
+  // header here — its diff loads by oid regardless), then a stash node.
   const commit = useMemo(
-    () => commits.find((c) => c.hash === selectedCommit) ?? (stash ? stashCommit(stash) : null),
-    [commits, selectedCommit, stash],
+    () =>
+      commits.find((c) => c.hash === selectedCommit) ??
+      searchResults.find((c) => c.hash === selectedCommit) ??
+      (stash ? stashCommit(stash) : null),
+    [commits, searchResults, selectedCommit, stash],
   );
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);

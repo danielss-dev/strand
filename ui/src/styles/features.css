@@ -904,6 +904,7 @@
   flex: 1;
 }
 .graph-search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -970,6 +971,87 @@
 .search-nav:disabled {
   opacity: 0.4;
   cursor: default;
+}
+/* The "search all history" button pulses while the backend search runs. */
+.search-nav.busy {
+  opacity: 0.6;
+  animation: search-busy 0.9s ease-in-out infinite;
+}
+@keyframes search-busy {
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-nav.busy {
+    animation: none;
+  }
+}
+/* Full-history search results dropdown, anchored under the search pill. */
+.search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-panel);
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 0.5px var(--border) inset,
+    var(--shadow-3);
+}
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.search-result.empty {
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+  cursor: default;
+}
+.search-result.focused {
+  background: var(--bg-hover);
+}
+.search-result .sr-subject {
+  color: var(--text);
+  font-size: var(--type-ui-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result .sr-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--type-ui-xs);
+}
+.search-result .sr-author {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.search-result .sr-hash {
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.search-result .sr-date {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* Marks a result older than the loaded graph window (opens detail only). */
+.search-result .sr-out {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 700;
 }
 .seg {
   display: flex;

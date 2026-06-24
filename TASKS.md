@@ -63,10 +63,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `FileBlob` + `BlobSource`, base64 over IPC via a std-only `base64_encode`, 8 MB
   cap with a metadata pre-check on the worktree path, behind `safe_workdir_path`;
   powers the image diff preview)
-- ◐ Commit search (message, author, hash) — in-graph highlight over the loaded
-  log is done **client-side** (no backend; `Commits.tsx` `commitMatches`), so no
-  `Repo` search command exists yet. Full-history search + `-G` / `-S` content
-  search (which need `git log --grep`/`-G`) are still ☐.
+- ☑ Commit search (message, author, hash, content). In-graph highlight over the
+  loaded log stays **client-side** (`Commits.tsx` `commitMatches`); full-history
+  search is now backed by `Repo::search_log(query, mode, limit)` (`log.rs`):
+  `--grep` / `--author` (`--fixed-strings -i`) reach beyond the loaded window,
+  and **`-G` (the pickaxe)** searches commit diffs — exposed via `repo_search_log`
+  and a Content field mode + results dropdown. (`-S` occurrence-count pickaxe is
+  a possible refinement; hash search stays a client-side prefix match.)
 
 ### Writes
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
@@ -234,6 +237,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## strand-tauri (IPC + app shell)
 
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
+  `repo_search_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
   `repo_submodules`, `repo_blame`, `repo_reflog`, `repo_file_content`,
   `repo_file_blob`, `repo_file_history`, `repo_diff_commit_file`,
@@ -492,8 +496,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   N/M counter; `/` focuses the field, ⌘K "Search commits…" jumps to it, Esc
   clears. Client-side over the loaded log (message **subject**, author
   name/email, hash prefix — body is excluded so `Co-Authored-By:`/`Signed-off-by:`
-  trailers don't match nearly every commit) — full-history + `-G`/`-S` content
-  search remain ☐ under Reads.
+  trailers don't match nearly every commit). **Full-history + content search
+  shipped (2026-06-24):** a **Content** field mode + a "Search all history"
+  button (⌘↵, or ↵ in Content) run `Repo::search_log` and open a
+  keyboard-navigable results dropdown (combobox + listbox) over `--grep` /
+  `--author` / `-G` matches across all history; an out-of-window hit opens in the
+  detail panel (`CommitDetail` falls back to `commitSearchResults`). The
+  loaded-window highlight + ‹/› are untouched.
 - ☑ Stashes shown inline on the graph (`mergeStashRows` in `Commits.tsx` splices a
   synthetic node per stash above its base commit; `Stash` gained `base` + `time_unix`
   from `stash_list`; `GraphRow.isStash` → neutral diamond in `CommitGraphCell`;
@@ -984,7 +993,8 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☑ Wire commit-graph search (`Commits.tsx`). Resolved by **highlighting matches
   in place instead of filtering** — every commit stays in the list, so the lane
   algorithm's parent→child continuity is never broken. (Backend `git log`-based
-  search for full history / `-G`/`-S` is still ☐ under strand-core → Reads.)
+  full-history / `-G` content search shipped 2026-06-24 — `Repo::search_log`,
+  surfaced in a results dropdown; see strand-core → Reads.)
 
 ---
 

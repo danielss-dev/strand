@@ -10,7 +10,7 @@ use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
-    history::{MergeMode, RebaseEntry, RebaseStep}, log::Commit,
+    history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
     refs::Refs, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
@@ -124,6 +124,19 @@ pub fn repo_unwatch(path: String, state: State<'_, AppState>) -> CmdResult<()> {
 #[tauri::command(async)]
 pub fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
     Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)
+}
+
+/// Full-history commit search (message / author / diff content) — the backend
+/// reach the client-side, loaded-window highlight can't cover. `mode` is one of
+/// `"message"` / `"author"` / `"content"`.
+#[tauri::command(async)]
+pub fn repo_search_log(
+    path: String,
+    query: String,
+    mode: SearchMode,
+    limit: Option<usize>,
+) -> CmdResult<Vec<Commit>> {
+    Ok(Repo::discover(&path)?.search_log(&query, mode, limit.unwrap_or(200))?)
 }
 
 #[tauri::command(async)]

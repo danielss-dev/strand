@@ -77,6 +77,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   const returnToFile = useRepo((s) => s.returnToFile);
   // One-shot signal from the command palette's "Search commits…" action.
   const commitSearchFocus = useRepo((s) => s.commitSearchFocus);
+  const commitSearchModeSignal = useRepo((s) => s.commitSearchMode);
   const clearCommitSearchFocus = useRepo((s) => s.clearCommitSearchFocus);
   // Review baseline — when pinned, the toolbar offers one-click selection of
   // every commit since it (the agent session), and the palette's "Select
@@ -87,6 +88,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   const clearSelectSinceBaseline = useRepo((s) => s.clearSelectSinceBaseline);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
+  // Full-history search (message / author / diff content): the backend reach
+  // beyond the loaded window. Results live in the store so the detail panel can
+  // render a surfaced commit that isn't a loaded graph row.
+  const commitSearchResults = useRepo((s) => s.commitSearchResults);
+  const searchLog = useRepo((s) => s.searchLog);
 
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
@@ -242,6 +248,12 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   const [query, setQuery] = useState('');
   const [searchMode, setSearchMode] = useState<SearchMode>('message');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Full-history results dropdown state.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [resultFocus, setResultFocus] = useState(0);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const focusedResultRef = useRef<HTMLDivElement>(null);
 
   // Inject stash nodes inline: each stash becomes a synthetic row right above
   // the commit it was taken on, so it visibly hangs off that point. The merged
@@ -335,6 +347,9 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
     return commits.filter((c) => commitMatches(c, q, searchMode)).map((c) => c.hash);
   }, [commits, query, searchMode]);
   const matchSet = useMemo(() => new Set(matches), [matches]);
+  // Hashes in the loaded graph window — lets a search result mark whether
+  // clicking it can scroll the graph or only open the detail panel.
+  const loadedSet = useMemo(() => new Set(commits.map((c) => c.hash)), [commits]);
   // The "current" match is derived from the focused row, so the counter and
   // ‹/› stepping can't drift out of sync with a separate index.
   const matchPos = focusedCommit ? matches.indexOf(focusedCommit) : -1;
@@ -358,21 +373,93 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
 
   const clearSearch = useCallback(() => {
     setQuery('');
+    setSearchOpen(false);
+    // Leave `commitSearchResults` in the store: they're invisible once the
+    // dropdown is closed, keep any open detail panel valid (a panel may show an
+    // out-of-window result), and reset on tab switch.
     searchInputRef.current?.focus();
   }, []);
 
+  // Escalate to a backend full-history search. The loaded-window highlight
+  // stays for instant feedback; this reaches commits past the window and — in
+  // Content mode — searches the diffs the client never loads. Explicit (a
+  // button / ⌘↵ / ↵ in Content), never per-keystroke: `git log -G` over full
+  // history can be slow on a big repo.
+  const runHistorySearch = useCallback(async () => {
+    const q = query.trim();
+    if (!q || searchMode === 'hash') return;
+    setSearching(true);
+    setSearchOpen(true);
+    try {
+      await searchLog(q, searchMode);
+      setResultFocus(0);
+    } catch (e) {
+      onToast(`Search failed: ${errMessage(e)}`);
+      setSearchOpen(false);
+    } finally {
+      setSearching(false);
+      // The button click moves focus off the field; restore it so ↑/↓/↵ drive
+      // the dropdown.
+      searchInputRef.current?.focus();
+    }
+  }, [query, searchMode, searchLog, onToast]);
+
+  // Open a search result: scroll + focus it in the graph when it's a loaded
+  // row, and open the detail panel either way (its diff loads by oid, and the
+  // store keeps the result so the panel can render an out-of-window commit).
+  const openResult = useCallback(
+    (c: Commit) => {
+      setSearchOpen(false);
+      if (loadedSet.has(c.hash)) {
+        setFocusedCommit(c.hash);
+        setMulti(new Set([c.hash]));
+        anchorRef.current = c.hash;
+        graphMainRef.current?.focus();
+      }
+      void selectCommit(c.hash);
+    },
+    [loadedSet, selectCommit],
+  );
+
   const onSearchKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
+      // While the results dropdown is open, the arrow keys drive it.
+      if (searchOpen && commitSearchResults.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setResultFocus((i) => Math.min(commitSearchResults.length - 1, i + 1));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setResultFocus((i) => Math.max(0, i - 1));
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const c = commitSearchResults[resultFocus];
+          if (c) openResult(c);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setSearchOpen(false);
+          return;
+        }
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        stepMatch(e.shiftKey ? -1 : 1);
+        // ⌘↵ — or plain ↵ in Content mode, which has no in-window matches —
+        // runs the full-history search; otherwise ↵ steps the loaded matches.
+        if (e.metaKey || e.ctrlKey || searchMode === 'content') void runHistorySearch();
+        else stepMatch(e.shiftKey ? -1 : 1);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         if (query) clearSearch();
         else searchInputRef.current?.blur();
       }
     },
-    [stepMatch, query, clearSearch],
+    [searchOpen, commitSearchResults, resultFocus, openResult, searchMode, runHistorySearch, stepMatch, query, clearSearch],
   );
 
   const openModeMenu = useCallback(
@@ -382,12 +469,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
         icon: searchMode === m ? 'check' : undefined,
         onSelect: () => {
           setSearchMode(m);
+          // Old results belong to the previous field — close the dropdown so a
+          // mode switch doesn't show stale hits until the next search.
+          setSearchOpen(false);
           // ContextMenu restores focus to its opener (the mode button) on
           // close; defer past that so the field gets focus for typing.
           requestAnimationFrame(() => searchInputRef.current?.focus());
         },
       });
-      setMenu({ x, y, items: [opt('message'), opt('author'), opt('hash')] });
+      setMenu({ x, y, items: [opt('message'), opt('author'), opt('hash'), opt('content')] });
     },
     [searchMode],
   );
@@ -572,14 +662,33 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Close the results dropdown on an outside click. Escape is handled by the
+  // input's own keydown (which also clears the query), so this watches the
+  // pointer only.
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!searchWrapRef.current?.contains(e.target as Node)) setSearchOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [searchOpen]);
+
+  // Keep the keyboard-focused result scrolled into view in the dropdown.
+  useEffect(() => {
+    if (searchOpen) focusedResultRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [resultFocus, searchOpen]);
+
   // The command palette's "Search commits…" sets a one-shot store flag; consume
   // it once the graph is mounted (handles the palette switching the view in).
   useEffect(() => {
     if (!commitSearchFocus) return;
+    // "Search file contents…" carries a target field so it lands in Content mode.
+    if (commitSearchModeSignal) setSearchMode(commitSearchModeSignal);
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
     clearCommitSearchFocus();
-  }, [commitSearchFocus, clearCommitSearchFocus]);
+  }, [commitSearchFocus, commitSearchModeSignal, clearCommitSearchFocus]);
 
   // The palette's "Select commits since baseline" sets a one-shot store flag;
   // wait for the log to load before consuming so a view switch (which renders
@@ -634,7 +743,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
         >
           <Icon name="history" size={14} />
         </button>
-        <div className="graph-search" role="search">
+        <div className="graph-search" role="search" ref={searchWrapRef}>
           <button
             type="button"
             className="search-mode"
@@ -652,40 +761,81 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
           <input
             ref={searchInputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              // Editing the query staled any open results — re-trigger to refresh.
+              setSearchOpen(false);
+            }}
             onKeyDown={onSearchKeyDown}
-            placeholder={`Search ${MODE_LABEL[searchMode].toLowerCase()}…`}
+            placeholder={
+              searchMode === 'content'
+                ? 'Search file contents — ↵'
+                : `Search ${MODE_LABEL[searchMode].toLowerCase()}…`
+            }
             aria-label={`Search commits by ${MODE_LABEL[searchMode].toLowerCase()}`}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={searchOpen}
+            aria-controls={searchOpen ? 'commit-search-results' : undefined}
+            aria-activedescendant={
+              searchOpen && commitSearchResults[resultFocus]
+                ? `csr-${commitSearchResults[resultFocus].hash}`
+                : undefined
+            }
           />
           {query && (
             <>
-              <span className="search-count" role="status" aria-live="polite">
-                {matches.length === 0
-                  ? 'No results'
-                  : matchPos >= 0
-                    ? `${matchPos + 1}/${matches.length}`
-                    : `${matches.length} found`}
-              </span>
-              <button
-                type="button"
-                className="search-nav"
-                onClick={() => stepMatch(-1)}
-                disabled={matches.length === 0}
-                aria-label="Previous match"
-                title="Previous match (⇧↵)"
-              >
-                <Icon name="chev-up" size={13} />
-              </button>
-              <button
-                type="button"
-                className="search-nav"
-                onClick={() => stepMatch(1)}
-                disabled={matches.length === 0}
-                aria-label="Next match"
-                title="Next match (↵)"
-              >
-                <Icon name="chev-down" size={13} />
-              </button>
+              {/* In-window highlight nav — meaningless for Content (no loaded
+                  rows match), so it's hidden there. */}
+              {searchMode !== 'content' && (
+                <>
+                  <span className="search-count" role="status" aria-live="polite">
+                    {matches.length === 0
+                      ? 'No results'
+                      : matchPos >= 0
+                        ? `${matchPos + 1}/${matches.length}`
+                        : `${matches.length} found`}
+                  </span>
+                  <button
+                    type="button"
+                    className="search-nav"
+                    onClick={() => stepMatch(-1)}
+                    disabled={matches.length === 0}
+                    aria-label="Previous match"
+                    title="Previous match (⇧↵)"
+                  >
+                    <Icon name="chev-up" size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="search-nav"
+                    onClick={() => stepMatch(1)}
+                    disabled={matches.length === 0}
+                    aria-label="Next match"
+                    title="Next match (↵)"
+                  >
+                    <Icon name="chev-down" size={13} />
+                  </button>
+                </>
+              )}
+              {/* Escalate to a backend full-history search. Hash stays
+                  loaded-window only (no backend prefix search). */}
+              {searchMode !== 'hash' && (
+                <button
+                  type="button"
+                  className={`search-nav${searching ? ' busy' : ''}`}
+                  onClick={() => void runHistorySearch()}
+                  disabled={searching}
+                  aria-label="Search all history"
+                  title={
+                    searchMode === 'content'
+                      ? 'Search file contents across all history (↵)'
+                      : 'Search all history (⌘↵)'
+                  }
+                >
+                  <Icon name="history" size={13} />
+                </button>
+              )}
               <button
                 type="button"
                 className="search-clear"
@@ -696,6 +846,50 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
                 <Icon name="x" size={12} />
               </button>
             </>
+          )}
+          {searchOpen && (
+            <div
+              className="search-results"
+              role="listbox"
+              id="commit-search-results"
+              aria-label="Search results"
+            >
+              {searching && commitSearchResults.length === 0 ? (
+                <div className="search-result empty">Searching all history…</div>
+              ) : commitSearchResults.length === 0 ? (
+                <div className="search-result empty">No matches in history.</div>
+              ) : (
+                commitSearchResults.map((c, i) => {
+                  const inWindow = loadedSet.has(c.hash);
+                  return (
+                    <div
+                      key={c.hash}
+                      id={`csr-${c.hash}`}
+                      ref={i === resultFocus ? focusedResultRef : undefined}
+                      role="option"
+                      aria-selected={i === resultFocus}
+                      className={`search-result${i === resultFocus ? ' focused' : ''}`}
+                      onMouseMove={() => setResultFocus(i)}
+                      onClick={() => openResult(c)}
+                    >
+                      <span className="sr-subject" title={c.subject}>
+                        {c.subject}
+                      </span>
+                      <span className="sr-meta">
+                        {c.author_name ? <span className="sr-author">{c.author_name}</span> : null}
+                        <span className="sr-hash">{c.short_hash}</span>
+                        <span className="sr-date">{relativeDate(c.time_unix)}</span>
+                        {!inWindow ? (
+                          <span className="sr-out" title="Older than the loaded graph">
+                            ·
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -845,13 +1039,19 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   );
 }
 
-/** Which field the commit search matches against. */
-type SearchMode = 'message' | 'author' | 'hash';
+/**
+ * Which field the commit search matches against. `message` / `author` / `hash`
+ * highlight in place over the loaded window (client-side); `content` has no
+ * client-side equivalent (the diffs aren't loaded) and is backend-only —
+ * pressing ↵ runs the full-history `git log -G` pickaxe.
+ */
+type SearchMode = 'message' | 'author' | 'hash' | 'content';
 
 const MODE_LABEL: Record<SearchMode, string> = {
   message: 'Message',
   author: 'Author',
   hash: 'Hash',
+  content: 'Content',
 };
 
 /**
@@ -870,6 +1070,9 @@ function commitMatches(c: Commit, q: string, mode: SearchMode): boolean {
       return c.author_name.toLowerCase().includes(q) || c.author_email.toLowerCase().includes(q);
     case 'hash':
       return c.hash.toLowerCase().startsWith(q);
+    case 'content':
+      // No client-side equivalent — content search runs against the backend.
+      return false;
   }
 }
 

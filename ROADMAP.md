@@ -754,9 +754,11 @@ and a first GitHub release so the download buttons resolve.
 - ☑ Blame view (per-line author + commit jump)
 - ☑ Reflog browser
 - ☑ File history (log for a path)
-- ◐ Commit search — in-graph message/author/hash search shipped (highlight + ‹/›
-  nav, lanes intact); `-G` / `-S` content search still pending (needs a backend
-  `git log` search)
+- ☑ Commit search — in-graph message/author/hash highlight over the loaded
+  window (instant, lanes intact) **plus** full-history message/author + `-G`
+  content (pickaxe) search via a backend `Repo::search_log`, surfaced in a
+  results dropdown (out-of-window hits open in the detail panel). `-S`
+  occurrence-count pickaxe is a possible future refinement.
 - ☑ Stashes shown inline on the graph (synthetic node per stash, attached to its
   base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
 - ☐ Drag-and-drop renames in file tree
@@ -1011,6 +1013,32 @@ successful delete clears the row with no optimistic bookkeeping. New
 `deleteRemoteBranch(remote, branch)` store action. Verified with `cargo check`,
 `tsc`, and an end-to-end bare-remote run confirming both the remote branch and
 the local tracking ref are removed.
+
+**Full-history commit search (2026-06-24):** Closed the last ◐ on the commit
+search line. The in-graph search highlighted matches over the loaded log
+client-side — instant, but blind past the loaded window and unable to search
+file *contents* (it holds no diffs). A backend `Repo::search_log(query, mode,
+limit)` (`log.rs`) now shells out to `git log` with the matching filter:
+`--grep` / `--author` (`--fixed-strings -i`, mirroring the client's
+case-insensitive substring) reach the whole history, and **`-G` (the pickaxe)**
+searches each commit's diff for an added/removed line matching the query — the
+one search the client can't do. Refs + empty-repo handling mirror `log`; the
+`--format`/parse path is shared (`commit_format`). New `repo_search_log` IPC +
+`repoSearchLog` wrapper + a `searchLog` store action that stashes hits in
+`commitSearchResults`. UI: the search pill gained a **Content** field mode and a
+"Search all history" button (⌘↵, or ↵ in Content mode) that opens a **results
+dropdown** — keyboard-navigable (↑/↓/↵, combobox + listbox/`aria-activedescendant`
+semantics) — listing matches across history with author/short-hash/date and a
+marker for hits older than the loaded graph. Clicking a result scrolls + focuses
+it when it's a loaded row, and opens the detail panel either way (`CommitDetail`
+falls back to `commitSearchResults` so an out-of-window commit still renders;
+its diff loads by oid). The loaded-window highlight + ‹/› stay untouched for
+message/author/hash — the deep search is an explicit, separate action so a
+`git log -G` over full history never fires per-keystroke. Verified with
+`cargo test -p strand-core` (+5 `log` tests: empty query, case-insensitive
+message, author name/email, the `-G` pickaxe touching-commit-only invariant, and
+limit + cross-branch reach), `clippy`, `tsc`, `vitest` (131), and `vite build`.
+`-S` occurrence-count pickaxe is a possible future refinement.
 
 ---
 

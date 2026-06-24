@@ -86,6 +86,14 @@ export interface Commit {
   parents: string[];
 }
 
+/**
+ * Field a full-history commit search matches against (the Rust `SearchMode`).
+ * `content` is the pickaxe (`git log -G`) — commits whose diff added or removed
+ * a matching line, which the loaded-window highlight can't do. `hash` is
+ * deliberately absent: hash lookup stays a client-side prefix match.
+ */
+export type CommitSearchMode = 'message' | 'author' | 'content';
+
 export type DiffStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange';
 
 export interface FileDiff {

@@ -5,6 +5,7 @@ import type {
   CheckoutOutcome,
   CloneOutcome,
   Commit,
+  CommitSearchMode,
   CommitOutcome,
   FileBlob,
   FileContent,
@@ -74,6 +75,10 @@ export const tauri = {
   repoUnwatch: (path: string) => invoke<void>('repo_unwatch', { path }),
   repoCancelOp: (opId: string) => invoke<void>('repo_cancel_op', { opId }),
   repoLog: (path: string, limit?: number) => invoke<Commit[]>('repo_log', { path, limit }),
+  // Full-history search by message / author / diff content — the backend reach
+  // the client-side loaded-window highlight can't cover.
+  repoSearchLog: (path: string, query: string, mode: CommitSearchMode, limit?: number) =>
+    invoke<Commit[]>('repo_search_log', { path, query, mode, limit }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),

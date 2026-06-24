@@ -66,6 +66,7 @@ fn main() {
             commands::repo_diff_unstaged_full,
             commands::repo_merge_base,
             commands::repo_log,
+            commands::repo_search_log,
             commands::repo_refs,
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
