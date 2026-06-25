@@ -57,6 +57,46 @@ pub use repo::Repo;
 pub(crate) const GIT_SAFE_CONFIG: &[&str] =
     &["-c", "core.fsmonitor=", "-c", "core.pager=cat"];
 
+/// One-time, process-global git2 setup. Call once at startup, before any repo
+/// command can run.
+///
+/// **Disables git2's repository owner validation.** libgit2 — like `git`'s
+/// `safe.directory` / "dubious ownership" check — refuses to open a repo whose
+/// directory isn't owned by the current user, failing with
+/// `class=Config (7); code=Owner (-36)`. On Windows this fires routinely for
+/// the user's *own* repos: anything created directly under a drive root
+/// (`C:\GitSources\…`) or by an elevated process is owned by the
+/// `Administrators` group, not the user account, so a normal (non-elevated) run
+/// rejects it. The symptom is a repo that opens but won't track — `gix` opens
+/// it (reads render the worktree/branches), while every `git2`-backed op
+/// (status snapshot, staging, commit) trips the ownership check, leaving the
+/// tab half-loaded.
+///
+/// Disabling the check makes `git2` match `gix`, which already opens these
+/// repos (with reduced trust) rather than hard-failing — restoring the
+/// "both backends open the same path" invariant the [`repo`] module relies on.
+/// The disable is process-global (not `#[cfg(windows)]`-gated) on purpose: the
+/// same ownership mismatch — and the same gix/git2 divergence — also fires on
+/// macOS/Linux for repos on mounted volumes, NFS, or trees checked out under a
+/// different uid (Docker bind mounts, root-cloned). Windows is just where it
+/// fires most routinely.
+/// It does **not** widen the RCE surface that motivates the check: the
+/// dangerous vector — a repo-local `core.fsmonitor`/`core.pager` running a
+/// program as a side effect of an internal git step — is on the shell-out
+/// paths, already neutralized by [`GIT_SAFE_CONFIG`]; `git2`/`gix` don't honor
+/// fsmonitor's exec. Strand is a single-user desktop client opening repos the
+/// user explicitly picked, so git2's cross-user ownership guard only ever
+/// blocks legitimate use here.
+pub fn init() {
+    // SAFETY: `set_verify_owner_validation` mutates a process-global libgit2
+    // static. Calling it once from `main` before the Tauri runtime spawns any
+    // command thread means no other thread is touching libgit2 yet — the
+    // documented-safe ordering. The call itself cannot fail (per git2's docs).
+    unsafe {
+        let _ = git2::opts::set_verify_owner_validation(false);
+    }
+}
+
 /// Construct a `git` [`std::process::Command`] for shell-outs. Every spawn
 /// must start here: the release build is a GUI-subsystem process with no
 /// console, so on Windows a child `git.exe` spawned with default flags
