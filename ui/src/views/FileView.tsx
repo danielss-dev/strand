@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
@@ -238,6 +238,7 @@ function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | 
           <span key={key} className="md-img-fallback">{alt || src}</span>
         );
       },
+      renderMermaid: (code, key) => <Mermaid key={key} code={code} />,
     });
   }, [data, dir, selectFile, setFileTab]);
 
@@ -271,6 +272,56 @@ function RepoImage({ path, alt }: { path: string; alt: string }) {
       alt={alt}
     />
   );
+}
+
+/**
+ * Renders a ```mermaid fence as an SVG diagram. Mermaid is heavy (its own
+ * parser + d3) and most docs carry no diagrams, so it's dynamically imported
+ * the first time one renders and never weighs on the main bundle. Rendered
+ * under `securityLevel: 'strict'` — mermaid runs the output through DOMPurify,
+ * so injecting its SVG is safe even though the source is untrusted repo
+ * content (this is the one sanctioned exception to the renderer's
+ * no-HTML-strings rule). Re-renders on theme flips so the diagram tracks
+ * light/dark; a parse error falls back to the raw source, never a blank box.
+ */
+function Mermaid({ code }: { code: string }) {
+  const theme = useSettings((s) => s.resolvedTheme);
+  // mermaid's internal temp-node id is fed to querySelector, so it must be a
+  // valid token — useId()'s colons aren't, strip them.
+  const id = `mermaid-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    void import('mermaid')
+      .then(async ({ default: mermaid }) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: theme === 'dark' ? 'dark' : 'default',
+          fontFamily: 'inherit',
+        });
+        const out = await mermaid.render(id, code);
+        if (!cancelled) setSvg(out.svg);
+      })
+      .catch((e) => {
+        if (!cancelled) { setSvg(null); setError(errMessage(e)); }
+      });
+    return () => { cancelled = true; };
+  }, [code, theme, id]);
+
+  if (error != null) {
+    return (
+      <pre className="md-pre md-mermaid-error" data-lang="mermaid" title={error}>
+        <code>{code}</code>
+      </pre>
+    );
+  }
+  if (svg == null) return <div className="md-mermaid" aria-busy="true" />;
+  // eslint-disable-next-line react/no-danger -- DOMPurify-sanitized by mermaid's strict mode.
+  return <div className="md-mermaid" role="img" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 /**

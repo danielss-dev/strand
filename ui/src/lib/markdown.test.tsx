@@ -49,6 +49,35 @@ describe('renderMarkdown blocks', () => {
     expect(els(out, 'strong')).toHaveLength(0);
   });
 
+  it('routes a mermaid fence to renderMermaid with the verbatim body', () => {
+    const seen: string[] = [];
+    const out = renderMarkdown('```mermaid\ngraph TD\nA --> B\n```', {
+      renderMermaid: (code, key) => {
+        seen.push(code);
+        return <div key={key} data-testid="diagram" />;
+      },
+    });
+    expect(seen).toEqual(['graph TD\nA --> B']);
+    // The diagram replaces the code block entirely.
+    expect(els(out, 'pre')).toHaveLength(0);
+    expect(els(out, 'div')).toHaveLength(1);
+  });
+
+  it('falls back to a code block for mermaid when no handler is given', () => {
+    const out = renderMarkdown('```mermaid\ngraph TD\n```');
+    const pre = els(out, 'pre');
+    expect(pre).toHaveLength(1);
+    expect((pre[0].props as { 'data-lang'?: string })['data-lang']).toBe('mermaid');
+  });
+
+  it('leaves non-mermaid fences untouched even with a handler', () => {
+    const out = renderMarkdown('```js\nconst x = 1;\n```', {
+      renderMermaid: () => <div />,
+    });
+    expect(els(out, 'pre')).toHaveLength(1);
+    expect(els(out, 'div')).toHaveLength(0);
+  });
+
   it('normalizes CRLF input', () => {
     const out = renderMarkdown('# Hi\r\n\r\ntext\r\n');
     expect(els(out, 'h1')).toHaveLength(1);
