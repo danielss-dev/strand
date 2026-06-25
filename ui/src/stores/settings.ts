@@ -15,6 +15,9 @@ export type Platform = 'mac' | 'win11';
 export type Density = 'compact' | 'default' | 'relaxed';
 export type DiffMode = 'stacked' | 'split';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
+/** How open repositories are presented: a vertical icon rail down the left
+ * edge (default), or a horizontal tab strip in the toolbar. */
+export type RepoNav = 'rail' | 'tabs';
 
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
@@ -72,6 +75,8 @@ export interface SettingsState {
   accent: AccentId;
   platform: Platform;
   density: Density;
+  /** Open-repository presentation — vertical rail vs. horizontal tabs. */
+  repoNav: RepoNav;
   /** Whole-UI zoom factor (1 = 100%). Driven by the Ctrl/⌘ +/− shortcuts and
    * applied as CSS `zoom` on `<html>` in App. Persisted across launches. */
   zoom: number;
@@ -153,6 +158,11 @@ export const DENSITY_OPTIONS: { id: Density; label: string }[] = [
   { id: 'relaxed', label: 'Relaxed' },
 ];
 
+export const REPO_NAV_OPTIONS: { id: RepoNav; label: string }[] = [
+  { id: 'rail', label: 'Sidebar' },
+  { id: 'tabs', label: 'Tabs' },
+];
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -161,6 +171,7 @@ export const useSettings = create<SettingsState>()(
       accent: 'amber',
       platform: detectPlatform(),
       density: 'default',
+      repoNav: 'rail',
       zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,

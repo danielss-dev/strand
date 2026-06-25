@@ -318,7 +318,24 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
 - ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
 - ☑ Tab persistence across launches (via `settings.session.tabs` in SQLite)
-- ☐ Tab reordering by drag and overflow scrolling
+- ☑ Open-repositories presentation toggle (Settings → Appearance, `repoNav`):
+  the default vertical icon rail (`components/RepoRail.tsx`) or a horizontal
+  toolbar tab strip (`components/RepoTabs.tsx`, rendered in `Topbar` in place of
+  the repo-name title). Both share the repo's customized tile color and the
+  right-click icon-customization menu.
+- ☑ Switch active repo from the keyboard — `tab-next` / `tab-prev` commands
+  (`⌘`/`Ctrl+Tab` and `+Shift`, rebindable, palette entries "Next/Previous
+  repository"); `App.cycleTab` wraps in on-screen order, works in both nav
+  layouts.
+- ☑ Tab-strip overflow handling: the pill lane scrolls (`components/RepoTabs.tsx`
+  — wheel-to-horizontal, active auto-scrolls into view on switch) and a ▾ jump
+  menu (shown only while overflowing) lists every open repo.
+- ☑ Repo quick-switcher overlay (`switch-repo`, `⌘`/`Ctrl+E`, rebindable +
+  palette entry "Switch repository…"): `views/RepoSwitcher.tsx` — a repo-only
+  sibling of the command palette (reuses its shell + `lib/fuzzy`), fuzzy over
+  open repos (switch active tab) and recents not open (opens them). ⌘K stays
+  the full palette.
+- ☐ Tab reordering by drag
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

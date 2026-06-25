@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
+import { RepoTabs } from './RepoTabs';
 import { isTauri } from '../lib/tauri';
 import { useSettings } from '../stores/settings';
 import { useRepo } from '../stores/repo';
@@ -20,6 +21,14 @@ interface Props {
   onToast: (msg: string) => void;
   /** Open the Save-snapshot dialog (message + keep-changes options). */
   onSaveSnapshot: () => void;
+  /** Open a repository via the directory picker (tabs-mode `+` menu). */
+  onOpenRepo: () => void;
+  /** Open a recent / dropped repository by path (tabs-mode `+` menu). */
+  onOpenRecent: (path: string) => void;
+  /** Open the clone dialog (tabs-mode `+` menu). */
+  onClone: () => void;
+  /** Open the icon-customization dialog for a repo tab. */
+  onCustomize: (path: string) => void;
 }
 
 export function Topbar({
@@ -35,8 +44,13 @@ export function Topbar({
   pushDone,
   onToast,
   onSaveSnapshot,
+  onOpenRepo,
+  onOpenRecent,
+  onClone,
+  onCustomize,
 }: Props) {
   const platform = useSettings((s) => s.platform);
+  const repoNav = useSettings((s) => s.repoNav);
   const meta = useRepo((s) => s.meta);
 
   const branch = meta?.branch ?? 'no repo';
@@ -70,10 +84,19 @@ export function Topbar({
         </div>
       )}
 
-      {meta && (
-        <div className="topbar-title" data-tauri-drag-region={dragRegion} title={meta.path}>
-          {meta.name}
-        </div>
+      {repoNav === 'tabs' ? (
+        <RepoTabs
+          onOpenRepo={onOpenRepo}
+          onOpenRecent={onOpenRecent}
+          onClone={onClone}
+          onCustomize={onCustomize}
+        />
+      ) : (
+        meta && (
+          <div className="topbar-title" data-tauri-drag-region={dragRegion} title={meta.path}>
+            {meta.name}
+          </div>
+        )
       )}
 
       <div className="topbar-spacer" data-tauri-drag-region={dragRegion} />

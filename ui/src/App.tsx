@@ -16,7 +16,7 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { useUpdates } from './stores/updates';
-import { accentHueForColor } from './lib/repoIdentity';
+import { accentHueForColor, groupTabs } from './lib/repoIdentity';
 import { pickRepoDirectory } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
@@ -54,6 +54,7 @@ import { Review } from './views/Review';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
+import { RepoSwitcher } from './views/RepoSwitcher';
 import type { FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
 
 const waitForPaint = () =>
@@ -122,6 +123,7 @@ export function App() {
   const density = useSettings((s) => s.density);
   const zoom = useSettings((s) => s.zoom);
   const platform = useSettings((s) => s.platform);
+  const repoNav = useSettings((s) => s.repoNav);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
   const diffFont = useSettings((s) => s.diffFont);
@@ -191,6 +193,7 @@ export function App() {
   const baselineDiffCount = useRepo((s) => s.baselineDiffs.length);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -417,6 +420,28 @@ export function App() {
     if (path) await openByPath(path);
   }, [openByPath]);
 
+  // Open the tile/tab icon-customization dialog for a repo. Shared by the repo
+  // rail and the toolbar tab strip (whichever `repoNav` selects).
+  const openIconDialog = useCallback((path: string) => {
+    const tab = useRepo.getState().tabs.find((t) => t.path === path);
+    setIconDialog({ path, name: tab?.meta.name ?? basename(path) });
+  }, []);
+
+  // Switch the active repository to the next (+1) / previous (-1) open one,
+  // wrapping around. Cycles in on-screen order (worktrees grouped with their
+  // repo) so it matches the rail/tab strip; a no-op with fewer than two tabs.
+  // Drives ⌘/Ctrl+Tab and the palette's Next/Previous repository actions, in
+  // both repo-nav layouts.
+  const cycleTab = useCallback((delta: 1 | -1) => {
+    const { tabs: open, activeTabPath: active, setActiveTab } = useRepo.getState();
+    if (open.length < 2) return;
+    const ordered = groupTabs(open);
+    const i = ordered.findIndex((t) => t.path === active);
+    const base = i === -1 ? 0 : i;
+    const next = ordered[(base + delta + ordered.length) % ordered.length];
+    void setActiveTab(next.path);
+  }, []);
+
   const onSync = useCallback(async () => {
     if (syncing) return;
     setSyncing(true);
@@ -508,6 +533,9 @@ export function App() {
     'view-reflog': () => { setView('reflog'); selectFile(null); },
     'view-review': () => { setView('review'); selectFile(null); },
     'view-worktrees': () => { setView('worktrees'); selectFile(null); },
+    'tab-next': () => cycleTab(1),
+    'tab-prev': () => cycleTab(-1),
+    'switch-repo': () => setRepoSwitcherOpen((o) => !o),
     'theme-toggle': () => {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
@@ -520,7 +548,7 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
   }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
-       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh]);
+       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab]);
   const commandHandlersRef = useRef(commandHandlers);
   commandHandlersRef.current = commandHandlers;
   const keyMapRef = useRef(keyMap);
@@ -703,9 +731,9 @@ export function App() {
   // handlers are read through refs so settings changes never re-subscribe.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Esc always closes the palette (the palette's own handler covers the
-      // case where it has focus; this is the global fallback).
-      if (e.key === 'Escape') { setPaletteOpen(false); return; }
+      // Esc always closes the palette / repo switcher (their own handlers cover
+      // the focused case; this is the global fallback).
+      if (e.key === 'Escape') { setPaletteOpen(false); setRepoSwitcherOpen(false); return; }
       // Browser-style UI zoom — Ctrl/⌘ with +, −, or 0. These sit outside the
       // rebindable registry: + / = (plus their Shift and numpad variants) don't
       // map to a single canonical binding, and zoom keys are conventionally
@@ -893,6 +921,7 @@ export function App() {
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
       { id: 'clone',   label: 'Clone repository…', group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
+      { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
     ];
     // Repo-scoped actions only make sense — and only succeed — with a repo
     // open, so don't surface them (the network ones would fail confusingly).
@@ -903,6 +932,8 @@ export function App() {
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
+        { id: 'tab-next', label: 'Next repository', group: 'Actions', shortcut: keyHint('tab-next'), keywords: 'switch repo tab next cycle', run: () => cycleTab(1) },
+        { id: 'tab-prev', label: 'Previous repository', group: 'Actions', shortcut: keyHint('tab-prev'), keywords: 'switch repo tab previous cycle', run: () => cycleTab(-1) },
         { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         { id: 'search-content', label: 'Search file contents…', group: 'Actions', keywords: 'pickaxe content diff code history full grep -G -S', run: () => { requestCommitSearch('content'); } },
@@ -1052,7 +1083,7 @@ export function App() {
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
-      reviewNoteCount, clearReviewNotes, keyHint, platform]);
+      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1076,18 +1107,21 @@ export function App() {
           pushDone={pushDone}
           onToast={showToast}
           onSaveSnapshot={() => setStashDialog({ snapshot: true })}
+          onOpenRepo={openViaDialog}
+          onOpenRecent={openByPath}
+          onClone={() => setCloneOpen(true)}
+          onCustomize={openIconDialog}
         />
 
         <div className="body">
-          <RepoRail
-            onOpenRepo={openViaDialog}
-            onOpenRecent={openByPath}
-            onClone={() => setCloneOpen(true)}
-            onCustomize={(path) => {
-              const tab = useRepo.getState().tabs.find((t) => t.path === path);
-              setIconDialog({ path, name: tab?.meta.name ?? basename(path) });
-            }}
-          />
+          {repoNav === 'rail' && (
+            <RepoRail
+              onOpenRepo={openViaDialog}
+              onOpenRecent={openByPath}
+              onClone={() => setCloneOpen(true)}
+              onCustomize={openIconDialog}
+            />
+          )}
           <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
             <Panel defaultSize={20} minSize={12} maxSize={40}>
               <Sidebar
@@ -1202,6 +1236,10 @@ export function App() {
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
+
+      {repoSwitcherOpen && (
+        <RepoSwitcher onOpenRecent={openByPath} onClose={() => setRepoSwitcherOpen(false)} />
+      )}
 
       {settingsOpen && (
         <SettingsDialog initialSection={settingsSection} onClose={() => setSettingsOpen(false)} />

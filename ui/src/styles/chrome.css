@@ -190,6 +190,179 @@
     flex: 1;
 }
 
+/* ─── Repo tabs (toolbar strip; the `repoNav: 'tabs'` alternative to the
+ *     vertical rail). Lives in the topbar's flex flow, replacing the title.
+ *     The pills sit in a scrollable lane; the `+` and ▾ controls flank it and
+ *     stay put. ─── */
+.repo-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 100%;
+    -webkit-app-region: no-drag;
+    min-width: 0;
+    flex-shrink: 1;
+}
+/* The scrolling lane — pills overflow horizontally instead of clipping. The
+ * scrollbar is hidden; the wheel handler, keyboard cycling, and ▾ menu drive it. */
+.repo-tabs-scroll {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+}
+.repo-tabs-scroll::-webkit-scrollbar {
+    display: none;
+}
+.repo-tab {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 0 10px;
+    height: 30px;
+    align-self: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--type-ui-sm);
+    color: var(--text-2);
+    cursor: pointer;
+    position: relative;
+    max-width: 200px;
+}
+.topbar[data-native-chrome] .repo-tab {
+    height: 24px;
+    padding: 0 10px 0 8px;
+}
+.repo-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+.repo-tab.active {
+    background: var(--bg-elev);
+    color: var(--text);
+    box-shadow: 0 0 0 0.5px var(--border-strong) inset;
+}
+.repo-tab .repo-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+}
+.repo-tab .repo-x {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    opacity: 0;
+    margin-right: -4px;
+}
+.repo-tab:hover .repo-x {
+    opacity: 1;
+}
+.repo-tab .repo-x:hover {
+    background: var(--bg-active);
+    color: var(--text);
+}
+.repo-tab .repo-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+/* Worktree tabs of one repo cluster tightly after their main tab. */
+.repo-tab.same-group {
+    margin-left: -4px;
+}
+.repo-tab.worktree .repo-name {
+    font-weight: 450;
+    color: var(--text-2);
+}
+.repo-tab .repo-wt-ico {
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    margin-left: -3px;
+}
+.tab-add-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    flex: none;
+}
+.tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    align-self: center;
+    margin-left: 2px;
+    -webkit-app-region: no-drag;
+}
+.topbar[data-native-chrome] .tab-add {
+    width: 22px;
+    height: 22px;
+}
+.tab-add:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+/* ▾ overflow / jump-list button — only mounted while the lane overflows. */
+.tab-overflow-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    flex: none;
+}
+.tab-overflow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    align-self: center;
+    -webkit-app-region: no-drag;
+}
+.topbar[data-native-chrome] .tab-overflow {
+    height: 22px;
+}
+.tab-overflow:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+/* Color dot for a repo row in the ▾ jump list (mirrors the tab's dot). */
+.repo-menu-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
 /* Sync action group */
 .sync-group {
     display: flex;

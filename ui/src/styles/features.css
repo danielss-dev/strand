@@ -2305,6 +2305,19 @@
   color: var(--accent);
 }
 
+/* Repo switcher (⌘/Ctrl+E) — reuses the palette shell. Center the icon slot so
+ * the color dot sits mid-row, and accent the active-repo check. */
+.repo-switcher .palette-item .ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.repo-switcher .palette-item .meta.active {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+}
+
 .palette-foot {
   display: flex;
   align-items: center;
