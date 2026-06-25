@@ -27,6 +27,8 @@ shortcuts").
 | `Mod+O` | Open repository |
 | `Mod+,` | Settings |
 | `Mod+1…5` | Local Changes · All Commits · Reflog · Review · Worktrees |
+| `Mod+Tab` / `Mod+Shift+Tab` | Next / previous repository |
+| `Mod+E` | Switch repository (quick-switcher) |
 | `Mod+P` | Push |
 | `Mod+Shift+P` | Pull |
 | `Mod+Shift+Y` | Fetch |
@@ -74,9 +76,11 @@ keyboard alone, and the mouse stays first-class.
   screen-reader operability.
 - **File view** — highlighted source, `--follow` history, compare any two
   revisions, blame, and rendered previews for markdown and SVG.
-- **Comfortable to live in** — multi-repo tabs persisted across launches,
-  native macOS menubar, open in your editor or terminal, settings (⌘,) for
-  appearance / diff / git / integrations, in-app updates.
+- **Comfortable to live in** — multiple repositories open at once (as a
+  vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
+  persisted across launches, native macOS menubar, open in your editor or
+  terminal, settings (⌘,) for appearance / diff / git / integrations, in-app
+  updates.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

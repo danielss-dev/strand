@@ -12,6 +12,7 @@ import {
 import {
   DENSITY_OPTIONS,
   MONO_FONT_OPTIONS,
+  REPO_NAV_OPTIONS,
   UI_FONT_OPTIONS,
   useSettings,
   type AccentId,
@@ -33,6 +34,7 @@ export function AppearanceSection() {
   const resolved = useSettings((s) => s.resolvedTheme);
   const accent = useSettings((s) => s.accent);
   const density = useSettings((s) => s.density);
+  const repoNav = useSettings((s) => s.repoNav);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
   const fileOpenTab = useSettings((s) => s.fileOpenTab);
@@ -99,6 +101,13 @@ export function AppearanceSection() {
       </div>
 
       <div className="settings-rows">
+        <SegRow
+          label="Open repositories"
+          hint="Show open repositories as a vertical sidebar rail or horizontal toolbar tabs."
+          options={REPO_NAV_OPTIONS}
+          value={repoNav}
+          onChange={(id) => set('repoNav', id)}
+        />
         <SegRow
           label="Density"
           options={DENSITY_OPTIONS}

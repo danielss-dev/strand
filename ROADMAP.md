@@ -742,6 +742,25 @@ interim `strand-releases` placeholder was never created, so every link 404'd
 until this). Still open: CLA workflow before accepting outside contributions,
 and a first GitHub release so the download buttons resolve.
 
+**Repo nav choice (2026-06-25):** Settings → Appearance now has an "Open
+repositories" toggle (`repoNav`, persisted) between the default vertical icon
+rail and a horizontal toolbar **tab strip** — the strip (`components/RepoTabs.tsx`)
+renders inside the topbar in place of the repo-name title, with color-dot pills
+that cluster a repo's worktrees, a hover close button, a `+` open/clone/recents
+menu, and the same right-click icon-customization menu as the rail. Tab dots
+reuse each repo's customized tile color (falling back to a stable hashed hue so
+repos stay distinguishable). Switching between open repos got a keyboard path
+that works in **both** layouts: rebindable `tab-next` / `tab-prev` commands
+(`⌘`/`Ctrl+Tab`, `+Shift` to reverse; palette "Next/Previous repository"),
+cycling in on-screen order via `App.cycleTab`. The strip never clips — its pill
+lane scrolls (wheel-to-horizontal, active tab auto-scrolls into view on switch)
+and a ▾ jump menu appears only while it overflows, listing every open repo.
+For a search-driven jump there's now a **repo quick-switcher** (`switch-repo`,
+`⌘`/`Ctrl+E`, rebindable + palette entry) — `views/RepoSwitcher.tsx`, a
+repo-only sibling of the command palette that reuses its shell and fuzzy
+matcher to filter open repos (switch the active tab) and recents not yet open
+(opens them); ⌘K stays the full palette. Verified: `tsc`, `vitest` (131).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

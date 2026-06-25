@@ -30,6 +30,9 @@ export type CommandId =
   | 'view-reflog'
   | 'view-review'
   | 'view-worktrees'
+  | 'tab-next'
+  | 'tab-prev'
+  | 'switch-repo'
   | 'theme-toggle'
   | 'fetch'
   | 'pull'
@@ -74,6 +77,13 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'view-reflog',    label: 'Go to Reflog',         category: 'Navigation',  defaultBinding: 'Mod+3', menu: true, needsRepo: true },
   { id: 'view-review',    label: 'Go to Review',         category: 'Navigation',  defaultBinding: 'Mod+4', menu: true, needsRepo: true },
   { id: 'view-worktrees', label: 'Go to Worktrees',      category: 'Navigation',  defaultBinding: 'Mod+5', menu: true, needsRepo: true },
+  // Cycle the active repository. Tab isn't representable as a native-menu
+  // accelerator, so these stay JS-owned (no `menu: true`).
+  { id: 'tab-next', label: 'Next repository',     category: 'Navigation',  defaultBinding: 'Mod+Tab',       needsRepo: true },
+  { id: 'tab-prev', label: 'Previous repository', category: 'Navigation',  defaultBinding: 'Mod+Shift+Tab', needsRepo: true },
+  // Repo quick-switcher overlay. Not `needsRepo` — with nothing open it still
+  // lists recents, so it doubles as a fast opener.
+  { id: 'switch-repo', label: 'Switch repository…', category: 'Navigation', defaultBinding: 'Mod+E' },
 
   { id: 'fetch',  label: 'Fetch',                        category: 'Git', defaultBinding: 'Mod+Shift+Y', needsRepo: true },
   { id: 'pull',   label: 'Pull',                         category: 'Git', defaultBinding: 'Mod+Shift+P', menu: true, needsRepo: true },
