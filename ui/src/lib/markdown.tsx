@@ -19,6 +19,10 @@ export interface MarkdownHandlers {
   onLinkClick?: (href: string) => void;
   /** Renders an image; `src` is the raw target (may be repo-relative). */
   renderImage?: (src: string, alt: string, key: string) => ReactNode;
+  /** Renders a ```mermaid fence as a diagram; `code` is the verbatim fence
+   *  body. When absent (or it declines), the block stays a normal code block —
+   *  the diagram engine lives in the view, keeping this module pure. */
+  renderMermaid?: (code: string, key: string) => ReactNode;
 }
 
 /** True when the path renders in the markdown preview. */
@@ -55,10 +59,15 @@ function parseBlocks(lines: string[], h: MarkdownHandlers, kb: string): ReactNod
       const body: string[] = [];
       let j = i + 1;
       while (j < lines.length && !closeRe.test(lines[j])) body.push(lines[j++]);
+      const lang = fence[2];
+      const code = body.join('\n');
+      const diagram = /^mermaid$/i.test(lang) ? h.renderMermaid?.(code, key()) : undefined;
       out.push(
-        <pre className="md-pre" key={key()} data-lang={fence[2] || undefined}>
-          <code>{body.join('\n')}</code>
-        </pre>,
+        diagram ?? (
+          <pre className="md-pre" key={key()} data-lang={lang || undefined}>
+            <code>{code}</code>
+          </pre>
+        ),
       );
       i = j + 1;
       continue;

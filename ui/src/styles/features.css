@@ -2100,6 +2100,24 @@
   color: var(--text-muted);
   font-style: italic;
 }
+/* Rendered ```mermaid diagram (FileView's <Mermaid>): centered, scaling down
+   to the measure but never blowing past it. Min-height holds layout steady
+   while the engine lazy-loads so the doc doesn't jump on first paint. */
+.md-render .md-mermaid {
+  margin: 0 0 12px;
+  display: flex;
+  justify-content: center;
+  min-height: 2.5em;
+}
+.md-render .md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+/* Parse failure falls back to the raw source, tinted to read as an error. */
+.md-render pre.md-mermaid-error {
+  border-color: color-mix(in oklch, var(--del) 45%, var(--border));
+  color: var(--text-muted);
+}
 
 /* ─── Command palette ─── */
 .palette-backdrop {
