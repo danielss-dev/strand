@@ -41,6 +41,11 @@ fn main() {
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("strand=info,strand_core=info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
+    // Process-global git engine setup (disables git2's owner validation so it
+    // opens the same repos gix already does — see strand_core::init). Must run
+    // before the Tauri runtime spawns any command thread.
+    strand_core::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
