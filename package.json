@@ -1,7 +1,7 @@
 {
   "name": "strand",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Fast, friendly Git client (Tauri 2 + Rust + React).",
   "scripts": {
     "dev": "pnpm --filter strand-ui dev",
