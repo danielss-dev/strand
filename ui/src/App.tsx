@@ -16,7 +16,7 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { useUpdates } from './stores/updates';
-import { accentHueForColor, groupTabs } from './lib/repoIdentity';
+import { accentHueForColor, groupTabs, repoFamilyName } from './lib/repoIdentity';
 import { pickRepoDirectory } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
@@ -424,7 +424,7 @@ export function App() {
   // rail and the toolbar tab strip (whichever `repoNav` selects).
   const openIconDialog = useCallback((path: string) => {
     const tab = useRepo.getState().tabs.find((t) => t.path === path);
-    setIconDialog({ path, name: tab?.meta.name ?? basename(path) });
+    setIconDialog({ path, name: tab ? repoFamilyName(tab.meta) : basename(path) });
   }, []);
 
   // Switch the active repository to the next (+1) / previous (-1) open one,
@@ -967,7 +967,7 @@ export function App() {
               return;
             }
             copyToClipboard(buildReviewFeedback({
-              repoName: st.activePath.split(/[\\/]/).filter(Boolean).pop() ?? st.activePath,
+              repoName: repoFamilyName(st.meta),
               branch: st.meta?.branch ?? null,
               baselineShort: st.baseline?.short ?? null,
               files,
@@ -1578,7 +1578,7 @@ function MainHeader({
     <div className="main-header">
       <div className="crumb">
         <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          {meta?.name ?? '—'}
+          {repoFamilyName(meta)}
         </span>
         <span className="sep"><Icon name="chev-right" size={10} /></span>
         <span className="leaf">{title}</span>

@@ -13,6 +13,7 @@ import {
 import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
+import { repoFamilyName } from '../lib/repoIdentity';
 import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -798,7 +799,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     }));
 
     try {
-      await recentsDb.touch(meta.path, meta.name);
+      await recentsDb.touch(meta.path, repoFamilyName(meta));
       await get().refreshRecents();
     } catch (e) {
       console.warn('recents.touch failed', e);

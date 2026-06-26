@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { RepoTabs } from './RepoTabs';
 import { isTauri } from '../lib/tauri';
+import { repoFamilyName } from '../lib/repoIdentity';
 import { useSettings } from '../stores/settings';
 import { useRepo } from '../stores/repo';
 
@@ -56,6 +57,7 @@ export function Topbar({
   const branch = meta?.branch ?? 'no repo';
   const ahead = meta?.ahead ?? 0;
   const behind = meta?.behind ?? 0;
+  const repoName = repoFamilyName(meta);
 
   const inTauri = isTauri();
   // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:
@@ -94,7 +96,7 @@ export function Topbar({
       ) : (
         meta && (
           <div className="topbar-title" data-tauri-drag-region={dragRegion} title={meta.path}>
-            {meta.name}
+            {repoName}
           </div>
         )
       )}

@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
 import { useOutsideClose } from '../lib/useOutsideClose';
-import { groupColor, groupTabs } from '../lib/repoIdentity';
+import { groupColor, groupTabs, repoTabLabel } from '../lib/repoIdentity';
 import type { RepoTab } from '../stores/repo';
 
 interface Props {
@@ -120,6 +120,7 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
           const sameGroup = !!prev && prev.meta.common_dir === t.meta.common_dir;
           const linked = t.meta.is_linked_worktree;
           const active = t.path === activeTabPath;
+          const label = repoTabLabel(t);
           return (
             <button
               key={t.path}
@@ -132,13 +133,17 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
                 (sameGroup ? ' same-group' : '') +
                 (linked ? ' worktree' : '')
               }
-              title={linked ? `${t.meta.name} · worktree on ${t.meta.branch}` : t.path}
+              title={label.title}
+              aria-label={label.ariaLabel}
               onClick={() => { void setActiveTab(t.path); }}
               onContextMenu={(e) => openMenu(e, t)}
             >
               <span className="repo-dot" style={{ background: colorFor(t) }} />
               {linked && <span className="repo-wt-ico"><Icon name="worktree" size={11} /></span>}
-              <span className="repo-name">{linked ? (t.meta.branch || t.meta.name) : t.meta.name}</span>
+              <span className="repo-name">
+                <span className="repo-primary">{label.primary}</span>
+                {linked && label.secondary && <span className="repo-sub">{label.secondary}</span>}
+              </span>
               <span
                 className="repo-x"
                 role="button"
@@ -277,6 +282,7 @@ function OverflowMenu({
           {tabs.map((t) => {
             const linked = t.meta.is_linked_worktree;
             const active = t.path === activeTabPath;
+            const label = repoTabLabel(t);
             return (
               <button
                 type="button"
@@ -285,7 +291,7 @@ function OverflowMenu({
                 role="menuitemradio"
                 aria-checked={active}
                 tabIndex={0}
-                title={linked ? `${t.meta.name} · worktree on ${t.meta.branch}` : t.path}
+                title={label.title}
                 onClick={() => { setOpen(false); onPick(t.path); }}
               >
                 <span className="ico">
@@ -293,7 +299,7 @@ function OverflowMenu({
                     ? <Icon name="worktree" size={12} />
                     : <span className="repo-menu-dot" style={{ background: colorFor(t) }} />}
                 </span>
-                <span className="label">{linked ? (t.meta.branch || t.meta.name) : t.meta.name}</span>
+                <span className="label">{linked && label.secondary ? `${label.primary} / ${label.secondary}` : label.primary}</span>
                 {active && <span className="meta"><Icon name="check" size={12} stroke={2.2} /></span>}
               </button>
             );
