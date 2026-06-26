@@ -57,10 +57,10 @@ keyboard alone, and the mouse stays first-class.
   edits inline, not isolated hunks. A file-tree queue tracks what you've
   reviewed, and a pinnable baseline captures everything since a commit —
   including work the agent already staged or committed.
-- **Worktrees (⌘5)** — an overview of every worktree with its branch,
-  ahead/behind, dirty count, and one-click Review pinned where the branch
-  diverged from main — built for reviewing agents' per-feature worktrees.
-  Worktree tabs of one repo group together in the tab strip.
+- **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
+  repo naming, branch/session labels, dirty count, ahead/behind, last commit,
+  and one-click Review pinned where the branch diverged from main. Worktree
+  tabs of one repo group together instead of looking like separate repos.
 - **Everyday Git** — staging with per-change-block stage / discard / unstage
   inline in the diff, fetch / pull / push with streaming progress, branches,
   tags, stashes, remotes, cherry-pick, revert, merge, and a fully

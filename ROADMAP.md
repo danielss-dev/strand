@@ -1059,6 +1059,18 @@ message, author name/email, the `-G` pickaxe touching-commit-only invariant, and
 limit + cross-branch reach), `clippy`, `tsc`, `vitest` (131), and `vite build`.
 `-S` occurrence-count pickaxe is a possible future refinement.
 
+**Worktree UX pass (2026-06-26):** Worktrees now read as one repo with many
+agent workspaces instead of unrelated branch-named repos. Shared
+`repoIdentity` helpers derive a stable repo-family label from `common_dir`;
+topbar titles, breadcrumbs, recents, the repo rail, tab strip, repo switcher,
+and sidebar all show the repo name first and the worktree/branch as context.
+The Worktrees view became a dashboard for parallel AI tasks: stable repo
+heading, total/dirty/locked metrics, lazy per-row dirty/drift/last-commit
+stats, clearer current/main/locked/detached/stale badges, and a Review action
+that leaves the dashboard before switching worktrees so rows do not jump during
+navigation. Verified with Vitest, TypeScript, frontend build, and a Tauri
+walkthrough of dashboard → Review on a dirty linked worktree.
+
 ---
 
 ## 1.1+ — Post-1.0

@@ -567,14 +567,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `pruneWorktrees` / `openWorktree` = `openRepo` reuse). Removing/pruning a
   worktree closes its open tab (`samePath` match) so no dead tab lingers.
 - ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘4 + ⌘K "Show:
-  Worktrees"; each row enriches lazily via `repoStatus`/`repoMeta`/`repoLog` on
-  the worktree path → dirty count, ahead/behind, last commit; Review opens the
-  worktree tab on Local Changes; keyboard `role=listbox` + ↑/↓ + Enter).
+  Worktrees"; AI-agent dashboard with stable repo-family heading, per-worktree
+  branch/session labels, lazy `repoStatus`/`repoMeta`/`repoLog` enrichment →
+  dirty count, ahead/behind, last commit; Review opens the worktree tab without
+  a row-jump and pins the review baseline when possible; keyboard `role=listbox`
+  + ↑/↓ + Enter).
 - ☑ Sidebar Worktrees section (first section in the Git tab; current marked with
   the accent check; single-click → overview, double-click/Enter → open as tab;
   context menu open/show/copy/remove/force-remove/prune; header `+` opens dialog).
 - ☑ Grouped worktree tabs (`Topbar.tsx` `groupTabs` clusters by `common_dir`,
-  shared dot color via `groupColor`, linked tabs show branch + worktree glyph).
+  shared dot color via `groupColor`, linked tabs show stable repo-family name +
+  branch/worktree context + worktree glyph).
 - ☑ Create dialog (`views/WorktreeDialog.tsx` — new/existing branch, default
   sibling `<repo>.worktrees/<branch>` path, "open in new tab" toggle).
 - ☑ Review worktree vs base branch (the overview's **Review** button pins the
