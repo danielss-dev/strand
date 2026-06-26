@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { match } from '../lib/fuzzy';
-import { groupColor, groupTabs } from '../lib/repoIdentity';
+import { groupColor, groupTabs, repoTabLabel } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
 
@@ -96,12 +96,13 @@ export function RepoSwitcher({ onOpenRecent, onClose }: Props) {
 
     const open: Entry[] = ordered.map((t) => {
       const linked = t.meta.is_linked_worktree;
+      const label = repoTabLabel(t);
       return {
         kind: 'open',
         path: t.path,
-        label: linked ? (t.meta.branch || t.meta.name) : t.meta.name,
-        meta: linked ? `worktree · ${t.meta.branch}` : t.meta.branch,
-        keywords: `${t.meta.name} ${t.meta.branch} ${t.path}`,
+        label: label.primary,
+        meta: linked && label.secondary ? `worktree · ${label.secondary}` : t.meta.branch,
+        keywords: `${label.primary} ${label.secondary ?? ''} ${t.meta.name} ${t.meta.branch} ${t.path}`,
         color: colorByDir.get(t.meta.common_dir),
         worktree: linked,
         active: t.path === activeTabPath,

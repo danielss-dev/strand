@@ -8,6 +8,7 @@ import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
 import { imageMime, isImagePath } from '../lib/image';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
+import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
@@ -43,7 +44,8 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
  */
 export function FileView({ path }: { path: string }) {
   const activePath = useRepo((s) => s.activePath);
-  const repoName = useRepo((s) => s.meta?.name ?? null);
+  const meta = useRepo((s) => s.meta);
+  const repoName = repoFamilyName(meta);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
   // Tab + jump live in the store so a blame/history → commit jump can return
@@ -66,7 +68,7 @@ export function FileView({ path }: { path: string }) {
       <div className="main-header">
         <div className="crumb">
           <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            {repoName ?? '—'}
+            {repoName}
           </span>
           <span className="sep"><Icon name="chev-right" size={10} /></span>
           <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} title={path}>

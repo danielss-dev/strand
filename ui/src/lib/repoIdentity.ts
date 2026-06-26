@@ -1,4 +1,4 @@
-import type { RepoIcon } from './types';
+import type { RepoIcon, RepoMeta, Worktree } from './types';
 
 /**
  * Order tabs so worktrees of the same repository cluster together: groups keyed
@@ -24,6 +24,75 @@ export function groupTabs<T extends { meta: { common_dir: string; is_linked_work
     // Main worktree (not linked) first, the rest in open order.
     return [...g.filter((t) => !t.meta.is_linked_worktree), ...g.filter((t) => t.meta.is_linked_worktree)];
   });
+}
+
+function pathParts(path: string): string[] {
+  return path.split(/[\\/]+/).filter(Boolean);
+}
+
+export function pathLeaf(path: string): string {
+  const parts = pathParts(path);
+  return parts[parts.length - 1] ?? path;
+}
+
+function pathParentLeaf(path: string): string | null {
+  const parts = pathParts(path);
+  return parts.length > 1 ? parts[parts.length - 2] : null;
+}
+
+/**
+ * Stable repository label for every worktree in a repo family. `RepoMeta.name`
+ * is the active worktree directory basename, so a linked worktree can look like
+ * the branch. The shared `.git` common dir points back to the main repo name.
+ */
+export function repoFamilyName(meta: Pick<RepoMeta, 'name' | 'common_dir'> | null | undefined): string {
+  if (!meta) return '—';
+  const commonLeaf = pathLeaf(meta.common_dir);
+  if (commonLeaf === '.git') return pathParentLeaf(meta.common_dir) ?? meta.name;
+  return commonLeaf || meta.name;
+}
+
+export function worktreeName(worktree: Pick<Worktree, 'branch' | 'head' | 'is_detached' | 'path'>): string {
+  if (worktree.branch) return worktree.branch;
+  if (worktree.is_detached && worktree.head) return worktree.head.slice(0, 7);
+  return pathLeaf(worktree.path);
+}
+
+export function tabWorktreeName(meta: Pick<RepoMeta, 'branch' | 'detached' | 'path' | 'name'>): string {
+  if (meta.branch && meta.branch !== 'HEAD') return meta.branch;
+  if (meta.detached && meta.branch) return meta.branch;
+  return pathLeaf(meta.path) || meta.name;
+}
+
+export function repoTabLabel<T extends { meta: RepoMeta }>(tab: T): {
+  repo: string;
+  worktree: string | null;
+  primary: string;
+  secondary: string | null;
+  title: string;
+  ariaLabel: string;
+} {
+  const repo = repoFamilyName(tab.meta);
+  if (!tab.meta.is_linked_worktree) {
+    return {
+      repo,
+      worktree: null,
+      primary: repo,
+      secondary: tab.meta.branch,
+      title: tab.meta.path,
+      ariaLabel: `${repo}, ${tab.meta.branch}`,
+    };
+  }
+
+  const worktree = tabWorktreeName(tab.meta);
+  return {
+    repo,
+    worktree,
+    primary: repo,
+    secondary: worktree,
+    title: `${repo} · worktree ${worktree}\n${tab.meta.path}`,
+    ariaLabel: `${repo}, worktree ${worktree}`,
+  };
 }
 
 /** Stable tile color for a repo group, hashed from its common git dir into the

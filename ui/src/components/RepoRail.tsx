@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
 import { useOutsideClose } from '../lib/useOutsideClose';
-import { groupTabs, tileGlyph } from '../lib/repoIdentity';
+import { groupTabs, repoTabLabel, tileGlyph } from '../lib/repoIdentity';
 import type { RepoTab } from '../stores/repo';
 
 interface Props {
@@ -71,7 +71,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
     e.preventDefault();
     setMenu({
       path: t.path,
-      name: t.meta.name,
+      name: repoTabLabel(t).repo,
       worktree: t.meta.is_linked_worktree,
       x: e.clientX,
       y: e.clientY,
@@ -86,9 +86,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
           const color = colorForGroup.get(t.meta.common_dir)!;
           const icon = icons[t.path];
           const active = t.path === activeTabPath;
-          const label = linked
-            ? `${t.meta.name} · worktree on ${t.meta.branch}`
-            : t.meta.name;
+          const label = repoTabLabel(t);
           return (
             <button
               key={t.path}
@@ -96,8 +94,8 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
               role="tab"
               aria-selected={active}
               className={'rail-tile' + (active ? ' active' : '') + (linked ? ' worktree' : '')}
-              title={label}
-              aria-label={label}
+              title={label.title}
+              aria-label={label.ariaLabel}
               onClick={() => { void setActiveTab(t.path); }}
               onContextMenu={(e) => openMenu(e, t)}
             >
@@ -114,7 +112,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
                   className={'rail-glyph' + (icon?.emoji ? ' emoji' : '')}
                   style={{ background: color }}
                 >
-                  {tileGlyph(icon, t.meta.name)}
+                  {tileGlyph(icon, label.repo)}
                 </span>
               )}
             </button>

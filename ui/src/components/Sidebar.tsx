@@ -5,6 +5,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
+import { worktreeName } from '../lib/repoIdentity';
 import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
@@ -276,7 +277,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     const q = filter.trim().toLowerCase();
     if (!q) return worktrees;
     return worktrees.filter(
-      (w) => (w.branch?.toLowerCase().includes(q) ?? false) || w.path.toLowerCase().includes(q),
+      (w) => worktreeName(w).toLowerCase().includes(q) || w.path.toLowerCase().includes(q),
     );
   }, [worktrees, filter]);
 
@@ -610,6 +611,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return items;
   };
 
+  const worktreeMeta = (w: Worktree): string | undefined => {
+    const labels = [
+      w.is_main ? 'main' : null,
+      w.is_current ? 'current' : null,
+      w.is_locked ? 'locked' : null,
+      w.is_detached ? 'detached' : null,
+      w.is_prunable ? 'stale' : null,
+    ].filter((x): x is string => Boolean(x));
+    return labels.length > 0 ? labels.join(' · ') : undefined;
+  };
+
   const renderBranchLeaf = (b: Branch, depth: number) => (
     <SideLeaf
       key={b.full_name}
@@ -737,9 +749,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 key={w.path}
                 depth={0}
                 icon={w.is_current ? 'check' : 'worktree'}
-                label={w.branch ?? leafName(w.path)}
+                label={worktreeName(w)}
                 active={w.is_current}
-                meta={w.is_locked ? 'locked' : w.is_detached ? 'detached' : undefined}
+                meta={worktreeMeta(w)}
                 title={`${w.path}${w.is_main ? ' — main worktree' : ''}${w.is_current ? ' — current' : ' — double-click to open in a tab'}`}
                 onActivate={() => void openWorktree(w.path)}
                 onSelect={() => setView('worktrees')}

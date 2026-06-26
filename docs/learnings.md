@@ -951,3 +951,23 @@ also ignored collapse).
 `treeFileOrder` first, then indexes by the active path. Both the Review queue
 (`Review.tsx` `navOrder`) and Local Changes' `j`/`k` (`LocalChanges.tsx` `nav`,
 each of the unstaged + staged groups sorted independently) route through it.
+
+---
+
+## Worktree UI names the repo first, branch second
+
+**Rule.** A linked worktree is not a different workspace/repo in the UI. Chrome,
+navigation, recents, and worktree dashboards must show the stable repo-family
+name first and the worktree branch/session as secondary context.
+
+**Why.** AI-agent workflows commonly run one branch per worktree. If the app
+lets a linked worktree's folder or branch replace the repo name, switching tabs
+feels like switching projects and recents can get polluted with branch slugs.
+
+**How to apply.** Use `repoFamilyName`, `repoTabLabel`, and `worktreeName` from
+`ui/src/lib/repoIdentity.ts`. `RepoMeta.name` is only the active workdir's
+basename; it is not stable across linked worktrees. The stable family label is
+derived from `RepoMeta.common_dir` (usually the main repo's `.git` directory).
+When opening Review from the Worktrees dashboard, leave the dashboard before
+switching active worktrees so the current-row sort does not visibly jump under
+the cursor.

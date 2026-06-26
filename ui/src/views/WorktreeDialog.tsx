@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { errMessage } from '../lib/tauri';
+import { repoFamilyName } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 
 /**
@@ -45,7 +46,7 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
     const sep = repoPath.includes('\\') ? '\\' : '/';
     const parent = repoPath.replace(/[\\/][^\\/]*$/, '');
     const slug = chosenBranch.replace(/\//g, '-');
-    setDest(slug ? `${parent}${sep}${meta.name}.worktrees${sep}${slug}` : '');
+    setDest(slug ? `${parent}${sep}${repoFamilyName(meta)}.worktrees${sep}${slug}` : '');
   }, [chosenBranch, destEdited, meta]);
 
   // Restore focus to the opener on close.
@@ -124,8 +125,8 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
 
         <div className="clone-body">
           <p className="stash-blurb">
-            Check out a branch into a separate directory — keep an agent's feature
-            work isolated and reviewable alongside your main tree.
+            Start an isolated checkout for one agent task. Strand keeps it grouped
+            with this repo, then can review the worktree against its fork point.
           </p>
 
           <label className="stash-check">
@@ -136,16 +137,16 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setNewBranch(e.target.checked)}
             />
             <span>
-              Create a new branch
+              Create a new task branch
               <span className="hint">
-                {headBranch ? `Branches off ${headBranch} (HEAD).` : 'Branches off HEAD.'}
+                {headBranch ? `Starts from ${headBranch} (HEAD).` : 'Starts from HEAD.'}
               </span>
             </span>
           </label>
 
           {newBranch ? (
             <label className="clone-field">
-              <span className="lbl">New branch name</span>
+              <span className="lbl">Task branch</span>
               <input
                 autoFocus
                 className="clone-input"
@@ -194,7 +195,7 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
             />
             <span>
               Open in a new tab when created
-              <span className="hint">Switch straight to the new worktree.</span>
+              <span className="hint">Switch straight to the isolated agent workspace.</span>
             </span>
           </label>
 
