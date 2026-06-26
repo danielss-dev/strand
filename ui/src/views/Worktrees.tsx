@@ -144,13 +144,13 @@ export function Worktrees({
         }
       }
 
+      const nextView = baselineOid ? 'review' : 'local';
+      setView(nextView);
       await openWorktree(w.path);
       if (baselineOid) {
         await setBaseline(baselineOid);
-        setView('review');
-      } else {
-        setView('local');
       }
+      setView(nextView);
     })();
   };
 
