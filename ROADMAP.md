@@ -273,7 +273,14 @@ also pending (only `aarch64-apple-darwin` is installed).
   (presets + custom command, wired to header buttons + palette)
 - ◐ Performance pass to hit PRD §8 targets on medium repos
   (open <2s for 100k commits ☑, status refresh <200ms on 10k files ☑; webview-side
-  targets — cold start, diff render, memory — still need a running-app pass)
+  targets measured on the running app 2026-06-29 — see `docs/perf-baseline.md`
+  § "Webview / full-app baseline": **cold start ☑** (~407ms shell / ~568ms
+  repo-interactive), **perceived stage ☑** (~34ms), **diff render ⚠️** (~87ms
+  normal but ~1460ms for a whole-file 5,000-line diff in the non-virtualized
+  Local Changes pane — Review is virtualized and fine), **idle memory ❌**
+  (~280MB private, over the 250MB target — WebView2's 6-process baseline, not
+  app JS). Two follow-ups remain: virtualize the Local Changes stacked diff
+  pane, and reconcile the memory target with WebView2's floor.)
 
 **Stashes shipped (2026-05-30):** First 0.5 vertical. `strand-core::stash`
 (`stash_list` via `stash_foreach`; `stash_save` via `stash_save2` with
