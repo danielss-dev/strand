@@ -70,12 +70,13 @@ target/release/examples/perfcheck ~/GitSources/.strand-perf-fixtures/bigtree 500
 | Open 100k-commit repo < 2.0s | ~47ms (discover + log, post-fix) | ✅ pass (~40× margin) |
 | Status refresh on 10k files < 200ms | 42ms (85ms with work_tree) | ✅ pass |
 | Installer < 25 MB | macOS DMG ~10 MB, Win MSI 10.5 MB (recorded) | ✅ pass |
-| Cold start < 1.0s | webview — not measured here | ⏳ needs app run |
-| Diff *render* 5,000-line < 100ms | webview/Pierre — not measured here | ⏳ needs app run |
-| Stage/unstage hunk < 50ms perceived | webview — not measured here | ⏳ needs app run |
-| Idle memory < 250 MB | full app — not measured here | ⏳ needs app run |
+| Cold start < 1.0s | ~407ms to shell paint, ~568ms to repo-interactive | ✅ pass (see webview section) |
+| Diff *render* 5,000-line < 100ms | ~87ms normal diff; ~1460ms whole-file in Local Changes | ⚠️ mixed — see webview section |
+| Stage/unstage hunk < 50ms perceived | ~34ms isolated; inflated when a huge diff is co-rendered | ✅ pass (with caveat) |
+| Idle memory < 250 MB | ~280 MB private / ~438 MB working set (medium repo) | ❌ over — WebView2 baseline |
 
-All three engine-measurable targets pass comfortably at target scale.
+All three engine-measurable targets pass comfortably at target scale. The
+webview/app targets were measured 2026-06-29 — see the next section.
 
 ## Findings, ranked by leverage
 
@@ -124,3 +125,138 @@ All three engine-measurable targets pass comfortably at target scale.
 The harness (`examples/perfcheck.rs`) is committed. Regenerate fixtures with
 the generator, then run the two commands above. Cheap to re-run after any
 hot-path change to confirm no regression.
+
+---
+
+# Webview / full-app baseline (Windows 11, 2026-06-29)
+
+The webview-side PRD §8 targets — cold start, diff *render*, perceived
+stage latency, idle memory — that the engine harness above explicitly does
+**not** cover. Measured against the real running Tauri app (v0.7.0).
+
+## Setup
+
+- **Hardware:** AMD Ryzen 7 7700X (8C/16T), 31 GB RAM.
+- **OS / runtime:** Windows 11 Pro 26200; WebView2 / Edge 149.0.4022.98; git 2.45.1.
+- **Build:** production binary via `pnpm tauri build --no-bundle` (release
+  profile, frontend embedded at `tauri.localhost` — **not** a dev build; a
+  dev build serves un-minified assets off the vite server and is not
+  representative).
+- **Method:** WebView2 exposes a Chrome DevTools Protocol endpoint when
+  launched with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
+  A dependency-free Node CDP client drives the app and reads the existing
+  `strand:perf` instrumentation (`ui/src/lib/perf.ts` — `timed()` /
+  `logColdStart()`). To open repos / select files / stage without a native
+  file dialog, the app exposes the zustand stores on `window.__strand` **only
+  when `localStorage['strand:perf']==='1'`** (perf-gated test hook in
+  `ui/src/main.tsx`). All figures are medians over 5–7 iterations.
+- **Fixtures:** a synthetic repo with `big.ts` (5,000-line file, ~2,500 lines
+  changed → a 7,500-line whole-file diff) and `small.ts` (a realistic
+  hunk-sized 2-hunk change); the strand repo itself as the "medium repo".
+
+## Results (median)
+
+### Cold start — exe launch → interactive
+
+| stage | median |
+|-------|-------:|
+| process spawn + WebView2 init (launch → navigation start) | 248ms |
+| navigation → shell first-contentful-paint (JS eval + React mount) | 160ms |
+| **full launch → shell painted** | **407ms** |
+| navigation → first repo snapshot (session restore + snapshot IPC) | 320ms |
+| **full launch → repo-interactive** (spawn + nav→snapshot) | **~568ms** |
+
+Per-IPC refresh cost on the strand repo (warm): `snapshot` 52ms, `log` 50ms,
+`diffs` 12ms — consistent with the engine numbers above.
+
+**Caveat:** the WebView2 runtime host stays warm across the rapid relaunch
+loop, so `spawn→nav` is a best case; a true first launch after a reboot
+(cold WebView2) would be somewhat higher. Still a wide margin under 1.0s.
+
+### Diff render — select file → fully painted
+
+| case | first paint | fully rendered | DOM line elements |
+|------|------------:|---------------:|------------------:|
+| `small.ts` (realistic hunk-sized change) | ~50ms | ~87ms | 9 |
+| `big.ts` whole-file in **Local Changes** (non-virtualized) | ~260ms | **~1460ms** | 7,500 |
+| `big.ts` whole-file in **Review** (virtualized) | — | bounded | **~100 mounted** |
+
+Local Changes renders the *entire* file diff (no row virtualization — its
+design assumption is hunk-sized patches), so a 5,000-line whole-file change
+mounts 7,500 line elements (~70k spans) and takes ~1.5s. The **Review** pane
+wraps the same diff in Pierre's `<Virtualizer>`, so only ~100 line elements
+mount regardless of file size — confirming the virtualized path stays within
+budget. Normal hunk-sized diffs render in ~87ms.
+
+### Stage / unstage — action → store updated + repainted
+
+| case | median |
+|------|-------:|
+| `small.ts` while viewing only that file | **34ms** |
+| `small.ts` while a 5,000-line whole-file diff is co-mounted (stacked view) | ~297ms |
+
+The stage *operation* (IPC + `refreshLocalChanges`) is ~50ms (snapshot 10ms +
+diffs 40ms); the round trip is ~34ms perceived in isolation. The 297ms case
+is dominated by re-rendering the non-virtualized 7,500-line `big.ts` diff —
+same root cause as the render miss above.
+
+### Idle memory — process tree (strand.exe + 6 WebView2 processes)
+
+| state | working set | private bytes | JS heap |
+|-------|------------:|--------------:|--------:|
+| empty (no repo open) | 408 MB | 248 MB | — |
+| one medium repo (strand) open, settled + GC | 438 MB | 280 MB | 7 MB |
+
+`strand.exe` itself is ~38 MB; the remaining ~400 MB is the six WebView2
+helper processes (browser / GPU / renderer / network / utility + the diff
+highlight workers). JS heap is tiny (7 MB), so the overage is structural to
+WebView2's multi-process model, not app allocation.
+
+## Verdict vs PRD §8 (webview/app targets)
+
+| target | result | status |
+|--------|--------|--------|
+| Cold start < 1.0s | ~407ms shell, ~568ms repo-interactive | ✅ pass |
+| Diff render 5,000-line < 100ms | ~87ms normal; ~1460ms whole-file in Local Changes; bounded in Review | ⚠️ mixed |
+| Stage/unstage hunk < 50ms perceived | ~34ms isolated | ✅ pass (caveat below) |
+| Idle memory < 250 MB | 280 MB private / 438 MB WS (medium repo) | ❌ over |
+
+## Findings, ranked by leverage
+
+1. **Local Changes does not virtualize whole-file diffs (highest leverage).**
+   Selecting a changed 5,000-line file mounts all 7,500 line elements
+   (~1.5s render), and any subsequent refresh (e.g. staging) re-renders them
+   (the ~297ms stage case). Review already virtualizes via Pierre's
+   `<Virtualizer>` (caps mounted rows at ~100). **Recommendation:** apply the
+   same virtualization (or a per-file mounted-row cap) to the Local Changes
+   stacked diff pane. Fixes both the render miss and the stage inflation.
+   Normal hunk-sized diffs are unaffected (~87ms) — this only bites on large
+   single-file changes, which AI agents do produce.
+
+2. **Idle memory is over the 250 MB target and the cause is structural.**
+   The app JS is ~7 MB; ~400 MB is WebView2's six helper processes. Levers:
+   reduce the WebView2 process count where possible, or revisit whether
+   250 MB is achievable for a Tauri/WebView2 app on Windows (the target may
+   need a per-platform figure). Not a code hot-path issue.
+
+3. **(Non-perf, surfaced during measurement) SQLite migration checksum
+   mismatch.** On this box `restoreSession` failed with
+   *"session load failed: migration 1 was previously applied but has been
+   modified"* — sqlx rejects a DB whose recorded migration checksum no longer
+   matches the binary's migration SQL. This silently disables **session
+   restore and all SQLite-backed settings persistence** (it's caught + warned,
+   app falls back to empty). If any already-shipped migration's SQL was edited
+   in place rather than appended as a new versioned migration, upgrading users
+   would hit this. Worth auditing `migrations/` for in-place edits.
+
+## Reproducing the webview pass
+
+1. `pnpm tauri build --no-bundle` (production binary).
+2. Launch with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 ./target/release/strand.exe`.
+3. Set `localStorage['strand:perf']='1'` and reload (enables instrumentation +
+   the `window.__strand` store hook).
+4. Drive via CDP (`http://localhost:9222/json/list` → page target's
+   `webSocketDebuggerUrl`) — `Runtime.evaluate` against `window.__strand.repo`
+   to open repos / select files / stage; read `[perf]` console lines and
+   `performance` timeline entries. Process-tree memory via the Windows process
+   list (sum strand.exe + child `msedgewebview2.exe`).

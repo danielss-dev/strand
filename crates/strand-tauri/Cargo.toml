@@ -17,6 +17,11 @@ strand-core = { path = "../strand-core" }
 
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# Used only to heal stale sqlx migration checksums on existing DBs (see
+# state::repair_migration_checksums). sqlx + sha2 are already in the tree via
+# tauri-plugin-sql, so these direct deps add ~no build cost.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
+sha2 = "0.10"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"

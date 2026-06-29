@@ -144,6 +144,20 @@ fn main() {
         ])
         .setup(|app| {
             install_crash_log(app);
+
+            // Heal stale sqlx migration checksums on an existing settings DB
+            // *before* the SQL plugin's migrator runs (on the webview's first
+            // `Database.load`), so an in-place migration edit can't silently
+            // break session restore + settings persistence. See
+            // `state::repair_migration_checksums`.
+            if let Ok(db_path) = app.path().app_config_dir().map(|d| d.join("strand.db")) {
+                match tauri::async_runtime::block_on(state::repair_migration_checksums(&db_path)) {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!("healed {n} stale migration checksum(s) in strand.db"),
+                    Err(e) => tracing::warn!("migration checksum repair skipped: {e}"),
+                }
+            }
+
             if let Some(win) = app.get_webview_window("main") {
                 // On Windows the native title bar would sit *above* our toolbar
                 // as a redundant second bar. Drop the OS decorations so the

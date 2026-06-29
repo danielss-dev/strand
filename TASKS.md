@@ -266,6 +266,26 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (`sql:default` only covers reads — silent failure trap, see
   `docs/learnings.md`)
 - ☑ SQLite migration v2: `commit_messages` (per-repo commit message history)
+- ☑ **Heal stale migration checksums (data-persistence bug fixed 2026-06-29).**
+  sqlx records a SHA-384 checksum of each migration's SQL and refuses to open a
+  DB whose stored checksum no longer matches the binary ("migration N was
+  previously applied but has been modified"). Commit `3e1f0bb` reindented
+  migration 1's SQL (whitespace-only), changing its checksum — so **every DB
+  created before it, including public 0.x installs, failed to open**, which
+  silently disabled session restore **and** all SQLite-backed settings
+  persistence (the frontend caught the load error and fell back to defaults).
+  Reverting the SQL can't fix it (it would break the newer cohort instead).
+  Fix: `state::repair_migration_checksums` (`strand-tauri`) recomputes each
+  migration's checksum and rewrites any stale `_sqlx_migrations` row **before**
+  the SQL plugin's migrator runs (Tauri `setup`, before the webview's first
+  `Database.load`). Safe because every migration is idempotent
+  `CREATE … IF NOT EXISTS` — the applied schema is identical regardless of SQL
+  whitespace — so no migration re-runs and no user data is touched. Verified
+  against the real broken DB: v1 checksum healed (`5E02…`→`6D23…`), v2 then
+  applied, session restore + persistence work, no console error. (sqlx + sha2
+  added as direct deps — already in the tree via tauri-plugin-sql.)
+  **Process rule going forward:** migrations are append-only; never edit an
+  applied migration's SQL (even whitespace) — add a new versioned migration.
 - ☑ Stream events for long-running ops (clone, fetch, push, pull) — via
   `tauri::ipc::Channel<Progress>`, no extra capability needed
 - ☑ Real updater pubkey + endpoint. Pubkey done: minisign keypair generated
@@ -953,19 +973,40 @@ and the `crates/strand-core/examples/perfcheck.rs` harness (100k-commit + 10k-fi
 synthetic fixtures). Engine-measurable targets pass; webview/app targets still need
 a running-app pass.
 
-- ◐ Cold start < 1.0s on M-series Mac (webview measurement harness landed:
-  `ui/src/lib/perf.ts` logs cold-start→first-snapshot plus per-refresh
-  snapshot/diffs/log timings — on in dev, opt-in via `localStorage['strand:perf']='1'`
-  in release. Numbers still need to be recorded in `docs/perf-baseline.md`.)
+- ☑ Cold start < 1.0s (measured on the running app 2026-06-29, Win 11 /
+  Ryzen 7 7700X — `docs/perf-baseline.md` § webview): **~407ms** launch→shell
+  paint, **~568ms** launch→repo-interactive (process+WebView2 init 248ms +
+  nav→snapshot 320ms). Per-IPC refresh: snapshot 52ms / log 50ms / diffs 12ms.
+  Driven via WebView2 CDP (`--remote-debugging-port`) + the `strand:perf`
+  harness and a perf-gated `window.__strand` store hook in `main.tsx`. Caveat:
+  WebView2 runtime warm across relaunches, so true post-reboot first launch is
+  a bit higher — still well under 1.0s.
 - ☑ Open 100k-commit repo < 2.0s (was ~0.5s on the git2 path; the ~0.46s topo-sort
   floor that was the 1M-commit scaling risk is now gone — `log` shells out to an
   incremental `git log`, so `discover + log(5000)` is ~47ms on the 100k fixture)
 - ☑ Status refresh on 10k-file working tree < 200ms (measured 42ms; ~85ms with the
   `work_tree` walk the UI also runs per refresh)
-- ☐ Diff render for 5,000-line file < 100ms (webview/Pierre render — not measured;
-  engine-side `diff_unstaged` for a 501-file changeset is ~150ms, see audit follow-up)
-- ☐ Stage/unstage hunk < 50ms perceived (webview — not yet measured)
-- ☐ Idle memory < 250MB for one medium repo (full app — not yet measured)
+- ◐ Diff render for 5,000-line file < 100ms (measured 2026-06-29): **~87ms** for
+  a realistic hunk-sized change ✅, but **~1460ms** for a whole-file 5,000-line
+  diff (7,500 line elements) in the **non-virtualized Local Changes** pane ❌.
+  The **Review** pane is virtualized (Pierre `<Virtualizer>`, ~100 mounted rows
+  regardless of file size) and stays within budget. **Follow-up:** virtualize /
+  cap mounted rows in the Local Changes stacked diff pane (see new item below).
+- ☑ Stage/unstage hunk < 50ms perceived (measured 2026-06-29): **~34ms** round
+  trip (IPC + `refreshLocalChanges` + repaint) when viewing the file. Note: rises
+  to ~297ms if a huge whole-file diff is co-mounted in the stacked view — same
+  Local Changes non-virtualization root cause as the render item.
+- ◐ Idle memory < 250MB for one medium repo (measured 2026-06-29): **~280MB
+  private / ~438MB working set** with the strand repo open (~408MB / 248MB
+  empty); JS heap is only 7MB, so the overage is WebView2's 6-process baseline
+  (`strand.exe` itself is ~38MB), not app allocation. **Over target** — needs
+  either WebView2 process-count reduction or a per-platform target revisit.
+- ☐ **Virtualize the Local Changes stacked diff pane** (perf follow-up from the
+  webview pass). A whole-file 5,000-line diff mounts 7,500 line elements
+  (~1.5s render; re-rendered on every refresh incl. staging). Review already
+  caps mounted rows via Pierre's `<Virtualizer>`; apply the same (or a per-file
+  mounted-row cap) to Local Changes. Hunk-sized diffs (~87ms) are unaffected —
+  this only bites large single-file agent changes.
 - ☑ Installer < 25MB per platform (macOS DMG ~10MB, Windows MSI 10.5MB — recorded)
 
 ### Perf-pass leads (2026-06-08 baseline)
