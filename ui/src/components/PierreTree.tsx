@@ -66,6 +66,8 @@ export interface TreeRowDecoration {
 /** Imperative handle so a host can open Pierre's in-tree search on demand. */
 export interface PierreTreeHandle {
   openSearch(): void;
+  /** Current Pierre multi-selection (file paths only). */
+  getSelectedPaths(): string[];
 }
 
 interface PierreTreeProps {
@@ -82,6 +84,8 @@ interface PierreTreeProps {
   selectedPath?: string | null;
   /** Fired with the active (last-selected) path, or `null` when the selection empties. */
   onSelect?: (path: string | null) => void;
+  /** Fired whenever Pierre's multi-selection changes (file paths only). */
+  onMultiSelectionChange?: (paths: string[]) => void;
   /**
    * Make plain ↑/↓/Home/End keyboard focus *select* the file it lands on
    * (firing {@link onSelect}), instead of just moving Pierre's focus ring.
@@ -191,6 +195,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     gitStatus,
     selectedPath = null,
     onSelect,
+    onMultiSelectionChange,
     onActivate,
     menuItems,
     onDiscard,
@@ -209,6 +214,8 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   // Latest-value refs so the once-created model's callbacks never go stale.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onMultiSelectionChangeRef = useRef(onMultiSelectionChange);
+  onMultiSelectionChangeRef.current = onMultiSelectionChange;
   const onActivateRef = useRef(onActivate);
   onActivateRef.current = onActivate;
   const onDiscardRef = useRef(onDiscard);
@@ -244,6 +251,9 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     initialSelectedPaths: selectedPath ? [selectedPath] : undefined,
     onSelectionChange: (sel) => {
       if (reflecting.current) return; // our own rewrite, not a user gesture
+      const files = fileSetRef.current;
+      const fileSel = sel.filter((p) => files.has(p));
+      onMultiSelectionChangeRef.current?.(fileSel);
       const next = sel.length ? sel[sel.length - 1] : null;
       // Ignore the echo of our own reflection (covers null === null too).
       if (next === selectedRef.current) return;
@@ -251,7 +261,14 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     },
   });
 
-  useImperativeHandle(ref, () => ({ openSearch: () => model.openSearch() }), [model]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      openSearch: () => model.openSearch(),
+      getSelectedPaths: () => model.getSelectedPaths().filter((p) => fileSetRef.current.has(p)),
+    }),
+    [model],
+  );
 
   // Resolve the file set an action targets, given the row it was invoked on:
   // a selected file row with a multi-selection → the whole selection; a folder

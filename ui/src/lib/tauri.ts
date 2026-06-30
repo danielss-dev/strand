@@ -297,6 +297,22 @@ export const tauri = {
   ) => invoke<StashOutcome>('repo_stash_save', { path, message, includeUntracked, keepIndex }),
   repoStashSnapshot: (path: string, message: string | null, includeUntracked: boolean) =>
     invoke<StashOutcome>('repo_stash_snapshot', { path, message, includeUntracked }),
+  repoStashPushPaths: (
+    path: string,
+    paths: string[],
+    message: string | null,
+    includeUntracked: boolean,
+    keepIndex: boolean,
+    snapshot: boolean,
+  ) =>
+    invoke<StashOutcome>('repo_stash_push_paths', {
+      path,
+      paths,
+      message,
+      includeUntracked,
+      keepIndex,
+      snapshot,
+    }),
   repoStashApply: (path: string, index: number) =>
     invoke<void>('repo_stash_apply', { path, index }),
   repoStashPop: (path: string, index: number) => invoke<void>('repo_stash_pop', { path, index }),

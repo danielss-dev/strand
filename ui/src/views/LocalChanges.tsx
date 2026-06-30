@@ -47,6 +47,8 @@ export function LocalChanges() {
   const stageAll = useRepo((s) => s.stageAll);
   const unstageAll = useRepo((s) => s.unstageAll);
   const selectLocalFile = useRepo((s) => s.selectLocalFile);
+  const setLocalTreeSelection = useRepo((s) => s.setLocalTreeSelection);
+  const requestStashDialog = useRepo((s) => s.requestStashDialog);
 
   // Conflicted (unmerged) files, from status — drive the Conflicts bar + the
   // in-pane landing. Deduped (status can list a path on both sides).
@@ -323,6 +325,8 @@ export function LocalChanges() {
                     staged={false}
                     selection={selection}
                     onSelect={selectFileRow}
+                    onMultiSelectionChange={(paths) => setLocalTreeSelection(false, paths)}
+                    onStash={() => requestStashDialog({ snapshot: false })}
                     onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                     actionLabel="Stage"
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
@@ -341,6 +345,8 @@ export function LocalChanges() {
                     staged={true}
                     selection={selection}
                     onSelect={selectFileRow}
+                    onMultiSelectionChange={(paths) => setLocalTreeSelection(true, paths)}
+                    onStash={() => requestStashDialog({ snapshot: false })}
                     onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
                     actionLabel="Unstage"
                     onBulk={() => void unstageAll().catch(fail('Unstage all'))}
@@ -472,6 +478,8 @@ interface SectionProps {
   staged: boolean;
   selection: LocalSelection | null;
   onSelect(sel: LocalSelection | null): void;
+  onMultiSelectionChange?(paths: string[]): void;
+  onStash?(): void;
   /** Stage (unstaged section) / Unstage (staged section) the given files. */
   onAction(files: string[]): void;
   actionLabel: string;
@@ -502,6 +510,8 @@ function FileSection({
   staged,
   selection,
   onSelect,
+  onMultiSelectionChange,
+  onStash,
   onAction,
   actionLabel,
   onDiscard,
@@ -529,6 +539,13 @@ function FileSection({
       const items: TreeMenuItem[] = [
         { label: actionLabel + suffix, icon: staged ? 'minus' : 'plus', onSelect: () => onAction(targets) },
       ];
+      if (onStash) {
+        items.push({
+          label: (n > 1 ? `Stash${suffix}` : 'Stash') + '…',
+          icon: 'stash',
+          onSelect: onStash,
+        });
+      }
       if (onDiscard) {
         items.push({
           label: (n > 1 ? `Discard${suffix}` : 'Discard') + '…',
@@ -569,7 +586,7 @@ function FileSection({
       }
       return items;
     },
-    [actionLabel, staged, onAction, onDiscard, isUntracked, onIgnore, onIgnoreCustom, files],
+    [actionLabel, staged, onAction, onStash, onDiscard, isUntracked, onIgnore, onIgnoreCustom, files],
   );
 
   return (
@@ -599,6 +616,7 @@ function FileSection({
         gitStatus={gitStatus}
         selectedPath={selectedPath}
         onSelect={(p) => onSelect(p ? { file: p, staged } : null)}
+        onMultiSelectionChange={onMultiSelectionChange}
         onActivate={onAction}
         menuItems={menuItems}
         onDiscard={onDiscard}

@@ -220,6 +220,53 @@ impl Repo {
         repo.stash_drop(index)?;
         Ok(())
     }
+
+    /// Stash only the given paths (`git stash push -- <pathspec…>`).
+    ///
+    /// When `snapshot` is true the changes are recorded on the stash stack but
+    /// immediately re-applied with `--index` so the working tree is unchanged.
+    /// An empty `paths` slice or a clean tree yields `StashOutcome { oid: None }`.
+    pub fn stash_push_paths(
+        &self,
+        paths: &[String],
+        message: Option<&str>,
+        include_untracked: bool,
+        keep_index: bool,
+        snapshot: bool,
+    ) -> Result<StashOutcome> {
+        if paths.is_empty() {
+            return Ok(StashOutcome { oid: None });
+        }
+
+        let mut args: Vec<String> = vec!["stash".into(), "push".into()];
+        if include_untracked {
+            args.push("--include-untracked".into());
+        }
+        if keep_index && !snapshot {
+            args.push("--keep-index".into());
+        }
+        if let Some(m) = message {
+            args.push("-m".into());
+            args.push(m.to_string());
+        }
+        args.push("--".into());
+        args.extend(paths.iter().cloned());
+
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = self.run_git(&arg_refs)?;
+        if out.contains("No local changes to save") {
+            return Ok(StashOutcome { oid: None });
+        }
+
+        if snapshot {
+            self.run_git(&["stash", "apply", "--index"])?;
+        }
+
+        let oid = self.run_git(&["rev-parse", "stash@{0}"])?;
+        Ok(StashOutcome {
+            oid: Some(oid),
+        })
+    }
 }
 
 /// Parse the branch a stash was taken on out of its message. git formats the
@@ -277,6 +324,44 @@ mod tests {
         // The stash node attaches to the commit it was taken on.
         assert_eq!(stashes[0].base.as_deref(), Some(base.as_str()));
         assert!(stashes[0].time_unix > 0, "commit time populated");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stash_push_paths_partial() {
+        let dir = std::env::temp_dir().join(format!("strand-stash-paths-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        std::fs::write(dir.join("b.txt"), "one\n").unwrap();
+        git(&dir, &["add", "a.txt", "b.txt"]);
+        git(&dir, &["commit", "-q", "-m", "base"]);
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        std::fs::write(dir.join("b.txt"), "two\n").unwrap();
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        let outcome = repo
+            .stash_push_paths(
+                &["a.txt".to_string()],
+                Some("partial"),
+                false,
+                false,
+                false,
+            )
+            .unwrap();
+        assert!(outcome.oid.is_some());
+
+        let a = std::fs::read_to_string(dir.join("a.txt")).unwrap();
+        let b = std::fs::read_to_string(dir.join("b.txt")).unwrap();
+        assert_eq!(a.trim(), "one");
+        assert_eq!(b.trim(), "two");
+
+        let stashes = repo.stash_list().unwrap();
+        assert_eq!(stashes.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

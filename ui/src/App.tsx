@@ -198,7 +198,9 @@ export function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
-  const [stashDialog, setStashDialog] = useState<{ snapshot: boolean } | null>(null);
+  const [stashDialog, setStashDialog] = useState<{ snapshot: boolean; keepIndex: boolean } | null>(null);
+  const stashDialogRequest = useRepo((s) => s.stashDialogRequest);
+  const clearStashDialogRequest = useRepo((s) => s.clearStashDialogRequest);
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   const [branchDialog, setBranchDialog] = useState<{ start: string | null; label: string } | null>(null);
@@ -509,6 +511,12 @@ export function App() {
     void refreshLocalChanges();
     void refreshLog();
   }, [refreshLocalChanges, refreshLog]);
+
+  useEffect(() => {
+    if (!stashDialogRequest) return;
+    setStashDialog(stashDialogRequest);
+    clearStashDialogRequest();
+  }, [stashDialogRequest, clearStashDialogRequest]);
 
   // Resolved keybindings: defaults from the registry overlaid with the user's
   // overrides. Drives the window keydown handler, the palette shortcut chips,
@@ -992,8 +1000,8 @@ export function App() {
           : []),
         { id: 'open-editor', label: 'Open in editor', group: 'Actions', shortcut: keyHint('open-editor'), keywords: 'external code reveal vscode editor', run: openInEditor },
         { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', shortcut: keyHint('open-terminal'), keywords: 'shell console cwd iterm terminal', run: openInTerminal },
-        { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true }) },
-        { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false }) },
+        { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true, keepIndex: false }) },
+        { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false, keepIndex: false }) },
         { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
         // Renaming the short OID HEAD shows while detached is meaningless —
         // only offer the rename on a real branch.
@@ -1106,7 +1114,8 @@ export function App() {
           pullDone={pullDone}
           pushDone={pushDone}
           onToast={showToast}
-          onSaveSnapshot={() => setStashDialog({ snapshot: true })}
+          onSaveSnapshot={() => setStashDialog({ snapshot: true, keepIndex: false })}
+          onStash={(opts) => setStashDialog({ snapshot: opts?.snapshot ?? false, keepIndex: opts?.keepIndex ?? false })}
           onOpenRepo={openViaDialog}
           onOpenRecent={openByPath}
           onClone={() => setCloneOpen(true)}
@@ -1127,7 +1136,7 @@ export function App() {
               <Sidebar
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
-                onCreateStash={() => setStashDialog({ snapshot: true })}
+                onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
                 onCreateWorktree={() => setWorktreeOpen(true)}
@@ -1250,7 +1259,11 @@ export function App() {
       )}
 
       {stashDialog && (
-        <StashDialog initialSnapshot={stashDialog.snapshot} onClose={() => setStashDialog(null)} />
+        <StashDialog
+          snapshot={stashDialog.snapshot}
+          keepIndex={stashDialog.keepIndex}
+          onClose={() => setStashDialog(null)}
+        />
       )}
 
       {tagDialog && (
