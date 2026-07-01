@@ -546,6 +546,10 @@ export interface RepoState {
    * the palette action switches the view itself when neither is showing.
    */
   diffSearchSignal: boolean;
+  /** One-shot: CommitBar should run AI suggest (command palette / shortcut). */
+  suggestCommitSignal: boolean;
+  requestSuggestCommitMessage(): void;
+  clearSuggestCommitMessage(): void;
   /** One-shot: open the stash dialog (e.g. from Local Changes context menu). */
   stashDialogRequest: { snapshot: boolean; keepIndex: boolean } | null;
   requestStashDialog(opts?: { snapshot?: boolean; keepIndex?: boolean }): void;
@@ -761,6 +765,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   commitSearchFocus: false,
   commitSearchMode: null,
   diffSearchSignal: false,
+  suggestCommitSignal: false,
   stashDialogRequest: null as { snapshot: boolean; keepIndex: boolean } | null,
   selectSinceBaseline: false,
   diffsTick: 0,
@@ -1817,6 +1822,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   clearCommitSearchFocus: () => set({ commitSearchFocus: false, commitSearchMode: null }),
   requestDiffSearch: () => set({ diffSearchSignal: true }),
   clearDiffSearch: () => set({ diffSearchSignal: false }),
+  requestSuggestCommitMessage: () => set({ view: 'local', suggestCommitSignal: true }),
+  clearSuggestCommitMessage: () => set({ suggestCommitSignal: false }),
   requestStashDialog: (opts) =>
     set({
       stashDialogRequest: {

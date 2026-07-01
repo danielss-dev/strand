@@ -362,3 +362,20 @@ export interface Snapshot {
   refs: Refs;
   submodules: Submodule[];
 }
+
+/** AI provider for commit message suggestions (matches Rust `AiProvider`). */
+export type AiProvider = 'openai' | 'anthropic';
+
+/** Status of a vendor CLI + login session (Settings → AI). */
+export interface AiProviderStatus {
+  provider: AiProvider;
+  installed: boolean;
+  logged_in: boolean;
+  account_hint?: string | null;
+}
+
+/** Suggested commit message from `repo_suggest_commit_message`. */
+export interface CommitMessageSuggestion {
+  subject: string;
+  body: string | null;
+}

@@ -1,5 +1,6 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+mod ai;
 mod commands;
 mod state;
 
@@ -142,6 +143,10 @@ fn main() {
             commands::repo_stash_apply,
             commands::repo_stash_pop,
             commands::repo_stash_drop,
+            commands::ai_provider_status,
+            commands::ai_provider_login,
+            commands::ai_provider_logout,
+            commands::repo_suggest_commit_message,
         ])
         .setup(|app| {
             install_crash_log(app);

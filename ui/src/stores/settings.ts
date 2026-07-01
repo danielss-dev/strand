@@ -38,6 +38,9 @@ export type ExternalTool =
   | { kind: 'custom'; template: string }
   | null;
 
+/** AI provider for commit message suggestions. */
+export type AiProvider = 'openai' | 'anthropic';
+
 /** The concrete theme already applied to `<html>` by the pre-paint inline
  * script in index.html — the exact (pref + OS) resolution, with no second
  * computation here. `useTheme` keeps it in sync from React's first commit. */
@@ -105,6 +108,12 @@ export interface SettingsState {
   defaultCloneDir: string | null;
   editorTool: ExternalTool;
   terminalTool: ExternalTool;
+  /** Default AI provider for commit message suggestions. */
+  aiProvider: AiProvider;
+  /** Optional override path to the Codex CLI binary. */
+  openaiCli: string | null;
+  /** Optional override path to the Claude Code CLI binary. */
+  anthropicCli: string | null;
   updateAutoCheck: boolean;
   updateAutoInstall: boolean;
   /** Per-command keyboard-shortcut overrides. A missing key uses the command's
@@ -188,6 +197,9 @@ export const useSettings = create<SettingsState>()(
       defaultCloneDir: null,
       editorTool: null,
       terminalTool: null,
+      aiProvider: 'openai',
+      openaiCli: null,
+      anthropicCli: null,
       updateAutoCheck: true,
       updateAutoInstall: false,
       keybindings: {},

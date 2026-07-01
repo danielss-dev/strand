@@ -1181,6 +1181,14 @@ as the remote-SSH daemon** (`--stdio` mode) — shares the `strand-ops`
 extraction above as prerequisite. **Do not start before 1.0 ships**
 (ROADMAP §1.1+).
 
+### AI (commit message suggestions)
+
+- ☑ Rust `ai/` module + IPC (`ai_provider_*`, `repo_suggest_commit_message`)
+- ☑ Settings → AI (ChatGPT / Claude Code sign-in, custom CLI paths)
+- ☑ CommitBar Suggest + palette / ⌘⇧M shortcut
+- ☐ Rebase reword suggestions (share CommitBar generator)
+- ☐ Conflict-resolution hints — PRD Q3 follow-up
+
 ### Pre-1.0 guardrails (active now)
 
 - ☐ Treat IPC serde types (`FileDiff`, `Commit`, `Snapshot`, …) as a

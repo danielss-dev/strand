@@ -971,3 +971,27 @@ derived from `RepoMeta.common_dir` (usually the main repo's `.git` directory).
 When opening Review from the Worktrees dashboard, leave the dashboard before
 switching active worktrees so the current-row sort does not visibly jump under
 the cursor.
+
+---
+
+## AI commit messages use vendor CLIs, not raw OAuth
+
+**Rule.** Subscription-backed AI features delegate auth and billing to the
+official vendor CLIs — **Codex** (`codex login` / `codex exec`) for ChatGPT,
+**Claude Code** (`claude auth login` / `claude -p`) for Anthropic. Strand
+orchestrates subprocess calls and parses JSON; it does not store API keys or
+implement Anthropic subscription OAuth.
+
+**Why.** ChatGPT Plus billing for third-party tools flows through Codex OAuth;
+Anthropic restricts subscription OAuth to first-party surfaces. Shelling out
+to `claude` is the supported path for Claude Code users.
+
+**How to apply.**
+
+- New AI providers implement the `CommitMessageGenerator` trait in
+  `crates/strand-tauri/src/ai/` — don't add direct HTTP + key storage without
+  an explicit product decision.
+- Spawn argv directly (no shell), same safety model as `external.rs`.
+- Disable tool use in headless CLI invocations (`--tools ""`, read-only Codex
+  sandbox) so suggestion runs can't mutate the repo.
+- Settings → AI owns sign-in UX; CommitBar only checks `ai_provider_status`.

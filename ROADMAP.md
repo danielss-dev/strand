@@ -1099,7 +1099,14 @@ walkthrough of dashboard → Review on a dirty linked worktree.
   `docs/strand-cli.md` + task breakdown in TASKS.md.
 - Plugin / extension surface
 - AI features (commit message suggestions, conflict hints) — PRD Q3
+  - ☑ Commit message suggestions from staged diffs (Codex / Claude Code CLIs)
 - Built-in PR review surface for GitHub / GitLab — PRD Q4
+
+**AI commit messages (2026-07-01):** Subscription-first suggestions from staged
+diffs — Codex CLI (`codex login` / `codex exec`) for ChatGPT Plus, Claude Code
+CLI (`claude -p`) for Anthropic. Rust `ai/` module + four IPC commands; Settings
+→ AI for sign-in; CommitBar sparkle button; palette + ⌘⇧M. Verified:
+`cargo test -p strand-tauri`, `pnpm --filter ./ui exec tsc --noEmit`.
 
 ---
 
@@ -1114,7 +1121,9 @@ walkthrough of dashboard → Review on a dirty linked worktree.
 - **Open questions.** PRD §12 lists 5 open Qs.
   1. ☑ Pierre licensing — approved 2026-05-25.
   2. ☑ OSS vs source-available — AGPL-3.0 + dual-license commercial.
-  3. ☐ AI features extension point — design before 1.0.
+  3. ◐ AI features extension point — `CommitMessageGenerator` trait +
+     subscription-first commit suggestions (`repo_suggest_commit_message`,
+     Settings → AI, CommitBar Suggest, ⌘⇧M / palette).
   4. ☐ PR review surface — 1.1 candidate.
   5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.

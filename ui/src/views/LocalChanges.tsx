@@ -15,7 +15,7 @@ import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
-import { gitErrorHint } from '../lib/tauri';
+import { gitErrorHint, tauri } from '../lib/tauri';
 import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
 import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
@@ -1231,14 +1231,22 @@ function BlockActions({
 // ─── Commit bar ─────────────────────────────────────────────────────────────
 
 function CommitBar({ canCommit }: { canCommit: boolean }) {
+  const activePath = useRepo((s) => s.activePath);
   const commit = useRepo((s) => s.commit);
   const recentMessages = useRepo((s) => s.recentMessages);
   const refreshRecentMessages = useRepo((s) => s.refreshRecentMessages);
+  const suggestCommitSignal = useRepo((s) => s.suggestCommitSignal);
+  const clearSuggestCommitMessage = useRepo((s) => s.clearSuggestCommitMessage);
+  const aiProvider = useSettings((s) => s.aiProvider);
+  const openaiCli = useSettings((s) => s.openaiCli);
+  const anthropicCli = useSettings((s) => s.anthropicCli);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [amend, setAmend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
+  const [aiReady, setAiReady] = useState(false);
 
   // Recent-messages dropdown state.
   const [recentOpen, setRecentOpen] = useState(false);
@@ -1252,6 +1260,54 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   useEffect(() => {
     void refreshRecentMessages();
   }, [refreshRecentMessages]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void tauri
+      .aiProviderStatus(aiProvider, openaiCli, anthropicCli)
+      .then((s) => {
+        if (!cancelled) setAiReady(s.installed && s.logged_in);
+      })
+      .catch(() => {
+        if (!cancelled) setAiReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiProvider, openaiCli, anthropicCli]);
+
+  function applyMessage(m: { subject: string; body: string }) {
+    setSubject(m.subject);
+    setBody(m.body);
+    setRecentOpen(false);
+    subjectRef.current?.focus();
+  }
+
+  const suggest = useCallback(async () => {
+    if (!activePath || !canCommit) return;
+    setSuggesting(true);
+    setCommitError(null);
+    try {
+      const msg = await tauri.repoSuggestCommitMessage(
+        activePath,
+        aiProvider,
+        openaiCli,
+        anthropicCli,
+      );
+      applyMessage({ subject: msg.subject, body: msg.body ?? '' });
+    } catch (e) {
+      console.error('suggest commit message failed', e);
+      setCommitError(gitErrorHint(e));
+    } finally {
+      setSuggesting(false);
+    }
+  }, [activePath, aiProvider, anthropicCli, canCommit, openaiCli]);
+
+  useEffect(() => {
+    if (!suggestCommitSignal) return;
+    clearSuggestCommitMessage();
+    void suggest();
+  }, [suggestCommitSignal, clearSuggestCommitMessage, suggest]);
 
   // Close the dropdown on outside click.
   useEffect(() => {
@@ -1282,13 +1338,6 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
     void refreshRecentMessages();
   }
 
-  function applyMessage(m: { subject: string; body: string }) {
-    setSubject(m.subject);
-    setBody(m.body);
-    setRecentOpen(false);
-    subjectRef.current?.focus();
-  }
-
   async function submit() {
     const trimmed = subject.trim();
     if (!trimmed || submitting) return;
@@ -1309,6 +1358,12 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   }
 
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
+  const suggestDisabled = suggesting || submitting || !canCommit || !aiReady;
+  const suggestTitle = !canCommit
+    ? 'Stage changes to suggest a commit message'
+    : !aiReady
+      ? 'Sign in under Settings → AI to enable suggestions'
+      : 'Suggest commit message from staged changes';
 
   return (
     <div className="lc-commit-bar">
@@ -1330,6 +1385,16 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
               }
             }}
           />
+          <button
+            type="button"
+            className="suggest-btn"
+            aria-label="Suggest commit message"
+            title={suggestTitle}
+            disabled={suggestDisabled}
+            onClick={() => void suggest()}
+          >
+            <Icon name="sparkle" size={13} />
+          </button>
           {recentMessages.length > 0 && (
             <button
               type="button"

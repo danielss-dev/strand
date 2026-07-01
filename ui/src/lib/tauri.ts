@@ -1,10 +1,13 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 
 import type {
+  AiProvider,
+  AiProviderStatus,
   BlameLine,
   CheckoutOutcome,
   CloneOutcome,
   Commit,
+  CommitMessageSuggestion,
   CommitSearchMode,
   CommitOutcome,
   FileBlob,
@@ -317,6 +320,49 @@ export const tauri = {
     invoke<void>('repo_stash_apply', { path, index }),
   repoStashPop: (path: string, index: number) => invoke<void>('repo_stash_pop', { path, index }),
   repoStashDrop: (path: string, index: number) => invoke<void>('repo_stash_drop', { path, index }),
+
+  aiProviderStatus: (
+    provider: AiProvider,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) =>
+    invoke<AiProviderStatus>('ai_provider_status', {
+      provider,
+      openaiCli: openaiCli ?? null,
+      anthropicCli: anthropicCli ?? null,
+    }),
+  aiProviderLogin: (
+    provider: AiProvider,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) =>
+    invoke<void>('ai_provider_login', {
+      provider,
+      openaiCli: openaiCli ?? null,
+      anthropicCli: anthropicCli ?? null,
+    }),
+  aiProviderLogout: (
+    provider: AiProvider,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) =>
+    invoke<void>('ai_provider_logout', {
+      provider,
+      openaiCli: openaiCli ?? null,
+      anthropicCli: anthropicCli ?? null,
+    }),
+  repoSuggestCommitMessage: (
+    path: string,
+    provider: AiProvider,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) =>
+    invoke<CommitMessageSuggestion>('repo_suggest_commit_message', {
+      path,
+      provider,
+      openaiCli: openaiCli ?? null,
+      anthropicCli: anthropicCli ?? null,
+    }),
 };
 
 /** True when a rejected op was user-cancelled (`Error::Cancelled`) — show it

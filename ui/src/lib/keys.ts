@@ -40,7 +40,8 @@ export type CommandId =
   | 'sync'
   | 'open-editor'
   | 'open-terminal'
-  | 'refresh';
+  | 'refresh'
+  | 'suggest-commit';
 
 export type CommandCategory = 'General' | 'Navigation' | 'Git' | 'Repository' | 'Appearance';
 
@@ -89,6 +90,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'pull',   label: 'Pull',                         category: 'Git', defaultBinding: 'Mod+Shift+P', menu: true, needsRepo: true },
   { id: 'push',   label: 'Push',                         category: 'Git', defaultBinding: 'Mod+P',       menu: true, needsRepo: true },
   { id: 'sync',   label: 'Sync (fetch + pull + push)',   category: 'Git', defaultBinding: 'Mod+Shift+S', menu: true, needsRepo: true },
+  { id: 'suggest-commit', label: 'Suggest commit message', category: 'Git', defaultBinding: 'Mod+Shift+M', needsRepo: true },
 
   { id: 'open-editor',   label: 'Open in editor',        category: 'Repository', defaultBinding: 'Mod+Shift+E', needsRepo: true },
   { id: 'open-terminal', label: 'Open in terminal',      category: 'Repository', defaultBinding: 'Mod+Shift+C', needsRepo: true },
