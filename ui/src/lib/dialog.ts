@@ -4,12 +4,21 @@ import { useSettings } from '../stores/settings';
 import { isTauri } from './tauri';
 
 /**
- * Show the native directory picker for "open repository". Returns the
- * chosen absolute path, or `null` if the user cancelled or we're not in
- * Tauri. Starts in the configured default folder (Settings → Git), if any.
+ * Show the native directory picker for "open repository", allowing several
+ * folders to be selected at once (each opens as its own tab). Returns the
+ * chosen absolute paths, or `[]` if the user cancelled or we're not in Tauri.
+ * Starts in the configured default folder (Settings → Git), if any.
  */
-export async function pickRepoDirectory(): Promise<string | null> {
-  return pickDirectory('Open repository', useSettings.getState().defaultCloneDir ?? undefined);
+export async function pickRepoDirectories(): Promise<string[]> {
+  if (!isTauri()) return [];
+  const selected = await openDialog({
+    directory: true,
+    multiple: true,
+    title: 'Open repositories',
+    defaultPath: useSettings.getState().defaultCloneDir ?? undefined,
+  });
+  if (Array.isArray(selected)) return selected;
+  return typeof selected === 'string' ? [selected] : [];
 }
 
 /**

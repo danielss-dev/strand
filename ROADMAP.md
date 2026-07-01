@@ -21,7 +21,7 @@ system ported verbatim. No real feature surface yet.
 > diff & stage, commit graph, file tree, one platform — likely macOS."
 
 - ◐ **Open / clone / add existing repo**
-  - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window)
+  - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window; picker + drop are **multi-select** — open several repos at once, each as a tab)
   - ☑ SQLite-backed recent-repo list with last-opened timestamp
   - ☑ Multi-repo tabs (open, switch, close, **persist across launches**)
   - ☑ Clone (HTTPS / SSH) with streaming progress (shell-out `git clone

@@ -17,7 +17,7 @@ import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { useUpdates } from './stores/updates';
 import { accentHueForColor, groupTabs, repoFamilyName } from './lib/repoIdentity';
-import { pickRepoDirectory } from './lib/dialog';
+import { pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
@@ -418,10 +418,18 @@ export function App() {
     }
   }, [openRepo, showToast, nextOpId]);
 
-  const openViaDialog = useCallback(async () => {
-    const path = await pickRepoDirectory();
-    if (path) await openByPath(path);
+  // Open a batch of repos as tabs, one after another. Sequential (not
+  // parallel) so the shared active-tab state and the progress popup don't race
+  // — same pattern as session restore. A folder that isn't a repo fails inside
+  // openByPath (toast/error popup) without aborting the rest; the last one to
+  // open successfully ends up active.
+  const openMany = useCallback(async (paths: string[]) => {
+    for (const p of paths) await openByPath(p);
   }, [openByPath]);
+
+  const openViaDialog = useCallback(async () => {
+    await openMany(await pickRepoDirectories());
+  }, [openMany]);
 
   // Open the tile/tab icon-customization dialog for a repo. Shared by the repo
   // rail and the toolbar tab strip (whichever `repoNav` selects).
@@ -687,17 +695,18 @@ export function App() {
     return () => clearTimeout(timer);
   }, [showToast]);
 
-  // Native drag-and-drop: drop a folder onto the window to open it.
+  // Native drag-and-drop: drop one or more folders onto the window to open
+  // them, each as its own tab.
   useEffect(() => {
     if (!isTauri()) return;
     const w = getCurrentWebviewWindow();
     const unlisten = w.onDragDropEvent(({ payload }) => {
       if (payload.type === 'drop' && payload.paths.length > 0) {
-        void openByPath(payload.paths[0]);
+        void openMany(payload.paths);
       }
     });
     return () => { void unlisten.then((fn) => fn()); };
-  }, [openByPath]);
+  }, [openMany]);
 
   // Primary freshness signal: the Rust file watcher. It debounces write
   // bursts and emits `repo://changed` with the repo path — exactly what an

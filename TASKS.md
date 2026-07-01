@@ -320,7 +320,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## Frontend — components & wiring
 
 ### Repo opening
-- ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`
+- ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`.
+  The picker is **multi-select** (`pickRepoDirectories`, `multiple: true`) — pick
+  several folders at once and each opens as its own tab via `App.openMany`
+  (sequential opens, mirroring session restore).
 - ☑ "Clone repository" command (palette + topbar `+` dropdown) → `CloneDialog`
   (URL + native destination picker). The dialog now closes on submit and hands
   `(url, dest)` to `App.runClone`, which drives a **persistent progress popup**
@@ -335,7 +338,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   for big repos that take a moment (200ms delay so small repos don't flash). Each
   op carries a generation id so overlapping opens/clones don't clear each other's
   popup.
-- ☑ Drag-and-drop a folder → calls `useRepo.openRepo`
+- ☑ Drag-and-drop one or more folders → each opens as a tab (`App.openMany`)
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
 - ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
 - ☑ Tab persistence across launches (via `settings.session.tabs` in SQLite)

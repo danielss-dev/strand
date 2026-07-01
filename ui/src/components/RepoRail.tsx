@@ -171,7 +171,7 @@ function RailContextMenu({
       {!menu.worktree && (
         <button type="button" className="repo-menu-item" role="menuitem" onClick={onCustomize}>
           <span className="ico"><Icon name="edit" size={13} /></span>
-          <span className="label">Customize icon…</span>
+          <span className="label">Customize…</span>
         </button>
       )}
       <button type="button" className="repo-menu-item" role="menuitem" onClick={onCloseRepo}>
