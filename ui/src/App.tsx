@@ -162,6 +162,7 @@ export function App() {
   const revealInGraph = useRepo((s) => s.revealInGraph);
   const requestCommitSearch = useRepo((s) => s.requestCommitSearch);
   const requestDiffSearch = useRepo((s) => s.requestDiffSearch);
+  const requestSuggestCommitMessage = useRepo((s) => s.requestSuggestCommitMessage);
   const requestSelectSinceBaseline = useRepo((s) => s.requestSelectSinceBaseline);
   const selectCommit = useRepo((s) => s.selectCommit);
 
@@ -555,8 +556,10 @@ export function App() {
     'open-editor': openInEditor,
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
+    'suggest-commit': () => { requestSuggestCommitMessage(); },
   }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
-       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab]);
+       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
+       requestSuggestCommitMessage]);
   const commandHandlersRef = useRef(commandHandlers);
   commandHandlersRef.current = commandHandlers;
   const keyMapRef = useRef(keyMap);
@@ -952,6 +955,7 @@ export function App() {
           if (v !== 'local' && v !== 'review') setView('local');
           requestDiffSearch();
         } },
+        { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
         { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: pin baseline at HEAD', group: 'Actions', keywords: 'ai agent session since diff review baseline', run: () => {
           void setBaseline().then(() => { setView('review'); selectFile(null); })
             .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`));
@@ -1053,6 +1057,7 @@ export function App() {
     base.push(
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
+      { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: keyHint('theme-toggle'), run: () => setTheme('system') },
@@ -1087,7 +1092,7 @@ export function App() {
     return [...base, ...repoActions, ...recentActions];
   }, [setView, selectFile, onSync, onPull, onPush, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, showToast, meta, abortOperation, requestCommitSearch,
-      requestDiffSearch, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
+      requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,

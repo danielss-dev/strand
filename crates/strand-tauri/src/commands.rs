@@ -20,6 +20,7 @@ use strand_core::{
 use tauri::ipc::Channel;
 use tauri::{Emitter, State};
 
+use crate::ai;
 use crate::state::AppState;
 
 /// Register / clear a cancellable op's handle under `op_id` so
@@ -803,4 +804,71 @@ pub fn repo_stash_pop(path: String, index: usize) -> CmdResult<()> {
 pub fn repo_stash_drop(path: String, index: usize) -> CmdResult<()> {
     Repo::discover(&path)?.stash_drop(index)?;
     Ok(())
+}
+
+// ─── AI commit message suggestions ─────────────────────────────────────────
+
+fn ai_cli_override(provider: ai::AiProvider, openai: Option<String>, anthropic: Option<String>) -> Option<String> {
+    match provider {
+        ai::AiProvider::Openai => openai,
+        ai::AiProvider::Anthropic => anthropic,
+    }
+}
+
+#[tauri::command(async)]
+pub fn ai_provider_status(
+    provider: ai::AiProvider,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+) -> CmdResult<ai::AiProviderStatus> {
+    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+    Ok(ai::provider_status(
+        provider,
+        override_path.as_deref(),
+    ))
+}
+
+#[tauri::command(async)]
+pub fn ai_provider_login(
+    provider: ai::AiProvider,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+) -> CmdResult<()> {
+    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+    ai::provider_login(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+}
+
+#[tauri::command(async)]
+pub fn ai_provider_logout(
+    provider: ai::AiProvider,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+) -> CmdResult<()> {
+    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+    ai::provider_logout(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+}
+
+#[tauri::command(async)]
+pub fn repo_suggest_commit_message(
+    path: String,
+    provider: ai::AiProvider,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+) -> CmdResult<ai::CommitMessageSuggestion> {
+    let repo = Repo::discover(&path)?;
+    let diffs = repo.diff_staged()?;
+    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+    ai::suggest_commit_message(
+        provider,
+        repo.path(),
+        &diffs,
+        override_path.as_deref(),
+    )
+    .map_err(CmdError::from_msg)
+}
+
+impl CmdError {
+    fn from_msg(message: String) -> Self {
+        Self { message }
+    }
 }

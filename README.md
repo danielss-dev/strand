@@ -79,8 +79,11 @@ keyboard alone, and the mouse stays first-class.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, native macOS menubar, open in your editor or
-  terminal, settings (⌘,) for appearance / diff / git / integrations, in-app
-  updates.
+  terminal, settings (⌘,) for appearance / diff / git / integrations / AI,
+  in-app updates.
+- **AI commit messages** — suggest subject + body from staged changes via
+  your ChatGPT subscription (Codex CLI) or Claude Code CLI; Settings → AI
+  for sign-in and provider choice.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

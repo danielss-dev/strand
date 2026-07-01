@@ -5,7 +5,7 @@ export type IconName =
   | 'file' | 'folder' | 'folder-open' | 'changes' | 'search' | 'command'
   | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
   | 'chev-down' | 'chev-right' | 'chev-up' | 'chev-left' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
-  | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye'
+  | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye' | 'sparkle'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
   | 'trash'
   | 'win-min' | 'win-max' | 'win-restore' | 'win-close';
@@ -73,6 +73,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'terminal':    return <svg {...p}><rect x="1.5" y="3" width="13" height="10" rx="1"/><path d="M4 6.5l2 1.5-2 1.5M8 10.5h3"/></svg>;
     case 'external':    return <svg {...p}><path d="M9 2h5v5M14 2l-7 7M7 3H3v10h10V9"/></svg>;
     case 'eye':         return <svg {...p}><path d="M1.5 8s2.5-5 6.5-5 6.5 5 6.5 5-2.5 5-6.5 5-6.5-5-6.5-5Z"/><circle cx="8" cy="8" r="2"/></svg>;
+    case 'sparkle':     return <svg {...p}><path d="M8 1.5l.8 2.6L11.5 5l-2.7.9L8 8.5 6.2 5.9 3.5 5l2.7-.9L8 1.5Z"/><path d="M12.5 9l.5 1.5L14.5 11l-1.5.5L12.5 13l-.5-1.5L10.5 11l1.5-.5.5-1.5Z"/></svg>;
     case 'split':       return <svg {...p}><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M8 2.5v11"/></svg>;
     case 'unified':     return <svg {...p}><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M2 8h12"/></svg>;
     case 'rebase':      return <svg {...p}><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="8" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="8" r="1.5"/><path d="M4 5v1.5M4 9.5V11M5.5 8h5"/></svg>;

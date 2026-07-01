@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Icon, type IconName } from '../components/Icon';
+import { AiSection } from './settings/AiSection';
 import { AppearanceSection } from './settings/AppearanceSection';
 import { DiffSection } from './settings/DiffSection';
 import { GitSection } from './settings/GitSection';
@@ -22,7 +23,7 @@ import { UpdatesSection } from './settings/UpdatesSection';
  * Reachable from the status-bar gear, ⌘, and the command palette.
  */
 
-export type SettingsSectionId = 'appearance' | 'diff' | 'keyboard' | 'git' | 'integrations' | 'updates';
+export type SettingsSectionId = 'appearance' | 'diff' | 'keyboard' | 'git' | 'integrations' | 'ai' | 'updates';
 
 const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
   { id: 'appearance', label: 'Appearance', icon: 'eye' },
@@ -30,6 +31,7 @@ const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
   { id: 'keyboard', label: 'Keyboard', icon: 'command' },
   { id: 'git', label: 'Git', icon: 'branch' },
   { id: 'integrations', label: 'Integrations', icon: 'external' },
+  { id: 'ai', label: 'AI', icon: 'sparkle' },
   { id: 'updates', label: 'Updates', icon: 'sync' },
 ];
 
@@ -159,6 +161,7 @@ export function SettingsDialog({
             {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}
             {section === 'integrations' && <IntegrationsSection />}
+            {section === 'ai' && <AiSection />}
             {section === 'updates' && <UpdatesSection />}
           </div>
         </div>
