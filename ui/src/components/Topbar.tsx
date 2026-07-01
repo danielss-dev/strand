@@ -22,6 +22,8 @@ interface Props {
   onToast: (msg: string) => void;
   /** Open the Save-snapshot dialog (message + keep-changes options). */
   onSaveSnapshot: () => void;
+  /** Open the stash preview dialog. */
+  onStash: (opts?: { snapshot?: boolean; keepIndex?: boolean }) => void;
   /** Open a repository via the directory picker (tabs-mode `+` menu). */
   onOpenRepo: () => void;
   /** Open a recent / dropped repository by path (tabs-mode `+` menu). */
@@ -45,6 +47,7 @@ export function Topbar({
   pushDone,
   onToast,
   onSaveSnapshot,
+  onStash,
   onOpenRepo,
   onOpenRecent,
   onClone,
@@ -156,7 +159,7 @@ export function Topbar({
         </button>
       </div>
 
-      <StashButton onToast={onToast} onSaveSnapshot={onSaveSnapshot} />
+      <StashButton onToast={onToast} onSaveSnapshot={onSaveSnapshot} onStash={onStash} />
 
       <BranchSwitcherButton
         branch={branch}
@@ -243,9 +246,11 @@ function WinControls({ functional }: { functional: boolean }) {
 function StashButton({
   onToast,
   onSaveSnapshot,
+  onStash,
 }: {
   onToast: (msg: string) => void;
   onSaveSnapshot: () => void;
+  onStash: (opts?: { snapshot?: boolean; keepIndex?: boolean }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -254,7 +259,6 @@ function StashButton({
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
-  const stashSave = useRepo((s) => s.stashSave);
   const stashPop = useRepo((s) => s.stashPop);
 
   const hasRepo = !!meta;
@@ -267,18 +271,9 @@ function StashButton({
 
   useOutsideClose([wrapRef, menuRef], open, () => setOpen(false));
 
-  const save = async (includeUntracked: boolean, keepIndex: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const outcome = await stashSave(null, includeUntracked, keepIndex);
-      onToast(outcome.oid ? 'Stashed changes' : 'Nothing to stash');
-      setOpen(false);
-    } catch (e) {
-      onToast(`Stash failed: ${(e as Error).message ?? e}`);
-    } finally {
-      setBusy(false);
-    }
+  const openStash = (opts?: { snapshot?: boolean; keepIndex?: boolean }) => {
+    setOpen(false);
+    onStash(opts);
   };
 
   const pop = async (index: number) => {
@@ -307,9 +302,9 @@ function StashButton({
       <button
         type="button"
         className="sync-btn"
-        onClick={() => void save(false, false)}
-        title="Stash all changes"
-        aria-label="Stash all changes"
+        onClick={() => openStash({ snapshot: false })}
+        title="Stash changes…"
+        aria-label="Stash changes…"
         disabled={!hasRepo || busy}
       >
         <span><Icon name="stash" size={13} /></span>
@@ -350,20 +345,20 @@ function StashButton({
             className="repo-menu-item"
             role="menuitem"
             tabIndex={0}
-            onClick={() => void save(false, false)}
+            onClick={() => openStash({ snapshot: false })}
           >
             <span className="ico"><Icon name="stash" size={13} /></span>
-            <span className="label">Stash all changes</span>
+            <span className="label">Stash all changes…</span>
           </button>
           <button
             type="button"
             className="repo-menu-item"
             role="menuitem"
             tabIndex={0}
-            onClick={() => void save(true, false)}
+            onClick={() => openStash({ snapshot: false })}
           >
             <span className="ico"><Icon name="stash" size={13} /></span>
-            <span className="label">Stash including untracked</span>
+            <span className="label">Stash including untracked…</span>
             <span className="meta">-u</span>
           </button>
           <button
@@ -371,10 +366,10 @@ function StashButton({
             className="repo-menu-item"
             role="menuitem"
             tabIndex={0}
-            onClick={() => void save(false, true)}
+            onClick={() => openStash({ snapshot: false, keepIndex: true })}
           >
             <span className="ico"><Icon name="stash" size={13} /></span>
-            <span className="label">Stash, keep staged</span>
+            <span className="label">Stash, keep staged…</span>
             <span className="meta">--keep-index</span>
           </button>
 

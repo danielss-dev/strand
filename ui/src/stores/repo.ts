@@ -98,6 +98,9 @@ export interface RepoState {
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
   localSelection: LocalSelection | null;
+  /** Pierre multi-select per side — mirrors Local Changes tree selection. */
+  localTreeSelection: { unstaged: string[]; staged: string[] };
+  setLocalTreeSelection(staged: boolean, paths: string[]): void;
 
   /**
    * Review-session baseline for the active repo: "show me everything since
@@ -484,6 +487,17 @@ export interface RepoState {
    * the working directory. Returns the outcome (`oid === null` ⇒ clean tree).
    */
   stashSnapshot(message: string | null, includeUntracked: boolean): Promise<StashOutcome>;
+  /**
+   * Stash only the given paths. When `snapshot` is true the working tree is
+   * left unchanged after recording the stash entry.
+   */
+  stashPushPaths(
+    paths: string[],
+    message: string | null,
+    includeUntracked: boolean,
+    keepIndex: boolean,
+    snapshot: boolean,
+  ): Promise<StashOutcome>;
   /** Apply a stash by index, leaving it on the stack. */
   stashApply(index: number): Promise<void>;
   /** Apply a stash by index and drop it on success. */
@@ -532,6 +546,10 @@ export interface RepoState {
    * the palette action switches the view itself when neither is showing.
    */
   diffSearchSignal: boolean;
+  /** One-shot: open the stash dialog (e.g. from Local Changes context menu). */
+  stashDialogRequest: { snapshot: boolean; keepIndex: boolean } | null;
+  requestStashDialog(opts?: { snapshot?: boolean; keepIndex?: boolean }): void;
+  clearStashDialogRequest(): void;
   requestDiffSearch(): void;
   clearDiffSearch(): void;
 
@@ -659,6 +677,7 @@ const EMPTY_ACTIVE = {
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
   localSelection: null as LocalSelection | null,
+  localTreeSelection: { unstaged: [] as string[], staged: [] as string[] },
   baseline: null as StoredBaseline | null,
   baselineDiffs: [] as FileDiff[],
   reviewUnstagedDiffs: [] as FileDiff[],
@@ -742,6 +761,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   commitSearchFocus: false,
   commitSearchMode: null,
   diffSearchSignal: false,
+  stashDialogRequest: null as { snapshot: boolean; keepIndex: boolean } | null,
   selectSinceBaseline: false,
   diffsTick: 0,
   ignoreDraft: null,
@@ -1696,6 +1716,24 @@ export const useRepo = create<RepoState>((set, get) => ({
     await Promise.all([get().refreshStashes(), get().refreshLog()]);
     return outcome;
   },
+  async stashPushPaths(paths, message, includeUntracked, keepIndex, snapshot) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const outcome = await tauri.repoStashPushPaths(
+      path,
+      paths,
+      message,
+      includeUntracked,
+      keepIndex,
+      snapshot,
+    );
+    await Promise.all([
+      get().refreshStashes(),
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+    ]);
+    return outcome;
+  },
   async stashApply(index) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
@@ -1716,6 +1754,13 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
 
   selectLocalFile: (sel) => set({ localSelection: sel }),
+
+  setLocalTreeSelection: (staged, paths) =>
+    set((s) => ({
+      localTreeSelection: staged
+        ? { ...s.localTreeSelection, staged: paths }
+        : { ...s.localTreeSelection, unstaged: paths },
+    })),
 
   async selectCommit(hash) {
     if (hash === null) {
@@ -1772,6 +1817,14 @@ export const useRepo = create<RepoState>((set, get) => ({
   clearCommitSearchFocus: () => set({ commitSearchFocus: false, commitSearchMode: null }),
   requestDiffSearch: () => set({ diffSearchSignal: true }),
   clearDiffSearch: () => set({ diffSearchSignal: false }),
+  requestStashDialog: (opts) =>
+    set({
+      stashDialogRequest: {
+        snapshot: opts?.snapshot ?? false,
+        keepIndex: opts?.keepIndex ?? false,
+      },
+    }),
+  clearStashDialogRequest: () => set({ stashDialogRequest: null }),
   openIgnoreDialog: (initial) => set({ ignoreDraft: initial }),
   closeIgnoreDialog: () => set({ ignoreDraft: null }),
   requestSelectSinceBaseline: () => set({ view: 'commits', selectSinceBaseline: true }),

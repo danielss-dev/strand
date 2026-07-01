@@ -770,6 +770,24 @@ pub fn repo_stash_snapshot(
 }
 
 #[tauri::command(async)]
+pub fn repo_stash_push_paths(
+    path: String,
+    paths: Vec<String>,
+    message: Option<String>,
+    include_untracked: bool,
+    keep_index: bool,
+    snapshot: bool,
+) -> CmdResult<StashOutcome> {
+    Ok(Repo::discover(&path)?.stash_push_paths(
+        &paths,
+        message.as_deref(),
+        include_untracked,
+        keep_index,
+        snapshot,
+    )?)
+}
+
+#[tauri::command(async)]
 pub fn repo_stash_apply(path: String, index: usize) -> CmdResult<()> {
     Repo::discover(&path)?.stash_apply(index)?;
     Ok(())

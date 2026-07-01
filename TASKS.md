@@ -145,10 +145,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   with `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
   `StashOutcome { oid: None }` instead of erroring; `stash_snapshot` keeps the
   changes in place via `git stash create` + `store` (or `push -u` + `apply
-  --index` when including untracked); `stash_drop` by index). `stash_apply` /
-  `stash_pop` shell out to `git` (`run_git` helper) so a dirty index merges
-  like real git instead of git2's blanket "uncommitted changes in the index"
-  refusal. **branch-from still pending** — no direct git2 API; needs
+  --index` when including untracked); `stash_push_paths` for partial stashes via
+  `git stash push -- <pathspec…>` (+ snapshot re-apply); `stash_drop` by index).
+  `stash_apply` / `stash_pop` shell out to `git` (`run_git` helper) so a dirty
+  index merges like real git instead of git2's blanket "uncommitted changes in
+  the index" refusal. **branch-from still pending** — no direct git2 API; needs
   branch-at-stash-base + checkout + apply/drop.)
 - ◐ Cherry-pick (single + multi) — `Repo::cherry_pick(&[oid])` shells out to
   `git cherry-pick` (accepts a list); the commit-detail panel wires single-commit
@@ -255,7 +256,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_abort_operation`, `repo_continue_operation`,
   `repo_read_conflict_file`, `repo_resolve_conflict`,
   `repo_stash_list`, `repo_stash_save`,
-  `repo_stash_snapshot`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
+  `repo_stash_snapshot`, `repo_stash_push_paths`, `repo_stash_apply`, `repo_stash_pop`, `repo_stash_drop`
 - ☑ Network commands: `repo_fetch`, `repo_pull`, `repo_push`, `repo_clone`,
   `repo_tag_push`, `repo_tag_push_all`, `repo_remote_tags`,
   `repo_submodule_update` (all `async`; streaming progress over a `Channel`
@@ -419,10 +420,14 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   the sidebar filter (matches message + branch). Section header `+` action
   (`SideSection`'s optional `action` prop) opens the Save-snapshot dialog.
 - ☑ Save-snapshot dialog (`views/StashDialog.tsx`, reuses the `.clone-dialog`
-  shell): message field + "Include untracked files" + "Keep changes in working
-  directory" checkboxes; primary CTA flips Stash / Save Snapshot. Reachable
-  from the sidebar `+`, the Topbar stash menu, and ⌘K ("Save snapshot…" /
-  "Stash changes…"). Clean tree surfaces "Nothing to stash" inline.
+  shell): message field + selectable file checklist (pre-filled from Local
+  Changes multi-select / active row / folder / show-all via
+  `lib/stashPreselection.ts`) + "Include untracked files" + "Keep changes in
+  working directory" checkboxes; primary CTA flips Stash / Save Snapshot.
+  Partial stashes call `repo_stash_push_paths`. Reachable from the sidebar `+`,
+  the Topbar stash menu (preview before confirm), Local Changes "Stash…"
+  context menu, and ⌘K ("Save snapshot…" / "Stash changes…"). Clean tree
+  surfaces "Nothing to stash" inline.
 - ☑ New-tag dialog (`views/TagDialog.tsx`, reuses the `.clone-dialog` shell):
   name field + optional message (non-empty ⇒ annotated, else lightweight, with
   a live hint). Targets HEAD from the Tags `+` and ⌘K ("Create tag…"), or a

@@ -138,6 +138,7 @@ fn main() {
             commands::repo_stash_list,
             commands::repo_stash_save,
             commands::repo_stash_snapshot,
+            commands::repo_stash_push_paths,
             commands::repo_stash_apply,
             commands::repo_stash_pop,
             commands::repo_stash_drop,
