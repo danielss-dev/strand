@@ -32,17 +32,17 @@ pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
 }
 
 pub fn login(cli_override: Option<&str>) -> Result<(), String> {
-    let bin = resolve_codex(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
     spawn_detached(&bin, &["login"], None)
 }
 
 pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
-    let bin = resolve_codex(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
     run_capture(&bin, &["logout"], None).map(|_| ())
 }
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
-    let bin = resolve_codex(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
     let status = super::provider_status(super::AiProvider::Openai, cli_override);
     if !status.logged_in {
         return Err("Not signed in — open Settings → AI and sign in with ChatGPT.".into());

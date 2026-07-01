@@ -47,17 +47,17 @@ fn parse_auth_status(out: &str) -> (bool, Option<String>) {
 }
 
 pub fn login(cli_override: Option<&str>) -> Result<(), String> {
-    let bin = resolve_claude(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
     spawn_detached(&bin, &["auth", "login"], None)
 }
 
 pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
-    let bin = resolve_claude(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
     run_capture(&bin, &["auth", "logout"], None).map(|_| ())
 }
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
-    let bin = resolve_claude(cli_override).ok_or_else(|| not_installed())?;
+    let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
     let status = super::provider_status(super::AiProvider::Anthropic, cli_override);
     if !status.logged_in {
         return Err(
