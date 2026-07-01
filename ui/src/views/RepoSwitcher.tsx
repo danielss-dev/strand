@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { match } from '../lib/fuzzy';
-import { groupColor, groupTabs, repoTabLabel } from '../lib/repoIdentity';
+import { groupColor, groupTabs, pathKey, repoTabLabel } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
+import { useWorkspaces } from '../stores/workspaces';
 
 interface Props {
   /** Open a recent (not-currently-open) repository by path. */
@@ -58,7 +59,6 @@ function Highlighted({ label, ranges }: { label: string; ranges: [number, number
 export function RepoSwitcher({ onOpenRecent, onClose }: Props) {
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
-  const setActiveTab = useRepo((s) => s.setActiveTab);
   const recents = useRepo((s) => s.recents);
   const icons = useRepoIcons((s) => s.icons);
   const ensure = useRepoIcons((s) => s.ensure);
@@ -109,9 +109,11 @@ export function RepoSwitcher({ onOpenRecent, onClose }: Props) {
       };
     });
 
-    const openPaths = new Set(tabs.map((t) => t.path));
+    // Compare by path identity — a recents row spelled differently from an
+    // open tab (D:/x vs D:\x) is the same repo, not a second entry.
+    const openKeys = new Set(tabs.map((t) => pathKey(t.path)));
     const recent: Entry[] = recents
-      .filter((r) => !openPaths.has(r.path))
+      .filter((r) => !openKeys.has(pathKey(r.path)))
       .map((r) => ({
         kind: 'recent',
         path: r.path,
@@ -167,7 +169,11 @@ export function RepoSwitcher({ onOpenRecent, onClose }: Props) {
   }, [sel]);
 
   const run = (e: Entry) => {
-    if (e.kind === 'open') void setActiveTab(e.path);
+    // Route open repos through the workspace-aware open: a repo hidden under
+    // another workspace joins the active one instead of being focused and
+    // immediately filtered back out. Visible repos just switch (the join is
+    // a no-op for existing members).
+    if (e.kind === 'open') void useWorkspaces.getState().openRepoInActive(e.path);
     else onOpenRecent(e.path);
     onClose();
   };

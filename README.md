@@ -78,9 +78,11 @@ keyboard alone, and the mouse stays first-class.
   revisions, blame, and rendered previews for markdown and SVG.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
-  persisted across launches, native macOS menubar, open in your editor or
-  terminal, settings (⌘,) for appearance / diff / git / integrations / AI,
-  in-app updates.
+  persisted across launches, saveable as named **workspaces** (the repos behind
+  one product — open a workspace to focus the rail on just those repos, close it
+  to return to your default set; a manage dialog curates each), native macOS
+  menubar, open in your editor or terminal, settings (⌘,) for appearance / diff /
+  git / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes via
   your ChatGPT subscription (Codex CLI) or Claude Code CLI; Settings → AI
   for sign-in and provider choice.

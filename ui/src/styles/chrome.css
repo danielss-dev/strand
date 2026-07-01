@@ -756,6 +756,108 @@
     border-color: var(--text-dim);
 }
 
+/* ─── Workspaces (rail + strip grouping) ─── */
+/* Switcher button — opens the create/open/manage menu. In the rail it caps
+   the column; in the strip it precedes the pill lane. */
+.ws-switch-wrap.rail {
+    flex: none;
+}
+.ws-switch-wrap.tabs {
+    position: relative;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    flex: none;
+}
+.ws-switch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.ws-switch-wrap.rail .ws-switch {
+    width: 38px;
+    height: 30px;
+    border-radius: 9px;
+}
+.ws-switch-wrap.tabs .ws-switch {
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 7px;
+    max-width: 200px;
+}
+.ws-switch:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+.ws-switch.active {
+    color: var(--accent);
+}
+.ws-switch-name {
+    font-size: 12px;
+    font-weight: 550;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Inline name field inside the workspace menu (create / rename). */
+.ws-name-form {
+    padding: 2px 4px 6px;
+}
+.ws-name-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 2px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 0.5px solid var(--border-strong);
+    background: var(--bg-base);
+    color: var(--text);
+    font-size: 12px;
+}
+.ws-name-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.ws-name-hint {
+    padding: 6px 2px 0;
+    font-size: 10.5px;
+    color: var(--text-dim);
+}
+.ws-name-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 8px;
+}
+.ws-name-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 0.5px solid var(--border-strong);
+    background: transparent;
+    color: var(--text-1);
+    font-size: 11.5px;
+    cursor: pointer;
+}
+.ws-name-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+.ws-name-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+}
+.ws-name-btn.primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* ─── Sidebar ─── */
 .sidebar {
     width: 100%;

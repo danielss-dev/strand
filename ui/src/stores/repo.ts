@@ -13,7 +13,7 @@ import {
 import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
-import { repoFamilyName } from '../lib/repoIdentity';
+import { pathKey, repoFamilyName } from '../lib/repoIdentity';
 import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -229,8 +229,20 @@ export interface RepoState {
   restoreSession(): Promise<void>;
 
   openRepo(path: string): Promise<void>;
+  /**
+   * Open a repository as a tab *without* focusing it: no active-tab reset, no
+   * refreshes, no recents touch — just the `repo_open` round-trip, the tab
+   * entry, and the file watcher. Data loads when the tab is activated
+   * (`setActiveTab` refreshes everything). Dedupes against open tabs; resolves
+   * to the canonical path. Used by session restore and workspace switching,
+   * where N full focused opens would flicker and crawl.
+   */
+  openRepoBackground(path: string): Promise<string>;
   closeTab(path: string): void;
   setActiveTab(path: string): Promise<void>;
+  /** Clear the active tab without closing anything — the empty state shown when
+   *  the active workspace has no visible repos (tabs stay open, just hidden). */
+  deactivateTab(): void;
   refreshStatus(): Promise<void>;
   refreshLog(limit?: number): Promise<void>;
   refreshDiffs(): Promise<void>;
@@ -610,13 +622,14 @@ const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags:
  */
 /**
  * Whether two filesystem paths point at the same directory, tolerating
- * separator (`\` vs `/`) and trailing-slash differences. Used to match an open
- * tab (whose path is the canonical workdir) against a worktree's porcelain path
- * — the same directory for a normal worktree, but not always byte-identical.
+ * separator (`\` vs `/`), trailing-slash, and Windows verbatim-prefix
+ * differences (see {@link pathKey}). Git-sourced paths (worktree porcelain,
+ * common dirs) and gix workdirs spell the same directory differently on
+ * Windows — every tab-identity comparison must go through this, or the same
+ * repo opens twice.
  */
 function samePath(a: string, b: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
-  return norm(a) === norm(b);
+  return pathKey(a) === pathKey(b);
 }
 
 export function defaultRemote(refs: Refs): string | null {
@@ -780,26 +793,28 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
     if (!saved || saved.tabs.length === 0) return;
 
-    // Open each saved tab; openRepo handles dedupe and tolerates failures
-    // (a repo may have moved or been deleted since last launch).
+    // Open each saved tab in the background (sequentially, to keep the saved
+    // order), tolerating failures — a repo may have moved or been deleted
+    // since last launch. Only the tab that ends up active pays for a full
+    // refresh, instead of every tab doing one as it opens.
     for (const path of saved.tabs) {
       try {
-        await get().openRepo(path);
+        await get().openRepoBackground(path);
       } catch (e) {
         console.warn(`restoreSession: failed to open ${path}`, e);
       }
     }
-    if (saved.activeTabPath) {
-      const stillOpen = get().tabs.some((t) => t.path === saved!.activeTabPath);
-      if (stillOpen && get().activeTabPath !== saved.activeTabPath) {
-        await get().setActiveTab(saved.activeTabPath);
-      }
-    }
+    const tabs = get().tabs;
+    if (tabs.length === 0) return;
+    const savedActive = saved.activeTabPath
+      ? tabs.find((t) => samePath(t.path, saved!.activeTabPath!))?.path
+      : undefined;
+    await get().setActiveTab(savedActive ?? tabs[tabs.length - 1].path);
   },
 
   async openRepo(path) {
-    // If this path is already open, just focus it.
-    const existing = get().tabs.find((t) => t.path === path);
+    // If this directory is already open — under any spelling — just focus it.
+    const existing = get().tabs.find((t) => samePath(t.path, path));
     if (existing) {
       await get().setActiveTab(existing.path);
       return;
@@ -807,8 +822,10 @@ export const useRepo = create<RepoState>((set, get) => ({
 
     const meta = await tauri.repoOpen(path);
 
-    // Rust may canonicalize the path; re-check against the canonical form.
-    const already = get().tabs.find((t) => t.path === meta.path);
+    // Re-check against the resolved workdir: discovery may land on a
+    // different directory than the input (a subfolder pick), and its spelling
+    // follows the input, not the existing tab's.
+    const already = get().tabs.find((t) => samePath(t.path, meta.path));
     if (already) {
       await get().setActiveTab(already.path);
       return;
@@ -845,6 +862,24 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRecentMessages(),
       get().loadReviewSession(),
     ]);
+  },
+
+  async openRepoBackground(path) {
+    const existing = get().tabs.find((t) => samePath(t.path, path));
+    if (existing) return existing.path;
+
+    const meta = await tauri.repoOpen(path);
+
+    // Re-check against the resolved workdir (see openRepo).
+    const already = get().tabs.find((t) => samePath(t.path, meta.path));
+    if (already) return already.path;
+
+    set((s) => ({ tabs: [...s.tabs, { path: meta.path, meta }] }));
+    void persistSession(get());
+    // Watch even unfocused tabs so external changes are picked up the moment
+    // the tab is activated (same best-effort contract as openRepo).
+    tauri.repoWatch(meta.path).catch((e) => console.warn('repoWatch failed', e));
+    return meta.path;
   },
 
   closeTab(path) {
@@ -901,6 +936,12 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshRecentMessages(),
       get().loadReviewSession(),
     ]);
+  },
+
+  deactivateTab() {
+    if (get().activeTabPath == null) return;
+    set({ ...EMPTY_ACTIVE, activeTabPath: null });
+    void persistSession(get());
   },
 
   async refreshStatus() {
@@ -1804,7 +1845,36 @@ export const useRepo = create<RepoState>((set, get) => ({
 
   async refreshRecents() {
     try {
-      set({ recents: await recentsDb.list() });
+      const list = await recentsDb.list();
+      // Heal separator-drift duplicates (the same directory recorded under
+      // two spellings, e.g. `D:/x` and `D:\x`): keep one row per path key —
+      // preferring the spelling of an open tab — and drop the shadowed rows
+      // from the DB so they don't come back.
+      const tabs = get().tabs;
+      const byKey = new Map<string, RecentRepo>();
+      const dupes: string[] = [];
+      for (const r of list) {
+        const key = pathKey(r.path);
+        const kept = byKey.get(key);
+        if (!kept) {
+          byKey.set(key, r);
+          continue;
+        }
+        const tabPath = tabs.find((t) => pathKey(t.path) === key)?.path;
+        const preferR =
+          (tabPath && r.path === tabPath && kept.path !== tabPath) ||
+          // No tab to defer to (e.g. before session restore): prefer the
+          // native backslash spelling over git's forward-slash output.
+          (!tabPath && /^[A-Za-z]:\//.test(kept.path) && !/^[A-Za-z]:\//.test(r.path));
+        if (preferR) {
+          dupes.push(kept.path);
+          byKey.set(key, r); // Map.set keeps the original position
+        } else {
+          dupes.push(r.path);
+        }
+      }
+      for (const p of dupes) void recentsDb.forget(p).catch(() => {});
+      set({ recents: [...byKey.values()] });
     } catch (e) {
       console.warn('recents.list failed', e);
     }

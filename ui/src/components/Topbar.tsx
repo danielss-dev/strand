@@ -32,6 +32,8 @@ interface Props {
   onClone: () => void;
   /** Open the icon-customization dialog for a repo tab. */
   onCustomize: (path: string) => void;
+  /** Open the workspace manager dialog (tabs-mode switcher). */
+  onManageWorkspaces: () => void;
 }
 
 export function Topbar({
@@ -52,6 +54,7 @@ export function Topbar({
   onOpenRecent,
   onClone,
   onCustomize,
+  onManageWorkspaces,
 }: Props) {
   const platform = useSettings((s) => s.platform);
   const repoNav = useSettings((s) => s.repoNav);
@@ -95,6 +98,7 @@ export function Topbar({
           onOpenRecent={onOpenRecent}
           onClone={onClone}
           onCustomize={onCustomize}
+          onManageWorkspaces={onManageWorkspaces}
         />
       ) : (
         meta && (

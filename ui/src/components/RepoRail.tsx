@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
+import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useOutsideClose } from '../lib/useOutsideClose';
-import { groupTabs, repoTabLabel, tileGlyph } from '../lib/repoIdentity';
+import { groupTabs, repoTabLabel, tileGlyph, workspaceMemberSet } from '../lib/repoIdentity';
 import type { RepoTab } from '../stores/repo';
 
 interface Props {
@@ -14,6 +16,8 @@ interface Props {
   onClone: () => void;
   /** Open the icon-customization dialog for a repo tab. */
   onCustomize: (path: string) => void;
+  /** Open the workspace manager dialog. */
+  onManageWorkspaces: () => void;
 }
 
 /** Right-click context menu target. */
@@ -31,15 +35,29 @@ interface MenuState {
  * of the same repo nest as smaller sub-tiles beneath their parent. Scales to
  * many repos by scrolling vertically instead of clipping like the tab strip.
  */
-export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Props) {
+export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces }: Props) {
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
   const setActiveTab = useRepo((s) => s.setActiveTab);
-  const closeTab = useRepo((s) => s.closeTab);
   const icons = useRepoIcons((s) => s.icons);
   const ensure = useRepoIcons((s) => s.ensure);
 
-  const ordered = useMemo(() => groupTabs(tabs), [tabs]);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const activeWsId = useWorkspaces((s) => s.activeWorkspaceId);
+  // Workspace-aware close: leaves the active workspace; only truly closes
+  // when no other workspace still holds the repo.
+  const closeRepo = useWorkspaces((s) => s.closeRepo);
+  // Default (`null`) is itself a workspace with its own membership.
+  const activeWs = workspaces.find((w) => w.id === (activeWsId ?? DEFAULT_WORKSPACE_ID)) ?? null;
+
+  // The rail shows only the active workspace's repos; others stay open but
+  // hidden. Switching to another workspace (or Default) re-filters.
+  const visibleTabs = useMemo(() => {
+    if (!activeWs) return tabs;
+    const members = workspaceMemberSet(tabs, new Set(activeWs.repoPaths));
+    return tabs.filter((t) => members.has(t.path));
+  }, [tabs, activeWs]);
+  const ordered = useMemo(() => groupTabs(visibleTabs), [visibleTabs]);
 
   // Pull each open repo's saved icon config in as it appears.
   useEffect(() => {
@@ -78,46 +96,50 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
     });
   };
 
+  const renderTile = (t: RepoTab) => {
+    const linked = t.meta.is_linked_worktree;
+    const color = colorForGroup.get(t.meta.common_dir)!;
+    const icon = icons[t.path];
+    const isActive = t.path === activeTabPath;
+    const label = repoTabLabel(t);
+    return (
+      <button
+        key={t.path}
+        type="button"
+        role="tab"
+        aria-selected={isActive}
+        className={'rail-tile' + (isActive ? ' active' : '') + (linked ? ' worktree' : '')}
+        title={label.title}
+        aria-label={label.ariaLabel}
+        onClick={() => { void setActiveTab(t.path); }}
+        onContextMenu={(e) => openMenu(e, t)}
+      >
+        {linked ? (
+          <span className="rail-glyph" style={{ background: color }}>
+            <Icon name="worktree" size={13} />
+          </span>
+        ) : icon?.image ? (
+          <span className="rail-glyph image">
+            <img src={icon.image} alt="" />
+          </span>
+        ) : (
+          <span
+            className={'rail-glyph' + (icon?.emoji ? ' emoji' : '')}
+            style={{ background: color }}
+          >
+            {tileGlyph(icon, label.repo)}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="repo-rail" role="tablist" aria-label="Open repositories">
+      <WorkspaceSwitcher placement="rail" onManage={onManageWorkspaces} />
+
       <div className="rail-tabs">
-        {ordered.map((t) => {
-          const linked = t.meta.is_linked_worktree;
-          const color = colorForGroup.get(t.meta.common_dir)!;
-          const icon = icons[t.path];
-          const active = t.path === activeTabPath;
-          const label = repoTabLabel(t);
-          return (
-            <button
-              key={t.path}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={'rail-tile' + (active ? ' active' : '') + (linked ? ' worktree' : '')}
-              title={label.title}
-              aria-label={label.ariaLabel}
-              onClick={() => { void setActiveTab(t.path); }}
-              onContextMenu={(e) => openMenu(e, t)}
-            >
-              {linked ? (
-                <span className="rail-glyph" style={{ background: color }}>
-                  <Icon name="worktree" size={13} />
-                </span>
-              ) : icon?.image ? (
-                <span className="rail-glyph image">
-                  <img src={icon.image} alt="" />
-                </span>
-              ) : (
-                <span
-                  className={'rail-glyph' + (icon?.emoji ? ' emoji' : '')}
-                  style={{ background: color }}
-                >
-                  {tileGlyph(icon, label.repo)}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {ordered.map(renderTile)}
       </div>
 
       <RailAddButton onOpenRepo={onOpenRepo} onOpenRecent={onOpenRecent} onClone={onClone} />
@@ -127,7 +149,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
           menu={menu}
           onClose={() => setMenu(null)}
           onCustomize={() => { onCustomize(menu.path); setMenu(null); }}
-          onCloseRepo={() => { closeTab(menu.path); setMenu(null); }}
+          onCloseRepo={() => { void closeRepo(menu.path); setMenu(null); }}
         />,
         document.body,
       )}

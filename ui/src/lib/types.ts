@@ -333,6 +333,29 @@ export interface RecentRepo {
 }
 
 /**
+ * A named group of repositories worked on together (e.g. the repos behind one
+ * product). Membership is by canonical repo path (`RepoMeta.path`, == a tab's
+ * `path`); a repo may belong to several workspaces. Opening a workspace opens
+ * all its repos — adding to whatever's already open — and marks it active,
+ * which clusters its members into their own rail/strip section. Persisted whole
+ * in the generic `settings` table under the `workspaces` key.
+ */
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Canonical workdir paths of member repos (main repos; worktrees of a
+   *  member inherit the section via their shared `common_dir`). */
+  repoPaths: string[];
+  /** Optional section accent — a `var(--b-N)` swatch or CSS color. */
+  color?: string;
+  /** Unix ms the workspace was created. */
+  createdAt: number;
+  /** Tab path last focused while this workspace was active — reopening the
+   *  workspace lands here instead of on the first member. */
+  lastActivePath?: string;
+}
+
+/**
  * User customization for a repo's square tile in the rail. Every field is
  * optional — an unset field falls back to the derived default (initials from
  * the repo name, a color hashed from the repo's git dir). `image`, when set,

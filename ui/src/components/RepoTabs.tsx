@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
+import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useOutsideClose } from '../lib/useOutsideClose';
-import { groupColor, groupTabs, repoTabLabel } from '../lib/repoIdentity';
+import { groupColor, groupTabs, repoTabLabel, workspaceMemberSet } from '../lib/repoIdentity';
 import type { RepoTab } from '../stores/repo';
 
 interface Props {
@@ -14,6 +16,8 @@ interface Props {
   onClone: () => void;
   /** Open the icon-customization dialog for a repo tab. */
   onCustomize: (path: string) => void;
+  /** Open the workspace manager dialog. */
+  onManageWorkspaces: () => void;
 }
 
 /** Right-click context menu target. */
@@ -38,15 +42,29 @@ interface MenuState {
  * outside the scroller so they stay put. Menus render through a portal since
  * the lane clips.
  */
-export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Props) {
+export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces }: Props) {
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
   const setActiveTab = useRepo((s) => s.setActiveTab);
-  const closeTab = useRepo((s) => s.closeTab);
   const icons = useRepoIcons((s) => s.icons);
   const ensure = useRepoIcons((s) => s.ensure);
 
-  const ordered = useMemo(() => groupTabs(tabs), [tabs]);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const activeWsId = useWorkspaces((s) => s.activeWorkspaceId);
+  // Workspace-aware close: leaves the active workspace; only truly closes
+  // when no other workspace still holds the repo.
+  const closeRepo = useWorkspaces((s) => s.closeRepo);
+  // Default (`null`) is itself a workspace with its own membership.
+  const activeWs = workspaces.find((w) => w.id === (activeWsId ?? DEFAULT_WORKSPACE_ID)) ?? null;
+
+  // The strip shows only the active workspace's repos; others stay open but
+  // hidden. Switching to another workspace (or Default) re-filters.
+  const visibleTabs = useMemo(() => {
+    if (!activeWs) return tabs;
+    const members = workspaceMemberSet(tabs, new Set(activeWs.repoPaths));
+    return tabs.filter((t) => members.has(t.path));
+  }, [tabs, activeWs]);
+  const ordered = useMemo(() => groupTabs(visibleTabs), [visibleTabs]);
 
   // Pull each open repo's saved icon in as it appears (for the custom dot color).
   useEffect(() => {
@@ -106,11 +124,18 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
 
   const openMenu = (e: React.MouseEvent, t: RepoTab) => {
     e.preventDefault();
-    setMenu({ path: t.path, worktree: t.meta.is_linked_worktree, x: e.clientX, y: e.clientY });
+    setMenu({
+      path: t.path,
+      worktree: t.meta.is_linked_worktree,
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   return (
     <div className="repo-tabs">
+      <WorkspaceSwitcher placement="tabs" onManage={onManageWorkspaces} />
+
       <div className="repo-tabs-scroll" ref={scrollRef} role="tablist" aria-label="Open repositories" onWheel={onWheel}>
         {ordered.map((t, i) => {
           // Linked worktrees of the same repo share a dot color and sit
@@ -149,7 +174,7 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
                 role="button"
                 aria-label={linked ? 'Close worktree' : 'Close repository'}
                 title={linked ? 'Close worktree' : 'Close repository'}
-                onClick={(e) => { e.stopPropagation(); closeTab(t.path); }}
+                onClick={(e) => { e.stopPropagation(); void closeRepo(t.path); }}
               >
                 <Icon name="x" size={9} stroke={2} />
               </span>
@@ -174,7 +199,7 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize }: Pro
           menu={menu}
           onClose={() => setMenu(null)}
           onCustomize={() => { onCustomize(menu.path); setMenu(null); }}
-          onCloseRepo={() => { closeTab(menu.path); setMenu(null); }}
+          onCloseRepo={() => { void closeRepo(menu.path); setMenu(null); }}
         />,
         document.body,
       )}

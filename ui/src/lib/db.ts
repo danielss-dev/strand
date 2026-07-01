@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { RecentRepo, RepoIcon, ReviewNote } from './types';
+import type { RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -194,5 +194,26 @@ export const repoDiffMode = {
   },
   set(repoPath: string, mode: DiffMode): Promise<void> {
     return settings.set(`diff-mode:${repoPath}`, mode);
+  },
+};
+
+/**
+ * Repo workspaces (named multi-repo groups). The whole list lives under one
+ * `workspaces` key and the active-workspace id under `active-workspace`, both
+ * in the generic `settings` table — no dedicated table/migration. Membership is
+ * plumbed by canonical repo path; see {@link Workspace}.
+ */
+export const workspacesDb = {
+  list(): Promise<Workspace[] | null> {
+    return settings.get<Workspace[]>('workspaces');
+  },
+  save(list: Workspace[]): Promise<void> {
+    return settings.set('workspaces', list);
+  },
+  getActive(): Promise<string | null> {
+    return settings.get<string>('active-workspace');
+  },
+  setActive(id: string | null): Promise<void> {
+    return settings.set('active-workspace', id);
   },
 };

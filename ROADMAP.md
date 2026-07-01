@@ -768,6 +768,31 @@ repo-only sibling of the command palette that reuses its shell and fuzzy
 matcher to filter open repos (switch the active tab) and recents not yet open
 (opens them); ⌘K stays the full palette. Verified: `tsc`, `vitest` (131).
 
+**Workspaces — Phase 1 (2026-07-01):** Open repos can now be grouped into named
+**workspaces** (the repos behind one product). A workspace is a list of repo
+paths (`Workspace` in `lib/types.ts`) owned by a dedicated `stores/workspaces.ts`
+(`useWorkspaces`), persisted whole in the generic `settings` table
+(`workspacesDb`, no new SQLite table) — the single-repo engine in `repo.ts` is
+deliberately left untouched. A workspace **filters** the rail/strip rather than
+owning the open set: while one is active the rail/strip shows only its repos
+(`workspaceMemberSet`, worktrees inherit via `common_dir`) and the rest stay
+**open but hidden**. The **Default view is itself a reserved workspace**
+(`DEFAULT_WORKSPACE_ID`, active when `activeWorkspaceId === null`) with its own
+membership — so opening and closing a named workspace never leaks its repos into
+Default (the earlier bug); on first run Default is seeded from the open repos no
+named workspace already claims. Opening a workspace opens any missing members
+and focuses the first (it never closes anything); while active, membership
+tracks *deltas* — a repo opened joins the active workspace (Default included),
+one closed leaves it — via a `useRepo` subscription (`enableSync`, armed by `App`
+only *after* session restore, keeping the active tab visible). Chrome:
+`components/WorkspaceSwitcher.tsx` (Default row + named list + create / rename /
+delete / manage) in the rail and strip, plus `views/WorkspaceManagerDialog.tsx`
+to curate each workspace's repositories (add from recents/open, remove;
+rename/delete named). Multi-membership stays possible at the model level (a path
+can be listed in several workspaces). Phase 2 (the payoff) is the aggregated
+cross-repo review surface; Phase 3 is palette + `.code-workspace` import — both
+open in TASKS. Verified: `tsc`, `vite build`.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

@@ -26,6 +26,57 @@ export function groupTabs<T extends { meta: { common_dir: string; is_linked_work
   });
 }
 
+/**
+ * Identity key for a filesystem path: forward slashes, no trailing separator,
+ * Windows verbatim prefix (`\\?\` / `\\?\UNC\`) stripped. Two spellings of
+ * the same directory — git's forward-slash output (`D:/src/repo`), the native
+ * backslash form (`D:\src\repo`), and canonicalize's verbatim form
+ * (`\\?\D:\src\repo`) — all map to one key. Compare paths by key, never by
+ * raw string: mixed sources (gix workdir, git porcelain, user picks) are
+ * byte-different for the same repo, which is how duplicate tabs happen.
+ */
+export function pathKey(p: string): string {
+  let out = p.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (out.startsWith('//?/UNC/')) out = '//' + out.slice('//?/UNC/'.length);
+  else if (out.startsWith('//?/')) out = out.slice('//?/'.length);
+  return out;
+}
+
+/**
+ * A repo family's main workdir derived from its shared `.git` common dir
+ * (`…/repo/.git` → `…/repo`), or `null` when the common dir isn't a plain
+ * `.git` folder (bare repos, submodule gitdirs). Lets a linked worktree
+ * resolve its main repo without the main tab being open. Returns the
+ * {@link pathKey} form — a comparison key, not a path to display or open.
+ */
+export function mainPathFromCommonDir(commonDir: string): string | null {
+  const key = pathKey(commonDir);
+  return key.endsWith('/.git') ? key.slice(0, -'/.git'.length) : null;
+}
+
+/**
+ * The set of tab paths that belong to `memberPaths` — the member repos plus the
+ * worktrees of any member (a linked worktree inherits membership via its shared
+ * `common_dir`, whether or not the main repo's own tab is open). Used to filter
+ * the rail/strip to the active workspace while leaving the non-members open
+ * (just hidden), so closing the workspace reveals everything again.
+ */
+export function workspaceMemberSet<
+  T extends { path: string; meta: { common_dir: string; is_linked_worktree: boolean } },
+>(tabs: T[], memberPaths: Set<string>): Set<string> {
+  const members = new Set([...memberPaths].map(pathKey));
+  const out = new Set<string>();
+  for (const t of tabs) {
+    if (members.has(pathKey(t.path))) {
+      out.add(t.path);
+      continue;
+    }
+    const main = mainPathFromCommonDir(t.meta.common_dir);
+    if (main != null && members.has(main)) out.add(t.path);
+  }
+  return out;
+}
+
 function pathParts(path: string): string[] {
   return path.split(/[\\/]+/).filter(Boolean);
 }

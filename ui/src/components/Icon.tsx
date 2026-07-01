@@ -7,7 +7,7 @@ export type IconName =
   | 'chev-down' | 'chev-right' | 'chev-up' | 'chev-left' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye' | 'sparkle'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
-  | 'trash'
+  | 'trash' | 'workspace'
   | 'win-min' | 'win-max' | 'win-restore' | 'win-close';
 
 interface Props extends Omit<SVGProps<SVGSVGElement>, 'name' | 'stroke'> {
@@ -45,6 +45,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'worktree':    return <svg {...p}><circle cx="4" cy="3.5" r="1.6"/><path d="M4 5.1v4.4M4 9.5c0 1.6 2.2 1.5 4 1.5"/><rect x="8" y="8.5" width="6" height="5" rx="1"/></svg>;
     case 'file':        return <svg {...p}><path d="M3 1.5h7l3 3v10H3v-13Z"/><path d="M10 1.5v3h3"/></svg>;
     case 'folder':      return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4Z"/></svg>;
+    case 'workspace':   return <svg {...p}><path d="M8 1.8 14.5 5 8 8.2 1.5 5 8 1.8Z"/><path d="M1.5 8 8 11.2 14.5 8"/><path d="M1.5 11 8 14.2 14.5 11"/></svg>;
     case 'folder-open': return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v1.5H1.5V4Z"/><path d="M1.5 6h13l-1.2 6.6a1 1 0 0 1-1 .9H3.7a1 1 0 0 1-1-.9L1.5 6Z"/></svg>;
     case 'changes':     return <svg {...p}><circle cx="8" cy="8" r="6.2"/><path d="M5 8h6M8 5v6"/></svg>;
     case 'search':      return <svg {...p}><circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4l3.1 3.1"/></svg>;

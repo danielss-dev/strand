@@ -15,8 +15,9 @@ import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
+import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useUpdates } from './stores/updates';
-import { accentHueForColor, groupTabs, repoFamilyName } from './lib/repoIdentity';
+import { accentHueForColor, groupTabs, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
 import { pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
@@ -46,6 +47,7 @@ import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
 import { RepoIconDialog } from './views/RepoIconDialog';
+import { WorkspaceManagerDialog } from './views/WorkspaceManagerDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
@@ -140,7 +142,6 @@ export function App() {
   const meta = useRepo((s) => s.meta);
   const activePath = useRepo((s) => s.activePath);
   const recents = useRepo((s) => s.recents);
-  const openRepo = useRepo((s) => s.openRepo);
   const refreshRecents = useRepo((s) => s.refreshRecents);
   const restoreSession = useRepo((s) => s.restoreSession);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
@@ -223,6 +224,7 @@ export function App() {
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   // null = closed; otherwise the repo whose rail tile is being customized.
   const [iconDialog, setIconDialog] = useState<{ path: string; name: string } | null>(null);
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -331,7 +333,9 @@ export function App() {
       });
     }, 200);
     try {
-      await openRepo(path);
+      // Workspace-aware open: the repo also joins the active workspace, even
+      // when it was already open but hidden under another one.
+      await useWorkspaces.getState().openRepoInActive(path);
       clearTimeout(timer);
       // Success: clear the popup if this op still owns it.
       setOpProgress((cur) => (cur && cur.id === id ? null : cur));
@@ -344,7 +348,7 @@ export function App() {
       if (shown) setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
       else showToast(`Open failed: ${msg}`);
     }
-  }, [openRepo, showToast]);
+  }, [showToast]);
 
   // Run a clone with the persistent progress popup, then open the result. The
   // same popup (one op id) switches in place from "Cloning" to "Opening" — no
@@ -410,13 +414,13 @@ export function App() {
         : cur,
     );
     try {
-      await openRepo(clonedPath);
+      await useWorkspaces.getState().openRepoInActive(clonedPath);
       setOpProgress((cur) => (cur && cur.id === id ? null : cur));
     } catch (e) {
       const msg = errMessage(e);
       setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
     }
-  }, [openRepo, showToast, nextOpId]);
+  }, [showToast, nextOpId]);
 
   // Open a batch of repos as tabs, one after another. Sequential (not
   // parallel) so the shared active-tab state and the progress popup don't race
@@ -440,13 +444,20 @@ export function App() {
 
   // Switch the active repository to the next (+1) / previous (-1) open one,
   // wrapping around. Cycles in on-screen order (worktrees grouped with their
-  // repo) so it matches the rail/tab strip; a no-op with fewer than two tabs.
-  // Drives ⌘/Ctrl+Tab and the palette's Next/Previous repository actions, in
-  // both repo-nav layouts.
+  // repo) so it matches the rail/tab strip — which means only the active
+  // workspace's visible repos; hidden tabs are skipped. A no-op with fewer
+  // than two visible tabs. Drives ⌘/Ctrl+Tab and the palette's Next/Previous
+  // repository actions, in both repo-nav layouts.
   const cycleTab = useCallback((delta: 1 | -1) => {
     const { tabs: open, activeTabPath: active, setActiveTab } = useRepo.getState();
-    if (open.length < 2) return;
-    const ordered = groupTabs(open);
+    const wsState = useWorkspaces.getState();
+    const ws = wsState.workspaces.find(
+      (w) => w.id === (wsState.activeWorkspaceId ?? DEFAULT_WORKSPACE_ID),
+    );
+    const members = ws ? workspaceMemberSet(open, new Set(ws.repoPaths)) : null;
+    const visible = members ? open.filter((t) => members.has(t.path)) : open;
+    if (visible.length < 2) return;
+    const ordered = groupTabs(visible);
     const i = ordered.findIndex((t) => t.path === active);
     const base = i === -1 ? 0 : i;
     const next = ordered[(base + delta + ordered.length) % ordered.length];
@@ -573,12 +584,22 @@ export function App() {
   const keyMapRef = useRef(keyMap);
   keyMapRef.current = keyMap;
 
-  // Load recents + restore the tabs the user had open last time. Both run
-  // once on first mount; restoreSession is idempotent so StrictMode's
-  // double-invoke is harmless.
+  // Load recents, then the saved workspaces, then restore last session's tabs,
+  // then run the workspace post-restore init (adopt unclaimed repos into
+  // Default + install the focus reconciler). The order matters: init must run
+  // after `load` (the Default entry exists) and after `restoreSession` (the
+  // tabs are open). Each step is idempotent, so StrictMode's double-invoke is
+  // harmless.
   useEffect(() => {
     void refreshRecents();
-    void restoreSession();
+    void (async () => {
+      await useWorkspaces.getState().load();
+      try {
+        await restoreSession();
+      } finally {
+        useWorkspaces.getState().initAfterRestore();
+      }
+    })();
   }, [refreshRecents, restoreSession]);
 
   // Native macOS menubar. Menu item actions read the latest callbacks
@@ -1134,6 +1155,7 @@ export function App() {
           onOpenRecent={openByPath}
           onClone={() => setCloneOpen(true)}
           onCustomize={openIconDialog}
+          onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
         />
 
         <div className="body">
@@ -1143,6 +1165,7 @@ export function App() {
               onOpenRecent={openByPath}
               onClone={() => setCloneOpen(true)}
               onCustomize={openIconDialog}
+              onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
             />
           )}
           <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
@@ -1347,6 +1370,10 @@ export function App() {
           name={iconDialog.name}
           onClose={() => setIconDialog(null)}
         />
+      )}
+
+      {workspaceManagerOpen && (
+        <WorkspaceManagerDialog onClose={() => setWorkspaceManagerOpen(false)} />
       )}
 
       {!isTauri() && !meta && (

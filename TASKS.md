@@ -361,6 +361,59 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   the full palette.
 - ☐ Tab reordering by drag
 
+### Workspaces (multi-repo groups)
+- ◐ Workspace model + persistence + switcher + manager (Phase 1, reworked). A
+  workspace is a named group of repo paths (`Workspace` in `lib/types.ts`),
+  persisted whole in the generic `settings` table (`workspacesDb` in
+  `lib/db.ts`, keys `workspaces` / `active-workspace`), owned by a dedicated
+  `stores/workspaces.ts` (`useWorkspaces`) so the single-repo engine in
+  `repo.ts` is untouched.
+  **A workspace filters the rail/strip; it doesn't own the open set.** Active →
+  the rail/strip shows only its repos (`workspaceMemberSet` in
+  `lib/repoIdentity.ts`; worktrees inherit via `common_dir` even when the main
+  tab is closed); non-members stay **open but hidden**. **The Default view is
+  itself a reserved workspace** (`DEFAULT_WORKSPACE_ID`,
+  `activeWorkspaceId === null`) with its own membership, so a named
+  workspace's repos never leak into Default. **Membership changes only through
+  explicit actions** (no delta tracking — the old open/close mirror corrupted
+  memberships when async flows overlapped): `openRepoInActive` (every
+  user-initiated open joins the active workspace), `closeRepo` (leaves the
+  active workspace; tabs truly close only when no other workspace holds the
+  repo; an emptied named workspace falls back to Default), and the manager's
+  `addRepo`/`removeRepo` (removal from the *last* holding workspace closes the
+  tabs). Open repos claimed by no workspace are adopted into Default
+  (`initAfterRestore` at startup, and on workspace delete). The only
+  subscription is a pure **focus reconciler** (keeps the active tab inside the
+  visible set; guarded by a counter during switches — a mistimed guard can
+  only delay a focus fix, never lose data). Switching is smooth:
+  `openWorkspace` filters instantly, keeps the current repo when it's a member
+  (else the workspace's persisted `lastActivePath`, else the first open
+  member), and opens missing members via `openRepoBackground` (`repo.ts`) —
+  parallel, unfocused, no per-repo full refresh; session restore uses the same
+  background path (one full refresh for the final active tab). ⌘Tab cycling
+  and the repo quick-switcher are workspace-aware (cycle skips hidden tabs;
+  picking a hidden repo joins it to the active workspace). UI:
+  `components/WorkspaceSwitcher.tsx` (Default row + named list + create /
+  rename / delete / manage) in `RepoRail`/`RepoTabs`, and
+  `views/WorkspaceManagerDialog.tsx` to curate each workspace's repos (add
+  from recents/open **or from disk via the native folder picker**, remove;
+  rename/delete named). Multi-membership holds at the model level (a path can
+  be listed in several workspaces). **Path identity:** every repo-path
+  comparison goes through `pathKey` (`lib/repoIdentity.ts` — separator,
+  trailing-slash, and Windows `\\?\` verbatim tolerant): tab dedupe
+  (`samePath` in `repo.ts` — git porcelain/`common_dir` spell paths
+  differently than gix workdirs on Windows, which used to open the same repo
+  twice), membership checks, recents (duplicate spellings healed + shadowed
+  rows forgotten in `refreshRecents`), and persisted memberships (healed to
+  native spelling + deduped in `load`). Never fabricate a re-spelled path to
+  open or store — derive from the original string (`derivedMainPath`).
+- ☐ Aggregated cross-repo review (Phase 2): a `WorkspaceReview` surface showing
+  changes from every member repo grouped repo→files, backed by a per-path slice
+  that fans the already-path-parameterized `repo_diff_*` IPC across members (no
+  Rust changes needed). Live-follow via `repo://changed` for non-active members.
+- ☐ Workspace polish (Phase 3): command-palette entries (create/open/switch),
+  reuse the Review `j`/`k` loop in the combined view, `.code-workspace` import.
+
 ### Topbar
 - ☑ Layout + native-chrome alignment
 - ☑ Fetch / Pull / Push handlers (shell out to `git`; spinner + shimmer
