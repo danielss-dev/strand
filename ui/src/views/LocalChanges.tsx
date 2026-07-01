@@ -1359,11 +1359,13 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
 
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
   const suggestDisabled = suggesting || submitting || !canCommit || !aiReady;
-  const suggestTitle = !canCommit
-    ? 'Stage changes to suggest a commit message'
-    : !aiReady
-      ? 'Sign in under Settings → AI to enable suggestions'
-      : 'Suggest commit message from staged changes';
+  const suggestTitle = suggesting
+    ? 'Generating commit message…'
+    : !canCommit
+      ? 'Stage changes to suggest a commit message'
+      : !aiReady
+        ? 'Sign in under Settings → AI to enable suggestions'
+        : 'Suggest commit message from staged changes';
 
   return (
     <div className="lc-commit-bar">
@@ -1387,13 +1389,20 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
           />
           <button
             type="button"
-            className="suggest-btn"
+            className={suggesting ? 'suggest-btn is-busy' : 'suggest-btn'}
             aria-label="Suggest commit message"
+            aria-busy={suggesting}
             title={suggestTitle}
             disabled={suggestDisabled}
             onClick={() => void suggest()}
           >
-            <Icon name="sparkle" size={13} />
+            {suggesting ? (
+              <span className="icon-spin">
+                <Icon name="refresh" size={13} />
+              </span>
+            ) : (
+              <Icon name="sparkle" size={13} />
+            )}
           </button>
           {recentMessages.length > 0 && (
             <button

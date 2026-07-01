@@ -443,6 +443,14 @@
   opacity: 0.45;
   cursor: default;
 }
+/* While a suggestion is in flight the button is disabled to block
+   double-clicks, but keep it fully visible and accented so the spinner
+   clearly reads as "working" rather than an inert, greyed-out control. */
+.cb-top .suggest-btn.is-busy:disabled {
+  opacity: 1;
+  color: var(--accent);
+  cursor: progress;
+}
 
 .cb-top .amend {
   display: inline-flex;
