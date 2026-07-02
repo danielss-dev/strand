@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { HistoryModeToggle } from './components/HistoryModeToggle';
+import { ReviewModeToggle } from './components/ReviewModeToggle';
 import { Icon } from './components/Icon';
 import { copyToClipboard } from './components/PierreTree';
 import { Presence } from './components/Presence';
@@ -16,6 +17,7 @@ import { FONTS, useSettings } from './stores/settings';
 import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
+import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
 import { accentHueForColor, groupTabs, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
 import { pickRepoDirectories } from './lib/dialog';
@@ -53,6 +55,7 @@ import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
+import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
@@ -560,6 +563,7 @@ export function App() {
     'view-commits': () => { setView('commits'); selectFile(null); },
     'view-reflog': () => { setView('reflog'); selectFile(null); },
     'view-review': () => { setView('review'); selectFile(null); },
+    'view-workspace-review': () => { setView('workspace-review'); selectFile(null); },
     'view-worktrees': () => { setView('worktrees'); selectFile(null); },
     'tab-next': () => cycleTab(1),
     'tab-prev': () => cycleTab(-1),
@@ -731,12 +735,14 @@ export function App() {
 
   // Primary freshness signal: the Rust file watcher. It debounces write
   // bursts and emits `repo://changed` with the repo path — exactly what an
-  // AI agent editing files in a terminal produces. The store ignores events
-  // for non-active tabs.
+  // AI agent editing files in a terminal produces. The single-repo store
+  // ignores events for non-active tabs; the workspace review store follows
+  // *every* member while its view is live (and no-ops otherwise).
   useEffect(() => {
     if (!isTauri()) return;
     const unlisten = listen<string>('repo://changed', (event) => {
       void useRepo.getState().handleExternalChange(event.payload);
+      useWorkspaceReview.getState().handleExternalChange(event.payload);
     });
     return () => { void unlisten.then((fn) => fn()); };
   }, []);
@@ -972,6 +978,7 @@ export function App() {
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
+        { id: 'workspace-review-view', label: 'Show: Workspace Review', group: 'Actions', shortcut: keyHint('view-workspace-review'), keywords: 'workspace review aggregate cross repo multi combined agent', run: () => { setView('workspace-review'); selectFile(null); } },
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'tab-next', label: 'Next repository', group: 'Actions', shortcut: keyHint('tab-next'), keywords: 'switch repo tab next cycle', run: () => cycleTab(1) },
         { id: 'tab-prev', label: 'Previous repository', group: 'Actions', shortcut: keyHint('tab-prev'), keywords: 'switch repo tab previous cycle', run: () => cycleTab(-1) },
@@ -1194,6 +1201,7 @@ export function App() {
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {view === 'review' && <Review />}
+                  {view === 'workspace-review' && <WorkspaceReview />}
                   {view === 'reflog' && (
                     <Reflog
                       onResetTo={(target, label) => setResetDialog({ target, label })}
@@ -1607,10 +1615,12 @@ function MainHeader({
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
+  const wsMembers = useWorkspaceReview((s) => s.members);
   const title = view === 'local' ? 'Local Changes'
     : view === 'commits' ? 'All Commits'
     : view === 'reflog' ? 'Reflog'
     : view === 'review' ? 'Review'
+    : view === 'workspace-review' ? 'Workspace Review'
     : view === 'worktrees' ? 'Worktrees'
     : view === 'branch' ? 'Branch'
     : '';
@@ -1624,9 +1634,12 @@ function MainHeader({
           ? baseline
             ? `${baselineDiffs.length} files since ${baseline.short}`
             : `${unstagedCount} unstaged files`
-          : view === 'worktrees'
-            ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
-            : '';
+          : view === 'workspace-review'
+            ? `${wsMembers.length} repo${wsMembers.length === 1 ? '' : 's'} · ` +
+              `${wsMembers.reduce((n, m) => n + m.diffs.length, 0)} files to review`
+            : view === 'worktrees'
+              ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
+              : '';
 
   return (
     <div className="main-header">
@@ -1640,7 +1653,8 @@ function MainHeader({
       </div>
       <div className="h-actions">
         {(view === 'commits' || view === 'reflog') && <HistoryModeToggle />}
-        {(view === 'local' || view === 'review') && (
+        {(view === 'review' || view === 'workspace-review') && <ReviewModeToggle />}
+        {(view === 'local' || view === 'review' || view === 'workspace-review') && (
           <>
             <button
               type="button"

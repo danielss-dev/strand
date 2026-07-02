@@ -362,7 +362,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☐ Tab reordering by drag
 
 ### Workspaces (multi-repo groups)
-- ◐ Workspace model + persistence + switcher + manager (Phase 1, reworked). A
+- ☑ Workspace model + persistence + switcher + manager (Phase 1, reworked). A
   workspace is a named group of repo paths (`Workspace` in `lib/types.ts`),
   persisted whole in the generic `settings` table (`workspacesDb` in
   `lib/db.ts`, keys `workspaces` / `active-workspace`), owned by a dedicated
@@ -407,12 +407,41 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   rows forgotten in `refreshRecents`), and persisted memberships (healed to
   native spelling + deduped in `load`). Never fabricate a re-spelled path to
   open or store — derive from the original string (`derivedMainPath`).
-- ☐ Aggregated cross-repo review (Phase 2): a `WorkspaceReview` surface showing
-  changes from every member repo grouped repo→files, backed by a per-path slice
-  that fans the already-path-parameterized `repo_diff_*` IPC across members (no
-  Rust changes needed). Live-follow via `repo://changed` for non-active members.
-- ☐ Workspace polish (Phase 3): command-palette entries (create/open/switch),
-  reuse the Review `j`/`k` loop in the combined view, `.code-workspace` import.
+- ☑ Aggregated cross-repo review (Phase 2): `views/WorkspaceReview.tsx` shows
+  changes from every member repo of the active workspace grouped repo→files,
+  backed by a dedicated `stores/workspaceReview.ts` slice that fans the
+  already-path-parameterized diff IPC across members (no Rust changes). Each
+  member reviews in its own mode — **session** (`diff_since_full`) when that
+  repo has a persisted baseline, **inbox** (`diff_unstaged_full`) otherwise —
+  and reviewed marks read/write the same per-repo `reviewSession` records, so
+  the aggregated view and each repo's own Review are two lenses on one state
+  (the active repo's in-memory marks are mirrored via `useRepo.setState`).
+  UI: one collapsible section per member (group-color dot, branch, mode chip,
+  n/m reviewed, open-in-repo) each with its own `PierreTree`; a single
+  whole-file-context diff pane (virtualized, read-only `<Diff>`; images via
+  `ImageDiff`'s new `repoPath`/`refetch` props); `j`/`k` walks the merged
+  queue across repo boundaries in tree display order (`workspaceQueueOrder`
+  in `lib/workspaceReview.ts`, unit-tested), Space toggles reviewed, `s`
+  stages, `d`-`d` discards (both per-member via `repo_stage_many` /
+  `repo_discard_many`, rename-aware), `o` jumps into the file's own repo
+  Review (pool pre-refreshed so the file selection sticks). **Live-follow:**
+  the `repo://changed` listener now also feeds
+  `useWorkspaceReview.handleExternalChange`, which refreshes the matching
+  member slice while the view is open — including background members the
+  single-repo store ignores. **One sidebar destination:** the Review row
+  covers both lenses (active on either view; clicking lands on the
+  single-repo lens), and a `[Repository | Workspace]` segmented control
+  (`components/ReviewModeToggle.tsx`, the `HistoryModeToggle` pattern) in the
+  main header flips between them — rendered only when the active workspace
+  has ≥2 members. Also reachable via palette "Show: Workspace Review" and
+  rebindable `view-workspace-review` (`Mod+6`). Hunk-level actions,
+  notes, and ⌘F stay in the per-repo Review (deliberate v1 cuts — hunk
+  staging needs per-path `apply_patch` plumbing; cross-repo note export needs
+  a repo-grouped feedback format).
+- ☐ Workspace polish (Phase 3): command-palette entries for workspace
+  management (create/open/switch), `.code-workspace` import, and Workspace
+  Review follow-ups: hunk-level stage/discard, notes + repo-grouped feedback
+  export, ⌘F across member pools, per-worktree members.
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

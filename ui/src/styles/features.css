@@ -4570,6 +4570,131 @@ textarea.clone-input {
   margin-left: 0;
 }
 
+/* ─── Workspace Review (aggregated cross-repo queue) ──────────────────── */
+
+/* Left column: one collapsible section per member repo. Expanded sections
+   share the height (each tree virtualizes + scrolls internally); collapsed,
+   clean, and errored sections shrink to their header. */
+.wsr-queue {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.wsr-section {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
+}
+.wsr-section.open {
+  flex: 1 1 0;
+  min-height: 72px;
+}
+.wsr-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 4px 8px 4px 4px;
+  font-size: 11.5px;
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border), 0 -0.5px 0 var(--border);
+}
+.wsr-fold {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.wsr-fold:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.wsr-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.wsr-name {
+  flex: none;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.wsr-branch {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsr-mode {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.wsr-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.wsr-open {
+  flex: none;
+}
+.wsr-tree {
+  /* Flex column so the Pierre host (.tree-host-wrap, flex: 1) actually gets
+     a height — as a block child it collapses to 0 and renders no rows. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px 0;
+}
+.wsr-note {
+  flex: none;
+  padding: 6px 12px 8px 29px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.wsr-note.danger {
+  color: var(--del);
+}
+
+/* Diff-pane repo chip: which member the shown file belongs to. */
+.wsr-repo-chip {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.wsr-chip-meta {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
 /* ─── Conflict resolution ──────────────────────────────────────────────── */
 
 /* Strip of conflicted files above the staging workspace. */

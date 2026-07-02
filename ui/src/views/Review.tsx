@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
-import { Diff, parseCacheablePatch } from '../components/Diff';
+import { Diff, parsePatchCached } from '../components/Diff';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
@@ -15,7 +15,8 @@ import {
   type TreeMenuItem,
   type TreeRowDecoration,
 } from '../components/PierreTree';
-import { hashPatch } from '../lib/patch';
+import { hashFileDiff as hashOf } from '../lib/patch';
+import { useSettled } from '../lib/useSettled';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
 import { gitErrorHint } from '../lib/tauri';
@@ -155,7 +156,7 @@ export function Review() {
     const t = window.setTimeout(() => {
       for (const d of targets) {
         try {
-          workerPool.primeDiffHighlightCache(primedParse(d));
+          workerPool.primeDiffHighlightCache(parsePatchCached(d));
         } catch {
           // Unparseable patches fall back at render time; nothing to prime.
         }
@@ -812,62 +813,9 @@ export function Review() {
   );
 }
 
-/**
- * Follow `value`, but while it changes in rapid succession (held-down j/k)
- * wait for a pause before swapping. The first change after an idle stretch
- * applies immediately, so a single step still feels instant; only scrubbing
- * defers, and the intermediate values are never rendered at all.
- */
-function useSettled<T>(value: T, delay = 120, idleGap = 250): T {
-  const [settled, setSettled] = useState(value);
-  const lastSwap = useRef(0);
-  useEffect(() => {
-    if (Object.is(value, settled)) return;
-    const now = performance.now();
-    if (now - lastSwap.current > idleGap) {
-      lastSwap.current = now;
-      setSettled(value);
-      return;
-    }
-    const t = window.setTimeout(() => {
-      lastSwap.current = performance.now();
-      setSettled(value);
-    }, delay);
-    return () => window.clearTimeout(t);
-  }, [value, settled, delay, idleGap]);
-  return settled;
-}
-
 /** Last path segment — the repo's directory name from its absolute path. */
 function basename(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
-}
-
-// Verdict hashes are FNV over the whole-file patch text — pennies for source
-// files, tens of milliseconds for a multi-megabyte lockfile. Cache per
-// FileDiff object (one per fetch) so each pool refresh hashes once, not once
-// per verdicts recompute.
-const patchHashCache = new WeakMap<FileDiff, string>();
-function hashOf(d: FileDiff): string {
-  let h = patchHashCache.get(d);
-  if (h === undefined) {
-    h = hashPatch(d.patch);
-    patchHashCache.set(d, h);
-  }
-  return h;
-}
-
-// Parsed-patch memo for prefetch priming, keyed by the FileDiff object (one
-// per fetch), so repeated pauses on the same queue don't re-parse whole-file
-// patches on the main thread.
-const primedParseCache = new WeakMap<FileDiff, ReturnType<typeof parseCacheablePatch>>();
-function primedParse(d: FileDiff) {
-  let parsed = primedParseCache.get(d);
-  if (!parsed) {
-    parsed = parseCacheablePatch(d.patch);
-    primedParseCache.set(d, parsed);
-  }
-  return parsed;
 }
 
 function ReviewToolbar({

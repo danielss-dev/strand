@@ -29,6 +29,7 @@ export type CommandId =
   | 'view-commits'
   | 'view-reflog'
   | 'view-review'
+  | 'view-workspace-review'
   | 'view-worktrees'
   | 'tab-next'
   | 'tab-prev'
@@ -78,6 +79,9 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'view-reflog',    label: 'Go to Reflog',         category: 'Navigation',  defaultBinding: 'Mod+3', menu: true, needsRepo: true },
   { id: 'view-review',    label: 'Go to Review',         category: 'Navigation',  defaultBinding: 'Mod+4', menu: true, needsRepo: true },
   { id: 'view-worktrees', label: 'Go to Worktrees',      category: 'Navigation',  defaultBinding: 'Mod+5', menu: true, needsRepo: true },
+  // Aggregated cross-repo review of the active workspace. JS-owned — the
+  // macOS View menu keeps the five core views.
+  { id: 'view-workspace-review', label: 'Go to Workspace Review', category: 'Navigation', defaultBinding: 'Mod+6', needsRepo: true },
   // Cycle the active repository. Tab isn't representable as a native-menu
   // accelerator, so these stay JS-owned (no `menu: true`).
   { id: 'tab-next', label: 'Next repository',     category: 'Navigation',  defaultBinding: 'Mod+Tab',       needsRepo: true },

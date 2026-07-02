@@ -10,7 +10,13 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: false,
-    hmr: { protocol: 'ws', host: 'localhost', port: 1421 },
+    // The HMR socket rides Tauri's fixed port. When the dev server runs
+    // standalone (browser-mode smoke tests, no `tauri dev`), that socket can
+    // never connect and the vite client reload-polls the page forever —
+    // STRAND_NO_HMR=1 turns HMR off for those runs.
+    hmr: process.env.STRAND_NO_HMR
+      ? false
+      : { protocol: 'ws', host: 'localhost', port: 1421 },
     watch: {
       // Don't watch the Rust side from Vite — Cargo handles that.
       ignored: ['**/src-tauri/**', '**/crates/**', '**/target/**'],

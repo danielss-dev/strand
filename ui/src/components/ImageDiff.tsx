@@ -21,9 +21,18 @@ export type SideState =
   | { kind: 'error'; message: string }
   | { kind: 'ok'; blob: FileBlob };
 
-export function useBlob(path: string, src: BlobRef | null): SideState {
-  const activePath = useRepo((s) => s.activePath);
+export function useBlob(
+  path: string,
+  src: BlobRef | null,
+  repoPath?: string,
+  refetch?: number,
+): SideState {
+  const storePath = useRepo((s) => s.activePath);
   const diffsTick = useRepo((s) => s.diffsTick);
+  // Default: the active repo, revalidated on its diff refreshes. A caller
+  // reviewing another repo (Workspace Review) passes both the repo path and
+  // its own refresh counter.
+  const activePath = repoPath ?? storePath;
   const [state, setState] = useState<SideState>({ kind: 'loading' });
   // Primitive deps so inline-object props don't refetch every render.
   const absent = src == null;
@@ -31,7 +40,7 @@ export function useBlob(path: string, src: BlobRef | null): SideState {
   const index = src?.index ?? false;
   // Worktree/index sources are mutable — refetch when the diffs refresh (the
   // agent-watch loop edits files under us). Rev-pinned blobs are immutable.
-  const refetchKey = rev == null ? diffsTick : 0;
+  const refetchKey = rev == null ? (refetch ?? diffsTick) : 0;
   useEffect(() => {
     if (absent || !activePath) return;
     let cancelled = false;
@@ -56,13 +65,20 @@ export function ImageDiff({
   path,
   oldSrc,
   newSrc,
+  repoPath,
+  refetch,
 }: {
   path: string;
   oldSrc: BlobRef | null;
   newSrc: BlobRef | null;
+  /** Repo to read blobs from — defaults to the active repo. */
+  repoPath?: string;
+  /** Refetch counter for mutable (worktree/index) sources when `repoPath` is
+   * not the active repo — defaults to the active repo's diff tick. */
+  refetch?: number;
 }) {
-  const before = useBlob(path, oldSrc);
-  const after = useBlob(path, newSrc);
+  const before = useBlob(path, oldSrc, repoPath, refetch);
+  const after = useBlob(path, newSrc, repoPath, refetch);
   return (
     <div className="img-diff">
       {oldSrc != null && <ImagePane label="Before" tone="del" path={path} state={before} />}

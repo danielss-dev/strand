@@ -45,7 +45,9 @@ interface PersistedSession {
 }
 const SESSION_KEY = 'session.tabs';
 
-export type View = 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees';
+export type View =
+  | 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees'
+  | 'workspace-review';
 
 /** Active tab within the file view ('preview' only offered for renderable
  *  files — SVG / markdown). */

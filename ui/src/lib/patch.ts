@@ -15,6 +15,22 @@ export function hashPatch(text: string): string {
 }
 
 /**
+ * {@link hashPatch} over a diff's whole-file patch, cached per FileDiff
+ * object (one per fetch) — pennies for source files, tens of milliseconds
+ * for a multi-megabyte lockfile, so each pool refresh hashes once, not once
+ * per verdicts recompute. Shared by the Review and Workspace Review views.
+ */
+const patchHashCache = new WeakMap<{ patch: string }, string>();
+export function hashFileDiff(d: { patch: string }): string {
+  let h = patchHashCache.get(d);
+  if (h === undefined) {
+    h = hashPatch(d.patch);
+    patchHashCache.set(d, h);
+  }
+  return h;
+}
+
+/**
  * Direction in which the resulting patch will be applied:
  * - `forward` for Stage (apply to index, source = pre-change side).
  * - `reverse` for Discard/Unstage (Rust will reverse before apply, so the

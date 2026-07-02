@@ -58,6 +58,22 @@ export function parseCacheablePatch(patch: string) {
   return fd;
 }
 
+/**
+ * {@link parseCacheablePatch} memoized per FileDiff object (one per fetch) —
+ * used to prime the worker pool's highlight cache for upcoming queue entries
+ * without re-parsing whole-file patches on the main thread on every pause.
+ * Shared by the Review and Workspace Review prefetchers.
+ */
+const parsedPatchCache = new WeakMap<{ patch: string }, ReturnType<typeof parseCacheablePatch>>();
+export function parsePatchCached(d: { patch: string }): ReturnType<typeof parseCacheablePatch> {
+  let parsed = parsedPatchCache.get(d);
+  if (!parsed) {
+    parsed = parseCacheablePatch(d.patch);
+    parsedPatchCache.set(d, parsed);
+  }
+  return parsed;
+}
+
 export function Diff({
   patch,
   layout = 'unified',

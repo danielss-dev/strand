@@ -793,6 +793,38 @@ can be listed in several workspaces). Phase 2 (the payoff) is the aggregated
 cross-repo review surface; Phase 3 is palette + `.code-workspace` import — both
 open in TASKS. Verified: `tsc`, `vite build`.
 
+**Workspaces — Phase 2, aggregated review (2026-07-02):** The payoff surface:
+**Workspace Review** (`views/WorkspaceReview.tsx`) reviews every member repo
+of the active workspace in one queue, grouped repo→files. It shares the
+sidebar **Review** destination with the single-repo view — the two are lenses
+on one review state, so a `[Repository | Workspace]` segmented control in the
+main header (`ReviewModeToggle`, the Graph|Reflog pattern; shown once the
+workspace has ≥2 members) flips between them in place, and ⌘K "Show:
+Workspace Review" / `Mod+6` jump straight to the workspace lens. A dedicated `stores/workspaceReview.ts` keeps one slice per member
+and fans the *already path-parameterized* diff IPC across them — exactly the
+no-Rust-changes plan: each member reviews in its own mode (**session** via
+`diff_since_full` when that repo has a persisted baseline, **inbox** via
+`diff_unstaged_full` otherwise), and reviewed marks read/write the same
+per-repo `reviewSession` records as the single-repo Review, so the two views
+are lenses on one review state. The left column stacks one collapsible section
+per member (group-color dot, branch, session/inbox chip, n/m reviewed, its own
+Pierre tree); the right pane is the familiar whole-file-context diff
+(virtualized, worker-pool prefetch of upcoming queue entries, image diffs via
+`ImageDiff`'s new `repoPath` prop). The Review keyboard loop carries over and
+crosses repo boundaries: `j`/`k` walk the merged queue in tree display order
+(`workspaceQueueOrder`, unit-tested), Space toggles reviewed, `s` stages,
+`d`-`d` discards (per-member `repo_stage_many`/`repo_discard_many`,
+rename-aware), and `o` opens the file in its repo's own Review for the tools
+that deliberately stay per-repo in v1 (hunk-level actions, notes, ⌘F).
+**Live-follow** landed with it: the `repo://changed` listener now also feeds
+the workspace store, which refreshes the matching member's slice while the
+view is open — so agents working in *background* member repos update the
+queue live, which the single-repo store never did. Verified: `tsc`, `vitest`
+(158, +6 `workspaceReview`), `vite build`, and a live browser-mode pass
+(seeded stores: sections + mode chips + toolbar progress render, j/k crosses
+repos and clamps, Space flips 0/3 → 1/3 with the section count following,
+row-visibility gate at ≥2 members).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

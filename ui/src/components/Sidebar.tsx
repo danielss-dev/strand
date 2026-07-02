@@ -696,7 +696,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         <SideRow
           icon="check"
           label="Review"
-          active={view === 'review'}
+          active={view === 'review' || view === 'workspace-review'}
           onClick={() => { setView('review'); selectFile(null); }}
         />
         <SideRow
