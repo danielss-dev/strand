@@ -20,7 +20,7 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
 import { accentHueForColor, groupTabs, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
-import { pickRepoDirectories } from './lib/dialog';
+import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
@@ -443,6 +443,24 @@ export function App() {
   const openViaDialog = useCallback(async () => {
     await openMany(await pickRepoDirectories());
   }, [openMany]);
+
+  // Import a VS Code .code-workspace as a named workspace: pick the file,
+  // let the store parse/validate it, then open the result. Folders that
+  // aren't repos are reported in the toast, not fatal.
+  const importCodeWorkspaceFlow = useCallback(async () => {
+    const file = await pickCodeWorkspaceFile();
+    if (!file) return;
+    try {
+      const r = await useWorkspaces.getState().importCodeWorkspace(file);
+      await useWorkspaces.getState().openWorkspace(r.id);
+      const skipped = r.skipped.length
+        ? ` — ${r.skipped.length} folder${r.skipped.length === 1 ? '' : 's'} skipped (not a repository)`
+        : '';
+      showToast(`Imported “${r.name}” with ${r.added} repositor${r.added === 1 ? 'y' : 'ies'}${skipped}`);
+    } catch (e) {
+      showToast(`Import failed: ${errMessage(e)}`);
+    }
+  }, [showToast]);
 
   // Open the tile/tab icon-customization dialog for a repo. Shared by the repo
   // rail and the toolbar tab strip (whichever `repoNav` selects).
@@ -977,6 +995,7 @@ export function App() {
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
       { id: 'workspace-new', label: 'New workspace…', group: 'Actions', keywords: 'workspace create group repositories multi repo', run: () => setWorkspaceManagerOpen('create') },
       { id: 'workspace-manage', label: 'Manage workspaces…', group: 'Actions', keywords: 'workspace edit curate repositories add remove rename delete', run: () => setWorkspaceManagerOpen(true) },
+      { id: 'workspace-import', label: 'Import .code-workspace…', group: 'Actions', keywords: 'workspace import vscode visual studio code folders multi root', run: () => { void importCodeWorkspaceFlow(); } },
     ];
     // Repo-scoped actions only make sense — and only succeed — with a repo
     // open, so don't surface them (the network ones would fail confusingly).
@@ -1163,7 +1182,7 @@ export function App() {
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab,
-      workspaces, activeWorkspaceId]);
+      workspaces, activeWorkspaceId, importCodeWorkspaceFlow]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],

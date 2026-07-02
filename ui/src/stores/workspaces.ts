@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 
-import { workspacesDb } from '../lib/db';
-import { pathKey, workspaceMemberSet } from '../lib/repoIdentity';
+import {
+  dirnameOf,
+  parseCodeWorkspace,
+  resolveWorkspaceFolder,
+  workspaceNameFromFile,
+} from '../lib/codeWorkspace';
+import { recents as recentsDb, workspacesDb } from '../lib/db';
+import { pathKey, repoFamilyName, workspaceMemberSet } from '../lib/repoIdentity';
+import { tauri } from '../lib/tauri';
 import type { Workspace } from '../lib/types';
 import { useRepo, type RepoTab } from './repo';
 
@@ -61,6 +68,18 @@ interface WorkspacesState {
 
   /** Create a named workspace from `repoPaths` (deduped) and return its id. */
   create(name: string, repoPaths: string[]): Promise<string>;
+  /**
+   * Import a VS Code `.code-workspace` file as a new named workspace: parse
+   * its `folders` (JSONC-tolerant), resolve them against the file's
+   * directory, validate each through `repoOpen` (which also canonicalizes —
+   * the returned `meta.path` is what gets stored), and create the workspace
+   * from the repos that resolve. Folders that aren't git repositories come
+   * back in `skipped` rather than failing the import; it only throws when
+   * the file is unreadable/unparseable or *no* folder is a repo.
+   */
+  importCodeWorkspace(
+    filePath: string,
+  ): Promise<{ id: string; name: string; added: number; skipped: string[] }>;
   /** Rename a workspace (no-op on Default). */
   rename(id: string, name: string): Promise<void>;
   /**
@@ -301,6 +320,38 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => {
       set({ workspaces });
       await persist(workspaces);
       return ws.id;
+    },
+
+    async importCodeWorkspace(filePath) {
+      const text = await tauri.workspaceFileRead(filePath);
+      const parsed = parseCodeWorkspace(text);
+      const dir = dirnameOf(filePath);
+      const added: string[] = [];
+      const skipped: string[] = [];
+      for (const folder of parsed.folders) {
+        const candidate = resolveWorkspaceFolder(dir, folder);
+        try {
+          const meta = await tauri.repoOpen(candidate);
+          if (!added.some((p) => pathKey(p) === pathKey(meta.path))) {
+            added.push(meta.path);
+            // Record in recents so the repo shows a proper name everywhere
+            // from now on (the manager's add-from-disk does the same).
+            void recentsDb.touch(meta.path, repoFamilyName(meta)).catch(() => undefined);
+          }
+        } catch {
+          skipped.push(folder);
+        }
+      }
+      if (added.length === 0) {
+        throw new Error(
+          parsed.folders.length === 0
+            ? 'the file lists no folders'
+            : 'none of its folders is a git repository',
+        );
+      }
+      const name = workspaceNameFromFile(filePath);
+      const id = await get().create(name, added);
+      return { id, name, added: added.length, skipped };
     },
 
     async rename(id, name) {

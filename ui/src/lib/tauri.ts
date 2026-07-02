@@ -294,6 +294,8 @@ export const tauri = {
   gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
   gitSetGlobalIdentity: (name: string, email: string) =>
     invoke<void>('git_set_global_identity', { name, email }),
+  /** Raw text of a `.code-workspace` file (extension + 1 MB gated backend-side). */
+  workspaceFileRead: (path: string) => invoke<string>('workspace_file_read', { path }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,
