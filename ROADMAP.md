@@ -39,8 +39,9 @@ system ported verbatim. No real feature surface yet.
     still pending.
   - ☑ Discard with single-undo handle (per-change-block; undo toast
     forward-applies the discarded slice back)
-  - ☑ Recent commit messages dropdown (SQLite `commit_messages` history per
-    repo; dropdown on the subject field, keyboard-navigable)
+  - ✗ Recent commit messages dropdown — removed 2026-07-02 on user feedback
+    (stale old messages made no sense next to AI suggestions; the SQLite
+    table stays, unused)
 - ◐ **Commit graph**
   - ☑ Table view from `repo_log`
   - ☑ SVG lane/edge rendering with branch colors
