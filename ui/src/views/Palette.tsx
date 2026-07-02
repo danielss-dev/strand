@@ -5,7 +5,7 @@ import { match, type Match } from '../lib/fuzzy';
 import { useSettings } from '../stores/settings';
 
 /** Result groups, in the order they render in the list and the scope row. */
-export type PaletteGroup = 'Actions' | 'Branches' | 'Tags' | 'Stashes' | 'Files' | 'Commits' | 'Recent';
+export type PaletteGroup = 'Actions' | 'Branches' | 'Tags' | 'Stashes' | 'Files' | 'Commits' | 'Workspaces' | 'Recent';
 
 export interface PaletteAction {
   id: string;
@@ -25,7 +25,7 @@ export interface PaletteAction {
   run(): void;
 }
 
-const GROUP_ORDER: PaletteGroup[] = ['Actions', 'Branches', 'Tags', 'Stashes', 'Files', 'Commits', 'Recent'];
+const GROUP_ORDER: PaletteGroup[] = ['Actions', 'Branches', 'Tags', 'Stashes', 'Files', 'Commits', 'Workspaces', 'Recent'];
 const GROUP_ICON: Record<PaletteGroup, IconName> = {
   Actions: 'command',
   Branches: 'branch',
@@ -33,6 +33,7 @@ const GROUP_ICON: Record<PaletteGroup, IconName> = {
   Stashes: 'history',
   Files: 'file',
   Commits: 'graph',
+  Workspaces: 'workspace',
   Recent: 'history',
 };
 
@@ -41,7 +42,7 @@ const GROUP_ICON: Record<PaletteGroup, IconName> = {
 const CAP_PER_GROUP = 6; // per group when scope = All
 const CAP_SCOPED = 50; // single selected scope
 // Defensive upper bound across all groups. The per-group caps already keep the
-// total well under this (6 groups × 6 = 36 under "All", 50 under one scope);
+// total well under this (8 groups × 6 = 48 under "All", 50 under one scope);
 // it's belt-and-suspenders against a future group being added.
 const CAP_TOTAL = 80;
 
@@ -116,8 +117,9 @@ export function CommandPalette({ actions, onClose }: Props) {
       if (scope !== 'All' && a.group !== scope) continue;
       // With no query under "All", only the cheap, always-relevant groups show;
       // dumping every file/commit would be noise (and slow). Type or pick a
-      // scope to surface them.
-      if (empty && scope === 'All' && a.group !== 'Actions' && a.group !== 'Recent') continue;
+      // scope to surface them. (Workspaces qualify: a handful of user-created
+      // entries, and switching is exactly the "open palette, go" gesture.)
+      if (empty && scope === 'All' && a.group !== 'Actions' && a.group !== 'Workspaces' && a.group !== 'Recent') continue;
       const m = match(query, a.label, a.keywords);
       if (!m) continue;
       const arr = byGroup.get(a.group) ?? [];
