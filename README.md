@@ -80,8 +80,9 @@ keyboard alone, and the mouse stays first-class.
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, saveable as named **workspaces** (the repos behind
   one product — open a workspace to focus the rail on just those repos, close it
-  to return to your default set; a manage dialog curates each, and creating,
-switching, and managing are all in ⌘K), native macOS
+  to return to your default set; a manage dialog curates each; creating,
+  switching, and managing are all in ⌘K, including importing a VS Code
+  `.code-workspace`), native macOS
   menubar, open in your editor or terminal, settings (⌘,) for appearance / diff /
   git / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes via

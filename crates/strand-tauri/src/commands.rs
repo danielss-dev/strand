@@ -746,6 +746,29 @@ pub fn git_set_global_identity(name: String, email: String) -> CmdResult<()> {
     Ok(gitconfig::set_global_identity(&name, &email)?)
 }
 
+/// Read a VS Code `.code-workspace` file for the workspace importer. This is
+/// the one IPC path that reads an arbitrary user-picked file, so it's gated
+/// hard: the name must end in `.code-workspace` and the file must be small
+/// (they're hand-sized JSON documents) — it can't be repurposed as a generic
+/// file reader from the webview.
+#[tauri::command(async)]
+pub fn workspace_file_read(path: String) -> CmdResult<String> {
+    const MAX_LEN: u64 = 1024 * 1024;
+    let p = std::path::Path::new(&path);
+    let ext_ok = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.to_ascii_lowercase().ends_with(".code-workspace"));
+    if !ext_ok {
+        return Err(CmdError { message: "not a .code-workspace file".into() });
+    }
+    let meta = std::fs::metadata(p).map_err(|e| CmdError { message: e.to_string() })?;
+    if meta.len() > MAX_LEN {
+        return Err(CmdError { message: "workspace file too large (max 1 MB)".into() });
+    }
+    std::fs::read_to_string(p).map_err(|e| CmdError { message: e.to_string() })
+}
+
 #[tauri::command(async)]
 pub fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
     Ok(Repo::discover(&path)?.stash_list()?)
@@ -870,5 +893,35 @@ pub fn repo_suggest_commit_message(
 impl CmdError {
     fn from_msg(message: String) -> Self {
         Self { message }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workspace_file_read;
+
+    #[test]
+    fn workspace_file_read_gates_extension_and_size() {
+        let dir = std::env::temp_dir().join(format!("strand-wsread-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Wrong extension refused, even if the content would parse.
+        let json = dir.join("workspace.json");
+        std::fs::write(&json, "{\"folders\":[]}").unwrap();
+        assert!(workspace_file_read(json.to_string_lossy().into_owned()).is_err());
+
+        // Right extension (case-insensitive) reads back verbatim.
+        let ws = dir.join("Acme.Code-Workspace");
+        std::fs::write(&ws, "{\"folders\":[{\"path\":\"api\"}]}").unwrap();
+        let text = workspace_file_read(ws.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(text, "{\"folders\":[{\"path\":\"api\"}]}");
+
+        // Oversized file refused before reading.
+        let big = dir.join("big.code-workspace");
+        std::fs::write(&big, vec![b' '; 1024 * 1024 + 1]).unwrap();
+        let err = workspace_file_read(big.to_string_lossy().into_owned()).unwrap_err();
+        assert!(err.message.contains("too large"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

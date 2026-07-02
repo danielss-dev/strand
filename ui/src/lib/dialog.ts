@@ -35,3 +35,18 @@ export async function pickDirectory(
   const selected = await openDialog({ directory: true, multiple: false, title, defaultPath });
   return typeof selected === 'string' ? selected : null;
 }
+
+/**
+ * Show the native file picker filtered to VS Code `.code-workspace` files
+ * (the workspace importer). Returns the chosen path, or `null` if the user
+ * cancelled or we're not in Tauri.
+ */
+export async function pickCodeWorkspaceFile(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const selected = await openDialog({
+    multiple: false,
+    title: 'Import .code-workspace',
+    filters: [{ name: 'VS Code workspace', extensions: ['code-workspace'] }],
+  });
+  return typeof selected === 'string' ? selected : null;
+}

@@ -841,6 +841,27 @@ Verified: `tsc`, `vitest` (158), `vite build`. Remaining Phase 3:
 `.code-workspace` import + the Workspace Review follow-ups (tracked in
 TASKS).
 
+**`.code-workspace` import (2026-07-02):** A VS Code multi-root workspace
+file now imports as a Strand workspace — palette "Import .code-workspace…"
+or the manager's new "Import .code-workspace…" row. Parsing is pure,
+unit-tested TS (`lib/codeWorkspace.ts`): JSONC-tolerant (string-aware
+comment/trailing-comma stripping), local `path` folders only (remote `uri`
+entries ignored), relative paths joined against the file's directory and
+each candidate validated through `repoOpen`, whose canonical `meta.path` is
+what gets stored — the join never fabricates a re-spelled path (the Windows
+duplicate-tab rule). The file itself is read by a new deliberately narrow
+IPC command (`workspace_file_read`: name must end `.code-workspace`, ≤1 MB
+— the webview gets no generic file reader out of this). Non-repo folders
+are skipped and reported (toast / manager message); the import only errors
+when nothing resolves. Verified with `cargo test -p strand-tauri` (+1 gate
+test), `clippy`, `tsc`, `vitest` (171, +13 `codeWorkspace`), `vite build`,
+and an end-to-end pass against the **running Tauri app** over WebView2 CDP:
+a JSONC fixture with two real repos + a non-repo + a remote uri imported as
+"acme" (2 added, 1 skipped, uri ignored), the workspace opened with members
+tabbed, the all-non-repo fixture threw without creating anything, and the
+backend refused a non-workspace path. Remaining Phase 3: the Workspace
+Review follow-ups (tracked in TASKS).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

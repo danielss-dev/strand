@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { recents as recentsDb } from '../lib/db';
-import { pickRepoDirectories } from '../lib/dialog';
+import { pickCodeWorkspaceFile, pickRepoDirectories } from '../lib/dialog';
 import { pathKey, pathLeaf, repoFamilyName } from '../lib/repoIdentity';
-import { tauri } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 
@@ -27,6 +27,7 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeId = useWorkspaces((s) => s.activeWorkspaceId);
   const create = useWorkspaces((s) => s.create);
+  const importWorkspace = useWorkspaces((s) => s.importCodeWorkspace);
   const rename = useWorkspaces((s) => s.rename);
   const remove = useWorkspaces((s) => s.remove);
   const addRepo = useWorkspaces((s) => s.addRepo);
@@ -117,6 +118,24 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
     }
   }, []);
 
+  // Import a .code-workspace as a new workspace and select it for curation;
+  // skipped folders surface in the same message slot as add-from-disk errors.
+  const importFromFile = async () => {
+    const file = await pickCodeWorkspaceFile();
+    if (!file) return;
+    setAddError(null);
+    try {
+      const r = await importWorkspace(file);
+      setSelectedId(r.id);
+      if (r.skipped.length > 0) {
+        setAddError(`Skipped (not a git repository): ${r.skipped.join(', ')}`);
+      }
+      void refreshRecents();
+    } catch (e) {
+      setAddError(`Import failed: ${errMessage(e)}`);
+    }
+  };
+
   // Add repos picked from the native folder dialog. Each pick is validated +
   // canonicalized through `repo_open` (membership keys on canonical paths),
   // and recorded in recents so it shows up with a proper name from now on.
@@ -178,6 +197,15 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
             >
               <Icon name="plus" size={13} />
               <span className="label">New workspace</span>
+            </button>
+            <button
+              type="button"
+              className="ws-mgr-ws new"
+              title="Create a workspace from a VS Code .code-workspace file"
+              onClick={() => void importFromFile()}
+            >
+              <Icon name="folder-open" size={13} />
+              <span className="label">Import .code-workspace…</span>
             </button>
           </div>
 

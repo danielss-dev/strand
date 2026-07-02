@@ -451,7 +451,21 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     manager grew its own create path (a "+ New workspace" row in the list;
     creating was switcher-menu-only before): the workspace is spawned with a
     placeholder name and the name field autofocuses with the text selected.
-  - ☐ `.code-workspace` import
+  - ☑ `.code-workspace` import (2026-07-02): palette "Import
+    .code-workspace…" and an "Import .code-workspace…" row in the manager's
+    workspace list create a named workspace from a VS Code workspace file.
+    Parsing is pure TS (`lib/codeWorkspace.ts`, unit-tested): JSONC-tolerant
+    (string-aware comment + trailing-comma stripping), local `path` entries
+    only (remote `uri` ignored), relative paths joined against the file's
+    directory *without* canonicalizing — each folder is validated through
+    `repoOpen` and the canonical `meta.path` is what gets stored (the
+    Windows re-spelling rule). File reading is a new gated IPC command
+    (`workspace_file_read` in `strand-tauri` — name must end
+    `.code-workspace`, ≤1 MB, so it can't be repurposed as a generic file
+    reader; unit-tested). `useWorkspaces.importCodeWorkspace` returns
+    added/skipped; non-repo folders are reported (toast / manager message),
+    only zero-repos is an error. Verified end-to-end against the running
+    Tauri app over CDP (import → open → members tabbed; error + gate probes).
   - ☐ Workspace Review follow-ups: hunk-level stage/discard, notes +
     repo-grouped feedback export, ⌘F across member pools, per-worktree
     members.
