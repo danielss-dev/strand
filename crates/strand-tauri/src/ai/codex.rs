@@ -43,16 +43,12 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
     let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
-    let status = super::provider_status(super::AiProvider::Openai, cli_override);
-    if !status.logged_in {
-        return Err("Not signed in — open Settings → AI and sign in with ChatGPT.".into());
-    }
 
     let full_prompt = format!(
         "{prompt}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}"
     );
 
-    run_capture(
+    match run_capture(
         &bin,
         &[
             "exec",
@@ -64,7 +60,13 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
             &full_prompt,
         ],
         Some(repo_path),
-    )
+    ) {
+        Ok(out) => Ok(out),
+        Err(err) => {
+            let logged_in = status(cli_override).logged_in;
+            Err(super::map_cli_failure(logged_in, "Codex", err))
+        }
+    }
 }
 
 fn not_installed() -> String {

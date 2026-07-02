@@ -15,7 +15,7 @@ import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
-import { gitErrorHint, tauri } from '../lib/tauri';
+import { AI_AUTH_REQUIRED, gitErrorHint, tauri } from '../lib/tauri';
 import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
 import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
@@ -1246,7 +1246,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   const [submitting, setSubmitting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
-  const [aiReady, setAiReady] = useState(false);
+  const [aiInstalled, setAiInstalled] = useState(false);
 
   // Recent-messages dropdown state.
   const [recentOpen, setRecentOpen] = useState(false);
@@ -1266,10 +1266,10 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
     void tauri
       .aiProviderStatus(aiProvider, openaiCli, anthropicCli)
       .then((s) => {
-        if (!cancelled) setAiReady(s.installed && s.logged_in);
+        if (!cancelled) setAiInstalled(s.installed);
       })
       .catch(() => {
-        if (!cancelled) setAiReady(false);
+        if (!cancelled) setAiInstalled(false);
       });
     return () => {
       cancelled = true;
@@ -1296,8 +1296,19 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
       );
       applyMessage({ subject: msg.subject, body: msg.body ?? '' });
     } catch (e) {
+      const msg = gitErrorHint(e);
+      if (msg.startsWith(AI_AUTH_REQUIRED)) {
+        try {
+          await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
+          setCommitError('Browser opened — complete sign-in, then click Suggest again.');
+        } catch (loginErr) {
+          console.error('ai provider login failed', loginErr);
+          setCommitError(gitErrorHint(loginErr));
+        }
+        return;
+      }
       console.error('suggest commit message failed', e);
-      setCommitError(gitErrorHint(e));
+      setCommitError(msg);
     } finally {
       setSuggesting(false);
     }
@@ -1358,13 +1369,13 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   }
 
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
-  const suggestDisabled = suggesting || submitting || !canCommit || !aiReady;
+  const suggestDisabled = suggesting || submitting || !canCommit || !aiInstalled;
   const suggestTitle = suggesting
     ? 'Generating commit message…'
     : !canCommit
       ? 'Stage changes to suggest a commit message'
-      : !aiReady
-        ? 'Sign in under Settings → AI to enable suggestions'
+      : !aiInstalled
+        ? 'Install the CLI (Settings → AI) to enable suggestions'
         : 'Suggest commit message from staged changes';
 
   return (

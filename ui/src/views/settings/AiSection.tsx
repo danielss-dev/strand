@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { errMessage, tauri } from '../../lib/tauri';
 import type { AiProvider, AiProviderStatus } from '../../lib/types';
@@ -8,6 +8,15 @@ const PROVIDERS: { id: AiProvider; label: string }[] = [
   { id: 'openai', label: 'OpenAI (ChatGPT subscription)' },
   { id: 'anthropic', label: 'Anthropic (Claude Code CLI)' },
 ];
+
+type CliStatus = AiProviderStatus | null;
+
+function formatCliStatus(status: CliStatus, cliLabel: string): string {
+  if (!status) return 'Not checked yet.';
+  if (!status.installed) return `${cliLabel} CLI not found on PATH or at the custom path above.`;
+  if (status.logged_in) return status.account_hint ?? 'Signed in';
+  return 'Installed but not signed in';
+}
 
 /**
  * AI — commit message suggestions via vendor CLIs (Codex / Claude Code).
@@ -19,30 +28,34 @@ export function AiSection() {
   const anthropicCli = useSettings((s) => s.anthropicCli);
   const set = useSettings((s) => s.set);
 
-  const [status, setStatus] = useState<AiProviderStatus | null>(null);
+  const [openaiStatus, setOpenaiStatus] = useState<CliStatus>(null);
+  const [anthropicStatus, setAnthropicStatus] = useState<CliStatus>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const s = await tauri.aiProviderStatus(aiProvider, openaiCli, anthropicCli);
-      setStatus(s);
-    } catch (e) {
-      setMessage(errMessage(e));
-      setStatus(null);
-    }
-  }, [aiProvider, openaiCli, anthropicCli]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  async function login() {
+  const checkBoth = useCallback(async () => {
     setBusy(true);
     setMessage(null);
     try {
-      await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
-      setMessage('Browser opened — complete sign-in there, then click Refresh status.');
+      const [openai, anthropic] = await Promise.all([
+        tauri.aiProviderStatus('openai', openaiCli, anthropicCli),
+        tauri.aiProviderStatus('anthropic', openaiCli, anthropicCli),
+      ]);
+      setOpenaiStatus(openai);
+      setAnthropicStatus(anthropic);
+    } catch (e) {
+      setMessage(errMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [openaiCli, anthropicCli]);
+
+  async function login(provider: AiProvider) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await tauri.aiProviderLogin(provider, openaiCli, anthropicCli);
+      setMessage('Browser opened — complete sign-in there, then click Check CLI status.');
     } catch (e) {
       setMessage(errMessage(e));
     } finally {
@@ -50,12 +63,12 @@ export function AiSection() {
     }
   }
 
-  async function logout() {
+  async function logout(provider: AiProvider) {
     setBusy(true);
     setMessage(null);
     try {
-      await tauri.aiProviderLogout(aiProvider, openaiCli, anthropicCli);
-      await refresh();
+      await tauri.aiProviderLogout(provider, openaiCli, anthropicCli);
+      await checkBoth();
       setMessage('Signed out.');
     } catch (e) {
       setMessage(errMessage(e));
@@ -66,16 +79,8 @@ export function AiSection() {
 
   const panelHint =
     aiProvider === 'openai'
-      ? 'Uses your ChatGPT subscription via the Codex CLI. Install from developers.openai.com/codex if missing.'
-      : 'Uses the Claude Code CLI (`claude`). For API billing, run `claude auth login --console` in a terminal once.';
-
-  const statusLine = !status
-    ? 'Checking…'
-    : !status.installed
-      ? 'CLI not found on PATH'
-      : status.logged_in
-        ? status.account_hint ?? 'Signed in'
-        : 'Not signed in';
+      ? 'Uses your ChatGPT subscription via the Codex CLI. Sign-in is prompted when you first suggest a message.'
+      : 'Uses the Claude Code CLI (`claude`). Sign-in is prompted when you first suggest a message.';
 
   return (
     <section className="settings-section" aria-label="AI">
@@ -100,44 +105,80 @@ export function AiSection() {
       </div>
 
       <div className="settings-field">
-        <span className="settings-field-label">Status</span>
-        <p className="settings-hint">{statusLine}</p>
-        <div className="settings-row">
-          <button type="button" className="btn primary" disabled={busy} onClick={() => void login()}>
-            {aiProvider === 'openai' ? 'Sign in with ChatGPT' : 'Sign in to Claude Code'}
-          </button>
-          <button type="button" className="btn" disabled={busy || !status?.logged_in} onClick={() => void logout()}>
-            Sign out
-          </button>
-          <button type="button" className="btn" disabled={busy} onClick={() => void refresh()}>
-            Refresh status
-          </button>
-        </div>
-        {message && <p className="settings-hint">{message}</p>}
-      </div>
-
-      <div className="settings-field">
-        <span className="settings-field-label">Custom Codex CLI path</span>
+        <span className="settings-field-label">Codex CLI</span>
         <input
           type="text"
           className="clone-input"
           aria-label="Custom Codex CLI path"
           placeholder="Leave empty to use codex on PATH"
           value={openaiCli ?? ''}
-          onChange={(e) => set('openaiCli', e.target.value.trim() || null)}
+          onChange={(e) => {
+            setOpenaiStatus(null);
+            set('openaiCli', e.target.value.trim() || null);
+          }}
         />
+        <p className="settings-hint">{formatCliStatus(openaiStatus, 'Codex')}</p>
+        <div className="settings-row">
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void login('openai')}
+          >
+            Sign in with ChatGPT
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || !openaiStatus?.logged_in}
+            onClick={() => void logout('openai')}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div className="settings-field">
-        <span className="settings-field-label">Custom Claude CLI path</span>
+        <span className="settings-field-label">Claude Code CLI</span>
         <input
           type="text"
           className="clone-input"
           aria-label="Custom Claude CLI path"
           placeholder="Leave empty to use claude on PATH"
           value={anthropicCli ?? ''}
-          onChange={(e) => set('anthropicCli', e.target.value.trim() || null)}
+          onChange={(e) => {
+            setAnthropicStatus(null);
+            set('anthropicCli', e.target.value.trim() || null);
+          }}
         />
+        <p className="settings-hint">{formatCliStatus(anthropicStatus, 'Claude Code')}</p>
+        <div className="settings-row">
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void login('anthropic')}
+          >
+            Sign in to Claude Code
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || !anthropicStatus?.logged_in}
+            onClick={() => void logout('anthropic')}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-field">
+        <div className="settings-row">
+          <button type="button" className="btn primary" disabled={busy} onClick={() => void checkBoth()}>
+            Check CLI status
+          </button>
+        </div>
+        {message && <p className="settings-hint">{message}</p>}
       </div>
     </section>
   );

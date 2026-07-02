@@ -12,6 +12,18 @@ mod prompt;
 use serde::{Deserialize, Serialize};
 use strand_core::diff::FileDiff;
 
+/// Prefix for errors where the vendor CLI is installed but not signed in.
+/// The UI opens the provider login flow when it sees this.
+pub const AI_AUTH_REQUIRED: &str = "AI_AUTH_REQUIRED:";
+
+pub(crate) fn map_cli_failure(logged_in: bool, provider_label: &str, err: String) -> String {
+    if logged_in {
+        err
+    } else {
+        format!("{AI_AUTH_REQUIRED} {provider_label} is not signed in.")
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AiProvider {
@@ -71,4 +83,21 @@ pub fn suggest_commit_message(
         AiProvider::Anthropic => claude::suggest(repo_path, &text, cli_override)?,
     };
     parse::parse_suggestion(&raw)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_cli_failure_prompts_login_when_logged_out() {
+        let err = map_cli_failure(false, "Claude Code", "exit 1".into());
+        assert!(err.starts_with(AI_AUTH_REQUIRED));
+    }
+
+    #[test]
+    fn map_cli_failure_preserves_error_when_logged_in() {
+        let err = map_cli_failure(true, "Claude Code", "rate limited".into());
+        assert_eq!(err, "rate limited");
+    }
 }

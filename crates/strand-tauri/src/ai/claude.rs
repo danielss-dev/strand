@@ -58,18 +58,12 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
-    let status = super::provider_status(super::AiProvider::Anthropic, cli_override);
-    if !status.logged_in {
-        return Err(
-            "Not signed in — open Settings → AI and sign in to Claude Code, or run `claude auth login --console` for API billing.".into(),
-        );
-    }
 
     let full_prompt = format!(
         "{prompt}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}"
     );
 
-    run_capture(
+    match run_capture(
         &bin,
         &[
             "-p",
@@ -85,8 +79,13 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
             "*",
         ],
         Some(repo_path),
-    )
-    .and_then(extract_claude_print_output)
+    ) {
+        Ok(out) => extract_claude_print_output(out),
+        Err(err) => {
+            let logged_in = status(cli_override).logged_in;
+            Err(super::map_cli_failure(logged_in, "Claude Code", err))
+        }
+    }
 }
 
 /// Claude `-p --output-format json` wraps the model text in a JSON envelope.

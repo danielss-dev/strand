@@ -994,4 +994,9 @@ to `claude` is the supported path for Claude Code users.
 - Spawn argv directly (no shell), same safety model as `external.rs`.
 - Disable tool use in headless CLI invocations (`--tools ""`, read-only Codex
   sandbox) so suggestion runs can't mutate the repo.
-- Settings → AI owns sign-in UX; CommitBar only checks `ai_provider_status`.
+- Don't gate Suggest on upfront sign-in — run the vendor CLI first; on failure,
+  check `auth status` / `login status` on the bin and only then open the login
+  flow (`AI_AUTH_REQUIRED` prefix from Rust → UI calls `ai_provider_login`).
+- Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
+  **Check CLI status** button — no auto auth probe on open. Optional manual
+  sign-in/out per CLI remains.

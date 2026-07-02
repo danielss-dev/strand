@@ -45,6 +45,9 @@ function progressChannel(onProgress?: (p: Progress) => void): Channel<Progress> 
   return channel;
 }
 
+/** Prefix returned when a vendor CLI is installed but not signed in. */
+export const AI_AUTH_REQUIRED = 'AI_AUTH_REQUIRED:';
+
 /**
  * Pull a human message out of a caught value. Tauri command rejections come
  * back as the serialized `CmdError` — a plain `{ message }` object, *not* an
