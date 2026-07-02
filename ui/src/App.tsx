@@ -196,6 +196,10 @@ export function App() {
   const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
   const stagedCount = useRepo((s) => s.stagedDiffs.length);
   const baselineDiffCount = useRepo((s) => s.baselineDiffs.length);
+  // Workspace list + active id feed the palette's Workspaces group — a
+  // handful of user-created entries, so subscribing whole is cheap.
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
@@ -227,7 +231,9 @@ export function App() {
   const [worktreeOpen, setWorktreeOpen] = useState(false);
   // null = closed; otherwise the repo whose rail tile is being customized.
   const [iconDialog, setIconDialog] = useState<{ path: string; name: string } | null>(null);
-  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
+  // false = closed; 'create' opens the manager mid-create (palette "New
+  // workspace…") — the dialog spawns a workspace and focuses its name field.
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState<boolean | 'create'>(false);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -969,6 +975,8 @@ export function App() {
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
       { id: 'clone',   label: 'Clone repository…', group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
+      { id: 'workspace-new', label: 'New workspace…', group: 'Actions', keywords: 'workspace create group repositories multi repo', run: () => setWorkspaceManagerOpen('create') },
+      { id: 'workspace-manage', label: 'Manage workspaces…', group: 'Actions', keywords: 'workspace edit curate repositories add remove rename delete', run: () => setWorkspaceManagerOpen(true) },
     ];
     // Repo-scoped actions only make sense — and only succeed — with a repo
     // open, so don't surface them (the network ones would fail confusingly).
@@ -1117,6 +1125,27 @@ export function App() {
         },
       });
     }
+    // Workspace switching — one row per workspace (Default included), shown
+    // only once a named workspace exists; with none, "switch" is meaningless.
+    const workspaceActions: PaletteAction[] =
+      workspaces.some((w) => w.id !== DEFAULT_WORKSPACE_ID)
+        ? workspaces.map((w) => {
+            const isActive = (activeWorkspaceId ?? DEFAULT_WORKSPACE_ID) === w.id;
+            const n = w.repoPaths.length;
+            return {
+              id: `workspace:${w.id}`,
+              label: w.id === DEFAULT_WORKSPACE_ID ? 'Default' : w.name,
+              group: 'Workspaces',
+              keywords: 'workspace open switch group',
+              meta: isActive ? 'active' : `${n} repo${n === 1 ? '' : 's'}`,
+              metaLabel: isActive
+                ? 'active workspace'
+                : `${n} repositor${n === 1 ? 'y' : 'ies'}`,
+              ...(isActive ? { icon: 'check' as const } : {}),
+              run: () => { void useWorkspaces.getState().openWorkspace(w.id); },
+            };
+          })
+        : [];
     const recentActions: PaletteAction[] = recents.map((r) => ({
       id: `recent:${r.path}`,
       label: r.name,
@@ -1126,14 +1155,15 @@ export function App() {
       icon: 'history',
       run: () => { void openByPath(r.path); },
     }));
-    return [...base, ...repoActions, ...recentActions];
+    return [...base, ...repoActions, ...workspaceActions, ...recentActions];
   }, [setView, selectFile, onSync, onPull, onPush, openViaDialog, openByPath, setTheme, recents,
       pushAllTags, showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
-      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab]);
+      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab,
+      workspaces, activeWorkspaceId]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1381,7 +1411,10 @@ export function App() {
       )}
 
       {workspaceManagerOpen && (
-        <WorkspaceManagerDialog onClose={() => setWorkspaceManagerOpen(false)} />
+        <WorkspaceManagerDialog
+          initialCreate={workspaceManagerOpen === 'create'}
+          onClose={() => setWorkspaceManagerOpen(false)}
+        />
       )}
 
       {!isTauri() && !meta && (

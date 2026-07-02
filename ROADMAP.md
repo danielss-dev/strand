@@ -826,6 +826,21 @@ queue live, which the single-repo store never did. Verified: `tsc`, `vitest`
 repos and clamps, Space flips 0/3 → 1/3 with the section count following,
 row-visibility gate at ≥2 members).
 
+**Workspaces — Phase 3 kick, palette entries (2026-07-02):** Workspace
+management joined the command palette, closing the keyboard-first gap. A new
+**Workspaces** palette group lists every workspace (Default included, active
+check-marked, repo counts as meta) — it shows once a named workspace exists
+and is part of the empty-query set, so switching is ⌘K → pick; rows run the
+same `openWorkspace` path as the switcher menu. The Actions group gains
+"New workspace…" and "Manage workspaces…"; create routes into
+`WorkspaceManagerDialog` in a new create mode (`initialCreate`), and the
+manager itself grew a "+ New workspace" row (creating was switcher-menu-only
+before) that spawns the workspace with a placeholder name and autofocuses
+the name field with the text selected — type to replace, Enter to commit.
+Verified: `tsc`, `vitest` (158), `vite build`. Remaining Phase 3:
+`.code-workspace` import + the Workspace Review follow-ups (tracked in
+TASKS).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

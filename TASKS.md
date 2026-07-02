@@ -440,10 +440,21 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   notes, and ⌘F stay in the per-repo Review (deliberate v1 cuts — hunk
   staging needs per-path `apply_patch` plumbing; cross-repo note export needs
   a repo-grouped feedback format).
-- ☐ Workspace polish (Phase 3): command-palette entries for workspace
-  management (create/open/switch), `.code-workspace` import, and Workspace
-  Review follow-ups: hunk-level stage/discard, notes + repo-grouped feedback
-  export, ⌘F across member pools, per-worktree members.
+- ◐ Workspace polish (Phase 3):
+  - ☑ Command-palette entries for workspace management (2026-07-02): a
+    **Workspaces** palette group — one row per workspace (Default included;
+    active one check-marked, others show a repo-count meta; the group appears
+    once a named workspace exists and is included in the empty-query groups,
+    so ⌘K → pick is a two-keystroke switch) running `openWorkspace`; Actions
+    gain "New workspace…" + "Manage workspaces…". "New workspace…" opens
+    `WorkspaceManagerDialog` in create mode (new `initialCreate` prop) — the
+    manager grew its own create path (a "+ New workspace" row in the list;
+    creating was switcher-menu-only before): the workspace is spawned with a
+    placeholder name and the name field autofocuses with the text selected.
+  - ☐ `.code-workspace` import
+  - ☐ Workspace Review follow-ups: hunk-level stage/discard, notes +
+    repo-grouped feedback export, ⌘F across member pools, per-worktree
+    members.
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

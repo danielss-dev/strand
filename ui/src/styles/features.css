@@ -3208,6 +3208,14 @@ textarea.clone-input {
   color: var(--text-dim);
   font-family: var(--font-mono);
 }
+/* The create row reads as an affordance, not a workspace. */
+.ws-mgr-ws.new {
+  margin-top: 4px;
+  color: var(--text-dim);
+}
+.ws-mgr-ws.new:hover {
+  color: var(--text);
+}
 
 .ws-mgr-editor {
   flex: 1;

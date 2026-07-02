@@ -18,10 +18,15 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
  * Membership edits are durable and take effect on the next open of that
  * workspace; for the *active* one the rail/strip re-filter live (an added
  * repo opens in the background and appears, a removed one hides).
+ *
+ * `initialCreate` (palette "New workspace…") starts a create on mount: the
+ * workspace is spawned immediately with a placeholder name and the name
+ * field focused with its text selected — type to replace, Enter to commit.
  */
-export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
+export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCreate?: boolean; onClose: () => void }) {
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeId = useWorkspaces((s) => s.activeWorkspaceId);
+  const create = useWorkspaces((s) => s.create);
   const rename = useWorkspaces((s) => s.rename);
   const remove = useWorkspaces((s) => s.remove);
   const addRepo = useWorkspaces((s) => s.addRepo);
@@ -33,6 +38,9 @@ export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
   const named = workspaces.filter((w) => w.id !== DEFAULT_WORKSPACE_ID);
 
   const [selectedId, setSelectedId] = useState(activeId ?? DEFAULT_WORKSPACE_ID);
+  // The workspace just created here (if any) — its name field autofocuses
+  // with the placeholder selected so typing replaces it.
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   // Error from the last "add from disk" attempt (e.g. a non-repo folder).
   const [addError, setAddError] = useState<string | null>(null);
   const selected =
@@ -90,6 +98,25 @@ export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
     setSelectedId(DEFAULT_WORKSPACE_ID);
   };
 
+  // Create-then-rename: the workspace exists immediately (placeholder name,
+  // empty membership — the add list is right below), and the name field takes
+  // focus with the text selected so typing replaces it.
+  const createWorkspace = async () => {
+    const id = await create('Workspace', []);
+    setSelectedId(id);
+    setJustCreatedId(id);
+  };
+
+  // Palette "New workspace…" lands here mid-create. Ref-guarded so
+  // StrictMode's double-run of the mount effect can't create two.
+  const initialCreateRan = useRef(false);
+  useEffect(() => {
+    if (initialCreate && !initialCreateRan.current) {
+      initialCreateRan.current = true;
+      void createWorkspace();
+    }
+  }, []);
+
   // Add repos picked from the native folder dialog. Each pick is validated +
   // canonicalized through `repo_open` (membership keys on canonical paths),
   // and recorded in recents so it shows up with a proper name from now on.
@@ -144,9 +171,14 @@ export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
                 onSelect={() => setSelectedId(w.id)}
               />
             ))}
-            {named.length === 0 && (
-              <div className="ws-mgr-hint">Create workspaces from the switcher menu.</div>
-            )}
+            <button
+              type="button"
+              className="ws-mgr-ws new"
+              onClick={() => void createWorkspace()}
+            >
+              <Icon name="plus" size={13} />
+              <span className="label">New workspace</span>
+            </button>
           </div>
 
           {/* Right: repos of the selected workspace */}
@@ -162,6 +194,7 @@ export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
                     <NameField
                       key={selected.id}
                       initial={selected.name}
+                      autoFocus={selected.id === justCreatedId}
                       onCommit={(v) => void rename(selected.id, v)}
                     />
                   )}
@@ -244,8 +277,10 @@ export function WorkspaceManagerDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** Rename field that commits on blur or Enter (not per keystroke, so a rename
- *  isn't a burst of SQLite writes). Reset by keying on the workspace id. */
-function NameField({ initial, onCommit }: { initial: string; onCommit: (name: string) => void }) {
+ *  isn't a burst of SQLite writes). Reset by keying on the workspace id.
+ *  `autoFocus` (just-created workspaces) also selects the placeholder text so
+ *  typing replaces it. */
+function NameField({ initial, onCommit, autoFocus }: { initial: string; onCommit: (name: string) => void; autoFocus?: boolean }) {
   const [value, setValue] = useState(initial);
   const commit = () => {
     const trimmed = value.trim();
@@ -257,6 +292,8 @@ function NameField({ initial, onCommit }: { initial: string; onCommit: (name: st
       className="clone-input ws-mgr-name"
       value={value}
       aria-label="Workspace name"
+      autoFocus={autoFocus}
+      onFocus={(e) => { if (autoFocus) e.currentTarget.select(); }}
       onChange={(e) => setValue(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
