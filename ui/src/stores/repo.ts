@@ -1,14 +1,12 @@
 import { create } from 'zustand';
 
 import {
-  commitMessages as commitMessagesDb,
   recents as recentsDb,
   remoteTagsCache,
   repoDiffMode,
   reviewSession,
   settings as settingsDb,
   type StoredBaseline,
-  type StoredMessage,
 } from '../lib/db';
 import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
@@ -210,10 +208,6 @@ export interface RepoState {
    * triggers {@link RepoState.refreshReflog}. */
   reflog: ReflogEntry[];
 
-  /** Recent commit messages for the active repo, newest first. Powers the
-   * dropdown on the commit subject field. */
-  recentMessages: StoredMessage[];
-
   recents: RecentRepo[];
 
   view: View;
@@ -281,8 +275,6 @@ export interface RepoState {
   /** Open a worktree's directory as its own repo tab (a worktree path is a
    * valid repo path — this is just {@link RepoState.openRepo}). */
   openWorktree(path: string): Promise<void>;
-  /** Re-read the recent commit messages for the active repo. */
-  refreshRecentMessages(): Promise<void>;
 
   /** Refresh status + diffs together — what every write op runs afterward. */
   refreshLocalChanges(): Promise<void>;
@@ -718,7 +710,6 @@ const EMPTY_ACTIVE = {
   submodules: [] as Submodule[],
   worktrees: [] as Worktree[],
   reflog: [] as ReflogEntry[],
-  recentMessages: [] as StoredMessage[],
 };
 
 /**
@@ -861,7 +852,6 @@ export const useRepo = create<RepoState>((set, get) => ({
       // refreshLocalChanges is snapshot-based (covers meta/refs/submodules);
       // worktrees aren't in the snapshot, so refresh them explicitly.
       get().refreshWorktrees(),
-      get().refreshRecentMessages(),
       get().loadReviewSession(),
     ]);
   },
@@ -913,7 +903,6 @@ export const useRepo = create<RepoState>((set, get) => ({
       void Promise.all([
         get().refreshLocalChanges(),
         get().refreshLog(),
-        get().refreshRecentMessages(),
         get().loadReviewSession(),
       ]);
     }
@@ -935,7 +924,6 @@ export const useRepo = create<RepoState>((set, get) => ({
       get().refreshLog(),
       get().refreshStashes(),
       get().refreshWorktrees(),
-      get().refreshRecentMessages(),
       get().loadReviewSession(),
     ]);
   },
@@ -1301,18 +1289,6 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().openRepo(path);
   },
 
-  async refreshRecentMessages() {
-    const path = get().activePath;
-    if (!path) return;
-    try {
-      const messages = await commitMessagesDb.list(path, 8);
-      if (get().activePath !== path) return;
-      set({ recentMessages: messages });
-    } catch (e) {
-      console.warn('commitMessages.list failed', e);
-    }
-  },
-
   async stage(file) {
     const path = get().activePath;
     if (!path) return;
@@ -1437,18 +1413,10 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     await tauri.repoCommit(path, subject, body, amend);
-    // Stash the message for the recent-messages dropdown (best-effort — a
-    // history miss must never block the commit flow).
-    try {
-      await commitMessagesDb.record(path, subject, body ?? '');
-    } catch (e) {
-      console.warn('commitMessages.record failed', e);
-    }
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
       get().refreshStashes(),
-      get().refreshRecentMessages(),
     ]);
   },
 

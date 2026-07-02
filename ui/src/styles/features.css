@@ -413,19 +413,6 @@
 .cb-top .subject::placeholder {
   color: var(--text-dim);
 }
-.cb-top .recent-btn {
-  display: flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 7px;
-  border-radius: 5px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.cb-top .recent-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
 .cb-top .suggest-btn {
   display: flex;
   align-items: center;
@@ -484,50 +471,6 @@
   background: oklch(0 0 0 / 0.2);
   color: oklch(0 0 0 / 0.6);
   margin-left: 2px;
-}
-
-.recent-pop {
-  position: absolute;
-  right: 0;
-  left: 0;
-  /* The commit form lives at the bottom of the window, so the dropdown
-     opens upward off the subject field. */
-  bottom: calc(100% + 4px);
-  background: var(--bg-elev);
-  border-radius: 7px;
-  box-shadow:
-    0 0 0 0.5px var(--border-strong),
-    var(--shadow-2);
-  z-index: 10;
-  max-height: 280px;
-  overflow-y: auto;
-}
-.recent-head {
-  padding: 6px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-  border-bottom: 0.5px solid var(--border);
-}
-.recent-item {
-  padding: 6px 10px;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-2);
-  border-bottom: 0.5px solid var(--border);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.recent-item:last-child {
-  border-bottom: 0;
-}
-.recent-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 /* Body textarea — compact by default, expands when focused or typed-into */
@@ -840,22 +783,6 @@
 .commit-form .subject::placeholder {
   color: var(--text-dim);
 }
-.commit-form .recent-btn {
-  display: flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 5px;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-}
-.commit-form .recent-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
 .commit-form .body {
   width: 100%;
   border: 0;
@@ -2888,38 +2815,6 @@ button {
 .toast.progress .icon-spin {
   color: var(--accent);
   display: inline-flex;
-}
-
-/* ─── Recent commit messages dropdown ───
- * Scope the items to `.recent-pop` so the generic `.recent-item` (used by
- * the sidebar empty-state recents list) doesn't override the dropdown's
- * single-line, monospace presentation. */
-.recent-pop .recent-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 0;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-2);
-  border-bottom: 0.5px solid var(--border);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.recent-pop .recent-item:last-child {
-  border-bottom: 0;
-}
-.recent-pop .recent-item:hover,
-.recent-pop .recent-item.selected {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.recent-pop:focus,
-.recent-pop:focus-visible {
-  outline: none;
 }
 
 /* ─── Commit graph multi-select ─── */

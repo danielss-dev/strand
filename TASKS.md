@@ -266,7 +266,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Capabilities: granted `sql:allow-execute` so SQLite writes land
   (`sql:default` only covers reads — silent failure trap, see
   `docs/learnings.md`)
-- ☑ SQLite migration v2: `commit_messages` (per-repo commit message history)
+- ☑ SQLite migration v2: `commit_messages` (per-repo commit message history —
+  the feature it backed was removed 2026-07-02; the migration stays, applied
+  migrations are append-only, the table is just unused)
 - ☑ **Heal stale migration checksums (data-persistence bug fixed 2026-06-29).**
   sqlx records a SHA-384 checksum of each migration's SQL and refuses to open a
   DB whose stored checksum no longer matches the binary ("migration N was
@@ -566,9 +568,11 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Per-row Discard action (`FileSection.menuItems` adds a confirm-gated
   "Discard…" item to the Unstaged file-row right-click menu, wired to
   `discardMany`; acts on the row or the whole multi-selection)
-- ☑ Recent-messages dropdown on the subject field (SQLite `commit_messages`
-  per-repo history via migration v2; keyboard-navigable popover that fills
-  subject + body; opens with the history button or ArrowDown in the field)
+- ✗ Recent-messages dropdown on the subject field — **removed 2026-07-02**
+  (shipped 2026-05-29, cut on user feedback: resurfacing stale old commit
+  messages made no sense next to AI suggestions). The `commit_messages`
+  table stays (migration v2 is applied and append-only) but is no longer
+  read or written.
 - ☑ Hunk / change-block stage + unstage UI (`HunkAnnotatedDiff` renders
   one `<PierreFileDiff/>` per file with `lineAnnotations` driving an
   inline Stage / Discard pair on each change block — Unstage on the
