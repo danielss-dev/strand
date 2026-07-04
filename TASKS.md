@@ -436,10 +436,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (`components/ReviewModeToggle.tsx`, the `HistoryModeToggle` pattern) in the
   main header flips between them — rendered only when the active workspace
   has ≥2 members. Also reachable via palette "Show: Workspace Review" and
-  rebindable `view-workspace-review` (`Mod+6`). Notes and ⌘F stay in the
-  per-repo Review (deliberate v1 cuts — cross-repo note export needs a
-  repo-grouped feedback format); hunk-level stage/discard landed 2026-07-03
-  (see Phase 3 below).
+  rebindable `view-workspace-review` (`Mod+6`). The v1 cuts have since
+  landed under Phase 3: hunk-level stage/discard (2026-07-03), notes +
+  repo-grouped feedback export (2026-07-04), and ⌘F across member pools
+  (2026-07-04).
 - ◐ Workspace polish (Phase 3):
   - ☑ Command-palette entries for workspace management (2026-07-02): a
     **Workspaces** palette group — one row per workspace (Default included;
@@ -502,8 +502,26 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     and a live browser-mode pass against the dev vite (seeded members:
     m → editor → chip + ✎1 + count, block-Note pre-anchors L2, export
     matched the format byte-for-byte across 2 repos, × removal recounts).
-  - ☐ Workspace Review follow-ups: ⌘F across member pools, per-worktree
-    members.
+  - ☑ ⌘F across member pools in Workspace Review (2026-07-04): the in-diff
+    search bar works in the workspace lens — Mod+F (and the palette "Search
+    in diff…" signal, which now stays on `workspace-review` instead of
+    bouncing to Local Changes) opens the shared `DiffSearchBar` over a pool
+    flattening every member's diffs, each entry `tag`ged with its owning
+    repo path so identical file paths in two members stay distinct. Stepping
+    selects across repo boundaries (`select({repo, file})`) and un-collapses
+    the landing member's section; the preview line is repo-prefixed
+    ("alpha · src/auth.ts") via a new optional `pathLabel` prop on
+    `DiffSearchBar` (single-repo callers unchanged). A same-day follow-up
+    (user feedback) made every ⌘F jump land on the matched **line**, not
+    just the file — see the in-diff search line under Local Changes for the
+    `lib/diffJump.ts` mechanics, shared by all three views. Verified: `tsc`,
+    `vitest` (184), and live browser-mode passes against the dev vite
+    (seeded members sharing a file path: 5-match census, cross-repo
+    stepping + wrap landing dead-center on a deletion 4,501 rows into a
+    5,003-row virtualized diff in both stacked and split layouts,
+    collapsed-section un-collapse on jump, Esc close, palette signal opens
+    in place).
+  - ☐ Workspace Review follow-ups: per-worktree members.
 
 ### Topbar
 - ☑ Layout + native-chrome alignment
@@ -651,8 +669,18 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   staging sides here, the whole review set there — tracking old/new line
   numbers across hunks; `DiffSearchBar.tsx` floats over the diff pane with
   Enter/⇧Enter wrap-stepping, i/N counter, and a path+line preview of the
-  current match. Stepping selects the matched *file*; scrolling to the exact
-  line inside Pierre's virtualized diff is a deliberate cut.)
+  current match. Stepping selects the matched *file* and — since 2026-07-04 —
+  lands on the matched **line**: `lib/diffJump.ts` finds the row in Pierre's
+  shadow DOM (`data-line`/`data-alt-line`/`data-line-type` on content rows)
+  and centers + accent-flashes it (inline style — outer CSS can't cross the
+  shadow boundary, inherited `--accent` can); when the row isn't mounted
+  (virtualized panes, lazy bodies) it first seeks proportionally via
+  `lineToRow` (`lib/changeMap.ts`, same rendered-row space as the minimap so
+  fractions agree) and retries until the row exists. Deletions anchor
+  old-side, adds/context new-side; a jump that swaps files parks a pending
+  target the settled pane consumes — and the first probe waits a frame so it
+  can't false-match the old file's rows. Shared by Local Changes, Review,
+  and Workspace Review.)
 - ☑ Image diff preview (binary images — png/jpg/gif/webp/bmp/ico/avif/svg —
   render side-by-side Before/After panes (`components/ImageDiff.tsx`, blobs
   via `repo_file_blob`) instead of "Binary file": token-based checkerboard,

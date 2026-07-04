@@ -19,24 +19,31 @@ export function focusDiffSearchInput(): void {
 }
 
 /**
- * Floating ⌘F text-search bar over a diff pane (Local Changes / Review).
- * Matches are computed with `searchDiffs` over the whole pool; Enter /
- * Shift+Enter (or ↓/↑) step through them with wrapping, calling `onJump`
- * so the owner selects the matched file. The preview line under the input
- * carries the match's path + text, since jumping only lands on the file —
- * not yet the exact line inside the virtualized diff.
+ * Floating ⌘F text-search bar over a diff pane (Local Changes / Review /
+ * Workspace Review). Matches are computed with `searchDiffs` over the whole
+ * pool; Enter / Shift+Enter (or ↓/↑) step through them with wrapping,
+ * calling `onJump` so the owner selects the matched file and scrolls its
+ * diff to the matched line (`lib/diffJump`). The preview line under the
+ * input carries the match's path + text.
  */
 export function DiffSearchBar({
   diffs,
   onJump,
   onClose,
   placeholder,
+  pathLabel,
 }: {
   /** `tag` rides through to each match (see {@link DiffMatch.tag}). */
   diffs: (Pick<FileDiff, 'path' | 'patch' | 'binary'> & { tag?: unknown })[];
   onJump: (m: DiffMatch) => void;
   onClose: () => void;
   placeholder?: string;
+  /**
+   * Preview-line label for a match; defaults to the file path. Lets a pool
+   * spanning several repos (Workspace Review) disambiguate identical paths
+   * by prefixing the owning repo, resolved from the match's `tag`.
+   */
+  pathLabel?: (m: DiffMatch) => string;
 }) {
   const [query, setQuery] = useState('');
   // The matcher runs on a debounced copy so typing into a 40-file pool
@@ -151,11 +158,14 @@ export function DiffSearchBar({
         </button>
       </div>
       {current && (
-        <div className="ds-preview" title={`${current.path} — ${current.lineText.trim()}`}>
+        <div
+          className="ds-preview"
+          title={`${pathLabel ? pathLabel(current) : current.path} — ${current.lineText.trim()}`}
+        >
           <span className={'ds-kind ' + current.kind} aria-hidden="true">
             {current.kind === 'add' ? '+' : current.kind === 'del' ? '−' : '·'}
           </span>
-          <span className="ds-path">{current.path}</span>
+          <span className="ds-path">{pathLabel ? pathLabel(current) : current.path}</span>
           <span className="ds-line">{current.lineText.trim()}</span>
         </div>
       )}

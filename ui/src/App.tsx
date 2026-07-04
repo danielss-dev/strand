@@ -1016,7 +1016,7 @@ export function App() {
         // route to Local Changes first (the signal is consumed on mount).
         { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: formatBinding('Mod+F', platform), keywords: 'find in diff grep text content search', run: () => {
           const v = useRepo.getState().view;
-          if (v !== 'local' && v !== 'review') setView('local');
+          if (v !== 'local' && v !== 'review' && v !== 'workspace-review') setView('local');
           requestDiffSearch();
         } },
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
