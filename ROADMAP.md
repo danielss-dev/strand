@@ -959,6 +959,38 @@ split layouts, the cross-repo pending path landed on the other member's
 deletion after the settle swap, and the census/wrap/Esc/palette checks from
 the first pass still hold. Remaining Phase 3: per-worktree members.
 
+**Per-worktree review members (2026-07-04) — Phase 3 complete:** The last
+Phase 3 item, closing the gap between the two organizing units of the
+AI-review workflow: agents run one **worktree** per feature, but Workspace
+Review only aggregated each member repo's *main* working tree, so an agent's
+worktree changes were invisible from the workspace lens. Now every **open
+linked-worktree tab** of a member repo reviews as its own section, right
+after its family's — `activeWorkspaceMembers` (`lib/workspaceReview.ts`)
+appends worktree tabs matched via `mainPathFromCommonDir(common_dir)`.
+Workspace *membership* is deliberately untouched: it stays family-level
+(main paths only), and opening the worktree tab is the explicit act that
+puts it in the review — the same rule by which worktrees inherit rail
+visibility, and consistent with the explicit-only membership model. Each
+worktree slice reviews in its own mode (session when its path has a pinned
+baseline — the Worktrees dashboard's Review pins merge-base baselines per
+worktree path — else inbox) with its own reviewed marks and notes, which
+already persisted per repo path, so no persistence changes and no Rust
+changes. A `MemberReview.worktree` label (branch-derived, refreshed with
+meta so an agent checkout renames it) disambiguates every surface —
+"web · feat-auth" in the diff-pane chip, ⌘F previews, aria-labels, and the
+feedback export's `##` heading; a neutral `worktree` tag chip marks the
+section header; toolbar + main-header counts split into "N repos + M
+worktrees". `ReviewModeToggle` counts review members, so **one repo with an
+agent worktree open now surfaces the [Repository | Workspace] toggle** —
+aggregating the main checkout and the worktree is exactly what the workspace
+lens adds there. Verified: `tsc`, `vitest` (185, +1 ordering/exclusion
+test), `vite build`, and a live browser-mode pass against the dev vite
+(seeded main + worktree + second-repo tabs: resolution order and labels,
+worktree chip, j/k crossing into the worktree slice, ⌘F preview
+"web · feat-auth · src/auth.ts", a note on the worktree file exporting under
+`## web · feat-auth (branch feat-auth)`, and the toggle appearing at 1 repo
++ 1 worktree).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

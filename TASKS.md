@@ -438,9 +438,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   has ≥2 members. Also reachable via palette "Show: Workspace Review" and
   rebindable `view-workspace-review` (`Mod+6`). The v1 cuts have since
   landed under Phase 3: hunk-level stage/discard (2026-07-03), notes +
-  repo-grouped feedback export (2026-07-04), and ⌘F across member pools
-  (2026-07-04).
-- ◐ Workspace polish (Phase 3):
+  repo-grouped feedback export (2026-07-04), ⌘F across member pools
+  (2026-07-04), and per-worktree review members (2026-07-04).
+- ☑ Workspace polish (Phase 3) — complete 2026-07-04:
   - ☑ Command-palette entries for workspace management (2026-07-02): a
     **Workspaces** palette group — one row per workspace (Default included;
     active one check-marked, others show a repo-count meta; the group appears
@@ -521,7 +521,30 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     5,003-row virtualized diff in both stacked and split layouts,
     collapsed-section un-collapse on jump, Esc close, palette signal opens
     in place).
-  - ☐ Workspace Review follow-ups: per-worktree members.
+  - ☑ Per-worktree review members (2026-07-04): every **open linked-worktree
+    tab** of a member repo reviews as its own section in Workspace Review,
+    right after its family's — `activeWorkspaceMembers` appends worktree tabs
+    matched via `mainPathFromCommonDir(common_dir)`, so workspace membership
+    itself stays family-level (main paths only; opening the worktree tab is
+    the explicit act that adds it to the review, mirroring how worktrees
+    inherit rail visibility). Each worktree slice reviews in its own mode
+    with its own baseline, reviewed marks, and notes — those already persist
+    per repo *path*, so a worktree's records were always distinct. A new
+    `MemberReview.worktree` label (branch-derived, refreshed with meta)
+    disambiguates every surface: "web · feat-auth" in the diff-pane repo
+    chip, ⌘F preview lines, section aria-labels, and the feedback export's
+    `##` heading; a neutral `worktree` tag chip (`.wsr-wt`) marks the section
+    header, and the toolbar + main-header counts split into "N repos + M
+    worktrees". `ReviewModeToggle` now counts review members, so one repo
+    with an agent worktree open surfaces the [Repository | Workspace] toggle
+    — aggregating the main checkout and the worktree is exactly what the
+    workspace lens adds. Verified: `tsc`, `vitest` (185, +1
+    ordering/exclusion test), `vite build`, and a live browser-mode pass
+    against the dev vite (seeded main + worktree + second-repo tabs:
+    resolution order & labels, worktree chip, j/k crossing into the worktree
+    slice, ⌘F preview "web · feat-auth · src/auth.ts", note → export heading
+    `## web · feat-auth (branch feat-auth)`, toggle appearing at 1 repo +
+    1 worktree).
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

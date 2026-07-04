@@ -4594,6 +4594,17 @@ textarea.clone-input {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
+/* "worktree" tag on a per-worktree review section — neutral (the accent
+   stays reserved for the mode chip), same chip geometry. */
+.wsr-wt {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
 .wsr-count {
   flex: none;
   font-variant-numeric: tabular-nums;
