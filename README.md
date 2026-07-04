@@ -55,8 +55,10 @@ keyboard alone, and the mouse stays first-class.
 
 - **Review view (⌘4)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've
-  reviewed, and a pinnable baseline captures everything since a commit —
-  including work the agent already staged or committed.
+  reviewed, a pinnable baseline captures everything since a commit —
+  including work the agent already staged or committed — and a change map
+  beside the scrollbar shows where every edit sits in the file (click to
+  jump).
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ahead/behind, last commit,
   and one-click Review pinned where the branch diverged from main. Worktree

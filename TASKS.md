@@ -969,6 +969,13 @@ tree: watch the agent work, review fast, accept or reject safely.
   step (page-scroll fallback on read-only session diffs), `s` stage, `d`-`d`
   discard, `c` jump to the commit form. Local Changes keeps its own staging
   loop (j/k/n/p/s/d-d/c, no review marking).
+- ☑ Change map in the Review diff pane (`components/DiffMinimap.tsx` — an
+  overview ruler beside the `.rv-diff-scroll` scrollbar marking every change
+  block in the file: add / del / mixed marks + a visible-region thumb;
+  click or drag jumps. Positions come from `computeChangeMap` in
+  `lib/changeMap.ts` — patch text → rendered-row fractions, layout-aware
+  (split collapses mixed runs to the taller column). Shared by Review and
+  Workspace Review; Local Changes untouched, its pane concatenates files.)
 - ☑ Bulk verdicts with a safety net: "Stage reviewed (n)" stages files whose
   review mark still matches; "Discard unreviewed (n)" is two-step-armed; any
   multi-file `discardMany` takes an automatic snapshot stash first

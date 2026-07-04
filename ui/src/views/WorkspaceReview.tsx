@@ -4,6 +4,7 @@ import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parsePatchCached } from '../components/Diff';
+import { DiffMinimap } from '../components/DiffMinimap';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
@@ -521,7 +522,8 @@ export function WorkspaceReview() {
                     </button>
                   </span>
                 </div>
-                <Virtualizer className="rv-diff-scroll">
+                <div className="rv-diff-body">
+                  <Virtualizer className="rv-diff-scroll">
                   {displayed.diff.binary && isImagePath(displayed.diff.path) ? (
                     // Old side: the member's session baseline, or its *index*
                     // in inbox mode (HEAD would lie for a partially staged
@@ -573,7 +575,15 @@ export function WorkspaceReview() {
                       }}
                     />
                   )}
-                </Virtualizer>
+                  </Virtualizer>
+                  {!displayed.diff.binary && displayed.diff.patch.length > 0 && (
+                    <DiffMinimap
+                      patch={displayed.diff.patch}
+                      layout={layout}
+                      hostSelector=".rv-diff-scroll"
+                    />
+                  )}
+                </div>
               </div>
             ) : (
               <div className="lc-empty">

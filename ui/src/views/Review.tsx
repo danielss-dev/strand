@@ -4,6 +4,7 @@ import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parsePatchCached } from '../components/Diff';
+import { DiffMinimap } from '../components/DiffMinimap';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
@@ -710,8 +711,10 @@ export function Review() {
                   )}
                   {/* Pierre's Virtualizer makes it the scroll container and
                       window-renders the diff rows — whole-file patches of any
-                      size (lockfiles…) mount only what's on screen. */}
-                  <Virtualizer className="rv-diff-scroll">
+                      size (lockfiles…) mount only what's on screen. The change
+                      map rides beside it as an overview ruler. */}
+                  <div className="rv-diff-body">
+                    <Virtualizer className="rv-diff-scroll">
                     {displayed.binary && isImagePath(displayed.path) ? (
                       // Old side: the session baseline, or the *index* in
                       // inbox mode — the unstaged diff's base (HEAD would lie
@@ -763,7 +766,15 @@ export function Review() {
                         }
                       />
                     )}
-                  </Virtualizer>
+                    </Virtualizer>
+                    {!displayed.binary && displayed.patch.length > 0 && (
+                      <DiffMinimap
+                        patch={displayed.patch}
+                        layout={layout}
+                        hostSelector=".rv-diff-scroll"
+                      />
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="lc-empty">

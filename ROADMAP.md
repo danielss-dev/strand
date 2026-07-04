@@ -884,6 +884,20 @@ baseline-pinned member rendered zero hunk buttons. Plus `tsc`, `vitest` (171),
 `vite build`. Remaining Phase 3: notes + repo-grouped feedback export, ⌘F
 across member pools, per-worktree members.
 
+**Review change map (2026-07-04):** The Review diff pane (both lenses) grew an
+overview ruler beside the scrollbar — `components/DiffMinimap.tsx` marks every
+change block in the whole-file diff (add / del / mixed = del-over-add) at its
+proportional position, with a translucent visible-region thumb; click or drag
+jumps the pane. Positions come from `computeChangeMap` (`lib/changeMap.ts`,
+unit-tested): a pure patch-text scan into *rendered row* space, so fractions
+line up with Pierre's Virtualizer even before it finishes measuring, and
+layout-aware (split collapses a mixed run to its taller column). Verified on
+the running app over WebView2 CDP: marker census matched the file's change
+blocks in both views, click at fraction f landed at `f·scrollHeight −
+clientHeight/2` exactly, `n`/`p` landings agreed with the marker positions,
+and flipping `diffMode` to split recomputed totals/heights. Plus `tsc`,
+`vitest` (176, +5 `changeMap`).
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)
