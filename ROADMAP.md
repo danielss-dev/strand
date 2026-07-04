@@ -923,6 +923,42 @@ clipboard capture matched the format byte-for-byte across both repos
 including the L13 excerpt; × removal recounted 3→2). Remaining Phase 3:
 ⌘F across member pools, per-worktree members.
 
+**Workspace Review ⌘F across member pools (2026-07-04):** The last
+review-lens parity gap. The in-diff search bar now works in the workspace
+lens, searching every member's pool at once: Mod+F — or the palette
+"Search in diff…", which now stays on the workspace view instead of
+bouncing to Local Changes — opens the shared `DiffSearchBar` over a
+flattened pool where each entry is `tag`ged with its owning repo path
+(the tag mechanism built for Local Changes' mixed unstaged/staged pool),
+so two members' identical file paths stay distinct. Stepping through
+matches crosses repo boundaries (`select({repo, file})` on the workspace
+store) and auto-expands the landing member's collapsed section so the
+selected row is visible; the preview line disambiguates with a repo
+prefix ("alpha · src/auth.ts") via a new optional `pathLabel` prop on
+`DiffSearchBar` (single-repo callers unchanged). A same-day follow-up (user
+feedback: "the search just moves you to the file, not the place") closed the
+original v1 cut for **all three** search surfaces (Local Changes, Review,
+Workspace Review): a ⌘F jump now lands on the matched **line**. New
+`lib/diffJump.ts` — `matchTarget` picks the anchor (deletions old-side,
+adds/context new-side) and `scrollToDiffLine` finds the row inside Pierre's
+`<diffs-container>` shadow DOM (content rows carry `data-line` /
+`data-alt-line` / `data-line-type`; gutter rows have no `data-line`, so no
+false matches), centers it, and flashes it accent-tinted via inline style
+(outer CSS can't cross the shadow boundary; inherited `--accent` can). When
+the row isn't mounted — Pierre's Virtualizer windows big diffs to ~300 rows;
+Local Changes bodies mount viewport-lazily — it first seeks proportionally
+using a new pure `lineToRow` (`lib/changeMap.ts`, +5 tests): the same
+rendered-row space as the minimap, so `row/total` is the scroll fraction
+even mid-measure, then retries until the row exists. Jumps that swap files
+park a pending target that the `useSettled` pane consumes on catch-up (or
+drops as stale), and the first DOM probe waits a frame so a file-swap can't
+false-match the old file's rows. Verified with `tsc`, `vitest` (184), and a
+live browser-mode pass: on a 5,003-row virtualized diff the jump landed
+dead-center (0px off) on a deletion 4,501 rows deep in both stacked and
+split layouts, the cross-repo pending path landed on the other member's
+deletion after the settle swap, and the census/wrap/Esc/palette checks from
+the first pass still hold. Remaining Phase 3: per-worktree members.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

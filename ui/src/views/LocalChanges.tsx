@@ -11,6 +11,7 @@ import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
+import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
 import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
@@ -371,7 +372,14 @@ export function LocalChanges() {
               {searchOpen && (
                 <DiffSearchBar
                   diffs={searchPool}
-                  onJump={(m) => selectFileRow({ file: m.path, staged: m.tag === true })}
+                  onJump={(m) => {
+                    selectFileRow({ file: m.path, staged: m.tag === true });
+                    // No patch/layout: this pane stacks files (sticky headers,
+                    // lazy bodies), so proportional math doesn't apply —
+                    // scrollToDiffLine's retries wait out the mount instead.
+                    const target = matchTarget(m);
+                    if (target) scrollToDiffLine('.lc-diff-scroll', target);
+                  }}
                   onClose={closeSearch}
                   placeholder="Search changes…"
                 />

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parsePatchCached } from '../components/Diff';
 import { DiffMinimap } from '../components/DiffMinimap';
+import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
@@ -15,6 +16,8 @@ import {
   type TreeMenuItem,
   type TreeRowDecoration,
 } from '../components/PierreTree';
+import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
+import type { DiffMatch } from '../lib/diffSearch';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { buildWorkspaceReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
@@ -52,8 +55,8 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * a note to the selected file, persisted to the owning repo's review session
  * (one note store, two lenses). "Copy feedback" exports every member's notes
  * as one repo-grouped Markdown prompt (`buildWorkspaceReviewFeedback`).
- * ⌘F stays per-repo — `o` (or the header button) jumps into the file's own
- * repo Review for it.
+ * ⌘F searches every member's pool at once — each match is tagged with its
+ * owning repo, and stepping through matches crosses repo boundaries.
  */
 export function WorkspaceReview() {
   const members = useWorkspaceReview((s) => s.members);
@@ -155,9 +158,28 @@ export function WorkspaceReview() {
   // Whole-file patches are too heavy to mount per keystroke — swap the pane
   // once the queue position settles (single steps stay instant).
   const displayed = useSettled(current);
+  // A ⌘F jump whose file isn't displayed yet parks its line target here until
+  // the settled pane catches up; consumed — or dropped as stale — below.
+  const pendingJumpRef = useRef<{ repo: string; file: string; target: DiffLineTarget } | null>(
+    null,
+  );
   useEffect(() => {
-    document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
-  }, [displayed]);
+    const pending = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    if (
+      pending &&
+      displayed &&
+      pathKey(displayed.member.path) === pathKey(pending.repo) &&
+      displayed.diff.path === pending.file
+    ) {
+      scrollToDiffLine('.rv-diff-scroll', pending.target, {
+        patch: displayed.diff.patch,
+        layout,
+      });
+    } else {
+      document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
+    }
+  }, [displayed, layout]);
 
   // Read the displayed file's notes off the LIVE member slice, not the
   // settled snapshot — a note added just now must paint without waiting for
@@ -211,6 +233,39 @@ export function WorkspaceReview() {
     const v = verdicts.get(qk(current.member.path, current.diff.path));
     if (v) toggleReviewed(current.member.path, current.diff.path, v.hash);
   }, [current, verdicts, toggleReviewed]);
+
+  // In-diff text search (⌘F): floats over the diff pane and searches EVERY
+  // member's pool at once — a jump selects the matched file, crossing repo
+  // boundaries. Each pool entry is tagged with its owning repo path, since a
+  // file path alone is ambiguous across members.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
+  const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
+  useEffect(() => {
+    if (!diffSearchSignal) return;
+    setSearchOpen(true);
+    // The palette restores focus on close — claim it back for the input.
+    focusDiffSearchInput();
+    clearDiffSearch();
+  }, [diffSearchSignal, clearDiffSearch]);
+  const searchPool = useMemo(
+    () =>
+      members.flatMap((m) =>
+        m.diffs.map((d) => ({ path: d.path, patch: d.patch, binary: d.binary, tag: m.path })),
+      ),
+    [members],
+  );
+  const memberNameByKey = useMemo(
+    () => new Map(members.map((m) => [pathKey(m.path), m.name])),
+    [members],
+  );
+  const searchPathLabel = useCallback(
+    (m: DiffMatch) => {
+      const name = typeof m.tag === 'string' ? memberNameByKey.get(pathKey(m.tag)) : undefined;
+      return name ? `${name} · ${m.path}` : m.path;
+    },
+    [memberNameByKey],
+  );
 
   // Failed write ops surface here instead of vanishing into the console.
   const [opError, setOpError] = useState<string | null>(null);
@@ -321,6 +376,14 @@ export function WorkspaceReview() {
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+        const ft = e.target as HTMLElement | null;
+        if (ft?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
+        e.preventDefault();
+        setSearchOpen(true);
+        focusDiffSearchInput(); // already open → refocus + select
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target instanceof HTMLElement ? e.target : null;
       if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"]')) {
@@ -397,6 +460,41 @@ export function WorkspaceReview() {
       return next;
     });
   }, []);
+
+  /** ⌘F jump: select the match's file (landing on the matched line — right
+   * away when the file is already displayed, else via the pending target the
+   * settle effect consumes) and un-collapse its member section so the
+   * selected row is actually visible in the queue column. */
+  const jumpToMatch = useCallback(
+    (m: DiffMatch) => {
+      if (typeof m.tag !== 'string') return;
+      const repo = m.tag;
+      setCollapsed((cur) => {
+        const key = pathKey(repo);
+        if (!cur.has(key)) return cur;
+        const next = new Set(cur);
+        next.delete(key);
+        return next;
+      });
+      const target = matchTarget(m);
+      if (target) {
+        if (
+          displayed &&
+          pathKey(displayed.member.path) === pathKey(repo) &&
+          displayed.diff.path === m.path
+        ) {
+          scrollToDiffLine('.rv-diff-scroll', target, {
+            patch: displayed.diff.patch,
+            layout,
+          });
+        } else {
+          pendingJumpRef.current = { repo, file: m.path, target };
+        }
+      }
+      select({ repo, file: m.path });
+    },
+    [select, displayed, layout],
+  );
 
   const activateFiles = useCallback(
     (member: MemberReview, paths: string[]) => {
@@ -545,6 +643,7 @@ export function WorkspaceReview() {
           </Panel>
           <PanelResizeHandle className="rs-handle vert" />
           <Panel minSize={30}>
+            <div className="diff-search-host">
             {displayed ? (
               <div className="rv-diff">
                 <div className="rv-file-head">
@@ -776,6 +875,16 @@ export function WorkspaceReview() {
                 )}
               </div>
             )}
+            {searchOpen && (
+              <DiffSearchBar
+                diffs={searchPool}
+                onJump={jumpToMatch}
+                onClose={() => setSearchOpen(false)}
+                placeholder="Search workspace diffs…"
+                pathLabel={searchPathLabel}
+              />
+            )}
+            </div>
           </Panel>
         </PanelGroup>
       </div>
@@ -788,6 +897,7 @@ export function WorkspaceReview() {
         <span className="kbd-inline">s</span> stage
         <span className="kbd-inline">d d</span> discard
         <span className="kbd-inline">o</span> open in repo
+        <span className="kbd-inline">⌘F</span> search
       </div>
 
       {opError ? (

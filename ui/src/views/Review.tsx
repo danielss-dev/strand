@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
@@ -17,6 +17,7 @@ import {
   type TreeRowDecoration,
 } from '../components/PierreTree';
 import { hashFileDiff as hashOf } from '../lib/patch';
+import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
 import { useSettled } from '../lib/useSettled';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
@@ -128,12 +129,22 @@ export function Review() {
   // tracks `current` instantly and the diff pane swaps on `displayed` once
   // the queue position settles.
   const displayed = useSettled(current);
-  // Each file starts at its top. Without this, the virtualized pane keeps the
+  // A ⌘F jump whose file isn't displayed yet parks its line target here until
+  // the settled pane catches up; consumed — or dropped as stale — below.
+  const pendingJumpRef = useRef<{ path: string; target: DiffLineTarget } | null>(null);
+  // Each file starts at its top (without this, the virtualized pane keeps the
   // previous file's scroll offset — deep into bun.lock, then a short file
-  // lands in an empty window.
+  // lands in an empty window) — unless a ⌘F jump is waiting for this file,
+  // which lands on the matched line instead.
   useEffect(() => {
-    document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
-  }, [displayed]);
+    const pending = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    if (pending && displayed && displayed.path === pending.path) {
+      scrollToDiffLine('.rv-diff-scroll', pending.target, { patch: displayed.patch, layout });
+    } else {
+      document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
+    }
+  }, [displayed, layout]);
 
   // While the reviewer reads the displayed file, pre-highlight the next few
   // queue entries in Pierre's worker pool, so landing on them paints with
@@ -785,7 +796,19 @@ export function Review() {
               {searchOpen && (
                 <DiffSearchBar
                   diffs={pool}
-                  onJump={(m) => selectReviewFile(m.path)}
+                  onJump={(m) => {
+                    const target = matchTarget(m);
+                    if (target && displayed?.path === m.path) {
+                      // Same file: the pane won't remount, scroll right away.
+                      scrollToDiffLine('.rv-diff-scroll', target, {
+                        patch: displayed.patch,
+                        layout,
+                      });
+                    } else if (target) {
+                      pendingJumpRef.current = { path: m.path, target };
+                    }
+                    selectReviewFile(m.path);
+                  }}
                   onClose={() => setSearchOpen(false)}
                   placeholder="Search review diffs…"
                 />
