@@ -436,10 +436,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (`components/ReviewModeToggle.tsx`, the `HistoryModeToggle` pattern) in the
   main header flips between them — rendered only when the active workspace
   has ≥2 members. Also reachable via palette "Show: Workspace Review" and
-  rebindable `view-workspace-review` (`Mod+6`). Hunk-level actions,
-  notes, and ⌘F stay in the per-repo Review (deliberate v1 cuts — hunk
-  staging needs per-path `apply_patch` plumbing; cross-repo note export needs
-  a repo-grouped feedback format).
+  rebindable `view-workspace-review` (`Mod+6`). Notes and ⌘F stay in the
+  per-repo Review (deliberate v1 cuts — cross-repo note export needs a
+  repo-grouped feedback format); hunk-level stage/discard landed 2026-07-03
+  (see Phase 3 below).
 - ◐ Workspace polish (Phase 3):
   - ☑ Command-palette entries for workspace management (2026-07-02): a
     **Workspaces** palette group — one row per workspace (Default included;
@@ -466,9 +466,24 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     added/skipped; non-repo folders are reported (toast / manager message),
     only zero-repos is an error. Verified end-to-end against the running
     Tauri app over CDP (import → open → members tabbed; error + gate probes).
-  - ☐ Workspace Review follow-ups: hunk-level stage/discard, notes +
-    repo-grouped feedback export, ⌘F across member pools, per-worktree
-    members.
+  - ☑ Hunk-level stage / discard in Workspace Review (2026-07-03):
+    inbox-mode member diffs render through the shared `HunkAnnotatedDiff`
+    (was read-only `<Diff>`), with a new `onApplyBlock` override prop that
+    routes each sliced change block to the owning member repo —
+    `useWorkspaceReview.applyBlock` → `repo_apply_patch(path, …)` — instead
+    of the active tab; session-mode diffs stay read-only, matching the
+    single-repo Review. A block discard records the global single-undo
+    handle pinned to the member's path, and `undoDiscard` (repo.ts) now
+    forward-applies to the *recorded* repo rather than dropping the handle
+    when another tab is active — the Undo toast recovers a background-member
+    discard. Verified end-to-end against the running Tauri app over WebView2
+    CDP (stage one block of a background member → `MM` with only that block
+    staged; discard → toast → Undo restores the block while another repo is
+    active; session-mode member renders zero hunk buttons). The perf-gated
+    `window.__strand` hook now also exposes the `workspaces` +
+    `workspaceReview` stores for such harness runs.
+  - ☐ Workspace Review follow-ups: notes + repo-grouped feedback export,
+    ⌘F across member pools, per-worktree members.
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

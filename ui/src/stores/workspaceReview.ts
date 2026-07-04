@@ -87,6 +87,19 @@ interface WorkspaceReviewState {
   /** Discard files in a member repo, then refresh its slice. Destructive —
    * callers confirm first (matches `discardMany`: no automatic safety stash). */
   discardFiles(repoPath: string, files: string[]): Promise<void>;
+  /**
+   * Apply one sliced change block in a member repo (hunk-level Stage /
+   * Discard from the aggregated view — inbox-mode diffs only), then refresh
+   * its slice. A discard (`workdir_reverse`) records the global single-undo
+   * handle pinned to the member's path, so the Undo toast recovers it even
+   * while another repo is the active tab.
+   */
+  applyBlock(
+    repoPath: string,
+    slice: string,
+    target: 'index' | 'index_reverse' | 'workdir_reverse',
+    discardLabel: string,
+  ): Promise<void>;
 }
 
 /** Stale-response guard: bumped on every {@link WorkspaceReviewState.refreshAll}. */
@@ -274,6 +287,18 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
       if (!member) return;
       await tauri.repoDiscardMany(member.path, files);
+      await afterWrite(get, member.path);
+    },
+
+    async applyBlock(repoPath, slice, target, discardLabel) {
+      const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
+      if (!member) return;
+      await tauri.repoApplyPatch(member.path, slice, target);
+      // Mirror the single-repo discardPatch: stash the exact slice so
+      // undoDiscard can forward-apply it back into this member repo.
+      if (target === 'workdir_reverse') {
+        useRepo.setState({ lastDiscard: { patch: slice, label: discardLabel, path: member.path } });
+      }
       await afterWrite(get, member.path);
     },
   };
