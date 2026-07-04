@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { reviewSession, type StoredBaseline } from '../lib/db';
-import { pathKey, repoFamilyName } from '../lib/repoIdentity';
+import { pathKey, repoFamilyName, tabWorktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { FileDiff, ReviewNote } from '../lib/types';
 import {
@@ -14,8 +14,10 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './workspaces';
 
 /**
  * The aggregated workspace review (Workspaces Phase 2): one review pool per
- * member repo of the active workspace, fanned out over the same
- * path-parameterized diff IPC the single-repo Review uses — no Rust changes.
+ * member repo of the active workspace — plus one per **open linked worktree**
+ * of a member (Phase 3 "per-worktree members": a worktree is its own working
+ * tree, so it reviews as its own slice) — fanned out over the same
+ * path-parameterized diff IPC the single-repo Review uses. No Rust changes.
  *
  * Each member reviews in its own mode, exactly like its single-repo Review
  * would: **session** when that repo has a persisted baseline (`diff_since_full`
@@ -34,6 +36,9 @@ export interface MemberReview {
   path: string;
   /** Stable repo-family display name. */
   name: string;
+  /** Worktree label when this slice is an open linked worktree of a member
+   * repo (it reviews as its own section), `null` for the member repo itself. */
+  worktree: string | null;
   /** Checked-out branch label, or `null` until meta resolves. */
   branch: string | null;
   /** Shared git dir — keys the section's stable group color. */
@@ -207,6 +212,9 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     if (gen !== generation) return;
     patchMember(path, {
       name: repoFamilyName(meta),
+      // Re-derive from fresh meta: an agent checkout in the worktree moves
+      // its branch-derived label just like it moves `branch`.
+      worktree: meta.is_linked_worktree ? tabWorktreeName(meta) : null,
       branch: meta.detached ? `${meta.branch} (detached)` : meta.branch,
       commonDir: meta.common_dir,
       baseline,
@@ -241,6 +249,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
           return {
             path: r.path,
             name: old?.name ?? repoFamilyName(r.meta),
+            worktree: r.worktree,
             branch: old?.branch ?? r.meta?.branch ?? null,
             commonDir: old?.commonDir ?? r.meta?.common_dir ?? null,
             baseline: old?.baseline ?? null,
@@ -262,7 +271,10 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       if (!member) return;
       patchMember(path, { loading: true });
       const tab = useRepo.getState().tabs.find((t) => pathKey(t.path) === key);
-      await loadMember({ path: member.path, meta: tab?.meta ?? null }, generation);
+      await loadMember(
+        { path: member.path, meta: tab?.meta ?? null, worktree: member.worktree },
+        generation,
+      );
     },
 
     handleExternalChange(path) {

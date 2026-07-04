@@ -1687,8 +1687,15 @@ function MainHeader({
             ? `${baselineDiffs.length} files since ${baseline.short}`
             : `${unstagedCount} unstaged files`
           : view === 'workspace-review'
-            ? `${wsMembers.length} repo${wsMembers.length === 1 ? '' : 's'} · ` +
-              `${wsMembers.reduce((n, m) => n + m.diffs.length, 0)} files to review`
+            ? (() => {
+                const repos = wsMembers.filter((m) => m.worktree == null).length;
+                const wts = wsMembers.length - repos;
+                return (
+                  `${repos} repo${repos === 1 ? '' : 's'}` +
+                  (wts > 0 ? ` + ${wts} worktree${wts === 1 ? '' : 's'}` : '') +
+                  ` · ${wsMembers.reduce((n, m) => n + m.diffs.length, 0)} files to review`
+                );
+              })()
             : view === 'worktrees'
               ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
               : '';

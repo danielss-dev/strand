@@ -45,13 +45,62 @@ describe('activeWorkspaceMembers', () => {
       ws({ id: 'w1', repoPaths: ['D:/src/api', 'D:/src/web'] }),
     ];
     const members = activeWorkspaceMembers(workspaces, 'w1', tabs, DEFAULT_ID);
-    expect(members).toHaveLength(2);
+    expect(members).toHaveLength(3);
     // Resolved to the open tab's own spelling, so reviewSession keys match
     // the single-repo Review's.
-    expect(members[0]).toEqual({ path: 'D:\\src\\api', meta: tabs[0].meta });
-    // Not open (only its worktree is, and worktree tabs are not members):
-    // keeps the stored path, no meta.
-    expect(members[1]).toEqual({ path: 'D:/src/web', meta: null });
+    expect(members[0]).toEqual({ path: 'D:\\src\\api', meta: tabs[0].meta, worktree: null });
+    // The main repo isn't open: keeps the stored path, no meta…
+    expect(members[1]).toEqual({ path: 'D:/src/web', meta: null, worktree: null });
+    // …and its open linked worktree follows as its own review member,
+    // labeled by its checked-out branch.
+    expect(members[2]).toEqual({
+      path: 'D:\\src\\web.worktrees\\feat',
+      meta: tabs[1].meta,
+      worktree: 'main',
+    });
+  });
+
+  it('appends open worktree tabs right after their member, in tab order', () => {
+    const wtTabs = [
+      { path: '/src/web', meta: meta({ path: '/src/web', common_dir: '/src/web/.git' }) },
+      {
+        path: '/src/web.worktrees/feat-a',
+        meta: meta({
+          path: '/src/web.worktrees/feat-a',
+          branch: 'feat-a',
+          common_dir: '/src/web/.git',
+          is_linked_worktree: true,
+        }),
+      },
+      { path: '/src/api', meta: meta({ path: '/src/api', common_dir: '/src/api/.git' }) },
+      {
+        path: '/src/web.worktrees/feat-b',
+        meta: meta({
+          path: '/src/web.worktrees/feat-b',
+          branch: 'feat-b',
+          common_dir: '/src/web/.git',
+          is_linked_worktree: true,
+        }),
+      },
+      // A worktree of a repo that is NOT a member — must not appear.
+      {
+        path: '/src/other.worktrees/x',
+        meta: meta({
+          path: '/src/other.worktrees/x',
+          branch: 'x',
+          common_dir: '/src/other/.git',
+          is_linked_worktree: true,
+        }),
+      },
+    ];
+    const workspaces = [ws({ id: 'w1', repoPaths: ['/src/web', '/src/api'] })];
+    const members = activeWorkspaceMembers(workspaces, 'w1', wtTabs, DEFAULT_ID);
+    expect(members.map((m) => [m.path, m.worktree])).toEqual([
+      ['/src/web', null],
+      ['/src/web.worktrees/feat-a', 'feat-a'],
+      ['/src/web.worktrees/feat-b', 'feat-b'],
+      ['/src/api', null],
+    ]);
   });
 
   it('resolves null active id to the Default workspace', () => {

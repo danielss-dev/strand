@@ -10,8 +10,10 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
  * Review and the aggregated Workspace Review are two views of the same review
  * state, so they share one sidebar destination and this toggle flips the
  * lens in place. Renders nothing until the active workspace actually has
- * something to aggregate (≥ 2 member repos) — with one member the two lenses
- * are the same set of files.
+ * something to aggregate (≥ 2 review members — member repos plus their open
+ * linked worktrees) — with one member the two lenses are the same set of
+ * files. One repo with an agent worktree open counts as 2: aggregating the
+ * main checkout and the worktree is exactly what the workspace lens adds.
  */
 export function ReviewModeToggle() {
   const view = useRepo((s) => s.view);

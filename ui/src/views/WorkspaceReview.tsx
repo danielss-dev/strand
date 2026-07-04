@@ -38,7 +38,11 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * Phase 2). One queue over every member repo of the active workspace, grouped
  * repo → files: each member repo gets its own collapsible tree section, and
  * the right pane shows the selected file with whole-file context, exactly
- * like the single-repo Review.
+ * like the single-repo Review. Open linked worktrees of a member repo are
+ * review members too (Phase 3): each gets its own section right after its
+ * repo's, labeled "repo · worktree", with its own mode/baseline, reviewed
+ * marks, and notes — an agent worktree is its own working tree, so the main
+ * repo's diff can never show what changed there.
  *
  * Each member reviews in the mode its own Review session is in — **session**
  * when that repo has a pinned baseline, **inbox** (unstaged) otherwise — and
@@ -256,7 +260,7 @@ export function WorkspaceReview() {
     [members],
   );
   const memberNameByKey = useMemo(
-    () => new Map(members.map((m) => [pathKey(m.path), m.name])),
+    () => new Map(members.map((m) => [pathKey(m.path), memberLabel(m)])),
     [members],
   );
   const searchPathLabel = useCallback(
@@ -311,7 +315,7 @@ export function WorkspaceReview() {
     () =>
       members
         .map((m) => ({
-          repoName: m.name,
+          repoName: memberLabel(m),
           branch: m.branch,
           baselineShort: m.baseline?.short ?? null,
           files: collectFeedbackFiles(m.diffs, m.notes),
@@ -598,7 +602,8 @@ export function WorkspaceReview() {
     <div className="rv-wrap">
       <WorkspaceReviewToolbar
         workspaceName={workspaceName}
-        repoCount={members.length}
+        repoCount={members.filter((m) => m.worktree == null).length}
+        worktreeCount={members.filter((m) => m.worktree != null).length}
         reviewedCount={reviewedCount}
         total={total}
         loading={anyLoading}
@@ -652,7 +657,7 @@ export function WorkspaceReview() {
                     style={{ color: groupColor(displayed.member.commonDir ?? displayed.member.path) }}
                     title={displayed.member.path}
                   >
-                    {displayed.member.name}
+                    {memberLabel(displayed.member)}
                   </span>
                   <span className="path">{displayed.diff.path}</span>
                   <span className="stat-del">−{displayed.diff.dels}</span>
@@ -843,7 +848,7 @@ export function WorkspaceReview() {
                           displayed.member.path,
                           slice,
                           target,
-                          `Discarded a change in ${name} (${displayed.member.name})`,
+                          `Discarded a change in ${name} (${memberLabel(displayed.member)})`,
                         );
                       }}
                     />
@@ -922,6 +927,12 @@ function sameEntry(a: QueueEntry, b: QueueEntry): boolean {
   return pathKey(a.repo) === pathKey(b.repo) && a.file === b.file;
 }
 
+/** Display label for a member slice: the repo name, or "repo · worktree" for
+ * an open linked worktree reviewing as its own section. */
+function memberLabel(m: Pick<MemberReview, 'name' | 'worktree'>): string {
+  return m.worktree ? `${m.name} · ${m.worktree}` : m.name;
+}
+
 function isUnstaged(member: MemberReview, file: string): boolean {
   return member.unstaged.some((u) => u.path === file);
 }
@@ -993,7 +1004,7 @@ function MemberSection({
   return (
     <section
       className={'wsr-section' + (showTree ? ' open' : '')}
-      aria-label={`${member.name} review queue`}
+      aria-label={`${memberLabel(member)} review queue`}
     >
       <header className="wsr-section-head">
         <button
@@ -1001,7 +1012,7 @@ function MemberSection({
           className="wsr-fold"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          aria-label={(collapsed ? 'Expand ' : 'Collapse ') + member.name}
+          aria-label={(collapsed ? 'Expand ' : 'Collapse ') + memberLabel(member)}
         >
           <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={11} />
         </button>
@@ -1011,6 +1022,14 @@ function MemberSection({
           aria-hidden="true"
         />
         <span className="wsr-name" title={member.path}>{member.name}</span>
+        {member.worktree != null && (
+          <span
+            className="wsr-wt"
+            title={`Linked worktree — reviews its own working tree\n${member.path}`}
+          >
+            worktree
+          </span>
+        )}
         {member.branch && <span className="wsr-branch">{member.branch}</span>}
         <span className="wsr-mode" title={member.baseline ? 'Session mode — everything since the pinned baseline' : 'Inbox mode — unstaged changes'}>
           {mode}
@@ -1024,8 +1043,8 @@ function MemberSection({
           type="button"
           className="icon-btn wsr-open"
           onClick={onOpenInRepo}
-          title={`Open ${member.name} in its own Review`}
-          aria-label={`Open ${member.name} in its own Review`}
+          title={`Open ${memberLabel(member)} in its own Review`}
+          aria-label={`Open ${memberLabel(member)} in its own Review`}
         >
           <Icon name="external" size={11} />
         </button>
@@ -1063,6 +1082,7 @@ function MemberSection({
 function WorkspaceReviewToolbar({
   workspaceName,
   repoCount,
+  worktreeCount = 0,
   reviewedCount,
   total,
   loading,
@@ -1071,6 +1091,7 @@ function WorkspaceReviewToolbar({
 }: {
   workspaceName: string;
   repoCount: number;
+  worktreeCount?: number;
   reviewedCount: number;
   total: number;
   loading?: boolean;
@@ -1085,6 +1106,7 @@ function WorkspaceReviewToolbar({
         {workspaceName}
         <span className="wsr-chip-meta">
           · {repoCount} repo{repoCount === 1 ? '' : 's'}
+          {worktreeCount > 0 && ` + ${worktreeCount} worktree${worktreeCount === 1 ? '' : 's'}`}
         </span>
       </span>
       {total > 0 && (
