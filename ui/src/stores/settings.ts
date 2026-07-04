@@ -180,7 +180,7 @@ export const useSettings = create<SettingsState>()(
       accent: 'amber',
       platform: detectPlatform(),
       density: 'default',
-      repoNav: 'rail',
+      repoNav: 'tabs',
       zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,
