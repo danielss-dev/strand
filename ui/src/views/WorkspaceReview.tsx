@@ -26,7 +26,7 @@ import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useWorkspaceReview, type MemberReview } from '../stores/workspaceReview';
-import { scrollDiff, stepChangeBlock } from './LocalChanges';
+import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
 
 /**
  * Workspace Review — the aggregated cross-repo review surface (Workspaces
@@ -40,10 +40,13 @@ import { scrollDiff, stepChangeBlock } from './LocalChanges';
  * reviewed marks are shared with the per-repo session, so the two views are
  * lenses on one review state.
  *
- * Diffs render read-only here (hunk-level stage/discard stays in the
- * per-repo Review, which owns the active repo's patch plumbing); file-level
- * Stage / Discard fan out over the same path-parameterized IPC. `o` (or the
- * header button) jumps into the file's own repo Review for the full loop.
+ * Inbox-mode diffs carry the same per-block Stage / Discard actions as the
+ * single-repo Review, routed to the owning member repo via
+ * `useWorkspaceReview.applyBlock` (the member may be a background tab);
+ * session-mode diffs render read-only, exactly like the single-repo view.
+ * File-level Stage / Discard fan out over the same path-parameterized IPC.
+ * Notes and ⌘F stay per-repo — `o` (or the header button) jumps into the
+ * file's own repo Review for those.
  */
 export function WorkspaceReview() {
   const members = useWorkspaceReview((s) => s.members);
@@ -54,6 +57,7 @@ export function WorkspaceReview() {
   const toggleReviewed = useWorkspaceReview((s) => s.toggleReviewed);
   const stageFiles = useWorkspaceReview((s) => s.stageFiles);
   const discardFiles = useWorkspaceReview((s) => s.discardFiles);
+  const applyBlock = useWorkspaceReview((s) => s.applyBlock);
   const tick = useWorkspaceReview((s) => s.tick);
 
   const workspaces = useWorkspaces((s) => s.workspaces);
@@ -539,14 +543,34 @@ export function WorkspaceReview() {
                     <div className="lc-file-note">
                       {displayed.diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
                     </div>
-                  ) : (
-                    // Read-only whole-file diff; keyed by repo + file + content
-                    // so swapping files remounts the virtualized instance.
+                  ) : displayed.member.baseline ? (
+                    // Session diffs span commits — render read-only, like the
+                    // single-repo Review. Keyed by repo + file + content so
+                    // swapping files remounts the virtualized instance.
                     <Diff
                       key={`${pathKey(displayed.member.path)}:${displayed.diff.path}:${hashOf(displayed.diff)}`}
                       patch={displayed.diff.patch}
                       layout={layout}
                       hideFileHeader
+                    />
+                  ) : (
+                    // Inbox diffs are pure unstaged changes — full per-block
+                    // Stage / Discard applies, routed to the owning member
+                    // repo (which may be a background tab). Same remount key.
+                    <HunkAnnotatedDiff
+                      key={`${pathKey(displayed.member.path)}:${displayed.diff.path}:${hashOf(displayed.diff)}`}
+                      diff={displayed.diff}
+                      layout={layout}
+                      side="unstaged"
+                      onApplyBlock={(slice, target) => {
+                        const name = displayed.diff.path.split('/').pop() ?? displayed.diff.path;
+                        return applyBlock(
+                          displayed.member.path,
+                          slice,
+                          target,
+                          `Discarded a change in ${name} (${displayed.member.name})`,
+                        );
+                      }}
                     />
                   )}
                 </Virtualizer>

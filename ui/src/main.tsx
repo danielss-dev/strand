@@ -7,6 +7,8 @@ import { perfEnabled } from './lib/perf';
 import { isTauri } from './lib/tauri';
 import { useRepo } from './stores/repo';
 import { useSettings } from './stores/settings';
+import { useWorkspaceReview } from './stores/workspaceReview';
+import { useWorkspaces } from './stores/workspaces';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/chrome.css';
@@ -23,6 +25,8 @@ if (perfEnabled()) {
   (window as unknown as { __strand?: unknown }).__strand = {
     repo: useRepo,
     settings: useSettings,
+    workspaces: useWorkspaces,
+    workspaceReview: useWorkspaceReview,
   };
 }
 

@@ -862,6 +862,28 @@ tabbed, the all-non-repo fixture threw without creating anything, and the
 backend refused a non-workspace path. Remaining Phase 3: the Workspace
 Review follow-ups (tracked in TASKS).
 
+**Workspace Review hunk-level stage/discard (2026-07-03):** The biggest gap
+between the two review lenses is closed: inbox-mode member diffs in Workspace
+Review now carry the same per-block Stage / Discard actions as the single-repo
+Review, instead of rendering read-only. The shared `HunkAnnotatedDiff` gained
+an `onApplyBlock` override that hands the sliced change block to the caller
+instead of the active repo's patch plumbing; Workspace Review routes it through
+a new `useWorkspaceReview.applyBlock`, which fans `repo_apply_patch` to the
+owning member's path (the member can be a background tab) and refreshes that
+member's slice. Session-mode members stay read-only — their diffs span commits,
+exactly like the single-repo view. Block discards record the global single-undo
+handle pinned to the member's path, and `undoDiscard` now forward-applies to
+the repo the handle was *recorded in* rather than dropping it when another tab
+is active — so the Undo toast recovers a background-member discard (this also
+fixes the single-repo edge where switching tabs inside the 6s window made Undo
+a silent no-op). Verified end-to-end on the running Tauri app over WebView2 CDP
+with two scratch repos in a throwaway workspace: staging one of two blocks left
+the file `MM` with exactly that block in the index; discard → Undo restored the
+block in the background member while the other repo held focus; a
+baseline-pinned member rendered zero hunk buttons. Plus `tsc`, `vitest` (171),
+`vite build`. Remaining Phase 3: notes + repo-grouped feedback export, ⌘F
+across member pools, per-worktree members.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

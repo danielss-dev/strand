@@ -157,9 +157,11 @@ export interface RepoState {
    * Single-undo handle for the most recent discard. Discarding a change
    * block reverse-applies a sliced patch to the working tree; this keeps
    * that exact slice around so {@link RepoState.undoDiscard} can
-   * forward-apply it back. `path` pins it to the repo it came from so a
-   * stale handle can't be replayed against a different tab. Cleared once
-   * the undo toast times out (see `clearUndo`) or after an undo.
+   * forward-apply it back. `path` pins it to the repo it came from — the
+   * undo always applies there, never to whichever tab happens to be active
+   * (Workspace Review discards can target a background member repo).
+   * Cleared once the undo toast times out (see `clearUndo`) or after an
+   * undo.
    */
   lastDiscard: { patch: string; label: string; path: string } | null;
 
@@ -351,7 +353,8 @@ export interface RepoState {
    * forward-oriented patch (same one fed to `applyPatch(_, 'workdir_reverse')`).
    */
   discardPatch(slice: string, label: string): Promise<void>;
-  /** Re-apply the last discarded slice to the working tree, then clear the handle. */
+  /** Re-apply the last discarded slice to the working tree of the repo the
+   * handle is pinned to (not necessarily the active tab), then clear it. */
   undoDiscard(): Promise<void>;
   /** Drop the undo handle without re-applying (called when the toast times out). */
   clearUndo(): void;
@@ -1362,16 +1365,16 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
   async undoDiscard() {
     const last = get().lastDiscard;
-    const path = get().activePath;
-    // Guard the handle against the active repo: a discard recorded in one
-    // tab must not be replayed into another. A mismatch just drops it.
-    if (!last || !path || last.path !== path) {
-      set({ lastDiscard: null });
-      return;
-    }
+    if (!last) return;
     set({ lastDiscard: null });
-    await tauri.repoApplyPatch(path, last.patch, 'workdir');
-    await get().refreshLocalChanges();
+    // Apply to the repo the handle is pinned to — not the active tab. A
+    // Workspace Review discard can come from a background member repo, and
+    // replaying into the wrong repo stays impossible because the path rides
+    // the handle. Background members repaint via their watcher; only the
+    // active tab needs the explicit refresh.
+    await tauri.repoApplyPatch(last.path, last.patch, 'workdir');
+    const active = get().activePath;
+    if (active && samePath(active, last.path)) await get().refreshLocalChanges();
   },
   clearUndo: () => set({ lastDiscard: null }),
   setDiffMode(mode) {

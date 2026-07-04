@@ -824,6 +824,7 @@ export function HunkAnnotatedDiff({
   layout,
   side,
   onNoteBlock,
+  onApplyBlock,
 }: {
   diff: FileDiff;
   layout: 'unified' | 'split';
@@ -831,6 +832,11 @@ export function HunkAnnotatedDiff({
   /** When provided (the Review view), each change block grows a "Note"
    * action that hands its meta back for a line-anchored review note. */
   onNoteBlock?: (meta: BlockMeta) => void;
+  /** When provided (Workspace Review), sliced patches route here instead of
+   * the active repo's `useRepo.applyPatch` / `discardPatch` — the diff may
+   * belong to a background member repo. The override owns the follow-up
+   * refresh and, for discards, the single-undo handle. */
+  onApplyBlock?: (slice: string, target: ApplyTarget) => Promise<void>;
 }) {
   const applyPatch = useRepo((s) => s.applyPatch);
   const discardPatch = useRepo((s) => s.discardPatch);
@@ -1046,9 +1052,11 @@ export function HunkAnnotatedDiff({
     setApplyError(null);
     try {
       const slice = sliceChangeBlock(diff.patch, meta.hunkIndex, meta.contentIndex, direction);
-      // Discard routes through discardPatch so it records a single-undo
-      // handle; stage / unstage are non-destructive and don't need one.
-      if (target === 'workdir_reverse') {
+      if (onApplyBlock) {
+        await onApplyBlock(slice, target);
+      } else if (target === 'workdir_reverse') {
+        // Discard routes through discardPatch so it records a single-undo
+        // handle; stage / unstage are non-destructive and don't need one.
         const name = diff.path.split('/').pop() ?? diff.path;
         await discardPatch(slice, `Discarded a change in ${name}`);
       } else {
@@ -1133,7 +1141,7 @@ function mapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
   return true;
 }
 
-type ApplyTarget = 'index' | 'index_reverse' | 'workdir_reverse';
+export type ApplyTarget = 'index' | 'index_reverse' | 'workdir_reverse';
 
 function FileHeaderStrip({
   diff,
