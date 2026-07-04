@@ -4378,6 +4378,46 @@ textarea.clone-input {
   min-height: 0;
   overflow-y: auto;
 }
+/* Scroller + change map side by side under the file head. */
+.rv-diff-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Change map: an overview ruler beside the diff scrollbar marking where the
+   change blocks sit in the file — add / del / mixed, plus a translucent
+   thumb for the visible region. Click or drag anywhere on it to jump. */
+.diff-map {
+  flex: none;
+  width: 11px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: -0.5px 0 0 var(--border);
+  touch-action: none;
+}
+.diff-map .dm-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: oklch(0.5 0 0 / 0.16);
+  pointer-events: none;
+}
+.diff-map:hover .dm-view { background: oklch(0.5 0 0 / 0.28); }
+.diff-map .dm-mark {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+.diff-map .dm-mark.add { background: var(--add); }
+.diff-map .dm-mark.del { background: var(--del); }
+/* Mixed blocks render deletions above additions in unified view — mirror it. */
+.diff-map .dm-mark.mixed {
+  background: linear-gradient(180deg, var(--del) 0 50%, var(--add) 50% 100%);
+}
 
 /* Review notes: the per-file list between the file head and the diff, and
    the inline editor the m key opens above it. */
