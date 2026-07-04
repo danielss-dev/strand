@@ -898,6 +898,31 @@ clientHeight/2` exactly, `n`/`p` landings agreed with the marker positions,
 and flipping `diffMode` to split recomputed totals/heights. Plus `tsc`,
 `vitest` (176, +5 `changeMap`).
 
+**Workspace Review notes + repo-grouped feedback export (2026-07-04):** The
+agent feedback loop now closes from the workspace lens too. Notes work
+exactly like the single-repo Review — `m` (or the header / per-block "Note"
+buttons) opens the same editor, chips render above the diff, ✎n decorates the
+queue trees — and each note persists to the *owning member's* review session
+(`MemberReview.notes` follows the `reviewed` pattern: the active repo reads
+the in-memory map, background members the DB, and writes mirror back into
+`useRepo` when the member is the active tab — one note store, two lenses; a
+shared `makeReviewNote` factory in repo.ts keeps the note shape identical).
+The export is the repo-grouped format the v1 cut waited on:
+`buildWorkspaceReviewFeedback` (`lib/reviewExport.ts`) emits
+`# Review feedback — <workspace> workspace`, one `## repo (branch …)` section
+per noted member with its own baseline context, per-file rendering demoted to
+`###` (a `fileSection` helper extracted from — and shared with — the
+single-repo builder, so excerpt windows and bullet-joining stay
+byte-identical), and a closing line telling the agent paths are relative to
+each repository. Members without notes are skipped; noted files that left a
+pool still export via the same `collectFeedbackFiles` union. "Copy feedback
+(N)" sits in the toolbar with the count toast. Verified with `tsc`, `vitest`
+(179, +3), and a live browser-mode pass against the dev vite with two seeded
+members (m → editor → chip/decoration/count; block-Note pre-anchored L2;
+clipboard capture matched the format byte-for-byte across both repos
+including the L13 excerpt; × removal recounted 3→2). Remaining Phase 3:
+⌘F across member pools, per-worktree members.
+
 ---
 
 ## 1.0 — Stable (≈ 20 weeks)

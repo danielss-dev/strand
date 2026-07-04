@@ -682,6 +682,27 @@ function noteId(): string {
   return `${Date.now()}-${++noteSeq}`;
 }
 
+/**
+ * Build a {@link ReviewNote} from editor input, or `null` when the trimmed
+ * text is empty. Shared with the workspace review store so notes taken in
+ * either lens are shaped identically (same id scheme, same side omission).
+ */
+export function makeReviewNote(
+  text: string,
+  line: number | null,
+  side?: 'new' | 'old',
+): ReviewNote | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return {
+    id: noteId(),
+    text: trimmed,
+    line,
+    ...(side === 'old' ? { side } : {}),
+    createdAt: Date.now(),
+  };
+}
+
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
@@ -1106,15 +1127,8 @@ export const useRepo = create<RepoState>((set, get) => ({
 
   addReviewNote(file, text, line, side) {
     const path = get().activePath;
-    const trimmed = text.trim();
-    if (!path || !trimmed) return;
-    const note: ReviewNote = {
-      id: noteId(),
-      text: trimmed,
-      line,
-      ...(side === 'old' ? { side } : {}),
-      createdAt: Date.now(),
-    };
+    const note = makeReviewNote(text, line, side);
+    if (!path || !note) return;
     const cur = get().reviewNotes;
     const next = { ...cur, [file]: [...(cur[file] ?? []), note] };
     set({ reviewNotes: next });

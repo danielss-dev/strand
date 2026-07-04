@@ -482,8 +482,28 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     active; session-mode member renders zero hunk buttons). The perf-gated
     `window.__strand` hook now also exposes the `workspaces` +
     `workspaceReview` stores for such harness runs.
-  - ☐ Workspace Review follow-ups: notes + repo-grouped feedback export,
-    ⌘F across member pools, per-worktree members.
+  - ☑ Notes + repo-grouped feedback export in Workspace Review (2026-07-04):
+    the note loop from the single-repo Review works in the workspace lens —
+    `m` / header "Note" / per-block "Note" open the same editor, notes render
+    as chips above the diff and ✎n tree decorations, all persisted to the
+    *owning member's* review session (`MemberReview.notes` mirrors the
+    `reviewed` pattern: active repo reads the in-memory `reviewNotes`, others
+    the DB; writes mirror back into `useRepo` when the member is the active
+    tab — one note store, two lenses). A shared `makeReviewNote` factory
+    (repo.ts) keeps note shape/id identical across both stores. "Copy
+    feedback (N)" exports every member's notes as one **repo-grouped**
+    Markdown prompt — `buildWorkspaceReviewFeedback` in `lib/reviewExport.ts`:
+    `## repo (branch …)` sections with per-repo baseline context and the
+    per-file rendering demoted to `###` (extracted `fileSection` helper
+    shared with the single-repo builder); noted files that left the pool
+    still export (same `collectFeedbackFiles` union), repos without notes
+    are skipped, and the closing line tells the agent paths are
+    per-repository. Verified: `tsc`, `vitest` (179, +3 workspace-export),
+    and a live browser-mode pass against the dev vite (seeded members:
+    m → editor → chip + ✎1 + count, block-Note pre-anchors L2, export
+    matched the format byte-for-byte across 2 repos, × removal recounts).
+  - ☐ Workspace Review follow-ups: ⌘F across member pools, per-worktree
+    members.
 
 ### Topbar
 - ☑ Layout + native-chrome alignment

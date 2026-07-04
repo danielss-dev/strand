@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildReviewFeedback, collectFeedbackFiles } from './reviewExport';
+import {
+  buildReviewFeedback,
+  buildWorkspaceReviewFeedback,
+  collectFeedbackFiles,
+} from './reviewExport';
 import type { ReviewNote } from './types';
 
 let seq = 0;
@@ -166,6 +170,102 @@ describe('buildReviewFeedback', () => {
       files: [{ path: 'src/a.ts', patch: PATCH, notes: [note('x', 2)] }],
     });
     expect(without).toBe(withSide);
+  });
+});
+
+describe('buildWorkspaceReviewFeedback', () => {
+  it('groups by repo with per-repo context and demoted file headings', () => {
+    const out = buildWorkspaceReviewFeedback({
+      workspaceName: 'acme',
+      repos: [
+        {
+          repoName: 'api',
+          branch: 'main',
+          baselineShort: 'abc1234',
+          files: [{ path: 'src/a.ts', patch: PATCH, notes: [note('rename this', 2)] }],
+        },
+        {
+          repoName: 'web',
+          branch: null,
+          baselineShort: null,
+          files: [{ path: 'app.tsx', patch: '', notes: [note('whole file')] }],
+        },
+      ],
+    });
+    expect(out).toBe(
+      [
+        '# Review feedback — acme workspace',
+        '',
+        '## api (branch main)',
+        '',
+        'Changes reviewed since abc1234.',
+        '',
+        '### src/a.ts',
+        '',
+        '```diff',
+        ' line one',
+        '+line two added',
+        ' line three',
+        ' line four',
+        '```',
+        '',
+        '**Note:** rename this',
+        '',
+        '## web',
+        '',
+        '### app.tsx',
+        '',
+        '- whole file',
+        '',
+        'Please address each note above. Notes are grouped by repository; file paths are relative to their repository.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('skips repos without noted files (empty files and note-less files)', () => {
+    const out = buildWorkspaceReviewFeedback({
+      workspaceName: 'w',
+      repos: [
+        { repoName: 'clean', branch: 'main', baselineShort: null, files: [] },
+        {
+          repoName: 'noteless',
+          branch: null,
+          baselineShort: 'fff0000',
+          files: [{ path: 'x.ts', patch: PATCH, notes: [] }],
+        },
+        {
+          repoName: 'noted',
+          branch: null,
+          baselineShort: null,
+          files: [{ path: 'y.ts', patch: '', notes: [note('keep')] }],
+        },
+      ],
+    });
+    expect(out).not.toContain('## clean');
+    expect(out).not.toContain('## noteless');
+    expect(out).not.toContain('fff0000');
+    expect(out).toContain('## noted\n\n### y.ts\n\n- keep');
+  });
+
+  it('matches the single-repo body rendering (same file, one level down)', () => {
+    const files = [{ path: 'src/a.ts', patch: PATCH, notes: [note('leaks', 40)] }];
+    const single = buildReviewFeedback({
+      repoName: 'r',
+      branch: null,
+      baselineShort: null,
+      files,
+    });
+    const workspace = buildWorkspaceReviewFeedback({
+      workspaceName: 'w',
+      repos: [{ repoName: 'r', branch: null, baselineShort: null, files }],
+    });
+    // The excerpt + note body must be byte-identical; only the heading depth
+    // and the surrounding header/closing lines differ.
+    const body = (s: string) => s.slice(s.indexOf('```diff'), s.indexOf('\n\nPlease address'));
+    expect(body(workspace)).toBe(body(single));
+    expect(single).toContain('## src/a.ts');
+    expect(workspace).toContain('### src/a.ts');
   });
 });
 
