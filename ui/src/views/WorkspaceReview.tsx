@@ -17,6 +17,7 @@ import {
 } from '../components/PierreTree';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
+import { buildWorkspaceReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
 import { groupColor, pathKey } from '../lib/repoIdentity';
 import { gitErrorHint } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -46,8 +47,13 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * `useWorkspaceReview.applyBlock` (the member may be a background tab);
  * session-mode diffs render read-only, exactly like the single-repo view.
  * File-level Stage / Discard fan out over the same path-parameterized IPC.
- * Notes and ⌘F stay per-repo — `o` (or the header button) jumps into the
- * file's own repo Review for those.
+ *
+ * Notes work here too — `m` (or the header / per-block Note buttons) attaches
+ * a note to the selected file, persisted to the owning repo's review session
+ * (one note store, two lenses). "Copy feedback" exports every member's notes
+ * as one repo-grouped Markdown prompt (`buildWorkspaceReviewFeedback`).
+ * ⌘F stays per-repo — `o` (or the header button) jumps into the file's own
+ * repo Review for it.
  */
 export function WorkspaceReview() {
   const members = useWorkspaceReview((s) => s.members);
@@ -56,6 +62,8 @@ export function WorkspaceReview() {
   const setActive = useWorkspaceReview((s) => s.setActive);
   const refreshAll = useWorkspaceReview((s) => s.refreshAll);
   const toggleReviewed = useWorkspaceReview((s) => s.toggleReviewed);
+  const addNote = useWorkspaceReview((s) => s.addNote);
+  const removeNote = useWorkspaceReview((s) => s.removeNote);
   const stageFiles = useWorkspaceReview((s) => s.stageFiles);
   const discardFiles = useWorkspaceReview((s) => s.discardFiles);
   const applyBlock = useWorkspaceReview((s) => s.applyBlock);
@@ -151,6 +159,15 @@ export function WorkspaceReview() {
     document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
   }, [displayed]);
 
+  // Read the displayed file's notes off the LIVE member slice, not the
+  // settled snapshot — a note added just now must paint without waiting for
+  // the settle window (the snapshot's member object is stale by then).
+  const displayedNotes = useMemo(() => {
+    if (!displayed) return [];
+    const mem = members.find((m) => pathKey(m.path) === pathKey(displayed.member.path));
+    return mem?.notes[displayed.diff.path] ?? [];
+  }, [members, displayed]);
+
   // Pre-highlight the next few queue entries while the reviewer reads.
   const workerPool = useWorkerPool();
   useEffect(() => {
@@ -206,6 +223,61 @@ export function WorkspaceReview() {
     (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
     [],
   );
+
+  // ── Review notes (the agent feedback loop, workspace-wide) ────────────
+  // The m editor: which member+file the note attaches to and the optional
+  // line it anchors at (pre-set by a per-hunk "Note" button).
+  const [noteEditor, setNoteEditor] = useState<{
+    repo: string;
+    path: string;
+    line: number | null;
+    /** Diff side `line` counts on — 'old' for deletion-only blocks. */
+    side: 'new' | 'old';
+  } | null>(null);
+  const closeNoteEditor = useCallback((el?: HTMLTextAreaElement) => {
+    // Blur before unmounting so focus falls back to the window and the
+    // j/k/space loop resumes immediately, no click needed.
+    el?.blur();
+    setNoteEditor(null);
+  }, []);
+
+  // Success notice ("Copied feedback …"); opError takes the toast slot first.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2600);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // Per member, the union of pool files with notes and noted paths that left
+  // the pool (staged away in inbox mode, …) — a stored note must never
+  // silently drop from the feedback. Members without notes export nothing.
+  const feedbackRepos = useMemo(
+    () =>
+      members
+        .map((m) => ({
+          repoName: m.name,
+          branch: m.branch,
+          baselineShort: m.baseline?.short ?? null,
+          files: collectFeedbackFiles(m.diffs, m.notes),
+        }))
+        .filter((r) => r.files.length > 0),
+    [members],
+  );
+  const noteCount = useMemo(
+    () => feedbackRepos.reduce((n, r) => n + r.files.reduce((k, f) => k + f.notes.length, 0), 0),
+    [feedbackRepos],
+  );
+  const copyFeedback = useCallback(() => {
+    if (feedbackRepos.length === 0) return;
+    copyToClipboard(buildWorkspaceReviewFeedback({ workspaceName, repos: feedbackRepos }));
+    const fileCount = feedbackRepos.reduce((n, r) => n + r.files.length, 0);
+    setNotice(
+      `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
+        `${fileCount} file${fileCount === 1 ? '' : 's'} in ` +
+        `${feedbackRepos.length} repo${feedbackRepos.length === 1 ? '' : 's'}`,
+    );
+  }, [feedbackRepos, noteCount, workspaceName]);
 
   // Two-step confirm for the destructive discard (d d, or double-click the
   // header button).
@@ -276,6 +348,19 @@ export function WorkspaceReview() {
         case ' ':
           e.preventDefault();
           markReviewed();
+          break;
+        case 'm':
+          // The input/textarea guard above keeps this inert while the note
+          // editor itself (or any other field) has focus.
+          if (current) {
+            e.preventDefault();
+            setNoteEditor({
+              repo: current.member.path,
+              path: current.diff.path,
+              line: null,
+              side: 'new',
+            });
+          }
           break;
         case 's':
           if (current && isUnstaged(current.member, current.diff.path)) {
@@ -420,6 +505,18 @@ export function WorkspaceReview() {
         total={total}
         loading={anyLoading}
         onRefresh={() => void refreshAll()}
+        extra={
+          noteCount > 0 && (
+            <button
+              type="button"
+              className="h-link"
+              onClick={copyFeedback}
+              title="Copy every member repo's notes as one repo-grouped Markdown prompt for the agent"
+            >
+              Copy feedback ({noteCount})
+            </button>
+          )
+        }
       />
 
       <div className="rv-main">
@@ -462,6 +559,21 @@ export function WorkspaceReview() {
                   <span className="stat-del">−{displayed.diff.dels}</span>
                   <span className="stat-add">+{displayed.diff.adds}</span>
                   <span className="rv-head-actions">
+                    <button
+                      type="button"
+                      className="h-link"
+                      onClick={() =>
+                        setNoteEditor({
+                          repo: displayed.member.path,
+                          path: displayed.diff.path,
+                          line: null,
+                          side: 'new',
+                        })
+                      }
+                      title="Add a review note to this file (m)"
+                    >
+                      Note
+                    </button>
                     {isUnstaged(displayed.member, displayed.diff.path) && (
                       <>
                         <button
@@ -522,6 +634,57 @@ export function WorkspaceReview() {
                     </button>
                   </span>
                 </div>
+                {noteEditor && (
+                  <div className="rv-note-editor">
+                    <textarea
+                      rows={2}
+                      autoFocus
+                      placeholder={
+                        (noteEditor.line != null
+                          ? `Note on ${noteEditor.side === 'old' ? 'old ' : ''}L${noteEditor.line} of ${noteEditor.path}`
+                          : `Note ${noteEditor.path}`) + ' — Enter saves, Esc cancels'
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          const text = e.currentTarget.value;
+                          closeNoteEditor(e.currentTarget);
+                          addNote(noteEditor.repo, noteEditor.path, text, noteEditor.line, noteEditor.side);
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          closeNoteEditor(e.currentTarget);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {displayedNotes.length > 0 && (
+                  <div className="rv-notes">
+                    {displayedNotes.map((n) => (
+                      <div key={n.id} className="rv-note">
+                        {n.line != null && (
+                          <span
+                            className="rv-note-line"
+                            title={n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
+                          >
+                            {n.side === 'old' ? '−' : ''}L{n.line}
+                          </span>
+                        )}
+                        <span className="rv-note-text" title={n.text}>
+                          {n.text}
+                        </span>
+                        <button
+                          type="button"
+                          className="rv-note-x"
+                          aria-label="Remove note"
+                          onClick={() => removeNote(displayed.member.path, displayed.diff.path, n.id)}
+                        >
+                          <Icon name="x" size={11} stroke={2} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="rv-diff-body">
                   <Virtualizer className="rv-diff-scroll">
                   {displayed.diff.binary && isImagePath(displayed.diff.path) ? (
@@ -564,6 +727,17 @@ export function WorkspaceReview() {
                       diff={displayed.diff}
                       layout={layout}
                       side="unstaged"
+                      onNoteBlock={(m) =>
+                        // A deletion-only block has no new-side line — its
+                        // anchor counts on the OLD side, and the exporter
+                        // locates the excerpt with the matching counter.
+                        setNoteEditor({
+                          repo: displayed.member.path,
+                          path: displayed.diff.path,
+                          line: m.addRange?.start ?? m.delRange?.start ?? null,
+                          side: m.addRange ? 'new' : m.delRange ? 'old' : 'new',
+                        })
+                      }
                       onApplyBlock={(slice, target) => {
                         const name = displayed.diff.path.split('/').pop() ?? displayed.diff.path;
                         return applyBlock(
@@ -609,13 +783,14 @@ export function WorkspaceReview() {
       <div className="rv-foot" aria-hidden="true">
         <span className="kbd-inline">↑ ↓ j k</span> files
         <span className="kbd-inline">space</span> reviewed
+        <span className="kbd-inline">m</span> note
         <span className="kbd-inline">n p</span> blocks
         <span className="kbd-inline">s</span> stage
         <span className="kbd-inline">d d</span> discard
         <span className="kbd-inline">o</span> open in repo
       </div>
 
-      {opError && (
+      {opError ? (
         <div className="toast" role="alert">
           <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="x" size={13} stroke={2} /></span>
           <span>{opError}</span>
@@ -623,7 +798,12 @@ export function WorkspaceReview() {
             Dismiss
           </button>
         </div>
-      )}
+      ) : notice ? (
+        <div className="toast" role="status">
+          <span style={{ color: 'var(--add, #57ab5a)' }}><Icon name="check" size={13} stroke={2} /></span>
+          <span>{notice}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -670,20 +850,30 @@ function MemberSection({
   const rowDecoration = useCallback(
     (path: string, kind: 'file' | 'directory'): TreeRowDecoration | null => {
       if (kind !== 'file') return null;
+      const notes = member.notes[path]?.length ?? 0;
+      const pen = notes > 0 ? ` ✎${notes}` : '';
+      const penTitle = notes > 0 ? ` · ${notes} note${notes === 1 ? '' : 's'}` : '';
       switch (verdictFor(path)) {
         case 'reviewed':
-          return { text: '✓', title: 'Reviewed' };
+          return { text: '✓' + pen, title: 'Reviewed' + penTitle };
         case 'stale':
-          return { text: 'changed', title: 'Changed since reviewed — review again' };
+          return { text: 'changed' + pen, title: 'Changed since reviewed — review again' + penTitle };
         default:
-          return null;
+          return notes > 0
+            ? { text: `✎${notes}`, title: `${notes} note${notes === 1 ? '' : 's'}` }
+            : null;
       }
     },
-    [verdictFor],
+    [verdictFor, member.notes],
   );
+  // Note counts feed the decoration, so they're folded into the key — Pierre
+  // only repaints rows when this fingerprint moves (see docs/learnings.md).
   const decorationKey = useMemo(
-    () => member.diffs.map((d) => `${d.path}:${verdictFor(d.path)}`).join('|'),
-    [member.diffs, verdictFor],
+    () =>
+      member.diffs
+        .map((d) => `${d.path}:${verdictFor(d.path)}:${member.notes[d.path]?.length ?? 0}`)
+        .join('|'),
+    [member.diffs, verdictFor, member.notes],
   );
 
   const empty = member.diffs.length === 0;
@@ -767,6 +957,7 @@ function WorkspaceReviewToolbar({
   total,
   loading,
   onRefresh,
+  extra,
 }: {
   workspaceName: string;
   repoCount: number;
@@ -774,6 +965,7 @@ function WorkspaceReviewToolbar({
   total: number;
   loading?: boolean;
   onRefresh: () => void;
+  extra?: React.ReactNode;
 }) {
   const pct = total > 0 ? Math.round((reviewedCount / total) * 100) : 0;
   return (
@@ -794,6 +986,7 @@ function WorkspaceReviewToolbar({
         </span>
       )}
       <div className="rv-actions">
+        {extra}
         <button
           type="button"
           className="h-link"

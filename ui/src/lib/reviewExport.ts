@@ -59,24 +59,71 @@ export function buildReviewFeedback(input: {
   ];
   if (input.baselineShort) sections.push(`Changes reviewed since ${input.baselineShort}.`);
   for (const file of input.files) {
-    if (file.notes.length === 0) continue;
-    const parts: string[] = [`## ${file.path}`];
-    for (const note of file.notes) {
-      if (note.line == null) {
-        // Whole-file notes are bullets; consecutive ones join into one list.
-        const last = parts.length - 1;
-        if (parts[last].startsWith('- ')) parts[last] += `\n- ${note.text}`;
-        else parts.push(`- ${note.text}`);
-        continue;
-      }
-      const excerpt = excerptAround(file.patch, note.line, note.side ?? 'new');
-      if (excerpt != null) parts.push(fencedDiff(excerpt));
-      parts.push(`**Note:** ${note.text}`);
-    }
-    sections.push(parts.join('\n\n'));
+    const section = fileSection(file, '##');
+    if (section != null) sections.push(section);
   }
   sections.push('Please address each note above.');
   return sections.join('\n\n') + '\n';
+}
+
+/** One repo's slice of a workspace-wide feedback export. */
+export interface WorkspaceFeedbackRepo {
+  repoName: string;
+  branch: string | null;
+  baselineShort: string | null;
+  files: ReviewFeedbackFile[];
+}
+
+/**
+ * The workspace-wide variant: one prompt covering every member repo that has
+ * notes, grouped by repository — `## repo` sections with the per-file notes
+ * demoted one heading level (`### path`). Each repo section carries its own
+ * branch / baseline context, since members review in independent modes.
+ * Repos without notes are skipped; the closing instruction tells the agent
+ * the paths are relative to each repo, not to one shared root.
+ */
+export function buildWorkspaceReviewFeedback(input: {
+  workspaceName: string;
+  repos: WorkspaceFeedbackRepo[];
+}): string {
+  const sections: string[] = [`# Review feedback — ${input.workspaceName} workspace`];
+  for (const repo of input.repos) {
+    const files = repo.files
+      .map((f) => fileSection(f, '###'))
+      .filter((s): s is string => s != null);
+    if (files.length === 0) continue;
+    const head = `## ${repo.repoName}` + (repo.branch ? ` (branch ${repo.branch})` : '');
+    const context = repo.baselineShort ? [`Changes reviewed since ${repo.baselineShort}.`] : [];
+    sections.push([head, ...context, ...files].join('\n\n'));
+  }
+  sections.push(
+    'Please address each note above. Notes are grouped by repository; file paths are relative to their repository.',
+  );
+  return sections.join('\n\n') + '\n';
+}
+
+/**
+ * Render one noted file: a `<hx> path` heading, then per note either a
+ * quoted ±4-line excerpt + **Note:** line (line-anchored) or a bullet
+ * (whole-file; consecutive bullets join into one list). `null` when the
+ * file has no notes — callers skip it entirely.
+ */
+function fileSection(file: ReviewFeedbackFile, heading: '##' | '###'): string | null {
+  if (file.notes.length === 0) return null;
+  const parts: string[] = [`${heading} ${file.path}`];
+  for (const note of file.notes) {
+    if (note.line == null) {
+      // Whole-file notes are bullets; consecutive ones join into one list.
+      const last = parts.length - 1;
+      if (parts[last].startsWith('- ')) parts[last] += `\n- ${note.text}`;
+      else parts.push(`- ${note.text}`);
+      continue;
+    }
+    const excerpt = excerptAround(file.patch, note.line, note.side ?? 'new');
+    if (excerpt != null) parts.push(fencedDiff(excerpt));
+    parts.push(`**Note:** ${note.text}`);
+  }
+  return parts.join('\n\n');
 }
 
 /**

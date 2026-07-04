@@ -3,13 +3,13 @@ import { create } from 'zustand';
 import { reviewSession, type StoredBaseline } from '../lib/db';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import type { FileDiff } from '../lib/types';
+import type { FileDiff, ReviewNote } from '../lib/types';
 import {
   activeWorkspaceMembers,
   type MemberResolution,
   type QueueEntry,
 } from '../lib/workspaceReview';
-import { useRepo } from './repo';
+import { makeReviewNote, useRepo } from './repo';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './workspaces';
 
 /**
@@ -51,6 +51,9 @@ export interface MemberReview {
   /** Reviewed marks (`path → reviewed diff hash`), shared with the repo's own
    * Review session persistence. */
   reviewed: Record<string, string>;
+  /** Reviewer notes (`path → notes`), shared with the repo's own Review
+   * session persistence — feed for the repo-grouped feedback export. */
+  notes: Record<string, ReviewNote[]>;
   loading: boolean;
   /** Human-readable fetch failure for this member, or `null`. */
   error: string | null;
@@ -82,6 +85,18 @@ interface WorkspaceReviewState {
   /** Toggle a file's reviewed mark within a member (same semantics as the
    * single-repo Review; persists to that repo's review session). */
   toggleReviewed(repoPath: string, file: string, hash: string): void;
+  /** Attach a note to a member's file (`line` = anchor line, null = whole
+   * file; `side` = which diff side the line counts on, default `'new'`).
+   * Empty text is ignored. Persists to that repo's review session. */
+  addNote(
+    repoPath: string,
+    file: string,
+    text: string,
+    line: number | null,
+    side?: 'new' | 'old',
+  ): void;
+  /** Remove one note from a member's file by id. */
+  removeNote(repoPath: string, file: string, id: string): void;
   /** Stage files in a member repo (rename-aware), then refresh its slice. */
   stageFiles(repoPath: string, files: string[]): Promise<void>;
   /** Discard files in a member repo, then refresh its slice. Destructive —
@@ -177,12 +192,17 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       error = errMessage(e);
     }
 
-    // Prefer the single-repo store's in-memory marks for the active repo —
-    // its persistence is fire-and-forget, so the DB read can be a beat stale.
+    // Prefer the single-repo store's in-memory marks + notes for the active
+    // repo — its persistence is fire-and-forget, so the DB read can be a
+    // beat stale.
     const repoState = useRepo.getState();
-    const reviewed = isActiveRepo(path)
+    const active = isActiveRepo(path);
+    const reviewed = active
       ? repoState.reviewed
       : ((await reviewSession.getReviewed(path).catch(() => null)) ?? {});
+    const notes = active
+      ? repoState.reviewNotes
+      : ((await reviewSession.getNotes(path).catch(() => null)) ?? {});
 
     if (gen !== generation) return;
     patchMember(path, {
@@ -193,6 +213,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       diffs,
       unstaged,
       reviewed,
+      notes,
       loading: false,
       error,
     });
@@ -226,6 +247,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
             diffs: old?.diffs ?? [],
             unstaged: old?.unstaged ?? [],
             reviewed: old?.reviewed ?? {},
+            notes: old?.notes ?? {},
             loading: true,
             error: null,
           };
@@ -268,6 +290,24 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
         .catch((e) => console.warn('workspace review: reviewed persist failed', e));
     },
 
+    addNote(repoPath, file, text, line, side) {
+      const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
+      const note = makeReviewNote(text, line, side);
+      if (!member || !note) return;
+      const next = { ...member.notes, [file]: [...(member.notes[file] ?? []), note] };
+      persistNotes(patchMember, member, next);
+    },
+
+    removeNote(repoPath, file, id) {
+      const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
+      if (!member || !member.notes[file]) return;
+      const remaining = member.notes[file].filter((n) => n.id !== id);
+      const next = { ...member.notes };
+      if (remaining.length === 0) delete next[file];
+      else next[file] = remaining;
+      persistNotes(patchMember, member, next);
+    },
+
     async stageFiles(repoPath, files) {
       if (files.length === 0) return;
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
@@ -303,6 +343,21 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     },
   };
 });
+
+/** Note-write tail (add/remove): patch the slice, mirror the map into the
+ * single-repo store when the member is the active tab (one review state, two
+ * lenses), and persist to that repo's review session. */
+function persistNotes(
+  patchMember: (repoPath: string, patch: Partial<MemberReview>) => void,
+  member: MemberReview,
+  next: Record<string, ReviewNote[]>,
+): void {
+  patchMember(member.path, { notes: next });
+  if (isActiveRepo(member.path)) useRepo.setState({ reviewNotes: next });
+  void reviewSession
+    .setNotes(member.path, next)
+    .catch((e) => console.warn('workspace review: notes persist failed', e));
+}
 
 /** Write-op tail: refresh the touched member, and when it's the active repo
  * also run the single-repo refresh so Local Changes / topbar stay in sync. */
