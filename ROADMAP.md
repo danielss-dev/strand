@@ -1374,6 +1374,27 @@ the crash-log path. Verified: `cargo test -p strand-tauri` (13, +1
 `last_panic_entry` boundary/newest-entry/truncation test), `clippy`, `tsc`,
 `vitest` (190, +5 `crashReport`), `vite build`.
 
+**Per-`Repo` git2 handle reuse; AppState repo cache declined by measurement
+(2026-07-06):** Closed the last open engine item from the 2026-06-04 audit —
+by measuring it first. The audit's premise (per-command `gix discover` + git2
+re-open is a cacheable cost) didn't hold: on regenerated Windows fixtures
+(generator now committed as `scripts/gen_perf_fixtures.py`; harness grew
+`git2 open` / `snapshot` / `discover+snapshot` rows) discover is ~1ms and git2
+open ~0.65ms, flat across 100k commits / 10k files — so the cross-command
+`AppState` cache, with its `!Sync`-forced per-repo `Mutex` (serializing the
+very reads `spawn_blocking` just parallelized) and config-staleness
+invalidation, was declined and the TASKS items closed ✗ with the numbers to
+beat. What *was* real: `snapshot` opened git2 four times per call (directly +
+`meta`/`refs`/`submodules`), and every re-open reloads the index + pack
+mmaps. `Repo` now lazily opens git2 once per instance (`OnceCell`; `git2()`
+returns `&git2::Repository`; stash keeps an owned `git2_owned()` — the only
+`&mut` callers). Per-IPC `discover+snapshot`: **54→36.5ms on the 10k-file
+fixture**, 8.3→5.6ms on 100k commits, 44.5→39.8ms on strand itself; warm-repo
+numbers recorded in `docs/perf-baseline.md` § "Windows re-baseline" bound what
+a cross-command cache could still buy (~18ms/snapshot) if the 1.0 perf pass
+ever justifies it. Verified: `cargo test -p strand-core` (91), workspace
+`clippy` clean, before/after `perfcheck` runs (variance re-checked 3×).
+
 ---
 
 ## 1.1+ — Post-1.0

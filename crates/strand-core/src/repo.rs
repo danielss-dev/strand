@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -8,10 +9,14 @@ use crate::error::Result;
 ///
 /// Holds both a `gix::Repository` (used for reads) and a lazily-opened
 /// `git2::Repository` (used for mutating operations). The two are kept in
-/// sync by always opening them against the same on-disk path.
+/// sync by always opening them against the same on-disk path. The git2
+/// handle opens once per `Repo` and is reused by every subsequent
+/// [`git2()`](Repo::git2) call — `snapshot` alone used to re-open it four
+/// times (directly, then via `meta`/`refs`/`submodules`).
 pub struct Repo {
     pub(crate) path: PathBuf,
     pub(crate) gix: gix::Repository,
+    git2: OnceCell<git2::Repository>,
 }
 
 impl Repo {
@@ -25,6 +30,7 @@ impl Repo {
         Ok(Self {
             path: workdir,
             gix,
+            git2: OnceCell::new(),
         })
     }
 
@@ -44,12 +50,11 @@ impl Repo {
         // both detached HEAD *and* an unborn branch, so it can't tell them
         // apart on its own).
         let g2 = self.git2().ok();
-        let detached = g2.as_ref().and_then(|r| r.head_detached().ok()).unwrap_or(false);
+        let detached = g2.and_then(|r| r.head_detached().ok()).unwrap_or(false);
 
         let branch = if detached {
             // Show the short OID we're parked on, matching `git status`.
-            g2.as_ref()
-                .and_then(|r| r.head().ok())
+            g2.and_then(|r| r.head().ok())
                 .and_then(|h| h.target())
                 .map(|oid| oid.to_string()[..7].to_string())
                 .unwrap_or_else(|| "HEAD".to_string())
@@ -65,7 +70,6 @@ impl Repo {
         // Reuse the git2 handle already opened above instead of opening a
         // third time — `meta` is on the post-every-op refresh path.
         let (ahead, behind) = g2
-            .as_ref()
             .and_then(Self::compute_ahead_behind)
             .unwrap_or((0, 0));
 
@@ -79,10 +83,9 @@ impl Repo {
             .unwrap_or(common_dir)
             .to_string_lossy()
             .into_owned();
-        let is_linked_worktree = g2.as_ref().map(|r| r.is_worktree()).unwrap_or(false);
+        let is_linked_worktree = g2.map(|r| r.is_worktree()).unwrap_or(false);
 
         let head_oid = g2
-            .as_ref()
             .and_then(|r| r.head().ok())
             .and_then(|h| h.target())
             .map(|oid| oid.to_string());
@@ -143,7 +146,20 @@ impl Repo {
         Some((ahead as u32, behind as u32))
     }
 
-    pub(crate) fn git2(&self) -> Result<git2::Repository> {
+    pub(crate) fn git2(&self) -> Result<&git2::Repository> {
+        // Not `get_or_try_init` (unstable); `Repo` is `!Sync`, so this
+        // check-then-set can't race.
+        if self.git2.get().is_none() {
+            let opened = git2::Repository::open(&self.path)?;
+            let _ = self.git2.set(opened);
+        }
+        Ok(self.git2.get().expect("git2 handle set above"))
+    }
+
+    /// A freshly-opened, owned git2 handle for the few APIs that need
+    /// `&mut git2::Repository` (the stash ops). Everything else should use
+    /// the cached [`git2()`](Repo::git2).
+    pub(crate) fn git2_owned(&self) -> Result<git2::Repository> {
         Ok(git2::Repository::open(&self.path)?)
     }
 
