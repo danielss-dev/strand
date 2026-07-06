@@ -92,6 +92,7 @@ fn main() {
             commands::repo_discard_many,
             commands::repo_discard,
             commands::repo_gitignore_add,
+            commands::repo_move_path,
             commands::repo_apply_patch,
             commands::repo_commit,
             commands::repo_fetch,

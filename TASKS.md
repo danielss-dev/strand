@@ -123,6 +123,17 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   (radiogroup, mixed default, danger-styled hard) and the Reflog's "Reset HEAD
   here…"; palette "Undo last commit (soft reset)" = soft reset to `HEAD~1`,
   gated on a non-root HEAD.)
+- ☑ Rename / move a working-tree entry (`Repo::move_path` in `rename.rs` —
+  `to` is the full destination path. Tracked sources (any index entry at the
+  path or under it) shell out to `git mv` so the index entry moves with the
+  file: staged content preserved, directory moves and case-only renames on
+  case-insensitive filesystems handled natively. Untracked sources are a
+  plain fs rename. Refuses to overwrite; creates missing destination parent
+  dirs (inert to git); both ends path-guarded — `safe_workdir_path` for the
+  source, an ancestor-walking variant for the not-yet-existing destination.
+  Std-only tests: tracked/untracked/directory moves, overwrite + missing +
+  no-op guards, traversal/absolute rejection. Powers the Files-tree
+  drag-and-drop + Rename dialog.)
 - ☑ Gitignore quick-add (`Repo::gitignore_add` in `ignore.rs` — validates
   (non-empty, no `\n`/`\r`), no-ops on an exact duplicate line, newline-safe
   append to the workdir-root `.gitignore`, creating it if absent. Context menus
@@ -252,7 +263,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_branch_delete`, `repo_branch_delete_remote`, `repo_branch_rename`,
   `repo_remote_add`,
   `repo_remote_remove`, `repo_remote_rename`, `repo_remote_set_url`,
-  `repo_reset`, `repo_gitignore_add`,
+  `repo_reset`, `repo_gitignore_add`, `repo_move_path`,
   `repo_tag_create`, `repo_tag_delete`,
   `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,
   `repo_rebase_todo`, `repo_interactive_rebase`,
@@ -633,6 +644,30 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   click-to-open; lazily loaded when the Files tab is shown and refreshed on
   status change. Built with the existing `buildTree`/`sortTree` primitives
   (no `@pierre/trees` dependency).
+- ☑ Drag-and-drop rename / move in the Files tree (2026-07-06). `PierreTree`
+  grew an opt-in `onMove(sources, targetDir)`: **pointer-based** drag (rows
+  live in Pierre's shadow root where nothing can be marked `draggable`, but
+  mouse events compose across the boundary like the existing click/menu
+  handlers), imperative refs + direct DOM so the 60Hz mousemove never
+  re-renders the tree. 5px threshold keeps plain clicks intact; a
+  cursor-chasing ghost chip (`.tree-drag-ghost`) names the entry and its
+  prospective target ("rootfile.txt → src/", dashed when invalid); folder
+  rows get a `--bg-sel` wash (inline style — the diff-jump shadow-boundary
+  precedent); a file row targets its containing folder, bare tree space the
+  repo root; Escape cancels. Dragging a multi-selected file moves the whole
+  selection, dragging a folder row moves the folder. Drops route through
+  `useRepo.moveEntries` (sequential `repo_move_path` calls, one snapshot
+  refresh, per-entry failure strings so one collision doesn't hide the
+  rest — failures toast; an open file view follows its file's new path).
+  Keyboard parity: context-menu "Rename / move…" opens `RenameFileDialog`
+  (full-path field, filename preselected, engine creates missing parent
+  dirs). Verified end-to-end against the running app over WebView2 CDP:
+  tracked root file → `src/` (git shows `R`), untracked file → `docs/`
+  (stays untracked, index untouched), dialog rename of a modified file →
+  `RM` with the worktree edit preserved, ghost text + cleanup asserted.
+  (CDP-harness gotcha, paid for: run the standalone vite with
+  `STRAND_NO_HMR=1` — its HMR client otherwise polls the user's 1421
+  socket and force-reloads the page mid-test.)
 
 ### Local Changes view
 - ☑ Three-section layout, vertically resizable unstaged / staged panes

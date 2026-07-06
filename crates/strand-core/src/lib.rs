@@ -38,6 +38,7 @@ pub mod worktree;
 pub mod blame;
 pub mod file;
 pub mod reflog;
+pub mod rename;
 pub mod reset;
 pub mod snapshot;
 pub mod watch;

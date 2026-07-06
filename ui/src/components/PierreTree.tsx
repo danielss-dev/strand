@@ -111,6 +111,15 @@ interface PierreTreeProps {
   /** Enable Pierre's in-tree fuzzy search (also bound to ⌘F / Ctrl+F). */
   search?: boolean;
   /**
+   * Enable drag-to-move: rows can be dragged onto a folder row — or a file
+   * row's containing folder, or the tree's bare space for the repo root —
+   * and dropping calls this with the resolved source set and the target
+   * directory (`''` = root). Dragging a file that is part of the current
+   * multi-selection moves the whole selection; dragging a folder row moves
+   * that folder. Omit to disable dragging entirely.
+   */
+  onMove?: (sources: string[], targetDir: string) => void;
+  /**
    * Per-row decoration (e.g. the Review view's reviewed ✓). Called for every
    * visible row; return `null` for none. Pair with {@link rowDecorationKey} —
    * Pierre only repaints rows on data pushes, so decoration-only changes need
@@ -173,6 +182,12 @@ function asDir(handle: FileTreeItemHandle | null): FileTreeDirectoryHandle | nul
   return handle && handle.isDirectory() ? (handle as FileTreeDirectoryHandle) : null;
 }
 
+/** `a/b/c.txt` → `a/b`; a root-level path → `''`. */
+function parentDirOf(p: string): string {
+  const i = p.lastIndexOf('/');
+  return i < 0 ? '' : p.slice(0, i);
+}
+
 /**
  * React wrapper around `@pierre/trees`. The Pierre model owns tree state
  * (expansion, virtualization, search, icons, multi-selection) and renders into
@@ -199,6 +214,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     onActivate,
     menuItems,
     onDiscard,
+    onMove,
     search,
     followFocus = false,
     rowDecoration,
@@ -460,6 +476,147 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     [model, resolveTargets, followFocus, followFromFocus],
   );
 
+  // ── Drag-to-move (the Files tree's drag-and-drop rename) ──
+  // Pointer-based rather than HTML5 DnD: the rows live in Pierre's shadow
+  // root, where we can't mark elements draggable — but mouse events compose
+  // across the boundary (same mechanism as the click/menu handlers above).
+  // All bookkeeping is imperative refs + direct DOM: a 60Hz mousemove must
+  // not re-render the tree.
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    sources: string[];
+    label: string;
+    startX: number;
+    startY: number;
+    active: boolean;
+    ghost: HTMLDivElement | null;
+    targetDir: string | null;
+    targetRow: HTMLElement | null;
+    targetRowBg: string;
+    detach: () => void;
+  } | null>(null);
+
+  const endDrag = useCallback((commit: boolean) => {
+    const d = dragRef.current;
+    if (!d) return;
+    dragRef.current = null;
+    d.detach();
+    d.ghost?.remove();
+    if (d.targetRow) d.targetRow.style.background = d.targetRowBg;
+    document.body.style.userSelect = '';
+    if (commit && d.active && d.targetDir != null) {
+      onMoveRef.current?.(d.sources, d.targetDir);
+    }
+  }, []);
+  useEffect(() => () => endDrag(false), [endDrag]);
+
+  const onDragMouseDown = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onMoveRef.current || e.button !== 0 || dragRef.current) return;
+      if (isChevronEvent(e.nativeEvent)) return;
+      const row = rowFromEvent(e.nativeEvent);
+      if (!row) return;
+      const rowPath = row.dataset.itemPath!.replace(/\/+$/, '');
+      const sources =
+        row.dataset.itemType === 'folder' ? [rowPath] : resolveTargets(rowPath);
+      if (sources.length === 0) return;
+      const label =
+        sources.length > 1
+          ? `${sources.length} files`
+          : sources[0].slice(sources[0].lastIndexOf('/') + 1);
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const d = dragRef.current;
+        if (!d) return;
+        if (!d.active) {
+          // A small threshold keeps plain clicks (select, chevron) intact.
+          if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < 5) return;
+          d.active = true;
+          document.body.style.userSelect = 'none';
+          const ghost = document.createElement('div');
+          ghost.className = 'tree-drag-ghost';
+          document.body.appendChild(ghost);
+          d.ghost = ghost;
+        }
+        ev.preventDefault();
+        const composed = ev.composedPath();
+        const insideTree = wrapRef.current != null && composed.includes(wrapRef.current);
+        let over: HTMLElement | null = null;
+        for (const node of composed) {
+          if (node instanceof HTMLElement && node.dataset.itemPath != null) {
+            over = node;
+            break;
+          }
+        }
+        // Resolve the drop directory: a folder row is itself the target; a
+        // file row targets its containing folder; bare tree space is the root.
+        let dir: string | null = null;
+        let overIsDir = false;
+        if (insideTree && over) {
+          const p = over.dataset.itemPath!.replace(/\/+$/, '');
+          overIsDir = over.dataset.itemType === 'folder';
+          dir = overIsDir ? p : parentDirOf(p);
+        } else if (insideTree) {
+          dir = '';
+        }
+        // At least one source must actually change location — and a folder
+        // can never move into itself or its own subtree.
+        if (dir != null) {
+          const target = dir;
+          const movable = d.sources.some(
+            (s) => parentDirOf(s) !== target && target !== s && !target.startsWith(s + '/'),
+          );
+          if (!movable) dir = null;
+        }
+        d.targetDir = dir;
+        // Row wash on the hovered folder row only — a file row's parent isn't
+        // the row under the cursor, so those drops read from the ghost label.
+        const highlight = dir != null && overIsDir ? over : null;
+        if (d.targetRow !== highlight) {
+          if (d.targetRow) d.targetRow.style.background = d.targetRowBg;
+          d.targetRow = highlight;
+          d.targetRowBg = highlight?.style.background ?? '';
+          // Inline style because outer CSS can't cross the shadow boundary;
+          // the inherited token can (the diff-jump flash precedent).
+          if (highlight) highlight.style.background = 'var(--bg-sel)';
+        }
+        if (d.ghost) {
+          d.ghost.style.left = `${ev.clientX + 14}px`;
+          d.ghost.style.top = `${ev.clientY + 10}px`;
+          d.ghost.textContent =
+            dir == null ? d.label : `${d.label} → ${dir === '' ? '/' : dir + '/'}`;
+          d.ghost.classList.toggle('invalid', dir == null);
+        }
+      };
+      const onMouseUp = () => endDrag(true);
+      const onKeyDown = (ev: KeyboardEvent) => {
+        if (ev.key === 'Escape') endDrag(false);
+      };
+      window.addEventListener('mousemove', onMouseMove, true);
+      window.addEventListener('mouseup', onMouseUp, true);
+      window.addEventListener('keydown', onKeyDown, true);
+      dragRef.current = {
+        sources,
+        label,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+        ghost: null,
+        targetDir: null,
+        targetRow: null,
+        targetRowBg: '',
+        detach: () => {
+          window.removeEventListener('mousemove', onMouseMove, true);
+          window.removeEventListener('mouseup', onMouseUp, true);
+          window.removeEventListener('keydown', onKeyDown, true);
+        },
+      };
+    },
+    [resolveTargets, endDrag],
+  );
+
   // ── Right-click menu (the app's own viewport-clamped ContextMenu) ──
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const onContextMenu = useCallback(
@@ -491,6 +648,8 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       // forward `className` onto Pierre's custom-element host, but CSS custom
       // properties set here inherit across the shadow boundary regardless.
       className={'tree-host-wrap' + (className ? ` ${className}` : '')}
+      ref={wrapRef}
+      onMouseDown={onMove ? onDragMouseDown : undefined}
       onClickCapture={onClickCapture}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}

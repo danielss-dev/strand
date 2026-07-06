@@ -5029,6 +5029,31 @@ textarea.clone-input {
   color: var(--text-dim);
 }
 
+/* Drag-to-move ghost (PierreTree onMove) — a cursor-chasing chip naming the
+   dragged entry and its prospective target directory. Appended to <body> and
+   positioned imperatively; pointer-events off so it never steals the drop. */
+.tree-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 320px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  box-shadow: var(--shadow-2);
+}
+.tree-drag-ghost.invalid {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
 /* Files sidebar tab — a bounded-height column so the tree owns its own scroll
    (it must not nest inside the .side-scroll region used by the Git tab). */
 .side-files {

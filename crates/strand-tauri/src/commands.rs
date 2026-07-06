@@ -330,6 +330,15 @@ pub fn repo_gitignore_add(path: String, pattern: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// Rename / move a working-tree entry (file or directory). `to` is the full
+/// destination path, not a directory to move into. A quick index/fs write —
+/// stays a plain sync body like the other fast writes.
+#[tauri::command(async)]
+pub fn repo_move_path(path: String, from: String, to: String) -> CmdResult<()> {
+    Repo::discover(&path)?.move_path(&from, &to)?;
+    Ok(())
+}
+
 #[tauri::command(async)]
 pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResult<()> {
     let t = match target.as_str() {
