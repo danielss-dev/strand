@@ -276,12 +276,13 @@ also pending (only `aarch64-apple-darwin` is installed).
   (open <2s for 100k commits ☑, status refresh <200ms on 10k files ☑; webview-side
   targets measured on the running app 2026-06-29 — see `docs/perf-baseline.md`
   § "Webview / full-app baseline": **cold start ☑** (~407ms shell / ~568ms
-  repo-interactive), **perceived stage ☑** (~34ms), **diff render ⚠️** (~87ms
-  normal but ~1460ms for a whole-file 5,000-line diff in the non-virtualized
-  Local Changes pane — Review is virtualized and fine), **idle memory ❌**
-  (~280MB private, over the 250MB target — WebView2's 6-process baseline, not
-  app JS). Two follow-ups remain: virtualize the Local Changes stacked diff
-  pane, and reconcile the memory target with WebView2's floor.)
+  repo-interactive), **perceived stage ☑** (~34ms), **diff render ☑** (~87ms
+  normal; the ~1460ms whole-file 5,000-line case was the non-virtualized Local
+  Changes pane — **virtualized 2026-07-06**, now ~200 mounted rows like Review),
+  **idle memory ❌** (~280MB private, over the 250MB target — WebView2's 6-process
+  baseline, not app JS). One follow-up remains: reconcile the idle-memory target
+  with WebView2's process-model floor (revisit as a per-platform figure or trim
+  the process count).)
 
 **Stashes shipped (2026-05-30):** First 0.5 vertical. `strand-core::stash`
 (`stash_list` via `stash_foreach`; `stash_save` via `stash_save2` with
@@ -990,6 +991,32 @@ worktree chip, j/k crossing into the worktree slice, ⌘F preview
 "web · feat-auth · src/auth.ts", a note on the worktree file exporting under
 `## web · feat-auth (branch feat-auth)`, and the toggle appearing at 1 repo
 + 1 worktree).
+
+**Local Changes diff pane virtualized (2026-07-06):** Closed the last
+diff-render miss from the 2026-06-29 webview baseline. The Local Changes diff
+pane rendered every row of the selected file — a whole-file 5,000-line agent
+change mounted ~7,500 line elements (~70k spans, ~1.5s), and every refresh
+(staging a block) re-paid it. `DiffPane` (`views/LocalChanges.tsx`) now wraps
+the stacked file list in Pierre's `<Virtualizer className="lc-diff-scroll">`
+(the scroll container); each stacked `<PierreFileDiff>` auto-registers with that
+one virtualizer through context (`useFileDiffInstance` → `useVirtualizer`), so
+every file window-renders only its on-screen rows — the exact mechanism Review
+uses. Measured live in the running app (browser-mode, seeded stores): a
+6,250/6,250-line whole-file diff mounts **~200 rows, not ~7,500**, with
+`scrollHeight` honestly reserved. Two companion fixes were load-bearing, not
+polish: (1) the diff is keyed by `hashFileDiff(diff)` because a
+`VirtualizedFileDiff` pins the first fileDiff it renders (`this.fileDiff ??=`) —
+without the remount, staging a block would leave the pane showing the pre-stage
+diff (the non-virtual `FileDiff` updated on re-prop; the virtual one doesn't);
+(2) the ⌘F jump hands `{patch, layout}` to `scrollToDiffLine` so it seeks
+proportionally to a row the Virtualizer hasn't mounted yet (a deep off-screen row
+isn't in the DOM to find — verified landing dead-center 148,645px down a 150,044px
+diff). The per-file viewport-lazy IO gate stays and composes: it bounds file
+*instances* in a "show all", the Virtualizer bounds *rows* per instance. Verified:
+`tsc`, `vitest` (185), `vite build`, and a live browser-mode pass (200-row cap,
+content-hash remount 200→8 on a patch swap, ⌘F deep-jump, `n`/`p` step,
+collapse/expand, multi-file "show all" placeholders). The only open perf item is
+idle memory (WebView2's process-model floor).
 
 ---
 

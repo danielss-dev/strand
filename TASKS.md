@@ -654,10 +654,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Bulk "Stage all" / "Unstage all" (single batched IPC — `repo_stage_many` /
   `repo_unstage_many` open the repo + write the index once, not once per file;
   matters for big changesets like a squash-merge staging hundreds of files)
-- ☑ Stacked diff pane is **viewport-lazy**: each file's Pierre diff body mounts
-  only when its block scrolls near the viewport (IntersectionObserver, ~900px
-  pre-roll), with a height-estimated placeholder until then — so "show all" over
-  hundreds of files no longer freezes on open / after a merge
+- ☑ Stacked diff pane is **viewport-lazy + row-virtualized**: the pane is wrapped
+  in Pierre's `<Virtualizer>` (2026-07-06) so each file window-renders only its
+  on-screen rows (a 5,000-line file mounts ~200, not ~7,500); *and* each file's
+  body only mounts once its block scrolls near the viewport (IntersectionObserver,
+  ~900px pre-roll, height-estimated placeholder until then), so "show all" over
+  hundreds of files doesn't instantiate every file diff at once. The two compose:
+  lazy-mount bounds file *instances*, the Virtualizer bounds *rows* per instance
 - ☑ Stacked / split diff layout toggle, **persisted per-repo** (MainHeader
   buttons map `useSettings.diffMode` `stacked`/`split` → Pierre `unified`/`split`
   for `LocalChanges` + `CommitDetail`; `useRepo.setDiffMode` writes the choice to
@@ -1198,27 +1201,46 @@ a running-app pass.
   incremental `git log`, so `discover + log(5000)` is ~47ms on the 100k fixture)
 - ☑ Status refresh on 10k-file working tree < 200ms (measured 42ms; ~85ms with the
   `work_tree` walk the UI also runs per refresh)
-- ◐ Diff render for 5,000-line file < 100ms (measured 2026-06-29): **~87ms** for
-  a realistic hunk-sized change ✅, but **~1460ms** for a whole-file 5,000-line
-  diff (7,500 line elements) in the **non-virtualized Local Changes** pane ❌.
-  The **Review** pane is virtualized (Pierre `<Virtualizer>`, ~100 mounted rows
-  regardless of file size) and stays within budget. **Follow-up:** virtualize /
-  cap mounted rows in the Local Changes stacked diff pane (see new item below).
+- ☑ Diff render for 5,000-line file < 100ms. The realistic hunk-sized change was
+  always **~87ms** ✅; the **~1460ms** whole-file case was the non-virtualized
+  Local Changes pane mounting all 7,500 line elements. **Resolved 2026-07-06** by
+  virtualizing that pane (see "Virtualize the Local Changes stacked diff pane"
+  below) — it now caps mounted rows at ~200 like Review, so file size no longer
+  drives render cost. (Absolute re-measure on the Windows/WebView2 prod harness
+  still wants a rerun, but the 7,500→200 row cap is the structural fix.)
 - ☑ Stage/unstage hunk < 50ms perceived (measured 2026-06-29): **~34ms** round
-  trip (IPC + `refreshLocalChanges` + repaint) when viewing the file. Note: rises
-  to ~297ms if a huge whole-file diff is co-mounted in the stacked view — same
-  Local Changes non-virtualization root cause as the render item.
+  trip (IPC + `refreshLocalChanges` + repaint) when viewing the file. The old
+  ~297ms case (a huge whole-file diff co-mounted in the stacked view) shared the
+  Local Changes non-virtualization root cause and is fixed by the same 2026-07-06
+  virtualization — the co-mounted file now re-renders only its ~200 windowed rows.
 - ◐ Idle memory < 250MB for one medium repo (measured 2026-06-29): **~280MB
   private / ~438MB working set** with the strand repo open (~408MB / 248MB
   empty); JS heap is only 7MB, so the overage is WebView2's 6-process baseline
   (`strand.exe` itself is ~38MB), not app allocation. **Over target** — needs
   either WebView2 process-count reduction or a per-platform target revisit.
-- ☐ **Virtualize the Local Changes stacked diff pane** (perf follow-up from the
-  webview pass). A whole-file 5,000-line diff mounts 7,500 line elements
-  (~1.5s render; re-rendered on every refresh incl. staging). Review already
-  caps mounted rows via Pierre's `<Virtualizer>`; apply the same (or a per-file
-  mounted-row cap) to Local Changes. Hunk-sized diffs (~87ms) are unaffected —
-  this only bites large single-file agent changes.
+- ☑ **Virtualize the Local Changes stacked diff pane** (perf follow-up from the
+  webview pass) — done 2026-07-06. `DiffPane` (`views/LocalChanges.tsx`) now
+  wraps the stacked file list in Pierre's `<Virtualizer className="lc-diff-scroll">`
+  (the scroll container); every stacked `<PierreFileDiff>` auto-registers with
+  that one virtualizer through context (`useFileDiffInstance` → `useVirtualizer`),
+  so each file window-renders its rows — the same mechanism Review uses. A
+  whole-file 5,000-line diff now mounts **~200 rows instead of ~7,500** (verified
+  live: 200 mounted, `scrollHeight` honestly reserved). Two companion fixes were
+  required, not optional: (1) `HunkAnnotatedDiff` is now keyed by
+  `hashFileDiff(diff)` because a `VirtualizedFileDiff` pins the first fileDiff it
+  renders (`this.fileDiff ??=`), so a content change (staging a block shrinks the
+  patch) must remount the instance — the non-virtual `FileDiff` updated on
+  re-prop, the virtual one doesn't; (2) the ⌘F jump now passes `{patch, layout}`
+  to `scrollToDiffLine` (the selection narrows the pane to one file, so its
+  scroll maps 1:1) — a virtualized off-screen row isn't in the DOM to find, so
+  the retry-only path would never land on it. The per-file viewport-lazy IO gate
+  stays (avoids instantiating hundreds of file diffs at once in a "show all").
+  Verified live (browser-mode seeded stores): 200-row cap, content-hash remount
+  (200→8 on a patch swap), ⌘F deep-jump lands dead-center, `n`/`p` step,
+  collapse/expand, multi-file "show all" (lazy placeholders + virtualization
+  compose). **Note:** the per-block action *overlay* markers are still all in the
+  light DOM (not virtualized) — pre-existing, unchanged, and far cheaper than the
+  highlighted code rows this fixed; a possible future trim.
 - ☑ Installer < 25MB per platform (macOS DMG ~10MB, Windows MSI 10.5MB — recorded)
 
 ### Perf-pass leads (2026-06-08 baseline)
