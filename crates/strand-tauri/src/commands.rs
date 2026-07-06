@@ -4,6 +4,14 @@
 //! repaints, which reads as the whole app freezing on alt-tab. `(async)` on a
 //! sync fn moves it to the runtime's pool with no signature change. The one
 //! exception is `repo_cancel_op` (see its comment).
+//!
+//! Within that pool there are two tiers. Commands whose cost scales with repo
+//! size (status/log/diff/tree/refs reads) or that wait on a subprocess route
+//! their work through [`run_blocking`] onto tokio's *blocking* pool — a sync
+//! body would otherwise occupy one of the runtime's few core workers for its
+//! whole duration, so a fan-out of slow reads (a workspace refresh walking
+//! several big repos) could head-of-line-block every other pending command.
+//! Quick writes (stage, branch, tag, …) stay plain sync bodies.
 
 use serde::Serialize;
 use strand_core::{
@@ -50,10 +58,21 @@ impl From<strand_core::Error> for CmdError {
 
 type CmdResult<T> = std::result::Result<T, CmdError>;
 
+/// Run CPU/disk-bound work on tokio's blocking pool (see the module comment
+/// for why repo-size-scaled reads don't stay sync). `label` names the op in
+/// the error if the task itself dies.
+async fn run_blocking<T: Send + 'static>(
+    label: &'static str,
+    work: impl FnOnce() -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| CmdError { message: format!("{label} task failed: {e}") })?
+}
+
 #[tauri::command(async)]
-pub fn repo_open(path: String, state: State<'_, AppState>) -> CmdResult<RepoMeta> {
-    let repo = Repo::discover(&path)?;
-    let meta = repo.meta()?;
+pub async fn repo_open(path: String, state: State<'_, AppState>) -> CmdResult<RepoMeta> {
+    let meta = run_blocking("open", move || Ok(Repo::discover(&path)?.meta()?)).await?;
     if let Ok(mut paths) = state.open_paths.lock() {
         paths.insert(meta.path.clone());
     }
@@ -61,21 +80,21 @@ pub fn repo_open(path: String, state: State<'_, AppState>) -> CmdResult<RepoMeta
 }
 
 #[tauri::command(async)]
-pub fn repo_meta(path: String) -> CmdResult<RepoMeta> {
-    Ok(Repo::discover(&path)?.meta()?)
+pub async fn repo_meta(path: String) -> CmdResult<RepoMeta> {
+    run_blocking("meta", move || Ok(Repo::discover(&path)?.meta()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
-    Ok(Repo::discover(&path)?.status()?)
+pub async fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
+    run_blocking("status", move || Ok(Repo::discover(&path)?.status()?)).await
 }
 
 /// One-call refresh bundle: meta + status + work tree + refs + submodules
 /// from a single repo open and a single statuses walk. The frontend's
 /// post-change refresh path calls this instead of five separate commands.
 #[tauri::command(async)]
-pub fn repo_snapshot(path: String) -> CmdResult<Snapshot> {
-    Ok(Repo::discover(&path)?.snapshot()?)
+pub async fn repo_snapshot(path: String) -> CmdResult<Snapshot> {
+    run_blocking("snapshot", move || Ok(Repo::discover(&path)?.snapshot()?)).await
 }
 
 /// Start watching `path`'s working tree; emits a `repo://changed` event with
@@ -123,134 +142,150 @@ pub fn repo_unwatch(path: String, state: State<'_, AppState>) -> CmdResult<()> {
 }
 
 #[tauri::command(async)]
-pub fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
-    Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)
+pub async fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
+    run_blocking("log", move || Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)).await
 }
 
 /// Full-history commit search (message / author / diff content) — the backend
 /// reach the client-side, loaded-window highlight can't cover. `mode` is one of
 /// `"message"` / `"author"` / `"content"`.
 #[tauri::command(async)]
-pub fn repo_search_log(
+pub async fn repo_search_log(
     path: String,
     query: String,
     mode: SearchMode,
     limit: Option<usize>,
 ) -> CmdResult<Vec<Commit>> {
-    Ok(Repo::discover(&path)?.search_log(&query, mode, limit.unwrap_or(200))?)
+    run_blocking("search", move || {
+        Ok(Repo::discover(&path)?.search_log(&query, mode, limit.unwrap_or(200))?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_refs(path: String) -> CmdResult<Refs> {
-    Ok(Repo::discover(&path)?.refs()?)
+pub async fn repo_refs(path: String) -> CmdResult<Refs> {
+    run_blocking("refs", move || Ok(Repo::discover(&path)?.refs()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_unstaged()?)
+pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_staged(path: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_staged()?)
+pub async fn repo_diff_staged(path: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_staged()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_between(path: String, from: String, to: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_between(&from, &to)?)
+pub async fn repo_diff_between(path: String, from: String, to: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_between(&from, &to)?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_commit(path: String, oid: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_commit(&oid)?)
+pub async fn repo_diff_commit(path: String, oid: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_commit(&oid)?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_commit_file(path: String, oid: String, file: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_commit_file(&oid, &file)?)
+pub async fn repo_diff_commit_file(path: String, oid: String, file: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_commit_file(&oid, &file)?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_workdir_file(path: String, file: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_workdir_file(&file)?)
+pub async fn repo_diff_workdir_file(path: String, file: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_workdir_file(&file)?)).await
 }
 
 /// Diff everything (committed + staged + unstaged) since a baseline
 /// commit-ish — the "review since…" view for agent sessions.
 #[tauri::command(async)]
-pub fn repo_diff_since(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_since(&baseline)?)
+pub async fn repo_diff_since(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_since(&baseline)?)).await
 }
 
 /// Whole-file-context variants of `repo_diff_unstaged` / `repo_diff_since`:
 /// each patch carries the entire file, not just hunks. The Review view uses
 /// these so an agent's edits read in the context of the full file.
 #[tauri::command(async)]
-pub fn repo_diff_unstaged_full(path: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_unstaged_full()?)
+pub async fn repo_diff_unstaged_full(path: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged_full()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_diff_since_full(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
-    Ok(Repo::discover(&path)?.diff_since_full(&baseline)?)
+pub async fn repo_diff_since_full(path: String, baseline: String) -> CmdResult<Vec<FileDiff>> {
+    run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_since_full(&baseline)?)).await
 }
 
 /// Best common ancestor of two commit-ishes. Pairs with `repo_diff_since` to
 /// review a worktree against the branch it forked from.
 #[tauri::command(async)]
-pub fn repo_merge_base(path: String, a: String, b: String) -> CmdResult<String> {
-    Ok(Repo::discover(&path)?.merge_base(&a, &b)?)
+pub async fn repo_merge_base(path: String, a: String, b: String) -> CmdResult<String> {
+    run_blocking("merge base", move || Ok(Repo::discover(&path)?.merge_base(&a, &b)?)).await
 }
 
 // ── File view (Content / History / Blame tabs) ──
 
 #[tauri::command(async)]
-pub fn repo_file_content(path: String, file: String, rev: Option<String>) -> CmdResult<FileContent> {
-    Ok(Repo::discover(&path)?.file_content(&file, rev.as_deref())?)
+pub async fn repo_file_content(path: String, file: String, rev: Option<String>) -> CmdResult<FileContent> {
+    run_blocking("file content", move || {
+        Ok(Repo::discover(&path)?.file_content(&file, rev.as_deref())?)
+    })
+    .await
 }
 
 /// Raw file bytes (base64) for the image diff preview. `index = true` reads
 /// the staged copy; otherwise `rev = None` reads the working tree and
 /// `rev = Some(spec)` the blob at that revision.
 #[tauri::command(async)]
-pub fn repo_file_blob(
+pub async fn repo_file_blob(
     path: String,
     file: String,
     rev: Option<String>,
     index: bool,
 ) -> CmdResult<FileBlob> {
-    let source = if index {
-        BlobSource::Index
-    } else {
-        match rev.as_deref() {
-            Some(spec) => BlobSource::Rev(spec),
-            None => BlobSource::Worktree,
-        }
-    };
-    Ok(Repo::discover(&path)?.file_blob(&file, source)?)
+    run_blocking("file blob", move || {
+        let source = if index {
+            BlobSource::Index
+        } else {
+            match rev.as_deref() {
+                Some(spec) => BlobSource::Rev(spec),
+                None => BlobSource::Worktree,
+            }
+        };
+        Ok(Repo::discover(&path)?.file_blob(&file, source)?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_file_history(
+pub async fn repo_file_history(
     path: String,
     file: String,
     limit: Option<usize>,
 ) -> CmdResult<Vec<FileHistoryEntry>> {
-    Ok(Repo::discover(&path)?.file_history(&file, limit.unwrap_or(200))?)
+    run_blocking("file history", move || {
+        Ok(Repo::discover(&path)?.file_history(&file, limit.unwrap_or(200))?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_blame(path: String, file: String) -> CmdResult<Vec<BlameLine>> {
-    Ok(Repo::discover(&path)?.blame(&file)?)
+pub async fn repo_blame(path: String, file: String) -> CmdResult<Vec<BlameLine>> {
+    run_blocking("blame", move || Ok(Repo::discover(&path)?.blame(&file)?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_reflog(
+pub async fn repo_reflog(
     path: String,
     selector: Option<String>,
     limit: Option<usize>,
 ) -> CmdResult<Vec<ReflogEntry>> {
-    Ok(Repo::discover(&path)?.reflog(selector.as_deref().unwrap_or("HEAD"), limit.unwrap_or(500))?)
+    run_blocking("reflog", move || {
+        Ok(Repo::discover(&path)?
+            .reflog(selector.as_deref().unwrap_or("HEAD"), limit.unwrap_or(500))?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
@@ -337,7 +372,7 @@ pub async fn repo_fetch(
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
     register_op(&state, &op_id, &cancel);
-    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let result = run_blocking("fetch", move || {
         let repo = Repo::discover(&path)?;
         repo.fetch(
             remote.as_deref(),
@@ -348,10 +383,9 @@ pub async fn repo_fetch(
         )
         .map_err(CmdError::from)
     })
-    .await
-    .map_err(|e| CmdError { message: format!("fetch task failed: {e}") });
+    .await;
     deregister_op(&state, &op_id);
-    result?
+    result
 }
 
 #[tauri::command(async)]
@@ -364,7 +398,7 @@ pub async fn repo_pull(
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
     register_op(&state, &op_id, &cancel);
-    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let result = run_blocking("pull", move || {
         let repo = Repo::discover(&path)?;
         repo.pull(
             rebase,
@@ -375,10 +409,9 @@ pub async fn repo_pull(
         )
         .map_err(CmdError::from)
     })
-    .await
-    .map_err(|e| CmdError { message: format!("pull task failed: {e}") });
+    .await;
     deregister_op(&state, &op_id);
-    result?
+    result
 }
 
 #[tauri::command(async)]
@@ -391,7 +424,7 @@ pub async fn repo_push(
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
     register_op(&state, &op_id, &cancel);
-    let result = tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    let result = run_blocking("push", move || {
         let repo = Repo::discover(&path)?;
         repo.push(
             force_with_lease,
@@ -402,10 +435,9 @@ pub async fn repo_push(
         )
         .map_err(CmdError::from)
     })
-    .await
-    .map_err(|e| CmdError { message: format!("push task failed: {e}") });
+    .await;
     deregister_op(&state, &op_id);
-    result?
+    result
 }
 
 #[tauri::command(async)]
@@ -418,7 +450,7 @@ pub async fn repo_clone(
 ) -> CmdResult<CloneOutcome> {
     let cancel = CancelHandle::new();
     register_op(&state, &op_id, &cancel);
-    let result = tokio::task::spawn_blocking(move || -> CmdResult<CloneOutcome> {
+    let result = run_blocking("clone", move || {
         core_clone(
             &url,
             &dest,
@@ -429,10 +461,9 @@ pub async fn repo_clone(
         )
         .map_err(CmdError::from)
     })
-    .await
-    .map_err(|e| CmdError { message: format!("clone task failed: {e}") });
+    .await;
     deregister_op(&state, &op_id);
-    result?
+    result
 }
 
 /// Kill the in-flight cancellable op registered under `op_id`. A no-op when
@@ -461,13 +492,13 @@ pub fn repo_checkout_commit(path: String, rev: String) -> CmdResult<CheckoutOutc
 }
 
 #[tauri::command(async)]
-pub fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
-    Ok(Repo::discover(&path)?.work_tree()?)
+pub async fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
+    run_blocking("tree", move || Ok(Repo::discover(&path)?.work_tree()?)).await
 }
 
 #[tauri::command(async)]
-pub fn repo_submodules(path: String) -> CmdResult<Vec<Submodule>> {
-    Ok(Repo::discover(&path)?.submodules()?)
+pub async fn repo_submodules(path: String) -> CmdResult<Vec<Submodule>> {
+    run_blocking("submodules", move || Ok(Repo::discover(&path)?.submodules()?)).await
 }
 
 // `git submodule update` can clone/fetch, so it runs off the IPC thread and
@@ -480,7 +511,7 @@ pub async fn repo_submodule_update(
     recursive: bool,
     on_event: Channel<Progress>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    run_blocking("submodule update", move || {
         let repo = Repo::discover(&path)?;
         repo.submodule_update(&paths, init, recursive, |p| {
             let _ = on_event.send(p);
@@ -488,12 +519,11 @@ pub async fn repo_submodule_update(
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("submodule update task failed: {e}") })?
 }
 
 #[tauri::command(async)]
-pub fn repo_worktrees(path: String) -> CmdResult<Vec<Worktree>> {
-    Ok(Repo::discover(&path)?.worktrees()?)
+pub async fn repo_worktrees(path: String) -> CmdResult<Vec<Worktree>> {
+    run_blocking("worktrees", move || Ok(Repo::discover(&path)?.worktrees()?)).await
 }
 
 #[tauri::command(async)]
@@ -545,7 +575,7 @@ pub async fn repo_branch_delete_remote(
     branch: String,
     on_event: Channel<Progress>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    run_blocking("branch delete", move || {
         let repo = Repo::discover(&path)?;
         repo.delete_remote_branch(&remote, &branch, |p| {
             let _ = on_event.send(p);
@@ -553,7 +583,6 @@ pub async fn repo_branch_delete_remote(
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("branch delete task failed: {e}") })?
 }
 
 #[tauri::command(async)]
@@ -602,11 +631,10 @@ pub fn repo_tag_delete(path: String, name: String) -> CmdResult<()> {
 
 #[tauri::command(async)]
 pub async fn repo_remote_tags(path: String, remote: String) -> CmdResult<Vec<String>> {
-    tokio::task::spawn_blocking(move || -> CmdResult<Vec<String>> {
+    run_blocking("remote tags", move || {
         Repo::discover(&path)?.remote_tags(&remote).map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("remote tags task failed: {e}") })?
 }
 
 #[tauri::command(async)]
@@ -617,7 +645,7 @@ pub async fn repo_tag_push(
     delete: bool,
     on_event: Channel<Progress>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    run_blocking("tag push", move || {
         let repo = Repo::discover(&path)?;
         repo.push_tag(&tag, &remote, delete, |p| {
             let _ = on_event.send(p);
@@ -625,7 +653,6 @@ pub async fn repo_tag_push(
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
 }
 
 #[tauri::command(async)]
@@ -634,7 +661,7 @@ pub async fn repo_tag_push_all(
     remote: String,
     on_event: Channel<Progress>,
 ) -> CmdResult<NetworkOutcome> {
-    tokio::task::spawn_blocking(move || -> CmdResult<NetworkOutcome> {
+    run_blocking("tag push", move || {
         let repo = Repo::discover(&path)?;
         repo.push_all_tags(&remote, |p| {
             let _ = on_event.send(p);
@@ -642,7 +669,6 @@ pub async fn repo_tag_push_all(
         .map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("tag push task failed: {e}") })?
 }
 
 // These return `true` when the op stopped on conflicts (left in progress for
@@ -712,11 +738,10 @@ pub fn repo_resolve_conflict(path: String, file: String, contents: String) -> Cm
 // Blocks until the external tool exits, so it runs off the IPC thread.
 #[tauri::command(async)]
 pub async fn repo_open_mergetool(path: String, file: String) -> CmdResult<()> {
-    tokio::task::spawn_blocking(move || -> CmdResult<()> {
+    run_blocking("mergetool", move || {
         Repo::discover(&path)?.open_mergetool(&file).map_err(CmdError::from)
     })
     .await
-    .map_err(|e| CmdError { message: format!("mergetool task failed: {e}") })?
 }
 
 // Detached spawns — they return as soon as the app launches, so no
@@ -829,8 +854,8 @@ pub fn crash_report_check(since: u64, app: tauri::AppHandle) -> CmdResult<CrashC
 }
 
 #[tauri::command(async)]
-pub fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
-    Ok(Repo::discover(&path)?.stash_list()?)
+pub async fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
+    run_blocking("stash list", move || Ok(Repo::discover(&path)?.stash_list()?)).await
 }
 
 #[tauri::command(async)]
@@ -897,56 +922,69 @@ fn ai_cli_override(provider: ai::AiProvider, openai: Option<String>, anthropic: 
     }
 }
 
+// The AI commands wait on the provider's CLI subprocess — `login` can sit for
+// minutes on an interactive auth flow and `suggest` on a model response — so
+// they run on the blocking pool like the network ops.
+
 #[tauri::command(async)]
-pub fn ai_provider_status(
+pub async fn ai_provider_status(
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
 ) -> CmdResult<ai::AiProviderStatus> {
-    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-    Ok(ai::provider_status(
-        provider,
-        override_path.as_deref(),
-    ))
+    run_blocking("ai status", move || {
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        Ok(ai::provider_status(provider, override_path.as_deref()))
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn ai_provider_login(
+pub async fn ai_provider_login(
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
 ) -> CmdResult<()> {
-    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-    ai::provider_login(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+    run_blocking("ai login", move || {
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::provider_login(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn ai_provider_logout(
+pub async fn ai_provider_logout(
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
 ) -> CmdResult<()> {
-    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-    ai::provider_logout(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+    run_blocking("ai logout", move || {
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::provider_logout(provider, override_path.as_deref()).map_err(CmdError::from_msg)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_suggest_commit_message(
+pub async fn repo_suggest_commit_message(
     path: String,
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
 ) -> CmdResult<ai::CommitMessageSuggestion> {
-    let repo = Repo::discover(&path)?;
-    let diffs = repo.diff_staged()?;
-    let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-    ai::suggest_commit_message(
-        provider,
-        repo.path(),
-        &diffs,
-        override_path.as_deref(),
-    )
-    .map_err(CmdError::from_msg)
+    run_blocking("ai suggest", move || {
+        let repo = Repo::discover(&path)?;
+        let diffs = repo.diff_staged()?;
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::suggest_commit_message(
+            provider,
+            repo.path(),
+            &diffs,
+            override_path.as_deref(),
+        )
+        .map_err(CmdError::from_msg)
+    })
+    .await
 }
 
 impl CmdError {
