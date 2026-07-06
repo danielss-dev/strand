@@ -33,6 +33,14 @@ export interface GlobalIdentity {
   email: string | null;
 }
 
+/** Local crash-log state from `crash_report_check` — `entry` is the newest
+ * panic past the acknowledged offset, or null when nothing new happened. */
+export interface CrashCheck {
+  path: string;
+  len: number;
+  entry: string | null;
+}
+
 /** Merge strategy chosen in the Merge dialog. */
 export type MergeMode = 'auto' | 'no_ff' | 'squash';
 

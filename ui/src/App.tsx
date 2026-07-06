@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { HistoryModeToggle } from './components/HistoryModeToggle';
@@ -20,6 +22,7 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
 import { accentHueForColor, groupTabs, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
+import { buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
@@ -60,7 +63,7 @@ import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 import { RepoSwitcher } from './views/RepoSwitcher';
-import type { FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
+import type { CrashCheck, FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -243,6 +246,9 @@ export function App() {
   const [pullDone, setPullDone] = useState(false);
   const [pushDone, setPushDone] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Unacknowledged crash from a previous run (Settings → Privacy, opt-in).
+  // Non-null renders the persistent CrashToast until reported or dismissed.
+  const [crashReport, setCrashReport] = useState<CrashCheck | null>(null);
   // Live network-op progress (fetch/pull/push) shown as a pill while a
   // transfer is in flight. Null when idle.
   const [netProgress, setNetProgress] = useState<string | null>(null);
@@ -743,6 +749,30 @@ export function App() {
     }, 3000);
     return () => clearTimeout(timer);
   }, [showToast]);
+
+  // Crash-report check on launch (Settings → Privacy, opt-in and off by
+  // default). Reads the *local* crash log for entries past the acknowledged
+  // offset; when one exists, a persistent toast offers a user-mediated
+  // report (a prefilled GitHub issue in the browser) or Dismiss — nothing is
+  // ever uploaded automatically. Delayed like the update check so it never
+  // competes with cold-start work; prefs read at fire time.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const timer = setTimeout(() => {
+      const { crashPrompt, crashAck, set } = useSettings.getState();
+      if (!crashPrompt) return;
+      void tauri
+        .crashReportCheck(crashAck)
+        .then((check) => {
+          if (check.entry) setCrashReport(check);
+          // Log shrank or vanished (cleared by hand) — realign the ack so a
+          // stale large offset can't hide the next crash forever.
+          else if (check.len < crashAck) set('crashAck', check.len);
+        })
+        .catch((e) => console.warn('crash-report check failed', e));
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Native drag-and-drop: drop one or more folders onto the window to open
   // them, each as its own tab.
@@ -1336,6 +1366,13 @@ export function App() {
 
         <UndoToast />
         <BulkUndoToast onToast={showToast} />
+        {crashReport && (
+          <CrashToast
+            check={crashReport}
+            onClose={() => setCrashReport(null)}
+            onToast={showToast}
+          />
+        )}
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
@@ -1536,6 +1573,51 @@ function BulkUndoToast({ onToast }: { onToast: (msg: string) => void }) {
       <span>Discarded {lastBulkDiscard.count} files (snapshot saved)</span>
       <button type="button" className="toast-action" onClick={() => void restore()}>
         Restore
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Prompt shown when the previous run crashed and crash-report offers are
+ * enabled (Settings → Privacy — opt-in, off by default). Persistent until
+ * acted on — unlike the undo toasts there's no expiry, a crash deserves a
+ * decision. "Report…" opens a *prefilled GitHub issue* in the browser so the
+ * user reviews exactly what leaves the machine before submitting; Strand
+ * never uploads anything itself. Both actions acknowledge the log offset so
+ * the same crash never re-prompts.
+ */
+function CrashToast({
+  check,
+  onClose,
+  onToast,
+}: {
+  check: CrashCheck;
+  onClose: () => void;
+  onToast: (msg: string) => void;
+}) {
+  const ack = () => {
+    useSettings.getState().set('crashAck', check.len);
+    onClose();
+  };
+  const report = async () => {
+    try {
+      const version = await getVersion().catch(() => 'unknown');
+      await shellOpen(buildCrashIssueUrl(check.entry ?? '', version, osType()));
+      onToast('Crash report opened in your browser — review it before submitting');
+    } catch (e) {
+      onToast(`Couldn't open the report: ${errMessage(e)}`);
+    }
+    ack();
+  };
+  return (
+    <div className="toast undo" role="alert">
+      <span>Strand crashed last session</span>
+      <button type="button" className="toast-action" onClick={() => void report()}>
+        Report…
+      </button>
+      <button type="button" className="toast-action" onClick={ack}>
+        Dismiss
       </button>
     </div>
   );

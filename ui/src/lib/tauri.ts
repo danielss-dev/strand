@@ -10,6 +10,7 @@ import type {
   CommitMessageSuggestion,
   CommitSearchMode,
   CommitOutcome,
+  CrashCheck,
   FileBlob,
   FileContent,
   FileDiff,
@@ -296,6 +297,9 @@ export const tauri = {
     invoke<void>('git_set_global_identity', { name, email }),
   /** Raw text of a `.code-workspace` file (extension + 1 MB gated backend-side). */
   workspaceFileRead: (path: string) => invoke<string>('workspace_file_read', { path }),
+  /** Local crash-log check — `since` is the persisted acknowledged byte
+   * offset; a purely local read, nothing leaves the machine. */
+  crashReportCheck: (since: number) => invoke<CrashCheck>('crash_report_check', { since }),
   repoStashList: (path: string) => invoke<Stash[]>('repo_stash_list', { path }),
   repoStashSave: (
     path: string,
