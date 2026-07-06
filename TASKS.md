@@ -1302,10 +1302,22 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 
 ## Security & privacy
 
-- ◐ Opt-in crash reporting (off by default) — local half landed: a panic hook
-  (`install_crash_log` in `main.rs`) appends panics + backtraces to
-  `app_log_dir()/crash.log`, nothing leaves the machine. Opt-in *remote*
-  reporting still ☐.
+- ☑ Opt-in crash reporting (off by default) — **user-mediated, no upload
+  path** (2026-07-06). Local half: a panic hook (`install_crash_log` in
+  `main.rs`) appends panics + backtraces to `app_log_dir()/crash.log`,
+  always, nothing leaves the machine. Reporting half: `crash_report_check`
+  IPC (a pure local read — log path + byte length + the newest panic entry
+  past the frontend's persisted ack offset, entry capped at 8 KB) feeds an
+  opt-in launch prompt (`crashPrompt`, default off; `crashAck` offset in
+  the settings store) — a persistent CrashToast offers **Report…** (opens a
+  *prefilled GitHub issue* in the browser via `buildCrashIssueUrl` in
+  `lib/crashReport.ts`, URL-budgeted to ~7 KB, so the user reviews exactly
+  what leaves the machine and submitting is their explicit act) or Dismiss;
+  both acknowledge. Settings → **Privacy** (new section, future telemetry
+  home) hosts the toggle, a "Report last crash…" button (grayed when the
+  log is empty), and the disclosure line with the log path. There is
+  deliberately no automatic-upload backend — the project has none, and the
+  user-reviewed issue keeps PRD §10 honest.
 - ☐ Opt-in telemetry (off by default, clearly disclosed at first launch)
 - ☐ SSH passphrase prompts via OS-native dialogs
 - ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)

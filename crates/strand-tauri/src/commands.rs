@@ -769,6 +769,65 @@ pub fn workspace_file_read(path: String) -> CmdResult<String> {
     std::fs::read_to_string(p).map_err(|e| CmdError { message: e.to_string() })
 }
 
+/// The local crash log's state, plus the newest panic entry when the log has
+/// grown past the frontend's acknowledged byte offset.
+#[derive(Debug, Serialize)]
+pub struct CrashCheck {
+    /// Absolute path of `crash.log` (shown in Settings so the user knows
+    /// where the local record lives).
+    pub path: String,
+    /// Current byte length of the log — the frontend persists this as its
+    /// acknowledgement offset after prompting.
+    pub len: u64,
+    /// The last panic entry appended after `since`, or `None` when nothing
+    /// new happened (or the log shrank / doesn't exist).
+    pub entry: Option<String>,
+}
+
+/// Pull the last `=== panic at …` block out of the unacknowledged log tail,
+/// bounded so a pathological backtrace can't balloon the IPC payload. The
+/// head of the entry (panic message + top frames) is what matters, so
+/// truncation keeps the front.
+fn last_panic_entry(tail: &str) -> String {
+    const MAX: usize = 8 * 1024;
+    let start = tail.rfind("=== panic at ").unwrap_or(0);
+    let mut entry = tail[start..].trim().to_string();
+    if entry.len() > MAX {
+        let mut cut = MAX;
+        while !entry.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        entry.truncate(cut);
+        entry.push_str("\n… (truncated — full entry in crash.log)");
+    }
+    entry
+}
+
+/// Check the local crash log (written by `install_crash_log` in main.rs) for
+/// panics newer than `since`, the byte offset the frontend last acknowledged.
+/// Purely a local read — reporting stays user-mediated (the frontend opens a
+/// prefilled GitHub issue the user reviews in the browser); nothing is ever
+/// uploaded automatically (PRD §10).
+#[tauri::command(async)]
+pub fn crash_report_check(since: u64, app: tauri::AppHandle) -> CmdResult<CrashCheck> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| CmdError { message: e.to_string() })?;
+    let path = dir.join("crash.log");
+    let len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let entry = if len > since {
+        std::fs::read(&path).ok().map(|bytes| {
+            let start = usize::try_from(since).unwrap_or(usize::MAX).min(bytes.len());
+            last_panic_entry(&String::from_utf8_lossy(&bytes[start..]))
+        })
+    } else {
+        None
+    };
+    Ok(CrashCheck { path: path.to_string_lossy().into_owned(), len, entry })
+}
+
 #[tauri::command(async)]
 pub fn repo_stash_list(path: String) -> CmdResult<Vec<Stash>> {
     Ok(Repo::discover(&path)?.stash_list()?)
@@ -898,7 +957,28 @@ impl CmdError {
 
 #[cfg(test)]
 mod tests {
+    use super::last_panic_entry;
     use super::workspace_file_read;
+
+    #[test]
+    fn last_panic_entry_picks_newest_and_bounds_size() {
+        // Two entries in the unacked tail → only the newest comes back.
+        let tail = "=== panic at unix:1 (strand 0.8.0)\nfirst\n\n=== panic at unix:2 (strand 0.8.0)\nsecond\nbacktrace line\n\n";
+        let entry = last_panic_entry(tail);
+        assert!(entry.starts_with("=== panic at unix:2"));
+        assert!(entry.contains("second"));
+        assert!(!entry.contains("first"));
+
+        // A tail cut mid-entry (ack offset landed inside it) still returns text.
+        assert_eq!(last_panic_entry("orphan tail, no marker"), "orphan tail, no marker");
+
+        // Oversized entries truncate at a char boundary, keeping the head.
+        let big = format!("=== panic at unix:3 (strand 0.8.0)\nmsg\n{}", "é".repeat(9000));
+        let entry = last_panic_entry(&big);
+        assert!(entry.len() < 9000);
+        assert!(entry.starts_with("=== panic at unix:3"));
+        assert!(entry.ends_with("(truncated — full entry in crash.log)"));
+    }
 
     #[test]
     fn workspace_file_read_gates_extension_and_size() {

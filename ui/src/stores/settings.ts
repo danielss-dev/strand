@@ -116,6 +116,13 @@ export interface SettingsState {
   anthropicCli: string | null;
   updateAutoCheck: boolean;
   updateAutoInstall: boolean;
+  /** Opt-in (off by default): after a crash, offer to report it on the next
+   * launch. Reporting opens a prefilled GitHub issue in the browser for the
+   * user to review and submit — Strand never uploads anything itself. */
+  crashPrompt: boolean;
+  /** Byte offset into `crash.log` the user has already been prompted about
+   * (report or dismiss both acknowledge). Entries past it are "new". */
+  crashAck: number;
   /** Per-command keyboard-shortcut overrides. A missing key uses the command's
    * default from `lib/keys.ts`; a `null` value means the command is unbound.
    * Resolved by `resolveBindings`. */
@@ -202,6 +209,8 @@ export const useSettings = create<SettingsState>()(
       anthropicCli: null,
       updateAutoCheck: true,
       updateAutoInstall: false,
+      crashPrompt: false,
+      crashAck: 0,
       keybindings: {},
       set: (key, value) => set({ [key]: value } as Partial<SettingsState>),
       setKeybinding: (id, binding) =>
