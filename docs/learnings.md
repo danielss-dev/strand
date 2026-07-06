@@ -825,9 +825,27 @@ instance silently renders the old file.
 **Why.** `VirtualizedFileDiff.render` assigns `this.fileDiff ??= fileDiff` —
 nullish-assign — so the first diff wins for the life of the instance. The
 non-virtualized `FileDiff` path re-reads the prop, which masks the bug until
-virtualization is enabled (Review's diff pane). Also reset the scroll
-container to the top on swap: the virtualizer keeps the previous file's
-offset, and a deep offset into a short file shows an empty window.
+virtualization is enabled (Review's diff pane, and Local Changes since
+2026-07-06). Also reset the scroll container to the top on swap: the
+virtualizer keeps the previous file's offset, and a deep offset into a short
+file shows an empty window.
+
+**How to apply.** A single `<Virtualizer>` can host a *stack* of files, not
+just one — every `<PierreFileDiff>` under it auto-registers through context
+(`useFileDiffInstance` → `useVirtualizer`) and windows its own rows. That's
+how Local Changes' stacked `DiffPane` virtualizes: wrap the map in one
+`<Virtualizer className="lc-diff-scroll">`, key each file's diff by
+`hashFileDiff(diff)` (the pinning rule above — staging a block changes the
+patch, and the instance must remount to show it), and keep any per-file
+viewport-lazy mount gate you already have (it bounds *instances* while the
+virtualizer bounds *rows* per instance). One more consequence: a ⌘F / jump to
+an off-screen line can't `findRow` it (virtualized rows past the window aren't
+in the DOM), so `scrollToDiffLine` needs `{patch, layout}` to seek
+proportionally first — but only when the pane shows a single file (selecting
+the match narrows Local Changes to one file, so its scroll maps 1:1). The
+per-block action *overlay* markers are **not** virtualized — they live in
+Pierre's light DOM, so all of them render regardless; that's cheap next to
+highlighted code rows but worth knowing if a file has thousands of blocks.
 
 ---
 

@@ -217,7 +217,7 @@ WebView2's multi-process model, not app allocation.
 | target | result | status |
 |--------|--------|--------|
 | Cold start < 1.0s | ~407ms shell, ~568ms repo-interactive | ✅ pass |
-| Diff render 5,000-line < 100ms | ~87ms normal; ~1460ms whole-file in Local Changes; bounded in Review | ⚠️ mixed |
+| Diff render 5,000-line < 100ms | ~87ms normal; whole-file Local Changes virtualized 2026-07-06 (~200 rows, was ~1460ms/7,500) | ✅ pass (see finding 1) |
 | Stage/unstage hunk < 50ms perceived | ~34ms isolated | ✅ pass (caveat below) |
 | Idle memory < 250 MB | 280 MB private / 438 MB WS (medium repo) | ❌ over |
 
@@ -232,6 +232,20 @@ WebView2's multi-process model, not app allocation.
    stacked diff pane. Fixes both the render miss and the stage inflation.
    Normal hunk-sized diffs are unaffected (~87ms) — this only bites on large
    single-file changes, which AI agents do produce.
+
+   **✅ Resolved 2026-07-06.** `DiffPane` (`ui/src/views/LocalChanges.tsx`) now
+   wraps the stacked file list in Pierre's `<Virtualizer className="lc-diff-scroll">`,
+   so each file window-renders its rows the way Review does. Verified in the
+   running app (browser-mode, seeded stores): a 6,250/6,250-line whole-file diff
+   mounts **~200 rows instead of ~7,500**, `scrollHeight` honestly reserved; the
+   ~297ms co-mounted-stage case is fixed by the same change (the file re-renders
+   only its ~200 windowed rows). Two required companions: the diff is keyed by
+   `hashFileDiff(diff)` (a `VirtualizedFileDiff` pins `this.fileDiff ??=`, so a
+   content change must remount, not re-prop), and the ⌘F jump passes
+   `{patch, layout}` to `scrollToDiffLine` for a proportional seek to an
+   unmounted row. This measurement was on macOS/Chromium/dev-vite (row-count cap
+   is platform-independent); a fresh absolute timing on the Windows/WebView2 prod
+   harness is a cheap re-run when convenient.
 
 2. **Idle memory is over the 250 MB target and the cause is structural.**
    The app JS is ~7 MB; ~400 MB is WebView2's six helper processes. Levers:

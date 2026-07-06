@@ -4,7 +4,7 @@ import {
   type DiffLineAnnotation,
   type SelectedLineRange,
 } from '@pierre/diffs';
-import { FileDiff as PierreFileDiff } from '@pierre/diffs/react';
+import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/Diff';
@@ -17,7 +17,7 @@ import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from 
 import { ignorePatterns } from '../lib/ignore';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, tauri } from '../lib/tauri';
-import { sliceChangeBlock, type SliceDirection } from '../lib/patch';
+import { hashFileDiff, sliceChangeBlock, type SliceDirection } from '../lib/patch';
 import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
@@ -133,11 +133,12 @@ export function LocalChanges() {
     ],
     [unstagedView, stagedView],
   );
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    // Hand focus back to the diff pane host so the j/k loop reads naturally.
-    document.querySelector<HTMLElement>('.lc-diff-scroll')?.focus();
-  }, []);
+  // Closing the search unmounts its input, so focus drops to <body> — the
+  // window-level j/k loop stays live from there (it only bails when focus is
+  // in an input). Shift+J/K still scroll the pane directly, so nothing needs
+  // to grab focus back. (The Virtualizer that hosts the diff can't take a
+  // tabIndex to be focused anyway.)
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   // The diff(s) the selection drives. "Show all" → the whole side. A file
   // row → just that file. A folder row (Pierre reports directory paths with
@@ -374,11 +375,23 @@ export function LocalChanges() {
                   diffs={searchPool}
                   onJump={(m) => {
                     selectFileRow({ file: m.path, staged: m.tag === true });
-                    // No patch/layout: this pane stacks files (sticky headers,
-                    // lazy bodies), so proportional math doesn't apply —
-                    // scrollToDiffLine's retries wait out the mount instead.
                     const target = matchTarget(m);
-                    if (target) scrollToDiffLine('.lc-diff-scroll', target);
+                    if (!target) return;
+                    // Selecting the match narrows the pane to just that file, so
+                    // the Virtualizer's scroll maps 1:1 to it — hand over the
+                    // patch + layout so scrollToDiffLine can seek proportionally
+                    // to a row the Virtualizer hasn't mounted yet (rows past the
+                    // window aren't in the DOM to find and center directly).
+                    const entry = searchPool.find(
+                      (d) => d.path === m.path && d.tag === (m.tag === true),
+                    );
+                    const layout =
+                      useSettings.getState().diffMode === 'split' ? 'split' : 'unified';
+                    scrollToDiffLine(
+                      '.lc-diff-scroll',
+                      target,
+                      entry ? { patch: entry.patch, layout } : {},
+                    );
                   }}
                   onClose={closeSearch}
                   placeholder="Search changes…"
@@ -666,16 +679,21 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
 
   return (
     <div className="lc-diff">
-      {/* tabIndex so closing the ⌘F bar can park focus here (not an input,
-          so the staging keyboard loop stays live). */}
-      <div className="lc-diff-scroll" tabIndex={-1}>
-        {diffs.length === 0 ? (
+      {diffs.length === 0 ? (
+        <div className="lc-diff-scroll">
           <div className="lc-empty">
             <strong>Select a file</strong>
             Pick something on the left to see its diff.
           </div>
-        ) : (
-          diffs.map((d) => (
+        </div>
+      ) : (
+        // Pierre's <Virtualizer> is the scroll container and window-renders each
+        // file's rows: a whole-file diff (a 5,000-line agent change) mounts only
+        // what's on screen instead of all ~7,500 line elements (~1.5s → bounded).
+        // Every stacked <PierreFileDiff> auto-registers with this one Virtualizer
+        // through context (useFileDiffInstance → useVirtualizer), same as Review.
+        <Virtualizer className="lc-diff-scroll">
+          {diffs.map((d) => (
             <FileDiffSection
               key={`${staged ? 's' : 'u'}:${d.path}`}
               diff={d}
@@ -684,9 +702,9 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
               collapsed={isCollapsed(d.path)}
               onToggle={() => toggle(d.path)}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </Virtualizer>
+      )}
     </div>
   );
 }
@@ -777,7 +795,18 @@ function FileDiffSection({
             {diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
           </div>
         ) : seen ? (
-          <HunkAnnotatedDiff diff={diff} layout={layout} side={staged ? 'staged' : 'unstaged'} />
+          // Keyed by content hash so a content change remounts the instance
+          // rather than re-propping it: inside the Virtualizer this renders a
+          // VirtualizedFileDiff, which pins the first fileDiff it sees
+          // (`this.fileDiff ??=`). Without the remount, staging a block (which
+          // shrinks this file's unstaged patch) would leave the pane showing
+          // the pre-stage diff. (The non-virtual path updated on re-prop.)
+          <HunkAnnotatedDiff
+            key={hashFileDiff(diff)}
+            diff={diff}
+            layout={layout}
+            side={staged ? 'staged' : 'unstaged'}
+          />
         ) : (
           <div className="lc-file-pending" style={{ height: estHeight }} aria-hidden />
         ))}
