@@ -13,7 +13,7 @@ import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
 import { jsonEqual, stable } from '../lib/stable';
-import { tauri } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
   Commit,
@@ -340,6 +340,14 @@ export interface RepoState {
   /** Append `pattern` to the workdir root `.gitignore` — the "Add to
    * .gitignore" quick action on untracked files. */
   gitignoreAdd(pattern: string): Promise<void>;
+  /**
+   * Rename / move working-tree entries (files or folders) — drag-and-drop
+   * and "Rename / move…" in the Files tree. Each move's `to` is the full new
+   * path. Runs sequentially with a single refresh at the end, and returns
+   * per-entry failure messages instead of throwing so one collision doesn't
+   * hide the moves that succeeded.
+   */
+  moveEntries(moves: Array<{ from: string; to: string }>): Promise<string[]>;
   /**
    * Apply a unified-diff patch (typically a single hunk sliced out of a
    * file's full patch) to either the index or the working tree in reverse.
@@ -1369,6 +1377,41 @@ export const useRepo = create<RepoState>((set, get) => ({
     // The ignored file drops out of untracked and .gitignore itself shows up
     // as modified/untracked — both ride the snapshot refresh.
     await get().refreshLocalChanges();
+  },
+  async moveEntries(moves) {
+    const path = get().activePath;
+    if (!path || moves.length === 0) return [];
+    const failures: string[] = [];
+    const done: Array<{ from: string; to: string }> = [];
+    for (const m of moves) {
+      try {
+        await tauri.repoMovePath(path, m.from, m.to);
+        done.push(m);
+      } catch (e) {
+        failures.push(`${m.from}: ${errMessage(e)}`);
+      }
+    }
+    if (done.length) {
+      // Keep an open file view pointed at the file's new location — including
+      // a file carried along by its folder's move. Only while the file view is
+      // showing: selectFile switches the view, and a background selection
+      // isn't worth yanking the user out of another view for.
+      const sel = get().selectedFile;
+      if (sel && get().view === 'file') {
+        for (const m of done) {
+          if (sel === m.from) {
+            get().selectFile(m.to);
+            break;
+          }
+          if (sel.startsWith(m.from + '/')) {
+            get().selectFile(m.to + sel.slice(m.from.length));
+            break;
+          }
+        }
+      }
+      await get().refreshLocalChanges();
+    }
+    return failures;
   },
   async applyPatch(patch, target) {
     const path = get().activePath;

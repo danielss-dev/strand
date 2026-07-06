@@ -1056,12 +1056,20 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   occurrence-count pickaxe is a possible future refinement.
 - ☑ Stashes shown inline on the graph (synthetic node per stash, attached to its
   base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
-- ☐ Drag-and-drop renames in file tree
+- ☑ Drag-and-drop renames in file tree — shipped 2026-07-06 (see changelog
+  entry below)
 - ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
   flow, shipped 2026-07-06 (see changelog entry below)
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
-- ☐ Performance pass on 100k-commit repos
+- ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
+  perf pass: every PRD §8 target passes on its measured platform, and the
+  engine numbers are taken on the 100k-commit / 10k-file fixtures
+  (`discover+log(5000)` ~47ms, `discover+snapshot` ~5.6ms on 100k commits;
+  see `docs/perf-baseline.md` + TASKS → Performance, where the audit
+  follow-ups — spawn_blocking reads, per-`Repo` git2 handle, snapshot batch,
+  virtualization, stable snapshot slices — are all ☑ or declined by
+  measurement)
 - ◐ Signed installers on all three platforms (macOS signed + notarized via
   release CI since v0.5.0; Windows EV cert + Linux signing still open)
 
@@ -1394,6 +1402,31 @@ numbers recorded in `docs/perf-baseline.md` § "Windows re-baseline" bound what
 a cross-command cache could still buy (~18ms/snapshot) if the 1.0 perf pass
 ever justifies it. Verified: `cargo test -p strand-core` (91), workspace
 `clippy` clean, before/after `perfcheck` runs (variance re-checked 3×).
+
+**Drag-and-drop renames in the Files tree (2026-07-06):** The last unstarted
+pure-code 1.0 feature. Engine: `Repo::move_path(from, to)` (`rename.rs`) —
+tracked sources shell out to `git mv` so the index entry moves with the file
+(staged content preserved, directory moves + case-only renames on
+case-insensitive filesystems native), untracked sources are a plain fs
+rename; overwrite refused, missing destination parents created, and both
+ends path-guarded (the destination via an ancestor-walking
+`safe_workdir_path` variant, since its parents may not exist yet). One new
+IPC command (`repo_move_path`, quick sync write) + `useRepo.moveEntries`
+(sequential moves, one snapshot refresh, per-entry failure strings; an open
+file view follows its file's new path). UI: `PierreTree` grew an opt-in
+**pointer-based** drag (shadow-root rows can't be marked `draggable`, but
+mouse events compose across the boundary — the existing click/menu-handler
+mechanism), all imperative refs + direct DOM so the 60Hz mousemove never
+re-renders the tree: 5px threshold, cursor-chasing ghost chip naming entry +
+target ("rootfile.txt → src/", dashed when invalid), `--bg-sel` wash on the
+hovered folder row, file rows target their containing folder, bare space the
+root, Escape cancels, multi-selection drags together. Keyboard parity via a
+context-menu "Rename / move…" → `RenameFileDialog` (full-path field,
+filename preselected). Verified: `cargo test -p strand-core` (96, +5
+`rename`), `clippy`, `tsc`, `vitest` (198), `vite build`, and an
+end-to-end WebView2 CDP pass on the running app (tracked file drag → git
+`R`, untracked drag stays untracked, dialog rename of a modified file → `RM`
+with the edit preserved, ghost text + cleanup asserted).
 
 ---
 

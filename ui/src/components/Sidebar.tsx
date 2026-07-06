@@ -10,6 +10,7 @@ import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
 import type { RemoteDialogMode } from '../views/RemoteDialog';
+import { RenameFileDialog } from '../views/RenameFileDialog';
 
 type SideTab = 'git' | 'files';
 
@@ -164,6 +165,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
+  const moveEntries = useRepo((s) => s.moveEntries);
   const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
   const stashes = useRepo((s) => s.stashes);
   const stashApply = useRepo((s) => s.stashApply);
@@ -338,11 +340,41 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       }),
     [workTree],
   );
+  // Rename / move — the drop handler for drag-to-move in the tree, and the
+  // dialog behind the context menu's keyboard-operable equivalent.
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  const moveTo = useCallback(
+    (sources: string[], dir: string) => {
+      const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+      const parent = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
+      // The tree validated the drop as a whole; per-source, skip entries the
+      // move wouldn't change (already in the target dir, folder into itself).
+      const moves = sources
+        .filter((s) => parent(s) !== dir && dir !== s && !dir.startsWith(s + '/'))
+        .map((s) => ({ from: s, to: dir ? `${dir}/${base(s)}` : base(s) }));
+      if (moves.length === 0) return;
+      void moveEntries(moves).then((failures) => {
+        if (failures.length) {
+          const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : '';
+          onToast(`Move failed: ${failures[0]}${more}`);
+        }
+      });
+    },
+    [moveEntries, onToast],
+  );
+
   const fileMenu = useCallback(
     (targets: string[]): TreeMenuItem[] => {
       const items: TreeMenuItem[] = [
         { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0]) },
       ];
+      if (targets.length === 1) {
+        items.push({
+          label: 'Rename / move…',
+          icon: 'file',
+          onSelect: () => setRenameTarget(targets[0]),
+        });
+      }
       // .gitignore quick actions for a single untracked file.
       if (
         targets.length === 1 &&
@@ -371,6 +403,14 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     },
     [selectFile, workTree, gitignoreAdd, openIgnoreDialog, onToast],
   );
+
+  const renameDialog = renameTarget ? (
+    <RenameFileDialog
+      from={renameTarget}
+      onClose={() => setRenameTarget(null)}
+      onToast={onToast}
+    />
+  ) : null;
 
   const runBranchOp = async (fn: () => Promise<void>) => {
     try { await fn(); } catch (e) { console.warn(e); }
@@ -861,9 +901,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         </div>
       ) : (
         <div className="side-files">
+          {renameDialog}
           <PierreTree
             paths={filePaths}
             gitStatus={fileGitStatus}
+            onMove={moveTo}
             selectedPath={selectedFile}
             onSelect={(p) => selectFile(p)}
             menuItems={fileMenu}

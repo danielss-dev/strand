@@ -127,6 +127,8 @@ export const tauri = {
   repoDiscard: (path: string, file: string) => invoke<void>('repo_discard', { path, file }),
   repoGitignoreAdd: (path: string, pattern: string) =>
     invoke<void>('repo_gitignore_add', { path, pattern }),
+  repoMovePath: (path: string, from: string, to: string) =>
+    invoke<void>('repo_move_path', { path, from, to }),
   repoApplyPatch: (
     path: string,
     patch: string,

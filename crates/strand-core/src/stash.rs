@@ -192,7 +192,8 @@ impl Repo {
     /// return trimmed stdout, mapping a non-zero exit to its stderr. Mirrors
     /// the `git`-subprocess approach in [`network`](crate::network);
     /// `GIT_TERMINAL_PROMPT=0` stops a stuck auth prompt from blocking.
-    fn run_git(&self, args: &[&str]) -> Result<String> {
+    /// Shared with [`rename`](crate::rename) (`git mv`).
+    pub(crate) fn run_git(&self, args: &[&str]) -> Result<String> {
         let out = crate::git_command()
             .current_dir(self.path())
             .env("GIT_TERMINAL_PROMPT", "0")
