@@ -1057,7 +1057,8 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
 - ☑ Stashes shown inline on the graph (synthetic node per stash, attached to its
   base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
 - ☐ Drag-and-drop renames in file tree
-- ☐ Crash reporting (opt-in, off by default)
+- ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
+  flow, shipped 2026-07-06 (see changelog entry below)
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☐ Performance pass on 100k-commit repos
@@ -1346,6 +1347,32 @@ stats, clearer current/main/locked/detached/stale badges, and a Review action
 that leaves the dashboard before switching worktrees so rows do not jump during
 navigation. Verified with Vitest, TypeScript, frontend build, and a Tauri
 walkthrough of dashboard → Review on a dirty linked worktree.
+
+**Crash reporting, user-mediated (2026-07-06):** Closed the 1.0 crash-reporting
+item — first 1.0 work after the 0.5 close. The design call: **no automatic
+upload path exists.** The project has no crash-ingest backend (the one custom
+host already died once and took the updater with it), and PRD §10's promise is
+easiest to keep when the only reporting channel is one the user can read: a
+*prefilled GitHub issue* opened in the browser, reviewed and submitted by the
+user. The local half (the `install_crash_log` panic hook appending panics +
+backtraces to `app_log_dir()/crash.log`) already existed; on top of it, a new
+`crash_report_check` IPC command (pure local read: log path, byte length, and
+the newest `=== panic at` entry past a caller-supplied ack offset, capped at
+8 KB with head-preserving truncation — the panic message + top frames matter
+most). Frontend: `crashPrompt` (opt-in, **off by default**) + `crashAck` (the
+acknowledged byte offset) in the settings store; an App launch effect (delayed
+3.5s like the update check) checks the log when enabled and surfaces a
+**persistent CrashToast** — no expiry, a crash deserves a decision — with
+**Report…** (builds the issue URL via `buildCrashIssueUrl` in
+`lib/crashReport.ts`: title from the panic message line, review-reminder +
+version/OS + fenced log excerpt body, iteratively shrunk to a ~7 KB URL
+budget; opened with the shell plugin) and **Dismiss**; both persist the ack so
+the same crash never re-prompts, and a shrunken/deleted log realigns the ack.
+Settings grew a **Privacy** section (telemetry's future home): the toggle with
+its disclosure hint, "Report last crash…" (grayed when the log is empty), and
+the crash-log path. Verified: `cargo test -p strand-tauri` (13, +1
+`last_panic_entry` boundary/newest-entry/truncation test), `clippy`, `tsc`,
+`vitest` (190, +5 `crashReport`), `vite build`.
 
 ---
 
