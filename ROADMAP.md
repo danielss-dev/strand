@@ -1061,7 +1061,14 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   flow, shipped 2026-07-06 (see changelog entry below)
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
-- ☐ Performance pass on 100k-commit repos
+- ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
+  perf pass: every PRD §8 target passes on its measured platform, and the
+  engine numbers are taken on the 100k-commit / 10k-file fixtures
+  (`discover+log(5000)` ~47ms, `discover+snapshot` ~5.6ms on 100k commits;
+  see `docs/perf-baseline.md` + TASKS → Performance, where the audit
+  follow-ups — spawn_blocking reads, per-`Repo` git2 handle, snapshot batch,
+  virtualization, stable snapshot slices — are all ☑ or declined by
+  measurement)
 - ◐ Signed installers on all three platforms (macOS signed + notarized via
   release CI since v0.5.0; Windows EV cert + Linux signing still open)
 
