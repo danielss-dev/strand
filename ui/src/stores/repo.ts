@@ -12,6 +12,7 @@ import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
+import { jsonEqual, stable } from '../lib/stable';
 import { tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -195,8 +196,9 @@ export interface RepoState {
   /** Stash stack for the active tab, most-recent first. */
   stashes: Stash[];
 
-  /** Working-tree file listing for the Files sidebar tab (lazy: only the
-   * Files tab triggers {@link RepoState.refreshTree}). */
+  /** Working-tree file listing for the Files sidebar tab. Loaded lazily via
+   * {@link RepoState.refreshTree} (Files tab shown / palette opened), then
+   * kept fresh by every {@link RepoState.refreshSnapshot}. */
   workTree: WorkTreeEntry[];
 
   /** Submodules of the active repo (list + status), for the sidebar section. */
@@ -965,7 +967,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     // Bail if the active repo changed while the request was in flight, or we'd
     // paint another tab's status into this one (see refreshTree).
     if (get().activePath !== path) return;
-    set({ status });
+    set({ status: stable(get().status, status) });
   },
   async refreshLog(limit) {
     const path = get().activePath;
@@ -1026,13 +1028,20 @@ export const useRepo = create<RepoState>((set, get) => ({
         set((s) => ({ tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t)) }));
         return;
       }
+      // Keep-if-equal per slice: a refresh where a slice didn't change keeps
+      // that slice's previous reference, so downstream memos and selector
+      // subscribers (sidebar ref trees, palette index, Files tree) don't
+      // rebuild or re-render for identical data. A stage toggle only really
+      // changes `status`/`workTree`; `refs`/`submodules`/`meta` stay put.
       set((s) => ({
-        meta: snap.meta,
-        status: snap.status,
-        workTree: snap.work_tree,
-        refs: snap.refs,
-        submodules: snap.submodules,
-        tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t)),
+        meta: stable(s.meta, snap.meta),
+        status: stable(s.status, snap.status),
+        workTree: stable(s.workTree, snap.work_tree),
+        refs: stable(s.refs, snap.refs),
+        submodules: stable(s.submodules, snap.submodules),
+        tabs: s.tabs.some((t) => t.path === path && !jsonEqual(t.meta, snap.meta))
+          ? s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t))
+          : s.tabs,
       }));
     } catch (e) {
       console.warn('repoSnapshot failed', e);
@@ -1198,7 +1207,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     try {
       const refs = await tauri.repoRefs(path);
       if (get().activePath !== path) return;
-      set({ refs });
+      set({ refs: stable(get().refs, refs) });
     } catch (e) {
       console.warn('repoRefs failed', e);
     }
@@ -1211,7 +1220,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       const tree = await tauri.repoTree(path);
       // Bail if the active repo changed while the listing was in flight.
       if (get().activePath !== path) return;
-      set({ workTree: tree });
+      set({ workTree: stable(get().workTree, tree) });
     } catch (e) {
       console.warn('repoTree failed', e);
     }
@@ -1224,7 +1233,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       const submodules = await tauri.repoSubmodules(path);
       // Bail if the active repo changed while the listing was in flight.
       if (get().activePath !== path) return;
-      set({ submodules });
+      set({ submodules: stable(get().submodules, submodules) });
     } catch (e) {
       console.warn('repoSubmodules failed', e);
     }

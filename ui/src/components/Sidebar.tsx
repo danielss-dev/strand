@@ -88,10 +88,14 @@ interface TreeNode<T> {
   fullPath: string;
   leaf?: T;
   children: TreeNode<T>[];
+  /** Leaf rows at or beneath this node — filled once per build by
+   * {@link countLeaves}, read by folder rows (was re-counted recursively on
+   * every render before). */
+  leaves: number;
 }
 
 function buildTree<T>(items: T[], getSegments: (item: T) => string[]): TreeNode<T> {
-  const root: TreeNode<T> = { name: '', fullPath: '', children: [] };
+  const root: TreeNode<T> = { name: '', fullPath: '', children: [], leaves: 0 };
   for (const item of items) {
     const parts = getSegments(item);
     let node = root;
@@ -101,7 +105,7 @@ function buildTree<T>(items: T[], getSegments: (item: T) => string[]): TreeNode<
       path = path ? `${path}/${part}` : part;
       let child = node.children.find((c) => c.name === part);
       if (!child) {
-        child = { name: part, fullPath: path, children: [] };
+        child = { name: part, fullPath: path, children: [], leaves: 0 };
         node.children.push(child);
       }
       if (i === parts.length - 1) child.leaf = item;
@@ -109,6 +113,16 @@ function buildTree<T>(items: T[], getSegments: (item: T) => string[]): TreeNode<
     }
   }
   return root;
+}
+
+function countLeaves<T>(node: TreeNode<T>): number {
+  node.leaves =
+    node.children.length === 0
+      ? node.leaf != null
+        ? 1
+        : 0
+      : node.children.reduce((sum, c) => sum + countLeaves(c), 0);
+  return node.leaves;
 }
 
 function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
@@ -223,6 +237,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       if (a.is_head !== b.is_head) return a.is_head ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
+    countLeaves(t);
     return t;
   }, [filtered.branches]);
 
@@ -236,16 +251,18 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     for (const r of refs.remotes) {
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (!t.children.some((c) => c.name === r.name)) {
-        t.children.push({ name: r.name, fullPath: r.name, children: [] });
+        t.children.push({ name: r.name, fullPath: r.name, children: [], leaves: 0 });
       }
     }
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
+    countLeaves(t);
     return t;
   }, [filtered.remotes, refs.remotes, filter]);
 
   const tagTree = useMemo(() => {
     const t = buildTree<Tag>(filtered.tags, (tg) => tg.name.split('/'));
     sortTree(t, (a, b) => a.name.localeCompare(b.name));
+    countLeaves(t);
     return t;
   }, [filtered.tags]);
 
@@ -290,10 +307,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     );
   }, [submodules, filter]);
 
-  // Files tab: lazily fetch the working-tree listing when the tab is shown,
-  // and refresh it whenever status (a proxy for working-tree change) updates.
-  // Depend on `meta?.path` (not the whole meta object) so a meta refresh that
-  // only bumps ahead/behind doesn't re-walk the tree.
+  // Files tab: lazily fetch the working-tree listing when the tab is shown
+  // (keyed on `meta?.path` so a tab switch reloads it). Ongoing freshness
+  // comes from `refreshSnapshot` — every write op and watcher tick updates
+  // `workTree` from the same statuses walk — so this effect deliberately
+  // does NOT depend on `status`: the old status dep re-walked the working
+  // tree over IPC a second time on every stage toggle.
   const [treeLoading, setTreeLoading] = useState(false);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
@@ -305,7 +324,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return () => {
       cancelled = true;
     };
-  }, [tab, meta?.path, status, refreshTree]);
+  }, [tab, meta?.path, refreshTree]);
 
   // Files tab — the Pierre tree is fed the whole working-tree listing.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
@@ -898,7 +917,7 @@ function renderTreeChildren<T>(
           depth={depth}
           collapsed={isCollapsed}
           icon={folderOpts?.folderIcon ?? 'folder'}
-          count={folderOpts?.showFolderCount === false ? undefined : leafCount(child)}
+          count={folderOpts?.showFolderCount === false ? undefined : child.leaves}
           onToggle={() => toggleCollapsed(collapseKey)}
           onMenu={menuFor && open ? (x, y) => open(x, y, menuFor(child.name)) : undefined}
         />
@@ -907,11 +926,6 @@ function renderTreeChildren<T>(
       </div>
     );
   });
-}
-
-function leafCount<T>(node: TreeNode<T>): number {
-  if (node.children.length === 0) return node.leaf != null ? 1 : 0;
-  return node.children.reduce((sum, c) => sum + leafCount(c), 0);
 }
 
 function leafName(fullName: string): string {

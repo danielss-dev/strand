@@ -1322,8 +1322,25 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   (`status::from_statuses` + `tree::from_index_and_statuses`, shared by
   `Repo::snapshot`; the standalone methods still walk independently when
   called directly).
-- ☐ Sidebar: memoize ref-tree builds / `leafCount`; debounce `refreshTree` off
-  the `status` dep so stage toggles don't re-walk the whole tree.
+- ☑ Sidebar: memoize ref-tree builds / `leafCount`; debounce `refreshTree` off
+  the `status` dep — done 2026-07-06, root-caused one level down. The tree
+  builds were already `useMemo`d; they rebuilt anyway because
+  `refreshSnapshot` replaced `status`/`workTree`/`refs`/`submodules`/`meta`
+  with freshly deserialized objects on every refresh, so input identity
+  churned on every stage toggle / watcher tick. New `lib/stable.ts`
+  (`stable(prev, next)` returns the previous reference when structurally
+  equal; unit-tested) now guards every snapshot-fed slice plus the standalone
+  `refreshStatus`/`refreshRefs`/`refreshTree`/`refreshSubmodules` setters —
+  unchanged slices keep identity, so the sidebar ref trees, palette index,
+  and Files `PierreTree` stop rebuilding (and their subscribers stop
+  re-rendering) for identical data. `leafCount` is precomputed once per tree
+  build (`countLeaves` fills `TreeNode.leaves`) instead of recursing per
+  folder row per render. The `refreshTree`-on-`status` dep was **removed**
+  rather than debounced: since the `repo_snapshot` batch, every
+  status-changing path already refreshes `workTree` from the same statuses
+  walk, so the effect's IPC re-walk was a redundant second walk of the
+  working tree — it now runs only on Files-tab show / repo switch (the lazy
+  first load). Verified: `tsc`, `vitest` (198, +13 `stable`), `vite build`.
 - ☑ Wire commit-graph search (`Commits.tsx`). Resolved by **highlighting matches
   in place instead of filtering** — every commit stays in the list, so the lane
   algorithm's parent→child continuity is never broken. (Backend `git log`-based
