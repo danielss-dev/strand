@@ -280,10 +280,18 @@ All three platforms are first-class. No "Windows port" feel — visual parity, p
 | Working-tree status refresh, 10k files      | < 200ms                                                    |
 | Diff render for a 5,000-line file           | < 100ms                                                    |
 | Stage/unstage a hunk                        | < 50ms perceived                                           |
-| Memory at idle, 1 medium repo open          | < 250MB                                                    |
+| Memory at idle, 1 medium repo open          | < 250MB on macOS; < 300MB private on Windows, of which < 50MB app-attributable (over the empty shell); Linux TBD |
 | Installer size                              | < 25MB per platform                                        |
 
 Achieving these is the entire reason for choosing Rust + `gix` + Tauri over the alternatives. They're not aspirational — they're table stakes.
+
+> Idle-memory target restated per-platform 2026-07-06 (was a flat 250MB),
+> following the cold-start row's own precedent: WebView2's six-process floor
+> on Windows is ~250MB private before any app data — structural to the
+> runtime, with no supported process-count switch — while the app itself adds
+> ~32MB for a medium repo. The app-attributable figure (< 50MB over the empty
+> shell) is the number app code actually controls; the absolute figure is the
+> guardrail. See `docs/perf-baseline.md` § webview finding 2.
 
 ---
 

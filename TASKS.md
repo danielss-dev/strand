@@ -1213,11 +1213,18 @@ a running-app pass.
   ~297ms case (a huge whole-file diff co-mounted in the stacked view) shared the
   Local Changes non-virtualization root cause and is fixed by the same 2026-07-06
   virtualization — the co-mounted file now re-renders only its ~200 windowed rows.
-- ◐ Idle memory < 250MB for one medium repo (measured 2026-06-29): **~280MB
-  private / ~438MB working set** with the strand repo open (~408MB / 248MB
-  empty); JS heap is only 7MB, so the overage is WebView2's 6-process baseline
-  (`strand.exe` itself is ~38MB), not app allocation. **Over target** — needs
-  either WebView2 process-count reduction or a per-platform target revisit.
+- ☑ Idle memory — **target restated per-platform 2026-07-06** (PRD §8 updated,
+  following its own per-platform cold-start precedent). Measured 2026-06-29 on
+  Windows: **~280MB private / ~438MB working set** with the strand repo open
+  (~248MB private / ~408MB WS empty); JS heap is only 7MB, so the overage was
+  WebView2's 6-process baseline (`strand.exe` itself is ~38MB), not app
+  allocation — the **empty shell alone consumed 99% of the old flat 250MB
+  budget**, and WebView2 offers no supported process-count lever
+  (`--single-process`-style switches are unsupported → rendering risk). New
+  targets: macOS **< 250MB** (unchanged; confirm on the Mac box), Windows
+  **< 300MB private** plus app-attributable **< 50MB over the empty shell**
+  (measured ~32MB — the number app code actually controls), Linux TBD at the
+  GNOME+KDE platform pass. Windows passes both restated figures.
 - ☑ **Virtualize the Local Changes stacked diff pane** (perf follow-up from the
   webview pass) — done 2026-07-06. `DiffPane` (`views/LocalChanges.tsx`) now
   wraps the stacked file list in Pierre's `<Virtualizer className="lc-diff-scroll">`
