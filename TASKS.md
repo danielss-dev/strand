@@ -1273,8 +1273,21 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   (reused handle) — every IPC command currently re-runs `gix discover` + git2
   open. Needs explicit invalidation tied to the refresh path. (`meta()` already
   reuses one git2 handle.)
-- ☐ Move CPU/disk-bound read commands (`repo_log`/`status`/`diff_*`/`tree`/`refs`)
-  to `spawn_blocking` so a slow op can't head-of-line-block the IPC thread.
+- ☑ Move CPU/disk-bound read commands (`repo_log`/`status`/`diff_*`/`tree`/`refs`)
+  to `spawn_blocking` so a slow op can't head-of-line-block the IPC thread
+  (2026-07-06). `#[tauri::command(async)]` had already moved sync bodies off
+  the main thread, but they still occupied one of the async runtime's few
+  *core* workers for their whole duration — a fan-out of slow reads (a
+  workspace refresh walking several big repos) could occupy every worker and
+  stall all pending commands. A `run_blocking(label, work)` helper in
+  `commands.rs` now routes every repo-size-scaled read (open / meta / status /
+  snapshot / log / search / refs / all `diff_*` / merge-base / file content-
+  blob-history / blame / reflog / tree / submodules / worktrees / stash list)
+  and every subprocess-waiting AI command (status / login — which can sit for
+  minutes on interactive auth — / logout / suggest) onto tokio's blocking
+  pool; the network commands' hand-rolled `spawn_blocking` + join-error
+  boilerplate was collapsed onto the same helper. Quick writes (stage, branch,
+  tag, …) deliberately stay plain sync bodies.
 - ☑ `repo_snapshot(path)` batch command (`snapshot.rs`: meta + status +
   work-tree + refs + submodules from one open and **one statuses walk**;
   `refreshLocalChanges`/`refreshSnapshot` in `stores/repo.ts` route every
