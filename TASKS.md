@@ -230,7 +230,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   Rust API, no spawn overhead); shell-out to user's `git` for network
   ops (credentials, hooks, LFS, GPG come for free) — and, since the signing
   work, for commits when `commit.gpgSign=true` (see Writes → Commit)
-- ☐ Repo cache to avoid re-`discover` per command on hot paths
+- ✗ Repo cache to avoid re-`discover` per command on hot paths — declined by
+  measurement 2026-07-06 (discover ~1ms flat; the real per-command waste was
+  redundant git2 opens *within* one command, fixed by the per-`Repo` cached
+  handle — see Performance → Audit follow-ups)
 - ☐ Tracing spans on every public fn for perf diagnostics
 
 ---
@@ -1269,10 +1272,26 @@ a running-app pass.
 Larger items surfaced by the audit and verified against the code; the safe
 quick-wins from that audit already landed (see ROADMAP changelog).
 
-- ☐ Cache the opened repo per path in `AppState` + open git2 once per `Repo`
-  (reused handle) — every IPC command currently re-runs `gix discover` + git2
-  open. Needs explicit invalidation tied to the refresh path. (`meta()` already
-  reuses one git2 handle.)
+- ☑ Open git2 once per `Repo` (reused handle) — done 2026-07-06. `Repo` holds a
+  `OnceCell<git2::Repository>`; `git2()` returns `&git2::Repository`, opened on
+  first use and shared by every op in the same command (`snapshot` alone opened
+  git2 four times — directly, then via `meta`/`refs`/`submodules`). The stash
+  ops keep a fresh `git2_owned()` (the only `&mut` callers). The win is bigger
+  than the ~0.65ms open: a warm handle keeps its loaded index + pack mmaps, so
+  per-IPC `discover+snapshot` dropped **54→36ms on the 10k-file fixture**,
+  8.3→5.6ms on the 100k-commit fixture, 44.5→39.8ms on the strand repo
+  (Windows fixtures regenerated; see `docs/perf-baseline.md`).
+- ✗ Cache the opened repo per path in `AppState` — **declined by measurement
+  2026-07-06.** The audit assumed re-discover was the cost; it isn't: gix
+  `discover` is ~1ms and `git2 open` ~0.65ms, flat across repo sizes (100k
+  commits / 10k files, Windows). What a cross-command cache *would* keep warm
+  is the git2 index/odb state (~18ms/snapshot residual on a 10k-file tree —
+  warm `snapshot` 18ms vs per-command 36ms), but `git2::Repository` is `!Sync`,
+  so a shared handle means a per-repo `Mutex` that serializes exactly the
+  concurrent reads `spawn_blocking` (2026-07-06) just unblocked, plus config
+  staleness + invalidation machinery. Revisit only if the 1.0 perf pass shows
+  refresh latency still mattering; the numbers to beat are in
+  `docs/perf-baseline.md`.
 - ☑ Move CPU/disk-bound read commands (`repo_log`/`status`/`diff_*`/`tree`/`refs`)
   to `spawn_blocking` so a slow op can't head-of-line-block the IPC thread
   (2026-07-06). `#[tauri::command(async)]` had already moved sync bodies off

@@ -25,7 +25,7 @@ impl Repo {
     pub fn work_tree(&self) -> Result<Vec<WorkTreeEntry>> {
         let repo = self.git2()?;
         let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
-        from_index_and_statuses(&repo, &statuses)
+        from_index_and_statuses(repo, &statuses)
     }
 }
 

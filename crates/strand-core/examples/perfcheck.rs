@@ -60,8 +60,20 @@ fn main() {
 
     let repo = Repo::discover(&path).expect("discover");
 
+    // The other half of the per-command open cost: the git2 handle most ops
+    // open on top of the gix discover.
+    bench("git2 open", 30, || {
+        git2::Repository::open(repo.path()).expect("git2 open")
+    });
+
     // --- meta (every post-op refresh) ---
     bench("meta", 50, || repo.meta().expect("meta"));
+
+    // --- snapshot (the bundled post-change refresh the app actually calls) ---
+    bench("snapshot", 20, || repo.snapshot().expect("snapshot"));
+    bench("discover+snapshot", 20, || {
+        Repo::discover(&path).expect("discover").snapshot().expect("snapshot")
+    });
 
     // --- log at several limits (graph load) ---
     for limit in [1000usize, 10_000, log_limit] {

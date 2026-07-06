@@ -2,7 +2,8 @@
 //!
 //! `list`/`save`/`drop` use git2's stash entry points (`stash_save2`,
 //! `stash_drop`, `stash_foreach`), each on a freshly-opened owned
-//! `git2::Repository` bound `mut` locally — same as every other write module.
+//! `git2::Repository` (`git2_owned`) — the stash APIs are the only callers
+//! that need `&mut`, which the shared cached handle can't hand out.
 //!
 //! `apply`/`pop`/`snapshot` instead **shell out to `git`** (the same
 //! subprocess approach [`network`] already uses). git2's `stash_apply` refuses
@@ -52,7 +53,7 @@ pub struct StashOutcome {
 impl Repo {
     /// List all stashes, most-recent first — the order `git stash list` uses.
     pub fn stash_list(&self) -> Result<Vec<Stash>> {
-        let mut repo = self.git2()?;
+        let mut repo = self.git2_owned()?;
         let mut out = Vec::new();
         repo.stash_foreach(|index, message, oid| {
             out.push(Stash {
@@ -98,7 +99,7 @@ impl Repo {
         include_untracked: bool,
         keep_index: bool,
     ) -> Result<StashOutcome> {
-        let mut repo = self.git2()?;
+        let mut repo = self.git2_owned()?;
         let sig = repo.signature()?;
 
         let mut flags = git2::StashFlags::DEFAULT;
@@ -216,7 +217,7 @@ impl Repo {
     /// **Destructive** — the discarded changes are unrecoverable through the
     /// app. The UI confirms before calling.
     pub fn stash_drop(&self, index: usize) -> Result<()> {
-        let mut repo = self.git2()?;
+        let mut repo = self.git2_owned()?;
         repo.stash_drop(index)?;
         Ok(())
     }

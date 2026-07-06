@@ -88,10 +88,10 @@ impl Repo {
     pub fn refs(&self) -> Result<Refs> {
         let repo = self.git2()?;
 
-        let branches = collect_branches(&repo);
-        let remote_branches = collect_remote_branches(&repo);
-        let remotes = collect_remotes(&repo);
-        let tags = collect_tags(&repo);
+        let branches = collect_branches(repo);
+        let remote_branches = collect_remote_branches(repo);
+        let remotes = collect_remotes(repo);
+        let tags = collect_tags(repo);
 
         Ok(Refs {
             branches,
