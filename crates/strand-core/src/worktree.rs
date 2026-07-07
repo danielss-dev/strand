@@ -79,13 +79,17 @@ impl Repo {
         Ok(())
     }
 
-    /// Remove the worktree rooted at `dest` (`git worktree remove [--force]
-    /// <dest>`). Without `force`, git refuses when the worktree has local
-    /// changes — that guard is intentional, so the UI confirms before forcing.
+    /// Remove the worktree rooted at `dest` (`git worktree remove [--force
+    /// --force] <dest>`). Without `force`, git refuses when the worktree has
+    /// local changes — that guard is intentional, so the UI confirms before
+    /// forcing. `force` passes the flag twice: git wants `-f -f` for locked
+    /// worktrees, and a single `--force` already implies discarding changes,
+    /// so there is no useful middle step to expose.
     pub fn remove_worktree(&self, dest: &str, force: bool) -> Result<()> {
         reject_dash("worktree path", dest)?;
         let mut args = vec!["worktree", "remove"];
         if force {
+            args.push("--force");
             args.push("--force");
         }
         args.push(dest);
