@@ -14,6 +14,7 @@
 //! per-worktree stats reuse the existing status/meta/log commands. This module
 //! only owns the worktree *registry* (list + lifecycle).
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
@@ -79,10 +80,32 @@ pub struct WorktreeHealth {
     pub unpushed: usize,
 }
 
+/// Workdir-level stats for one worktree — the fleet dashboard's "is anything
+/// happening here, and what does it cost?" row data. One filesystem walk
+/// yields both size and freshness; the line counts come from one
+/// `diff --shortstat`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorktreeStats {
+    /// Total size of the working directory, `.git` excluded.
+    pub disk_bytes: u64,
+    /// Newest file mtime outside `.git` (Unix seconds) — a decent proxy for
+    /// "an agent touched this N minutes ago" without process spying.
+    pub last_activity_unix: Option<i64>,
+    /// Inserted lines across staged + unstaged tracked changes.
+    pub insertions: usize,
+    /// Deleted lines across staged + unstaged tracked changes.
+    pub deletions: usize,
+}
+
 /// Namespace for worktree snapshot refs. Kept out of `refs/heads`/`refs/tags`
 /// so archives never show up as branches, but still reachable — a snapshot
 /// protects its objects from gc.
 const ARCHIVE_NS: &str = "refs/strand/archive/";
+
+/// Auto-prune policy for archive snapshots: keep the newest per slug…
+const ARCHIVE_KEEP_PER_SLUG: usize = 10;
+/// …and drop anything older than this regardless (safety nets go stale).
+const ARCHIVE_MAX_AGE_SECS: i64 = 60 * 60 * 24 * 60; // 60 days
 
 /// One archived worktree snapshot under [`ARCHIVE_NS`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,19 +149,59 @@ impl Repo {
     }
 
     /// Add a worktree at `dest`. When `new_branch` is set, create branch
-    /// `branch` at HEAD and check it out (`git worktree add -b <branch>
-    /// <dest>`); otherwise check out the existing `branch`
+    /// `branch` at `start_point` (any branch / tag / commit; HEAD when `None`)
+    /// and check it out (`git worktree add [--track] -b <branch> <dest>
+    /// [<start>]`); `track` sets the new branch's upstream to a remote
+    /// `start_point`. Otherwise check out the existing `branch`
     /// (`git worktree add <dest> <branch>`). git refuses if the branch is
     /// already checked out in another worktree — that error is surfaced as-is.
-    pub fn add_worktree(&self, dest: &str, branch: &str, new_branch: bool) -> Result<()> {
+    pub fn add_worktree(
+        &self,
+        dest: &str,
+        branch: &str,
+        new_branch: bool,
+        start_point: Option<&str>,
+        track: bool,
+    ) -> Result<()> {
         reject_dash("worktree path", dest)?;
         reject_dash("branch", branch)?;
-        let args: Vec<&str> = if new_branch {
-            vec!["worktree", "add", "-b", branch, dest]
+        if let Some(sp) = start_point {
+            reject_dash("start point", sp)?;
+        }
+        let mut args: Vec<&str> = vec!["worktree", "add"];
+        if new_branch {
+            if track {
+                args.push("--track");
+            }
+            args.extend(["-b", branch, dest]);
+            if let Some(sp) = start_point {
+                args.push(sp);
+            }
         } else {
-            vec!["worktree", "add", dest, branch]
-        };
+            args.extend([dest, branch]);
+        }
         run_git(&self.path, &args)?;
+        Ok(())
+    }
+
+    /// Lock the worktree at `dest` against removal/pruning
+    /// (`git worktree lock [--reason <r>] <dest>`) — e.g. while an agent is
+    /// mid-task there.
+    pub fn lock_worktree(&self, dest: &str, reason: Option<&str>) -> Result<()> {
+        reject_dash("worktree path", dest)?;
+        let mut args = vec!["worktree", "lock"];
+        if let Some(r) = reason.filter(|r| !r.trim().is_empty()) {
+            args.extend(["--reason", r]);
+        }
+        args.push(dest);
+        run_git(&self.path, &args)?;
+        Ok(())
+    }
+
+    /// Unlock the worktree at `dest` (`git worktree unlock <dest>`).
+    pub fn unlock_worktree(&self, dest: &str) -> Result<()> {
+        reject_dash("worktree path", dest)?;
+        run_git(&self.path, &["worktree", "unlock", dest])?;
         Ok(())
     }
 
@@ -165,6 +228,67 @@ impl Repo {
     pub fn prune_worktrees(&self) -> Result<()> {
         run_git(&self.path, &["worktree", "prune"])?;
         Ok(())
+    }
+
+    /// Compute [`WorktreeStats`] for *this* repo's working directory. Must be
+    /// called on a `Repo` opened at the worktree of interest. The walk skips
+    /// `.git` (dir, or the linked-worktree pointer file) and doesn't follow
+    /// symlinks; it can take a moment on huge trees (node_modules), so the UI
+    /// fetches it in the background and caches per path.
+    pub fn worktree_stats(&self) -> Result<WorktreeStats> {
+        let (disk_bytes, last_activity_unix) = scan_workdir(&self.path);
+        // Staged + unstaged tracked changes in one number; an unborn HEAD
+        // (or any diff failure) just reads as no line changes.
+        let shortstat =
+            run_git(&self.path, &["diff", "HEAD", "--shortstat"]).unwrap_or_default();
+        let (insertions, deletions) = parse_shortstat(&shortstat);
+        Ok(WorktreeStats { disk_bytes, last_activity_unix, insertions, deletions })
+    }
+
+    /// Patterns from `.worktreeinclude` at the workdir root — the convention
+    /// (shared with Claude Code) naming gitignored files a fresh worktree
+    /// needs copied over (`.env`, local settings). Missing file ⇒ empty list.
+    pub fn worktree_include_patterns(&self) -> Result<Vec<String>> {
+        let Ok(text) = std::fs::read_to_string(self.path.join(".worktreeinclude")) else {
+            return Ok(Vec::new());
+        };
+        Ok(text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(str::to_string)
+            .collect())
+    }
+
+    /// Copy gitignored files matching `.worktreeinclude` from this worktree
+    /// into `dest` (a freshly created worktree). Only *ignored* files are
+    /// candidates — tracked content arrives via checkout, and non-ignored
+    /// untracked files are someone's uncommitted work, not setup. Returns the
+    /// copied paths (workdir-relative).
+    pub fn copy_worktree_include(&self, dest: &str) -> Result<Vec<String>> {
+        reject_dash("worktree path", dest)?;
+        let patterns = self.worktree_include_patterns()?;
+        if patterns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let raw = run_git(
+            &self.path,
+            &["ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
+        )?;
+        let mut copied = Vec::new();
+        for rel in raw.split('\0').map(str::trim).filter(|s| !s.is_empty()) {
+            if !patterns.iter().any(|p| include_match(p, rel)) {
+                continue;
+            }
+            let to = Path::new(dest).join(rel);
+            if let Some(parent) = to.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if std::fs::copy(self.path.join(rel), &to).is_ok() {
+                copied.push(rel.to_string());
+            }
+        }
+        Ok(copied)
     }
 
     /// Compute [`WorktreeHealth`] for the branch `target` (a worktree's
@@ -365,7 +489,29 @@ impl Repo {
             Ok(ref_name)
         })();
         let _ = std::fs::remove_file(&tmp);
+        // Best-effort housekeeping: snapshots are a safety net, not history —
+        // cap them per slug and by age so they can't pile up forever.
+        if result.is_ok() {
+            let _ = self.auto_prune_archives();
+        }
         result
+    }
+
+    /// Drop archive snapshots beyond [`ARCHIVE_KEEP_PER_SLUG`] per slug or
+    /// older than [`ARCHIVE_MAX_AGE_SECS`]. Runs after every new archive.
+    fn auto_prune_archives(&self) -> Result<()> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+        let mut per_slug: HashMap<String, usize> = HashMap::new();
+        // `worktree_archives` is newest-first, so counting down the list
+        // keeps the newest N per slug.
+        for a in self.worktree_archives()? {
+            let seen = per_slug.entry(a.name.clone()).or_insert(0);
+            *seen += 1;
+            if *seen > ARCHIVE_KEEP_PER_SLUG || now.saturating_sub(a.time_unix) > ARCHIVE_MAX_AGE_SECS {
+                let _ = self.delete_worktree_archive(&a.ref_name);
+            }
+        }
+        Ok(())
     }
 
     /// List archived worktree snapshots, newest first.
@@ -485,6 +631,106 @@ impl Repo {
         run_git(&self.path, &["update-ref", "-d", ref_name])?;
         Ok(())
     }
+}
+
+/// One-pass walk of a working directory: total file bytes + newest mtime,
+/// skipping anything named `.git` and never following symlinks. Errors are
+/// swallowed per entry — stats are advisory, not a source of truth.
+fn scan_workdir(root: &Path) -> (u64, Option<i64>) {
+    let mut bytes = 0u64;
+    let mut newest: Option<i64> = None;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            if entry.file_name() == ".git" {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                stack.push(entry.path());
+            } else if meta.is_file() {
+                bytes += meta.len();
+                if let Ok(mtime) = meta.modified() {
+                    let secs = mtime
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    if newest.is_none_or(|n| secs > n) {
+                        newest = Some(secs);
+                    }
+                }
+            }
+        }
+    }
+    (bytes, newest)
+}
+
+/// Pull the two counters out of `git diff --shortstat` output, e.g.
+/// `" 3 files changed, 41 insertions(+), 5 deletions(-)"`. Either counter may
+/// be absent (pure adds / pure deletes).
+fn parse_shortstat(line: &str) -> (usize, usize) {
+    let mut ins = 0;
+    let mut del = 0;
+    for part in line.split(',') {
+        let part = part.trim();
+        let Some(n) = part.split_whitespace().next().and_then(|n| n.parse::<usize>().ok()) else {
+            continue;
+        };
+        if part.contains("insertion") {
+            ins = n;
+        } else if part.contains("deletion") {
+            del = n;
+        }
+    }
+    (ins, del)
+}
+
+/// Does one `.worktreeinclude` pattern match a workdir-relative path?
+/// A pragmatic gitignore subset: leading `/` anchors to the root, a trailing
+/// `/` means "everything under this directory", `**` crosses directories,
+/// `*`/`?` stay within one segment, and a slash-less pattern matches the file
+/// name at any depth (`.env*` finds `sub/dir/.env.local`).
+fn include_match(pattern: &str, rel: &str) -> bool {
+    let mut pat = pattern.trim();
+    let anchored = pat.starts_with('/');
+    if anchored {
+        pat = &pat[1..];
+    }
+    let dir_pat;
+    if pat.ends_with('/') {
+        dir_pat = format!("{pat}**");
+        pat = &dir_pat;
+    }
+    if anchored || pat.contains('/') {
+        glob_match(pat, rel)
+    } else {
+        rel.rsplit('/').next().map(|base| glob_match(pat, base)).unwrap_or(false)
+    }
+}
+
+/// Minimal glob matcher: `**` matches anything (including `/`), `*` and `?`
+/// never cross a `/`, everything else is literal.
+fn glob_match(pattern: &str, text: &str) -> bool {
+    fn rec(p: &[char], t: &[char]) -> bool {
+        match p.first() {
+            None => t.is_empty(),
+            Some('*') if p.get(1) == Some(&'*') => {
+                // Collapse `**` (and an optional following `/`): match any
+                // suffix of the text, slashes included.
+                let rest = if p.get(2) == Some(&'/') { &p[3..] } else { &p[2..] };
+                (0..=t.len()).any(|i| rec(rest, &t[i..]))
+            }
+            Some('*') => (0..=t.len())
+                .take_while(|&i| i == 0 || t[i - 1] != '/')
+                .any(|i| rec(&p[1..], &t[i..])),
+            Some('?') => t.first().is_some_and(|c| *c != '/') && rec(&p[1..], &t[1..]),
+            Some(c) => t.first() == Some(c) && rec(&p[1..], &t[1..]),
+        }
+    }
+    let p: Vec<char> = pattern.chars().collect();
+    let t: Vec<char> = text.chars().collect();
+    rec(&p, &t)
 }
 
 /// Reduce a branch label to a safe ref-name segment: anything outside
@@ -650,7 +896,7 @@ mod tests {
 
         // Add a linked worktree on a new branch.
         let linked = base.join("feature");
-        repo.add_worktree(linked.to_str().unwrap(), "feature", true).unwrap();
+        repo.add_worktree(linked.to_str().unwrap(), "feature", true, None, false).unwrap();
         let wts = repo.worktrees().unwrap();
         assert_eq!(wts.len(), 2, "main + linked");
         let feat = wts.iter().find(|w| w.branch.as_deref() == Some("feature")).unwrap();
@@ -697,7 +943,7 @@ mod tests {
         let main = setup("health");
         let feature = main.parent().unwrap().join("feature");
         let repo = Repo::discover(main.to_str().unwrap()).unwrap();
-        repo.add_worktree(feature.to_str().unwrap(), "feature", true).unwrap();
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
         commit_file(&feature, "f.txt", "f\n", "feature work");
 
         let h = repo.worktree_health("feature").unwrap();
@@ -733,7 +979,7 @@ mod tests {
         git(&main, &["branch", "release"]);
         let feature = main.parent().unwrap().join("feature");
         let repo = Repo::discover(main.to_str().unwrap()).unwrap();
-        repo.add_worktree(feature.to_str().unwrap(), "feature", true).unwrap();
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
         commit_file(&feature, "f.txt", "f\n", "feature work");
         let feature_tip = git(&feature, &["rev-parse", "HEAD"]);
 
@@ -760,7 +1006,7 @@ mod tests {
 
         // Diverge: two commits on feature, one on main (disjoint files).
         let feature = main.parent().unwrap().join("feature");
-        repo.add_worktree(feature.to_str().unwrap(), "feature", true).unwrap();
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
         commit_file(&feature, "f1.txt", "1\n", "feature 1");
         commit_file(&feature, "f2.txt", "2\n", "feature 2");
         commit_file(&main, "m.txt", "m\n", "main moved on");
@@ -783,7 +1029,7 @@ mod tests {
 
         // Merge (no-ff): the new HEAD is a real merge commit.
         let feature2 = main.parent().unwrap().join("feature2");
-        repo.add_worktree(feature2.to_str().unwrap(), "feature2", true).unwrap();
+        repo.add_worktree(feature2.to_str().unwrap(), "feature2", true, None, false).unwrap();
         commit_file(&feature2, "g.txt", "g\n", "feature2 work");
         repo.integrate_worktree_branch("feature2", "main", "merge").unwrap();
         assert!(!git(&main, &["rev-parse", "HEAD^2"]).is_empty(), "merge commit has two parents");
@@ -801,7 +1047,7 @@ mod tests {
 
         let repo = Repo::discover(main.to_str().unwrap()).unwrap();
         let feature = main.parent().unwrap().join("feature");
-        repo.add_worktree(feature.to_str().unwrap(), "feature", true).unwrap();
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
         commit_file(&feature, "f.txt", "committed\n", "feature work");
         let feature_tip = git(&feature, &["rev-parse", "HEAD"]);
 
@@ -865,6 +1111,151 @@ mod tests {
     }
 
     #[test]
+    fn include_match_covers_the_gitignore_subset() {
+        // Slash-less patterns match the basename at any depth.
+        assert!(include_match(".env*", ".env"));
+        assert!(include_match(".env*", "sub/dir/.env.local"));
+        assert!(!include_match(".env*", "environment.txt"));
+        // A slash makes the pattern path-relative; `*` stays in one segment.
+        assert!(include_match("config/*.local", "config/settings.local"));
+        assert!(!include_match("config/*.local", "config/deep/settings.local"));
+        // `**` crosses directories.
+        assert!(include_match("**/secrets.json", "a/b/secrets.json"));
+        assert!(include_match("data/**", "data/x/y.bin"));
+        // Trailing slash = everything under the directory.
+        assert!(include_match(".venv/", ".venv/bin/python"));
+        // Leading slash anchors to the root.
+        assert!(include_match("/.env", ".env"));
+        assert!(!include_match("/.env", "sub/.env"));
+        assert!(include_match("file?.txt", "file1.txt"));
+        assert!(!include_match("file?.txt", "file10.txt"));
+    }
+
+    #[test]
+    fn parse_shortstat_reads_both_counters() {
+        assert_eq!(parse_shortstat(" 3 files changed, 41 insertions(+), 5 deletions(-)"), (41, 5));
+        assert_eq!(parse_shortstat(" 1 file changed, 2 insertions(+)"), (2, 0));
+        assert_eq!(parse_shortstat(" 1 file changed, 7 deletions(-)"), (0, 7));
+        assert_eq!(parse_shortstat(""), (0, 0));
+    }
+
+    #[test]
+    fn adds_a_worktree_from_a_start_point() {
+        let main = setup("startpoint");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let first = git(&main, &["rev-parse", "HEAD"]);
+        commit_file(&main, "b.txt", "b\n", "second");
+
+        // New branch cut from the *first* commit, not HEAD.
+        let wt = main.parent().unwrap().join("from-first");
+        repo.add_worktree(wt.to_str().unwrap(), "from-first", true, Some(&first), false)
+            .unwrap();
+        assert_eq!(git(&wt, &["rev-parse", "HEAD"]), first);
+        assert_eq!(git(&wt, &["symbolic-ref", "--short", "HEAD"]), "from-first");
+        assert!(!wt.join("b.txt").exists(), "checked out at the start point");
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn copies_worktree_include_files_into_a_new_worktree() {
+        let main = setup("include");
+        std::fs::write(main.join(".gitignore"), ".env*\nsecret.key\nnoise.log\n").unwrap();
+        std::fs::write(main.join(".worktreeinclude"), "# setup files\n.env*\nsecret.key\n")
+            .unwrap();
+        git(&main, &["add", ".gitignore", ".worktreeinclude"]);
+        git(&main, &["commit", "-q", "-m", "ignore rules"]);
+        // Ignored files: two matching the include list, one not.
+        std::fs::write(main.join(".env"), "A=1\n").unwrap();
+        std::fs::write(main.join("secret.key"), "k\n").unwrap();
+        std::fs::write(main.join("noise.log"), "log\n").unwrap();
+
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        assert_eq!(repo.worktree_include_patterns().unwrap(), vec![".env*", "secret.key"]);
+
+        let wt = main.parent().unwrap().join("agent");
+        repo.add_worktree(wt.to_str().unwrap(), "agent", true, None, false).unwrap();
+        let mut copied = repo.copy_worktree_include(wt.to_str().unwrap()).unwrap();
+        copied.sort();
+        assert_eq!(copied, vec![".env", "secret.key"]);
+        assert_eq!(std::fs::read_to_string(wt.join(".env")).unwrap(), "A=1\n");
+        assert!(wt.join("secret.key").exists());
+        assert!(!wt.join("noise.log").exists(), "unlisted ignored files stay put");
+
+        // No `.worktreeinclude` ⇒ quiet no-op.
+        let bare = setup("include-none");
+        let repo2 = Repo::discover(bare.to_str().unwrap()).unwrap();
+        assert!(repo2.worktree_include_patterns().unwrap().is_empty());
+        assert!(repo2.copy_worktree_include(bare.to_str().unwrap()).unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+        let _ = std::fs::remove_dir_all(bare.parent().unwrap());
+    }
+
+    #[test]
+    fn stats_report_size_activity_and_line_counts() {
+        let main = setup("stats");
+        std::fs::write(main.join("a.txt"), "a\nchanged\n").unwrap();
+        std::fs::write(main.join("big.bin"), vec![0u8; 2048]).unwrap();
+
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let stats = repo.worktree_stats().unwrap();
+        assert!(stats.disk_bytes >= 2048, "walk counted the payload: {}", stats.disk_bytes);
+        assert!(stats.last_activity_unix.is_some());
+        assert!(stats.insertions >= 1, "a.txt gained a line: {}", stats.insertions);
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn locks_and_unlocks_a_worktree() {
+        let main = setup("lock");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let wt = main.parent().unwrap().join("locked");
+        repo.add_worktree(wt.to_str().unwrap(), "locked", true, None, false).unwrap();
+
+        repo.lock_worktree(wt.to_str().unwrap(), Some("agent running")).unwrap();
+        let listed = repo.worktrees().unwrap();
+        let entry = listed.iter().find(|w| w.branch.as_deref() == Some("locked")).unwrap();
+        assert!(entry.is_locked);
+        assert_eq!(entry.lock_reason.as_deref(), Some("agent running"));
+
+        repo.unlock_worktree(wt.to_str().unwrap()).unwrap();
+        let listed = repo.worktrees().unwrap();
+        let entry = listed.iter().find(|w| w.branch.as_deref() == Some("locked")).unwrap();
+        assert!(!entry.is_locked);
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn archiving_auto_prunes_old_snapshots() {
+        let main = setup("autoprune");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let head = git(&main, &["rev-parse", "HEAD"]);
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+
+        // Seed synthetic archive refs: 12 recent ones for this slug (over the
+        // per-slug cap) + 1 ancient one for another slug (over the age cap).
+        for i in 0..12i64 {
+            let r = format!("{ARCHIVE_NS}main/{}", now - 100 - i);
+            git(&main, &["update-ref", &r, &head]);
+        }
+        let old = format!("{ARCHIVE_NS}other/{}", now - ARCHIVE_MAX_AGE_SECS - 1000);
+        git(&main, &["update-ref", &old, &head]);
+
+        // A real archive triggers the prune pass.
+        repo.archive_worktree_state().unwrap();
+
+        let archives = repo.worktree_archives().unwrap();
+        let main_slug = archives.iter().filter(|a| a.name == "main").count();
+        assert_eq!(main_slug, ARCHIVE_KEEP_PER_SLUG, "capped per slug");
+        assert!(!archives.iter().any(|a| a.name == "other"), "aged out");
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
     fn rejects_dash_leading_args() {
         let base = std::env::temp_dir().join(format!(
             "strand-worktree-dash-{}-{:?}",
@@ -875,7 +1266,7 @@ mod tests {
         std::fs::create_dir_all(&base).unwrap();
         git(&base, &["init", "-q", "-b", "main"]);
         let repo = Repo::discover(base.to_str().unwrap()).unwrap();
-        assert!(repo.add_worktree("--force", "x", false).is_err());
+        assert!(repo.add_worktree("--force", "x", false, None, false).is_err());
         assert!(repo.remove_worktree("-rf", true).is_err());
         let _ = std::fs::remove_dir_all(&base);
     }

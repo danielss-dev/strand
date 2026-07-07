@@ -24,7 +24,7 @@ use strand_core::{
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
     status::FileStatus, submodule::Submodule, tree::WorkTreeEntry,
-    worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth}, Repo,
+    worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats}, Repo,
 };
 use tauri::ipc::Channel;
 use tauri::{Emitter, State};
@@ -556,9 +556,66 @@ pub async fn repo_worktree_add(
     dest: String,
     branch: String,
     new_branch: bool,
+    start_point: Option<String>,
+    track: Option<bool>,
 ) -> CmdResult<()> {
     run_blocking("worktree add", move || {
-        Ok(Repo::discover(&path)?.add_worktree(&dest, &branch, new_branch)?)
+        Ok(Repo::discover(&path)?.add_worktree(
+            &dest,
+            &branch,
+            new_branch,
+            start_point.as_deref(),
+            track.unwrap_or(false),
+        )?)
+    })
+    .await
+}
+
+/// Lock / unlock a worktree against removal and pruning (`reason` shows in
+/// `worktree list` and the overview badge).
+#[tauri::command(async)]
+pub async fn repo_worktree_lock(
+    path: String,
+    dest: String,
+    reason: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("worktree lock", move || {
+        Ok(Repo::discover(&path)?.lock_worktree(&dest, reason.as_deref())?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_worktree_unlock(path: String, dest: String) -> CmdResult<()> {
+    run_blocking("worktree unlock", move || {
+        Ok(Repo::discover(&path)?.unlock_worktree(&dest)?)
+    })
+    .await
+}
+
+/// Disk size / last-activity / ±line stats for the worktree at `path` — the
+/// overview fetches this lazily per row (the walk can be slow on huge trees).
+#[tauri::command(async)]
+pub async fn repo_worktree_stats(path: String) -> CmdResult<WorktreeStats> {
+    run_blocking("worktree stats", move || Ok(Repo::discover(&path)?.worktree_stats()?)).await
+}
+
+/// Patterns from `.worktreeinclude` at the workdir root (empty when absent) —
+/// lets the create dialog offer the copy step only when it would do something.
+#[tauri::command(async)]
+pub async fn repo_worktree_include_patterns(path: String) -> CmdResult<Vec<String>> {
+    run_blocking("worktree include patterns", move || {
+        Ok(Repo::discover(&path)?.worktree_include_patterns()?)
+    })
+    .await
+}
+
+/// Copy gitignored files matching `.worktreeinclude` from the worktree at
+/// `path` into the fresh worktree at `dest`; returns the copied paths.
+#[tauri::command(async)]
+pub async fn repo_worktree_copy_include(path: String, dest: String) -> CmdResult<Vec<String>> {
+    run_blocking("worktree copy include", move || {
+        Ok(Repo::discover(&path)?.copy_worktree_include(&dest)?)
     })
     .await
 }
