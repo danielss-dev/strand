@@ -1518,6 +1518,13 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 - ☑ Rust `ai/` module + IPC (`ai_provider_*`, `repo_suggest_commit_message`)
 - ☑ Settings → AI (ChatGPT / Claude Code sign-in, custom CLI paths)
 - ☑ CommitBar Suggest + palette / ⌘⇧M shortcut
+- ☑ Windows CLI spawning hardened (DAN-11: `ai/bin.rs` resolves `.exe`/`.cmd`/
+  `.bat` only — never npm's extensionless POSIX shims — and runs batch shims
+  via `cmd /C`; prompts travel over stdin; null stdin + 30s/120s timeouts so
+  an interactive CLI prompt can't hang the spinner forever; `CREATE_NO_WINDOW`
+  stops per-call console flashes in the release build; CommitBar surfaces
+  suggest failures inline as "Suggestion failed: …" instead of a silently
+  disabled sparkle / mislabeled "Commit failed:")
 - ☐ Rebase reword suggestions (share CommitBar generator)
 - ☐ Conflict-resolution hints — PRD Q3 follow-up
 

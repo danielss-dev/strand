@@ -1334,12 +1334,12 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
           setCommitError('Browser opened — complete sign-in, then click Suggest again.');
         } catch (loginErr) {
           console.error('ai provider login failed', loginErr);
-          setCommitError(gitErrorHint(loginErr));
+          setCommitError(`Sign-in failed: ${gitErrorHint(loginErr)}`);
         }
         return;
       }
       console.error('suggest commit message failed', e);
-      setCommitError(msg);
+      setCommitError(`Suggestion failed: ${msg}`);
     } finally {
       setSuggesting(false);
     }
@@ -1364,14 +1364,16 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
       setAmend(false);
     } catch (e) {
       console.error('commit failed', e);
-      setCommitError(gitErrorHint(e));
+      setCommitError(`Commit failed: ${gitErrorHint(e)}`);
     } finally {
       setSubmitting(false);
     }
   }
 
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
-  const suggestDisabled = suggesting || submitting || !canCommit || !aiInstalled;
+  // Missing CLI does not disable the button: clicking surfaces the backend's
+  // install/sign-in hint inline, instead of a dead control (DAN-11).
+  const suggestDisabled = suggesting || submitting || !canCommit;
   const suggestTitle = suggesting
     ? 'Generating commit message…'
     : !canCommit
@@ -1441,7 +1443,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
       />
       {commitError && (
         <div className="cb-error" role="alert">
-          Commit failed: {commitError}
+          {commitError}
         </div>
       )}
     </div>
