@@ -32,7 +32,9 @@ export function BranchDialog({
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
+  // cleanup-only effect would leave it permanently false (frozen busy state).
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
   // Restore focus to whatever opened the dialog when it closes, so keyboard
   // flow returns to the graph/sidebar instead of falling to <body>.

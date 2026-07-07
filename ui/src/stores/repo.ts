@@ -1292,6 +1292,16 @@ export const useRepo = create<RepoState>((set, get) => ({
   async removeWorktree(dest, force) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
+    // Safety net: snapshot the worktree's full state (HEAD + uncommitted +
+    // untracked) into an archive ref before the directory goes away — a
+    // force-remove is then always recoverable from the Worktrees overview.
+    // Best-effort: a prunable entry has no directory to archive, and git's
+    // own dirty guard still protects the non-force path.
+    try {
+      await tauri.repoWorktreeArchive(dest);
+    } catch (e) {
+      console.warn('worktree archive before remove failed', e);
+    }
     await tauri.repoWorktreeRemove(path, dest, force);
     // The worktree's directory is gone now — close its tab if it was open, so a
     // dead tab doesn't linger pointing at a removed worktree.

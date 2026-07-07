@@ -63,6 +63,11 @@ keyboard alone, and the mouse stays first-class.
   repo naming, branch/session labels, dirty count, ahead/behind, last commit,
   and one-click Review pinned where the branch diverged from main. Worktree
   tabs of one repo group together instead of looking like separate repos.
+  Rows badge merged / unpushed work against the detected base; **Merge &
+  clean up** lands a worktree's branch (squash / merge / fast-forward, exact
+  commands previewed) and retires the worktree + branch in one motion, and
+  every removal first archives a full snapshot — uncommitted and untracked
+  files included — restorable later as a new worktree.
 - **Everyday Git** — staging with per-change-block stage / discard / unstage
   inline in the diff, fetch / pull / push with streaming progress, branches,
   tags, stashes, remotes, cherry-pick, revert, merge, and a fully

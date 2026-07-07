@@ -78,8 +78,13 @@ export function RebaseEditor({
   const mountedRef = useRef(true);
   // Original commit order, to detect a no-op plan (all pick + unchanged order).
   const origOrderRef = useRef<string[]>([]);
-  useEffect(() => () => {
-    mountedRef.current = false;
+  // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
+  // cleanup-only effect would leave it permanently false (frozen busy state).
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   // Restore focus to whatever opened the dialog when it closes.

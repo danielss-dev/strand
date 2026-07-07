@@ -853,6 +853,48 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   on the Review view in session mode, so committed + uncommitted work since the
   fork point shows in one diff via the existing `diff_since`. The main worktree,
   or a failed merge-base (toast), falls back to Local Changes as before.)
+- ☑ Worktree health + dirty-aware cleanup (W2 — `Repo::worktree_health` in
+  `worktree.rs`: detected base, ahead-of-base, can-fast-forward,
+  upstream/unpushed, and **merged via a containment scan across all local
+  branches** (`merged_into`) — detect_base_branch alone misses a branch merged
+  into main when sibling worktrees sit at the fork, the canonical
+  parallel-agent shape; `repo_worktree_health` IPC; overview rows
+  fetch it lazily and badge **merged** / **unpushed** / **unmerged**, with
+  `lock_reason` + new `prune_reason` surfaced as badge tooltips; hero gains a
+  merged metric, a **Clean up (N)** action that lists clean+merged worktrees in
+  a confirm dialog and removes them + deletes their branches, and a **Prune
+  stale** button.)
+- ☑ Merge & clean up (W1 — `Repo::integrate_worktree_branch` in `worktree.rs`:
+  squash / merge-commit / ff of a worktree branch into its detected base,
+  running in whichever worktree holds the base (clean-workdir guard, conflict
+  auto-abort) or as a pure ref fast-forward when the base isn't checked out;
+  `repo_worktree_integrate` IPC; `views/WorktreeMergeDialog.tsx` previews the
+  exact git commands, warns about uncommitted files, offers an editable base
+  picker (detected base preselected; per-base ff-possibility recomputed via
+  `repoMergeBase`) since the detection heuristic can name a sibling, and
+  optionally removes the worktree + deletes the branch after merging.
+  +3 engine tests.)
+- ☑ Archive-before-remove snapshots (W3 — `Repo::archive_worktree_state` in
+  `worktree.rs` snapshots HEAD+staged+unstaged+untracked into
+  `refs/strand/archive/<slug>/<secs>` via a throwaway `GIT_INDEX_FILE`, without
+  touching the real index; `worktree_archives` / `restore_worktree_archive`
+  (puts the original identity back: recorded directory when free, branch
+  recreated-or-reattached when unambiguous — commit subject carries the exact
+  branch, body a `Path:` line — else fallback dir/detached; archived changes
+  return as uncommitted state on the original commit) /
+  `delete_worktree_archive`; four
+  `repo_worktree_archive*` IPC commands; the store's `removeWorktree` archives
+  best-effort before every removal, and the overview grows a collapsible
+  "Archived snapshots" strip with Restore / Delete. +1 engine test.)
+- ☐ Surface "Merge & clean up" beyond the overview (sidebar worktree context
+  menu + worktree review header) and add palette entries for Clean up / Prune.
+- ☐ Auto-prune old worktree archive snapshots (keep last N per slug or
+  age-based) instead of manual-delete only.
+- ☐ `detect_base_branch` tie-break revisit: with several sibling branches at
+  one fork point it picks a sibling (smallest `base_ahead`) over the real
+  parent. Harmless for review baselines (same merge-base) but it seeds the
+  merge dialog's base picker; consider preferring the branch another worktree
+  has checked out, or main-ish names, on exact rank ties.
 
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;

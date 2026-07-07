@@ -37,6 +37,7 @@ function worktree(overrides: Partial<Worktree>): Worktree {
     is_locked: false,
     lock_reason: null,
     is_prunable: false,
+    prune_reason: null,
     is_main: false,
     is_current: false,
     ...overrides,

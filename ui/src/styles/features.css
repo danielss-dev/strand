@@ -5308,6 +5308,119 @@ select.clone-input {
   cursor: pointer;
 }
 
+/* Hero action stack: create + clean-up + prune in the hero's third column. */
+.wt-hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.wt-hero-actions .btn {
+  justify-content: center;
+}
+
+/* Health badges (W2): merged = safe to retire, warn = work only exists here. */
+.wt-tag.merged {
+  color: var(--add);
+}
+.wt-tag.warn {
+  color: var(--warn);
+}
+
+/* Merge dialog: exact-commands preview + dirty-files warning. */
+.wt-merge-preview {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.wt-merge-warn {
+  color: var(--warn);
+}
+.stash-check.disabled {
+  opacity: 0.55;
+}
+
+/* Cleanup confirm: the list of worktrees about to be retired. */
+.wt-cleanup-list {
+  margin: 4px 0 0;
+  padding: 0 0 0 18px;
+  font-size: var(--type-ui-sm);
+}
+.wt-cleanup-list li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Archived snapshots (W3): collapsible strip under the worktree list. */
+.wt-archives {
+  flex-shrink: 0;
+  border-top: 0.5px solid var(--border);
+  max-height: 32%;
+  display: flex;
+  flex-direction: column;
+}
+.wt-archives-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--type-ui-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.wt-archives-head:hover {
+  color: var(--text);
+}
+.wt-archives-caret {
+  width: 10px;
+  color: var(--text-dim);
+}
+.wt-archives-count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--border);
+  font-size: 10px;
+}
+.wt-archives-list {
+  overflow-y: auto;
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wt-archive-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+  background: var(--bg-elev);
+  font-size: var(--type-ui-sm);
+}
+.wt-archive-name {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+.wt-archive-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ─── In-diff text search (⌘F, Local Changes + Review) ─────────────────── */
 
 /* Positioning anchor wrapping the diff pane, so the floating bar pins to its

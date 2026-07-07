@@ -30,7 +30,9 @@ export function RenameFileDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
+  // cleanup-only effect would leave it permanently false (frozen busy state).
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
   // Restore focus to the opener (the context menu / row) when the dialog closes.
   useEffect(() => {

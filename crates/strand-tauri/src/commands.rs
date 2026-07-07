@@ -23,7 +23,8 @@ use strand_core::{
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
-    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
+    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry,
+    worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth}, Repo,
 };
 use tauri::ipc::Channel;
 use tauri::{Emitter, State};
@@ -546,24 +547,96 @@ pub async fn repo_worktrees(path: String) -> CmdResult<Vec<Worktree>> {
     run_blocking("worktrees", move || Ok(Repo::discover(&path)?.worktrees()?)).await
 }
 
+// The worktree lifecycle commands all wait on `git` subprocesses (add even
+// runs a full checkout + the user's post-checkout hook), so they route
+// through `run_blocking` like the other subprocess-backed commands.
 #[tauri::command(async)]
-pub fn repo_worktree_add(
+pub async fn repo_worktree_add(
     path: String,
     dest: String,
     branch: String,
     new_branch: bool,
 ) -> CmdResult<()> {
-    Ok(Repo::discover(&path)?.add_worktree(&dest, &branch, new_branch)?)
+    run_blocking("worktree add", move || {
+        Ok(Repo::discover(&path)?.add_worktree(&dest, &branch, new_branch)?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_worktree_remove(path: String, dest: String, force: bool) -> CmdResult<()> {
-    Ok(Repo::discover(&path)?.remove_worktree(&dest, force)?)
+pub async fn repo_worktree_remove(path: String, dest: String, force: bool) -> CmdResult<()> {
+    run_blocking("worktree remove", move || {
+        Ok(Repo::discover(&path)?.remove_worktree(&dest, force)?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
-pub fn repo_worktree_prune(path: String) -> CmdResult<()> {
-    Ok(Repo::discover(&path)?.prune_worktrees()?)
+pub async fn repo_worktree_prune(path: String) -> CmdResult<()> {
+    run_blocking("worktree prune", move || Ok(Repo::discover(&path)?.prune_worktrees()?)).await
+}
+
+/// Ref-level health of a worktree's branch (merged into base? unpushed?
+/// fast-forwardable?) — the overview's badge + cleanup data.
+#[tauri::command(async)]
+pub async fn repo_worktree_health(path: String, target: String) -> CmdResult<WorktreeHealth> {
+    run_blocking("worktree health", move || {
+        Ok(Repo::discover(&path)?.worktree_health(&target)?)
+    })
+    .await
+}
+
+/// Merge a worktree's branch into its base (`mode`: "ff" | "merge" |
+/// "squash") — the "merge & clean up" flow's integration step.
+#[tauri::command(async)]
+pub async fn repo_worktree_integrate(
+    path: String,
+    branch: String,
+    base: String,
+    mode: String,
+) -> CmdResult<String> {
+    run_blocking("worktree integrate", move || {
+        Ok(Repo::discover(&path)?.integrate_worktree_branch(&branch, &base, &mode)?)
+    })
+    .await
+}
+
+/// Snapshot the worktree at `path` (HEAD + staged + unstaged + untracked)
+/// into an archive ref; the safety net taken before any worktree removal.
+#[tauri::command(async)]
+pub async fn repo_worktree_archive(path: String) -> CmdResult<String> {
+    run_blocking("worktree archive", move || {
+        Ok(Repo::discover(&path)?.archive_worktree_state()?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_worktree_archives(path: String) -> CmdResult<Vec<WorktreeArchive>> {
+    run_blocking("worktree archives", move || Ok(Repo::discover(&path)?.worktree_archives()?)).await
+}
+
+/// Restore an archived snapshot as a worktree — original directory + branch
+/// when they're free, `dest`/detached as fallbacks; archived changes come
+/// back as uncommitted workdir state.
+#[tauri::command(async)]
+pub async fn repo_worktree_archive_restore(
+    path: String,
+    ref_name: String,
+    dest: String,
+) -> CmdResult<RestoredWorktree> {
+    run_blocking("worktree restore", move || {
+        Ok(Repo::discover(&path)?.restore_worktree_archive(&ref_name, &dest)?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_worktree_archive_delete(path: String, ref_name: String) -> CmdResult<()> {
+    run_blocking("worktree archive delete", move || {
+        Ok(Repo::discover(&path)?.delete_worktree_archive(&ref_name)?)
+    })
+    .await
 }
 
 #[tauri::command(async)]

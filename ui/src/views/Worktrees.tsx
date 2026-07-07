@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { Icon } from '../components/Icon';
 import { pathLeaf, repoFamilyName, worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
-import type { Worktree } from '../lib/types';
+import type { Worktree, WorktreeArchive, WorktreeHealth } from '../lib/types';
+import { WorktreeMergeDialog } from './WorktreeMergeDialog';
 
 interface WtStats {
   loading: boolean;
@@ -14,6 +15,8 @@ interface WtStats {
   behind: number;
   lastSubject: string | null;
   lastTime: number | null;
+  /** Ref-level health vs the detected base; `null` for main/detached rows. */
+  health: WorktreeHealth | null;
 }
 
 const EMPTY_STATS: WtStats = {
@@ -23,7 +26,16 @@ const EMPTY_STATS: WtStats = {
   behind: 0,
   lastSubject: null,
   lastTime: null,
+  health: null,
 };
+
+/** Snapshot of the row a merge dialog was opened for — kept stable while the
+ *  underlying lists refresh mid-flow. */
+interface MergeTarget {
+  worktree: Worktree;
+  health: WorktreeHealth;
+  dirty: number;
+}
 
 /**
  * Worktrees overview — the triage surface for "what is each agent doing?".
@@ -43,8 +55,10 @@ export function Worktrees({
   const activePath = useRepo((s) => s.activePath);
   const worktrees = useRepo((s) => s.worktrees);
   const refreshWorktrees = useRepo((s) => s.refreshWorktrees);
+  const refreshRefs = useRepo((s) => s.refreshRefs);
   const openWorktree = useRepo((s) => s.openWorktree);
   const removeWorktree = useRepo((s) => s.removeWorktree);
+  const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const setBaseline = useRepo((s) => s.setBaseline);
   const setView = useRepo((s) => s.setView);
 
@@ -53,6 +67,13 @@ export function Worktrees({
   // swaps the trash button for an explicit Force remove / Cancel pair.
   const [forcePath, setForcePath] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
+  const [mergeTarget, setMergeTarget] = useState<MergeTarget | null>(null);
+  const [showCleanup, setShowCleanup] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [archives, setArchives] = useState<WorktreeArchive[]>([]);
+  const [archivesOpen, setArchivesOpen] = useState(false);
+  // Archive ref pending delete; its row shows an explicit confirm pair.
+  const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null);
   const focusedRowRef = useRef<HTMLDivElement>(null);
 
   const repoName = repoFamilyName(meta);
@@ -77,10 +98,14 @@ export function Worktrees({
     for (const w of worktrees) {
       void (async () => {
         try {
-          const [status, m, log] = await Promise.all([
+          const [status, m, log, health] = await Promise.all([
             tauri.repoStatus(w.path),
             tauri.repoMeta(w.path),
             tauri.repoLog(w.path, 1),
+            // Health only means something for a linked worktree on a branch.
+            !w.is_main && w.branch
+              ? tauri.repoWorktreeHealth(w.path, w.branch).catch(() => null)
+              : Promise.resolve(null),
           ]);
           if (cancelled) return;
           setStats((s) => ({
@@ -92,6 +117,7 @@ export function Worktrees({
               behind: m.behind,
               lastSubject: log[0]?.subject ?? null,
               lastTime: log[0]?.time_unix ?? null,
+              health,
             },
           }));
         } catch {
@@ -104,6 +130,22 @@ export function Worktrees({
 
     return () => { cancelled = true; };
   }, [pathsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshArchives = useCallback(async () => {
+    const path = activePath;
+    if (!path) return;
+    try {
+      const list = await tauri.repoWorktreeArchives(path);
+      setArchives(list);
+    } catch {
+      // Non-fatal: the section just stays as-is.
+    }
+  }, [activePath]);
+
+  // Every removal archives first, so re-list whenever the worktree set moves.
+  useEffect(() => {
+    void refreshArchives();
+  }, [refreshArchives, pathsKey]);
 
   const orderedWorktrees = useMemo(() => {
     const rank = (w: Worktree): number => {
@@ -129,8 +171,29 @@ export function Worktrees({
     focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [focused]);
 
+  useEffect(() => {
+    if (!showCleanup) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape' && !cleanupBusy) setShowCleanup(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showCleanup, cleanupBusy]);
+
   const dirtyWorktrees = orderedWorktrees.filter((w) => (stats[w.path]?.dirty ?? 0) > 0).length;
-  const lockedWorktrees = orderedWorktrees.filter((w) => w.is_locked).length;
+  const mergedWorktrees = orderedWorktrees.filter((w) => stats[w.path]?.health?.merged).length;
+
+  // Safe to retire without losing anything: clean, on a branch, and every
+  // commit already lives in the base.
+  const cleanupCandidates = useMemo(
+    () =>
+      worktrees.filter((w) => {
+        if (w.is_main || w.is_current || !w.branch) return false;
+        const st = stats[w.path];
+        return !!st && !st.loading && st.dirty === 0 && !!st.health?.merged;
+      }),
+    [worktrees, stats],
+  );
 
   const review = (w: Worktree) => {
     void (async () => {
@@ -168,7 +231,8 @@ export function Worktrees({
       try {
         await removeWorktree(w.path, force);
         setForcePath(null);
-        onToast(`Removed worktree ${worktreeName(w)}`);
+        void refreshArchives();
+        onToast(`Removed worktree ${worktreeName(w)} — snapshot archived`);
       } catch (e) {
         const msg = errMessage(e);
         // git refuses dirty/locked worktrees without --force; surface the
@@ -177,6 +241,85 @@ export function Worktrees({
           setForcePath(w.path);
         }
         onToast(`Remove failed: ${msg}`, 'error');
+      }
+    })();
+  };
+
+  const prune = () => {
+    void (async () => {
+      try {
+        await pruneWorktrees();
+        onToast('Pruned stale worktree entries');
+      } catch (e) {
+        onToast(`Prune failed: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
+
+  const runCleanup = () => {
+    const path = activePath;
+    if (!path) return;
+    void (async () => {
+      setCleanupBusy(true);
+      let removed = 0;
+      const errors: string[] = [];
+      for (const w of cleanupCandidates) {
+        try {
+          // removeWorktree archives the full state first (safety net).
+          await removeWorktree(w.path, true);
+          if (w.branch) await tauri.repoBranchDelete(path, w.branch, true);
+          removed += 1;
+        } catch (e) {
+          errors.push(`${worktreeName(w)}: ${errMessage(e)}`);
+        }
+      }
+      await Promise.all([refreshWorktrees(), refreshRefs()]);
+      void refreshArchives();
+      setCleanupBusy(false);
+      setShowCleanup(false);
+      if (errors.length > 0) {
+        onToast(`Cleaned up ${removed}, but: ${errors[0]}`, 'error');
+      } else {
+        onToast(`Cleaned up ${removed} worktree${removed === 1 ? '' : 's'} — snapshots archived`);
+      }
+    })();
+  };
+
+  const restoreArchive = (a: WorktreeArchive) => {
+    const path = activePath;
+    if (!path) return;
+    void (async () => {
+      // Fallback only — restore prefers the snapshot's original directory
+      // and re-attaches its branch when both are free.
+      const mainPath = worktrees.find((w) => w.is_main)?.path ?? path;
+      const parent = mainPath.replace(/[\\/][^\\/]*$/, '');
+      const dest = `${parent}/${repoFamilyName(meta)}.worktrees/${a.name.replace(/\//g, '-')}`;
+      try {
+        const res = await tauri.repoWorktreeArchiveRestore(path, a.ref_name, dest);
+        await Promise.all([refreshWorktrees(), refreshRefs()]);
+        onToast(
+          res.branch
+            ? `Restored ${a.name} on ${res.branch} at ${res.path}`
+            : `Restored ${a.name} (detached) at ${res.path}`,
+        );
+        void openWorktree(res.path);
+      } catch (e) {
+        onToast(`Restore failed: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
+
+  const deleteArchive = (a: WorktreeArchive) => {
+    const path = activePath;
+    if (!path) return;
+    void (async () => {
+      try {
+        await tauri.repoWorktreeArchiveDelete(path, a.ref_name);
+        setArchives((s) => s.filter((x) => x.ref_name !== a.ref_name));
+        setArchiveConfirm(null);
+        onToast('Snapshot deleted');
+      } catch (e) {
+        onToast(`Delete failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -210,12 +353,36 @@ export function Worktrees({
         <div className="wt-hero-stats" aria-label="Worktree summary">
           <Metric value={orderedWorktrees.length} label="total" />
           <Metric value={dirtyWorktrees} label="dirty" />
-          <Metric value={lockedWorktrees} label="locked" />
+          <Metric value={mergedWorktrees} label="merged" />
         </div>
-        <button type="button" className="btn primary" onClick={onCreateWorktree}>
-          <Icon name="plus" size={13} stroke={2} />
-          <span>New worktree</span>
-        </button>
+        <div className="wt-hero-actions">
+          <button type="button" className="btn primary" onClick={onCreateWorktree}>
+            <Icon name="plus" size={13} stroke={2} />
+            <span>New worktree</span>
+          </button>
+          {cleanupCandidates.length > 0 && (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setShowCleanup(true)}
+              title="Remove worktrees that are clean and fully merged into their base (snapshots archived first)"
+            >
+              <Icon name="trash" size={12} />
+              <span>Clean up ({cleanupCandidates.length})</span>
+            </button>
+          )}
+          {worktrees.some((w) => w.is_prunable) && (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={prune}
+              title="Drop registry entries whose directories are gone"
+            >
+              <Icon name="sync" size={12} />
+              <span>Prune stale</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {orderedWorktrees.length === 0 ? (
@@ -243,6 +410,7 @@ export function Worktrees({
             const st = stats[w.path] ?? EMPTY_STATS;
             const name = worktreeName(w);
             const detail = w.is_main ? 'Main checkout' : pathLeaf(w.path);
+            const baseName = st.health?.base_branch ?? mainBranch;
             return (
               <div
                 key={w.path}
@@ -264,7 +432,7 @@ export function Worktrees({
                   <div className="wt-card-top">
                     <span className="wt-branch">{name}</span>
                     <span className="wt-detail">{detail}</span>
-                    <Tags worktree={w} />
+                    <Tags worktree={w} health={st.health} />
                     <Drift ahead={st.ahead} behind={st.behind} />
                   </div>
                   <div className="wt-card-sub">
@@ -289,13 +457,26 @@ export function Worktrees({
                     className="btn primary"
                     onClick={(e) => { e.stopPropagation(); review(w); }}
                     title={
-                      !w.is_main && mainBranch
-                        ? `Review changes since this worktree diverged from ${mainBranch}`
+                      !w.is_main && baseName
+                        ? `Review changes since this worktree diverged from ${baseName}`
                         : 'Open this worktree on Local Changes'
                     }
                   >
                     {w.is_main ? 'Open' : 'Review'}
                   </button>
+                  {!w.is_main && w.branch && st.health?.base_branch && !st.health.merged && (
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMergeTarget({ worktree: w, health: st.health!, dirty: st.dirty });
+                      }}
+                      title={`Merge ${w.branch} into ${st.health.base_branch}, then optionally remove the worktree`}
+                    >
+                      Merge…
+                    </button>
+                  )}
                   {!w.is_current && (
                     <button
                       type="button"
@@ -312,7 +493,7 @@ export function Worktrees({
                         type="button"
                         className="btn ghost danger"
                         onClick={(e) => { e.stopPropagation(); remove(w, true); }}
-                        title="Discard its local changes and remove the worktree"
+                        title="Remove the worktree; its state is archived to a snapshot first"
                         aria-label={`Force remove worktree ${name}`}
                       >
                         Force remove
@@ -331,7 +512,7 @@ export function Worktrees({
                       type="button"
                       className="btn ghost danger"
                       onClick={(e) => { e.stopPropagation(); remove(w, false); }}
-                      title="Remove this worktree"
+                      title="Remove this worktree (a snapshot is archived first)"
                       aria-label={`Remove worktree ${name}`}
                     >
                       <Icon name="trash" size={12} />
@@ -341,6 +522,131 @@ export function Worktrees({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {archives.length > 0 && (
+        <div className="wt-archives">
+          <button
+            type="button"
+            className="wt-archives-head"
+            onClick={() => setArchivesOpen((o) => !o)}
+            aria-expanded={archivesOpen}
+          >
+            <span className="wt-archives-caret">{archivesOpen ? '▾' : '▸'}</span>
+            <span>Archived snapshots</span>
+            <span className="wt-archives-count">{archives.length}</span>
+            <span className="wt-dim">taken automatically before each worktree removal</span>
+          </button>
+          {archivesOpen && (
+            <div className="wt-archives-list">
+              {archives.map((a) => (
+                <div key={a.ref_name} className="wt-archive-row">
+                  <Icon name="worktree" size={12} />
+                  <span className="wt-archive-name">{a.name}</span>
+                  <span className="wt-dim">{relTime(a.time_unix)} · {a.oid.slice(0, 7)}</span>
+                  <div className="wt-archive-actions">
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => restoreArchive(a)}
+                      title="Recreate a worktree with this snapshot's exact state (including uncommitted changes)"
+                    >
+                      Restore
+                    </button>
+                    {archiveConfirm === a.ref_name ? (
+                      <>
+                        <button type="button" className="btn ghost danger" onClick={() => deleteArchive(a)}>
+                          Delete snapshot
+                        </button>
+                        <button type="button" className="btn ghost" onClick={() => setArchiveConfirm(null)}>
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn ghost danger"
+                        onClick={() => setArchiveConfirm(a.ref_name)}
+                        title="Delete this snapshot"
+                        aria-label={`Delete snapshot ${a.name}`}
+                      >
+                        <Icon name="trash" size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mergeTarget && (
+        <WorktreeMergeDialog
+          worktree={mergeTarget.worktree}
+          health={mergeTarget.health}
+          dirty={mergeTarget.dirty}
+          onClose={() => setMergeTarget(null)}
+          onToast={onToast}
+        />
+      )}
+
+      {showCleanup && (
+        <div
+          className="palette-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !cleanupBusy) setShowCleanup(false);
+          }}
+        >
+          <div className="clone-dialog worktree-dialog" role="dialog" aria-modal="true" aria-label="Clean up worktrees">
+            <div className="clone-head">
+              <Icon name="trash" size={15} />
+              <span className="title">Clean up merged worktrees</span>
+              <button
+                type="button"
+                className="cd-close"
+                aria-label="Close"
+                disabled={cleanupBusy}
+                onClick={() => setShowCleanup(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="clone-body">
+              <p className="stash-blurb">
+                These worktrees are clean and every commit is already in their base
+                branch. Each one is snapshotted to the archive before its directory
+                and branch are removed.
+              </p>
+              <ul className="wt-cleanup-list">
+                {cleanupCandidates.map((w) => {
+                  const h = stats[w.path]?.health;
+                  return (
+                    <li key={w.path}>
+                      <strong>{w.branch}</strong>
+                      <span className="wt-dim"> — in {h?.merged_into ?? h?.base_branch} · {w.path}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="clone-foot">
+              <button type="button" className="btn" disabled={cleanupBusy} onClick={() => setShowCleanup(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={cleanupBusy || cleanupCandidates.length === 0}
+                onClick={runCleanup}
+              >
+                {cleanupBusy
+                  ? 'Cleaning…'
+                  : `Remove ${cleanupCandidates.length} worktree${cleanupCandidates.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -356,14 +662,47 @@ function Metric({ value, label }: { value: number; label: string }) {
   );
 }
 
-function Tags({ worktree }: { worktree: Worktree }) {
+function Tags({ worktree, health }: { worktree: Worktree; health: WorktreeHealth | null }) {
+  // Work that exists only in this worktree: unmerged commits with no
+  // upstream, or an upstream that hasn't seen them yet.
+  const atRisk =
+    !!health &&
+    !health.merged &&
+    (health.has_upstream ? health.unpushed > 0 : health.ahead_of_base > 0);
   return (
     <>
       {worktree.is_current && <span className="wt-tag current">current</span>}
       {worktree.is_main && <span className="wt-tag">main</span>}
-      {worktree.is_locked && <span className="wt-tag"><Icon name="lock" size={10} /> locked</span>}
+      {health?.merged && (
+        <span
+          className="wt-tag merged"
+          title={`No commits of its own — everything is in ${health.merged_into ?? health.base_branch}`}
+        >
+          merged
+        </span>
+      )}
+      {atRisk && health && (
+        <span
+          className="wt-tag warn"
+          title={
+            `${health.ahead_of_base} commit${health.ahead_of_base === 1 ? '' : 's'} not in ${health.base_branch}` +
+            (health.has_upstream
+              ? ` and not pushed (${health.unpushed})`
+              : ' and no upstream — this work exists only here')
+          }
+        >
+          {health.has_upstream ? 'unpushed' : 'unmerged'}
+        </span>
+      )}
+      {worktree.is_locked && (
+        <span className="wt-tag" title={worktree.lock_reason ?? undefined}>
+          <Icon name="lock" size={10} /> locked
+        </span>
+      )}
       {worktree.is_detached && <span className="wt-tag">detached</span>}
-      {worktree.is_prunable && <span className="wt-tag">stale</span>}
+      {worktree.is_prunable && (
+        <span className="wt-tag" title={worktree.prune_reason ?? undefined}>stale</span>
+      )}
     </>
   );
 }

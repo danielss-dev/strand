@@ -1043,3 +1043,30 @@ lesson as `strand_core::git_command`).
 `bin::spawn_detached` — never `Command::new` directly in provider modules.
 Exception mirror: `spawn_detached` (login flows) keeps a visible console on
 purpose, because sign-in may need an interactive picker.
+
+---
+
+## Dialog `mountedRef` must re-arm in the effect body (StrictMode)
+
+**Rule.** The dialog pattern `const mountedRef = useRef(true)` guarding
+`setError`/`setBusy` after an await must set the ref back to `true` in the
+mount effect's *body*, not rely on the initializer:
+`useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, [])`.
+A cleanup-only effect (`useEffect(() => () => { ... }, [])`) is wrong.
+
+**Why.** The app runs in `<StrictMode>`, which in dev mounts → unmounts →
+remounts every component. The ref *object* survives that remount, so the
+simulated unmount's cleanup leaves `mountedRef.current === false` on a fully
+mounted dialog. Every guarded state update is then silently skipped — in
+practice the `finally { if (mountedRef.current) setBusy(false) }` never runs
+and the dialog freezes on its busy label the first time its submit errors
+(found 2026-07-07: "Merging…" frozen in `WorktreeMergeDialog` when the base
+worktree refused the merge; the same latent bug sat in eleven other dialogs).
+Production builds don't double-mount, so the bug is dev-only and invisible on
+the happy path.
+
+**How to apply.** Copying an existing dialog is how the bug spread — all
+dialogs were fixed in one pass (2026-07-07), so copy from any of them now, but
+check for the re-arm line whenever you see `mountedRef`. Same trap for any
+`useRef` flag that a cleanup mutates: initializers run once per fiber, not per
+mount.
