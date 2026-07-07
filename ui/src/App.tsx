@@ -21,7 +21,7 @@ import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
-import { accentHueForColor, groupTabs, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
+import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
 import { buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
@@ -63,9 +63,10 @@ import { Review } from './views/Review';
 import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
+import { WorktreeMergeDialog } from './views/WorktreeMergeDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 import { RepoSwitcher } from './views/RepoSwitcher';
-import type { CrashCheck, FileDiff, Progress, RepoMeta, StatusKind } from './lib/types';
+import type { CrashCheck, FileDiff, Progress, RepoMeta, StatusKind, Worktree, WorktreeHealth } from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -239,6 +240,67 @@ export function App() {
   const [worktreeDialog, setWorktreeDialog] = useState<
     { start: { ref: string; label: string } | null } | null
   >(null);
+  // "Merge & clean up" opened from a rail/tab-strip worktree context menu —
+  // the same on-demand fetch the sidebar's worktree menu does.
+  const [wtMergeDialog, setWtMergeDialog] = useState<{
+    worktree: Worktree;
+    health: WorktreeHealth;
+    dirty: number;
+  } | null>(null);
+  // Registry entry for the worktree tab at `path`, listed from `anchorPath`
+  // so `is_current` means "the active tab", matching the sidebar's list.
+  const worktreeForTab = async (anchorPath: string, path: string): Promise<Worktree | null> => {
+    const list = await tauri.repoWorktrees(anchorPath);
+    return list.find((w) => pathKey(w.path) === pathKey(path)) ?? null;
+  };
+  // Rail/tab-strip "Review vs base" — the store's reviewWorktree flow
+  // (detect base, open the worktree tab, pin the baseline).
+  const reviewWorktreeTab = (path: string) => {
+    void (async () => {
+      try {
+        const w = await worktreeForTab(path, path);
+        if (!w || w.is_main) return;
+        const name = w.branch ?? w.path.split('/').pop() ?? w.path;
+        const { base, detectError } = await useRepo.getState().reviewWorktree(w);
+        if (base) showToast(`Reviewing ${name} vs ${base}`);
+        else if (detectError) showToast(`Can't detect base branch: ${detectError}`, 'error');
+      } catch (e) {
+        showToast(`Review failed: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
+  // Rail/tab-strip "Merge & clean up…". The dialog reads refs/worktrees from
+  // the *active* repo, so when the target belongs to another family, focus a
+  // member first — preferring the main checkout so cleanup (which can't
+  // remove the current worktree) stays available.
+  const mergeWorktreeTab = (path: string) => {
+    void (async () => {
+      try {
+        const { tabs, meta, setActiveTab } = useRepo.getState();
+        const tab = tabs.find((t) => pathKey(t.path) === pathKey(path));
+        if (!tab) return;
+        let anchor = meta && meta.common_dir === tab.meta.common_dir ? meta.path : null;
+        if (!anchor) {
+          const fam = tabs.filter((t) => t.meta.common_dir === tab.meta.common_dir);
+          anchor = (fam.find((t) => !t.meta.is_linked_worktree) ?? tab).path;
+          await setActiveTab(anchor);
+        }
+        const w = await worktreeForTab(anchor, path);
+        if (!w || w.is_main) return;
+        if (!w.branch) {
+          showToast('A detached worktree has no branch to merge', 'error');
+          return;
+        }
+        const [health, status] = await Promise.all([
+          tauri.repoWorktreeHealth(w.path, w.branch),
+          tauri.repoStatus(w.path),
+        ]);
+        setWtMergeDialog({ worktree: w, health, dirty: status.length });
+      } catch (e) {
+        showToast(`Can't load worktree state: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
   // null = closed; otherwise the repo whose rail tile is being customized.
   const [iconDialog, setIconDialog] = useState<{ path: string; name: string } | null>(null);
   // false = closed; 'create' opens the manager mid-create (palette "New
@@ -1265,6 +1327,8 @@ export function App() {
           onClone={() => setCloneOpen(true)}
           onCustomize={openIconDialog}
           onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
+          onWorktreeReview={reviewWorktreeTab}
+          onWorktreeMerge={mergeWorktreeTab}
         />
 
         <div className="body">
@@ -1275,6 +1339,8 @@ export function App() {
               onClone={() => setCloneOpen(true)}
               onCustomize={openIconDialog}
               onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
+              onWorktreeReview={reviewWorktreeTab}
+              onWorktreeMerge={mergeWorktreeTab}
             />
           )}
           <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
@@ -1487,6 +1553,16 @@ export function App() {
           initialStart={worktreeDialog.start}
           onToast={showToast}
           onClose={() => setWorktreeDialog(null)}
+        />
+      )}
+
+      {wtMergeDialog && (
+        <WorktreeMergeDialog
+          worktree={wtMergeDialog.worktree}
+          health={wtMergeDialog.health}
+          dirty={wtMergeDialog.dirty}
+          onClose={() => setWtMergeDialog(null)}
+          onToast={showToast}
         />
       )}
 

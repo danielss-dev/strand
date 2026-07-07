@@ -237,6 +237,14 @@ export const tauri = {
   repoWorktreeRemove: (path: string, dest: string, force: boolean) =>
     invoke<void>('repo_worktree_remove', { path, dest, force }),
   repoWorktreePrune: (path: string) => invoke<void>('repo_worktree_prune', { path }),
+  // Registry-aware directory move for a linked worktree; `force` overrides
+  // git's locked-worktree refusal.
+  repoWorktreeMove: (path: string, dest: string, newPath: string, force: boolean) =>
+    invoke<void>('repo_worktree_move', { path, dest, newPath, force }),
+  // Repair worktree admin links — pass the new directories of manually-moved
+  // worktrees, or nothing after the repo itself moved.
+  repoWorktreeRepair: (path: string, paths: string[]) =>
+    invoke<void>('repo_worktree_repair', { path, paths }),
   // Ref-level health of a worktree's branch: merged into its base? unpushed
   // work? fast-forwardable? Powers the overview badges + merge dialog.
   repoWorktreeHealth: (path: string, target: string) =>
