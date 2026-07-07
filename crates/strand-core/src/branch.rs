@@ -20,7 +20,28 @@ impl Repo {
     /// Uses a safe checkout — if the working tree has changes that would be
     /// overwritten, this errors instead of clobbering them. The UI is
     /// responsible for offering a force/stash escape hatch.
+    ///
+    /// A branch that is HEAD of another worktree is rejected up front (same
+    /// rule as `git switch`). libgit2 only enforces this at `set_head` —
+    /// *after* `checkout_tree` has rewritten the workdir and index — which
+    /// would strand the repo half-switched: HEAD on the old branch, files on
+    /// the new one, and every later safe checkout failing with phantom
+    /// conflicts. git2-rs doesn't bind `git_branch_is_checked_out`, so the
+    /// check goes through the worktree registry; a registry read failure
+    /// falls through (the rollback below still protects the repo).
     pub fn checkout_branch(&self, name: &str) -> Result<CheckoutOutcome> {
+        if let Some(wt) = self
+            .worktrees()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|w| !w.is_current && w.branch.as_deref() == Some(name))
+        {
+            return Err(crate::Error::Other(format!(
+                "branch {name} is already checked out in worktree {}",
+                wt.path
+            )));
+        }
+
         let repo = self.git2()?;
         let branch = repo.find_branch(name, git2::BranchType::Local)?;
         let full = branch
@@ -29,13 +50,56 @@ impl Repo {
             .ok_or_else(|| crate::Error::Other(format!("branch {name} has no ref name")))?
             .to_string();
 
+        // Kept for the rollback path: what the workdir/index looked like
+        // before we touch anything.
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+
         let tree = branch.get().peel_to_tree()?;
         let mut opts = git2::build::CheckoutBuilder::new();
         opts.safe();
         repo.checkout_tree(tree.as_object(), Some(&mut opts))?;
-        repo.set_head(&full)?;
+        if let Err(e) = repo.set_head(&full) {
+            // checkout_tree already rewrote workdir + index; put them back so
+            // a refused HEAD move can't leave the repo half-switched. Restore
+            // only the paths that differ between the two trees — any file the
+            // safe checkout carried local modifications over on is identical
+            // in both trees (it would have conflicted otherwise), so scoping
+            // the force to the diff can't clobber user changes.
+            if let Some(orig) = head_tree {
+                let _ = Self::restore_tree_diff(repo, &orig, &tree);
+            }
+            return Err(e.into());
+        }
 
         Ok(CheckoutOutcome { branch: name.to_string() })
+    }
+
+    /// Force-checkout `orig` for just the paths that differ between `orig`
+    /// and `switched` — the rollback half of [`checkout_branch`]'s failed
+    /// `set_head`. Returns Ok even when there is nothing to restore.
+    ///
+    /// [`checkout_branch`]: Repo::checkout_branch
+    fn restore_tree_diff(
+        repo: &git2::Repository,
+        orig: &git2::Tree<'_>,
+        switched: &git2::Tree<'_>,
+    ) -> std::result::Result<(), git2::Error> {
+        let diff = repo.diff_tree_to_tree(Some(orig), Some(switched), None)?;
+        let mut restore = git2::build::CheckoutBuilder::new();
+        restore.force();
+        let mut any = false;
+        for delta in diff.deltas() {
+            for file in [delta.old_file(), delta.new_file()] {
+                if let Some(p) = file.path() {
+                    restore.path(p);
+                    any = true;
+                }
+            }
+        }
+        if any {
+            repo.checkout_tree(orig.as_object(), Some(&mut restore))?;
+        }
+        Ok(())
     }
 
     /// Create a new local branch.
@@ -168,6 +232,36 @@ mod tests {
             String::from_utf8_lossy(&out.stderr)
         );
         String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn checkout_refuses_branch_of_linked_worktree_without_touching_workdir() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+        git(&dir, &["branch", "feature"]);
+
+        let wt = dir.with_file_name(format!(
+            "{}-wt",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = std::fs::remove_dir_all(&wt);
+        git(&dir, &["worktree", "add", wt.to_str().unwrap(), "feature"]);
+
+        let err = repo.checkout_branch("feature").unwrap_err();
+        assert!(
+            err.to_string().contains("checked out in worktree"),
+            "unexpected error: {err}"
+        );
+        // The guard fires before checkout_tree, so nothing was mutated:
+        // HEAD still on main and the workdir/index are clean.
+        assert_eq!(git(&dir, &["symbolic-ref", "--short", "HEAD"]), "main");
+        assert_eq!(git(&dir, &["status", "--porcelain"]), "");
+
+        git(&dir, &["worktree", "remove", wt.to_str().unwrap()]);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&wt);
     }
 
     #[test]

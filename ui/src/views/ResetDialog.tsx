@@ -23,7 +23,7 @@ export function ResetDialog({
   target: string;
   label: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const reset = useRepo((s) => s.reset);
   const meta = useRepo((s) => s.meta);

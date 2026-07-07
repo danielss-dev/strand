@@ -23,7 +23,7 @@ export function RemoteDialog({
 }: {
   mode: RemoteDialogMode;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const addRemote = useRepo((s) => s.addRemote);
   const renameRemote = useRepo((s) => s.renameRemote);

@@ -47,7 +47,7 @@ interface CommitsProps {
   /** Open the Reset dialog targeting a commit (revspec + label). */
   onResetTo: (target: string, label: string) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
@@ -100,7 +100,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   const openCommitMenu = useCallback(
     (c: Commit, x: number, y: number) => {
       const fail = (verb: string, e: unknown) =>
-        onToast(`${verb} failed: ${errMessage(e)}`);
+        onToast(`${verb} failed: ${errMessage(e)}`, 'error');
       const items: MenuItem[] = [
         {
           label: 'Checkout',
@@ -206,7 +206,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
             onToast(`${verb} stash@{${s.index}}`);
             if (removes && selectedCommit === s.oid) void selectCommit(null);
           } catch (e) {
-            onToast(`${verb} failed: ${errMessage(e)}`);
+            onToast(`${verb} failed: ${errMessage(e)}`, 'error');
           }
         })();
       const items: MenuItem[] = [
@@ -394,7 +394,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
       await searchLog(q, searchMode);
       setResultFocus(0);
     } catch (e) {
-      onToast(`Search failed: ${errMessage(e)}`);
+      onToast(`Search failed: ${errMessage(e)}`, 'error');
       setSearchOpen(false);
     } finally {
       setSearching(false);

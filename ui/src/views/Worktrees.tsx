@@ -37,7 +37,7 @@ export function Worktrees({
   onToast,
 }: {
   onCreateWorktree: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const meta = useRepo((s) => s.meta);
   const activePath = useRepo((s) => s.activePath);
@@ -49,6 +49,9 @@ export function Worktrees({
   const setView = useRepo((s) => s.setView);
 
   const [stats, setStats] = useState<Record<string, WtStats>>({});
+  // Worktree path whose plain remove git refused (dirty/locked); its row
+  // swaps the trash button for an explicit Force remove / Cancel pair.
+  const [forcePath, setForcePath] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
   const focusedRowRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +143,7 @@ export function Worktrees({
         try {
           baselineOid = await tauri.repoMergeBase(w.path, target, base);
         } catch (e) {
-          onToast(`Can't compare with ${base}: ${errMessage(e)}`);
+          onToast(`Can't compare with ${base}: ${errMessage(e)}`, 'error');
         }
       }
 
@@ -154,13 +157,20 @@ export function Worktrees({
     })();
   };
 
-  const remove = (w: Worktree) => {
+  const remove = (w: Worktree, force: boolean) => {
     void (async () => {
       try {
-        await removeWorktree(w.path, false);
+        await removeWorktree(w.path, force);
+        setForcePath(null);
         onToast(`Removed worktree ${worktreeName(w)}`);
       } catch (e) {
-        onToast(`Remove failed: ${errMessage(e)}`);
+        const msg = errMessage(e);
+        // git refuses dirty/locked worktrees without --force; surface the
+        // reason and arm the row's Force remove instead of dead-ending.
+        if (!force && /--force|modified or untracked|locked working tree/i.test(msg)) {
+          setForcePath(w.path);
+        }
+        onToast(`Remove failed: ${msg}`, 'error');
       }
     })();
   };
@@ -290,17 +300,37 @@ export function Worktrees({
                       Open tab
                     </button>
                   )}
-                  {!w.is_main && !w.is_current && (
+                  {!w.is_main && !w.is_current && (forcePath === w.path ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn ghost danger"
+                        onClick={(e) => { e.stopPropagation(); remove(w, true); }}
+                        title="Discard its local changes and remove the worktree"
+                        aria-label={`Force remove worktree ${name}`}
+                      >
+                        Force remove
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={(e) => { e.stopPropagation(); setForcePath(null); }}
+                        aria-label="Cancel force remove"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
                       className="btn ghost danger"
-                      onClick={(e) => { e.stopPropagation(); remove(w); }}
+                      onClick={(e) => { e.stopPropagation(); remove(w, false); }}
                       title="Remove this worktree"
                       aria-label={`Remove worktree ${name}`}
                     >
                       <Icon name="trash" size={12} />
                     </button>
-                  )}
+                  ))}
                 </div>
               </div>
             );

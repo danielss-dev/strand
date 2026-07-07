@@ -20,7 +20,7 @@ export function RenameFileDialog({
 }: {
   from: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const moveEntries = useRepo((s) => s.moveEntries);
 

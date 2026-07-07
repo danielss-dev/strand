@@ -28,7 +28,7 @@ export function CommitDetail({
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
   /** Surface cherry-pick / revert success or git's conflict message. */
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const diffs = useRepo((s) => s.selectedCommitDiffs);
@@ -114,7 +114,7 @@ export function CommitDetail({
           : `Cherry-picked ${commit!.short_hash}`,
       );
     } catch (e) {
-      onToast(`Cherry-pick failed: ${errMessage(e)}`);
+      onToast(`Cherry-pick failed: ${errMessage(e)}`, 'error');
     } finally {
       setHistoryBusy(false);
     }
@@ -130,7 +130,7 @@ export function CommitDetail({
           : `Reverted ${commit!.short_hash}`,
       );
     } catch (e) {
-      onToast(`Revert failed: ${errMessage(e)}`);
+      onToast(`Revert failed: ${errMessage(e)}`, 'error');
     } finally {
       setHistoryBusy(false);
     }
@@ -150,7 +150,7 @@ export function CommitDetail({
       // close it rather than leaving an empty strip.
       if (pop) void selectCommit(null);
     } catch (e) {
-      onToast(`${pop ? 'Pop' : 'Apply'} failed: ${errMessage(e)}`);
+      onToast(`${pop ? 'Pop' : 'Apply'} failed: ${errMessage(e)}`, 'error');
     } finally {
       setStashBusy(false);
     }

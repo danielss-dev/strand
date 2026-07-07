@@ -79,7 +79,7 @@ interface SidebarProps {
   /** Open the Rename-branch dialog for the branch `name`. */
   onRenameBranch: (name: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }
 
 // ─── tree primitives ────────────────────────────────────────────────────
@@ -179,6 +179,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const rebase = useRepo((s) => s.rebase);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
+  // Branches that are HEAD of another worktree — checkout here is guaranteed
+  // to fail, so their rows badge the fact and open that worktree instead.
+  const worktreeByBranch = useMemo(
+    () =>
+      new Map(
+        worktrees
+          .filter((w) => !w.is_current && w.branch)
+          .map((w) => [w.branch as string, w]),
+      ),
+    [worktrees],
+  );
 
   const [tab, setTab] = useState<SideTab>('git');
   const [filter, setFilter] = useState('');
@@ -356,7 +367,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       void moveEntries(moves).then((failures) => {
         if (failures.length) {
           const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : '';
-          onToast(`Move failed: ${failures[0]}${more}`);
+          onToast(`Move failed: ${failures[0]}${more}`, 'error');
         }
       });
     },
@@ -381,7 +392,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         workTree.some((e) => e.path === targets[0] && e.status === 'UNTRACKED')
       ) {
         const ignore = (pattern: string) =>
-          void gitignoreAdd(pattern).catch((e) => onToast(`Ignore failed: ${errMessage(e)}`));
+          void gitignoreAdd(pattern).catch((e) => onToast(`Ignore failed: ${errMessage(e)}`, 'error'));
         const target = targets[0];
         const base = target.slice(target.lastIndexOf('/') + 1);
         const { exact, extension } = ignorePatterns(target);
@@ -412,19 +423,22 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     />
   ) : null;
 
+  // Branch/tag ops don't toast on success (the sidebar itself updates), but
+  // failures must be loud — a silently refused checkout reads as the app
+  // doing nothing (DAN-12).
   const runBranchOp = async (fn: () => Promise<void>) => {
-    try { await fn(); } catch (e) { console.warn(e); }
+    try { await fn(); } catch (e) { onToast(errMessage(e), 'error'); }
   };
 
-  // Tag network ops surface success/failure via a toast (unlike the silent
-  // local branch/tag ops) — a push can fail on auth or a missing upstream.
+  // Tag network ops surface success/failure via a toast — a push can fail on
+  // auth or a missing upstream.
   const runTagPush = (name: string) => {
     void (async () => {
       try {
         await pushTag(name);
         onToast(`Pushed ${name} to ${tagRemote}`);
       } catch (e) {
-        onToast(`Push failed: ${errMessage(e)}`);
+        onToast(`Push failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -434,7 +448,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await deleteRemoteTag(name);
         onToast(`Deleted ${name} on ${tagRemote}`);
       } catch (e) {
-        onToast(`Remote delete failed: ${errMessage(e)}`);
+        onToast(`Remote delete failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -445,7 +459,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await deleteRemoteBranch(rb.remote, rb.branch);
         onToast(`Deleted ${rb.branch} on ${rb.remote}`);
       } catch (e) {
-        onToast(`Remote delete failed: ${errMessage(e)}`);
+        onToast(`Remote delete failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -466,7 +480,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             : `Rebased ${currentBranch} onto ${onto}`,
         );
       } catch (e) {
-        onToast(`Rebase failed: ${errMessage(e)}`);
+        onToast(`Rebase failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -500,8 +514,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         },
       ];
     }
+    const wt = worktreeByBranch.get(b.name);
     const items: MenuItem[] = [
-      { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+      // A branch that is HEAD of another worktree can't be checked out here —
+      // offer its worktree tab where Checkout would sit.
+      wt
+        ? { label: 'Open worktree', icon: 'worktree', onSelect: () => void openWorktree(wt.path) }
+        : { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
       newBranchItem,
       renameItem,
     ];
@@ -556,7 +575,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         onSelect: () =>
           void fetchRemote(name).then(
             () => onToast(`Fetched ${name}`),
-            (e) => onToast(`Fetch failed: ${errMessage(e)}`),
+            (e) => onToast(`Fetch failed: ${errMessage(e)}`, 'error'),
           ),
       },
       { label: 'Edit URL…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '' }) },
@@ -570,7 +589,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon: 'trash',
       danger: true,
       confirm: true,
-      onSelect: () => void removeRemote(name).catch((e) => onToast(`Remove failed: ${errMessage(e)}`)),
+      onSelect: () => void removeRemote(name).catch((e) => onToast(`Remove failed: ${errMessage(e)}`, 'error')),
     });
     return items;
   };
@@ -619,7 +638,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await submoduleUpdate(paths, true, true);
         onToast(`Updated ${label}`);
       } catch (e) {
-        onToast(`Submodule update failed: ${errMessage(e)}`);
+        onToast(`Submodule update failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -645,7 +664,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         await removeWorktree(w.path, force);
         onToast(`Removed worktree ${w.branch ?? leafName(w.path)}`);
       } catch (e) {
-        onToast(`Remove failed: ${errMessage(e)}`);
+        onToast(`Remove failed: ${errMessage(e)}`, 'error');
       }
     })();
   };
@@ -681,20 +700,29 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return labels.length > 0 ? labels.join(' · ') : undefined;
   };
 
-  const renderBranchLeaf = (b: Branch, depth: number) => (
-    <SideLeaf
-      key={b.full_name}
-      depth={depth}
-      icon={b.is_head ? 'check' : 'branch'}
-      label={b.name}
-      active={b.is_head}
-      ahead={b.upstream ? b.ahead : 0}
-      behind={b.upstream ? b.behind : 0}
-      onActivate={() => !b.is_head && void runBranchOp(() => checkout(b.name))}
-      onSelect={() => revealInGraph(b.target)}
-      onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
-    />
-  );
+  const renderBranchLeaf = (b: Branch, depth: number) => {
+    const wt = !b.is_head ? worktreeByBranch.get(b.name) : undefined;
+    return (
+      <SideLeaf
+        key={b.full_name}
+        depth={depth}
+        icon={b.is_head ? 'check' : wt ? 'worktree' : 'branch'}
+        label={b.name}
+        meta={wt ? 'worktree' : undefined}
+        title={wt ? `${b.name} — checked out in worktree ${wt.path}; double-click to open it` : undefined}
+        active={b.is_head}
+        ahead={b.upstream ? b.ahead : 0}
+        behind={b.upstream ? b.behind : 0}
+        onActivate={() => {
+          if (b.is_head) return;
+          if (wt) void openWorktree(wt.path);
+          else void runBranchOp(() => checkout(b.name));
+        }}
+        onSelect={() => revealInGraph(b.target)}
+        onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
+      />
+    );
+  };
 
   // Remote rows with a local tracking branch check the local out on
   // activate; only untracked ones create-and-track (avoids accidentally
