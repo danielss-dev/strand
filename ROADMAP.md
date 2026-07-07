@@ -1186,7 +1186,7 @@ overview's per-worktree stats reuse the existing `repo_status`/`repo_meta`/
 rules); `RepoMeta` gained `common_dir` (gix `common_dir()`) + `is_linked_worktree`
 (git2 `is_worktree()`) so the tab strip can group. Four IPC commands + store slice
 (`worktrees`, eager-refreshed on open/tab-switch). Three UI surfaces: a **Worktrees
-overview** (`views/Worktrees.tsx`, ⌘4 / ⌘K) listing each worktree with branch,
+overview** (`views/Worktrees.tsx`, ⌘5 / ⌘K) listing each worktree with branch,
 ahead/behind, dirty count, last commit, and one-click **Review** (opens the worktree
 tab on Local Changes); a **sidebar Worktrees section** (first in the Git tab,
 current marked with the accent check, context-menu open/remove/force-remove/prune,
@@ -1460,6 +1460,35 @@ in the same motion; a collapsible "Archived snapshots" strip offers
 Restore / Delete. Verified:
 `cargo test -p strand-core` (102, +4 worktree), workspace `clippy` clean,
 `tsc`, `vitest` (200).
+
+**Worktrees pass W4–W8 + follow-ups (2026-07-08):** The rest of the worktrees
+menu from `docs/improvements.md`, in one pass. **Setup (W4):**
+`.worktreeinclude` honored — on create, gitignored files matching its patterns
+(own gitignore-subset matcher; anchoring, `**`, `*`/`?`, basename patterns)
+copy from the source worktree into the fresh one (`copy_worktree_include`,
+offered as a checked-by-default toggle only when the file names something);
+overview rows badge worktrees created by known agent tools (`.claude/worktrees/`
+paths, `vk/` branches). **Fleet stats (W5):** `worktree_stats` walks the
+workdir once for disk size + newest-mtime "touched 3m ago" (background per-row
+fetch, separate from the cheap stats so node_modules never delays badges) and
+parses `diff HEAD --shortstat` for ±lines; rows sort most-recently-touched
+first within their rank. **Best-of-N compare (W6, v1):** overview rows grow
+selection checkboxes (Space toggles); "Compare (N)" opens
+`WorktreeCompareDialog` — one column per attempt diffed vs its own fork point,
+files touched by ≥2 attempts highlighted, per-column Review / **Pick winner…**
+(hands off to Merge & clean up). **Overlap warnings (W7):** pairwise
+uncommitted-file intersection across the family's dirty worktrees (client-side
+from data already fetched) badges rows and warns inside the merge dialog.
+**Create-from-anything (W8):** `add_worktree` grew `start_point`/`track`; the
+dialog gained a Start-at picker (branches / remote branches / tags / handed-in
+commit) with auto-track + fetch-first for remote bases, and "New worktree from
+here…" landed in the sidebar branch menus + commit graph context menu; engine
++ IPC + sidebar menu for `worktree lock`/`unlock`. **Follow-ups:** archive
+snapshots now auto-prune (newest 10 per slug, 60-day cap); "Review vs base"
+and "Merge & clean up…" joined the sidebar worktree context menu (shared
+store-level `reviewWorktree`); palette gained Clean up / Prune entries; the
+⌘4→⌘5 worktrees copy drift is fixed. Verified: `cargo test -p strand-core`
+(109, +7 worktree), workspace clippy clean, `tsc`, `vitest` (200).
 
 ---
 

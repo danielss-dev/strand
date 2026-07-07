@@ -832,7 +832,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `refreshWorktrees` eager on open/tab-switch, `addWorktree` / `removeWorktree` /
   `pruneWorktrees` / `openWorktree` = `openRepo` reuse). Removing/pruning a
   worktree closes its open tab (`samePath` match) so no dead tab lingers.
-- ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘4 + ⌘K "Show:
+- ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘5 + ⌘K "Show:
   Worktrees"; AI-agent dashboard with stable repo-family heading, per-worktree
   branch/session labels, lazy `repoStatus`/`repoMeta`/`repoLog` enrichment →
   dirty count, ahead/behind, last commit; Review opens the worktree tab without
@@ -886,10 +886,66 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   `repo_worktree_archive*` IPC commands; the store's `removeWorktree` archives
   best-effort before every removal, and the overview grows a collapsible
   "Archived snapshots" strip with Restore / Delete. +1 engine test.)
-- ☐ Surface "Merge & clean up" beyond the overview (sidebar worktree context
-  menu + worktree review header) and add palette entries for Clean up / Prune.
-- ☐ Auto-prune old worktree archive snapshots (keep last N per slug or
-  age-based) instead of manual-delete only.
+- ☑ Surface worktree actions beyond the overview (2026-07-08 — sidebar worktree
+  context menu grows **Review vs base** (store-shared `reviewWorktree` action,
+  same flow as the overview button) and **Merge & clean up…** (fetches
+  health+dirty on demand, renders the same `WorktreeMergeDialog`); palette
+  gains **Clean up merged worktrees…** (switches to the overview and fires a
+  `strand:worktrees-cleanup` event the view listens for) and **Prune stale
+  worktrees**. The review-header entry point was dropped — the header already
+  carries the baseline chip and the sidebar/overview cover the flow.)
+- ☑ Auto-prune old worktree archive snapshots (2026-07-08 —
+  `auto_prune_archives` in `worktree.rs` runs after every
+  `archive_worktree_state`: keeps the newest 10 per slug and drops anything
+  older than 60 days. +1 engine test.)
+- ☑ W4 setup copy-list (2026-07-08 — `.worktreeinclude` honored (the Claude
+  Code convention): `Repo::worktree_include_patterns` +
+  `Repo::copy_worktree_include` copy gitignored files matching the patterns
+  (own gitignore-subset matcher: anchoring, `**`, `*`/`?`, trailing-`/`,
+  basename patterns) from the source worktree into a fresh one;
+  `repo_worktree_include_patterns` / `repo_worktree_copy_include` IPC; the
+  create dialog offers "Copy setup files" (checked) only when the file names
+  something, and toasts the copied count. Tool badge: overview rows tag
+  worktrees created by known agent tools (`.claude/worktrees/` path, `vk/`
+  branches). +2 engine tests.)
+- ☑ W5 fleet stats (2026-07-08 — `Repo::worktree_stats` walks the workdir once
+  (skipping `.git`, no symlink-follow) for **disk size** + **last-activity
+  mtime**, and parses `git diff HEAD --shortstat` for **±lines**;
+  `repo_worktree_stats` IPC fetched per-row in the background, separate from
+  the cheap row stats so a huge tree never delays badges. Overview rows show
+  "+412 −38 · touched 3m ago · 1.2 GB"; rows sort most-recently-touched first
+  within their rank. +2 engine tests.)
+- ☑ W6 best-of-N compare, v1 (2026-07-08 — overview rows of linked worktrees
+  grow a selection checkbox (Space toggles the focused row); "Compare (N)"
+  opens `views/WorktreeCompareDialog.tsx`: one column per attempt, each diffed
+  vs its own detected fork point (`repoDetectBaseBranch` + `repoDiffSince`),
+  files touched by ≥2 attempts highlighted, per-column **Review** (full
+  session) and **Pick winner…** (hands off to Merge & clean up; losers retire
+  via the existing Clean up).)
+- ☑ W7 overlap warnings (2026-07-08 — pairwise uncommitted-file intersection
+  across the family's dirty worktrees, computed client-side from the row
+  status fetches already in hand; overview rows badge "overlaps <name>: N"
+  with the file list in the tooltip, and `WorktreeMergeDialog` warns when a
+  sibling's uncommitted changes touch the same files.)
+- ☑ W8 create-from-anything (2026-07-08 — `add_worktree` grows
+  `start_point`/`track` (`worktree add [--track] -b <branch> <dest> [<start>]`);
+  the dialog gains a **Start at** picker (HEAD / branches / remote branches /
+  tags, plus the handed-in commit), auto-tracking + a checked-by-default
+  **Fetch first** for remote start points (with task-branch name prefill);
+  "New worktree from here…" added to the sidebar's local+remote branch menus
+  and the commit graph's context menu (prefills the start). Engine also gains
+  `lock_worktree(reason)` / `unlock_worktree` + `repo_worktree_lock`/`_unlock`
+  IPC, surfaced as Lock/Unlock in the sidebar worktree menu. +2 engine tests.)
+- ☐ Overview row "last commit" line shows the family's newest commit, not the
+  row's own HEAD (`repoLog(w.path, 1)` walks all refs) — every row reads the
+  same subject when one worktree just committed. Surfaced in the 2026-07-08
+  CDP pass; cosmetic, but per-row `log HEAD -1` would be truthful.
+- ☐ W8 leftovers: `worktree move` / `repair` engine ops (trivial shell-outs,
+  no UI surface yet); "Review vs base" / "Merge & clean up" in the rail/tab
+  context menus (sidebar + overview cover it today).
+- ☐ W4 leftover: optional post-create command (per-repo setting, e.g.
+  `pnpm i`, `STRAND_WORKTREE_PATH` env, streamed output) — deliberately
+  deferred; Strand is a client, not a launcher.
 - ☐ `detect_base_branch` tie-break revisit: with several sibling branches at
   one fork point it picks a sibling (smallest `base_ahead`) over the real
   parent. Harmless for review baselines (same merge-base) but it seeds the

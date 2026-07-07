@@ -329,9 +329,19 @@ fast, accept or reject it safely."** That's a positioning no mainstream git clie
 > commands, merged/unpushed badges + Clean up + Prune on the overview,
 > `WorktreeMergeDialog` with exact-command preview, archive-before-every-remove
 > in the store, and a restorable "Archived snapshots" strip. The
-> `run_blocking` fix from W9 rode along (the other W9 items and W1's
-> sidebar/review-header entry points are follow-up `☐`s in TASKS.md, as is
-> auto-pruning old archives). W4–W8 remain open proposals.
+> `run_blocking` fix from W9 rode along.
+>
+> **Second worktrees pass (2026-07-08):** everything else landed — W4
+> (`.worktreeinclude` copy on create + agent-tool badges; the optional
+> post-create command stays deferred as launcher territory), W5
+> (`worktree_stats`: disk size, last-activity, ±lines; recent-first sort), W6
+> v1 (row selection + `WorktreeCompareDialog` with shared-file highlighting
+> and Pick winner → merge), W7 (pairwise dirty-file overlap badges + merge
+> dialog warning), W8 (start-point picker with track/fetch-first, "New
+> worktree from here…" in branch/commit menus, `lock`/`unlock`; `move`/`repair`
+> still open), and the follow-ups: archive auto-prune (10 per slug / 60 days),
+> sidebar Review-vs-base + Merge-&-clean-up, palette Clean up / Prune, ⌘4→⌘5
+> copy drift. Remaining `☐`s live in TASKS.md → Worktrees.
 
 **Where the market landed (2025–2026).** Every agent orchestrator (Conductor,
 Vibe Kanban, Cursor, GitKraken Agent Mode, Claude Code itself) rebuilt the same
