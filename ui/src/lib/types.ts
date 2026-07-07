@@ -181,6 +181,12 @@ export interface Refs {
   tags: Tag[];
 }
 
+/** The branch a ref was forked from + the fork point to review against. */
+export interface BaseBranch {
+  name: string;
+  merge_base: string;
+}
+
 export interface CheckoutOutcome {
   branch: string;
 }

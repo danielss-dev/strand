@@ -3,6 +3,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import type {
   AiProvider,
   AiProviderStatus,
+  BaseBranch,
   BlameLine,
   CheckoutOutcome,
   CloneOutcome,
@@ -107,6 +108,10 @@ export const tauri = {
     invoke<FileDiff[]>('repo_diff_since_full', { path, baseline }),
   repoMergeBase: (path: string, a: string, b: string) =>
     invoke<string>('repo_merge_base', { path, a, b }),
+  // Which branch `target` forked from + the fork point — the worktree Review
+  // flow's baseline (review vs the actual parent, not the main branch).
+  repoDetectBaseBranch: (path: string, target: string) =>
+    invoke<BaseBranch | null>('repo_detect_base_branch', { path, target }),
   repoFileContent: (path: string, file: string, rev: string | null) =>
     invoke<FileContent>('repo_file_content', { path, file, rev }),
   repoFileBlob: (path: string, file: string, rev: string | null, index: boolean) =>
