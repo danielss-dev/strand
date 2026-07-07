@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::bin::{resolve_claude, run_capture, spawn_detached};
+use super::bin::{resolve_claude, run_capture, spawn_detached, STATUS_TIMEOUT, SUGGEST_TIMEOUT};
 use super::AiProviderStatus;
 
 const CLAUDE_INSTALL: &str = "https://code.claude.com/docs/en/setup";
@@ -15,7 +15,7 @@ pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
         };
     };
 
-    let (logged_in, hint) = match run_capture(&bin, &["auth", "status"], None) {
+    let (logged_in, hint) = match run_capture(&bin, &["auth", "status"], None, None, STATUS_TIMEOUT) {
         Ok(out) => parse_auth_status(&out),
         Err(_) => (false, None),
     };
@@ -42,8 +42,13 @@ fn parse_auth_status(out: &str) -> (bool, Option<String>) {
             .map(String::from);
         return (logged_in, hint);
     }
-    // Non-JSON success output — treat as logged in.
-    (true, None)
+    // Non-JSON success output — trust an explicit logged-out marker, treat
+    // anything else as logged in.
+    let lower = out.to_lowercase();
+    let logged_out = ["not logged in", "logged out", "not authenticated"]
+        .iter()
+        .any(|m| lower.contains(m));
+    (!logged_out, None)
 }
 
 pub fn login(cli_override: Option<&str>) -> Result<(), String> {
@@ -53,7 +58,7 @@ pub fn login(cli_override: Option<&str>) -> Result<(), String> {
 
 pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
-    run_capture(&bin, &["auth", "logout"], None).map(|_| ())
+    run_capture(&bin, &["auth", "logout"], None, None, STATUS_TIMEOUT).map(|_| ())
 }
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
@@ -63,11 +68,13 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
         "{prompt}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}"
     );
 
+    // The prompt travels via stdin (`claude -p` reads it there): it can
+    // exceed the Windows command-line ceiling and, when the CLI is an npm
+    // `.cmd` shim run through `cmd /C`, multi-line args would be re-parsed.
     match run_capture(
         &bin,
         &[
             "-p",
-            &full_prompt,
             "--output-format",
             "json",
             "--tools",
@@ -79,6 +86,8 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
             "*",
         ],
         Some(repo_path),
+        Some(&full_prompt),
+        SUGGEST_TIMEOUT,
     ) {
         Ok(out) => extract_claude_print_output(out),
         Err(err) => {
@@ -116,5 +125,26 @@ mod tests {
         let raw = r#"{"type":"result","result":"{\"subject\":\"fix: x\",\"body\":\"\"}"}"#;
         let text = extract_claude_print_output(raw.to_string()).unwrap();
         assert!(text.contains("fix: x"));
+    }
+
+    #[test]
+    fn auth_status_json_reports_email() {
+        let (logged_in, hint) =
+            parse_auth_status(r#"{"loggedIn":true,"email":"a@b.c"}"#);
+        assert!(logged_in);
+        assert_eq!(hint.as_deref(), Some("a@b.c"));
+    }
+
+    #[test]
+    fn auth_status_plain_text_logged_out_detected() {
+        let (logged_in, hint) = parse_auth_status("Not logged in. Run `claude auth login`.");
+        assert!(!logged_in);
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn auth_status_unknown_text_stays_optimistic() {
+        let (logged_in, _) = parse_auth_status("Authenticated via claude.ai");
+        assert!(logged_in);
     }
 }
