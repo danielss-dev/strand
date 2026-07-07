@@ -1018,3 +1018,28 @@ to `claude` is the supported path for Claude Code users.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
   **Check CLI status** button — no auto auth probe on open. Optional manual
   sign-in/out per CLI remains.
+
+---
+
+## Vendor-CLI subprocesses on Windows (paid for by DAN-11)
+
+**Rule.** Every vendor-CLI spawn from `crates/strand-tauri/src/ai/bin.rs`
+must: resolve only `.exe`/`.cmd`/`.bat` on Windows (never extensionless
+PATH entries), run batch shims via `cmd /C`, pass prompts over **stdin**
+(not argv), null stdin otherwise, enforce a timeout (30s status /
+120s suggest), and set `CREATE_NO_WINDOW`.
+
+**Why.** npm installs an extensionless POSIX-shell shim *next to* every
+`.cmd`; the old bare-name probe resolved it first, `CreateProcess` can't run
+it, and `provider_status` then reported "installed but not signed in" on a
+fully signed-in machine while suggest failed every time. Prompts as argv hit
+the 32K command-line ceiling and get re-parsed (newlines = command
+separators) when routed through `cmd /C`. A CLI that stops to ask a question
+on inherited stdin spins the UI forever without a timeout, and the release
+build is GUI-subsystem, so unflagged children flash a console per call (same
+lesson as `strand_core::git_command`).
+
+**How to apply.** Route new CLI calls through `bin::run_capture` /
+`bin::spawn_detached` — never `Command::new` directly in provider modules.
+Exception mirror: `spawn_detached` (login flows) keeps a visible console on
+purpose, because sign-in may need an interactive picker.

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::bin::{resolve_codex, run_capture, spawn_detached};
+use super::bin::{resolve_codex, run_capture, spawn_detached, STATUS_TIMEOUT, SUGGEST_TIMEOUT};
 use super::AiProviderStatus;
 
 const CODEX_INSTALL: &str = "https://developers.openai.com/codex";
@@ -15,7 +15,7 @@ pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
         };
     };
 
-    let logged_in = run_capture(&bin, &["login", "status"], None)
+    let logged_in = run_capture(&bin, &["login", "status"], None, None, STATUS_TIMEOUT)
         .map(|_| true)
         .unwrap_or(false);
 
@@ -38,7 +38,7 @@ pub fn login(cli_override: Option<&str>) -> Result<(), String> {
 
 pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
     let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
-    run_capture(&bin, &["logout"], None).map(|_| ())
+    run_capture(&bin, &["logout"], None, None, STATUS_TIMEOUT).map(|_| ())
 }
 
 pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
@@ -48,6 +48,8 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
         "{prompt}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}"
     );
 
+    // `-` makes `codex exec` read the prompt from stdin — see the note in
+    // `claude::suggest` for why prompts don't travel as argv.
     match run_capture(
         &bin,
         &[
@@ -56,10 +58,11 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
             repo_path.to_str().ok_or("invalid repo path")?,
             "--sandbox",
             "read-only",
-            "--",
-            &full_prompt,
+            "-",
         ],
         Some(repo_path),
+        Some(&full_prompt),
+        SUGGEST_TIMEOUT,
     ) {
         Ok(out) => Ok(out),
         Err(err) => {
