@@ -134,16 +134,22 @@ export function Worktrees({
 
   const review = (w: Worktree) => {
     void (async () => {
-      const main = worktrees.find((x) => x.is_main);
-      const base = !w.is_main ? (main?.branch ?? main?.head ?? null) : null;
       const target = w.branch ?? w.head;
       let baselineOid: string | null = null;
 
-      if (base && target && base !== target) {
+      // Review against the branch this worktree actually forked from, not
+      // the main worktree's branch — a worktree cut from `portal30` must
+      // baseline at merge-base(HEAD, portal30), or the diff swallows all of
+      // portal30's own work (DAN-14).
+      if (!w.is_main && target) {
         try {
-          baselineOid = await tauri.repoMergeBase(w.path, target, base);
+          const base = await tauri.repoDetectBaseBranch(w.path, target);
+          if (base) {
+            baselineOid = base.merge_base;
+            onToast(`Reviewing ${w.branch ?? worktreeName(w)} vs ${base.name}`);
+          }
         } catch (e) {
-          onToast(`Can't compare with ${base}: ${errMessage(e)}`, 'error');
+          onToast(`Can't detect base branch: ${errMessage(e)}`, 'error');
         }
       }
 

@@ -72,6 +72,16 @@ pub struct Refs {
     pub tags: Vec<Tag>,
 }
 
+/// The branch a ref was most likely forked from, plus the fork point to
+/// review against. Produced by [`Repo::detect_base_branch`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BaseBranch {
+    /// Short name of the detected base branch, e.g. `portal30`.
+    pub name: String,
+    /// merge-base(target, base) — pin the review baseline here.
+    pub merge_base: String,
+}
+
 impl Repo {
     /// Best common ancestor of two commit-ishes (`git merge-base <a> <b>`).
     /// Powers "review a worktree against its base branch": pinning the review
@@ -82,6 +92,77 @@ impl Repo {
         let a = repo.revparse_single(a)?.peel_to_commit()?.id();
         let b = repo.revparse_single(b)?.peel_to_commit()?.id();
         Ok(repo.merge_base(a, b)?.to_string())
+    }
+
+    /// Detect the local branch `target` was most likely forked from, and the
+    /// fork point to review against.
+    ///
+    /// Two passes. The branch's reflog creation entry (`branch: Created from
+    /// <ref>`) names the parent exactly when git recorded one, and survives
+    /// graph shapes the scan can't disambiguate (e.g. the parent was merged
+    /// back into `target` after forking). Otherwise fall back to the local
+    /// branch whose merge-base with `target` is nearest — fewest commits
+    /// between `target` and the fork point. A worktree cut from `portal30`
+    /// must review against `portal30`, not the repo's main branch: main's
+    /// merge-base is the *older* fork point, so the diff would swallow all of
+    /// `portal30`'s own work (DAN-14).
+    pub fn detect_base_branch(&self, target: &str) -> Result<Option<BaseBranch>> {
+        let repo = self.git2()?;
+        let target_id = repo.revparse_single(target)?.peel_to_commit()?.id();
+
+        // Pass 1: the reflog's oldest entry records what the branch was
+        // created from. Only trust it when it names a local branch that still
+        // exists — "HEAD", raw OIDs, and deleted branches fall through.
+        let created_from = repo
+            .reflog(&format!("refs/heads/{target}"))
+            .ok()
+            .and_then(|log| {
+                let oldest = log.get(log.len().checked_sub(1)?)?;
+                let from = oldest.message()?.strip_prefix("branch: Created from ")?;
+                (from != target && from != "HEAD").then(|| from.to_string())
+            });
+        if let Some(from) = created_from {
+            let hit = repo
+                .find_branch(&from, git2::BranchType::Local)
+                .ok()
+                .and_then(|b| b.get().target())
+                .and_then(|tip| repo.merge_base(target_id, tip).ok())
+                .map(|mb| BaseBranch { name: from, merge_base: mb.to_string() });
+            if hit.is_some() {
+                return Ok(hit);
+            }
+        }
+
+        // Pass 2: nearest-fork-point scan. Rank candidates by commits on
+        // `target` since the merge-base (fewer = forked later = closer
+        // parent), tie-break on commits the candidate has since the
+        // merge-base (a branch still sitting at the fork point beats a
+        // sibling that moved on), then name for determinism. Candidates that
+        // *contain* target (merge-base = target tip, i.e. children or
+        // already-merged integration branches) rank last — pinning the
+        // baseline at target's own tip would review nothing.
+        let mut best: Option<((bool, usize, usize), BaseBranch)> = None;
+        if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
+            for (branch, _) in branches.flatten() {
+                let name = match branch.name() {
+                    Ok(Some(n)) if n != target => n.to_string(),
+                    _ => continue,
+                };
+                let Some(tip) = branch.get().target() else { continue };
+                let Ok(mb) = repo.merge_base(target_id, tip) else { continue };
+                let Ok((ahead, _)) = repo.graph_ahead_behind(target_id, mb) else { continue };
+                let Ok((base_ahead, _)) = repo.graph_ahead_behind(tip, mb) else { continue };
+                let rank = (ahead == 0, ahead, base_ahead);
+                let better = match &best {
+                    None => true,
+                    Some((r, c)) => (rank, name.as_str()) < (*r, c.name.as_str()),
+                };
+                if better {
+                    best = Some((rank, BaseBranch { name, merge_base: mb.to_string() }));
+                }
+            }
+        }
+        Ok(best.map(|(_, hit)| hit))
     }
 
     /// All resolvable refs, grouped for the sidebar + branch picker.
@@ -326,6 +407,66 @@ mod tests {
         assert_eq!(repo.merge_base("main", "main").unwrap(), git(&dir, &["rev-parse", "main"]));
         // Unknown revspec surfaces as an error, not a panic.
         assert!(repo.merge_base("no-such-branch", "main").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_base_branch_prefers_the_actual_parent_over_main() {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-detect-base-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        git(&dir, &["config", "core.logAllRefUpdates", "true"]);
+
+        let commit = |name: &str, msg: &str| {
+            std::fs::write(dir.join(name), msg).unwrap();
+            git(&dir, &["add", name]);
+            git(&dir, &["commit", "-q", "-m", msg]);
+        };
+
+        // main ── portal30 (2 commits) ── feature (1 commit); main moves on.
+        commit("a.txt", "root");
+        git(&dir, &["checkout", "-q", "-b", "portal30"]);
+        commit("p1.txt", "portal work 1");
+        commit("p2.txt", "portal work 2");
+        let portal_tip = git(&dir, &["rev-parse", "portal30"]);
+        git(&dir, &["checkout", "-q", "-b", "feature", "portal30"]);
+        commit("f.txt", "feature work");
+        git(&dir, &["checkout", "-q", "main"]);
+        commit("m.txt", "main moved on");
+        git(&dir, &["checkout", "-q", "feature"]);
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        let hit = repo.detect_base_branch("feature").unwrap().unwrap();
+        assert_eq!(hit.name, "portal30");
+        assert_eq!(hit.merge_base, portal_tip);
+
+        // The reflog names the parent even after merging main into feature,
+        // where the nearest-merge-base scan alone would pick main.
+        git(&dir, &["merge", "-q", "--no-edit", "main"]);
+        let hit = repo.detect_base_branch("feature").unwrap().unwrap();
+        assert_eq!(hit.name, "portal30");
+        assert_eq!(hit.merge_base, portal_tip);
+
+        // A fresh branch with no commits of its own still detects its parent
+        // (fork point = its own tip), not main.
+        git(&dir, &["checkout", "-q", "-b", "fresh", "portal30"]);
+        let hit = repo.detect_base_branch("fresh").unwrap().unwrap();
+        assert_eq!(hit.name, "portal30");
+        assert_eq!(hit.merge_base, portal_tip);
+
+        // portal30 itself forked from main.
+        let hit = repo.detect_base_branch("portal30").unwrap().unwrap();
+        assert_eq!(hit.name, "main");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

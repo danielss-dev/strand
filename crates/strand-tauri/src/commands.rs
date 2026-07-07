@@ -21,7 +21,7 @@ use strand_core::{
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
     reflog::ReflogEntry,
-    refs::Refs, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
+    refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
     status::FileStatus, submodule::Submodule, tree::WorkTreeEntry, worktree::Worktree, Repo,
 };
@@ -222,6 +222,17 @@ pub async fn repo_diff_since_full(path: String, baseline: String) -> CmdResult<V
 #[tauri::command(async)]
 pub async fn repo_merge_base(path: String, a: String, b: String) -> CmdResult<String> {
     run_blocking("merge base", move || Ok(Repo::discover(&path)?.merge_base(&a, &b)?)).await
+}
+
+/// Detect the branch `target` was forked from and the fork point — powers the
+/// worktree Review flow's baseline, so a branch cut from `portal30` reviews
+/// against `portal30`, not the repo's main branch (DAN-14).
+#[tauri::command(async)]
+pub async fn repo_detect_base_branch(path: String, target: String) -> CmdResult<Option<BaseBranch>> {
+    run_blocking("detect base branch", move || {
+        Ok(Repo::discover(&path)?.detect_base_branch(&target)?)
+    })
+    .await
 }
 
 // ── File view (Content / History / Blame tabs) ──

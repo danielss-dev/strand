@@ -71,6 +71,7 @@ fn main() {
             commands::repo_diff_since_full,
             commands::repo_diff_unstaged_full,
             commands::repo_merge_base,
+            commands::repo_detect_base_branch,
             commands::repo_log,
             commands::repo_search_log,
             commands::repo_refs,

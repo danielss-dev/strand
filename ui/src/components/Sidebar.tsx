@@ -6,7 +6,7 @@ import { Icon, type IconName } from './Icon';
 import { copyToClipboard, PierreTree, workStatusToGit, type TreeMenuItem } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { worktreeName } from '../lib/repoIdentity';
-import { errMessage } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
 import type { RemoteDialogMode } from '../views/RemoteDialog';
@@ -178,6 +178,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const removeWorktree = useRepo((s) => s.removeWorktree);
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const rebase = useRepo((s) => s.rebase);
+  const setBaseline = useRepo((s) => s.setBaseline);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
   // Branches that are HEAD of another worktree — checkout here is guaranteed
   // to fail, so their rows badge the fact and open that worktree instead.
@@ -485,6 +486,23 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     })();
   };
 
+  // Pin the review baseline at merge-base(HEAD, base) and open the Review
+  // view — the current branch's own work, reviewed against the branch the
+  // user picked instead of an auto-detected one.
+  const reviewAgainst = (base: string) => {
+    void (async () => {
+      if (!meta) return;
+      try {
+        const oid = await tauri.repoMergeBase(meta.path, 'HEAD', base);
+        await setBaseline(oid);
+        setView('review');
+        selectFile(null);
+      } catch (e) {
+        onToast(`Can't compare with ${base}: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
+
   const branchMenu = (b: Branch): MenuItem[] => {
     const newBranchItem: MenuItem = {
       label: 'New branch from here…',
@@ -525,6 +543,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       renameItem,
     ];
     if (currentBranch) {
+      items.push({ label: `Review ${currentBranch} vs this`, icon: 'eye', onSelect: () => reviewAgainst(b.name) });
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
       items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
     }
