@@ -21,7 +21,7 @@ export function IgnoreDialog({
 }: {
   initial: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
 

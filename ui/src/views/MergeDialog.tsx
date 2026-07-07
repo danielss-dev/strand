@@ -39,7 +39,7 @@ export function MergeDialog({
   source: string;
   into: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const merge = useRepo((s) => s.merge);
 

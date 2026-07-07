@@ -17,7 +17,7 @@ export function RenameBranchDialog({
 }: {
   name: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const renameBranch = useRepo((s) => s.renameBranch);
 

@@ -59,7 +59,7 @@ export function RebaseEditor({
   /** Short human label for the starting point, shown in the blurb. */
   label: string;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const loadRebaseTodo = useRepo((s) => s.loadRebaseTodo);
   const interactiveRebase = useRepo((s) => s.interactiveRebase);

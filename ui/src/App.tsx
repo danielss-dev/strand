@@ -245,7 +245,7 @@ export function App() {
   const [syncDone, setSyncDone] = useState(false);
   const [pullDone, setPullDone] = useState(false);
   const [pushDone, setPushDone] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; kind: 'success' | 'error' } | null>(null);
   // Unacknowledged crash from a previous run (Settings → Privacy, opt-in).
   // Non-null renders the persistent CrashToast until reported or dismissed.
   const [crashReport, setCrashReport] = useState<CrashCheck | null>(null);
@@ -265,9 +265,14 @@ export function App() {
   // stomp each other's progress.
   const opGen = useRef(0);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2200);
+  // Errors linger longer — a failure that flashes by in 2s with a success
+  // check reads as "nothing happened" (DAN-12). The timer is tracked so a
+  // quick success right before an error can't cut the error's time short.
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showToast = useCallback((msg: string, kind: 'success' | 'error' = 'success') => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, kind });
+    toastTimer.current = setTimeout(() => setToast(null), kind === 'error' ? 4500 : 2200);
   }, []);
   // The window keydown handler is attached once (empty deps); it reaches the
   // latest showToast through this ref instead of re-subscribing.
@@ -291,7 +296,7 @@ export function App() {
       return;
     }
     tauri.repoOpenInTerminal(path, template)
-      .catch((e) => showToast(`Open terminal failed: ${errMessage(e)}`));
+      .catch((e) => showToast(`Open terminal failed: ${errMessage(e)}`, 'error'));
   }, [showToast, openSettingsAt]);
 
   const openInEditor = useCallback(() => {
@@ -306,7 +311,7 @@ export function App() {
     // With no file selected the repo directory opens instead.
     const file = useRepo.getState().selectedFile;
     tauri.repoOpenInEditor(path, file, null, template)
-      .catch((e) => showToast(`Open editor failed: ${errMessage(e)}`));
+      .catch((e) => showToast(`Open editor failed: ${errMessage(e)}`, 'error'));
   }, [showToast, openSettingsAt]);
 
   // Copy a diff list to the clipboard (raw patch or Markdown) and confirm
@@ -361,7 +366,7 @@ export function App() {
       // isn't swallowed; if the open failed before the popup showed (fast fail,
       // e.g. "not a git repository"), a toast is enough.
       if (shown) setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
-      else showToast(`Open failed: ${msg}`);
+      else showToast(`Open failed: ${msg}`, 'error');
     }
   }, [showToast]);
 
@@ -464,7 +469,7 @@ export function App() {
         : '';
       showToast(`Imported “${r.name}” with ${r.added} repositor${r.added === 1 ? 'y' : 'ies'}${skipped}`);
     } catch (e) {
-      showToast(`Import failed: ${errMessage(e)}`);
+      showToast(`Import failed: ${errMessage(e)}`, 'error');
     }
   }, [showToast]);
 
@@ -509,7 +514,7 @@ export function App() {
       flashDone(setSyncDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Fetch cancelled');
-      else showToast(`Fetch failed: ${errMessage(e)}`);
+      else showToast(`Fetch failed: ${errMessage(e)}`, 'error');
     } finally {
       setSyncing(false);
       setNetProgress(null);
@@ -529,7 +534,7 @@ export function App() {
       flashDone(setPullDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Pull cancelled');
-      else showToast(`Pull failed: ${errMessage(e)}`);
+      else showToast(`Pull failed: ${errMessage(e)}`, 'error');
     } finally {
       setPulling(false);
       setNetProgress(null);
@@ -549,7 +554,7 @@ export function App() {
       flashDone(setPushDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Push cancelled');
-      else showToast(`Push failed: ${errMessage(e)}`);
+      else showToast(`Push failed: ${errMessage(e)}`, 'error');
     } finally {
       setPushing(false);
       setNetProgress(null);
@@ -909,7 +914,7 @@ export function App() {
         run: () => {
           if (b.is_head) { revealInGraph(b.target); return; }
           void checkout(b.name).catch((e) =>
-            showToast(`Checkout failed: ${errMessage(e)}`));
+            showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
         },
       });
     }
@@ -931,7 +936,7 @@ export function App() {
           // only auto-tracks when the start point resolves as a remote-tracking
           // *branch*, which git2 finds by shorthand.
           void createBranch(rb.branch, rb.name, true).catch((e) =>
-            showToast(`Checkout failed: ${errMessage(e)}`));
+            showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
         },
       });
     }
@@ -982,7 +987,7 @@ export function App() {
         keywords: `stash apply ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void stashApply(st.index).catch((e) => showToast(`Apply failed: ${errMessage(e)}`));
+          void stashApply(st.index).catch((e) => showToast(`Apply failed: ${errMessage(e)}`, 'error'));
         },
       });
       out.push({
@@ -992,7 +997,7 @@ export function App() {
         keywords: `stash pop ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void stashPop(st.index).catch((e) => showToast(`Pop failed: ${errMessage(e)}`));
+          void stashPop(st.index).catch((e) => showToast(`Pop failed: ${errMessage(e)}`, 'error'));
         },
       });
     }
@@ -1007,7 +1012,7 @@ export function App() {
         meta: sm.status,
         run: () => {
           void submoduleUpdate([sm.path], true, true).catch((e) =>
-            showToast(`Submodule update failed: ${errMessage(e)}`));
+            showToast(`Submodule update failed: ${errMessage(e)}`, 'error'));
         },
       });
     }
@@ -1052,12 +1057,12 @@ export function App() {
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
         { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: pin baseline at HEAD', group: 'Actions', keywords: 'ai agent session since diff review baseline', run: () => {
           void setBaseline().then(() => { setView('review'); selectFile(null); })
-            .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`));
+            .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`, 'error'));
         } },
         ...(baseline ? [{ id: 'review-clear', label: 'Review: clear baseline', group: 'Actions', keywords: 'ai agent session review baseline', run: () => { void clearBaseline(); } } satisfies PaletteAction] : []),
         ...(baseline ? [{ id: 'review-select-commits', label: `Review: select commits since baseline (${baseline.short})`, group: 'Actions', keywords: 'ai agent session graph commits baseline select', run: () => { selectFile(null); requestSelectSinceBaseline(); } } satisfies PaletteAction] : []),
         { id: 'review-stage', label: 'Review: stage reviewed files', group: 'Actions', keywords: 'accept reviewed stage bulk', run: () => {
-          void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`));
+          void stageReviewed().catch((e) => showToast(`Stage reviewed failed: ${errMessage(e)}`, 'error'));
         } },
         // Notes → one Markdown prompt to paste back into the coding agent.
         ...(reviewNoteCount > 0 ? [
@@ -1115,7 +1120,7 @@ export function App() {
               await pushAllTags();
               showToast('Pushed all tags');
             } catch (e) {
-              showToast(`Push tags failed: ${errMessage(e)}`);
+              showToast(`Push tags failed: ${errMessage(e)}`, 'error');
             } finally {
               setNetProgress(null);
             }
@@ -1136,7 +1141,7 @@ export function App() {
               run: () => {
                 void resetTo('HEAD~1', 'soft')
                   .then(() => showToast('Last commit undone — changes kept staged'))
-                  .catch((e) => showToast(`Undo failed: ${errMessage(e)}`));
+                  .catch((e) => showToast(`Undo failed: ${errMessage(e)}`, 'error'));
               },
             } satisfies PaletteAction]
           : []),
@@ -1168,7 +1173,7 @@ export function App() {
               await abortOperation();
               showToast('Operation aborted');
             } catch (e) {
-              showToast(`Abort failed: ${errMessage(e)}`);
+              showToast(`Abort failed: ${errMessage(e)}`, 'error');
             }
           })();
         },
@@ -1312,7 +1317,7 @@ export function App() {
             from an always-present node. assertive because the toast is the
             sole channel for network-op failures. */}
         <div className="sr-only" role="status" aria-live="assertive" aria-atomic="true">
-          {toast ?? netProgress ?? ''}
+          {toast?.msg ?? netProgress ?? ''}
         </div>
 
         <Presence value={netProgress}>
@@ -1335,10 +1340,12 @@ export function App() {
         </Presence>
 
         <Presence value={toast}>
-          {(msg, exiting) => (
+          {(t, exiting) => (
             <div className={`toast${exiting ? ' exiting' : ''}`} aria-hidden="true">
-              <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2.2} /></span>
-              <span>{msg}</span>
+              <span style={{ color: t.kind === 'error' ? 'var(--del)' : 'var(--add)' }}>
+                <Icon name={t.kind === 'error' ? 'x' : 'check'} size={13} stroke={2.2} />
+              </span>
+              <span>{t.msg}</span>
             </div>
           )}
         </Presence>
@@ -1537,7 +1544,7 @@ function UndoToast() {
  */
 const BULK_UNDO_WINDOW_MS = 15000;
 
-function BulkUndoToast({ onToast }: { onToast: (msg: string) => void }) {
+function BulkUndoToast({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
   const lastBulkDiscard = useRepo((s) => s.lastBulkDiscard);
   const undoBulkDiscard = useRepo((s) => s.undoBulkDiscard);
   const clearBulkUndo = useRepo((s) => s.clearBulkUndo);
@@ -1563,7 +1570,7 @@ function BulkUndoToast({ onToast }: { onToast: (msg: string) => void }) {
       await undoBulkDiscard();
       onToast('Changes restored from safety snapshot');
     } catch (e) {
-      onToast(`Restore failed: ${errMessage(e)}`);
+      onToast(`Restore failed: ${errMessage(e)}`, 'error');
     }
   };
 
@@ -1594,7 +1601,7 @@ function CrashToast({
 }: {
   check: CrashCheck;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const ack = () => {
     useSettings.getState().set('crashAck', check.len);
@@ -1639,7 +1646,7 @@ const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
  * the pre-op state). Continue is disabled while any conflict remains. The op
  * clears `operation` on the next refresh, which hides the banner.
  */
-function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
+function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
   const operation = useRepo((s) => s.meta?.operation ?? null);
   const status = useRepo((s) => s.status);
   const abortOperation = useRepo((s) => s.abortOperation);
@@ -1657,7 +1664,7 @@ function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
       await abortOperation();
       onToast('Operation aborted');
     } catch (e) {
-      onToast(`Abort failed: ${errMessage(e)}`);
+      onToast(`Abort failed: ${errMessage(e)}`, 'error');
     } finally {
       setBusy(null);
     }
@@ -1674,7 +1681,7 @@ function OpBanner({ onToast }: { onToast: (msg: string) => void }) {
           : `${OP_LABEL[operation].replace(' in progress', '')} complete`,
       );
     } catch (e) {
-      onToast(`Continue failed: ${errMessage(e)}`);
+      onToast(`Continue failed: ${errMessage(e)}`, 'error');
     } finally {
       setBusy(null);
     }

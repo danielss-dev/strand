@@ -26,7 +26,7 @@ export function Reflog({
   onResetTo: (target: string, label: string) => void;
   /** Open the New-branch dialog from a start point (revspec + label). */
   onCreateBranch: (start: string, label: string) => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const activePath = useRepo((s) => s.activePath);
   const reflog = useRepo((s) => s.reflog);
@@ -58,7 +58,7 @@ export function Reflog({
               await checkoutCommit(entry.new_oid);
               onToast(`Checked out ${entry.new_short} (detached)`);
             } catch (e) {
-              onToast(`Checkout failed: ${errMessage(e)}`);
+              onToast(`Checkout failed: ${errMessage(e)}`, 'error');
             }
           })(),
         },

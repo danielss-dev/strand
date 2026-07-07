@@ -19,7 +19,7 @@ interface Props {
   syncDone: boolean;
   pullDone: boolean;
   pushDone: boolean;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
   /** Open the Save-snapshot dialog (message + keep-changes options). */
   onSaveSnapshot: () => void;
   /** Open the stash preview dialog. */
@@ -252,7 +252,7 @@ function StashButton({
   onSaveSnapshot,
   onStash,
 }: {
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
   onSaveSnapshot: () => void;
   onStash: (opts?: { snapshot?: boolean; keepIndex?: boolean }) => void;
 }) {
@@ -295,7 +295,7 @@ function StashButton({
       onToast('Popped stash');
       setOpen(false);
     } catch (e) {
-      onToast(`Pop failed: ${(e as Error).message ?? e}`);
+      onToast(`Pop failed: ${(e as Error).message ?? e}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -417,7 +417,7 @@ function BranchSwitcherButton({
   branch: string;
   detached: boolean;
   hasRepo: boolean;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -427,6 +427,17 @@ function BranchSwitcherButton({
   const refs = useRepo((s) => s.refs);
   const checkout = useRepo((s) => s.checkout);
   const createBranch = useRepo((s) => s.createBranch);
+  const worktrees = useRepo((s) => s.worktrees);
+  const openWorktree = useRepo((s) => s.openWorktree);
+
+  // Branches that are HEAD of another worktree can't become HEAD here too —
+  // their rows say so and open that worktree's tab instead of a checkout
+  // that's guaranteed to fail (DAN-12).
+  const worktreeByBranch = new Map(
+    worktrees
+      .filter((w) => !w.is_current && w.branch)
+      .map((w) => [w.branch as string, w]),
+  );
 
   // Run a branch op, toasting the outcome and closing the menu on success.
   // Errors keep the menu open so the user can try a different row.
@@ -438,7 +449,7 @@ function BranchSwitcherButton({
       onToast(label);
       setOpen(false);
     } catch (e) {
-      onToast(`${label} failed: ${(e as Error).message ?? e}`);
+      onToast(`${label} failed: ${(e as Error).message ?? e}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -521,28 +532,39 @@ function BranchSwitcherButton({
             <>
               <div className="repo-menu-divider" />
               <div className="repo-menu-sect">Local branches</div>
-              {otherBranches.map((b) => (
-                <button
-                  type="button"
-                  key={b.full_name}
-                  className="repo-menu-item"
-                  role="menuitem"
-                  tabIndex={0}
-                  title={b.upstream ? `tracks ${b.upstream.name}` : 'no upstream'}
-                  onClick={() => {
-                    void run(`Switched to ${b.name}`, () => checkout(b.name));
-                  }}
-                >
-                  <span className="ico"><Icon name="branch" size={13} /></span>
-                  <span className="label">{b.name}</span>
-                  <span className="meta">
-                    {b.upstream
-                      ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() ||
-                        b.upstream.name
-                      : ''}
-                  </span>
-                </button>
-              ))}
+              {otherBranches.map((b) => {
+                const wt = worktreeByBranch.get(b.name);
+                return (
+                  <button
+                    type="button"
+                    key={b.full_name}
+                    className="repo-menu-item"
+                    role="menuitem"
+                    tabIndex={0}
+                    title={
+                      wt
+                        ? `Checked out in worktree ${wt.path} — opens that tab`
+                        : b.upstream ? `tracks ${b.upstream.name}` : 'no upstream'
+                    }
+                    onClick={() => {
+                      void (wt
+                        ? run(`Opened worktree for ${b.name}`, () => openWorktree(wt.path))
+                        : run(`Switched to ${b.name}`, () => checkout(b.name)));
+                    }}
+                  >
+                    <span className="ico"><Icon name={wt ? 'worktree' : 'branch'} size={13} /></span>
+                    <span className="label">{b.name}</span>
+                    <span className="meta">
+                      {wt
+                        ? 'worktree'
+                        : b.upstream
+                          ? `${b.ahead > 0 ? `↑${b.ahead} ` : ''}${b.behind > 0 ? `↓${b.behind}` : ''}`.trim() ||
+                            b.upstream.name
+                          : ''}
+                    </span>
+                  </button>
+                );
+              })}
             </>
           )}
 
