@@ -16,6 +16,7 @@ import {
   type TreeMenuItem,
   type TreeRowDecoration,
 } from '../components/PierreTree';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
 import { useSettled } from '../lib/useSettled';
@@ -430,10 +431,9 @@ export function Review() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"]')) {
-        return;
-      }
+      // `eventInside` sees through shadow DOM — the Pierre tree's file-search
+      // box lives in one, and `e.target` retargets to the host there.
+      if (eventInside(e, `${EDITABLE_SELECTOR}, [role="dialog"]`)) return;
       // Arrow keys stay with the Pierre tree (its own focus model handles
       // them); j/k walk the queue from anywhere.
       switch (e.key) {

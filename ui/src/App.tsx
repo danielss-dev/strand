@@ -29,6 +29,8 @@ import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
 import {
+  EDITABLE_SELECTOR,
+  eventInside,
   eventToBinding,
   formatBinding,
   isPlainKey,
@@ -865,12 +867,11 @@ export function App() {
       // action before the webview sees the key — so defer to it for menu-owned,
       // representable combos (no menu installed elsewhere ⇒ JS handles them).
       if (appMenuInstalled() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)) return;
-      // A plain (modifier-less) binding must not steal keystrokes from a text
-      // field; mod-combos are safe to handle globally.
-      if (isPlainKey(binding)) {
-        const t = e.target as HTMLElement | null;
-        if (t?.closest('input, textarea, [contenteditable="true"], [role="combobox"]')) return;
-      }
+      // Only Mod-combos may act while a text field is focused — a plain,
+      // Shift-, or Alt-modified key is typing (a capital letter arrives as
+      // Shift+letter). `eventInside` sees through shadow DOM, where `e.target`
+      // is retargeted to the host (Pierre's in-tree file-search box).
+      if (isPlainKey(binding) && eventInside(e, EDITABLE_SELECTOR)) return;
       // Repo-scoped commands no-op without a repository open.
       if (REPO_COMMANDS.has(cmd) && !useRepo.getState().meta) return;
       const handler = commandHandlersRef.current[cmd];

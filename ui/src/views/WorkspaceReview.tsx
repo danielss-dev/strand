@@ -18,6 +18,7 @@ import {
 } from '../components/PierreTree';
 import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
 import type { DiffMatch } from '../lib/diffSearch';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { buildWorkspaceReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
@@ -389,10 +390,9 @@ export function WorkspaceReview() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      const t = e.target instanceof HTMLElement ? e.target : null;
-      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"]')) {
-        return;
-      }
+      // `eventInside` sees through shadow DOM — the Pierre tree's file-search
+      // box lives in one, and `e.target` retargets to the host there.
+      if (eventInside(e, `${EDITABLE_SELECTOR}, [role="dialog"]`)) return;
       switch (e.key) {
         case 'j':
           e.preventDefault();

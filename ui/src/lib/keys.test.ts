@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMMANDS,
   conflictingCommands,
+  eventInside,
   eventToBinding,
   formatBinding,
   isPlainKey,
@@ -44,11 +45,38 @@ describe('eventToBinding', () => {
 });
 
 describe('isPlainKey', () => {
-  it('flags bindings with no Mod/Alt modifier', () => {
+  it('flags every binding without Mod — only Mod-combos act in text fields', () => {
     expect(isPlainKey('/')).toBe(true);
+    // Shift+J is a capital letter while typing; Alt combos compose characters.
     expect(isPlainKey('Shift+J')).toBe(true);
+    expect(isPlainKey('Alt+P')).toBe(true);
+    expect(isPlainKey('Alt+Shift+P')).toBe(true);
     expect(isPlainKey('Mod+P')).toBe(false);
-    expect(isPlainKey('Alt+P')).toBe(false);
+    expect(isPlainKey('Mod+Shift+P')).toBe(false);
+  });
+});
+
+describe('eventInside', () => {
+  const el = (matched: string[]): unknown => ({
+    matches: (sel: string) => matched.includes(sel),
+    closest: (sel: string) => (matched.includes(sel) ? {} : null),
+  });
+
+  it('matches any element on the composed path (shadow DOM retargeting)', () => {
+    // A keydown from Pierre's in-shadow search box: the path holds the inner
+    // <input>, but `target` is the retargeted shadow host.
+    const e = {
+      target: el([]),
+      composedPath: () => [el(['input']), el([])],
+    };
+    expect(eventInside(e, 'input')).toBe(true);
+    expect(eventInside(e, 'textarea')).toBe(false);
+  });
+
+  it('falls back to target.closest without a composed path', () => {
+    expect(eventInside({ target: el(['input']) }, 'input')).toBe(true);
+    expect(eventInside({ target: el([]) }, 'input')).toBe(false);
+    expect(eventInside({ target: null }, 'input')).toBe(false);
   });
 });
 

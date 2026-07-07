@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { errMessage } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -652,8 +653,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== '/') return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      // `eventInside` sees through shadow DOM (Pierre's file-search box).
+      if (eventInside(e, `${EDITABLE_SELECTOR}, [role="dialog"]`)) return;
       e.preventDefault();
       searchInputRef.current?.focus();
       searchInputRef.current?.select();

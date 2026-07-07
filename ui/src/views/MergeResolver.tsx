@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { File as PierreFile } from '@pierre/diffs/react';
 
 import { Icon } from '../components/Icon';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -131,6 +132,8 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !busy) { onClose(); return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (eventInside(e, EDITABLE_SELECTOR)) return;
       if (e.key === '[' || e.key === 'ArrowLeft') step(-1);
       else if (e.key === ']' || e.key === 'ArrowRight') step(1);
     };
