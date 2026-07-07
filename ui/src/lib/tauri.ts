@@ -86,7 +86,10 @@ export const tauri = {
   repoWatch: (path: string) => invoke<void>('repo_watch', { path }),
   repoUnwatch: (path: string) => invoke<void>('repo_unwatch', { path }),
   repoCancelOp: (opId: string) => invoke<void>('repo_cancel_op', { opId }),
-  repoLog: (path: string, limit?: number) => invoke<Commit[]>('repo_log', { path, limit }),
+  // `headOnly` walks HEAD's ancestry instead of every ref — for per-worktree
+  // "last commit" answers (worktrees share the family's refs).
+  repoLog: (path: string, limit?: number, headOnly?: boolean) =>
+    invoke<Commit[]>('repo_log', { path, limit, headOnly }),
   // Full-history search by message / author / diff content — the backend reach
   // the client-side loaded-window highlight can't cover.
   repoSearchLog: (path: string, query: string, mode: CommitSearchMode, limit?: number) =>

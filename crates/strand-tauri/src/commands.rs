@@ -142,9 +142,20 @@ pub fn repo_unwatch(path: String, state: State<'_, AppState>) -> CmdResult<()> {
     Ok(())
 }
 
+/// `head_only` walks HEAD's ancestry instead of every ref — what a
+/// per-worktree "last commit" wants, since worktrees share the family's refs.
 #[tauri::command(async)]
-pub async fn repo_log(path: String, limit: Option<usize>) -> CmdResult<Vec<Commit>> {
-    run_blocking("log", move || Ok(Repo::discover(&path)?.log(limit.unwrap_or(500))?)).await
+pub async fn repo_log(
+    path: String,
+    limit: Option<usize>,
+    head_only: Option<bool>,
+) -> CmdResult<Vec<Commit>> {
+    run_blocking("log", move || {
+        let repo = Repo::discover(&path)?;
+        let limit = limit.unwrap_or(500);
+        Ok(if head_only.unwrap_or(false) { repo.log_head(limit)? } else { repo.log(limit)? })
+    })
+    .await
 }
 
 /// Full-history commit search (message / author / diff content) — the backend
