@@ -116,7 +116,9 @@ export function Worktrees({
           const [status, m, log, health] = await Promise.all([
             tauri.repoStatus(w.path),
             tauri.repoMeta(w.path),
-            tauri.repoLog(w.path, 1),
+            // HEAD-only: the all-ref log leads with the family's newest
+            // commit, painting every row with the same subject.
+            tauri.repoLog(w.path, 1, true),
             // Health only means something for a linked worktree on a branch.
             !w.is_main && w.branch
               ? tauri.repoWorktreeHealth(w.path, w.branch).catch(() => null)

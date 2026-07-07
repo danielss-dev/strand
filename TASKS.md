@@ -936,10 +936,13 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   and the commit graph's context menu (prefills the start). Engine also gains
   `lock_worktree(reason)` / `unlock_worktree` + `repo_worktree_lock`/`_unlock`
   IPC, surfaced as Lock/Unlock in the sidebar worktree menu. +2 engine tests.)
-- ☐ Overview row "last commit" line shows the family's newest commit, not the
-  row's own HEAD (`repoLog(w.path, 1)` walks all refs) — every row reads the
-  same subject when one worktree just committed. Surfaced in the 2026-07-08
-  CDP pass; cosmetic, but per-row `log HEAD -1` would be truthful.
+- ☑ Overview row "last commit" line shows the row's own HEAD (2026-07-08 —
+  was the family's newest commit: `repoLog(w.path, 1)` walks all refs, which
+  worktrees share, so every row read the same subject when one worktree just
+  committed. `Repo::log_head` walks HEAD's ancestry only (shared `run_log`
+  behind `log`), surfaced as an optional `head_only` flag on `repo_log` /
+  `repoLog(path, limit, headOnly)`; the overview's per-row stats fetch passes
+  it. +2 engine tests: side-branch tip excluded, unborn HEAD → empty.)
 - ☐ W8 leftovers: `worktree move` / `repair` engine ops (trivial shell-outs,
   no UI surface yet); "Review vs base" / "Merge & clean up" in the rail/tab
   context menus (sidebar + overview cover it today).

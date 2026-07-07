@@ -72,25 +72,31 @@ impl Repo {
     /// the previous `push_head` + `push_glob` set exactly (not `--all`, which
     /// would also pull in `refs/stash` and notes).
     pub fn log(&self, limit: usize) -> Result<Vec<Commit>> {
+        self.run_log(limit, false)
+    }
+
+    /// Like [`Repo::log`], but walk **HEAD's ancestry only** — no branch /
+    /// remote / tag selectors. This is what a "this checkout's last commit"
+    /// answer needs: worktrees share the family's refs, so the all-ref walk
+    /// leads with the *newest commit anywhere in the family* regardless of
+    /// which worktree's path you ask through (every worktree-overview row
+    /// showed the same subject the moment one worktree committed).
+    pub fn log_head(&self, limit: usize) -> Result<Vec<Commit>> {
+        self.run_log(limit, true)
+    }
+
+    fn run_log(&self, limit: usize, head_only: bool) -> Result<Vec<Commit>> {
         let limit_arg = limit.to_string();
         let format = commit_format();
-        let out = crate::git_command()
-            .current_dir(&self.path)
+        let mut cmd = crate::git_command();
+        cmd.current_dir(&self.path)
             .env("GIT_TERMINAL_PROMPT", "0")
             .args(crate::GIT_SAFE_CONFIG)
-            .args([
-                "log",
-                "--date-order",
-                "--no-color",
-                "-z",
-                "-n",
-                &limit_arg,
-                &format,
-                "HEAD",
-                "--branches",
-                "--remotes",
-                "--tags",
-            ])
+            .args(["log", "--date-order", "--no-color", "-z", "-n", &limit_arg, &format, "HEAD"]);
+        if !head_only {
+            cmd.args(["--branches", "--remotes", "--tags"]);
+        }
+        let out = cmd
             .output()
             .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
 
@@ -331,6 +337,30 @@ mod tests {
                 }
             }
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn log_head_walks_only_head_ancestry() {
+        let (repo, dir) = scratch();
+        commit(&dir, "a.txt", "1\n", "base");
+        // A newer commit on a side branch, then back to main: the all-ref walk
+        // leads with the side tip; the HEAD-only walk must not see it.
+        git(&dir, &["checkout", "-q", "-b", "side"]);
+        commit(&dir, "b.txt", "side\n", "newer on side");
+        git(&dir, &["checkout", "-q", "main"]);
+
+        assert_eq!(repo.log(1).unwrap()[0].subject, "newer on side");
+        let head = repo.log_head(100).unwrap();
+        assert_eq!(head.len(), 1, "side's commit is not in HEAD's ancestry");
+        assert_eq!(head[0].subject, "base");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn log_head_empty_repo_yields_no_commits() {
+        let (repo, dir) = scratch();
+        assert!(repo.log_head(100).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
