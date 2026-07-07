@@ -1428,6 +1428,39 @@ end-to-end WebView2 CDP pass on the running app (tracked file drag → git
 `R`, untracked drag stays untracked, dialog rename of a modified file → `RM`
 with the edit preserved, ghost text + cleanup asserted).
 
+**Worktree lifecycle: merge & clean up, health badges, archive snapshots
+(2026-07-07):** The worktree overview grew the missing second half of the
+agent-worktree loop — retiring a worktree safely once its work lands. Engine
+(`worktree.rs`): `worktree_health` (detected base, ahead-of-base,
+can-fast-forward, upstream/unpushed, and merged-detection via a containment
+scan across all local branches — the detect-base heuristic alone names a
+sibling when several worktrees sit at one fork point, exactly the
+parallel-agent shape, and would hide "merged"), `integrate_worktree_branch`
+(squash / merge-commit / ff into the detected base, run in whichever worktree
+holds the base with a clean-workdir guard and conflict auto-abort, or as a pure
+ref fast-forward when the base isn't checked out), and archive snapshots:
+`archive_worktree_state` captures HEAD+staged+unstaged+untracked into
+`refs/strand/archive/<slug>/<secs>` via a throwaway `GIT_INDEX_FILE` (real
+index untouched), with list / restore / delete counterparts — restore puts
+the original identity back (recorded directory when free; branch recreated
+or re-attached when it's unheld and still at the archived commit; fallback
+dir/detached otherwise), archived changes returning as uncommitted state on
+the original commit; `prunable`'s reason is now parsed alongside `locked`'s. Six new
+IPC commands, and the existing worktree add/remove/prune commands now route
+through `run_blocking` (they wait on subprocesses — `add` even runs a full
+checkout). UI: every `removeWorktree` archives first (best-effort), so force
+remove is always recoverable; overview rows badge **merged** /
+**unpushed** / **unmerged** with lock/prune reasons as tooltips; the hero
+gains a merged metric, **Clean up (N)** (confirm-listed removal of
+clean+merged worktrees incl. branch deletion), and **Prune stale**;
+`WorktreeMergeDialog` previews the exact git commands Crystal-style before
+merging, has an editable base picker (detected base preselected, per-base
+ff-possibility via `repoMergeBase`), and optionally removes worktree + branch
+in the same motion; a collapsible "Archived snapshots" strip offers
+Restore / Delete. Verified:
+`cargo test -p strand-core` (102, +4 worktree), workspace `clippy` clean,
+`tsc`, `vitest` (200).
+
 ---
 
 ## 1.1+ — Post-1.0

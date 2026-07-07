@@ -312,3 +312,205 @@ escape hatch (PRD §6.4 P1) keeps the modal simple while unblocking the hard cas
 Items 2–4 together are a coherent 0.6 theme: **"watch the agent work, review it
 fast, accept or reject it safely."** That's a positioning no mainstream git client
 (Tower, Fork, GitKraken) currently owns.
+
+---
+
+# Worktrees pass (2026-07-07) — proposals
+
+> From a research sweep across (a) Strand's current worktree code, (b) how other
+> tools expose worktrees (Fork, Tower, GitKraken Agent Mode, SmartGit, lazygit,
+> Zed, JetBrains 2026.1, Conductor, Vibe Kanban, Claude Squad, Cursor, Claude
+> Code's own `--worktree`), and (c) how developers actually run parallel AI
+> agents on worktrees. Menu, not commitment.
+
+> **Implementation status (2026-07-07):** W1 + W2 + W3 landed the same day —
+> `Repo::worktree_health` / `integrate_worktree_branch` /
+> `archive_worktree_state` + restore/list/delete in `worktree.rs`, six new IPC
+> commands, merged/unpushed badges + Clean up + Prune on the overview,
+> `WorktreeMergeDialog` with exact-command preview, archive-before-every-remove
+> in the store, and a restorable "Archived snapshots" strip. The
+> `run_blocking` fix from W9 rode along (the other W9 items and W1's
+> sidebar/review-header entry points are follow-up `☐`s in TASKS.md, as is
+> auto-pruning old archives). W4–W8 remain open proposals.
+
+**Where the market landed (2025–2026).** Every agent orchestrator (Conductor,
+Vibe Kanban, Cursor, GitKraken Agent Mode, Claude Code itself) rebuilt the same
+Git-client subset: worktree list → diff review → merge+cleanup. The pure
+worktree multiplexers died or pivoted (Crystal deprecated, Vibe Kanban shut
+down, Terragon shut down, Sculptor pivoted); the survivors are the
+**review-centric** ones. Strand approaches from the other side — it already has
+the review surface — so the play is to own the worktree *lifecycle around
+review*, not to become an agent launcher.
+
+**What Strand already has** (all shipped): worktrees dashboard (Mod+5) with
+per-row Review at the detected merge-base (DAN-14), create dialog with sibling
+`<family>.worktrees/<slug>` default, family grouping by `common_dir` everywhere
+(rail, tabs, workspaces), branch-held-elsewhere → navigate-to-worktree instead
+of erroring (the Fork/SmartGit pattern), per-worktree workspace review members.
+That's already ahead of Fork/Tower. The gaps are lifecycle (setup, cleanup,
+merge-back) and fleet legibility.
+
+## W1. Close the review loop: merge-and-clean-up as one action (P0)
+
+The canonical agent-worktree session ends with "this is good — land it and make
+the worktree go away". Today that's N manual steps across two tabs. Every tool
+studied converged on one command (Worktrunk `wt merge`, Crystal's
+"Squash and rebase to main", Vibe Kanban's one-click merge, Cursor
+`/apply-worktree`).
+
+- After a worktree review, offer **"Merge into <parent> & remove worktree"**:
+  squash or merge the worktree branch onto its detected base branch
+  (`refs.rs::detect_base_branch` already knows the parent), fast-forward the
+  parent's worktree if clean, then `worktree remove` + `branch -d`.
+- Crystal's touch worth copying: the confirm dialog **previews the exact git
+  commands** it will run. Trust through legibility.
+- Guard rails: refuse (or downgrade to "merge only") when the worktree has
+  uncommitted changes; take a snapshot ref first (W3).
+- Surface it in three places: the Worktrees overview row, the review header
+  when reviewing a worktree session, and the sidebar worktree context menu.
+
+## W2. Dirty-aware cleanup + merged detection (P0)
+
+Stale worktrees pile up because deletion is scary — some hold unpushed agent
+work. The safety pattern that separates "trustworthy" from "scary"
+(Claude Code's exit policy, GitKraken's merged-PR pill):
+
+- Classify each worktree: **clean+merged** (branch fully merged into its base —
+  cheap `merge_base == branch tip` check), **clean+unmerged**,
+  **dirty**, **has unpushed commits**. Show it as a badge; GitKraken's
+  "merged" pill is the cleanup cue users act on.
+- Dashboard-level **"Clean up" action**: one click removes all clean+merged
+  worktrees and their branches; dirty/unpushed ones are listed but require
+  explicit per-row confirmation. Never blind-sweep.
+- Surface `prunable <reason>` from `worktree list --porcelain` (already parsed
+  into `is_prunable`, reason is dropped — `worktree.rs` keeps only the flag) and
+  add a dashboard **Prune** button; today prune hides in a sidebar context menu
+  that only appears on prunable rows (`Sidebar.tsx:705-707`).
+- Display `lock_reason` — parsed, typed, carried to the frontend
+  (`types.ts:270`) and never rendered anywhere. Dead data today.
+
+## W3. Archive-before-remove: snapshot ref safety net (P1)
+
+Conductor's best idea: before removing a worktree, snapshot **committed +
+uncommitted + untracked** state into a git ref, restorable later. Removes all
+fear from cleanup, which is the root cause of stale pile-up.
+
+- Strand already has the no-touch snapshot-stash infrastructure (`stash.rs`,
+  used by the discard safety net). Extend: on any worktree remove, create a
+  snapshot (e.g. `refs/strand/worktree-archive/<name>@<date>`), keep last N,
+  auto-prune after a few weeks.
+- A small "Archive" section (or filter on the Worktrees overview) lists
+  snapshots with one-click **Restore as new worktree**.
+- This also unlocks Claude Squad's cheap **pause/resume**: "Shelve worktree" =
+  snapshot + remove directory + keep branch; "Resume" = re-add worktree from
+  branch. Reclaims disk (the #3 complaint: 9.8 GB for two worktrees of a 2 GB
+  repo) without losing anything.
+
+## W4. Setup: copy-list + honor agent-tool conventions (P1)
+
+The single most-cited worktree pain everywhere: gitignored files (`.env`,
+`settings.local`, `.venv`) don't exist in a fresh worktree, so agents can't
+even run tests. The field converged on a declarative copy-list + post-create
+script:
+
+- On worktree create, **copy gitignored files matching a pattern list** from
+  the source worktree. Honor existing config the user already has —
+  `.worktreeinclude` (Claude Code), `git.worktreeIncludeFiles`-style globs —
+  before inventing a Strand-only format; fall back to a per-repo setting with
+  a sane default offer ("Copy .env* into the new worktree?").
+- Optional **post-create command** (per-repo setting, e.g. `pnpm i`), run with
+  `STRAND_WORKTREE_PATH` / `STRAND_ROOT_PATH` env vars, output streamed into
+  the progress toast. Explicitly opt-in — Strand is a client, not a launcher.
+- Recognize the naming conventions agents generate so the dashboard reads
+  well: `worktree-<name>` / `.claude/worktrees/` (Claude Code), `vk/<id>-slug`
+  (Vibe Kanban), `<user>/` prefixes — strip the noise in `worktreeName` labels
+  and badge the tool that created it when detectable.
+
+## W5. Fleet dashboard: status at a glance (P1)
+
+The wishlist item users state most often: "which worktree has which task, and
+is anything happening in it?" The overview (`views/Worktrees.tsx`) already has
+per-row dirty/ahead-behind/drift; missing:
+
+- **Last-activity time** (mtime of index / newest workdir change) — "touched
+  3 min ago" is a decent proxy for "agent is working" without process
+  spying; sort recent-first.
+- **Merged / unpushed / prunable-reason / lock-reason badges** (from W2).
+- **Per-worktree disk size** (background `du`, cached) — makes the cost of
+  stale trees visible and motivates cleanup.
+- **Uncommitted-summary line** ("+412 −38 across 23 files") so triage doesn't
+  require opening each tab. The existing lazy `repoStatus` per-row fetch
+  already has the data.
+- Optional later: detect a running agent by lock holder or heuristics
+  (Claude Code holds `git worktree lock` while a session runs — read the
+  reason string).
+
+## W6. Best-of-N: compare sibling attempts (P1, review differentiator)
+
+Running the same task in 2–4 worktrees and picking the winner is now a
+first-class pattern (Cursor `/best-of-n` productized it). Nobody offers a good
+*comparison* UI — that's a review problem, i.e. Strand's home turf.
+
+- Let the user **select 2+ worktrees of one family** in the overview and open
+  a compare view: same baseline (shared merge-base), side-by-side or tabbed
+  per-attempt diffs, file-list intersection highlighted ("both touched
+  `auth.ts`, only attempt B touched migrations").
+- Verdict: **pick winner** → offer W1 merge for it and W2/W3 cleanup for the
+  losers in one flow.
+- Cheap v1: even just "open N worktree review sessions as adjacent tabs with
+  synchronized file focus" beats everything on the market.
+
+## W7. Cross-worktree overlap warning (P2, nobody does this)
+
+Parallel agents silently diverge and conflicts only surface at merge time
+(GitButler's core critique of worktrees). Strand sees all worktrees of a
+family and their diffs-vs-base:
+
+- Compute pairwise **file-set overlap** between dirty worktrees of a family;
+  badge the dashboard rows ("overlaps fix-auth: 3 files") and warn in the W1
+  merge dialog when a sibling worktree touches the same files.
+- Full conflict prediction (merge simulation) is overkill; path-set
+  intersection catches most of it for free from data already fetched.
+
+## W8. Create-from-anything (P2)
+
+The create dialog is HEAD-only (`WorktreeDialog.tsx:142`; `add_worktree`
+hard-codes `-b <branch> <dest>`). Lazygit puts "new worktree" in seven panels;
+GitKraken creates from a PR. For Strand:
+
+- **Start-point picker** in the dialog: any local/remote branch, tag, or
+  commit; remote branches create with `--track`.
+- **"New worktree from here"** in the branch and commit context menus (the
+  branch menu already grew "Review <current> vs this" — same pattern).
+- **Fetch-first option**: "base on origin/HEAD (fetch first)" checkbox — the
+  Conductor/Claude Code default that avoids building on a stale local main.
+- Engine: extend `add_worktree` with start-point + track flags; add
+  `worktree lock/unlock` (reason string), `move`, `repair` while in there —
+  all missing, all trivial shell-outs (`worktree.rs`).
+
+## W9. Small fixes surfaced by the audit (P2, quick)
+
+- `repo_worktree_add/remove/prune` are `#[tauri::command(async)]` but call the
+  blocking git shell-out directly (`commands.rs:549-567`) — route through
+  `run_blocking` like `repo_worktrees`; a slow post-checkout hook currently
+  blocks an executor thread.
+- "Review vs base" is only reachable from the overview; add it to the sidebar
+  worktree context menu (`Sidebar.tsx:690-709`) and rail/tab menus.
+- Keybinding copy drift: Worktrees is Mod+5 (`keys.ts:81`) but ROADMAP/prose
+  still say ⌘4.
+
+## Suggested sequencing (worktrees)
+
+1. **W9 + W2** — safety and legibility first; small engine surface
+   (merged-check, prunable reason, lock reason) with immediate dashboard value.
+2. **W1 merge-and-cleanup** riding on W2's classification, with W3's snapshot
+   as its guard rail (build W3's snapshot op first, UI later).
+3. **W4 setup copy-list** — table stakes for the agent audience; honor
+   `.worktreeinclude` for free adoption.
+4. **W5 fleet dashboard** polish, then **W6 best-of-N** as the flagship
+   review differentiator, with **W7 overlap warnings** feeding both.
+5. **W8** whenever the dialog is next touched.
+
+W1–W3 together make the pitch: **"the only Git client where cleaning up after
+an agent is one safe click."** W6+W7 make the second pitch: **"the only place
+to compare N agent attempts and land the winner."**

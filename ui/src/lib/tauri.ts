@@ -28,12 +28,15 @@ import type {
   RepoMeta,
   ResetMode,
   ResetOutcome,
+  RestoredWorktree,
   Snapshot,
   Stash,
   StashOutcome,
   Submodule,
   WorkTreeEntry,
   Worktree,
+  WorktreeArchive,
+  WorktreeHealth,
 } from './types';
 
 /**
@@ -200,6 +203,24 @@ export const tauri = {
   repoWorktreeRemove: (path: string, dest: string, force: boolean) =>
     invoke<void>('repo_worktree_remove', { path, dest, force }),
   repoWorktreePrune: (path: string) => invoke<void>('repo_worktree_prune', { path }),
+  // Ref-level health of a worktree's branch: merged into its base? unpushed
+  // work? fast-forwardable? Powers the overview badges + merge dialog.
+  repoWorktreeHealth: (path: string, target: string) =>
+    invoke<WorktreeHealth>('repo_worktree_health', { path, target }),
+  // Merge a worktree branch into its base ("ff" | "merge" | "squash").
+  repoWorktreeIntegrate: (path: string, branch: string, base: string, mode: string) =>
+    invoke<string>('repo_worktree_integrate', { path, branch, base, mode }),
+  // Snapshot the worktree at `path` into an archive ref (safety net before
+  // removal); returns the created ref name.
+  repoWorktreeArchive: (path: string) => invoke<string>('repo_worktree_archive', { path }),
+  repoWorktreeArchives: (path: string) =>
+    invoke<WorktreeArchive[]>('repo_worktree_archives', { path }),
+  // `dest` is only the fallback — restore prefers the snapshot's recorded
+  // original directory and re-attaches its branch when both are free.
+  repoWorktreeArchiveRestore: (path: string, refName: string, dest: string) =>
+    invoke<RestoredWorktree>('repo_worktree_archive_restore', { path, refName, dest }),
+  repoWorktreeArchiveDelete: (path: string, refName: string) =>
+    invoke<void>('repo_worktree_archive_delete', { path, refName }),
   repoBranchCreate: (
     path: string,
     name: string,

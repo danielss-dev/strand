@@ -270,10 +270,49 @@ export interface Worktree {
   lock_reason: string | null;
   /** git considers this worktree's directory missing/removable. */
   is_prunable: boolean;
+  /** Why git considers it prunable, when a reason was given. */
+  prune_reason: string | null;
   /** The primary worktree (holds the repo's own `.git`). */
   is_main: boolean;
   /** Matches the currently-open repo path. */
   is_current: boolean;
+}
+
+/** Ref-level health of a worktree's branch relative to its detected base. */
+export interface WorktreeHealth {
+  /** The branch this one forked from; `null` when undetectable. */
+  base_branch: string | null;
+  /** Every commit lives in some other local branch (safe to retire). */
+  merged: boolean;
+  /** The branch `merged` refers to; `null` when not merged. */
+  merged_into: string | null;
+  /** Commits on the branch that are not in the base. */
+  ahead_of_base: number;
+  /** Base tip is still the fork point, so integrating is a pure fast-forward. */
+  can_fast_forward: boolean;
+  has_upstream: boolean;
+  /** Commits not on the upstream; 0 when `has_upstream` is false. */
+  unpushed: number;
+}
+
+/** Where a snapshot restore put the worktree, and the re-attached branch. */
+export interface RestoredWorktree {
+  path: string;
+  /** `null` when the restore stayed detached (branch held or moved on). */
+  branch: string | null;
+}
+
+/** One archived worktree snapshot under `refs/strand/archive/`. */
+export interface WorktreeArchive {
+  /** Full ref name, e.g. `refs/strand/archive/feature-x/1751871234`. */
+  ref_name: string;
+  /** Slug segment — the branch (or `detached`) at archive time. */
+  name: string;
+  /** Snapshot commit oid. */
+  oid: string;
+  /** Creation time (Unix seconds). */
+  time_unix: number;
+  subject: string;
 }
 
 /** One line of `git blame` output for a file at HEAD. */
