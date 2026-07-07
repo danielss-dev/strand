@@ -644,6 +644,32 @@ pub async fn repo_worktree_prune(path: String) -> CmdResult<()> {
     run_blocking("worktree prune", move || Ok(Repo::discover(&path)?.prune_worktrees()?)).await
 }
 
+/// Move a linked worktree's directory, registry-aware — a manual rename
+/// leaves a dangling entry that `repair` has to fix.
+#[tauri::command(async)]
+pub async fn repo_worktree_move(
+    path: String,
+    dest: String,
+    new_path: String,
+    force: bool,
+) -> CmdResult<()> {
+    run_blocking("worktree move", move || {
+        Ok(Repo::discover(&path)?.move_worktree(&dest, &new_path, force)?)
+    })
+    .await
+}
+
+/// Repair worktree admin links: no `paths` fixes worktree→repo pointers after
+/// the repo moved; the new directories of manually-moved worktrees fix the
+/// repo→worktree side.
+#[tauri::command(async)]
+pub async fn repo_worktree_repair(path: String, paths: Vec<String>) -> CmdResult<()> {
+    run_blocking("worktree repair", move || {
+        Ok(Repo::discover(&path)?.repair_worktrees(&paths)?)
+    })
+    .await
+}
+
 /// Ref-level health of a worktree's branch (merged into base? unpushed?
 /// fast-forwardable?) — the overview's badge + cleanup data.
 #[tauri::command(async)]

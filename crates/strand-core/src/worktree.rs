@@ -223,10 +223,42 @@ impl Repo {
         Ok(())
     }
 
+    /// Move a linked worktree's directory (`git worktree move [--force]
+    /// <dest> <new_path>`), keeping the registry consistent — unlike a manual
+    /// rename, which leaves a stale entry that needs
+    /// [`repair_worktrees`](Repo::repair_worktrees). git refuses to move the
+    /// main worktree or one containing submodules, and a locked worktree
+    /// needs `force`; those errors surface as-is.
+    pub fn move_worktree(&self, dest: &str, new_path: &str, force: bool) -> Result<()> {
+        reject_dash("worktree path", dest)?;
+        reject_dash("destination path", new_path)?;
+        let mut args = vec!["worktree", "move"];
+        if force {
+            args.push("--force");
+        }
+        args.extend([dest, new_path]);
+        run_git(&self.path, &args)?;
+        Ok(())
+    }
+
     /// Prune registry entries whose working trees are gone
     /// (`git worktree prune`). Used to clear `is_prunable` leftovers.
     pub fn prune_worktrees(&self) -> Result<()> {
         run_git(&self.path, &["worktree", "prune"])?;
+        Ok(())
+    }
+
+    /// Repair worktree administrative links (`git worktree repair [<path>…]`).
+    /// With no `paths` it fixes the worktree→repo pointers after the *repo*
+    /// moved; pass the new directories of manually-moved worktrees to fix the
+    /// repo→worktree side (the case a stale `is_prunable` entry usually means).
+    pub fn repair_worktrees(&self, paths: &[String]) -> Result<()> {
+        let mut args: Vec<&str> = vec!["worktree", "repair"];
+        for p in paths {
+            reject_dash("worktree path", p)?;
+            args.push(p);
+        }
+        run_git(&self.path, &args)?;
         Ok(())
     }
 
@@ -912,6 +944,60 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn moves_a_worktree() {
+        let main = setup("move");
+        let base = main.parent().unwrap();
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let src = base.join("feature");
+        repo.add_worktree(src.to_str().unwrap(), "feature", true, None, false).unwrap();
+
+        let moved = base.join("moved");
+        repo.move_worktree(src.to_str().unwrap(), moved.to_str().unwrap(), false).unwrap();
+
+        assert!(!src.exists(), "old directory is gone");
+        assert!(moved.join("a.txt").exists(), "tree content moved");
+        let wts = repo.worktrees().unwrap();
+        let feat = wts.iter().find(|w| w.branch.as_deref() == Some("feature")).unwrap();
+        assert!(
+            Path::new(&feat.path).ends_with("moved"),
+            "registry follows the move: {}",
+            feat.path
+        );
+        assert!(!feat.is_prunable);
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn repairs_a_manually_moved_worktree() {
+        let main = setup("repair");
+        let base = main.parent().unwrap();
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let src = base.join("feature");
+        repo.add_worktree(src.to_str().unwrap(), "feature", true, None, false).unwrap();
+
+        // A plain fs rename (what a user or agent does outside git) breaks
+        // both link directions; the registry then reports the entry prunable.
+        let moved = base.join("relocated");
+        std::fs::rename(&src, &moved).unwrap();
+        let wts = repo.worktrees().unwrap();
+        let feat = wts.iter().find(|w| !w.is_main).unwrap();
+        assert!(feat.is_prunable, "manual move leaves a dangling registry entry");
+
+        repo.repair_worktrees(&[moved.to_str().unwrap().to_string()]).unwrap();
+        let wts = repo.worktrees().unwrap();
+        let feat = wts.iter().find(|w| w.branch.as_deref() == Some("feature")).unwrap();
+        assert!(!feat.is_prunable, "repair relinks the moved worktree");
+        assert!(
+            Path::new(&feat.path).ends_with("relocated"),
+            "registry points at the new directory: {}",
+            feat.path
+        );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
     /// Fresh repo on `main` with one commit; returns the repo dir.
     fn setup(tag: &str) -> std::path::PathBuf {
         let base = std::env::temp_dir().join(format!(
@@ -1268,6 +1354,9 @@ mod tests {
         let repo = Repo::discover(base.to_str().unwrap()).unwrap();
         assert!(repo.add_worktree("--force", "x", false, None, false).is_err());
         assert!(repo.remove_worktree("-rf", true).is_err());
+        assert!(repo.move_worktree("-x", "y", false).is_err());
+        assert!(repo.move_worktree("x", "--force", false).is_err());
+        assert!(repo.repair_worktrees(&["--dry-run".into()]).is_err());
         let _ = std::fs::remove_dir_all(&base);
     }
 }
