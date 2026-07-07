@@ -34,6 +34,10 @@ interface Props {
   onCustomize: (path: string) => void;
   /** Open the workspace manager dialog (tabs-mode switcher). */
   onManageWorkspaces: () => void;
+  /** "Review vs base" for a worktree tab (tabs-mode context menu). */
+  onWorktreeReview: (path: string) => void;
+  /** "Merge & clean up…" for a worktree tab (tabs-mode context menu). */
+  onWorktreeMerge: (path: string) => void;
 }
 
 export function Topbar({
@@ -55,6 +59,8 @@ export function Topbar({
   onClone,
   onCustomize,
   onManageWorkspaces,
+  onWorktreeReview,
+  onWorktreeMerge,
 }: Props) {
   const platform = useSettings((s) => s.platform);
   const repoNav = useSettings((s) => s.repoNav);
@@ -99,6 +105,8 @@ export function Topbar({
           onClone={onClone}
           onCustomize={onCustomize}
           onManageWorkspaces={onManageWorkspaces}
+          onWorktreeReview={onWorktreeReview}
+          onWorktreeMerge={onWorktreeMerge}
         />
       ) : (
         meta && (

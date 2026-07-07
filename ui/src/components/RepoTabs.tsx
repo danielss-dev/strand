@@ -18,6 +18,10 @@ interface Props {
   onCustomize: (path: string) => void;
   /** Open the workspace manager dialog. */
   onManageWorkspaces: () => void;
+  /** "Review vs base" for a worktree tab (App owns the store flow). */
+  onWorktreeReview: (path: string) => void;
+  /** "Merge & clean up…" for a worktree tab (App owns the dialog). */
+  onWorktreeMerge: (path: string) => void;
 }
 
 /** Right-click context menu target. */
@@ -42,7 +46,7 @@ interface MenuState {
  * outside the scroller so they stay put. Menus render through a portal since
  * the lane clips.
  */
-export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces }: Props) {
+export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces, onWorktreeReview, onWorktreeMerge }: Props) {
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
   const setActiveTab = useRepo((s) => s.setActiveTab);
@@ -200,6 +204,8 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize, onMan
           onClose={() => setMenu(null)}
           onCustomize={() => { onCustomize(menu.path); setMenu(null); }}
           onCloseRepo={() => { void closeRepo(menu.path); setMenu(null); }}
+          onReview={() => { onWorktreeReview(menu.path); setMenu(null); }}
+          onMerge={() => { onWorktreeMerge(menu.path); setMenu(null); }}
         />,
         document.body,
       )}
@@ -207,17 +213,22 @@ export function RepoTabs({ onOpenRepo, onOpenRecent, onClone, onCustomize, onMan
   );
 }
 
-/** Right-click menu: customize (main repos only) + close. Mirrors the rail's. */
+/** Right-click menu: customize (main repos only) or the worktree review /
+ * merge pair (worktrees only) + close. Mirrors the rail's. */
 function TabContextMenu({
   menu,
   onClose,
   onCustomize,
   onCloseRepo,
+  onReview,
+  onMerge,
 }: {
   menu: MenuState;
   onClose: () => void;
   onCustomize: () => void;
   onCloseRepo: () => void;
+  onReview: () => void;
+  onMerge: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useOutsideClose([ref], true, onClose);
@@ -245,6 +256,18 @@ function TabContextMenu({
           <span className="ico"><Icon name="edit" size={13} /></span>
           <span className="label">Customize…</span>
         </button>
+      )}
+      {menu.worktree && (
+        <>
+          <button type="button" className="repo-menu-item" role="menuitem" onClick={onReview}>
+            <span className="ico"><Icon name="eye" size={13} /></span>
+            <span className="label">Review vs base</span>
+          </button>
+          <button type="button" className="repo-menu-item" role="menuitem" onClick={onMerge}>
+            <span className="ico"><Icon name="branch" size={13} /></span>
+            <span className="label">Merge &amp; clean up…</span>
+          </button>
+        </>
       )}
       <button type="button" className="repo-menu-item" role="menuitem" onClick={onCloseRepo}>
         <span className="ico"><Icon name="x" size={13} /></span>
