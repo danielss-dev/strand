@@ -15,6 +15,7 @@ import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
 import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, tauri } from '../lib/tauri';
 import { hashFileDiff, sliceChangeBlock, type SliceDirection } from '../lib/patch';
@@ -189,14 +190,9 @@ export function LocalChanges() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t?.closest(
-          'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="combobox"], .recent-pop',
-        )
-      ) {
-        return;
-      }
+      // `eventInside` sees through shadow DOM — the Pierre tree's file-search
+      // box lives in one, and `e.target` retargets to the host there.
+      if (eventInside(e, `${EDITABLE_SELECTOR}, [role="dialog"], .recent-pop`)) return;
       if (resolverOpen.current) return;
 
       const state = useRepo.getState();

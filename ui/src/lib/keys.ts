@@ -151,12 +151,48 @@ export function eventToBinding(e: KeyLike): string | null {
   return parts.join('+');
 }
 
-/** True if a binding uses no `Mod`/`Alt` modifier — a "plain" key that must be
- * suppressed while a text field is focused. */
+/** True if a binding lacks the `Mod` modifier — a key that must be suppressed
+ * while a text field is focused, so typing never triggers a shortcut. Only
+ * `Mod+…` combos may act there: a Shift-modified key is a capital letter and
+ * an Alt-modified key composes characters on many layouts. `Mod` is always
+ * the first token of a canonical binding (see {@link eventToBinding}). */
 export function isPlainKey(binding: string): boolean {
-  return !binding.startsWith('Mod+') && !binding.includes('+Mod')
-    && !binding.startsWith('Alt+') && !binding.includes('+Alt')
-    && binding !== 'Mod' && binding !== 'Alt';
+  return !binding.startsWith('Mod+');
+}
+
+/** Elements that own the keystrokes they receive — a keydown originating in
+ * one must never be treated as a plain-key shortcut. */
+export const EDITABLE_SELECTOR =
+  'input, textarea, select, [contenteditable="true"], [role="combobox"]';
+
+/** Structural slice of `Element` this module touches — duck-typed (no DOM
+ * globals) so the file stays unit-testable in a node environment. */
+interface ElementLike {
+  matches?: (selector: string) => boolean;
+  closest?: (selector: string) => unknown;
+}
+
+/** Minimal shape of the parts of an Event we read. */
+export type EventLike = {
+  target: unknown;
+  composedPath?: () => unknown[];
+};
+
+/**
+ * True if the event originated in (or inside) an element matching `selector`.
+ * Walks `composedPath()` rather than `e.target.closest(...)`: a keydown from
+ * inside a shadow root — e.g. Pierre's in-tree file-search box — is
+ * *retargeted*, so window-level listeners see the shadow host as `target` and
+ * a plain `closest` check never sees the inner `<input>`, letting shortcuts
+ * steal keystrokes from it. Falls back to `closest` when the event has no
+ * composed path (synthetic events in tests).
+ */
+export function eventInside(e: EventLike, selector: string): boolean {
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  if (path.length > 0) {
+    return path.some((n) => !!(n as ElementLike | null)?.matches?.(selector));
+  }
+  return !!(e.target as ElementLike | null)?.closest?.(selector);
 }
 
 export interface ResolvedBindings {
