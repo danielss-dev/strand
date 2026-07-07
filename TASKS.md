@@ -943,9 +943,32 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   behind `log`), surfaced as an optional `head_only` flag on `repo_log` /
   `repoLog(path, limit, headOnly)`; the overview's per-row stats fetch passes
   it. +2 engine tests: side-branch tip excluded, unborn HEAD → empty.)
-- ☐ W8 leftovers: `worktree move` / `repair` engine ops (trivial shell-outs,
-  no UI surface yet); "Review vs base" / "Merge & clean up" in the rail/tab
-  context menus (sidebar + overview cover it today).
+- ☑ W8 leftovers closed (2026-07-08). Engine: `Repo::move_worktree`
+  (`git worktree move [--force] <src> <dest>` — registry-aware, unlike a
+  manual rename) and `Repo::repair_worktrees` (`git worktree repair
+  [<path>…]` — no paths fixes worktree→repo links after the repo moved;
+  the new directories of manually-moved worktrees fix the repo→worktree
+  side), both dash-guarded, with std-only tests (move round-trip keeps the
+  branch + clears prunable; a manual `fs::rename` reads prunable until
+  repair relinks it). `repo_worktree_move` / `repo_worktree_repair` IPC +
+  `tauri.ts` wrappers — engine + IPC only, still no UI surface (deliberate;
+  nothing in the UI needs a move yet). UI: "Review vs base" and
+  "Merge & clean up…" joined the **rail and tab-strip** worktree context
+  menus (`RepoRail` / `RepoTabs` → new `onWorktreeReview` / `onWorktreeMerge`
+  props; App owns the handlers + a `WorktreeMergeDialog` instance). Review
+  reuses the store's `reviewWorktree` flow; merge resolves the registry
+  entry relative to the active tab and — since the dialog reads
+  refs/worktrees from the active repo — first focuses a family member when
+  the target belongs to another family, preferring the main checkout so
+  cleanup (which can't remove the current worktree) stays available.
+  Verified: `cargo test -p strand-core` (113, +2 worktree), clippy, `tsc`,
+  `vitest` (200), `vite build`, and a live WebView2-CDP pass against the
+  running app (scratch repo + `feat-cart` worktree: both items in the rail
+  tile menu and the strip pill menu; Review vs base pinned the baseline at
+  the fork commit and toasted "Reviewing feat-cart vs main"; the merge
+  dialog opened from both surfaces with `main (detected base)`, cleanup
+  checked, and the dirty-file warning; a cross-family invocation re-anchored
+  the active tab to the family's main checkout before opening).
 - ☐ W4 leftover: optional post-create command (per-repo setting, e.g.
   `pnpm i`, `STRAND_WORKTREE_PATH` env, streamed output) — deliberately
   deferred; Strand is a client, not a launcher.
