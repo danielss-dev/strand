@@ -268,10 +268,17 @@ export interface RepoState {
   refreshWorktrees(): Promise<void>;
   /**
    * Create a worktree at `dest`. `newBranch` ⇒ create + check out a new branch
-   * `branch` at HEAD; otherwise check out the existing `branch`. Refreshes the
-   * worktree list and refs (a new branch may appear).
+   * `branch` at `startPoint` (HEAD when omitted; `track` sets its upstream to
+   * a remote start point); otherwise check out the existing `branch`.
+   * Refreshes the worktree list and refs (a new branch may appear).
    */
-  addWorktree(dest: string, branch: string, newBranch: boolean): Promise<void>;
+  addWorktree(
+    dest: string,
+    branch: string,
+    newBranch: boolean,
+    startPoint?: string | null,
+    track?: boolean,
+  ): Promise<void>;
   /** Remove the worktree at `dest` (force past local changes when `force`). */
   removeWorktree(dest: string, force: boolean): Promise<void>;
   /** Prune registry entries whose directories are gone. */
@@ -279,6 +286,14 @@ export interface RepoState {
   /** Open a worktree's directory as its own repo tab (a worktree path is a
    * valid repo path — this is just {@link RepoState.openRepo}). */
   openWorktree(path: string): Promise<void>;
+  /**
+   * Open a worktree for review: detect the branch it forked from, open its
+   * tab, pin the review baseline at the fork point, and land on Review
+   * (Local Changes when no baseline is derivable — the main worktree, or
+   * detection failure). Returns the detected base name and any detection
+   * error; the caller owns the toast copy.
+   */
+  reviewWorktree(w: Worktree): Promise<{ base: string | null; detectError: string | null }>;
 
   /** Refresh status + diffs together — what every write op runs afterward. */
   refreshLocalChanges(): Promise<void>;
@@ -1282,10 +1297,10 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('repoWorktrees failed', e);
     }
   },
-  async addWorktree(dest, branch, newBranch) {
+  async addWorktree(dest, branch, newBranch, startPoint, track) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoWorktreeAdd(path, dest, branch, newBranch);
+    await tauri.repoWorktreeAdd(path, dest, branch, newBranch, startPoint ?? null, track ?? false);
     // A new branch may have been created — refresh refs alongside the list.
     await Promise.all([get().refreshWorktrees(), get().refreshRefs()]);
   },
@@ -1331,6 +1346,37 @@ export const useRepo = create<RepoState>((set, get) => ({
     // A worktree directory is a valid repo path; opening it reuses the normal
     // tab flow (dedupe + canonicalize handled there).
     await get().openRepo(path);
+  },
+  async reviewWorktree(w) {
+    const target = w.branch ?? w.head;
+    let baselineOid: string | null = null;
+    let base: string | null = null;
+    let detectError: string | null = null;
+
+    // Review against the branch this worktree actually forked from, not the
+    // main worktree's branch — a worktree cut from `portal30` must baseline
+    // at merge-base(HEAD, portal30), or the diff swallows all of portal30's
+    // own work (DAN-14).
+    if (!w.is_main && target) {
+      try {
+        const hit = await tauri.repoDetectBaseBranch(w.path, target);
+        if (hit) {
+          baselineOid = hit.merge_base;
+          base = hit.name;
+        }
+      } catch (e) {
+        detectError = errMessage(e);
+      }
+    }
+
+    const nextView = baselineOid ? 'review' : 'local';
+    get().setView(nextView);
+    await get().openWorktree(w.path);
+    if (baselineOid) {
+      await get().setBaseline(baselineOid);
+    }
+    get().setView(nextView);
+    return { base, detectError };
   },
 
   async stage(file) {

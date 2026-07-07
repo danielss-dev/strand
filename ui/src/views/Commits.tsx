@@ -47,12 +47,14 @@ interface CommitsProps {
   onInteractiveRebase: (base: string | null, label: string) => void;
   /** Open the Reset dialog targeting a commit (revspec + label). */
   onResetTo: (target: string, label: string) => void;
+  /** Open the New-worktree dialog with a pre-picked start point. */
+  onCreateWorktree: (start: { ref: string; label: string }) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -162,6 +164,12 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
           onSelect: () => onResetTo(c.hash, c.short_hash),
         },
         {
+          // A task branch cut from this exact commit, in its own directory.
+          label: 'New worktree from here…',
+          icon: 'worktree',
+          onSelect: () => onCreateWorktree({ ref: c.hash, label: c.short_hash }),
+        },
+        {
           // Pin the review baseline here and jump to the Review view — review
           // everything (commits + working tree) done since this commit.
           label: 'Review changes since this',
@@ -183,7 +191,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onToast }
       setMenu({ x, y, items });
     },
     [checkoutCommit, cherryPick, revert, hasStaged, commit, onCreateTag,
-      onInteractiveRebase, onResetTo, meta, onToast, setBaseline, setView, selectFile],
+      onInteractiveRebase, onResetTo, onCreateWorktree, meta, onToast, setBaseline, setView, selectFile],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail

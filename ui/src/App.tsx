@@ -185,6 +185,7 @@ export function App() {
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
   const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
+  const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const baseline = useRepo((s) => s.baseline);
   const setBaseline = useRepo((s) => s.setBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
@@ -233,7 +234,11 @@ export function App() {
   // + the Files tab), so its draft lives in the store; App renders the one modal.
   const ignoreDraft = useRepo((s) => s.ignoreDraft);
   const closeIgnoreDialog = useRepo((s) => s.closeIgnoreDialog);
-  const [worktreeOpen, setWorktreeOpen] = useState(false);
+  // null = closed; `start` pre-picks the new branch's start point when opened
+  // from a branch/commit "New worktree from here" context menu.
+  const [worktreeDialog, setWorktreeDialog] = useState<
+    { start: { ref: string; label: string } | null } | null
+  >(null);
   // null = closed; otherwise the repo whose rail tile is being customized.
   const [iconDialog, setIconDialog] = useState<{ path: string; name: string } | null>(null);
   // false = closed; 'create' opens the manager mid-create (palette "New
@@ -1045,7 +1050,19 @@ export function App() {
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'tab-next', label: 'Next repository', group: 'Actions', shortcut: keyHint('tab-next'), keywords: 'switch repo tab next cycle', run: () => cycleTab(1) },
         { id: 'tab-prev', label: 'Previous repository', group: 'Actions', shortcut: keyHint('tab-prev'), keywords: 'switch repo tab previous cycle', run: () => cycleTab(-1) },
-        { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeOpen(true) },
+        { id: 'worktree-new', label: 'New worktree…', group: 'Actions', keywords: 'worktree add branch checkout agent', run: () => setWorktreeDialog({ start: null }) },
+        { id: 'worktree-cleanup', label: 'Clean up merged worktrees…', group: 'Actions', keywords: 'worktree remove merged clean stale retire agent', run: () => {
+          // The candidate list + confirm dialog live in the overview; land
+          // there and ask it to open the dialog once mounted.
+          setView('worktrees'); selectFile(null);
+          setTimeout(() => window.dispatchEvent(new CustomEvent('strand:worktrees-cleanup')), 50);
+        } },
+        { id: 'worktree-prune', label: 'Prune stale worktrees', group: 'Actions', keywords: 'worktree prune stale registry gone missing', run: () => {
+          void pruneWorktrees().then(
+            () => showToast('Pruned stale worktree entries'),
+            (e) => showToast(`Prune failed: ${errMessage(e)}`, 'error'),
+          );
+        } },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         { id: 'search-content', label: 'Search file contents…', group: 'Actions', keywords: 'pickaxe content diff code history full grep -G -S', run: () => { requestCommitSearch('content'); } },
         // Opens the ⌘F bar in whichever diff view is showing; other views
@@ -1218,7 +1235,7 @@ export function App() {
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab,
-      workspaces, activeWorkspaceId, importCodeWorkspaceFlow]);
+      workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1268,7 +1285,7 @@ export function App() {
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
-                onCreateWorktree={() => setWorktreeOpen(true)}
+                onCreateWorktree={(start) => setWorktreeDialog({ start: start ?? null })}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onManageRemote={(mode) => setRemoteDialog(mode)}
@@ -1295,13 +1312,14 @@ export function App() {
                     />
                   )}
                   {view === 'worktrees' && (
-                    <Worktrees onCreateWorktree={() => setWorktreeOpen(true)} onToast={showToast} />
+                    <Worktrees onCreateWorktree={() => setWorktreeDialog({ start: null })} onToast={showToast} />
                   )}
                   {(view === 'commits' || view === 'branch') && (
                     <Commits
                       onCreateTag={(target, label) => setTagDialog({ target, label })}
                       onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                       onResetTo={(target, label) => setResetDialog({ target, label })}
+                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
                       onToast={showToast}
                     />
                   )}
@@ -1464,7 +1482,13 @@ export function App() {
         <IgnoreDialog initial={ignoreDraft} onClose={closeIgnoreDialog} onToast={showToast} />
       )}
 
-      {worktreeOpen && <WorktreeDialog onClose={() => setWorktreeOpen(false)} />}
+      {worktreeDialog && (
+        <WorktreeDialog
+          initialStart={worktreeDialog.start}
+          onToast={showToast}
+          onClose={() => setWorktreeDialog(null)}
+        />
+      )}
 
       {iconDialog && (
         <RepoIconDialog

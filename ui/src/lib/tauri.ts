@@ -37,6 +37,7 @@ import type {
   Worktree,
   WorktreeArchive,
   WorktreeHealth,
+  WorktreeStats,
 } from './types';
 
 /**
@@ -198,8 +199,38 @@ export const tauri = {
       onEvent: progressChannel(onProgress),
     }),
   repoWorktrees: (path: string) => invoke<Worktree[]>('repo_worktrees', { path }),
-  repoWorktreeAdd: (path: string, dest: string, branch: string, newBranch: boolean) =>
-    invoke<void>('repo_worktree_add', { path, dest, branch, newBranch }),
+  // `startPoint` (branch/tag/commit; null = HEAD) and `track` (set upstream to
+  // a remote start point) only apply when `newBranch` is set.
+  repoWorktreeAdd: (
+    path: string,
+    dest: string,
+    branch: string,
+    newBranch: boolean,
+    startPoint?: string | null,
+    track?: boolean,
+  ) =>
+    invoke<void>('repo_worktree_add', {
+      path,
+      dest,
+      branch,
+      newBranch,
+      startPoint: startPoint ?? null,
+      track: track ?? false,
+    }),
+  repoWorktreeLock: (path: string, dest: string, reason: string | null) =>
+    invoke<void>('repo_worktree_lock', { path, dest, reason }),
+  repoWorktreeUnlock: (path: string, dest: string) =>
+    invoke<void>('repo_worktree_unlock', { path, dest }),
+  // Disk size / last activity / ±lines for the worktree at `path` — lazy
+  // per-row fetch (the directory walk can be slow on huge trees).
+  repoWorktreeStats: (path: string) => invoke<WorktreeStats>('repo_worktree_stats', { path }),
+  // `.worktreeinclude` patterns at the workdir root (empty when absent).
+  repoWorktreeIncludePatterns: (path: string) =>
+    invoke<string[]>('repo_worktree_include_patterns', { path }),
+  // Copy gitignored files matching `.worktreeinclude` from `path` into the
+  // fresh worktree at `dest`; returns the copied relative paths.
+  repoWorktreeCopyInclude: (path: string, dest: string) =>
+    invoke<string[]>('repo_worktree_copy_include', { path, dest }),
   repoWorktreeRemove: (path: string, dest: string, force: boolean) =>
     invoke<void>('repo_worktree_remove', { path, dest, force }),
   repoWorktreePrune: (path: string) => invoke<void>('repo_worktree_prune', { path }),

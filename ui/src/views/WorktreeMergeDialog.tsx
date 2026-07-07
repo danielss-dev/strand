@@ -21,6 +21,7 @@ export function WorktreeMergeDialog({
   worktree,
   health,
   dirty,
+  overlaps = [],
   onClose,
   onToast,
 }: {
@@ -28,6 +29,8 @@ export function WorktreeMergeDialog({
   health: WorktreeHealth;
   /** Uncommitted files in the worktree — they won't be part of the merge. */
   dirty: number;
+  /** Sibling worktrees whose uncommitted changes touch the same files. */
+  overlaps?: { name: string; files: string[] }[];
   onClose: () => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
@@ -277,6 +280,15 @@ export function WorktreeMergeDialog({
             <p className="stash-blurb wt-merge-warn">
               {dirty} uncommitted file{dirty === 1 ? '' : 's'} in this worktree won't be merged
               {cleanup ? ' — they are kept in the archived snapshot' : ''}.
+            </p>
+          )}
+
+          {overlaps.length > 0 && (
+            <p className="stash-blurb wt-merge-warn">
+              {overlaps
+                .map((o) => `${o.name} has uncommitted changes to ${o.files.length} of the same file${o.files.length === 1 ? '' : 's'}`)
+                .join('; ')}{' '}
+              — landing both later is likely to conflict.
             </p>
           )}
 

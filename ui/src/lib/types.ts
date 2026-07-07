@@ -295,6 +295,18 @@ export interface WorktreeHealth {
   unpushed: number;
 }
 
+/** Workdir-level stats for one worktree (fleet-dashboard row data). */
+export interface WorktreeStats {
+  /** Total size of the working directory, `.git` excluded. */
+  disk_bytes: number;
+  /** Newest file mtime outside `.git` (Unix seconds); `null` for an empty tree. */
+  last_activity_unix: number | null;
+  /** Inserted lines across staged + unstaged tracked changes. */
+  insertions: number;
+  /** Deleted lines across staged + unstaged tracked changes. */
+  deletions: number;
+}
+
 /** Where a snapshot restore put the worktree, and the re-attached branch. */
 export interface RestoredWorktree {
   path: string;

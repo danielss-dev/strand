@@ -60,14 +60,21 @@ keyboard alone, and the mouse stays first-class.
   beside the scrollbar shows where every edit sits in the file (click to
   jump).
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
-  repo naming, branch/session labels, dirty count, ahead/behind, last commit,
-  and one-click Review pinned where the branch diverged from main. Worktree
-  tabs of one repo group together instead of looking like separate repos.
-  Rows badge merged / unpushed work against the detected base; **Merge &
-  clean up** lands a worktree's branch (squash / merge / fast-forward, exact
-  commands previewed) and retires the worktree + branch in one motion, and
-  every removal first archives a full snapshot — uncommitted and untracked
-  files included — restorable later as a new worktree.
+  repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
+  activity, disk size, ahead/behind, and one-click Review pinned where the
+  branch diverged from main. Worktree tabs of one repo group together instead
+  of looking like separate repos. Rows badge merged / unpushed work against
+  the detected base and warn when parallel worktrees touch the same files;
+  **Merge & clean up** lands a worktree's branch (squash / merge /
+  fast-forward, exact commands previewed) and retires the worktree + branch
+  in one motion, and every removal first archives a full snapshot —
+  uncommitted and untracked files included — restorable later as a new
+  worktree. Select two or more attempts and **Compare** them side by side —
+  shared files highlighted — then pick the winner and land it. Creating a
+  worktree can start from any branch, remote branch, tag, or commit
+  (fetch-first for remote bases) and copies gitignored setup files listed in
+  `.worktreeinclude` (`.env`, local settings) so agents can run out of the
+  box.
 - **Everyday Git** — staging with per-change-block stage / discard / unstage
   inline in the diff, fetch / pull / push with streaming progress, branches,
   tags, stashes, remotes, cherry-pick, revert, merge, and a fully
