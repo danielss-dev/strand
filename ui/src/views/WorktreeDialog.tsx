@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
-import { errMessage } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 
@@ -9,13 +9,29 @@ import { useRepo } from '../stores/repo';
  * Modal for creating a worktree. Checks out a branch into a separate directory
  * on disk; the new worktree can optionally open as its own tab.
  *
- * Two modes, toggled by "Create a new branch": a new branch off HEAD, or an
- * existing local branch (git refuses one already checked out in another
- * worktree — that error surfaces inline). The destination defaults to a
- * sibling `<repo>.worktrees/<branch>` and is editable; until the user edits it
- * by hand it tracks the branch name.
+ * Two modes, toggled by "Create a new branch": a new branch cut from a chosen
+ * start point (HEAD, any branch/remote branch/tag, or a commit handed in via
+ * `initialStart` from the graph's context menu), or an existing local branch
+ * (git refuses one already checked out in another worktree — that error
+ * surfaces inline). A remote start point tracks it as upstream and offers a
+ * fetch-first step so the branch isn't cut from a stale local snapshot. The
+ * destination defaults to a sibling `<repo>.worktrees/<branch>` and is
+ * editable; until the user edits it by hand it tracks the branch name.
+ *
+ * When the repo has a `.worktreeinclude` (the Claude Code convention naming
+ * gitignored setup files — `.env`, local settings), the dialog offers to copy
+ * the matching files into the fresh worktree so agents can actually run there.
  */
-export function WorktreeDialog({ onClose }: { onClose: () => void }) {
+export function WorktreeDialog({
+  onClose,
+  onToast,
+  initialStart = null,
+}: {
+  onClose: () => void;
+  onToast?: (msg: string, kind?: 'success' | 'error') => void;
+  /** Pre-picked start point (branch/tag/commit) from "New worktree from here". */
+  initialStart?: { ref: string; label: string } | null;
+}) {
   const meta = useRepo((s) => s.meta);
   const refs = useRepo((s) => s.refs);
   const addWorktree = useRepo((s) => s.addWorktree);
@@ -27,9 +43,15 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
   const [newBranch, setNewBranch] = useState(true);
   const [branch, setBranch] = useState('');
   const [existing, setExisting] = useState(localBranches[0] ?? '');
+  // Start point for the new branch; '' = HEAD.
+  const [start, setStart] = useState(initialStart?.ref ?? '');
+  const [fetchFirst, setFetchFirst] = useState(false);
   const [dest, setDest] = useState('');
   const [destEdited, setDestEdited] = useState(false);
   const [openInTab, setOpenInTab] = useState(true);
+  // `.worktreeinclude` patterns of the source worktree; empty = no offer.
+  const [includePatterns, setIncludePatterns] = useState<string[]>([]);
+  const [copyInclude, setCopyInclude] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -39,6 +61,33 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
   const chosenBranch = newBranch ? branch.trim() : existing;
+  // A remote start point gets `--track` + the fetch-first offer.
+  const remoteStart = useMemo(
+    () => (newBranch && start ? refs.remote_branches.find((rb) => rb.name === start) ?? null : null),
+    [refs, newBranch, start],
+  );
+  // A start handed in from a context menu may be a plain commit — not in any
+  // ref list — so it needs its own option to stay selectable.
+  const customStart = useMemo(() => {
+    if (!initialStart) return null;
+    const known =
+      refs.branches.some((b) => b.name === initialStart.ref) ||
+      refs.remote_branches.some((rb) => rb.name === initialStart.ref) ||
+      refs.tags.some((t) => t.name === initialStart.ref);
+    return known ? null : initialStart;
+  }, [initialStart, refs]);
+
+  // Offer the `.worktreeinclude` copy only when the file exists and names
+  // something.
+  useEffect(() => {
+    if (!meta) return;
+    let cancelled = false;
+    void tauri
+      .repoWorktreeIncludePatterns(meta.path)
+      .then((p) => { if (!cancelled) setIncludePatterns(p); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [meta]);
 
   // Default destination = sibling `<repo>.worktrees/<branch-slug>`, tracking the
   // chosen branch until the user types their own path.
@@ -87,12 +136,35 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
   const canSubmit = !busy && chosenBranch.length > 0 && dest.trim().length > 0;
 
   async function submit() {
-    if (!canSubmit) return;
+    if (!canSubmit || !meta) return;
     setBusy(true);
     setError(null);
     try {
       const d = dest.trim();
-      await addWorktree(d, chosenBranch, newBranch);
+      // Cut from origin's tip, not a stale local snapshot of it.
+      if (newBranch && fetchFirst && remoteStart) {
+        await tauri.repoFetch(meta.path, remoteStart.remote);
+      }
+      await addWorktree(
+        d,
+        chosenBranch,
+        newBranch,
+        newBranch && start ? start : null,
+        !!remoteStart,
+      );
+      let copied = 0;
+      if (copyInclude && includePatterns.length > 0) {
+        try {
+          copied = (await tauri.repoWorktreeCopyInclude(meta.path, d)).length;
+        } catch {
+          // The worktree exists; a failed setup copy shouldn't fail the flow.
+        }
+      }
+      onToast?.(
+        copied > 0
+          ? `Worktree created — copied ${copied} setup file${copied === 1 ? '' : 's'}`
+          : 'Worktree created',
+      );
       if (openInTab) void openWorktree(d);
       onClose();
     } catch (e) {
@@ -101,6 +173,10 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
       if (mountedRef.current) setBusy(false);
     }
   }
+
+  const startLabel = start
+    ? customStart?.ref === start ? customStart.label : start
+    : headBranch ? `${headBranch} (HEAD)` : 'HEAD';
 
   return (
     <div
@@ -140,25 +216,84 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
             />
             <span>
               Create a new task branch
-              <span className="hint">
-                {headBranch ? `Starts from ${headBranch} (HEAD).` : 'Starts from HEAD.'}
-              </span>
+              <span className="hint">Starts from {startLabel}.</span>
             </span>
           </label>
 
           {newBranch ? (
-            <label className="clone-field">
-              <span className="lbl">Task branch</span>
-              <input
-                autoFocus
-                className="clone-input"
-                placeholder="feature/my-work"
-                value={branch}
-                disabled={busy}
-                onChange={(e) => setBranch(e.target.value.replace(/\s+/g, '-'))}
-                onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
-              />
-            </label>
+            <>
+              <label className="clone-field">
+                <span className="lbl">Task branch</span>
+                <input
+                  autoFocus
+                  className="clone-input"
+                  placeholder="feature/my-work"
+                  value={branch}
+                  disabled={busy}
+                  onChange={(e) => setBranch(e.target.value.replace(/\s+/g, '-'))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+                />
+              </label>
+              <label className="clone-field">
+                <span className="lbl">Start at</span>
+                <select
+                  className="clone-input"
+                  value={start}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setStart(v);
+                    const rb = refs.remote_branches.find((r) => r.name === v) ?? null;
+                    // Fetch-first is the sane default for a remote base…
+                    setFetchFirst(!!rb);
+                    // …and its short name is the obvious task-branch prefill.
+                    if (rb && branch.trim().length === 0) setBranch(rb.branch);
+                  }}
+                >
+                  <option value="">{headBranch ? `HEAD (${headBranch})` : 'HEAD'}</option>
+                  {customStart && (
+                    <option value={customStart.ref}>{customStart.label}</option>
+                  )}
+                  {localBranches.length > 0 && (
+                    <optgroup label="Branches">
+                      {localBranches.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {refs.remote_branches.length > 0 && (
+                    <optgroup label="Remote branches">
+                      {refs.remote_branches.map((rb) => (
+                        <option key={rb.full_name} value={rb.name}>{rb.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {refs.tags.length > 0 && (
+                    <optgroup label="Tags">
+                      {refs.tags.map((t) => (
+                        <option key={t.full_name} value={t.name}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </label>
+              {remoteStart && (
+                <label className="stash-check">
+                  <input
+                    type="checkbox"
+                    checked={fetchFirst}
+                    disabled={busy}
+                    onChange={(e) => setFetchFirst(e.target.checked)}
+                  />
+                  <span>
+                    Fetch {remoteStart.remote} first
+                    <span className="hint">
+                      Cut the branch from {remoteStart.name}'s current tip, not a stale local copy.
+                    </span>
+                  </span>
+                </label>
+              )}
+            </>
           ) : (
             <label className="clone-field">
               <span className="lbl">Branch</span>
@@ -187,6 +322,24 @@ export function WorktreeDialog({ onClose }: { onClose: () => void }) {
               onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
             />
           </label>
+
+          {includePatterns.length > 0 && (
+            <label className="stash-check">
+              <input
+                type="checkbox"
+                checked={copyInclude}
+                disabled={busy}
+                onChange={(e) => setCopyInclude(e.target.checked)}
+              />
+              <span>
+                Copy setup files from .worktreeinclude
+                <span className="hint">
+                  Gitignored files matching {includePatterns.slice(0, 3).join(', ')}
+                  {includePatterns.length > 3 ? ', …' : ''} — so the tree runs out of the box.
+                </span>
+              </span>
+            </label>
+          )}
 
           <label className="stash-check">
             <input

@@ -5,29 +5,42 @@ import { Icon } from '../components/Icon';
 import { pathLeaf, repoFamilyName, worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
-import type { Worktree, WorktreeArchive, WorktreeHealth } from '../lib/types';
+import type { Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats } from '../lib/types';
+import { WorktreeCompareDialog } from './WorktreeCompareDialog';
 import { WorktreeMergeDialog } from './WorktreeMergeDialog';
 
 interface WtStats {
   loading: boolean;
   dirty: number;
+  /** Workdir-relative paths of the dirty files — feeds the overlap check. */
+  dirtyPaths: string[];
   ahead: number;
   behind: number;
   lastSubject: string | null;
   lastTime: number | null;
   /** Ref-level health vs the detected base; `null` for main/detached rows. */
   health: WorktreeHealth | null;
+  /** Disk size / last activity / ±lines; arrives late (directory walk). */
+  fs: WorktreeStats | null;
 }
 
 const EMPTY_STATS: WtStats = {
   loading: true,
   dirty: 0,
+  dirtyPaths: [],
   ahead: 0,
   behind: 0,
   lastSubject: null,
   lastTime: null,
   health: null,
+  fs: null,
 };
+
+/** Sibling worktrees whose uncommitted changes touch the same files. */
+interface Overlap {
+  name: string;
+  files: string[];
+}
 
 /** Snapshot of the row a merge dialog was opened for — kept stable while the
  *  underlying lists refresh mid-flow. */
@@ -59,14 +72,16 @@ export function Worktrees({
   const openWorktree = useRepo((s) => s.openWorktree);
   const removeWorktree = useRepo((s) => s.removeWorktree);
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
-  const setBaseline = useRepo((s) => s.setBaseline);
-  const setView = useRepo((s) => s.setView);
+  const reviewWorktree = useRepo((s) => s.reviewWorktree);
 
   const [stats, setStats] = useState<Record<string, WtStats>>({});
   // Worktree path whose plain remove git refused (dirty/locked); its row
   // swaps the trash button for an explicit Force remove / Cancel pair.
   const [forcePath, setForcePath] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
+  // Worktree paths ticked for the best-of-N comparison.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [compareOpen, setCompareOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<MergeTarget | null>(null);
   const [showCleanup, setShowCleanup] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState(false);
@@ -111,8 +126,10 @@ export function Worktrees({
           setStats((s) => ({
             ...s,
             [w.path]: {
+              ...(s[w.path] ?? EMPTY_STATS),
               loading: false,
               dirty: status.length,
+              dirtyPaths: status.map((f) => f.path),
               ahead: m.ahead,
               behind: m.behind,
               lastSubject: log[0]?.subject ?? null,
@@ -126,6 +143,15 @@ export function Worktrees({
           }
         }
       })();
+      // Disk size + activity walk the whole tree — fetched apart from the
+      // cheap row stats so a huge node_modules never delays the badges.
+      void tauri
+        .repoWorktreeStats(w.path)
+        .then((fs) => {
+          if (cancelled) return;
+          setStats((s) => ({ ...s, [w.path]: { ...(s[w.path] ?? EMPTY_STATS), fs } }));
+        })
+        .catch(() => {});
     }
 
     return () => { cancelled = true; };
@@ -157,10 +183,44 @@ export function Worktrees({
       return 3;
     };
 
+    // Within a rank, most recently touched first — "what is the agent doing
+    // right now" floats to the top.
+    const activity = (w: Worktree): number => stats[w.path]?.fs?.last_activity_unix ?? 0;
+
     return [...worktrees].sort((a, b) =>
       rank(a) - rank(b)
+      || activity(b) - activity(a)
       || worktreeName(a).localeCompare(worktreeName(b))
       || a.path.localeCompare(b.path));
+  }, [worktrees, stats]);
+
+  // Drop selections whose worktrees disappeared (removed / pruned).
+  useEffect(() => {
+    setSelected((prev) => {
+      const live = new Set(worktrees.map((w) => w.path));
+      const next = new Set([...prev].filter((p) => live.has(p)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pathsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pairwise uncommitted-file overlap between worktrees of the family — the
+  // early warning that parallel agents are about to collide at merge time.
+  const overlaps = useMemo(() => {
+    const dirty = worktrees
+      .map((w) => ({ w, set: new Set(stats[w.path]?.dirtyPaths ?? []) }))
+      .filter((x) => x.set.size > 0);
+    const out = new Map<string, Overlap[]>();
+    for (const a of dirty) {
+      for (const b of dirty) {
+        if (a.w.path === b.w.path) continue;
+        const files = [...a.set].filter((p) => b.set.has(p));
+        if (files.length === 0) continue;
+        const list = out.get(a.w.path) ?? [];
+        list.push({ name: worktreeName(b.w), files });
+        out.set(a.w.path, list);
+      }
+    }
+    return out;
   }, [worktrees, stats]);
 
   useEffect(() => {
@@ -195,36 +255,36 @@ export function Worktrees({
     [worktrees, stats],
   );
 
+  // Detect-base + open + pin-baseline lives in the store (`reviewWorktree`)
+  // so the sidebar's context menu drives the identical flow; this wrapper
+  // only owns the toast copy.
   const review = (w: Worktree) => {
     void (async () => {
-      const target = w.branch ?? w.head;
-      let baselineOid: string | null = null;
-
-      // Review against the branch this worktree actually forked from, not
-      // the main worktree's branch — a worktree cut from `portal30` must
-      // baseline at merge-base(HEAD, portal30), or the diff swallows all of
-      // portal30's own work (DAN-14).
-      if (!w.is_main && target) {
-        try {
-          const base = await tauri.repoDetectBaseBranch(w.path, target);
-          if (base) {
-            baselineOid = base.merge_base;
-            onToast(`Reviewing ${w.branch ?? worktreeName(w)} vs ${base.name}`);
-          }
-        } catch (e) {
-          onToast(`Can't detect base branch: ${errMessage(e)}`, 'error');
-        }
-      }
-
-      const nextView = baselineOid ? 'review' : 'local';
-      setView(nextView);
-      await openWorktree(w.path);
-      if (baselineOid) {
-        await setBaseline(baselineOid);
-      }
-      setView(nextView);
+      const { base, detectError } = await reviewWorktree(w);
+      if (base) onToast(`Reviewing ${w.branch ?? worktreeName(w)} vs ${base}`);
+      else if (detectError) onToast(`Can't detect base branch: ${detectError}`, 'error');
     })();
   };
+
+  // A row is a comparable "attempt" when it's a linked worktree on a branch.
+  const selectable = (w: Worktree) => !w.is_main && !!w.branch;
+  const toggleSelected = (w: Worktree) => {
+    if (!selectable(w)) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(w.path)) next.delete(w.path);
+      else next.add(w.path);
+      return next;
+    });
+  };
+
+  // The palette's "Clean up merged worktrees…" lands here after switching to
+  // this view — same dialog, same candidate list.
+  useEffect(() => {
+    const onCleanupRequest = () => setShowCleanup(true);
+    window.addEventListener('strand:worktrees-cleanup', onCleanupRequest);
+    return () => window.removeEventListener('strand:worktrees-cleanup', onCleanupRequest);
+  }, []);
 
   const remove = (w: Worktree, force: boolean) => {
     void (async () => {
@@ -336,6 +396,11 @@ export function Worktrees({
       e.preventDefault();
       const w = orderedWorktrees[focused];
       if (w) review(w);
+    } else if (e.key === ' ') {
+      // Space ticks the focused row for the best-of-N comparison.
+      e.preventDefault();
+      const w = orderedWorktrees[focused];
+      if (w) toggleSelected(w);
     }
   };
 
@@ -360,6 +425,17 @@ export function Worktrees({
             <Icon name="plus" size={13} stroke={2} />
             <span>New worktree</span>
           </button>
+          {selected.size >= 2 && (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setCompareOpen(true)}
+              title="Compare the selected attempts side by side and pick the winner"
+            >
+              <Icon name="worktree" size={12} />
+              <span>Compare ({selected.size})</span>
+            </button>
+          )}
           {cleanupCandidates.length > 0 && (
             <button
               type="button"
@@ -424,15 +500,30 @@ export function Worktrees({
                 onDoubleClick={() => review(w)}
                 title={w.path}
               >
-                <div className="wt-card-icon">
-                  <Icon name={w.is_current ? 'check' : 'worktree'} size={15} />
-                </div>
+                {selectable(w) ? (
+                  <label
+                    className="wt-select"
+                    title="Select for comparison (Space)"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(w.path)}
+                      onChange={() => toggleSelected(w)}
+                      aria-label={`Select ${name} for comparison`}
+                    />
+                  </label>
+                ) : (
+                  <div className="wt-card-icon">
+                    <Icon name={w.is_current ? 'check' : 'worktree'} size={15} />
+                  </div>
+                )}
 
                 <div className="wt-card-main">
                   <div className="wt-card-top">
                     <span className="wt-branch">{name}</span>
                     <span className="wt-detail">{detail}</span>
-                    <Tags worktree={w} health={st.health} />
+                    <Tags worktree={w} health={st.health} overlaps={overlaps.get(w.path) ?? []} />
                     <Drift ahead={st.ahead} behind={st.behind} />
                   </div>
                   <div className="wt-card-sub">
@@ -443,7 +534,22 @@ export function Worktrees({
                         <span className={st.dirty > 0 ? 'wt-dirty' : 'wt-clean'}>
                           {st.dirty > 0 ? `${st.dirty} file${st.dirty === 1 ? '' : 's'} changed` : 'clean'}
                         </span>
-                        {st.lastTime != null && <span className="wt-dim">· {relTime(st.lastTime)}</span>}
+                        {st.fs != null && (st.fs.insertions > 0 || st.fs.deletions > 0) && (
+                          <span className="wt-lines">+{st.fs.insertions} −{st.fs.deletions}</span>
+                        )}
+                        {st.fs?.last_activity_unix != null && (
+                          <span
+                            className="wt-dim"
+                            title="Newest file change in the working directory"
+                          >
+                            · touched {agoText(st.fs.last_activity_unix)}
+                          </span>
+                        )}
+                        {st.fs != null && (
+                          <span className="wt-dim" title="Working directory size (without .git)">
+                            · {bytesText(st.fs.disk_bytes)}
+                          </span>
+                        )}
                         {st.lastSubject && <span className="wt-msg">· {st.lastSubject}</span>}
                       </>
                     )}
@@ -582,11 +688,32 @@ export function Worktrees({
         </div>
       )}
 
+      {compareOpen && (
+        <WorktreeCompareDialog
+          worktrees={orderedWorktrees.filter((w) => selected.has(w.path))}
+          onClose={() => setCompareOpen(false)}
+          onReview={(w) => {
+            setCompareOpen(false);
+            review(w);
+          }}
+          onPick={(w) => {
+            setCompareOpen(false);
+            const st = stats[w.path];
+            if (st?.health) {
+              setMergeTarget({ worktree: w, health: st.health, dirty: st.dirty });
+            } else {
+              onToast('Still loading this worktree’s health — try again in a moment', 'error');
+            }
+          }}
+        />
+      )}
+
       {mergeTarget && (
         <WorktreeMergeDialog
           worktree={mergeTarget.worktree}
           health={mergeTarget.health}
           dirty={mergeTarget.dirty}
+          overlaps={overlaps.get(mergeTarget.worktree.path) ?? []}
           onClose={() => setMergeTarget(null)}
           onToast={onToast}
         />
@@ -662,17 +789,42 @@ function Metric({ value, label }: { value: number; label: string }) {
   );
 }
 
-function Tags({ worktree, health }: { worktree: Worktree; health: WorktreeHealth | null }) {
+function Tags({
+  worktree,
+  health,
+  overlaps,
+}: {
+  worktree: Worktree;
+  health: WorktreeHealth | null;
+  overlaps: Overlap[];
+}) {
   // Work that exists only in this worktree: unmerged commits with no
   // upstream, or an upstream that hasn't seen them yet.
   const atRisk =
     !!health &&
     !health.merged &&
     (health.has_upstream ? health.unpushed > 0 : health.ahead_of_base > 0);
+  const tool = worktreeTool(worktree);
   return (
     <>
       {worktree.is_current && <span className="wt-tag current">current</span>}
       {worktree.is_main && <span className="wt-tag">main</span>}
+      {tool && <span className="wt-tag" title={`Created by ${tool}`}>{tool}</span>}
+      {overlaps.length > 0 && (
+        <span
+          className="wt-tag warn"
+          title={
+            'Uncommitted changes touch the same files as: ' +
+            overlaps
+              .map((o) => `${o.name} (${o.files.slice(0, 5).join(', ')}${o.files.length > 5 ? ', …' : ''})`)
+              .join('; ') +
+            ' — parallel work here is likely to conflict at merge time'
+          }
+        >
+          overlaps {overlaps[0].name}
+          {overlaps.length > 1 ? ` +${overlaps.length - 1}` : `: ${overlaps[0].files.length}`}
+        </span>
+      )}
       {health?.merged && (
         <span
           className="wt-tag merged"
@@ -729,4 +881,29 @@ function relTime(unix: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/** Compact "how long ago" for the activity readout. */
+function agoText(unix: number): string {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - unix));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+/** Human-readable directory size — makes the cost of stale trees visible. */
+function bytesText(n: number): string {
+  const mb = n / (1024 * 1024);
+  if (mb < 1) return `${Math.max(1, Math.round(n / 1024))} KB`;
+  if (mb < 1024) return `${mb < 100 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+/** Which agent tool created this worktree, when its conventions give it away
+ *  (Claude Code's `.claude/worktrees/`, Vibe Kanban's `vk/` branches). */
+function worktreeTool(w: Worktree): string | null {
+  if (w.path.toLowerCase().includes('/.claude/worktrees/')) return 'claude';
+  if (w.branch?.startsWith('vk/')) return 'vibe kanban';
+  return null;
 }

@@ -8,9 +8,10 @@ import { ignorePatterns } from '../lib/ignore';
 import { worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree } from '../lib/types';
+import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree, WorktreeHealth } from '../lib/types';
 import type { RemoteDialogMode } from '../views/RemoteDialog';
 import { RenameFileDialog } from '../views/RenameFileDialog';
+import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
 
 type SideTab = 'git' | 'files';
 
@@ -68,8 +69,9 @@ interface SidebarProps {
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
   onCreateBranch: (start: string | null, label: string) => void;
-  /** Open the New-worktree dialog. */
-  onCreateWorktree: () => void;
+  /** Open the New-worktree dialog, optionally pre-picking a start point
+   * (`ref` = branch/tag/commit for the new task branch). */
+  onCreateWorktree: (start?: { ref: string; label: string }) => void;
   /** Open the Merge dialog: merge `source` into the current branch `into`. */
   onMerge: (source: string, into: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
@@ -177,6 +179,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const openWorktree = useRepo((s) => s.openWorktree);
   const removeWorktree = useRepo((s) => s.removeWorktree);
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
+  const refreshWorktrees = useRepo((s) => s.refreshWorktrees);
+  const reviewWorktree = useRepo((s) => s.reviewWorktree);
+  // "Merge & clean up" opened from a worktree's context menu; state fetched
+  // on demand (the sidebar doesn't track per-worktree health).
+  const [wtMerge, setWtMerge] = useState<{
+    worktree: Worktree;
+    health: WorktreeHealth;
+    dirty: number;
+  } | null>(null);
   const rebase = useRepo((s) => s.rebase);
   const setBaseline = useRepo((s) => s.setBaseline);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
@@ -509,6 +520,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon: 'plus',
       onSelect: () => onCreateBranch(b.name, b.name),
     };
+    const newWorktreeItem: MenuItem = {
+      label: 'New worktree from here…',
+      icon: 'worktree',
+      onSelect: () => onCreateWorktree({ ref: b.name, label: b.name }),
+    };
     const renameItem: MenuItem = {
       label: 'Rename branch…',
       icon: 'edit',
@@ -521,6 +537,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       return [
         { label: 'Current branch', disabled: true, onSelect: () => {} },
         newBranchItem,
+        newWorktreeItem,
         renameItem,
         {
           label: 'Interactive rebase…',
@@ -540,6 +557,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         ? { label: 'Open worktree', icon: 'worktree', onSelect: () => void openWorktree(wt.path) }
         : { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
       newBranchItem,
+      newWorktreeItem,
       renameItem,
     ];
     if (currentBranch) {
@@ -572,6 +590,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       label: 'New branch from here…',
       icon: 'plus',
       onSelect: () => onCreateBranch(rb.name, rb.name),
+    });
+    items.push({
+      label: 'New worktree from here…',
+      icon: 'worktree',
+      onSelect: () => onCreateWorktree({ ref: rb.name, label: rb.name }),
     });
     items.push({
       label: `Delete branch on ${rb.remote}`,
@@ -687,6 +710,43 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       }
     })();
   };
+  // The same review flow as the overview's Review button (store-owned).
+  const runWorktreeReview = (w: Worktree) => {
+    void (async () => {
+      const { base, detectError } = await reviewWorktree(w);
+      if (base) onToast(`Reviewing ${w.branch ?? leafName(w.path)} vs ${base}`);
+      else if (detectError) onToast(`Can't detect base branch: ${detectError}`, 'error');
+    })();
+  };
+  // "Merge & clean up" needs the worktree's health + dirty count before the
+  // dialog can render — fetched on demand when the menu item is picked.
+  const openWorktreeMerge = (w: Worktree) => {
+    if (!w.branch) return;
+    void (async () => {
+      try {
+        const [health, status] = await Promise.all([
+          tauri.repoWorktreeHealth(w.path, w.branch as string),
+          tauri.repoStatus(w.path),
+        ]);
+        setWtMerge({ worktree: w, health, dirty: status.length });
+      } catch (e) {
+        onToast(`Can't load worktree state: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
+  const runWorktreeLock = (w: Worktree, lock: boolean) => {
+    if (!meta) return;
+    void (async () => {
+      try {
+        if (lock) await tauri.repoWorktreeLock(meta.path, w.path, null);
+        else await tauri.repoWorktreeUnlock(meta.path, w.path);
+        await refreshWorktrees();
+        onToast(lock ? `Locked ${leafName(w.path)}` : `Unlocked ${leafName(w.path)}`);
+      } catch (e) {
+        onToast(`${lock ? 'Lock' : 'Unlock'} failed: ${errMessage(e)}`, 'error');
+      }
+    })();
+  };
   const worktreeMenu = (w: Worktree): MenuItem[] => {
     const items: MenuItem[] = [
       {
@@ -694,9 +754,22 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         icon: 'folder-open',
         onSelect: () => void openWorktree(w.path),
       },
-      { label: 'Show in overview', icon: 'worktree', onSelect: () => setView('worktrees') },
-      { label: 'Copy path', icon: 'file', onSelect: () => void copyToClipboard(w.path) },
     ];
+    if (!w.is_main) {
+      items.push({ label: 'Review vs base', icon: 'eye', onSelect: () => runWorktreeReview(w) });
+      if (w.branch) {
+        items.push({ label: 'Merge & clean up…', icon: 'branch', onSelect: () => openWorktreeMerge(w) });
+      }
+    }
+    items.push({ label: 'Show in overview', icon: 'worktree', onSelect: () => setView('worktrees') });
+    items.push({ label: 'Copy path', icon: 'file', onSelect: () => void copyToClipboard(w.path) });
+    if (!w.is_main) {
+      items.push(
+        w.is_locked
+          ? { label: 'Unlock worktree', icon: 'lock', onSelect: () => runWorktreeLock(w, false) }
+          : { label: 'Lock worktree', icon: 'lock', onSelect: () => runWorktreeLock(w, true) },
+      );
+    }
     // The main worktree and the one you're in can't be removed.
     if (!w.is_main && !w.is_current) {
       items.push({ label: 'Remove worktree', icon: 'trash', danger: true, confirm: true, onSelect: () => runWorktreeRemove(w, false) });
@@ -791,6 +864,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
 
   return (
     <div className="sidebar">
+      {wtMerge && (
+        <WorktreeMergeDialog
+          worktree={wtMerge.worktree}
+          health={wtMerge.health}
+          dirty={wtMerge.dirty}
+          onClose={() => setWtMerge(null)}
+          onToast={onToast}
+        />
+      )}
       <div className="side-primary">
         <SideRow
           icon="changes"
@@ -847,7 +929,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             collapsed={!sections.worktrees}
             onToggle={() => toggle('worktrees')}
             count={filteredWorktrees.length}
-            action={{ icon: 'plus', title: 'New worktree…', onClick: onCreateWorktree }}
+            action={{ icon: 'plus', title: 'New worktree…', onClick: () => onCreateWorktree() }}
           />
           {sections.worktrees &&
             filteredWorktrees.map((w) => (
