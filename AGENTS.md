@@ -144,7 +144,14 @@ After finishing any non-trivial task, before declaring "done":
    "Features" / "Status" sections should reflect reality. New top-level
    files/folders → update the layout block. Keep the README scannable —
    it isn't a changelog.
-4. **Memory.** Save durable things (conventions, "why we did it this
+4. **Update the user guide (`website/docs/`)** when user-visible behavior
+   changed — new feature, renamed label, changed shortcut, removed
+   surface. The guide is plain markdown (one file per page,
+   `manifest.json` for order); edit the affected page(s) in the same
+   change that ships the behavior, and only document what actually
+   exists in `ui/src`. If the landing page (`website/index.html`) makes
+   a claim your change invalidates, fix that too.
+5. **Memory.** Save durable things (conventions, "why we did it this
    way", policy decisions) to the agent memory system. Don't write
    transient task state there.
 
