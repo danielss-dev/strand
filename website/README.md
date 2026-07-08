@@ -32,6 +32,15 @@ Preview locally with `pnpm site` from the repo root (serves on
   fuzzy / highlighted UI): it scrolls to page sections, switches the demo
   views, sets the accent, and opens GitHub / X. Items live in `ITEMS` in
   `script.js` — add new destinations there.
+- `docs/` — the user guide, served at `/docs/`. Content is plain markdown
+  (`*.md`, one file per page) rendered client-side by `docs/index.html` +
+  `docs/docs.js` using the vendored `docs/marked.min.js` (still no build
+  step). **To update a page, edit its `.md` and redeploy. To add a page,
+  drop the `.md` in `docs/` and add a row to `docs/manifest.json`** (order
+  there drives the sidebar and prev/next pager). Cross-page links are plain
+  relative `foo.md` links — the viewer rewrites them (and they render on
+  GitHub too). Keep the guide in sync with app releases: every claim in it
+  was fact-checked against `ui/src` on 2026-07-08 (v0.9.0).
 
 ## Before launch
 

@@ -1562,8 +1562,17 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   pricing section. **Deployed on Railway** — project `landings`, service
   `strand-landing`, live at https://strand.danielss.dev (custom domain DNS
   flipped). Site links point at the public `danielss-dev/strand` repo as of
-  2026-06-12. Still pending: a first GitHub release so the download buttons
-  resolve, og:image, and serving the updater `latest.json`.)
+  2026-06-12. Download buttons resolve release assets and `latest.json` is
+  served from GitHub Releases. Still pending: og:image.)
+- ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
+  fact-checked markdown pages + `manifest.json`, rendered client-side by
+  `docs/index.html`/`docs.js` with vendored `marked.min.js`; no build step —
+  updating docs = editing the `.md` files and redeploying. Landing page synced
+  to 0.9.x: Linux download button live, installer sizes corrected, worktree
+  Compare / Merge & clean up + Workspaces + AI commit messages cards, Docs
+  link in nav/footer/⌘K.)
+- ☐ Keep `website/docs/` in sync with app releases — re-check the guide (and
+  landing claims) whenever a release adds or changes user-visible behavior.
 
 ---
 
