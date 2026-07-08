@@ -7,6 +7,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 
 **[Website](https://strand.danielss.dev)** ·
+**[Docs](https://strand.danielss.dev/docs/)** ·
 **[Download](https://github.com/danielss-dev/strand/releases/latest)** ·
 **[Roadmap](./ROADMAP.md)** ·
 **[Commercial license](./COMMERCIAL.md)**
@@ -148,7 +149,7 @@ strand/
 │   ├── strand-core/    # Git engine (gix for reads, git2 for writes)
 │   └── strand-tauri/   # Tauri 2 app shell + IPC commands
 ├── ui/                 # Vite + React + TypeScript frontend
-├── website/            # landing page for strand.danielss.dev (no build step)
+├── website/            # strand.danielss.dev: landing page + user guide (website/docs/, no build step)
 ├── docs/               # design notes, perf baseline, packaging
 ├── PRD.md              # product spec
 ├── ROADMAP.md          # milestones and status

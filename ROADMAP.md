@@ -1490,6 +1490,19 @@ store-level `reviewWorktree`); palette gained Clean up / Prune entries; the
 ⌘4→⌘5 worktrees copy drift is fixed. Verified: `cargo test -p strand-core`
 (109, +7 worktree), workspace clippy clean, `tsc`, `vitest` (200).
 
+**Website user guide + landing refresh (2026-07-08):** The site grew real
+documentation: `website/docs/` holds nine markdown guide pages (overview,
+getting started, repositories & workspaces, reviewing agent changes,
+worktrees, everyday git, commits & history, keyboard & palette, settings),
+each fact-checked against `ui/src` before landing, rendered client-side by a
+static viewer (`docs/index.html` + vendored `marked.min.js` — the site keeps
+its no-build-step invariant; updating docs = editing the `.md` and
+redeploying). The landing page was synced to 0.9.x reality: Linux download
+button live (AppImage), stale ~10 MB installer claims corrected to real
+15/31 MB sizes, the worktrees card now covers Compare + Merge & clean up, new
+Workspaces and AI-commit-messages cards fill the feature grid, and Docs is
+linked from the nav, footer, and ⌘K palette.
+
 ---
 
 ## 1.1+ — Post-1.0

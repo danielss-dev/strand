@@ -36,6 +36,7 @@
         <a href="#speed">Speed</a>
         <a href="#keyboard">Keyboard</a>
         <a href="#pricing">Pricing</a>
+        <a href="docs/">Docs</a>
         <a href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">GitHub<span class="ext">↗</span></a>
       </nav>
       <a class="btn btn-accent btn-sm" href="#download">Download</a>
@@ -58,7 +59,7 @@
           <a class="btn btn-accent" href="#download">Download the alpha</a>
           <a class="btn btn-ghost" href="https://github.com/danielss-dev/strand/releases" target="_blank" rel="noopener">Release notes</a>
         </div>
-        <p class="cta-note" data-reveal>macOS &amp; Windows today · Linux soon · ~10&nbsp;MB</p>
+        <p class="cta-note" data-reveal>macOS · Windows · Linux · free for individuals</p>
 
         <div class="accents" role="group" aria-label="Accent color" data-reveal>
           <span class="accents-label">Make it yours</span>
@@ -459,9 +460,9 @@
             <div class="stat-sub">the path every agent edit touches</div>
           </div>
           <div class="stat">
-            <div class="stat-num"><span data-count="10">10</span><small>MB</small></div>
+            <div class="stat-num"><span data-count="15">15</span><small>MB</small></div>
             <div class="stat-label">installer, whole app</div>
-            <div class="stat-sub">macOS DMG · Windows MSI</div>
+            <div class="stat-sub">Windows MSI · Linux deb/rpm · macOS universal ~31 MB</div>
           </div>
           <div class="stat">
             <div class="stat-num">0<small>&nbsp;</small></div>
@@ -523,7 +524,7 @@
           <div class="card" style="--c:var(--b-3)">
             <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 2v14"/><path d="M5 7c0-2 1.5-3 3.5-3H13"/><circle cx="13" cy="4" r="1.6"/><path d="M5 11c0 2 1.5 3 3.5 3H13"/><circle cx="13" cy="14" r="1.6"/></svg></div>
             <h3>Worktrees, first-class</h3>
-            <p>One worktree per agent, grouped as tabs, with a dashboard and one-click review against the base branch's fork point.</p>
+            <p>One worktree per agent, grouped as tabs, with a dashboard, one-click review from the fork point, side-by-side <em>Compare</em> of parallel attempts, and <em>Merge&nbsp;&amp;&nbsp;clean&nbsp;up</em> to land the winner — removals snapshot-archived, always restorable.</p>
           </div>
           <div class="card" style="--c:var(--b-5)">
             <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 16 9 9 16 2 9Z"/></svg></div>
@@ -548,7 +549,17 @@
           <div class="card" style="--c:var(--accent)">
             <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m3 5 4 4-4 4"/><path d="M9 13h6"/></svg></div>
             <h3>Honest git</h3>
-            <p>Network and signing shell out to <em>your</em> git — credentials, SSH agent, GPG, hooks, and LFS work on day one. No re-implementation surprises.</p>
+            <p>Network and signing shell out to <em>your</em> git — credentials, SSH agent, GPG, and LFS work on day one. No re-implementation surprises.</p>
+          </div>
+          <div class="card card-wide" style="--c:var(--b-3)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="10" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="10" width="6" height="6" rx="1.5"/><rect x="10" y="10" width="6" height="6" rx="1.5"/></svg></div>
+            <h3>Workspaces</h3>
+            <p>Group the repos behind one product. Open a workspace to focus the rail on just those repos, review changes across all of them in one merged queue, and import straight from a VS Code <span class="mono-inline">.code-workspace</span>.</p>
+          </div>
+          <div class="card card-wide" style="--c:var(--b-4)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 10.8 6.6 15.5 7.2 12 10.4 13 15 9 12.6 5 15 6 10.4 2.5 7.2 7.2 6.6Z"/></svg></div>
+            <h3>AI commit messages</h3>
+            <p>Suggest subject + body from your staged changes via the ChatGPT subscription you already have (Codex CLI) or Claude Code — no API key, sign in once in Settings → AI.</p>
           </div>
         </div>
       </div>
@@ -598,11 +609,11 @@
       <div class="wrap">
         <svg class="cta-mark" aria-hidden="true" data-reveal><use href="#strand-mark"/></svg>
         <h2 data-reveal>Your agent is already typing.</h2>
-        <p class="lead lead-center" data-reveal>Be ready to review it. Download the alpha — about 10&nbsp;MB, opens your biggest repo in well under a second.</p>
+        <p class="lead lead-center" data-reveal>Be ready to review it. Download the alpha — it opens your biggest repo in well under a second.</p>
         <div class="cta-row cta-row-center" data-reveal>
           <a class="btn btn-accent" data-artifact=".dmg" href="https://github.com/danielss-dev/strand/releases/latest" target="_blank" rel="noopener"> Download for macOS</a>
           <a class="btn btn-ghost" data-artifact=".msi" href="https://github.com/danielss-dev/strand/releases/latest" target="_blank" rel="noopener">⊞ Download for Windows</a>
-          <span class="btn btn-soon" aria-disabled="true">🐧 Linux — soon</span>
+          <a class="btn btn-ghost" data-artifact=".AppImage" href="https://github.com/danielss-dev/strand/releases/latest" target="_blank" rel="noopener">🐧 Download for Linux</a>
         </div>
         <p class="cta-note" data-reveal>Alpha builds · auto-updates once you're in · free for individuals</p>
       </div>
@@ -622,6 +633,7 @@
       <div class="footer-col">
         <h4>Product</h4>
         <a href="#download">Download</a>
+        <a href="docs/">Docs</a>
         <a href="#pricing">Pricing</a>
         <a href="https://github.com/danielss-dev/strand/blob/main/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a>
       </div>

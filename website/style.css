@@ -720,6 +720,7 @@ p { margin: 0; }
 
 /* ─── Feature grid ─── */
 .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 60px; }
+.card-wide { grid-column: span 2; }
 .card {
   background: var(--bg-panel); border: 1px solid var(--border);
   border-radius: var(--r-xl); padding: 22px 20px;
@@ -871,6 +872,7 @@ p { margin: 0; }
   .d-scroll { max-height: 380px; }
   .price-grid { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr; }
+  .card-wide { grid-column: auto; }
   .stats { grid-template-columns: 1fr; gap: 32px; }
   .stat { border-left: none; padding-left: 0; }
   .footer-row { grid-template-columns: 1fr; gap: 36px; }
