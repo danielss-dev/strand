@@ -4535,14 +4535,24 @@ textarea.clone-input {
 .pr-toolbar strong { color: var(--text); font-size: 12px; }
 .pr-toolbar span { color: var(--text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-toolbar .h-link { display: inline-flex; align-items: center; gap: 5px; }
+.pr-toolbar .pr-back { flex: 0 0 auto; color: var(--text); font-weight: 600; }
 
 .pr-main { flex: 1; min-height: 0; }
 
-.pr-list {
+.pr-list-screen {
   height: 100%;
   overflow: auto;
+  background: var(--bg-panel);
+}
+
+.pr-list {
+  width: min(100%, 960px);
+  min-height: 100%;
+  margin: 0 auto;
+  overflow: visible;
   padding: 6px;
   background: var(--bg-panel);
+  border-inline: 1px solid var(--border);
 }
 
 .pr-list:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }

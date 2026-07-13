@@ -1095,11 +1095,11 @@ official CLI unless OS-keychain storage is explicitly part of the change.
 
 ---
 
-## Provider list queries stay shallow; nested data loads per selection
+## Provider list queries stay shallow; nested data loads per activation
 
 **Rule.** Never request nested comments, commits, reviews, files, or checks for
 an entire hosted-PR list. The index query carries only row fields; load rich
-metadata for the selected PR after a short settled-selection delay.
+metadata only after explicit PR activation (or current-branch auto-open).
 
 **Why.** `gh pr list --limit 100` with comments + commits + latest reviews +
 check rollups asked GitHub GraphQL to traverse up to 1,000,000 possible nodes,
@@ -1109,10 +1109,12 @@ detail calls would avoid that cap but turn j/k key-repeat into a subprocess
 storm.
 
 **How to apply.** GitHub uses shallow `gh pr list` plus one `gh pr view` for the
-settled row. Other providers follow the same boundary even if their present API
-would tolerate a large response. Generation-gate responses so a slow previous
-selection cannot replace the active detail, and append login guidance only
-when stderr actually indicates authentication failure.
+opened row. Other providers follow the same boundary even if their present API
+would tolerate a large response. List focus may move freely; Enter/click opens
+details, while only an active source-branch match may auto-open. Generation-gate
+responses so a slow previous activation cannot replace the active detail, and
+append login guidance only when stderr actually indicates authentication
+failure.
 
 ---
 

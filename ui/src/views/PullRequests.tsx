@@ -6,7 +6,13 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ParsedDiff } from '../components/Diff';
 import { Icon, type IconName } from '../components/Icon';
 import { renderMarkdown } from '../lib/markdown';
-import { checkTone, diffStats, markdownUrl, parsePullRequestPatch } from '../lib/pullRequests';
+import {
+  checkTone,
+  diffStats,
+  markdownUrl,
+  parsePullRequestPatch,
+  pullRequestForBranch,
+} from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import type { PullRequest, PullRequestCheck, PullRequestList } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -281,8 +287,8 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
 
   return (
     <div className="pr-changes">
-      <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes">
-        <Panel defaultSize={28} minSize={18} maxSize={48}>
+      <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes-v2">
+        <Panel defaultSize={22} minSize={14} maxSize={36}>
           <div
             className="pr-file-list"
             role="listbox"
@@ -420,8 +426,11 @@ function PullRequestDetails({
 
 export function PullRequests() {
   const path = useRepo((state) => state.activePath);
+  const meta = useRepo((state) => state.meta);
+  const currentBranch = meta && !meta.detached ? meta.branch : null;
   const [data, setData] = useState<PullRequestList | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [openedId, setOpenedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PullRequest | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -430,6 +439,7 @@ export function PullRequests() {
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
+  const autoOpenedContext = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!path) return;
@@ -439,20 +449,31 @@ export function PullRequests() {
     try {
       const next = await tauri.repoPullRequests(path);
       if (generation.current !== current) return;
+      const branchPullRequest = pullRequestForBranch(next.pull_requests, currentBranch);
+      const preferredId = branchPullRequest?.id ?? next.pull_requests[0]?.id ?? null;
+      const autoOpenContext = `${path}\0${currentBranch ?? '<detached>'}`;
+      const shouldAutoOpen = autoOpenedContext.current !== autoOpenContext;
       setData(next);
       setSelectedId((selected) =>
-        next.pull_requests.some((pr) => pr.id === selected)
+        !shouldAutoOpen && next.pull_requests.some((pr) => pr.id === selected)
           ? selected
-          : (next.pull_requests[0]?.id ?? null));
+          : preferredId);
+      setOpenedId((opened) =>
+        next.pull_requests.some((pr) => pr.id === opened) ? opened : null);
+      if (shouldAutoOpen) {
+        autoOpenedContext.current = autoOpenContext;
+        setOpenedId(branchPullRequest?.id ?? null);
+      }
     } catch (caught) {
       if (generation.current !== current) return;
       setData(null);
       setSelectedId(null);
+      setOpenedId(null);
       setError(errMessage(caught));
     } finally {
       if (generation.current === current) setLoading(false);
     }
-  }, [path]);
+  }, [currentBranch, path]);
 
   useEffect(() => {
     void refresh();
@@ -466,9 +487,13 @@ export function PullRequests() {
     () => data?.pull_requests.find((pr) => pr.id === selectedId) ?? null,
     [data, selectedId],
   );
+  const openedSummary = useMemo(
+    () => data?.pull_requests.find((pr) => pr.id === openedId) ?? null,
+    [data, openedId],
+  );
 
   useEffect(() => {
-    if (!path || selectedId == null || !data) {
+    if (!path || openedId == null || !data) {
       setDetail(null);
       setDetailError(null);
       setDetailLoading(false);
@@ -478,10 +503,10 @@ export function PullRequests() {
     setDetail(null);
     setDetailError(null);
     setDetailLoading(true);
-    // Avoid spawning one provider CLI per key-repeat while the user walks the
-    // list; only the row they settle on pays for a rich-detail request.
+    // Briefly coalesce rapid pointer activation; keyboard list navigation does
+    // not load details until Enter opens the selected PR.
     const timer = window.setTimeout(() => {
-      void tauri.repoPullRequest(path, selectedId).then(
+      void tauri.repoPullRequest(path, openedId).then(
         (next) => {
           if (detailGeneration.current === current) setDetail(next);
         },
@@ -496,7 +521,7 @@ export function PullRequests() {
       window.clearTimeout(timer);
       detailGeneration.current += 1;
     };
-  }, [path, selectedId, data, detailReload]);
+  }, [path, openedId, data, detailReload]);
 
   const move = (delta: number) => {
     if (!data?.pull_requests.length) return;
@@ -506,12 +531,30 @@ export function PullRequests() {
     document.getElementById(`pr-row-${data.pull_requests[next].id}`)?.scrollIntoView({ block: 'nearest' });
   };
 
+  const openPullRequest = (id: number) => {
+    setSelectedId(id);
+    setOpenedId(id);
+  };
+
+  const closePullRequest = () => {
+    setOpenedId(null);
+    window.requestAnimationFrame(() => document.getElementById('pr-listbox')?.focus());
+  };
+
   return (
     <div className="pr-view">
       <div className="pr-toolbar">
         <div>
-          <strong>Pull Requests</strong>
-          {data && <span>{providerName(data.repository.provider)} · {data.repository.label} · {data.repository.remote}</span>}
+          {openedId != null ? (
+            <button type="button" className="h-link pr-back" onClick={closePullRequest}>
+              <Icon name="chev-left" size={12} /> Pull Requests
+            </button>
+          ) : <strong>Pull Requests</strong>}
+          {data && openedSummary ? (
+            <span>#{openedSummary.id} · {openedSummary.title}</span>
+          ) : data ? (
+            <span>{providerName(data.repository.provider)} · {data.repository.label} · {data.repository.remote}</span>
+          ) : null}
         </div>
         <button type="button" className="h-link" onClick={() => void refresh()} disabled={loading}>
           <Icon name="refresh" size={12} className={loading ? 'spin' : ''} />
@@ -533,9 +576,10 @@ export function PullRequests() {
         <div className="pr-empty"><Icon name="check" size={28} /><strong>No pull requests found</strong><p>This repository has no open, closed, or merged pull requests in the latest 100.</p></div>
       ) : data ? (
         <div className="pr-main">
-          <PanelGroup direction="horizontal" autoSaveId="strand:pull-requests">
-            <Panel defaultSize={34} minSize={22} maxSize={55}>
+          {openedId == null ? (
+            <div className="pr-list-screen">
               <div
+                id="pr-listbox"
                 className="pr-list"
                 role="listbox"
                 aria-label="Pull requests"
@@ -546,7 +590,7 @@ export function PullRequests() {
                   else if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); }
                   else if (event.key === 'Home') { event.preventDefault(); setSelectedId(data.pull_requests[0]?.id ?? null); }
                   else if (event.key === 'End') { event.preventDefault(); setSelectedId(data.pull_requests.at(-1)?.id ?? null); }
-                  else if (event.key === 'Enter' && selectedSummary?.url) { event.preventDefault(); void shellOpen(selectedSummary.url); }
+                  else if (event.key === 'Enter' && selectedSummary) { event.preventDefault(); openPullRequest(selectedSummary.id); }
                 }}
               >
                 {data.pull_requests.map((pr) => (
@@ -558,8 +602,7 @@ export function PullRequests() {
                     key={pr.id}
                     tabIndex={-1}
                     className={`pr-row${pr.id === selectedId ? ' selected' : ''}`}
-                    onClick={() => setSelectedId(pr.id)}
-                    onDoubleClick={() => { if (pr.url) void shellOpen(pr.url); }}
+                    onClick={() => openPullRequest(pr.id)}
                   >
                     <span className="pr-row-top"><b>#{pr.id}</b><span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span></span>
                     <strong>{pr.title}</strong>
@@ -567,31 +610,27 @@ export function PullRequests() {
                   </button>
                 ))}
               </div>
-            </Panel>
-            <PanelResizeHandle className="rs-handle vert" />
-            <Panel minSize={35}>
-              {detailLoading ? (
-                <div className="pr-empty pr-detail-empty" aria-live="polite">
-                  <Icon name="refresh" size={24} className="spin" />
-                  <strong>Loading PR #{selectedId}…</strong>
-                </div>
-              ) : detailError ? (
-                <div className="pr-empty pr-detail-empty" role="alert">
-                  <Icon name="remote" size={24} />
-                  <strong>Could not load PR #{selectedId}</strong>
-                  <p>{detailError}</p>
-                  <button type="button" className="btn" onClick={() => setDetailReload((value) => value + 1)}>Try again</button>
-                </div>
-              ) : detail && path ? (
-                <PullRequestDetails
-                  key={`${path}:${detail.id}`}
-                  path={path}
-                  pr={detail}
-                  onUpdated={setDetail}
-                />
-              ) : null}
-            </Panel>
-          </PanelGroup>
+            </div>
+          ) : detailLoading ? (
+            <div className="pr-empty pr-detail-empty" aria-live="polite">
+              <Icon name="refresh" size={24} className="spin" />
+              <strong>Loading PR #{openedId}…</strong>
+            </div>
+          ) : detailError ? (
+            <div className="pr-empty pr-detail-empty" role="alert">
+              <Icon name="remote" size={24} />
+              <strong>Could not load PR #{openedId}</strong>
+              <p>{detailError}</p>
+              <button type="button" className="btn" onClick={() => setDetailReload((value) => value + 1)}>Try again</button>
+            </div>
+          ) : detail && path ? (
+            <PullRequestDetails
+              key={`${path}:${detail.id}`}
+              path={path}
+              pr={detail}
+              onUpdated={setDetail}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

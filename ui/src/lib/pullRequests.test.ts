@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkTone, diffStats, markdownUrl, parsePullRequestPatch } from './pullRequests';
+import {
+  checkTone,
+  diffStats,
+  markdownUrl,
+  parsePullRequestPatch,
+  pullRequestForBranch,
+} from './pullRequests';
 
 describe('checkTone', () => {
   it('normalizes provider success, running, and failure states', () => {
@@ -32,5 +38,23 @@ describe('markdownUrl', () => {
     expect(markdownUrl('/acme/repo/issues/1', 'https://github.com/acme/repo/pull/2'))
       .toBe('https://github.com/acme/repo/issues/1');
     expect(markdownUrl('javascript:alert(1)', 'https://github.com/acme/repo/pull/2')).toBeNull();
+  });
+});
+
+describe('pullRequestForBranch', () => {
+  const pullRequests = [
+    { id: 3, source_branch: 'feature', state: 'merged' },
+    { id: 2, source_branch: 'refs/heads/feature', state: 'open' },
+    { id: 1, source_branch: 'other', state: 'active' },
+  ];
+
+  it('finds the active PR for the checked-out branch', () => {
+    expect(pullRequestForBranch(pullRequests, 'feature')?.id).toBe(2);
+  });
+
+  it('does not auto-open historical or unrelated PRs', () => {
+    expect(pullRequestForBranch(pullRequests, 'missing')).toBeNull();
+    expect(pullRequestForBranch([{ id: 3, source_branch: 'feature', state: 'merged' }], 'feature'))
+      .toBeNull();
   });
 });

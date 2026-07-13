@@ -19,16 +19,18 @@ shows the provider error and the setup command. Provider calls time out after
 
 ## Browse PRs
 
-The left pane contains up to the latest 100 open, closed, and merged pull
-requests. Click a row to inspect it, use `Up`/`Down` or `j`/`k` while the list
-is focused, and press `Enter` (or double-click) to open the PR on its host. Drag
-the divider to resize the list; Strand remembers the size.
+The list contains up to the latest 100 open, closed, and merged pull requests.
+If the checked-out branch has an active PR, Strand opens that PR automatically.
+Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
+use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
+toolbar returns to the list and restores its keyboard focus. **Open on host**
+hands the active PR to the provider website.
 
-The list loads only compact row data; after selection settles, Strand loads the
-rich metadata for that one PR. This keeps large repositories below provider
-query limits and avoids starting a CLI call for every key-repeat while you move
-through the list. The detail workspace has three tabs. Use `Left`/`Right`,
-`Home`, and `End` while the tab bar is focused.
+The list loads only compact row data; Strand loads rich metadata only after a
+PR is opened. This keeps large repositories below provider query limits and
+means moving through the list does not start provider calls. The opened PR uses
+the full content width and has three tabs. Use `Left`/`Right`, `Home`, and `End`
+while the tab bar is focused.
 
 ### Overview
 
@@ -49,11 +51,12 @@ does not receive or store the provider token.
 
 ### Changes
 
-Changes loads only when its tab opens. The left pane lists changed files; use
-`Up`/`Down`, `j`/`k`, `Home`, or `End` to select one. The right pane renders the
-selected patch through Strand's Pierre diff wrapper and follows the configured
-stacked/split diff appearance. Only one file diff is mounted at a time to keep
-large PRs responsive. Provider patches larger than 16 MB are not rendered.
+Changes loads only when its tab opens. A narrow left rail lists changed files;
+use `Up`/`Down`, `j`/`k`, `Home`, or `End` to select one. The rest of the
+full-width workspace renders the selected patch through Strand's Pierre diff
+wrapper and follows the configured stacked/split diff appearance. Only one
+file diff is mounted at a time to keep large PRs responsive. Provider patches
+larger than 16 MB are not rendered.
 
 Azure does not expose every check or policy field through the same provider
 command, so absent data is shown honestly rather than inferred. Replies, new

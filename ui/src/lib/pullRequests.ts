@@ -1,6 +1,7 @@
 import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
 
 import { hashPatch } from './patch';
+import type { PullRequest } from './types';
 
 export type CheckTone = 'success' | 'running' | 'failed' | 'neutral';
 
@@ -45,4 +46,21 @@ export function markdownUrl(href: string | undefined, baseUrl?: string): string 
   } catch {
     return null;
   }
+}
+
+type BranchPullRequest = Pick<PullRequest, 'id' | 'source_branch' | 'state'>;
+
+/** Active PR for the checked-out branch, if one exists. Closed/merged PRs
+ *  must never pull the user away from the repository's PR list. */
+export function pullRequestForBranch(
+  pullRequests: readonly BranchPullRequest[],
+  branch: string | null,
+): BranchPullRequest | null {
+  if (!branch) return null;
+  const current = branch.replace(/^refs\/heads\//, '');
+  return pullRequests.find((pullRequest) => {
+    const source = pullRequest.source_branch.replace(/^refs\/heads\//, '');
+    const state = pullRequest.state.toLowerCase();
+    return source === current && (state === 'open' || state === 'active');
+  }) ?? null;
 }

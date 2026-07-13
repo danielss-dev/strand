@@ -1062,9 +1062,10 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   flow, shipped 2026-07-06 (see changelog entry below)
 - ◐ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
   rendered Markdown, color-coded checks, discussions with top-level comment
-  creation, and lazy selected-file Pierre diffs shipped 2026-07-13 through
-  authenticated provider CLIs. Inline/review actions, Azure policies, and merge
-  controls remain; GitLab and Bitbucket are follow-on provider adapters.
+  creation, current-branch auto-open, and full-width lazy selected-file Pierre
+  diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
+  actions, Azure policies, and merge controls remain; GitLab and Bitbucket are
+  follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
@@ -1549,6 +1550,13 @@ readable in-app, with top-level comment creation via the signed-in CLI. Changes
 load only when requested, parse the provider patch once, and mount just the
 selected file through the shared Pierre wrapper. Azure source/target objects
 are fetched with source-only refspecs that leave refs and FETCH_HEAD untouched.
+
+**Full-width hosted PR workspace (2026-07-13):** Replaced the permanently split
+PR list/detail layout with list → dedicated PR navigation. Enter/click opens a
+PR across the content width, Back returns focus to the list, and an active PR
+whose source matches the checked-out branch opens automatically. Closed and
+merged matches stay in the list. Changes resets to a 22% file rail so the code
+diff owns most of the workspace without sacrificing keyboard file navigation.
 
 ---
 

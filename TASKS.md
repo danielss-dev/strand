@@ -1273,15 +1273,17 @@ tree: watch the agent work, review fast, accept or reject safely.
     detects the provider from `origin`/supported remotes, loads a shallow latest
     100 open/closed/merged PR index through the signed-in `gh` or `az` CLI, then
     fetches description, counts, labels, reviewers, merge/review status, and
-    provider-reported checks only for the selected PR (120ms settled-selection
-    gate prevents key-repeat subprocess storms and avoids GitHub's GraphQL
-    possible-node cap). Resizable list/detail panes, arrow or j/k
-    selection, Enter/double-click/Open-on-host, refresh, command-palette entry,
-    and actionable missing-CLI/auth errors.
+    provider-reported checks only when a PR is opened, avoiding GitHub's
+    GraphQL possible-node cap. The browser is a list → full-width detail flow:
+    an active PR matching the checked-out branch opens automatically; otherwise
+    arrow or j/k selects and Enter/click opens. Back restores list focus, and
+    refresh, open-on-host, command-palette entry, and actionable CLI/auth errors
+    remain available.
   - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
     `PullRequestChanges`): provider patches load only when Changes opens; the
-    keyboard-operable file list mounts one selected Pierre diff at a time and
-    follows the app's split/stacked appearance settings. Azure comparisons
+    keyboard-operable 22% file rail mounts one selected Pierre diff at a time,
+    leaving the rest of the full-width detail workspace for code and following
+    the app's split/stacked appearance settings. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
   - ◐ Discussion threads and comment creation: Conversation reads GitHub
     comments and Azure thread comments (including inline file context) as safe
