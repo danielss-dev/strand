@@ -30,6 +30,28 @@ const GITHUB_DETAIL_FIELDS: &str = concat!(
     "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
     "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
 );
+const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          startLine
+          originalLine
+          originalStartLine
+          diffSide
+          comments(first: 100) {
+            nodes { id body createdAt url author { login avatarUrl } }
+          }
+        }
+      }
+    }
+  }
+}"#;
 type Result<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -80,6 +102,18 @@ pub struct PullRequestComment {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PullRequestReviewThread {
+    pub id: String,
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub side: PullRequestDiffSide,
+    pub is_resolved: bool,
+    pub is_outdated: bool,
+    pub comments: Vec<PullRequestComment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PullRequest {
     pub id: u64,
     pub title: String,
@@ -104,6 +138,7 @@ pub struct PullRequest {
     pub reviewers: Vec<PullRequestReviewer>,
     pub checks: Vec<PullRequestCheck>,
     pub comments: Vec<PullRequestComment>,
+    pub review_threads: Vec<PullRequestReviewThread>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,7 +147,7 @@ pub struct PullRequestList {
     pub pull_requests: Vec<PullRequest>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PullRequestDiffSide {
     Deletions,
@@ -293,14 +328,14 @@ fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result
 
 fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<PullRequest> {
     let slug = format!("{owner}/{repo}");
-    let id = id.to_string();
+    let id_string = id.to_string();
     let output = run_command(
         cwd,
         "gh",
         &[
             "pr",
             "view",
-            &id,
+            &id_string,
             "--repo",
             &slug,
             "--json",
@@ -310,7 +345,41 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
     )?;
     let value: Value = serde_json::from_slice(&output)
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
-    parse_github_pr(&value).ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))
+    let mut pull_request = parse_github_pr(&value)
+        .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
+    let review_threads = github_review_threads(cwd, &owner, &repo, id)?;
+    pull_request.comments.extend(
+        review_threads
+            .iter()
+            .flat_map(|thread| thread.comments.iter().cloned()),
+    );
+    pull_request
+        .comments
+        .sort_by(|left, right| left.created_at.cmp(&right.created_at));
+    pull_request.comment_count = pull_request.comments.len();
+    pull_request.review_threads = review_threads;
+    Ok(pull_request)
+}
+
+fn github_review_threads(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    id: u64,
+) -> Result<Vec<PullRequestReviewThread>> {
+    let query = format!("query={GITHUB_REVIEW_THREADS_QUERY}");
+    let owner = format!("owner={owner}");
+    let repo = format!("repo={repo}");
+    let number = format!("number={id}");
+    let output = run_command(
+        cwd,
+        "gh",
+        &["api", "graphql", "-f", &query, "-F", &owner, "-F", &repo, "-F", &number],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))?;
+    Ok(parse_github_review_threads(&value))
 }
 
 fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String> {
@@ -971,7 +1040,76 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
         reviewers,
         checks,
         comments,
+        review_threads: Vec::new(),
     })
+}
+
+fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
+    value
+        .pointer("/data/repository/pullRequest/reviewThreads/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|thread| {
+            let path = text(thread.get("path"))?;
+            let end_line = thread
+                .get("line")
+                .and_then(Value::as_u64)
+                .or_else(|| thread.get("originalLine").and_then(Value::as_u64))? as u32;
+            let start_line = thread
+                .get("startLine")
+                .and_then(Value::as_u64)
+                .or_else(|| thread.get("originalStartLine").and_then(Value::as_u64))
+                .unwrap_or(u64::from(end_line)) as u32;
+            let side = match text(thread.get("diffSide"))?.as_str() {
+                "LEFT" => PullRequestDiffSide::Deletions,
+                "RIGHT" => PullRequestDiffSide::Additions,
+                _ => return None,
+            };
+            let comments = thread
+                .pointer("/comments/nodes")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|comment| {
+                    let author = text(comment.pointer("/author/login"))
+                        .unwrap_or_else(|| "unknown".into());
+                    Some(PullRequestComment {
+                        id: text(comment.get("id"))?,
+                        avatar_url: text(comment.pointer("/author/avatarUrl"))
+                            .or_else(|| github_avatar_url(&author)),
+                        author,
+                        body: text(comment.get("body")).unwrap_or_default(),
+                        created_at: text(comment.get("createdAt")).unwrap_or_default(),
+                        url: text(comment.get("url")).unwrap_or_default(),
+                        is_system: false,
+                        path: Some(path.clone()),
+                    })
+                })
+                .collect::<Vec<_>>();
+            if comments.is_empty() {
+                return None;
+            }
+            Some(PullRequestReviewThread {
+                id: text(thread.get("id"))?,
+                path,
+                start_line,
+                end_line,
+                side,
+                is_resolved: thread
+                    .get("isResolved")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                is_outdated: thread
+                    .get("isOutdated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                comments,
+            })
+        })
+        .collect()
 }
 
 fn parse_azure_pr(
@@ -1049,6 +1187,7 @@ fn parse_azure_pr(
         reviewers,
         checks: Vec::new(),
         comments: Vec::new(),
+        review_threads: Vec::new(),
     })
 }
 
@@ -1374,6 +1513,35 @@ mod tests {
             Some("https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/ada")
         );
         assert!(comments[1].is_system);
+    }
+
+    #[test]
+    fn normalizes_github_review_threads_with_replies_and_ranges() {
+        let value = serde_json::json!({
+            "data": { "repository": { "pullRequest": { "reviewThreads": { "nodes": [{
+                "id": "PRRT_1", "isResolved": false, "isOutdated": false,
+                "path": "src/lib.rs", "line": 29, "startLine": 27,
+                "originalLine": 29, "originalStartLine": 27, "diffSide": "RIGHT",
+                "comments": { "nodes": [
+                    { "id": "PRRC_1", "body": "Please validate this.",
+                      "createdAt": "2026-07-13T12:00:00Z", "url": "https://github.com/acme/repo/pull/42#discussion_r1",
+                      "author": { "login": "octo", "avatarUrl": "https://avatars.example/octo" } },
+                    { "id": "PRRC_2", "body": "Fixed.",
+                      "createdAt": "2026-07-13T12:05:00Z", "url": "https://github.com/acme/repo/pull/42#discussion_r2",
+                      "author": { "login": "ada", "avatarUrl": "https://avatars.example/ada" } }
+                ] }
+            }] } } } }
+        });
+
+        let threads = parse_github_review_threads(&value);
+        assert_eq!(threads.len(), 1);
+        assert_eq!(threads[0].path, "src/lib.rs");
+        assert_eq!((threads[0].start_line, threads[0].end_line), (27, 29));
+        assert_eq!(threads[0].side, PullRequestDiffSide::Additions);
+        assert!(!threads[0].is_resolved);
+        assert_eq!(threads[0].comments.len(), 2);
+        assert_eq!(threads[0].comments[1].author, "ada");
+        assert_eq!(threads[0].comments[0].path.as_deref(), Some("src/lib.rs"));
     }
 
     #[test]

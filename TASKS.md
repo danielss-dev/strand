@@ -1288,17 +1288,22 @@ tree: watch the agent work, review fast, accept or reject safely.
     persisted stacked/split controls in context. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
   - ◐ Discussion threads and comment creation: Conversation reads GitHub
-    comments and Azure thread comments (including inline file context) as safe
+    issue comments, GitHub review-thread comments, and Azure thread comments
+    (including inline file context) as safe
     Markdown and creates top-level Markdown comments through the signed-in
     provider CLI. The `PullRequestConversation` timeline now includes a
     keyboard-operable Write/Preview composer, Markdown formatting toolbar,
     hosted screenshot/image insertion, explicit click-to-load image previews,
     character count, provider avatars with initials fallback, and comment
-    permalinks. GitHub Changes now supports Pierre line-range selection and an
-    anchored inline composer through `repo_pull_request_inline_comment`, with
-    exact-head validation before publishing. Replies, Azure iteration-tracked
-    inline comments, direct binary attachment uploads, suggestions, and thread
-    resolution remain.
+    permalinks. File-backed timeline comments expose a keyboard-operable
+    **View in changes** action that selects the file and focuses its fetched
+    GitHub thread when coordinates exist. GitHub Changes now uses Pierre's native hover-gutter `+`,
+    line-range selection, persistent fetched thread cards with replies and
+    resolved/outdated state, and an annotation-row composer through
+    `repo_pull_request_inline_comment`, with
+    exact-head validation before publishing. Reply creation, Azure
+    iteration-tracked inline comments, direct binary attachment uploads,
+    suggestions, and thread resolution remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
   - ◐ PR review ledger + merge-readiness model (see
     `docs/pull-request-improvements.md`).
@@ -1308,13 +1313,16 @@ tree: watch the agent work, review fast, accept or reject safely.
       explicitly incomplete instead of appearing ready.
     - ☐ Add viewed-file progress and unresolved-thread counts when those review
       state models land.
-  - ◐ Inline review workspace: GitHub line-range selection and immediate
-    publishing are present (`ParsedDiff` controlled selection + inline
-    annotation composer); provider-neutral line/file thread reading, Azure
-    iteration coordinates, replies, resolved/outdated state, local
+  - ◐ Inline review workspace: GitHub hover-gutter line/range selection,
+    immediate publishing, and fetched review-thread annotations are present
+    (`ParsedDiff` controlled selection + native gutter utility + inline
+    composer/thread cards); Azure iteration coordinates, reply/resolution
+    writes, local
     content-hash-keyed viewed files, unviewed/thread filters, batched drafts,
     and keyboard next-thread navigation remain while retaining one mounted
     Pierre diff.
+  - ☐ Paginate GitHub review threads and replies beyond the current bounded
+    100-thread / 100-comment detail query.
   - ☐ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails.

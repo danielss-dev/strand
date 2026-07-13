@@ -20,7 +20,7 @@ import {
 } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
-import type { PullRequest, PullRequestCheck, PullRequestList } from '../lib/types';
+import type { PullRequest, PullRequestCheck, PullRequestComment, PullRequestList, PullRequestReviewThread } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
@@ -173,10 +173,12 @@ function PullRequestConversation({
   path,
   pr,
   onUpdated,
+  onViewInChanges,
 }: {
   path: string;
   pr: PullRequest;
   onUpdated: (next: PullRequest) => void;
+  onViewInChanges: (comment: PullRequestComment) => void;
 }) {
   const platform = useSettings((state) => state.platform);
   const [draft, setDraft] = useState('');
@@ -369,12 +371,20 @@ function PullRequestConversation({
                     {comment.is_system && <span>system</span>}
                     {comment.path && <code>{comment.path}</code>}
                   </div>
-                  {commentUrl ? (
-                    <button type="button" className="pr-comment-time" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
-                      <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
-                      <Icon name="external" size={10} />
-                    </button>
-                  ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
+                  <div className="pr-comment-links">
+                    {comment.path && (
+                      <button type="button" onClick={() => onViewInChanges(comment)} title="View this comment in Changes">
+                        <Icon name="changes" size={11} />
+                        View in changes
+                      </button>
+                    )}
+                    {commentUrl ? (
+                      <button type="button" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
+                        <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
+                        <Icon name="external" size={10} />
+                      </button>
+                    ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
+                  </div>
                 </header>
                 <div className="pr-comment-body">
                   <ProviderMarkdown source={comment.body} baseUrl={commentUrl || pr.url} />
@@ -395,18 +405,73 @@ function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
   return 'modified';
 }
 
-type InlineCommentAnnotation = { range: SelectedLineRange };
+function PullRequestInlineThread({ thread, prUrl }: { thread: PullRequestReviewThread; prUrl: string }) {
+  const lineLabel = thread.start_line === thread.end_line
+    ? `${thread.end_line}`
+    : `${thread.start_line}–${thread.end_line}`;
+  return (
+    <article
+      id={`pr-review-thread-${thread.id}`}
+      tabIndex={-1}
+      className={`pr-inline-thread${thread.is_resolved ? ' resolved' : ''}${thread.is_outdated ? ' outdated' : ''}`}
+    >
+      <header>
+        <strong>{thread.side === 'deletions' ? 'Old' : 'New'} line{thread.start_line === thread.end_line ? '' : 's'} {lineLabel}</strong>
+        <div>
+          {thread.is_resolved && <span>Resolved</span>}
+          {thread.is_outdated && <span>Outdated</span>}
+        </div>
+      </header>
+      {thread.comments.map((comment) => {
+        const commentUrl = markdownUrl(comment.url, prUrl);
+        const avatarUrl = markdownUrl(comment.avatar_url ?? undefined);
+        return (
+          <section className="pr-inline-thread-comment" key={comment.id}>
+            <div className="pr-inline-thread-author">
+              <span className="pr-inline-avatar" aria-hidden="true">
+                {authorInitials(comment.author)}
+                {avatarUrl && <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} />}
+              </span>
+              <strong>{comment.author}</strong>
+              {commentUrl ? (
+                <button type="button" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
+                  <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
+                  <Icon name="external" size={10} />
+                </button>
+              ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
+            </div>
+            <ProviderMarkdown source={comment.body} baseUrl={commentUrl || prUrl} />
+          </section>
+        );
+      })}
+    </article>
+  );
+}
+
+type InlineCommentAnnotation =
+  | { kind: 'composer'; range: SelectedLineRange }
+  | { kind: 'thread'; thread: PullRequestReviewThread };
+
+type PullRequestChangesTarget = {
+  path: string;
+  threadId: string | null;
+  requestId: number;
+};
 
 function PullRequestChanges({
   path,
   provider,
   pr,
   onUpdated,
+  navigationTarget,
+  onNavigationComplete,
 }: {
   path: string;
   provider: PullRequestList['repository']['provider'];
   pr: PullRequest;
   onUpdated: (next: PullRequest) => void;
+  navigationTarget: PullRequestChangesTarget | null;
+  onNavigationComplete: (requestId: number) => void;
 }) {
   const diffMode = useSettings((state) => state.diffMode);
   const platform = useSettings((state) => state.platform);
@@ -457,10 +522,31 @@ function PullRequestChanges({
   );
   const selectedFile = selectedPath ? filesByPath.get(selectedPath) ?? null : null;
   const selectedStats = selectedFile ? diffStats(selectedFile) : null;
+  const selectedThreads = useMemo(
+    () => selectedFile ? (pr.review_threads ?? []).filter((thread) => thread.path === selectedFile.name) : [],
+    [pr.review_threads, selectedFile],
+  );
 
   useEffect(() => {
-    setSelectedPath((current) => current && filesByPath.has(current) ? current : treePaths[0] ?? null);
-  }, [filesByPath, treePaths]);
+    setSelectedPath((current) => {
+      if (navigationTarget && filesByPath.has(navigationTarget.path)) return navigationTarget.path;
+      return current && filesByPath.has(current) ? current : treePaths[0] ?? null;
+    });
+  }, [filesByPath, navigationTarget, treePaths]);
+
+  useEffect(() => {
+    if (!navigationTarget || navigationTarget.path !== selectedPath) return;
+    const frame = requestAnimationFrame(() => {
+      const threadTarget = navigationTarget.threadId
+        ? document.getElementById(`pr-review-thread-${navigationTarget.threadId}`)
+        : null;
+      const target = threadTarget ?? document.getElementById(`pr-diff-file-${pr.id}`);
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+      onNavigationComplete(navigationTarget.requestId);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [navigationTarget, onNavigationComplete, pr.id, selectedPath]);
 
   useEffect(() => {
     setCollapsed(false);
@@ -471,12 +557,6 @@ function PullRequestChanges({
 
   const openForReview = pr.state === 'open' || pr.state === 'active';
   const inlineCommentsSupported = provider === 'git_hub' && openForReview;
-  const inlineCommentTitle = provider !== 'git_hub'
-    ? 'Inline Azure DevOps comments need iteration tracking; open on host for now'
-    : openForReview
-      ? 'Comment on lines'
-      : 'This pull request is read-only';
-
   const selectLines = useCallback((range: SelectedLineRange | null) => {
     if (!inlineCommentsSupported || !range) {
       setSelectedLines(null);
@@ -497,21 +577,27 @@ function PullRequestChanges({
     setCommentMessage(null);
   }, [inlineCommentsSupported]);
 
-  const beginInlineComment = () => {
-    if (!selectedFile || !inlineCommentsSupported) return;
-    const hunk = selectedFile.hunks[0];
-    if (!hunk) return;
-    const side = selectedFile.type === 'deleted' ? 'deletions' : 'additions';
-    const line = side === 'deletions' ? hunk.deletionStart : hunk.additionStart;
-    selectLines({ start: Math.max(1, line), end: Math.max(1, line), side, endSide: side });
+  const openInlineComment = useCallback((range: SelectedLineRange) => {
+    selectLines(range);
     requestAnimationFrame(() => document.getElementById(`pr-inline-comment-${pr.id}`)?.focus());
-  };
+  }, [pr.id, selectLines]);
 
   const inlineAnnotations = useMemo<DiffLineAnnotation<InlineCommentAnnotation>[]>(() => {
-    if (!selectedLines) return [];
-    const side = selectedLines.endSide ?? selectedLines.side ?? 'additions';
-    return [{ side, lineNumber: selectedLines.end, metadata: { range: selectedLines } }];
-  }, [selectedLines]);
+    const annotations: DiffLineAnnotation<InlineCommentAnnotation>[] = selectedThreads.map((thread) => ({
+      side: thread.side,
+      lineNumber: thread.end_line,
+      metadata: { kind: 'thread' as const, thread },
+    }));
+    if (selectedLines) {
+      const side = selectedLines.endSide ?? selectedLines.side ?? 'additions';
+      annotations.push({
+        side,
+        lineNumber: selectedLines.end,
+        metadata: { kind: 'composer' as const, range: selectedLines },
+      });
+    }
+    return annotations;
+  }, [selectedLines, selectedThreads]);
 
   const submitInlineComment = async () => {
     if (!selectedFile || !selectedLines || postingComment) return;
@@ -608,6 +694,7 @@ function PullRequestChanges({
                 <div className="pr-diff-header">
                   <button
                     type="button"
+                    id={`pr-diff-file-${pr.id}`}
                     className="lc-hunkfile pr-file-toggle"
                     onClick={() => setCollapsed((value) => !value)}
                     aria-expanded={!collapsed}
@@ -639,16 +726,6 @@ function PullRequestChanges({
                     >
                       <Icon name="split" size={13} />
                     </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={beginInlineComment}
-                      title={inlineCommentTitle}
-                      aria-label={inlineCommentTitle}
-                      disabled={!inlineCommentsSupported}
-                    >
-                      <Icon name="edit" size={13} />
-                    </button>
                   </div>
                 </div>
                 {commentMessage && (
@@ -665,7 +742,10 @@ function PullRequestChanges({
                     selectedLines={selectedLines}
                     lineAnnotations={inlineAnnotations}
                     onLineSelected={inlineCommentsSupported ? selectLines : undefined}
-                    renderAnnotation={() => selectedLines ? (
+                    onGutterUtilityClick={inlineCommentsSupported ? openInlineComment : undefined}
+                    renderAnnotation={(annotation) => annotation.metadata.kind === 'thread' ? (
+                      <PullRequestInlineThread thread={annotation.metadata.thread} prUrl={pr.url} />
+                    ) : selectedLines ? (
                       <form
                         className="pr-inline-composer"
                         onSubmit={(event) => {
@@ -737,6 +817,8 @@ function PullRequestDetails({
   onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
+  const [changesTarget, setChangesTarget] = useState<PullRequestChangesTarget | null>(null);
+  const changesRequest = useRef(0);
   const open = () => { if (pr.url) void shellOpen(pr.url); };
   const selectTab = (next: DetailTab) => {
     setTab(next);
@@ -761,6 +843,21 @@ function PullRequestDetails({
       : !pr.source_commit
         ? 'Refresh this pull request before merging'
         : '';
+  const viewCommentInChanges = (comment: PullRequestComment) => {
+    if (!comment.path) return;
+    const thread = (pr.review_threads ?? []).find((candidate) =>
+      candidate.comments.some((item) => item.id === comment.id));
+    changesRequest.current += 1;
+    setChangesTarget({
+      path: comment.path,
+      threadId: thread?.id ?? null,
+      requestId: changesRequest.current,
+    });
+    setTab('changes');
+  };
+  const completeChangesNavigation = useCallback((requestId: number) => {
+    setChangesTarget((current) => current?.requestId === requestId ? null : current);
+  }, []);
 
   return (
     <article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
@@ -853,8 +950,24 @@ function PullRequestDetails({
         aria-labelledby={`pr-tab-${pr.id}-${tab}`}
       >
         {tab === 'overview' && <PullRequestOverview pr={pr} />}
-        {tab === 'conversation' && <PullRequestConversation path={path} pr={pr} onUpdated={onUpdated} />}
-        {tab === 'changes' && <PullRequestChanges path={path} provider={provider} pr={pr} onUpdated={onUpdated} />}
+        {tab === 'conversation' && (
+          <PullRequestConversation
+            path={path}
+            pr={pr}
+            onUpdated={onUpdated}
+            onViewInChanges={viewCommentInChanges}
+          />
+        )}
+        {tab === 'changes' && (
+          <PullRequestChanges
+            path={path}
+            provider={provider}
+            pr={pr}
+            onUpdated={onUpdated}
+            navigationTarget={changesTarget}
+            onNavigationComplete={completeChangesNavigation}
+          />
+        )}
       </div>
     </article>
   );

@@ -209,8 +209,19 @@ export interface PullRequestComment {
   created_at: string;
   url: string;
   is_system: boolean;
-  /** Azure inline threads report their file; top-level comments are null. */
+  /** Inline review comments report their file; top-level comments are null. */
   path: string | null;
+}
+
+export interface PullRequestReviewThread {
+  id: string;
+  path: string;
+  start_line: number;
+  end_line: number;
+  side: 'deletions' | 'additions';
+  is_resolved: boolean;
+  is_outdated: boolean;
+  comments: PullRequestComment[];
 }
 
 export interface PullRequest {
@@ -237,6 +248,7 @@ export interface PullRequest {
   reviewers: PullRequestReviewer[];
   checks: PullRequestCheck[];
   comments: PullRequestComment[];
+  review_threads: PullRequestReviewThread[];
 }
 
 export interface PullRequestList {
