@@ -82,6 +82,38 @@ pub struct Progress {
 }
 
 impl Repo {
+    /// Fetch provider-reported branch tips for a read-only comparison without
+    /// updating FETCH_HEAD or any local/remote-tracking ref. Hosted PR views
+    /// use this when a provider exposes commit IDs but not a unified patch.
+    pub fn fetch_refs_for_read(&self, remote: &str, refs: &[&str]) -> Result<()> {
+        validate_remote_arg(remote, "remote")?;
+        if refs.is_empty() {
+            return Ok(());
+        }
+        for reference in refs {
+            validate_read_ref(reference)?;
+        }
+        // An empty refmap disables remote.<name>.fetch; the trailing `:` makes
+        // each command-line refspec source-only. Both are required — without
+        // --refmap= Git still updates refs/remotes/<name>/*.
+        let refspecs = refs
+            .iter()
+            .map(|reference| format!("{reference}:"))
+            .collect::<Vec<_>>();
+        let mut args = vec![
+            "fetch",
+            "--no-tags",
+            "--no-write-fetch-head",
+            "--refmap=",
+            "--quiet",
+            "--",
+            remote,
+        ];
+        args.extend(refspecs.iter().map(String::as_str));
+        run_git_streaming(&self.path, &args, |_| {}, None)?;
+        Ok(())
+    }
+
     pub fn fetch(
         &self,
         remote: Option<&str>,
@@ -300,6 +332,19 @@ pub(crate) fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
     // we never want them from a pasted URL.
     if lower.starts_with("ext::") || lower.starts_with("fd::") {
         return Err(Error::Other(format!("unsupported transport in {what}: {arg}")));
+    }
+    Ok(())
+}
+
+fn validate_read_ref(reference: &str) -> Result<()> {
+    if !reference.starts_with("refs/heads/")
+        || reference.contains(':')
+        || reference.contains("..")
+        || reference.contains(['\n', '\r'])
+    {
+        return Err(Error::Other(format!(
+            "unsupported branch ref for hosted comparison: {reference}"
+        )));
     }
     Ok(())
 }
@@ -554,6 +599,50 @@ mod tests {
         assert!(validate_remote_arg("https://github.com/org/repo.git", "clone URL").is_ok());
         assert!(validate_remote_arg("git@github.com:org/repo.git", "clone URL").is_ok());
         assert!(validate_remote_arg("ssh://git@host/path.git", "clone URL").is_ok());
+    }
+
+    #[test]
+    fn hosted_comparison_accepts_only_full_branch_refs() {
+        assert!(validate_read_ref("refs/heads/main").is_ok());
+        assert!(validate_read_ref("refs/heads/feature/nested").is_ok());
+        assert!(validate_read_ref("main").is_err());
+        assert!(validate_read_ref("refs/tags/v1").is_err());
+        assert!(validate_read_ref("refs/heads/../../oops").is_err());
+        assert!(validate_read_ref("refs/heads/a:b").is_err());
+    }
+
+    #[test]
+    fn hosted_comparison_fetch_does_not_update_repository_refs() {
+        let (publisher, publisher_path, base) = push_fixture();
+        publisher.push(false, |_| {}, None).unwrap();
+        let topic = git(&publisher_path, &["rev-parse", "HEAD"]);
+
+        let consumer_path = base.join("consumer");
+        std::fs::create_dir_all(&consumer_path).unwrap();
+        git(&consumer_path, &["init", "-q", "-b", "main"]);
+        let remote = base.join("remote.git");
+        git(
+            &consumer_path,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        let consumer = Repo::discover(&consumer_path).unwrap();
+
+        consumer
+            .fetch_refs_for_read("origin", &["refs/heads/topic"])
+            .unwrap();
+
+        assert_eq!(git(&consumer_path, &["cat-file", "-t", &topic]), "commit");
+        assert!(!consumer_path.join(".git/FETCH_HEAD").exists());
+        let remote_ref = Command::new("git")
+            .current_dir(&consumer_path)
+            .args(["show-ref", "--verify", "refs/remotes/origin/topic"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(!remote_ref.success());
+
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]

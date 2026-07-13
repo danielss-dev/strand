@@ -4,6 +4,7 @@
     { "file": "getting-started", "title": "Getting Started" },
     { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces" },
     { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes" },
+    { "file": "pull-requests", "title": "Pull Requests" },
     { "file": "worktrees", "title": "Worktrees" },
     { "file": "everyday-git", "title": "Everyday Git" },
     { "file": "commits-and-history", "title": "Commits & History" },

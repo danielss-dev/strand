@@ -30,6 +30,7 @@ use tauri::ipc::Channel;
 use tauri::{Emitter, State};
 
 use crate::ai;
+use crate::pull_requests::{self, PullRequestList};
 use crate::state::AppState;
 
 /// Register / clear a cancellable op's handle under `op_id` so
@@ -177,6 +178,63 @@ pub async fn repo_search_log(
 #[tauri::command(async)]
 pub async fn repo_refs(path: String) -> CmdResult<Refs> {
     run_blocking("refs", move || Ok(Repo::discover(&path)?.refs()?)).await
+}
+
+/// Pull requests for the first supported remote (`origin` wins). Provider CLI
+/// authentication is inherited; Strand never reads or stores access tokens.
+#[tauri::command(async)]
+pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
+    run_blocking("pull requests", move || {
+        pull_requests::list(&path).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Rich fields for one selected pull request. Kept separate from the list so
+/// GitHub never expands every PR's nested GraphQL connections in one query.
+#[tauri::command(async)]
+pub async fn repo_pull_request(path: String, id: u64) -> CmdResult<pull_requests::PullRequest> {
+    run_blocking("pull request", move || {
+        pull_requests::detail(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Unified patch for one hosted pull request. This stays lazy because provider
+/// diffs can be much larger than the overview metadata.
+#[tauri::command(async)]
+pub async fn repo_pull_request_diff(path: String, id: u64) -> CmdResult<String> {
+    run_blocking("pull request diff", move || {
+        pull_requests::diff(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Add a top-level provider discussion comment. Authentication remains in the
+/// signed-in provider CLI; the comment body is sent through stdin/temp input,
+/// never interpolated into a shell command.
+#[tauri::command(async)]
+pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> CmdResult<()> {
+    run_blocking("pull request comment", move || {
+        pull_requests::add_comment(&path, id, &body).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Merge a hosted pull request through its provider. The expected source
+/// commit prevents merging unseen updates; provider policies remain enforced.
+#[tauri::command(async)]
+pub async fn repo_pull_request_merge(
+    path: String,
+    id: u64,
+    strategy: pull_requests::PullRequestMergeStrategy,
+    expected_head: String,
+) -> CmdResult<()> {
+    run_blocking("pull request merge", move || {
+        pull_requests::merge(&path, id, strategy, &expected_head)
+            .map_err(|message| CmdError { message })
+    })
+    .await
 }
 
 #[tauri::command(async)]

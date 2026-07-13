@@ -181,6 +181,68 @@ export interface Refs {
   tags: Tag[];
 }
 
+export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
+export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
+
+export interface PullRequestRepository {
+  provider: PullRequestProvider;
+  remote: string;
+  label: string;
+}
+
+export interface PullRequestReviewer {
+  name: string;
+  status: string;
+  required: boolean;
+}
+
+export interface PullRequestCheck {
+  name: string;
+  status: string;
+}
+
+export interface PullRequestComment {
+  id: string;
+  author: string;
+  body: string;
+  created_at: string;
+  url: string;
+  is_system: boolean;
+  /** Azure inline threads report their file; top-level comments are null. */
+  path: string | null;
+}
+
+export interface PullRequest {
+  id: number;
+  title: string;
+  state: string;
+  is_draft: boolean;
+  author: string;
+  source_branch: string;
+  source_commit: string;
+  target_branch: string;
+  created_at: string;
+  updated_at: string;
+  url: string;
+  description: string;
+  merge_status: string;
+  review_status: string;
+  comment_count: number;
+  commit_count: number;
+  additions: number | null;
+  deletions: number | null;
+  changed_files: number | null;
+  labels: string[];
+  reviewers: PullRequestReviewer[];
+  checks: PullRequestCheck[];
+  comments: PullRequestComment[];
+}
+
+export interface PullRequestList {
+  repository: PullRequestRepository;
+  pull_requests: PullRequest[];
+}
+
 /** The branch a ref was forked from + the fork point to review against. */
 export interface BaseBranch {
   name: string;

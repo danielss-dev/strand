@@ -34,6 +34,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
 
 [features]
 # Enables Tauri's custom-protocol production build (set by `tauri build`).

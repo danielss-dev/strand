@@ -1070,3 +1070,94 @@ dialogs were fixed in one pass (2026-07-07), so copy from any of them now, but
 check for the re-arm line whenever you see `mountedRef`. Same trap for any
 `useRef` flag that a cleanup mutates: initializers run once per fiber, not per
 mount.
+
+---
+
+## Resolve provider CLIs before entering an untrusted repository
+
+**Rule.** A provider integration must resolve its executable from `PATH` to an
+absolute path *before* setting a repository as the child process's working
+directory. Reuse `crates/strand-tauri/src/ai/bin.rs` (`resolve_cli` +
+`base_command`) for spawnability and Windows console behavior. Null stdin,
+drain stdout and stderr concurrently, and enforce a bounded timeout.
+
+**Why.** `Command::new("gh")` / `Command::new("az")` with an untrusted repo as
+cwd can execute a repository-owned same-name program on Windows because the
+CreateProcess search includes the current directory. A relative `PATH` entry
+has the same problem after `current_dir` changes. Independently, a 100-PR JSON
+response can fill an OS pipe and deadlock if the parent waits for exit before
+reading, while an invisible auth prompt can otherwise wait forever.
+
+**How to apply.** Resolve and canonicalize first; then build the command with
+the shared wrapper. Spawn with piped stdout/stderr readers running in parallel,
+`stdin(null)`, and a product-appropriate timeout. Provider auth remains in the
+official CLI unless OS-keychain storage is explicitly part of the change.
+
+---
+
+## Provider list queries stay shallow; nested data loads per activation
+
+**Rule.** Never request nested comments, commits, reviews, files, or checks for
+an entire hosted-PR list. The index query carries only row fields; load rich
+metadata only after explicit PR activation (or current-branch auto-open).
+
+**Why.** `gh pr list --limit 100` with comments + commits + latest reviews +
+check rollups asked GitHub GraphQL to traverse up to 1,000,000 possible nodes,
+over its 500,000 maximum. The user was authenticated; the UI incorrectly
+described the provider query-shape error as a login problem. Eager per-row
+detail calls would avoid that cap but turn j/k key-repeat into a subprocess
+storm.
+
+**How to apply.** GitHub uses shallow `gh pr list` plus one `gh pr view` for the
+opened row. Other providers follow the same boundary even if their present API
+would tolerate a large response. List focus may move freely; Enter/click opens
+details, while only an active source-branch match may auto-open. Generation-gate
+responses so a slow previous activation cannot replace the active detail, and
+append login guidance only when stderr actually indicates authentication
+failure.
+
+---
+
+## Hosted PR content stays safe and heavy changes stay tab-lazy
+
+**Rule.** Render provider descriptions and comments through the shared
+React-element Markdown renderer: no raw HTML and no automatic remote image
+requests. Fetch and parse a hosted patch only after the Changes tab opens, and
+mount only the selected file through Strand's Pierre wrapper.
+
+**Why.** Pull-request content is untrusted input inside an IPC-privileged
+webview. Remote images also leak that the PR was viewed. Separately, eager patch
+downloads and one Pierre mount per changed file turn list navigation into a
+network/render hot path and repeat the large-diff freezes already solved in
+Local Changes and Review.
+
+**How to apply.** Reuse `renderMarkdown` with a provider URL resolver and an
+alt-text image handler. Keep provider list/detail, discussion, and diff calls
+separate; mount the changes component conditionally by tab. Parse the aggregate
+patch once, give Pierre a stable cache key, and hand `ParsedDiff` only the
+active `FileDiffMetadata`. Reuse `PierreTree` and the Local Changes file-header
+strip for hosted changed-file navigation instead of maintaining a second flat
+list or letting Pierre render a padded, provider-specific diff card. Keep the
+changes workspace inside the tab panel's actual content width: a negative
+margin into the detail padding is still clipped by the tab's `overflow: hidden`
+and cuts off right-aligned diff totals with more than one digit.
+
+---
+
+## Hosted PR writes carry the exact reviewed head
+
+**Rule.** Every hosted pull-request action that can integrate code must send
+the provider the exact source commit loaded in the detail view. Do not expose
+policy or administrator bypasses by default, and do not infer mergeability from
+the checks currently visible in Strand.
+
+**Why.** A source branch can advance after a reviewer opens the PR. Merging by
+PR number alone can then integrate code the user never saw. Provider policies
+also contain information Strand may not have loaded (especially in Azure
+DevOps), so client-side green checks are not sufficient authorization.
+
+**How to apply.** GitHub merge commands use `--match-head-commit`; Azure
+completion requests include `lastMergeSourceCommit`. Keep required checks,
+reviews, queues, and branch policies provider-authoritative, preserve their
+failure text next to the initiating control, and refresh the PR after a
+successful request because queued completion may leave it active temporarily.

@@ -60,6 +60,7 @@ import { FileView } from './views/FileView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
+import { PullRequests } from './views/PullRequests';
 import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
@@ -1108,6 +1109,14 @@ export function App() {
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
+        { id: 'pull-requests', label: 'Show: Pull Requests', group: 'Actions', keywords: 'pr github azure devops code review merge request', run: () => { setView('pull-requests'); selectFile(null); } },
+        ...(view === 'pull-requests' ? [{
+          id: 'pull-request-merge',
+          label: 'Pull Requests: merge open pull request…',
+          group: 'Actions',
+          keywords: 'pr github azure devops complete squash rebase',
+          run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-merge')),
+        } satisfies PaletteAction] : []),
         { id: 'workspace-review-view', label: 'Show: Workspace Review', group: 'Actions', shortcut: keyHint('view-workspace-review'), keywords: 'workspace review aggregate cross repo multi combined agent', run: () => { setView('workspace-review'); selectFile(null); } },
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'tab-next', label: 'Next repository', group: 'Actions', shortcut: keyHint('tab-next'), keywords: 'switch repo tab next cycle', run: () => cycleTab(1) },
@@ -1369,6 +1378,7 @@ export function App() {
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges />}
                   {view === 'review' && <Review />}
+                  {view === 'pull-requests' && <PullRequests onToast={showToast} />}
                   {view === 'workspace-review' && <WorkspaceReview />}
                   {view === 'reflog' && (
                     <Reflog

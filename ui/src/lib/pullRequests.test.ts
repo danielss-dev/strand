@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+
+// Pierre detects mobile Safari when its root module is evaluated. The app
+// always runs in a webview, but Vitest runs in plain Node; Node 20 (used by CI)
+// has no navigator global. Install the smallest browser contract before the
+// dynamic import so this test exercises the parser under the same condition
+// without switching the whole unit suite to a DOM environment.
+if (typeof navigator === 'undefined') {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { userAgent: 'vitest', platform: '', maxTouchPoints: 0 },
+  });
+}
+
+const {
+  checkTone,
+  diffStats,
+  markdownUrl,
+  parsePullRequestPatch,
+  pullRequestForBranch,
+} = await import('./pullRequests');
+
+describe('checkTone', () => {
+  it('normalizes provider success, running, and failure states', () => {
+    expect(checkTone('SUCCESS')).toBe('success');
+    expect(checkTone('in progress')).toBe('running');
+    expect(checkTone('queued')).toBe('running');
+    expect(checkTone('timed-out')).toBe('failed');
+    expect(checkTone('neutral')).toBe('neutral');
+  });
+});
+
+describe('parsePullRequestPatch', () => {
+  it('returns provider patch files and line totals', () => {
+    const [file] = parsePullRequestPatch(`diff --git a/a.txt b/a.txt
+index 5626abf..f719efd 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+ one
++two
+`);
+    expect(file.name).toBe('a.txt');
+    expect(diffStats(file)).toEqual({ additions: 1, deletions: 0 });
+  });
+});
+
+describe('markdownUrl', () => {
+  it('resolves safe relative links and rejects executable protocols', () => {
+    expect(markdownUrl('/acme/repo/issues/1', 'https://github.com/acme/repo/pull/2'))
+      .toBe('https://github.com/acme/repo/issues/1');
+    expect(markdownUrl('javascript:alert(1)', 'https://github.com/acme/repo/pull/2')).toBeNull();
+  });
+});
+
+describe('pullRequestForBranch', () => {
+  const pullRequests = [
+    { id: 3, source_branch: 'feature', state: 'merged' },
+    { id: 2, source_branch: 'refs/heads/feature', state: 'open' },
+    { id: 1, source_branch: 'other', state: 'active' },
+  ];
+
+  it('finds the active PR for the checked-out branch', () => {
+    expect(pullRequestForBranch(pullRequests, 'feature')?.id).toBe(2);
+  });
+
+  it('does not auto-open historical or unrelated PRs', () => {
+    expect(pullRequestForBranch(pullRequests, 'missing')).toBeNull();
+    expect(pullRequestForBranch([{ id: 3, source_branch: 'feature', state: 'merged' }], 'feature'))
+      .toBeNull();
+  });
+});

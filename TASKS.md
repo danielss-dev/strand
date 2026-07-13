@@ -1118,7 +1118,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
     + add-an-entry, no other code changes.
 - ◐ **Keyboard operability pass.** Almost every action reachable from the
-  keyboard, not just the palette (PRD §6.7, `docs/learnings.md`). Per-surface
+  keyboard, not just the palette (PRD §6.8, `docs/learnings.md`). Per-surface
   focus models + palette entries; audit for mouse-only actions. Drag-and-drop
   (folder open, tab / file reorder) may stay pointer-only.
   - ☑ Configurable global-shortcut registry (`ui/src/lib/keys.ts` `COMMANDS` +
@@ -1262,6 +1262,48 @@ tree: watch the agent work, review fast, accept or reject safely.
   side.)
 - ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
   up in profiles.
+
+---
+
+## Hosted pull requests (started 2026-07-13)
+
+- ◐ Provider-neutral Pull Requests workspace for the active repository.
+  - ☑ GitHub + Azure DevOps list/detail overview (`pull_requests.rs`,
+    `repo_pull_requests` + lazy `repo_pull_request`, `views/PullRequests.tsx`):
+    detects the provider from `origin`/supported remotes, loads a shallow latest
+    100 open/closed/merged PR index through the signed-in `gh` or `az` CLI, then
+    fetches description, counts, labels, reviewers, merge/review status, and
+    provider-reported checks only when a PR is opened, avoiding GitHub's
+    GraphQL possible-node cap. The browser is a list → full-width detail flow:
+    an active PR matching the checked-out branch opens automatically; otherwise
+    arrow or j/k selects and Enter/click opens. Back restores list focus, and
+    refresh, open-on-host, command-palette entry, and actionable CLI/auth errors
+    remain available.
+  - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
+    `PullRequestChanges`): provider patches load only when Changes opens; the
+    keyboard-operable 22% Pierre folder tree and compact Local Changes-style
+    file header mount one selected, edge-to-edge diff at a time, leaving the
+    rest of the full-width detail workspace for code and following the app's
+    split/stacked appearance settings. Azure comparisons
+    fetch source/target objects without updating repository refs or FETCH_HEAD.
+  - ◐ Discussion threads and comment creation: Conversation reads GitHub
+    comments and Azure thread comments (including inline file context) as safe
+    Markdown and creates top-level Markdown comments through the signed-in
+    provider CLI. Replies, new inline comments, suggestions, and thread
+    resolution remain.
+  - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
+  - ◐ Checks render provider states as green success, yellow running, red
+    failure, or neutral. Azure policies, merge queue/auto-complete, and
+    required-review detail remain.
+  - ◐ Hosted PR lifecycle actions.
+    - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
+      stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
+    - ☐ Update/check out the PR branch.
+    - ☐ Close/reopen the PR.
+  - ☐ GitLab merge-request adapter.
+  - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
+  - ☐ Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
+    to provider CLIs (blocked on Platform → per-platform credential storage).
 
 ---
 

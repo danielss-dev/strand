@@ -1060,6 +1060,12 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   entry below)
 - ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
   flow, shipped 2026-07-06 (see changelog entry below)
+- ◐ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
+  rendered Markdown, color-coded checks, discussions with top-level comment
+  creation, current-branch auto-open, and full-width lazy selected-file Pierre
+  diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
+  actions, Azure policies, and merge controls remain; GitLab and Bitbucket are
+  follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
@@ -1518,6 +1524,53 @@ explicit `pushRemote` / `remote.pushDefault` routes remain delegated to Git.
 Covered by a real local-to-bare-remote integration test, including the second
 ordinary push.
 
+**Hosted pull requests kick (2026-07-13):** A new provider-neutral Pull Requests
+destination now reads GitHub and Azure DevOps PRs for the active repository.
+`pull_requests.rs` detects common HTTPS/SSH remote shapes, prefers `origin`, and
+delegates authentication to `gh`/`az` so Strand stores no new credentials. A
+bounded, 30-second shallow call returns the latest 100 PRs; nested metadata is
+loaded lazily for the selected row to stay below provider query limits. The UI
+renders a keyboard-operable, resizable list/detail workspace with refresh and
+open-on-host. This is the read-only foundation—hosted diffs,
+threads/reviews, provider policies, and merge/update actions remain tracked.
+
+**GitHub PR query-cap fix (2026-07-13):** The initial implementation expanded
+comments, commits, reviews, and checks across all 100 rows in one `gh pr list`
+GraphQL operation. GitHub rejected that shape as up to 1,000,000 possible nodes
+(500,000 maximum), even for an authenticated user. The list query is now
+strictly shallow and `repo_pull_request` runs `gh pr view` only after selection
+settles for 120ms. Non-auth provider errors no longer append a misleading
+"sign in" instruction.
+
+**Hosted PR review details (2026-07-13):** Pull request detail is now split into
+keyboard-operable Overview, Conversation, and Changes tabs. Descriptions and
+comments use Strand's safe Markdown renderer; provider checks carry semantic
+success/running/failure colors; GitHub comments and Azure thread comments are
+readable in-app, with top-level comment creation via the signed-in CLI. Changes
+load only when requested, parse the provider patch once, and mount just the
+selected file through the shared Pierre wrapper. Azure source/target objects
+are fetched with source-only refspecs that leave refs and FETCH_HEAD untouched.
+
+**Full-width hosted PR workspace (2026-07-13):** Replaced the permanently split
+PR list/detail layout with list → dedicated PR navigation. Enter/click opens a
+PR across the content width, Back returns focus to the list, and an active PR
+whose source matches the checked-out branch opens automatically. Closed and
+merged matches stay in the list. Changes resets to a 22% file rail so the code
+diff owns most of the workspace without sacrificing keyboard file navigation.
+
+**Hosted PR diff parity (2026-07-13):** The Changes tab now uses the same
+virtualized Pierre folder tree and compact collapsible file strip as Local
+Changes. The selected diff renders edge to edge while preserving the narrow
+22% rail and one-mounted-file performance boundary for large pull requests.
+
+**Hosted PR merge (2026-07-13):** Open GitHub and Azure DevOps pull requests
+can now be merged without leaving Strand. The detail header and command palette
+focus a GitHub-style split merge control: the primary button runs the selected
+strategy and its chevron opens a keyboard-operable merge-commit, squash, or
+rebase menu. Provider checks and branch policies stay authoritative, and every
+write carries the exact source commit loaded by Strand so a newer, unreviewed
+head is refused instead of merged silently.
+
 ---
 
 ## 1.1+ — Post-1.0
@@ -1540,7 +1593,8 @@ ordinary push.
 - Plugin / extension surface
 - AI features (commit message suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs (Codex / Claude Code CLIs)
-- Built-in PR review surface for GitHub / GitLab — PRD Q4
+- ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
+  foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 
 **AI commit messages (2026-07-01):** Subscription-first suggestions from staged
 diffs — Codex CLI (`codex login` / `codex exec`) for ChatGPT Plus, Claude Code
@@ -1555,7 +1609,7 @@ CLI (`claude -p`) for Anthropic. Rust `ai/` module + four IPC commands; Settings
 - **Security & signing.** EV cert for Windows. macOS notarization pipeline
   must be live by 0.1 alpha.
 - **Keyboard accessibility.** Almost every action must be keyboard-operable,
-  not just the command palette (PRD §2, §6.7). New surfaces in each
+  not just the command palette (PRD §2, §6.8). New surfaces in each
   milestone ship with a focus model + shortcuts; audit before each release
   that nothing meaningful is mouse-only without a reason.
 - **Open questions.** PRD §12 lists 5 open Qs.

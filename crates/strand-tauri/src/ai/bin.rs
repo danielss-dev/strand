@@ -19,7 +19,7 @@ pub fn resolve_claude(override_path: Option<&str>) -> Option<PathBuf> {
     resolve_cli("claude", override_path)
 }
 
-fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Option<PathBuf> {
+pub(crate) fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Option<PathBuf> {
     if let Some(p) = override_path {
         let path = PathBuf::from(p);
         if path.is_file() {
@@ -65,7 +65,7 @@ fn find_in_dirs(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
 /// directly) and hides the child console — the release build is a
 /// GUI-subsystem process, so a default spawn flashes a visible console
 /// window per call (same rationale as `strand_core::git_command`).
-fn base_command(program: &Path, hide_console: bool) -> Command {
+pub(crate) fn base_command(program: &Path, hide_console: bool) -> Command {
     #[cfg(windows)]
     {
         let is_batch = program.extension().is_some_and(|e| {
