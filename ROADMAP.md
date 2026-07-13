@@ -1558,6 +1558,11 @@ whose source matches the checked-out branch opens automatically. Closed and
 merged matches stay in the list. Changes resets to a 22% file rail so the code
 diff owns most of the workspace without sacrificing keyboard file navigation.
 
+**Hosted PR diff parity (2026-07-13):** The Changes tab now uses the same
+virtualized Pierre folder tree and compact collapsible file strip as Local
+Changes. The selected diff renders edge to edge while preserving the narrow
+22% rail and one-mounted-file performance boundary for large pull requests.
+
 ---
 
 ## 1.1+ — Post-1.0

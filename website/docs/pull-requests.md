@@ -51,10 +51,12 @@ does not receive or store the provider token.
 
 ### Changes
 
-Changes loads only when its tab opens. A narrow left rail lists changed files;
-use `Up`/`Down`, `j`/`k`, `Home`, or `End` to select one. The rest of the
-full-width workspace renders the selected patch through Strand's Pierre diff
-wrapper and follows the configured stacked/split diff appearance. Only one
+Changes loads only when its tab opens. A narrow left rail groups changed files
+in the same Pierre folder tree used by Local Changes. Use the folder chevrons
+to expand or collapse paths; use `Up`/`Down`, `j`/`k`, `Home`, or `End` to
+select a file. The rest of the full-width workspace renders the selected patch
+edge to edge beneath the same compact, collapsible file header used by Local
+Changes and follows the configured stacked/split diff appearance. Only one
 file diff is mounted at a time to keep large PRs responsive. Provider patches
 larger than 16 MB are not rendered.
 

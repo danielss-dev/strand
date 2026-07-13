@@ -1135,4 +1135,6 @@ Local Changes and Review.
 alt-text image handler. Keep provider list/detail, discussion, and diff calls
 separate; mount the changes component conditionally by tab. Parse the aggregate
 patch once, give Pierre a stable cache key, and hand `ParsedDiff` only the
-active `FileDiffMetadata`.
+active `FileDiffMetadata`. Reuse `PierreTree` and the Local Changes file-header
+strip for hosted changed-file navigation instead of maintaining a second flat
+list or letting Pierre render a padded, provider-specific diff card.

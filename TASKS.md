@@ -1281,9 +1281,10 @@ tree: watch the agent work, review fast, accept or reject safely.
     remain available.
   - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
     `PullRequestChanges`): provider patches load only when Changes opens; the
-    keyboard-operable 22% file rail mounts one selected Pierre diff at a time,
-    leaving the rest of the full-width detail workspace for code and following
-    the app's split/stacked appearance settings. Azure comparisons
+    keyboard-operable 22% Pierre folder tree and compact Local Changes-style
+    file header mount one selected, edge-to-edge diff at a time, leaving the
+    rest of the full-width detail workspace for code and following the app's
+    split/stacked appearance settings. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
   - ◐ Discussion threads and comment creation: Conversation reads GitHub
     comments and Azure thread comments (including inline file context) as safe

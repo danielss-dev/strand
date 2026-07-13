@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import type { FileDiffMetadata } from '@pierre/diffs';
+import type { GitStatusEntry } from '@pierre/trees';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { ParsedDiff } from '../components/Diff';
 import { Icon, type IconName } from '../components/Icon';
+import { PierreTree } from '../components/PierreTree';
 import { renderMarkdown } from '../lib/markdown';
 import {
   checkTone,
@@ -14,6 +16,7 @@ import {
   pullRequestForBranch,
 } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
+import { treeFileOrder } from '../lib/treeOrder';
 import type { PullRequest, PullRequestCheck, PullRequestList } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -213,11 +216,11 @@ function PullRequestConversation({
   );
 }
 
-function fileState(file: FileDiffMetadata): string {
-  if (file.type === 'new') return 'A';
-  if (file.type === 'deleted') return 'D';
-  if (file.type.startsWith('rename')) return 'R';
-  return 'M';
+function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
+  if (file.type === 'new') return 'added';
+  if (file.type === 'deleted') return 'deleted';
+  if (file.type.startsWith('rename')) return 'renamed';
+  return 'modified';
 }
 
 function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
@@ -226,7 +229,8 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
-  const [selected, setSelected] = useState(0);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -255,17 +259,26 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
     }
   }, [patch]);
   const files = parsed.files;
-  const selectedFile = files[selected] ?? null;
+  const filesByPath = useMemo(() => new Map(files.map((file) => [file.name, file])), [files]);
+  const treePaths = useMemo(() => treeFileOrder(files.map((file) => file.name)), [files]);
+  const treeStatus = useMemo<GitStatusEntry[]>(
+    () => files.map((file) => ({ path: file.name, status: fileGitStatus(file) })),
+    [files],
+  );
+  const selectedFile = selectedPath ? filesByPath.get(selectedPath) ?? null : null;
+  const selectedStats = selectedFile ? diffStats(selectedFile) : null;
 
   useEffect(() => {
-    if (selected >= files.length) setSelected(Math.max(0, files.length - 1));
-  }, [files.length, selected]);
+    setSelectedPath((current) => current && filesByPath.has(current) ? current : treePaths[0] ?? null);
+  }, [filesByPath, treePaths]);
+
+  useEffect(() => setCollapsed(false), [selectedPath]);
 
   const move = (delta: number) => {
-    if (!files.length) return;
-    const next = Math.min(files.length - 1, Math.max(0, selected + delta));
-    setSelected(next);
-    document.getElementById(`pr-file-${pr.id}-${next}`)?.scrollIntoView({ block: 'nearest' });
+    if (!treePaths.length) return;
+    const current = selectedPath ? treePaths.indexOf(selectedPath) : -1;
+    const next = Math.min(treePaths.length - 1, Math.max(0, current + delta));
+    setSelectedPath(treePaths[next]);
   };
 
   if (loading) {
@@ -290,43 +303,53 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
       <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes-v2">
         <Panel defaultSize={22} minSize={14} maxSize={36}>
           <div
-            className="pr-file-list"
-            role="listbox"
+            className="pr-file-tree"
             aria-label="Changed files"
-            aria-activedescendant={`pr-file-${pr.id}-${selected}`}
-            tabIndex={0}
             onKeyDown={(event) => {
-              if (event.key === 'ArrowDown' || event.key === 'j') { event.preventDefault(); move(1); }
-              else if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); }
-              else if (event.key === 'Home') { event.preventDefault(); setSelected(0); }
-              else if (event.key === 'End') { event.preventDefault(); setSelected(files.length - 1); }
+              if (event.key === 'j') { event.preventDefault(); move(1); }
+              else if (event.key === 'k') { event.preventDefault(); move(-1); }
             }}
           >
             <div className="pr-file-count">{files.length} changed {files.length === 1 ? 'file' : 'files'}</div>
-            {files.map((file, index) => {
-              const stats = diffStats(file);
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === selected}
-                  id={`pr-file-${pr.id}-${index}`}
-                  key={`${file.prevName || ''}:${file.name}:${index}`}
-                  className={`pr-file-row${index === selected ? ' selected' : ''}`}
-                  onClick={() => setSelected(index)}
-                >
-                  <span className={`pr-file-state ${file.type}`}>{fileState(file)}</span>
-                  <span className="pr-file-name" title={file.name}>{file.name}</span>
-                  <span className="pr-file-stats"><b>+{stats.additions}</b><i>−{stats.deletions}</i></span>
-                </button>
-              );
-            })}
+            <PierreTree
+              paths={treePaths}
+              gitStatus={treeStatus}
+              selectedPath={selectedPath}
+              followFocus
+              onSelect={(next) => {
+                if (!next) setSelectedPath(null);
+                else if (filesByPath.has(next)) setSelectedPath(next);
+              }}
+              emptyLabel="No changed files."
+            />
           </div>
         </Panel>
         <PanelResizeHandle className="rs-handle vert" />
         <Panel minSize={35}>
           <div className="pr-diff-scroll">
-            {selectedFile && <ParsedDiff fileDiff={selectedFile} layout={diffMode === 'split' ? 'split' : 'unified'} />}
+            {selectedFile && (
+              <>
+                <button
+                  type="button"
+                  className="lc-hunkfile"
+                  onClick={() => setCollapsed((value) => !value)}
+                  aria-expanded={!collapsed}
+                  title={collapsed ? 'Expand diff' : 'Collapse diff'}
+                >
+                  <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={12} className="chev" />
+                  <span className="path">{selectedFile.name}</span>
+                  <span className="stat-del">−{selectedStats?.deletions ?? 0}</span>
+                  <span className="stat-add">+{selectedStats?.additions ?? 0}</span>
+                </button>
+                {!collapsed && (
+                  <ParsedDiff
+                    fileDiff={selectedFile}
+                    layout={diffMode === 'split' ? 'split' : 'unified'}
+                    hideFileHeader
+                  />
+                )}
+              </>
+            )}
           </div>
         </Panel>
       </PanelGroup>
