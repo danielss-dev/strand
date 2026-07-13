@@ -28,12 +28,13 @@ hands the active PR to the provider website.
 
 For an active, non-draft PR, choose **Merge** in the detail header or run
 "Pull Requests: merge open pull request…" from the command palette. The
-confirmation dialog offers merge-commit, squash, and rebase strategies and is
-fully keyboard operable. Required checks, reviews, branch policies, and merge
-queues remain enforced by GitHub or Azure DevOps. Strand includes the exact
-source commit currently displayed in the merge request; if the branch changes
-before confirmation, the provider refuses the stale merge and Strand asks you
-to refresh. The source branch is not deleted automatically.
+split merge control works like GitHub: its primary button immediately runs the
+selected strategy, while the adjacent chevron opens a keyboard-operable menu
+for merge-commit, squash, and rebase. Required checks, reviews, branch policies,
+and merge queues remain enforced by GitHub or Azure DevOps. Strand includes the
+exact source commit currently displayed in the merge request; if the branch
+changes before the action reaches the provider, the stale merge is refused and
+Strand asks you to refresh. The source branch is not deleted automatically.
 
 The list loads only compact row data; Strand loads rich metadata only after a
 PR is opened. This keeps large repositories below provider query limits and

@@ -20,7 +20,7 @@ import { treeFileOrder } from '../lib/treeOrder';
 import type { PullRequest, PullRequestCheck, PullRequestList } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import { PullRequestMergeDialog } from './PullRequestMergeDialog';
+import { PullRequestMergeControl } from './PullRequestMergeControl';
 
 const providerName = (provider: PullRequestList['repository']['provider']) =>
   provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
@@ -367,14 +367,16 @@ const DETAIL_TABS: { id: DetailTab; label: string }[] = [
 
 function PullRequestDetails({
   path,
+  provider,
   pr,
   onUpdated,
-  onMerge,
+  onToast,
 }: {
   path: string;
+  provider: PullRequestList['repository']['provider'];
   pr: PullRequest;
   onUpdated: (next: PullRequest) => void;
-  onMerge: () => void;
+  onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const open = () => { if (pr.url) void shellOpen(pr.url); };
@@ -399,15 +401,14 @@ function PullRequestDetails({
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
-          <button
-            type="button"
-            className="btn primary"
-            onClick={onMerge}
-            disabled={Boolean(mergeDisabledReason)}
-            title={mergeDisabledReason || 'Merge this pull request'}
-          >
-            <Icon name="check" size={13} /> Merge
-          </button>
+          <PullRequestMergeControl
+            path={path}
+            provider={provider}
+            pr={pr}
+            disabledReason={mergeDisabledReason}
+            onMerged={onUpdated}
+            onToast={onToast}
+          />
           <button type="button" className="btn" onClick={open} disabled={!pr.url}>
             <Icon name="external" size={13} /> Open on host
           </button>
@@ -485,7 +486,6 @@ export function PullRequests({
   const [detailReload, setDetailReload] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mergeTarget, setMergeTarget] = useState<PullRequest | null>(null);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
   const autoOpenedContext = useRef<string | null>(null);
@@ -598,19 +598,19 @@ export function PullRequests({
     } : current);
   }, []);
 
-  const requestMerge = useCallback((pr: PullRequest | null) => {
+  const requestMergeMenu = useCallback((pr: PullRequest | null) => {
     if (!pr || pr.is_draft || !['open', 'active'].includes(pr.state) || !pr.source_commit) {
       onToast('Open an active, non-draft pull request before merging.', 'error');
       return;
     }
-    setMergeTarget(pr);
+    window.dispatchEvent(new CustomEvent('strand:pull-request-merge-menu'));
   }, [onToast]);
 
   useEffect(() => {
-    const onMergeRequest = () => requestMerge(detail);
+    const onMergeRequest = () => requestMergeMenu(detail);
     window.addEventListener('strand:pull-request-merge', onMergeRequest);
     return () => window.removeEventListener('strand:pull-request-merge', onMergeRequest);
-  }, [detail, requestMerge]);
+  }, [detail, requestMergeMenu]);
 
   return (
     <div className="pr-view">
@@ -698,23 +698,14 @@ export function PullRequests({
             <PullRequestDetails
               key={`${path}:${detail.id}`}
               path={path}
+              provider={data.repository.provider}
               pr={detail}
               onUpdated={updatePullRequest}
-              onMerge={() => requestMerge(detail)}
+              onToast={onToast}
             />
           ) : null}
         </div>
       ) : null}
-      {mergeTarget && path && data && (
-        <PullRequestMergeDialog
-          path={path}
-          provider={data.repository.provider}
-          pr={mergeTarget}
-          onClose={() => setMergeTarget(null)}
-          onMerged={updatePullRequest}
-          onToast={onToast}
-        />
-      )}
     </div>
   );
 }

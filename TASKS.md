@@ -1297,7 +1297,7 @@ tree: watch the agent work, review fast, accept or reject safely.
     required-review detail remain.
   - ◐ Hosted PR lifecycle actions.
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
-      stale-head guard, focus-trapped `PullRequestMergeDialog`, and command-palette action).
+      stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
     - ☐ Update/check out the PR branch.
     - ☐ Close/reopen the PR.
   - ☐ GitLab merge-request adapter.

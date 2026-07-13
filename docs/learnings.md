@@ -1159,5 +1159,5 @@ DevOps), so client-side green checks are not sufficient authorization.
 **How to apply.** GitHub merge commands use `--match-head-commit`; Azure
 completion requests include `lastMergeSourceCommit`. Keep required checks,
 reviews, queues, and branch policies provider-authoritative, preserve their
-failure text in the confirmation surface, and refresh the PR after a successful
-request because queued completion may leave it active temporarily.
+failure text next to the initiating control, and refresh the PR after a
+successful request because queued completion may leave it active temporarily.

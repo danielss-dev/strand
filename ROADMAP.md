@@ -1565,10 +1565,11 @@ Changes. The selected diff renders edge to edge while preserving the narrow
 
 **Hosted PR merge (2026-07-13):** Open GitHub and Azure DevOps pull requests
 can now be merged without leaving Strand. The detail header and command palette
-open a keyboard-contained confirmation dialog with merge-commit, squash, and
-rebase strategies. Provider checks and branch policies stay authoritative, and
-every write carries the exact source commit loaded by Strand so a newer,
-unreviewed head is refused instead of merged silently.
+focus a GitHub-style split merge control: the primary button runs the selected
+strategy and its chevron opens a keyboard-operable merge-commit, squash, or
+rebase menu. Provider checks and branch policies stay authoritative, and every
+write carries the exact source commit loaded by Strand so a newer, unreviewed
+head is refused instead of merged silently.
 
 ---
 

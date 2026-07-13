@@ -66,7 +66,7 @@ keyboard alone, and the mouse stays first-class.
   Markdown descriptions and conversations, add top-level comments, inspect
   lazily loaded code changes in the Local Changes-style Pierre file tree and
   diff workspace, see color-coded provider checks, and merge with merge-commit,
-  squash, or rebase strategies after an explicit confirmation.
+  squash, or rebase through a GitHub-style split merge control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
   remain enforced, while submit-review and other lifecycle actions are still
   in progress.
