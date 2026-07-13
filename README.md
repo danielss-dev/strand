@@ -65,12 +65,14 @@ keyboard alone, and the mouse stays first-class.
   opening automatically. Each PR gets a full-width workspace: read rendered
   Markdown descriptions and avatar-led timeline conversations, compose
   top-level comments with formatting, preview, and hosted screenshot links, inspect
-  lazily loaded code changes in the Local Changes-style Pierre file tree and
-  diff workspace, see color-coded provider checks, and merge with merge-commit,
-  squash, or rebase through a GitHub-style split merge control.
+  lazily loaded code changes in the Local Changes-style Pierre file tree,
+  switch stacked/split layout in place, and add stale-head-guarded GitHub
+  comments to selected line ranges. A compact readiness ledger combines review,
+  checks, conflicts, merge state, and provider freshness before merging with
+  merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
-  remain enforced, while submit-review and other lifecycle actions are still
-  in progress.
+  remain enforced. Azure inline comments need iteration tracking and
+  submit-review and other lifecycle actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the

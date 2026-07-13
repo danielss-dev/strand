@@ -1,6 +1,11 @@
-import { getSingularPatch, type FileDiffMetadata } from '@pierre/diffs';
+import {
+  getSingularPatch,
+  type DiffLineAnnotation,
+  type FileDiffMetadata,
+  type SelectedLineRange,
+} from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, PatchDiff } from '@pierre/diffs/react';
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 
 import { hashPatch } from '../lib/patch';
 import { useSettings, type SettingsState } from '../stores/settings';
@@ -24,8 +29,15 @@ export interface DiffProps {
   style?: CSSProperties;
 }
 
-export interface ParsedDiffProps extends Omit<DiffProps, 'patch'> {
+export interface ParsedDiffProps<LAnnotation = undefined> extends Omit<DiffProps, 'patch'> {
   fileDiff: FileDiffMetadata;
+  /** Controlled line selection used by hosted review surfaces. */
+  selectedLines?: SelectedLineRange | null;
+  /** Inline rows anchored to a side + line in the parsed diff. */
+  lineAnnotations?: DiffLineAnnotation<LAnnotation>[];
+  renderAnnotation?: (annotation: DiffLineAnnotation<LAnnotation>) => ReactNode;
+  /** Pierre emits a complete range after pointer or keyboard selection. */
+  onLineSelected?: (range: SelectedLineRange | null) => void;
 }
 
 /**
@@ -119,13 +131,17 @@ export function Diff({
 }
 
 /** Render an already-parsed provider patch through Strand's Pierre boundary. */
-export function ParsedDiff({
+export function ParsedDiff<LAnnotation = undefined>({
   fileDiff,
   layout = 'unified',
   hideFileHeader = false,
+  selectedLines,
+  lineAnnotations,
+  renderAnnotation,
+  onLineSelected,
   className,
   style,
-}: ParsedDiffProps) {
+}: ParsedDiffProps<LAnnotation>) {
   const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const diffIndicators = useSettings((s) => s.diffIndicators);
   const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
@@ -135,9 +151,20 @@ export function ParsedDiff({
     theme: pierreTheme,
     disableBackground: true,
     disableFileHeader: hideFileHeader,
+    enableLineSelection: Boolean(onLineSelected),
+    controlledSelection: Boolean(onLineSelected),
+    onLineSelected,
     ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
   } as const;
   return (
-    <PierreFileDiff fileDiff={fileDiff} options={options} className={className} style={style} />
+    <PierreFileDiff<LAnnotation>
+      fileDiff={fileDiff}
+      options={options}
+      selectedLines={selectedLines}
+      lineAnnotations={lineAnnotations}
+      renderAnnotation={renderAnnotation}
+      className={className}
+      style={style}
+    />
   );
 }

@@ -1580,6 +1580,32 @@ common Markdown blocks, a hosted screenshot/image action, live character
 count, and clearer submission feedback. Remote images remain inert until the
 user explicitly reveals them, preserving the webview privacy boundary.
 
+**Hosted PR review-workspace research (2026-07-13):** A current comparison of
+Codex, Cursor, Conductor, GitHub, Graphite, and GitKraken is captured in
+`docs/pull-request-improvements.md`. The recommended next phase keeps Strand's
+lazy provider queries and one-mounted-diff boundary, but adds the missing review
+state: a readiness/viewed/thread ledger, inline thread lifecycle and batched
+review submission, attention-oriented list filters, then commit/version and
+safe worktree actions. Concrete unchecked slices were added to `TASKS.md`; no
+user-visible behavior changed in this research pass.
+
+**Hosted PR readiness ledger (2026-07-13):** The first review-workspace slice
+landed in the PR header. `pullRequestReadiness` conservatively combines active /
+draft state, exact-head availability, required-review state, CI results, merge
+conflicts, and provider merge state; the compact `.pr-readiness` strip keeps the
+result, checks summary, review decision, and update age visible across every PR
+tab, with keyboard-accessible blocker details. Unrecognized signals and Azure's
+currently unavailable policy/check detail remain **Status incomplete**, never a
+false green. Focused Vitest coverage locks the provider-state normalization.
+
+**Hosted PR inline review kick (2026-07-13):** Changes now carries its own
+persisted stacked/split controls and exposes Pierre's controlled line-range
+selection through Strand's diff boundary. Open GitHub PRs get an annotation-row
+composer that publishes a real review comment against old/new blob coordinates;
+`repo_pull_request_inline_comment` rechecks the exact head before the write so a
+stale diff cannot silently misplace feedback. Azure stays explicitly disabled
+until its required iteration/change-tracking coordinates join the patch model.
+
 ---
 
 ## 1.1+ — Post-1.0

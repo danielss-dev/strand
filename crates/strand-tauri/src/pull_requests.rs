@@ -112,6 +112,13 @@ pub struct PullRequestList {
     pub pull_requests: Vec<PullRequest>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestDiffSide {
+    Deletions,
+    Additions,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum HostRepo {
     GitHub {
@@ -171,6 +178,44 @@ pub fn add_comment(path: &str, id: u64, body: &str) -> Result<()> {
             project,
             repo,
         } => add_comment_azure(path, organization, project, repo, id, body),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn add_inline_comment(
+    path: &str,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    expected_head: &str,
+) -> Result<()> {
+    validate_comment(body)?;
+    validate_commit(expected_head)?;
+    if file_path.trim().is_empty() || file_path.contains(['\r', '\n', '\0']) {
+        return Err("The inline comment file path is invalid".to_string());
+    }
+    if start_line == 0 || end_line < start_line {
+        return Err("The inline comment line range is invalid".to_string());
+    }
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => {
+            let current = detail_github(path, owner.clone(), repo.clone(), id)?;
+            if current.source_commit != expected_head {
+                return Err("The pull request changed while this comment was being written. Refresh Changes and select the lines again.".to_string());
+            }
+            add_inline_comment_github(
+                path, owner, repo, id, body, file_path, start_line, end_line, side,
+                expected_head,
+            )
+        }
+        HostRepo::Azure { .. } => Err(
+            "Inline Azure DevOps comments need iteration tracking metadata that Strand does not load yet. Open this pull request on Azure DevOps to comment on these lines."
+                .to_string(),
+        ),
     }
 }
 
@@ -295,6 +340,61 @@ fn add_comment_github(cwd: &str, owner: String, repo: String, id: u64, body: &st
         Some(body.as_bytes()),
     )?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_inline_comment_github(
+    cwd: &str,
+    owner: String,
+    repo: String,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    expected_head: &str,
+) -> Result<()> {
+    let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/comments");
+    let payload = github_inline_comment_payload(
+        body, file_path, start_line, end_line, side, expected_head,
+    );
+    let input = serde_json::to_vec(&payload)
+        .map_err(|error| format!("Could not encode GitHub inline comment: {error}"))?;
+    run_command_input(
+        cwd,
+        "gh",
+        &["api", "--method", "POST", &endpoint, "--input", "-"],
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(&input),
+    )?;
+    Ok(())
+}
+
+fn github_inline_comment_payload(
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    expected_head: &str,
+) -> Value {
+    let side = match side {
+        PullRequestDiffSide::Deletions => "LEFT",
+        PullRequestDiffSide::Additions => "RIGHT",
+    };
+    let mut payload = serde_json::json!({
+        "body": body,
+        "commit_id": expected_head,
+        "path": file_path,
+        "line": end_line,
+        "side": side,
+    });
+    if start_line != end_line {
+        payload["start_line"] = start_line.into();
+        payload["start_side"] = side.into();
+    }
+    payload
 }
 
 fn merge_github(
@@ -1292,5 +1392,35 @@ mod tests {
         assert_eq!(github_merge_flag(PullRequestMergeStrategy::Squash), "--squash");
         assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::MergeCommit), "noFastForward");
         assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::Rebase), "rebase");
+    }
+
+    #[test]
+    fn builds_github_inline_comment_ranges_with_blob_sides() {
+        let multi = github_inline_comment_payload(
+            "Please simplify this.",
+            "src/lib.rs",
+            10,
+            12,
+            PullRequestDiffSide::Additions,
+            "0123456789abcdef0123456789abcdef01234567",
+        );
+        assert_eq!(multi["path"], "src/lib.rs");
+        assert_eq!(multi["start_line"], 10);
+        assert_eq!(multi["line"], 12);
+        assert_eq!(multi["start_side"], "RIGHT");
+        assert_eq!(multi["side"], "RIGHT");
+
+        let single = github_inline_comment_payload(
+            "Why remove this?",
+            "src/lib.rs",
+            7,
+            7,
+            PullRequestDiffSide::Deletions,
+            "0123456789abcdef0123456789abcdef01234567",
+        );
+        assert_eq!(single["line"], 7);
+        assert_eq!(single["side"], "LEFT");
+        assert!(single.get("start_line").is_none());
+        assert!(single.get("start_side").is_none());
     }
 }
