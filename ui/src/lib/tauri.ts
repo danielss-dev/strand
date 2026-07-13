@@ -104,6 +104,18 @@ export const tauri = {
     invoke<string>('repo_pull_request_diff', { path, id }),
   repoPullRequestComment: (path: string, id: number, body: string) =>
     invoke<void>('repo_pull_request_comment', { path, id, body }),
+  repoPullRequestInlineComment: (
+    path: string,
+    id: number,
+    body: string,
+    filePath: string,
+    startLine: number,
+    endLine: number,
+    side: 'deletions' | 'additions',
+    expectedHead: string,
+  ) => invoke<void>('repo_pull_request_inline_comment', {
+    path, id, body, filePath, startLine, endLine, side, expectedHead,
+  }),
   repoPullRequestMerge: (
     path: string,
     id: number,

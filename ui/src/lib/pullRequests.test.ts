@@ -17,8 +17,41 @@ const {
   diffStats,
   markdownUrl,
   parsePullRequestPatch,
+  pullRequestReadiness,
   pullRequestForBranch,
+  relativeTimeLabel,
 } = await import('./pullRequests');
+
+import type { PullRequest } from './types';
+
+function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
+  return {
+    id: 42,
+    title: 'Ship it',
+    state: 'open',
+    is_draft: false,
+    author: 'octo',
+    source_branch: 'feature',
+    source_commit: '1'.repeat(40),
+    target_branch: 'main',
+    created_at: '2026-07-13T10:00:00Z',
+    updated_at: '2026-07-13T11:00:00Z',
+    url: 'https://github.com/acme/repo/pull/42',
+    description: '',
+    merge_status: 'CLEAN',
+    review_status: 'APPROVED',
+    comment_count: 0,
+    commit_count: 1,
+    additions: 10,
+    deletions: 2,
+    changed_files: 2,
+    labels: [],
+    reviewers: [],
+    checks: [{ name: 'CI', status: 'SUCCESS' }],
+    comments: [],
+    ...overrides,
+  };
+}
 
 describe('checkTone', () => {
   it('normalizes provider success, running, and failure states', () => {
@@ -27,6 +60,57 @@ describe('checkTone', () => {
     expect(checkTone('queued')).toBe('running');
     expect(checkTone('timed-out')).toBe('failed');
     expect(checkTone('neutral')).toBe('neutral');
+  });
+});
+
+describe('pullRequestReadiness', () => {
+  it('reports a GitHub PR ready only when every reported signal is clear', () => {
+    const readiness = pullRequestReadiness(pullRequest(), 'git_hub');
+    expect(readiness.tone).toBe('ready');
+    expect(readiness.label).toBe('Ready to merge');
+    expect(readiness.checks).toMatchObject({ passed: 1, failed: 0, total: 1 });
+  });
+
+  it('collects explicit blockers and pending signals', () => {
+    const readiness = pullRequestReadiness(pullRequest({
+      merge_status: 'DIRTY',
+      review_status: 'CHANGES_REQUESTED',
+      checks: [
+        { name: 'CI', status: 'FAILURE' },
+        { name: 'Browser', status: 'IN_PROGRESS' },
+      ],
+    }), 'git_hub');
+    expect(readiness.tone).toBe('blocked');
+    expect(readiness.label).toBe('3 blockers');
+    expect(readiness.details).toContain('The source branch has merge conflicts.');
+    expect(readiness.details).toContain('1 check is still running.');
+  });
+
+  it('keeps incomplete Azure policy data neutral instead of ready', () => {
+    const readiness = pullRequestReadiness(pullRequest({
+      merge_status: 'succeeded',
+      checks: [],
+    }), 'azure_dev_ops');
+    expect(readiness.tone).toBe('neutral');
+    expect(readiness.label).toBe('Status incomplete');
+    expect(readiness.details[0]).toContain('Azure policy');
+  });
+
+  it('treats a requested required reviewer as pending', () => {
+    const readiness = pullRequestReadiness(pullRequest({
+      review_status: 'REVIEW_REQUIRED',
+      reviewers: [{ name: 'Ada', status: 'requested', required: true }],
+    }), 'git_hub');
+    expect(readiness.tone).toBe('pending');
+    expect(readiness.details).toEqual(['A required review is still pending.']);
+  });
+});
+
+describe('relativeTimeLabel', () => {
+  it('formats provider freshness without baking time into the component', () => {
+    expect(relativeTimeLabel('2026-07-13T11:52:00Z', Date.parse('2026-07-13T12:00:00Z')))
+      .toBe('8m ago');
+    expect(relativeTimeLabel('')).toBe('Update time unavailable');
   });
 });
 

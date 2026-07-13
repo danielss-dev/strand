@@ -221,6 +221,35 @@ pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> C
     .await
 }
 
+/// Add a provider review thread anchored to an exact file line range.
+/// `expected_head` prevents a delayed editor from commenting on a newer diff.
+#[tauri::command(async)]
+pub async fn repo_pull_request_inline_comment(
+    path: String,
+    id: u64,
+    body: String,
+    file_path: String,
+    start_line: u32,
+    end_line: u32,
+    side: pull_requests::PullRequestDiffSide,
+    expected_head: String,
+) -> CmdResult<()> {
+    run_blocking("pull request inline comment", move || {
+        pull_requests::add_inline_comment(
+            &path,
+            id,
+            &body,
+            &file_path,
+            start_line,
+            end_line,
+            side,
+            &expected_head,
+        )
+        .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Merge a hosted pull request through its provider. The expected source
 /// commit prevents merging unseen updates; provider policies remain enforced.
 #[tauri::command(async)]

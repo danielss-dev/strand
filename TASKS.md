@@ -1284,7 +1284,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     keyboard-operable 22% Pierre folder tree and compact Local Changes-style
     file header mount one selected, edge-to-edge diff at a time, leaving the
     rest of the full-width detail workspace for code and following the app's
-    split/stacked appearance settings. Azure comparisons
+    split/stacked appearance settings. The file header now exposes the same
+    persisted stacked/split controls in context. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
   - ◐ Discussion threads and comment creation: Conversation reads GitHub
     comments and Azure thread comments (including inline file context) as safe
@@ -1293,10 +1294,38 @@ tree: watch the agent work, review fast, accept or reject safely.
     keyboard-operable Write/Preview composer, Markdown formatting toolbar,
     hosted screenshot/image insertion, explicit click-to-load image previews,
     character count, provider avatars with initials fallback, and comment
-    permalinks. Replies, new
+    permalinks. GitHub Changes now supports Pierre line-range selection and an
+    anchored inline composer through `repo_pull_request_inline_comment`, with
+    exact-head validation before publishing. Replies, Azure iteration-tracked
     inline comments, direct binary attachment uploads, suggestions, and thread
     resolution remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
+  - ◐ PR review ledger + merge-readiness model (see
+    `docs/pull-request-improvements.md`).
+    - ☑ Header readiness strip (`pullRequestReadiness`, `.pr-readiness`):
+      combines state, required reviews, checks, conflicts, provider freshness,
+      and expandable blocker evidence; missing Azure policy/check fields remain
+      explicitly incomplete instead of appearing ready.
+    - ☐ Add viewed-file progress and unresolved-thread counts when those review
+      state models land.
+  - ◐ Inline review workspace: GitHub line-range selection and immediate
+    publishing are present (`ParsedDiff` controlled selection + inline
+    annotation composer); provider-neutral line/file thread reading, Azure
+    iteration coordinates, replies, resolved/outdated state, local
+    content-hash-keyed viewed files, unviewed/thread filters, batched drafts,
+    and keyboard next-thread navigation remain while retaining one mounted
+    Pierre diff.
+  - ☐ Batched review submission: pending comments plus Comment / Approve /
+    Request changes, summary preview, exact-head stale guard, and draft
+    preservation when a provider write fails.
+  - ☐ PR inbox controls over the shallow list: Open / Needs review / Mine /
+    Draft / Closed filters, fuzzy search, attention-first sort, and row-level
+    review/check state without expanding provider queries per row.
+  - ☐ Lazy Commits + independent Checks tabs; keep readiness persistent in the
+    PR header and deep-link unsupported provider detail to the host.
+  - ☐ Review evolution + local action: reliable “since my last review” compare
+    where the provider exposes a boundary, safe Open in worktree / Update branch,
+    suggestions, and unresolved-feedback export for external agents.
   - ◐ Checks render provider states as green success, yellow running, red
     failure, or neutral. Azure policies, merge queue/auto-complete, and
     required-review detail remain.

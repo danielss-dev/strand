@@ -36,6 +36,15 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
+Directly below the PR title, the readiness strip combines the open/draft state,
+review decision, provider checks, merge conflicts or policy state, and the last
+reported update time. Select its **status details** disclosure to see the exact
+blockers or pending signals. Strand only shows **Ready to merge** when every
+reported signal is clear. Missing or unrecognized provider data is shown as
+**Status incomplete**; Azure policy/check detail that the current CLI path does
+not expose is never treated as success. The provider remains authoritative when
+you choose Merge.
+
 The list loads only compact row data; Strand loads rich metadata only after a
 PR is opened. This keeps large repositories below provider query limits and
 means moving through the list does not start provider calls. The opened PR uses
@@ -82,13 +91,27 @@ in the same Pierre folder tree used by Local Changes. Use the folder chevrons
 to expand or collapse paths; use `Up`/`Down`, `j`/`k`, `Home`, or `End` to
 select a file. The rest of the full-width workspace renders the selected patch
 edge to edge beneath the same compact, collapsible file header used by Local
-Changes and follows the configured stacked/split diff appearance. Only one
-file diff is mounted at a time to keep large PRs responsive. Provider patches
-larger than 16 MB are not rendered.
+Changes. Use the two layout buttons in that header to switch between stacked
+and split diffs; the choice is saved per repository. Only one file diff is
+mounted at a time to keep large PRs responsive. Provider patches larger than
+16 MB are not rendered.
+
+On an open GitHub pull request, drag across line numbers to select one or more
+lines, or choose **Comment on lines** in the file header to start from the
+first changed line using the keyboard. Strand highlights the range and opens a
+composer directly beneath it. **Add comment** publishes a GitHub review thread
+on that exact old- or new-file range; `Mod+Enter` sends from the composer.
+Before publishing, Strand verifies that
+the pull request head is still the commit used by the displayed patch; if it
+changed, the draft stays in place and Changes asks you to refresh and reselect.
+Closed and merged pull requests stay read-only.
 
 Azure does not expose every check or policy field through the same provider
-command, so absent data is shown honestly rather than inferred. Replies, new
-inline comments, suggestions, approve/request-changes actions, Azure policy
-details, branch updates, and close/reopen controls are planned but are not
-presented as available yet. GitLab and Bitbucket adapters will use the same
-workspace in a later slice.
+command, so absent data is shown honestly rather than inferred. Azure inline
+comments also require provider iteration/change-tracking coordinates that the
+current patch fetch does not include, so Strand disables that action and
+directs you to the host instead of creating a wrongly anchored thread.
+Replies, suggestions, approve/request-changes actions, Azure policy details,
+branch updates, and close/reopen controls are planned but are not presented as
+available yet. GitLab and Bitbucket adapters will use the same workspace in a
+later slice.

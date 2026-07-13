@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
-import type { FileDiffMetadata } from '@pierre/diffs';
+import type { DiffLineAnnotation, FileDiffMetadata, SelectedLineRange } from '@pierre/diffs';
 import type { GitStatusEntry } from '@pierre/trees';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
@@ -14,7 +14,9 @@ import {
   diffStats,
   markdownUrl,
   parsePullRequestPatch,
+  pullRequestReadiness,
   pullRequestForBranch,
+  relativeTimeLabel,
 } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -393,14 +395,32 @@ function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
   return 'modified';
 }
 
-function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
+type InlineCommentAnnotation = { range: SelectedLineRange };
+
+function PullRequestChanges({
+  path,
+  provider,
+  pr,
+  onUpdated,
+}: {
+  path: string;
+  provider: PullRequestList['repository']['provider'];
+  pr: PullRequest;
+  onUpdated: (next: PullRequest) => void;
+}) {
   const diffMode = useSettings((state) => state.diffMode);
+  const platform = useSettings((state) => state.platform);
+  const setDiffMode = useRepo((state) => state.setDiffMode);
   const [patch, setPatch] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+  const [commentMessage, setCommentMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -442,7 +462,93 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
     setSelectedPath((current) => current && filesByPath.has(current) ? current : treePaths[0] ?? null);
   }, [filesByPath, treePaths]);
 
-  useEffect(() => setCollapsed(false), [selectedPath]);
+  useEffect(() => {
+    setCollapsed(false);
+    setSelectedLines(null);
+    setCommentDraft('');
+    setCommentMessage(null);
+  }, [selectedPath]);
+
+  const openForReview = pr.state === 'open' || pr.state === 'active';
+  const inlineCommentsSupported = provider === 'git_hub' && openForReview;
+  const inlineCommentTitle = provider !== 'git_hub'
+    ? 'Inline Azure DevOps comments need iteration tracking; open on host for now'
+    : openForReview
+      ? 'Comment on lines'
+      : 'This pull request is read-only';
+
+  const selectLines = useCallback((range: SelectedLineRange | null) => {
+    if (!inlineCommentsSupported || !range) {
+      setSelectedLines(null);
+      return;
+    }
+    const startSide = range.side ?? 'additions';
+    const endSide = range.endSide ?? startSide;
+    if (startSide !== endSide) {
+      setSelectedLines({ start: range.end, end: range.end, side: endSide, endSide });
+      return;
+    }
+    setSelectedLines({
+      start: Math.min(range.start, range.end),
+      end: Math.max(range.start, range.end),
+      side: startSide,
+      endSide: startSide,
+    });
+    setCommentMessage(null);
+  }, [inlineCommentsSupported]);
+
+  const beginInlineComment = () => {
+    if (!selectedFile || !inlineCommentsSupported) return;
+    const hunk = selectedFile.hunks[0];
+    if (!hunk) return;
+    const side = selectedFile.type === 'deleted' ? 'deletions' : 'additions';
+    const line = side === 'deletions' ? hunk.deletionStart : hunk.additionStart;
+    selectLines({ start: Math.max(1, line), end: Math.max(1, line), side, endSide: side });
+    requestAnimationFrame(() => document.getElementById(`pr-inline-comment-${pr.id}`)?.focus());
+  };
+
+  const inlineAnnotations = useMemo<DiffLineAnnotation<InlineCommentAnnotation>[]>(() => {
+    if (!selectedLines) return [];
+    const side = selectedLines.endSide ?? selectedLines.side ?? 'additions';
+    return [{ side, lineNumber: selectedLines.end, metadata: { range: selectedLines } }];
+  }, [selectedLines]);
+
+  const submitInlineComment = async () => {
+    if (!selectedFile || !selectedLines || postingComment) return;
+    const body = commentDraft.trim();
+    if (!body) return;
+    const side = selectedLines.side ?? 'additions';
+    setPostingComment(true);
+    setCommentMessage(null);
+    let posted = false;
+    try {
+      await tauri.repoPullRequestInlineComment(
+        path,
+        pr.id,
+        body,
+        selectedFile.name,
+        selectedLines.start,
+        selectedLines.end,
+        side,
+        pr.source_commit,
+      );
+      posted = true;
+      setCommentDraft('');
+      setSelectedLines(null);
+      const next = await tauri.repoPullRequest(path, pr.id);
+      onUpdated(next);
+      setCommentMessage({ tone: 'ok', text: 'Inline comment added.' });
+    } catch (caught) {
+      setCommentMessage({
+        tone: 'error',
+        text: posted
+          ? `Comment was added, but the pull request could not refresh: ${errMessage(caught)}`
+          : errMessage(caught),
+      });
+    } finally {
+      setPostingComment(false);
+    }
+  };
 
   const move = (delta: number) => {
     if (!treePaths.length) return;
@@ -499,23 +605,106 @@ function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
           <div className="pr-diff-scroll">
             {selectedFile && (
               <>
-                <button
-                  type="button"
-                  className="lc-hunkfile"
-                  onClick={() => setCollapsed((value) => !value)}
-                  aria-expanded={!collapsed}
-                  title={collapsed ? 'Expand diff' : 'Collapse diff'}
-                >
-                  <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={12} className="chev" />
-                  <span className="path">{selectedFile.name}</span>
-                  <span className="stat-del">−{selectedStats?.deletions ?? 0}</span>
-                  <span className="stat-add">+{selectedStats?.additions ?? 0}</span>
-                </button>
+                <div className="pr-diff-header">
+                  <button
+                    type="button"
+                    className="lc-hunkfile pr-file-toggle"
+                    onClick={() => setCollapsed((value) => !value)}
+                    aria-expanded={!collapsed}
+                    title={collapsed ? 'Expand diff' : 'Collapse diff'}
+                  >
+                    <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={12} className="chev" />
+                    <span className="path">{selectedFile.name}</span>
+                    <span className="stat-del">−{selectedStats?.deletions ?? 0}</span>
+                    <span className="stat-add">+{selectedStats?.additions ?? 0}</span>
+                  </button>
+                  <div className="pr-diff-tools" aria-label="Diff view controls">
+                    <button
+                      type="button"
+                      className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
+                      onClick={() => setDiffMode('stacked')}
+                      title="Stacked (unified)"
+                      aria-label="Stacked (unified) diff view"
+                      aria-pressed={diffMode === 'stacked'}
+                    >
+                      <Icon name="unified" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
+                      onClick={() => setDiffMode('split')}
+                      title="Split (side-by-side)"
+                      aria-label="Split (side-by-side) diff view"
+                      aria-pressed={diffMode === 'split'}
+                    >
+                      <Icon name="split" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={beginInlineComment}
+                      title={inlineCommentTitle}
+                      aria-label={inlineCommentTitle}
+                      disabled={!inlineCommentsSupported}
+                    >
+                      <Icon name="edit" size={13} />
+                    </button>
+                  </div>
+                </div>
+                {commentMessage && (
+                  <div className={`pr-inline-message ${commentMessage.tone}`} role={commentMessage.tone === 'error' ? 'alert' : 'status'}>
+                    {commentMessage.text}
+                  </div>
+                )}
                 {!collapsed && (
-                  <ParsedDiff
+                  <ParsedDiff<InlineCommentAnnotation>
                     fileDiff={selectedFile}
                     layout={diffMode === 'split' ? 'split' : 'unified'}
                     hideFileHeader
+                    className="pr-review-diff"
+                    selectedLines={selectedLines}
+                    lineAnnotations={inlineAnnotations}
+                    onLineSelected={inlineCommentsSupported ? selectLines : undefined}
+                    renderAnnotation={() => selectedLines ? (
+                      <form
+                        className="pr-inline-composer"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void submitInlineComment();
+                        }}
+                      >
+                        <div className="pr-inline-composer-head">
+                          <strong>
+                            {selectedFile.name} · {selectedLines.side === 'deletions' ? 'old' : 'new'} line{selectedLines.start === selectedLines.end ? '' : 's'}{' '}
+                            {selectedLines.start === selectedLines.end ? selectedLines.start : `${selectedLines.start}–${selectedLines.end}`}
+                          </strong>
+                          <button type="button" className="icon-btn" onClick={() => setSelectedLines(null)} aria-label="Cancel inline comment" title="Cancel">
+                            <Icon name="x" size={12} />
+                          </button>
+                        </div>
+                        <textarea
+                          id={`pr-inline-comment-${pr.id}`}
+                          value={commentDraft}
+                          onChange={(event) => setCommentDraft(event.target.value)}
+                          placeholder="Leave a comment on these lines…"
+                          rows={3}
+                          maxLength={65_536}
+                          disabled={postingComment}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                              event.preventDefault();
+                              void submitInlineComment();
+                            }
+                          }}
+                        />
+                        <div className="pr-inline-actions">
+                          <span>{commentDraft.length.toLocaleString()} / 65,536 · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter</span>
+                          <button type="submit" className="btn primary" disabled={!commentDraft.trim() || postingComment}>
+                            {postingComment ? 'Adding…' : 'Add comment'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                   />
                 )}
               </>
@@ -554,6 +743,17 @@ function PullRequestDetails({
     document.getElementById(`pr-tab-${pr.id}-${next}`)?.focus();
   };
   const tabIndex = DETAIL_TABS.findIndex((item) => item.id === tab);
+  const readiness = pullRequestReadiness(pr, provider);
+  const readinessIcon: IconName = readiness.tone === 'ready'
+    ? 'check'
+    : readiness.tone === 'blocked'
+      ? 'x'
+      : readiness.tone === 'pending'
+        ? 'history'
+        : 'circle';
+  const checksLabel = readiness.checks.total > 0
+    ? `${readiness.checks.passed}/${readiness.checks.total} checks passed`
+    : 'No checks reported';
   const mergeDisabledReason = pr.is_draft
     ? 'Mark this pull request ready before merging'
     : !['open', 'active'].includes(pr.state)
@@ -584,10 +784,32 @@ function PullRequestDetails({
         </div>
       </header>
 
-      <div className="pr-pills" aria-label="Pull request status">
-        <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
-        {pr.review_status && <span>{pr.review_status.toLowerCase()}</span>}
-        {pr.merge_status && <span>{pr.merge_status.toLowerCase()}</span>}
+      <div className={`pr-readiness ${readiness.tone}`} aria-label="Pull request readiness">
+        <div className="pr-readiness-main">
+          <span className="pr-readiness-icon" aria-hidden="true">
+            <Icon name={readinessIcon} size={14} />
+          </span>
+          <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
+          <span>
+            <strong>{readiness.label}</strong>
+            <small>{readiness.summary}</small>
+          </span>
+        </div>
+        <div className="pr-readiness-facts">
+          <span><Icon name="check" size={11} /> {checksLabel}</span>
+          <span><Icon name="eye" size={11} /> {readiness.reviewLabel}</span>
+          <span title={dateLabel(pr.updated_at) || undefined}>
+            <Icon name="history" size={11} /> Updated {relativeTimeLabel(pr.updated_at)}
+          </span>
+        </div>
+        {readiness.details.length > 0 && (
+          <details className="pr-readiness-details">
+            <summary>{readiness.details.length} status {readiness.details.length === 1 ? 'detail' : 'details'}</summary>
+            <ul>
+              {readiness.details.map((detail) => <li key={detail}>{detail}</li>)}
+            </ul>
+          </details>
+        )}
       </div>
 
       <div
@@ -632,7 +854,7 @@ function PullRequestDetails({
       >
         {tab === 'overview' && <PullRequestOverview pr={pr} />}
         {tab === 'conversation' && <PullRequestConversation path={path} pr={pr} onUpdated={onUpdated} />}
-        {tab === 'changes' && <PullRequestChanges path={path} pr={pr} />}
+        {tab === 'changes' && <PullRequestChanges path={path} provider={provider} pr={pr} onUpdated={onUpdated} />}
       </div>
     </article>
   );
