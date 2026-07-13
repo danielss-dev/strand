@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import {
+// Pierre detects mobile Safari when its root module is evaluated. The app
+// always runs in a webview, but Vitest runs in plain Node; Node 20 (used by CI)
+// has no navigator global. Install the smallest browser contract before the
+// dynamic import so this test exercises the parser under the same condition
+// without switching the whole unit suite to a DOM environment.
+if (typeof navigator === 'undefined') {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { userAgent: 'vitest', platform: '', maxTouchPoints: 0 },
+  });
+}
+
+const {
   checkTone,
   diffStats,
   markdownUrl,
   parsePullRequestPatch,
   pullRequestForBranch,
-} from './pullRequests';
+} = await import('./pullRequests');
 
 describe('checkTone', () => {
   it('normalizes provider success, running, and failure states', () => {
