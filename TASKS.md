@@ -1269,11 +1269,13 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 - ◐ Provider-neutral Pull Requests workspace for the active repository.
   - ☑ Read-only GitHub + Azure DevOps list/detail slice (`pull_requests.rs`,
-    `repo_pull_requests`, `views/PullRequests.tsx`): detects the provider from
-    `origin`/supported remotes, batches the latest 100 open/closed/merged PRs
-    through the signed-in `gh` or `az` CLI, and shows title/state, branches,
-    author, description, dates, labels, reviewers, merge/review status, counts,
-    and provider-reported checks. Resizable list/detail panes, arrow or j/k
+    `repo_pull_requests` + lazy `repo_pull_request`, `views/PullRequests.tsx`):
+    detects the provider from `origin`/supported remotes, loads a shallow latest
+    100 open/closed/merged PR index through the signed-in `gh` or `az` CLI, then
+    fetches description, counts, labels, reviewers, merge/review status, and
+    provider-reported checks only for the selected PR (120ms settled-selection
+    gate prevents key-repeat subprocess storms and avoids GitHub's GraphQL
+    possible-node cap). Resizable list/detail panes, arrow or j/k
     selection, Enter/double-click/Open-on-host, refresh, command-palette entry,
     and actionable missing-CLI/auth errors.
   - ☐ Hosted diff and changed-files tree, using lazy/virtualized Pierre renders.

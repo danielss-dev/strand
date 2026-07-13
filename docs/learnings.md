@@ -1092,3 +1092,24 @@ reading, while an invisible auth prompt can otherwise wait forever.
 the shared wrapper. Spawn with piped stdout/stderr readers running in parallel,
 `stdin(null)`, and a product-appropriate timeout. Provider auth remains in the
 official CLI unless OS-keychain storage is explicitly part of the change.
+
+---
+
+## Provider list queries stay shallow; nested data loads per selection
+
+**Rule.** Never request nested comments, commits, reviews, files, or checks for
+an entire hosted-PR list. The index query carries only row fields; load rich
+metadata for the selected PR after a short settled-selection delay.
+
+**Why.** `gh pr list --limit 100` with comments + commits + latest reviews +
+check rollups asked GitHub GraphQL to traverse up to 1,000,000 possible nodes,
+over its 500,000 maximum. The user was authenticated; the UI incorrectly
+described the provider query-shape error as a login problem. Eager per-row
+detail calls would avoid that cap but turn j/k key-repeat into a subprocess
+storm.
+
+**How to apply.** GitHub uses shallow `gh pr list` plus one `gh pr view` for the
+settled row. Other providers follow the same boundary even if their present API
+would tolerate a large response. Generation-gate responses so a slow previous
+selection cannot replace the active detail, and append login guidance only
+when stderr actually indicates authentication failure.

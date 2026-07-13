@@ -4639,6 +4639,7 @@ textarea.clone-input {
 .pr-empty p { max-width: 620px; margin: 0; color: var(--text-2); font-size: 11px; line-height: 1.5; }
 .pr-empty span { max-width: 620px; font-size: 10px; }
 .pr-empty .btn { margin-top: 5px; }
+.pr-detail-empty { height: 100%; }
 
 /* ─── Workspace Review (aggregated cross-repo queue) ──────────────────── */
 

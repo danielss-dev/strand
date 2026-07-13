@@ -1,9 +1,9 @@
 //! Pull-request host integration.
 //!
 //! Authentication stays with the provider CLIs (`gh` and `az`): Strand never
-//! reads or stores their tokens. One command returns the complete list payload
-//! needed by the UI so opening the view costs one subprocess, not one request
-//! per pull request.
+//! reads or stores their tokens. The list call stays shallow; a second command
+//! loads nested metadata only for the selected pull request so provider query
+//! limits and large repositories remain predictable.
 
 use std::{
     io::Read,
@@ -19,6 +19,15 @@ use strand_core::Repo;
 use crate::ai::bin::{base_command, resolve_cli};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const GITHUB_LIST_FIELDS: &str = concat!(
+    "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
+    "url,reviewDecision"
+);
+const GITHUB_DETAIL_FIELDS: &str = concat!(
+    "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
+    "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
+    "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup"
+);
 type Result<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -93,6 +102,30 @@ enum HostRepo {
 }
 
 pub fn list(path: &str) -> Result<PullRequestList> {
+    let (remote, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => list_github(path, remote, owner, repo),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => list_azure(path, remote, organization, project, repo),
+    }
+}
+
+pub fn detail(path: &str, id: u64) -> Result<PullRequest> {
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => detail_github(path, owner, repo, id),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => detail_azure(path, organization, project, repo, id),
+    }
+}
+
+fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let repo = Repo::discover(path).map_err(|error| error.to_string())?;
     let refs = repo.refs().map_err(|error| error.to_string())?;
     let mut supported = refs
@@ -105,32 +138,31 @@ pub fn list(path: &str) -> Result<PullRequestList> {
         .collect::<Vec<_>>();
     supported.sort_by_key(|(name, _)| (name != "origin", name.clone()));
 
-    let (remote, host) = supported.into_iter().next().ok_or_else(|| {
+    supported.into_iter().next().ok_or_else(|| {
         "No supported GitHub or Azure DevOps remote was found for this repository".to_string()
-    })?;
-
-    match host {
-        HostRepo::GitHub { owner, repo } => list_github(path, remote, owner, repo),
-        HostRepo::Azure {
-            organization,
-            project,
-            repo,
-        } => list_azure(path, remote, organization, project, repo),
-    }
+    })
 }
 
 fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result<PullRequestList> {
     let slug = format!("{owner}/{repo}");
-    let fields = concat!(
-        "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
-        "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
-        "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup"
-    );
+    // Keep the list query shallow. Asking GraphQL to expand nested comments,
+    // commits, reviews, and checks across 100 PRs can exceed GitHub's 500k
+    // possible-node cap even for a modest repository. Rich fields load only
+    // for the selected PR via `detail_github`.
     let output = run_command(
         cwd,
         "gh",
         &[
-            "pr", "list", "--repo", &slug, "--state", "all", "--limit", "100", "--json", fields,
+            "pr",
+            "list",
+            "--repo",
+            &slug,
+            "--state",
+            "all",
+            "--limit",
+            "100",
+            "--json",
+            GITHUB_LIST_FIELDS,
         ],
         &[("GH_PROMPT_DISABLED", "1")],
     )?;
@@ -145,6 +177,28 @@ fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result
         },
         pull_requests,
     })
+}
+
+fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<PullRequest> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    let output = run_command(
+        cwd,
+        "gh",
+        &[
+            "pr",
+            "view",
+            &id,
+            "--repo",
+            &slug,
+            "--json",
+            GITHUB_DETAIL_FIELDS,
+        ],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
+    parse_github_pr(&value).ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))
 }
 
 fn list_azure(
@@ -192,6 +246,38 @@ fn list_azure(
         },
         pull_requests,
     })
+}
+
+fn detail_azure(
+    cwd: &str,
+    organization: String,
+    project: String,
+    repo: String,
+    id: u64,
+) -> Result<PullRequest> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id = id.to_string();
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "show",
+            "--id",
+            &id,
+            "--organization",
+            &organization_url,
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
+    parse_azure_pr(&value, &organization, &project, &repo)
+        .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))
 }
 
 fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<Vec<u8>> {
@@ -271,21 +357,36 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
         .map_err(|_| format!("{program} error reader failed"))?;
     if !status.success() {
         let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
-        let hint = if program == "gh" {
-            "Sign in with `gh auth login`, then try again."
+        let hint = auth_hint(program, &stderr);
+        return Err(if stderr.is_empty() {
+            format!("{program} failed{hint}")
         } else {
-            "Sign in with `az login` and install the azure-devops extension, then try again."
-        };
-        return Err(format!(
-            "{program} failed{} {hint}",
-            if stderr.is_empty() {
-                String::new()
-            } else {
-                format!(": {stderr}.")
-            }
-        ));
+            format!("{program} failed: {stderr}{hint}")
+        });
     }
     Ok(stdout)
+}
+
+fn auth_hint(program: &str, stderr: &str) -> &'static str {
+    let lower = stderr.to_ascii_lowercase();
+    let is_auth = [
+        "auth login",
+        "az login",
+        "not logged",
+        "authentication",
+        "unauthorized",
+        "bad credentials",
+        "http 401",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+    if !is_auth {
+        ""
+    } else if program == "gh" {
+        " Sign in with `gh auth login`, then try again."
+    } else {
+        " Sign in with `az login`, then try again."
+    }
 }
 
 fn parse_github_pr(value: &Value) -> Option<PullRequest> {
@@ -636,5 +737,22 @@ mod tests {
         assert_eq!(azure.source_branch, "topic");
         assert_eq!(azure.review_status, "approved");
         assert!(azure.reviewers[0].required);
+    }
+
+    #[test]
+    fn github_list_query_stays_shallow_and_auth_hints_are_specific() {
+        for nested in ["comments", "commits", "latestReviews", "statusCheckRollup"] {
+            assert!(!GITHUB_LIST_FIELDS.contains(nested));
+            assert!(GITHUB_DETAIL_FIELDS.contains(nested));
+        }
+        assert_eq!(
+            auth_hint(
+                "gh",
+                "GraphQL query requests too many possible nodes (maximum 500,000)"
+            ),
+            ""
+        );
+        assert!(auth_hint("gh", "authentication required").contains("gh auth login"));
+        assert!(auth_hint("az", "Please run az login").contains("az login"));
     }
 }

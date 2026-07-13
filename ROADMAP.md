@@ -1525,11 +1525,20 @@ ordinary push.
 **Hosted pull requests kick (2026-07-13):** A new provider-neutral Pull Requests
 destination now reads GitHub and Azure DevOps PRs for the active repository.
 `pull_requests.rs` detects common HTTPS/SSH remote shapes, prefers `origin`, and
-delegates authentication to `gh`/`az` so Strand stores no new credentials. One
-bounded, 30-second subprocess returns the latest 100 PRs and their normalized
-metadata; the UI renders a keyboard-operable, resizable list/detail workspace
-with refresh and open-on-host. This is the read-only foundation—hosted diffs,
+delegates authentication to `gh`/`az` so Strand stores no new credentials. A
+bounded, 30-second shallow call returns the latest 100 PRs; nested metadata is
+loaded lazily for the selected row to stay below provider query limits. The UI
+renders a keyboard-operable, resizable list/detail workspace with refresh and
+open-on-host. This is the read-only foundation—hosted diffs,
 threads/reviews, provider policies, and merge/update actions remain tracked.
+
+**GitHub PR query-cap fix (2026-07-13):** The initial implementation expanded
+comments, commits, reviews, and checks across all 100 rows in one `gh pr list`
+GraphQL operation. GitHub rejected that shape as up to 1,000,000 possible nodes
+(500,000 maximum), even for an authenticated user. The list query is now
+strictly shallow and `repo_pull_request` runs `gh pr view` only after selection
+settles for 120ms. Non-auth provider errors no longer append a misleading
+"sign in" instruction.
 
 ---
 

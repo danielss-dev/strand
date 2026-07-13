@@ -190,6 +190,16 @@ pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     .await
 }
 
+/// Rich fields for one selected pull request. Kept separate from the list so
+/// GitHub never expands every PR's nested GraphQL connections in one query.
+#[tauri::command(async)]
+pub async fn repo_pull_request(path: String, id: u64) -> CmdResult<pull_requests::PullRequest> {
+    run_blocking("pull request", move || {
+        pull_requests::detail(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

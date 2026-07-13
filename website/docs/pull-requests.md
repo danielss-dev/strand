@@ -24,11 +24,14 @@ requests. Click a row to inspect it, use `Up`/`Down` or `j`/`k` while the list
 is focused, and press `Enter` (or double-click) to open the PR on its host. Drag
 the divider to resize the list; Strand remembers the size.
 
-The detail pane shows the information reported by that provider: title, state,
-author, source and target branches, description, dates, labels, reviewers,
-review and merge state, file/addition/deletion/comment/commit counts, and CI
-checks when available. Azure's list response does not expose every discussion
-or check field, so absent data is shown honestly rather than inferred.
+The list loads only compact row data; after selection settles, Strand loads the
+rich metadata for that one PR. This keeps large repositories below provider
+query limits and avoids starting a CLI call for every key-repeat while you move
+through the list. The detail pane shows title, state, author, source and target
+branches, description, dates, labels, reviewers, review and merge state,
+file/addition/deletion/comment/commit counts, and CI checks when available.
+Azure does not expose every discussion or check field through the same command,
+so absent data is shown honestly rather than inferred.
 
 This first slice is read-only. Hosted diffs, comment threads, suggestions,
 approve/request-changes actions, Azure policies, branch updates, and merge

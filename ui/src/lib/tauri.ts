@@ -21,6 +21,7 @@ import type {
   MergeMode,
   NetworkOutcome,
   Progress,
+  PullRequest,
   PullRequestList,
   RebaseEntry,
   RebaseStep,
@@ -97,6 +98,7 @@ export const tauri = {
     invoke<Commit[]>('repo_search_log', { path, query, mode, limit }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
+  repoPullRequest: (path: string, id: number) => invoke<PullRequest>('repo_pull_request', { path, id }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>

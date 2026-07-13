@@ -104,9 +104,14 @@ export function PullRequests() {
   const path = useRepo((state) => state.activePath);
   const [data, setData] = useState<PullRequestList | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<PullRequest | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailReload, setDetailReload] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  const detailGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!path) return;
@@ -133,13 +138,47 @@ export function PullRequests() {
 
   useEffect(() => {
     void refresh();
-    return () => { generation.current += 1; };
+    return () => {
+      generation.current += 1;
+      detailGeneration.current += 1;
+    };
   }, [refresh]);
 
-  const selected = useMemo(
+  const selectedSummary = useMemo(
     () => data?.pull_requests.find((pr) => pr.id === selectedId) ?? null,
     [data, selectedId],
   );
+
+  useEffect(() => {
+    if (!path || selectedId == null || !data) {
+      setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
+      return;
+    }
+    const current = ++detailGeneration.current;
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    // Avoid spawning one provider CLI per key-repeat while the user walks the
+    // list; only the row they settle on pays for a rich-detail request.
+    const timer = window.setTimeout(() => {
+      void tauri.repoPullRequest(path, selectedId).then(
+        (next) => {
+          if (detailGeneration.current === current) setDetail(next);
+        },
+        (caught) => {
+          if (detailGeneration.current === current) setDetailError(errMessage(caught));
+        },
+      ).finally(() => {
+        if (detailGeneration.current === current) setDetailLoading(false);
+      });
+    }, 120);
+    return () => {
+      window.clearTimeout(timer);
+      detailGeneration.current += 1;
+    };
+  }, [path, selectedId, data, detailReload]);
 
   const move = (delta: number) => {
     if (!data?.pull_requests.length) return;
@@ -189,7 +228,7 @@ export function PullRequests() {
                   else if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); }
                   else if (event.key === 'Home') { event.preventDefault(); setSelectedId(data.pull_requests[0]?.id ?? null); }
                   else if (event.key === 'End') { event.preventDefault(); setSelectedId(data.pull_requests.at(-1)?.id ?? null); }
-                  else if (event.key === 'Enter' && selected?.url) { event.preventDefault(); void shellOpen(selected.url); }
+                  else if (event.key === 'Enter' && selectedSummary?.url) { event.preventDefault(); void shellOpen(selectedSummary.url); }
                 }}
               >
                 {data.pull_requests.map((pr) => (
@@ -213,7 +252,25 @@ export function PullRequests() {
             </Panel>
             <PanelResizeHandle className="rs-handle vert" />
             <Panel minSize={35}>
-              {selected && <PullRequestDetails pr={selected} />}
+              {detailLoading ? (
+                <div className="pr-empty pr-detail-empty" aria-live="polite">
+                  <Icon name="refresh" size={24} className="spin" />
+                  <strong>Loading PR #{selectedId}…</strong>
+                </div>
+              ) : detailError ? (
+                <div className="pr-empty pr-detail-empty" role="alert">
+                  <Icon name="remote" size={24} />
+                  <strong>Could not load PR #{selectedId}</strong>
+                  <p>{detailError}</p>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setDetailReload((value) => value + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : detail ? <PullRequestDetails pr={detail} /> : null}
             </Panel>
           </PanelGroup>
         </div>
