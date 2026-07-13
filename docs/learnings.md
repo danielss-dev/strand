@@ -1122,8 +1122,18 @@ failure.
 
 **Rule.** Render provider descriptions and comments through the shared
 React-element Markdown renderer: no raw HTML and no automatic remote image
-requests. Fetch and parse a hosted patch only after the Changes tab opens, and
-mount only the selected file through Strand's Pierre wrapper.
+requests. A remote image may render only after an explicit user reveal. Fetch
+and parse a hosted patch only after the Changes tab opens, and mount only the
+selected file through Strand's Pierre wrapper.
+
+Provider identity avatars are the narrow exception: they are trusted metadata,
+not author-controlled Markdown. Load only a sanitized `http(s)` URL, lazily and
+with `referrerPolicy="no-referrer"`; keep initials behind the image so a missing,
+blocked, or expired avatar never leaves an empty marker. GitHub's `gh pr view`
+comment shape exposes only `author.login`, so derive its standard profile
+image route (`https://github.com/<login>.png?size=80`) after validating the login
+instead of spawning one `gh api users/...` subprocess per commenter. Azure
+thread identities may supply `author.imageUrl` directly.
 
 **Why.** Pull-request content is untrusted input inside an IPC-privileged
 webview. Remote images also leak that the PR was viewed. Separately, eager patch
@@ -1131,9 +1141,13 @@ downloads and one Pierre mount per changed file turn list navigation into a
 network/render hot path and repeat the large-diff freezes already solved in
 Local Changes and Review.
 
-**How to apply.** Reuse `renderMarkdown` with a provider URL resolver and an
-alt-text image handler. Keep provider list/detail, discussion, and diff calls
-separate; mount the changes component conditionally by tab. Parse the aggregate
+**How to apply.** Reuse `renderMarkdown` with a provider URL resolver and the
+click-to-load `ProviderImage` handler. The comment composer may insert standard
+image Markdown for an already-hosted `http(s)` URL; do not claim local binary
+upload or call an undocumented provider upload endpoint. GitHub and Azure's
+supported CLI paths do not currently share a stable attachment-upload contract.
+Keep provider list/detail, discussion, and diff calls separate; mount the
+changes component conditionally by tab. Parse the aggregate
 patch once, give Pierre a stable cache key, and hand `ParsedDiff` only the
 active `FileDiffMetadata`. Reuse `PierreTree` and the Local Changes file-header
 strip for hosted changed-file navigation instead of maintaining a second flat

@@ -1289,7 +1289,12 @@ tree: watch the agent work, review fast, accept or reject safely.
   - ◐ Discussion threads and comment creation: Conversation reads GitHub
     comments and Azure thread comments (including inline file context) as safe
     Markdown and creates top-level Markdown comments through the signed-in
-    provider CLI. Replies, new inline comments, suggestions, and thread
+    provider CLI. The `PullRequestConversation` timeline now includes a
+    keyboard-operable Write/Preview composer, Markdown formatting toolbar,
+    hosted screenshot/image insertion, explicit click-to-load image previews,
+    character count, provider avatars with initials fallback, and comment
+    permalinks. Replies, new
+    inline comments, direct binary attachment uploads, suggestions, and thread
     resolution remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
   - ◐ Checks render provider states as green success, yellow running, red

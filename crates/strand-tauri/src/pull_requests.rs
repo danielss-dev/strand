@@ -71,6 +71,7 @@ pub struct PullRequestCheck {
 pub struct PullRequestComment {
     pub id: String,
     pub author: String,
+    pub avatar_url: Option<String>,
     pub body: String,
     pub created_at: String,
     pub url: String,
@@ -792,9 +793,11 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
     let comments = array(value, "comments")
         .iter()
         .filter_map(|comment| {
+            let author = text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into());
             Some(PullRequestComment {
                 id: text(comment.get("id"))?,
-                author: text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
+                avatar_url: github_avatar_url(&author),
+                author,
                 body: text(comment.get("body")).unwrap_or_default(),
                 created_at: text(comment.get("createdAt")).unwrap_or_default(),
                 url: text(comment.get("url")).unwrap_or_default(),
@@ -984,6 +987,8 @@ fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> 
                     id: format!("{thread_id}:{comment_id}"),
                     author: text(comment.pointer("/author/displayName"))
                         .unwrap_or_else(|| "unknown".into()),
+                    avatar_url: text(comment.pointer("/author/imageUrl"))
+                        .or_else(|| text(comment.pointer("/author/_links/avatar/href"))),
                     body,
                     created_at: text(comment.get("publishedDate")).unwrap_or_default(),
                     url: pr_url.to_string(),
@@ -1006,6 +1011,15 @@ fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
 
 fn text(value: Option<&Value>) -> Option<String> {
     value.and_then(Value::as_str).map(str::to_string)
+}
+
+fn github_avatar_url(login: &str) -> Option<String> {
+    let valid = !login.is_empty()
+        && login.len() <= 39
+        && login.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        && !login.starts_with('-')
+        && !login.ends_with('-');
+    valid.then(|| format!("https://github.com/{login}.png?size=80"))
 }
 
 fn branch_name(value: String) -> String {
@@ -1239,11 +1253,15 @@ mod tests {
         .unwrap();
         let github = parse_github_pr(&github).unwrap();
         assert_eq!(github.comments[0].author, "octo");
+        assert_eq!(
+            github.comments[0].avatar_url.as_deref(),
+            Some("https://github.com/octo.png?size=80")
+        );
         assert_eq!(github.comments[0].body, "**Looks good**");
 
         let azure: Value = serde_json::from_str(
             r#"{"value":[{"id":9,"threadContext":{"filePath":"/src/lib.rs"},"comments":[
-              {"id":1,"content":"Please rename this","commentType":"text","publishedDate":"2026-07-13T12:00:00Z","author":{"displayName":"Ada"}},
+              {"id":1,"content":"Please rename this","commentType":"text","publishedDate":"2026-07-13T12:00:00Z","author":{"displayName":"Ada","imageUrl":"https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/ada"}},
               {"id":2,"content":"Policy updated","commentType":"system","author":{"displayName":"Build Service"}}
             ]}]}"#,
         )
@@ -1251,6 +1269,10 @@ mod tests {
         let comments = parse_azure_comments(&azure, "https://dev.azure.com/acme/pr/7");
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].path.as_deref(), Some("/src/lib.rs"));
+        assert_eq!(
+            comments[0].avatar_url.as_deref(),
+            Some("https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/ada")
+        );
         assert!(comments[1].is_system);
     }
 
