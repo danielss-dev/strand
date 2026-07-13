@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strand_core::Repo;
 
@@ -28,7 +28,7 @@ const GITHUB_LIST_FIELDS: &str = concat!(
 const GITHUB_DETAIL_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
     "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
-    "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup"
+    "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
 );
 type Result<T> = std::result::Result<T, String>;
 
@@ -37,6 +37,14 @@ type Result<T> = std::result::Result<T, String>;
 pub enum PullRequestProvider {
     GitHub,
     AzureDevOps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestMergeStrategy {
+    MergeCommit,
+    Squash,
+    Rebase,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,6 +86,7 @@ pub struct PullRequest {
     pub is_draft: bool,
     pub author: String,
     pub source_branch: String,
+    pub source_commit: String,
     pub target_branch: String,
     pub created_at: String,
     pub updated_at: String,
@@ -161,6 +170,24 @@ pub fn add_comment(path: &str, id: u64, body: &str) -> Result<()> {
             project,
             repo,
         } => add_comment_azure(path, organization, project, repo, id, body),
+    }
+}
+
+pub fn merge(
+    path: &str,
+    id: u64,
+    strategy: PullRequestMergeStrategy,
+    expected_head: &str,
+) -> Result<()> {
+    validate_commit(expected_head)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => {
+            merge_github(path, &owner, &repo, id, strategy, expected_head)
+        }
+        HostRepo::Azure { organization, project, repo } => {
+            merge_azure(path, &organization, &project, &repo, id, strategy, expected_head)
+        }
     }
 }
 
@@ -265,6 +292,28 @@ fn add_comment_github(cwd: &str, owner: String, repo: String, id: u64, body: &st
         &["pr", "comment", &id, "--repo", &slug, "--body-file", "-"],
         &[("GH_PROMPT_DISABLED", "1")],
         Some(body.as_bytes()),
+    )?;
+    Ok(())
+}
+
+fn merge_github(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    id: u64,
+    strategy: PullRequestMergeStrategy,
+    expected_head: &str,
+) -> Result<()> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    run_command(
+        cwd,
+        "gh",
+        &[
+            "pr", "merge", &id, "--repo", &slug, github_merge_flag(strategy),
+            "--match-head-commit", expected_head,
+        ],
+        &[("GH_PROMPT_DISABLED", "1")],
     )?;
     Ok(())
 }
@@ -457,6 +506,52 @@ fn add_comment_azure(
             "--output",
             "json",
             "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
+fn merge_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+    strategy: PullRequestMergeStrategy,
+    expected_head: &str,
+) -> Result<()> {
+    let mut request = tempfile::NamedTempFile::new()
+        .map_err(|error| format!("Could not prepare Azure merge: {error}"))?;
+    serde_json::to_writer(
+        &mut request,
+        &serde_json::json!({
+            "status": "completed",
+            "lastMergeSourceCommit": {"commitId": expected_head},
+            "completionOptions": {
+                "mergeStrategy": azure_merge_strategy(strategy),
+                "deleteSourceBranch": false,
+                "transitionWorkItems": false
+            }
+        }),
+    )
+    .map_err(|error| format!("Could not encode Azure merge: {error}"))?;
+    request.flush().map_err(|error| format!("Could not prepare Azure merge: {error}"))?;
+    let request_path = request.path().to_str()
+        .ok_or_else(|| "Azure merge request path is not valid UTF-8".to_string())?;
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let project_arg = format!("project={project}");
+    let repository_arg = format!("repositoryId={repo}");
+    let pull_request_arg = format!("pullRequestId={id}");
+    run_command(
+        cwd,
+        "az",
+        &[
+            "devops", "invoke", "--area", "git", "--resource", "pullRequests",
+            "--route-parameters", &project_arg, &repository_arg, &pull_request_arg,
+            "--organization", &organization_url, "--api-version", "7.1",
+            "--http-method", "PATCH", "--in-file", request_path,
+            "--media-type", "application/json", "--output", "json", "--only-show-errors",
         ],
         &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
     )?;
@@ -669,6 +764,29 @@ fn validate_comment(body: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_commit(commit: &str) -> Result<()> {
+    if !matches!(commit.len(), 40 | 64) || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Pull request source commit is missing or invalid; refresh the PR and try again".into());
+    }
+    Ok(())
+}
+
+fn github_merge_flag(strategy: PullRequestMergeStrategy) -> &'static str {
+    match strategy {
+        PullRequestMergeStrategy::MergeCommit => "--merge",
+        PullRequestMergeStrategy::Squash => "--squash",
+        PullRequestMergeStrategy::Rebase => "--rebase",
+    }
+}
+
+fn azure_merge_strategy(strategy: PullRequestMergeStrategy) -> &'static str {
+    match strategy {
+        PullRequestMergeStrategy::MergeCommit => "noFastForward",
+        PullRequestMergeStrategy::Squash => "squash",
+        PullRequestMergeStrategy::Rebase => "rebase",
+    }
+}
+
 fn parse_github_pr(value: &Value) -> Option<PullRequest> {
     let id = value.get("number")?.as_u64()?;
     let comments = array(value, "comments")
@@ -730,6 +848,7 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
             .unwrap_or(false),
         author: text(value.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
         source_branch: text(value.get("headRefName")).unwrap_or_default(),
+        source_commit: text(value.get("headRefOid")).unwrap_or_default(),
         target_branch: text(value.get("baseRefName")).unwrap_or_default(),
         created_at: text(value.get("createdAt")).unwrap_or_default(),
         updated_at: text(value.get("updatedAt")).unwrap_or_default(),
@@ -807,6 +926,7 @@ fn parse_azure_pr(
             .unwrap_or(false),
         author: text(value.pointer("/createdBy/displayName")).unwrap_or_else(|| "unknown".into()),
         source_branch: branch_name(text(value.get("sourceRefName")).unwrap_or_default()),
+        source_commit: text(value.pointer("/lastMergeSourceCommit/commitId")).unwrap_or_default(),
         target_branch: branch_name(text(value.get("targetRefName")).unwrap_or_default()),
         created_at: text(value.get("creationDate")).unwrap_or_default(),
         updated_at: text(value.get("closedDate")).unwrap_or_default(),
@@ -1053,6 +1173,7 @@ mod tests {
             r#"{
               "number": 42, "title": "Ship it", "state": "OPEN", "isDraft": false,
               "author": {"login": "octo"}, "headRefName": "feature", "baseRefName": "main",
+              "headRefOid": "1111111111111111111111111111111111111111",
               "comments": [{"id": "c"}], "commits": [{"oid": "a"}],
               "latestReviews": [{"author": {"login": "reviewer"}, "state": "APPROVED"}],
               "statusCheckRollup": [{"name": "CI", "status": "COMPLETED", "conclusion": "SUCCESS"}]
@@ -1062,6 +1183,7 @@ mod tests {
         let github = parse_github_pr(&github).unwrap();
         assert_eq!(github.id, 42);
         assert_eq!(github.state, "open");
+        assert_eq!(github.source_commit, "1111111111111111111111111111111111111111");
         assert_eq!(github.comment_count, 1);
         assert_eq!(github.comments.len(), 1);
         assert_eq!(github.reviewers[0].status, "APPROVED");
@@ -1072,6 +1194,7 @@ mod tests {
               "pullRequestId": 7, "title": "Azure PR", "status": "active", "isDraft": true,
               "createdBy": {"displayName": "Ada"}, "sourceRefName": "refs/heads/topic",
               "targetRefName": "refs/heads/main",
+              "lastMergeSourceCommit": {"commitId": "2222222222222222222222222222222222222222"},
               "reviewers": [{"displayName": "Grace", "vote": 10, "isRequired": true}]
             }"#,
         )
@@ -1079,6 +1202,7 @@ mod tests {
         let azure = parse_azure_pr(&azure, "org", "project", "repo").unwrap();
         assert_eq!(azure.id, 7);
         assert_eq!(azure.source_branch, "topic");
+        assert_eq!(azure.source_commit, "2222222222222222222222222222222222222222");
         assert_eq!(azure.review_status, "approved");
         assert!(azure.reviewers[0].required);
     }
@@ -1135,5 +1259,16 @@ mod tests {
         assert!(validate_comment(" \n ").is_err());
         assert!(validate_comment("Looks good").is_ok());
         assert!(validate_comment(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn validates_expected_heads_and_maps_provider_merge_strategies() {
+        assert!(validate_commit("0123456789abcdef0123456789abcdef01234567").is_ok());
+        assert!(validate_commit("0123456").is_err());
+        assert!(validate_commit("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").is_err());
+        assert_eq!(github_merge_flag(PullRequestMergeStrategy::MergeCommit), "--merge");
+        assert_eq!(github_merge_flag(PullRequestMergeStrategy::Squash), "--squash");
+        assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::MergeCommit), "noFastForward");
+        assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::Rebase), "rebase");
     }
 }

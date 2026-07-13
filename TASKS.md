@@ -1295,7 +1295,11 @@ tree: watch the agent work, review fast, accept or reject safely.
   - ◐ Checks render provider states as green success, yellow running, red
     failure, or neutral. Azure policies, merge queue/auto-complete, and
     required-review detail remain.
-  - ☐ Update/check out the PR branch; close/reopen; merge with provider-supported strategies.
+  - ◐ Hosted PR lifecycle actions.
+    - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
+      stale-head guard, focus-trapped `PullRequestMergeDialog`, and command-palette action).
+    - ☐ Update/check out the PR branch.
+    - ☐ Close/reopen the PR.
   - ☐ GitLab merge-request adapter.
   - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
   - ☐ Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth

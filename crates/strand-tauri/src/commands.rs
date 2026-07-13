@@ -221,6 +221,22 @@ pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> C
     .await
 }
 
+/// Merge a hosted pull request through its provider. The expected source
+/// commit prevents merging unseen updates; provider policies remain enforced.
+#[tauri::command(async)]
+pub async fn repo_pull_request_merge(
+    path: String,
+    id: u64,
+    strategy: pull_requests::PullRequestMergeStrategy,
+    expected_head: String,
+) -> CmdResult<()> {
+    run_blocking("pull request merge", move || {
+        pull_requests::merge(&path, id, strategy, &expected_head)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

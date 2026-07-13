@@ -23,6 +23,7 @@ import type {
   Progress,
   PullRequest,
   PullRequestList,
+  PullRequestMergeStrategy,
   RebaseEntry,
   RebaseStep,
   Refs,
@@ -103,6 +104,12 @@ export const tauri = {
     invoke<string>('repo_pull_request_diff', { path, id }),
   repoPullRequestComment: (path: string, id: number, body: string) =>
     invoke<void>('repo_pull_request_comment', { path, id, body }),
+  repoPullRequestMerge: (
+    path: string,
+    id: number,
+    strategy: PullRequestMergeStrategy,
+    expectedHead: string,
+  ) => invoke<void>('repo_pull_request_merge', { path, id, strategy, expectedHead }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>

@@ -26,6 +26,15 @@ use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
 toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
 
+For an active, non-draft PR, choose **Merge** in the detail header or run
+"Pull Requests: merge open pull request…" from the command palette. The
+confirmation dialog offers merge-commit, squash, and rebase strategies and is
+fully keyboard operable. Required checks, reviews, branch policies, and merge
+queues remain enforced by GitHub or Azure DevOps. Strand includes the exact
+source commit currently displayed in the merge request; if the branch changes
+before confirmation, the provider refuses the stale merge and Strand asks you
+to refresh. The source branch is not deleted automatically.
+
 The list loads only compact row data; Strand loads rich metadata only after a
 PR is opened. This keeps large repositories below provider query limits and
 means moving through the list does not start provider calls. The opened PR uses
@@ -62,7 +71,7 @@ larger than 16 MB are not rendered.
 
 Azure does not expose every check or policy field through the same provider
 command, so absent data is shown honestly rather than inferred. Replies, new
-inline comments, suggestions, approve/request-changes actions, Azure policies,
-branch updates, and merge controls are planned but are not presented as
-available yet. GitLab and Bitbucket adapters will use the same workspace in a
-later slice.
+inline comments, suggestions, approve/request-changes actions, Azure policy
+details, branch updates, and close/reopen controls are planned but are not
+presented as available yet. GitLab and Bitbucket adapters will use the same
+workspace in a later slice.

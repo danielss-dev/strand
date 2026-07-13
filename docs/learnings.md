@@ -1141,3 +1141,23 @@ list or letting Pierre render a padded, provider-specific diff card. Keep the
 changes workspace inside the tab panel's actual content width: a negative
 margin into the detail padding is still clipped by the tab's `overflow: hidden`
 and cuts off right-aligned diff totals with more than one digit.
+
+---
+
+## Hosted PR writes carry the exact reviewed head
+
+**Rule.** Every hosted pull-request action that can integrate code must send
+the provider the exact source commit loaded in the detail view. Do not expose
+policy or administrator bypasses by default, and do not infer mergeability from
+the checks currently visible in Strand.
+
+**Why.** A source branch can advance after a reviewer opens the PR. Merging by
+PR number alone can then integrate code the user never saw. Provider policies
+also contain information Strand may not have loaded (especially in Azure
+DevOps), so client-side green checks are not sufficient authorization.
+
+**How to apply.** GitHub merge commands use `--match-head-commit`; Azure
+completion requests include `lastMergeSourceCommit`. Keep required checks,
+reviews, queues, and branch policies provider-authoritative, preserve their
+failure text in the confirmation surface, and refresh the PR after a successful
+request because queued completion may leave it active temporarily.

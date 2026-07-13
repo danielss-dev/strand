@@ -182,6 +182,7 @@ export interface Refs {
 }
 
 export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
+export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
 
 export interface PullRequestRepository {
   provider: PullRequestProvider;
@@ -218,6 +219,7 @@ export interface PullRequest {
   is_draft: boolean;
   author: string;
   source_branch: string;
+  source_commit: string;
   target_branch: string;
   created_at: string;
   updated_at: string;

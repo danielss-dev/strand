@@ -1563,6 +1563,13 @@ virtualized Pierre folder tree and compact collapsible file strip as Local
 Changes. The selected diff renders edge to edge while preserving the narrow
 22% rail and one-mounted-file performance boundary for large pull requests.
 
+**Hosted PR merge (2026-07-13):** Open GitHub and Azure DevOps pull requests
+can now be merged without leaving Strand. The detail header and command palette
+open a keyboard-contained confirmation dialog with merge-commit, squash, and
+rebase strategies. Provider checks and branch policies stay authoritative, and
+every write carries the exact source commit loaded by Strand so a newer,
+unreviewed head is refused instead of merged silently.
+
 ---
 
 ## 1.1+ — Post-1.0

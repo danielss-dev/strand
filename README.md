@@ -65,9 +65,11 @@ keyboard alone, and the mouse stays first-class.
   opening automatically. Each PR gets a full-width workspace: read rendered
   Markdown descriptions and conversations, add top-level comments, inspect
   lazily loaded code changes in the Local Changes-style Pierre file tree and
-  diff workspace, and see color-coded provider checks.
-  Authentication stays in the signed-in `gh` / `az` CLI; review and merge
-  actions are still in progress.
+  diff workspace, see color-coded provider checks, and merge with merge-commit,
+  squash, or rebase strategies after an explicit confirmation.
+  Authentication stays in the signed-in `gh` / `az` CLI; provider policies
+  remain enforced, while submit-review and other lifecycle actions are still
+  in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the

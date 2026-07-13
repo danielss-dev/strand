@@ -4606,7 +4606,15 @@ textarea.clone-input {
 .pr-detail-head > div { min-width: 0; }
 .pr-detail-head h2 { margin: 5px 0 0; color: var(--text); font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
 .pr-detail-head .btn { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.pr-detail-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
 .pr-detail-kicker { color: var(--text-muted); font-size: 10px; }
+
+.pr-merge-warning {
+  margin: -2px 0 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 
 .pr-pills { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
 .pr-pills > span:not(.pr-state) { padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font-size: 9px; }
