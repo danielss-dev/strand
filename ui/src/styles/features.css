@@ -4513,6 +4513,133 @@ textarea.clone-input {
   margin-left: 0;
 }
 
+/* Pull requests — provider-neutral list + detail workspace. */
+.pr-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pr-toolbar {
+  min-height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pr-toolbar > div { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.pr-toolbar strong { color: var(--text); font-size: 12px; }
+.pr-toolbar span { color: var(--text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-toolbar .h-link { display: inline-flex; align-items: center; gap: 5px; }
+
+.pr-main { flex: 1; min-height: 0; }
+
+.pr-list {
+  height: 100%;
+  overflow: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+}
+
+.pr-list:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+.pr-row {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: default;
+}
+
+.pr-row:hover { background: var(--bg-hover); }
+.pr-row.selected { background: var(--selection); border-color: var(--accent); }
+.pr-row:focus-visible { outline: 1px solid var(--accent-2); }
+.pr-row > strong { font-size: 12px; line-height: 1.35; }
+.pr-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 10px; }
+.pr-row-meta { color: var(--text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pr-state {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pr-state.open, .pr-state.active { color: var(--add); border-color: var(--add); }
+.pr-state.merged, .pr-state.completed { color: var(--accent-2); border-color: var(--accent); }
+.pr-state.draft { color: var(--text-muted); }
+.pr-state.closed, .pr-state.abandoned { color: var(--del); border-color: var(--del); }
+
+.pr-detail {
+  height: 100%;
+  overflow: auto;
+  padding: 20px clamp(18px, 4vw, 42px) 40px;
+}
+
+.pr-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.pr-detail-head > div { min-width: 0; }
+.pr-detail-head h2 { margin: 5px 0 0; color: var(--text); font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.pr-detail-head .btn { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.pr-detail-kicker { color: var(--text-muted); font-size: 10px; }
+
+.pr-pills { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.pr-pills > span:not(.pr-state) { padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font-size: 9px; }
+
+.pr-meta-grid {
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.pr-meta-grid > div { min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.pr-meta-grid dt { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.pr-meta-grid dd { margin: 4px 0 0; color: var(--text); font-size: 11px; overflow-wrap: anywhere; }
+.pr-meta-grid code { color: var(--accent-2); }
+
+.pr-detail-section { margin-top: 22px; }
+.pr-detail-section h3 { margin: 0 0 8px; color: var(--text); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.pr-description { margin: 0; color: var(--text-2); font: 11px/1.6 var(--font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pr-muted { margin: 0; color: var(--text-muted); font-size: 11px; }
+
+.pr-facts { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+.pr-facts li { padding: 8px 10px; display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); color: var(--text-2); font-size: 10px; }
+.pr-facts li:last-child { border-bottom: 0; }
+.pr-facts strong { color: var(--text-muted); font-weight: 500; text-align: right; }
+
+.pr-empty {
+  flex: 1;
+  min-height: 0;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.pr-empty strong { color: var(--text); font-size: 13px; }
+.pr-empty p { max-width: 620px; margin: 0; color: var(--text-2); font-size: 11px; line-height: 1.5; }
+.pr-empty span { max-width: 620px; font-size: 10px; }
+.pr-empty .btn { margin-top: 5px; }
+
 /* ─── Workspace Review (aggregated cross-repo queue) ──────────────────── */
 
 /* Left column: one collapsible section per member repo. Expanded sections

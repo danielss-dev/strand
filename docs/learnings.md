@@ -1070,3 +1070,25 @@ dialogs were fixed in one pass (2026-07-07), so copy from any of them now, but
 check for the re-arm line whenever you see `mountedRef`. Same trap for any
 `useRef` flag that a cleanup mutates: initializers run once per fiber, not per
 mount.
+
+---
+
+## Resolve provider CLIs before entering an untrusted repository
+
+**Rule.** A provider integration must resolve its executable from `PATH` to an
+absolute path *before* setting a repository as the child process's working
+directory. Reuse `crates/strand-tauri/src/ai/bin.rs` (`resolve_cli` +
+`base_command`) for spawnability and Windows console behavior. Null stdin,
+drain stdout and stderr concurrently, and enforce a bounded timeout.
+
+**Why.** `Command::new("gh")` / `Command::new("az")` with an untrusted repo as
+cwd can execute a repository-owned same-name program on Windows because the
+CreateProcess search includes the current directory. A relative `PATH` entry
+has the same problem after `current_dir` changes. Independently, a 100-PR JSON
+response can fill an OS pipe and deadlock if the parent waits for exit before
+reading, while an invisible auth prompt can otherwise wait forever.
+
+**How to apply.** Resolve and canonicalize first; then build the command with
+the shared wrapper. Spawn with piped stdout/stderr readers running in parallel,
+`stdin(null)`, and a product-appropriate timeout. Provider auth remains in the
+official CLI unless OS-keychain storage is explicitly part of the change.

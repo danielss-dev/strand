@@ -30,7 +30,9 @@ It will be built as a **Tauri 2** application with a **Rust** git backend and a 
 
 - A full code editor. Strand shows diffs and file contents at any commit — it does not edit working-tree files. Users edit in their editor of choice.
 - A web/cloud product. Strand is a local-first desktop app. No accounts, no telemetry by default.
-- A built-in CI/CD or code review system. Strand may _display_ CI status from GitHub/GitLab in later versions, but reviews happen on the host.
+- Hosting CI/CD or code-review data. Strand integrates with Git providers and
+  may let users review and act on pull requests, but the provider remains the
+  source of truth and Strand never becomes a collaboration server.
 - Mobile / tablet versions.
 
 ---
@@ -88,6 +90,9 @@ The app has two primary regions plus a topbar and a status bar: a **left sidebar
 ### Sidebar (left) — navigation source
 
 - **Local Changes** — working tree + index status. Shows a badge with file count when there are uncommitted changes.
+- **Pull Requests** — hosted pull requests for the current repository, starting
+  with GitHub and Azure DevOps; GitLab and Bitbucket follow through the same
+  provider-neutral surface.
 - **All Commits** — commit graph.
 - _(divider)_
 - **Filter** field — scopes branches / tags / stashes / files.
@@ -238,7 +243,18 @@ Tab state persists per-file across the session so jumping back to a file restore
 | Search commits (message, author, hash, content `-G/-S`) | P1       |                                                                                                                                        |
 | Hooks editor                                            | P3       |                                                                                                                                        |
 
-### 6.7 Cross-cutting
+### 6.7 Hosted pull requests
+
+| Feature | Priority | Notes |
+| --- | --- | --- |
+| GitHub and Azure DevOps PR list + metadata | P0 | Provider detected from the repository remote; authenticated through the provider's signed-in CLI initially. |
+| PR diff, commits, discussion, checks, and policies | P0 | Normalize common concepts while retaining provider-specific status. |
+| Comment, review, approve/request changes | P1 | Keyboard-operable and reflected on the provider immediately. |
+| Update branch, close/reopen, and merge | P1 | Respect provider branch protections and merge policies; destructive actions require confirmation. |
+| GitLab merge requests | P1 | Provider adapter; no GitHub-specific assumptions in the UI model. |
+| Bitbucket pull requests | P1 | Provider adapter; cloud first, server support separately scoped. |
+
+### 6.8 Cross-cutting
 
 | Feature                           | Priority | Notes                                        |
 | --------------------------------- | -------- | -------------------------------------------- |
@@ -356,7 +372,9 @@ All P1 features. Performance targets met for 100k-commit repos. Signed installer
 1. **Pierre library licensing** — confirm both libraries are usable in a commercial desktop app, or arrange a license.
 2. **Open source or source-available?** — affects positioning and contribution model. Decide before 0.5.
 3. **AI features?** — commit message suggestions, conflict resolution hints, PR description drafts. Not in v1, but worth designing the extension point now.
-4. **Built-in code review surface for GitHub/GitLab PRs?** — `@pierre/diffs` literally has comment & annotation primitives for this. Tempting v1.1 feature.
+4. **Hosted code review scope.** — Decided 2026-07-13: build a provider-neutral
+   PR workspace. GitHub and Azure DevOps ship first; GitLab and Bitbucket are
+   follow-on adapters. The provider remains the source of truth.
 5. **Pricing model?** — Tower-style subscription, Sublime Merge-style one-time, or free / OSS. Affects everything downstream.
 
 ---

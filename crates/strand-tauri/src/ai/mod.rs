@@ -3,7 +3,7 @@
 //! Auth and billing stay in the official tools — Strand only orchestrates
 //! subprocess calls and parses JSON responses.
 
-mod bin;
+pub(crate) mod bin;
 mod claude;
 mod codex;
 mod parse;

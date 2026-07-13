@@ -1118,7 +1118,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
     + add-an-entry, no other code changes.
 - ◐ **Keyboard operability pass.** Almost every action reachable from the
-  keyboard, not just the palette (PRD §6.7, `docs/learnings.md`). Per-surface
+  keyboard, not just the palette (PRD §6.8, `docs/learnings.md`). Per-surface
   focus models + palette entries; audit for mouse-only actions. Drag-and-drop
   (folder open, tab / file reorder) may stay pointer-only.
   - ☑ Configurable global-shortcut registry (`ui/src/lib/keys.ts` `COMMANDS` +
@@ -1262,6 +1262,29 @@ tree: watch the agent work, review fast, accept or reject safely.
   side.)
 - ☐ Watcher: optional `.gitignore`-aware path filtering if build storms show
   up in profiles.
+
+---
+
+## Hosted pull requests (started 2026-07-13)
+
+- ◐ Provider-neutral Pull Requests workspace for the active repository.
+  - ☑ Read-only GitHub + Azure DevOps list/detail slice (`pull_requests.rs`,
+    `repo_pull_requests`, `views/PullRequests.tsx`): detects the provider from
+    `origin`/supported remotes, batches the latest 100 open/closed/merged PRs
+    through the signed-in `gh` or `az` CLI, and shows title/state, branches,
+    author, description, dates, labels, reviewers, merge/review status, counts,
+    and provider-reported checks. Resizable list/detail panes, arrow or j/k
+    selection, Enter/double-click/Open-on-host, refresh, command-palette entry,
+    and actionable missing-CLI/auth errors.
+  - ☐ Hosted diff and changed-files tree, using lazy/virtualized Pierre renders.
+  - ☐ Full discussion threads, inline comments, suggestions, and comment creation.
+  - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
+  - ☐ Checks, Azure policies, merge queue/auto-complete, and required-review detail.
+  - ☐ Update/check out the PR branch; close/reopen; merge with provider-supported strategies.
+  - ☐ GitLab merge-request adapter.
+  - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
+  - ☐ Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
+    to provider CLIs (blocked on Platform → per-platform credential storage).
 
 ---
 

@@ -2,6 +2,7 @@
 
 mod ai;
 mod commands;
+mod pull_requests;
 mod state;
 
 use tauri::Manager;
@@ -75,6 +76,7 @@ fn main() {
             commands::repo_log,
             commands::repo_search_log,
             commands::repo_refs,
+            commands::repo_pull_requests,
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
             commands::repo_diff_between,

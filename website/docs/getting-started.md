@@ -59,7 +59,7 @@ Open repositories appear either as a vertical icon rail or a horizontal tab stri
 
 ### Sidebar
 
-The sidebar has three primary rows — **Local Changes** (with an unstaged-count badge), **Review**, and **All Commits** — and two tabs below them:
+The sidebar has four primary rows — **Local Changes** (with an unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and two tabs below them:
 
 - **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row actions live in right-click context menus.
 - **Files** — the working-tree file tree; clicking a file opens it in the file view.
@@ -76,6 +76,9 @@ Switch views with `Mod+1` through `Mod+6`:
 | `Mod+4` | Review | Reviewing changes as whole files with a queue and baselines — see [Reviewing agent changes](reviewing-agent-changes.md) |
 | `Mod+5` | Worktrees | Dashboard for parallel worktrees and agent attempts — see [Worktrees](worktrees.md) |
 | `Mod+6` | Workspace Review | Aggregated review across every repository in the active workspace |
+
+**Pull Requests** currently has no dedicated number shortcut; open it from the
+sidebar or the palette action "Show: Pull Requests". See [Pull Requests](pull-requests.md).
 
 ### Status bar
 

@@ -888,6 +888,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           onClick={() => { setView('review'); selectFile(null); }}
         />
         <SideRow
+          icon="remote"
+          label="Pull Requests"
+          active={view === 'pull-requests'}
+          onClick={() => { setView('pull-requests'); selectFile(null); }}
+        />
+        <SideRow
           icon="graph"
           label="All Commits"
           active={view === 'commits' || view === 'reflog'}

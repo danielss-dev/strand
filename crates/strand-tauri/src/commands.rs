@@ -30,6 +30,7 @@ use tauri::ipc::Channel;
 use tauri::{Emitter, State};
 
 use crate::ai;
+use crate::pull_requests::{self, PullRequestList};
 use crate::state::AppState;
 
 /// Register / clear a cancellable op's handle under `op_id` so
@@ -177,6 +178,16 @@ pub async fn repo_search_log(
 #[tauri::command(async)]
 pub async fn repo_refs(path: String) -> CmdResult<Refs> {
     run_blocking("refs", move || Ok(Repo::discover(&path)?.refs()?)).await
+}
+
+/// Pull requests for the first supported remote (`origin` wins). Provider CLI
+/// authentication is inherited; Strand never reads or stores access tokens.
+#[tauri::command(async)]
+pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
+    run_blocking("pull requests", move || {
+        pull_requests::list(&path).map_err(|message| CmdError { message })
+    })
+    .await
 }
 
 #[tauri::command(async)]
