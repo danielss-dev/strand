@@ -4759,7 +4759,13 @@ textarea.clone-input {
 .pr-comment header span { padding: 1px 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font-size: 8px; text-transform: uppercase; }
 .pr-comment header time { margin-left: auto; color: var(--text-muted); font-size: 9px; }
 
-.pr-changes { height: 100%; min-height: 0; margin: 0 calc(0px - clamp(18px, 4vw, 42px)); }
+.pr-changes {
+  height: 100%;
+  min-height: 0;
+  /* Use the trailing detail padding for diff width without shifting the file
+     list behind the tab panel's clipped left edge. */
+  margin: 0 calc(0px - clamp(18px, 4vw, 42px)) 0 0;
+}
 .pr-file-list { height: 100%; overflow: auto; padding: 6px; background: var(--bg-panel); }
 .pr-file-list:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .pr-file-count { padding: 5px 7px 8px; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
