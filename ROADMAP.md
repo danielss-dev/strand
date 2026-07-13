@@ -1600,11 +1600,20 @@ false green. Focused Vitest coverage locks the provider-state normalization.
 
 **Hosted PR inline review kick (2026-07-13):** Changes now carries its own
 persisted stacked/split controls and exposes Pierre's controlled line-range
-selection through Strand's diff boundary. Open GitHub PRs get an annotation-row
-composer that publishes a real review comment against old/new blob coordinates;
+selection and native hover-gutter `+` through Strand's diff boundary. Open
+GitHub PRs get a compact annotation-row composer immediately beneath the target
+code that publishes a real review comment against old/new blob coordinates;
 `repo_pull_request_inline_comment` rechecks the exact head before the write so a
 stale diff cannot silently misplace feedback. Azure stays explicitly disabled
 until its required iteration/change-tracking coordinates join the patch model.
+
+**Hosted PR thread reading (2026-07-13):** GitHub detail now loads its review
+thread connection separately from issue comments, preserving file/range,
+old/new side, reply grouping, and resolved/outdated state. Those comments join
+Conversation and render as persistent Pierre annotation cards beneath their
+code in Changes, so a refresh reflects comments created in Strand or on GitHub.
+Conversation now links file-backed comments straight to that file/thread in
+Changes and transfers keyboard focus to the destination.
 
 ---
 

@@ -224,6 +224,7 @@ pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> C
 /// Add a provider review thread anchored to an exact file line range.
 /// `expected_head` prevents a delayed editor from commenting on a newer diff.
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
 pub async fn repo_pull_request_inline_comment(
     path: String,
     id: u64,

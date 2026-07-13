@@ -62,12 +62,14 @@ does not report a recognized state.
 
 ### Conversation
 
-Conversation displays GitHub comments and Azure DevOps thread comments as safe
-Markdown in a timeline with author markers, timestamps, and inline file paths
-for Azure comments. GitHub and Azure profile images appear when the provider
+Conversation displays GitHub issue and review-thread comments plus Azure
+DevOps thread comments as safe Markdown in a timeline with author markers,
+timestamps, and inline file paths for review comments. GitHub and Azure profile images appear when the provider
 supplies a usable identity; initials remain visible if an avatar is absent or
 cannot load. Select a comment timestamp to open that comment directly on the
-provider host.
+provider host. File-backed comments also show **View in changes**. It switches
+to Changes, selects the referenced file, and focuses the inline GitHub thread
+when the provider supplied its line coordinates.
 
 Use **Write** to compose a top-level comment and **Preview** to inspect the
 rendered result before sending. The formatting toolbar supports bold, italic,
@@ -96,22 +98,28 @@ and split diffs; the choice is saved per repository. Only one file diff is
 mounted at a time to keep large PRs responsive. Provider patches larger than
 16 MB are not rendered.
 
-On an open GitHub pull request, drag across line numbers to select one or more
-lines, or choose **Comment on lines** in the file header to start from the
-first changed line using the keyboard. Strand highlights the range and opens a
-composer directly beneath it. **Add comment** publishes a GitHub review thread
+On an open GitHub pull request, hover a line number and choose the `+` in its
+gutter. Drag the `+` across adjacent lines to comment on a range, or drag across
+line numbers and then use the `+` at the end of the selection. Strand
+highlights the range and opens a compact composer directly beneath that code,
+inside the diff. **Add comment** publishes a GitHub review thread
 on that exact old- or new-file range; `Mod+Enter` sends from the composer.
 Before publishing, Strand verifies that
 the pull request head is still the commit used by the displayed patch; if it
 changed, the draft stays in place and Changes asks you to refresh and reselect.
 Closed and merged pull requests stay read-only.
 
+Fetched GitHub review threads remain visible directly beneath their anchored
+line or range. Replies stay grouped in the same card, and resolved or outdated
+threads are labeled. The same review comments also appear in Conversation, so
+comments added on GitHub are visible after refreshing the pull request.
+
 Azure does not expose every check or policy field through the same provider
 command, so absent data is shown honestly rather than inferred. Azure inline
 comments also require provider iteration/change-tracking coordinates that the
 current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
-Replies, suggestions, approve/request-changes actions, Azure policy details,
+Creating replies, resolving threads, suggestions, approve/request-changes actions, Azure policy details,
 branch updates, and close/reopen controls are planned but are not presented as
 available yet. GitLab and Bitbucket adapters will use the same workspace in a
 later slice.

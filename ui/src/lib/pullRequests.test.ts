@@ -49,6 +49,7 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     reviewers: [],
     checks: [{ name: 'CI', status: 'SUCCESS' }],
     comments: [],
+    review_threads: [],
     ...overrides,
   };
 }

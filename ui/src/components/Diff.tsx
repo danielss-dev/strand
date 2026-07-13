@@ -38,6 +38,8 @@ export interface ParsedDiffProps<LAnnotation = undefined> extends Omit<DiffProps
   renderAnnotation?: (annotation: DiffLineAnnotation<LAnnotation>) => ReactNode;
   /** Pierre emits a complete range after pointer or keyboard selection. */
   onLineSelected?: (range: SelectedLineRange | null) => void;
+  /** Opens a line/range action from Pierre's built-in hover-gutter `+`. */
+  onGutterUtilityClick?: (range: SelectedLineRange) => void;
 }
 
 /**
@@ -139,6 +141,7 @@ export function ParsedDiff<LAnnotation = undefined>({
   lineAnnotations,
   renderAnnotation,
   onLineSelected,
+  onGutterUtilityClick,
   className,
   style,
 }: ParsedDiffProps<LAnnotation>) {
@@ -154,6 +157,8 @@ export function ParsedDiff<LAnnotation = undefined>({
     enableLineSelection: Boolean(onLineSelected),
     controlledSelection: Boolean(onLineSelected),
     onLineSelected,
+    enableGutterUtility: Boolean(onGutterUtilityClick),
+    onGutterUtilityClick,
     ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
   } as const;
   return (
