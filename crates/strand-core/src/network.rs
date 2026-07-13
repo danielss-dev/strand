@@ -124,7 +124,42 @@ impl Repo {
         if force_with_lease {
             args.push("--force-with-lease");
         }
+        if self.should_set_origin_upstream() {
+            args.extend(["--set-upstream", "--", "origin", "HEAD"]);
+        }
         run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    /// A freshly-created local branch has no push destination under Git's
+    /// default `push.default=simple`. Establish `origin/<branch>` on its first
+    /// push, but leave every configured push route (upstream, pushRemote, or
+    /// remote.pushDefault) to Git so existing workflows keep their semantics.
+    fn should_set_origin_upstream(&self) -> bool {
+        let Ok(repo) = self.git2() else { return false };
+        let Ok(head) = repo.head() else { return false };
+        if !head.is_branch() {
+            return false;
+        }
+        let Some(full_name) = head.name() else {
+            return false;
+        };
+        if repo.branch_upstream_name(full_name).is_ok() || repo.find_remote("origin").is_err() {
+            return false;
+        }
+
+        let Some(branch) = head.shorthand() else {
+            return false;
+        };
+        let Ok(config) = repo.config() else {
+            return false;
+        };
+        config
+            .get_string(&format!("branch.{branch}.pushRemote"))
+            .is_err()
+            && config.get_string("remote.pushDefault").is_err()
+            && config
+                .get_string(&format!("branch.{branch}.remote"))
+                .is_err()
     }
 
     /// Delete `branch` on `remote` (`git push <remote> --delete refs/heads/<branch>`).
@@ -433,6 +468,50 @@ fn parse_progress(raw: &str) -> Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    fn push_fixture() -> (Repo, PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!(
+            "strand-push-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let local = base.join("local");
+        let remote = base.join("remote.git");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&local).unwrap();
+        git(&local, &["init", "-q", "-b", "topic"]);
+        git(&local, &["config", "user.name", "Test"]);
+        git(&local, &["config", "user.email", "test@example.com"]);
+        git(&local, &["config", "commit.gpgsign", "false"]);
+        git(&local, &["config", "push.default", "simple"]);
+        std::fs::write(local.join("a.txt"), "one\n").unwrap();
+        git(&local, &["add", "a.txt"]);
+        git(&local, &["commit", "-q", "-m", "first"]);
+        git(&base, &["init", "-q", "--bare", remote.to_str().unwrap()]);
+        git(
+            &local,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        let repo = Repo::discover(&local).unwrap();
+        (repo, local, base)
+    }
 
     #[test]
     fn parses_phase_and_percent() {
@@ -505,5 +584,35 @@ mod tests {
     #[test]
     fn error_summary_empty_names_the_command() {
         assert_eq!(error_summary("", &["push"]), "git push failed");
+    }
+
+    #[test]
+    fn first_push_creates_origin_branch_and_upstream() {
+        let (repo, local, base) = push_fixture();
+
+        repo.push(false, |_| {}, None).unwrap();
+        assert_eq!(
+            git(&local, &["config", "--get", "branch.topic.remote"]),
+            "origin"
+        );
+        assert_eq!(
+            git(&local, &["config", "--get", "branch.topic.merge"]),
+            "refs/heads/topic"
+        );
+        assert_eq!(
+            git(&local, &["rev-parse", "HEAD"]),
+            git(&local, &["rev-parse", "refs/remotes/origin/topic"])
+        );
+
+        std::fs::write(local.join("a.txt"), "two\n").unwrap();
+        git(&local, &["commit", "-qam", "second"]);
+        repo.push(false, |_| {}, None).unwrap();
+        assert_eq!(
+            git(&local, &["rev-parse", "HEAD"]),
+            git(&local, &["rev-parse", "refs/remotes/origin/topic"])
+        );
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(base);
     }
 }

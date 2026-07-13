@@ -1510,6 +1510,14 @@ working when large files are virtualized. Invoking search from Preview,
 History, Compare, or Blame switches to the searchable source; the command
 palette exposes the same action.
 
+**First push creates its remote branch (2026-07-13):** Closed DAN-10. Pushing
+a newly-created local branch with no configured destination now runs the
+equivalent of `git push --set-upstream origin HEAD`, creating the branch on
+`origin` and wiring future push/pull operations. Existing upstreams and
+explicit `pushRemote` / `remote.pushDefault` routes remain delegated to Git.
+Covered by a real local-to-bare-remote integration test, including the second
+ordinary push.
+
 ---
 
 ## 1.1+ — Post-1.0
