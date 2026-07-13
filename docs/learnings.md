@@ -1137,4 +1137,7 @@ separate; mount the changes component conditionally by tab. Parse the aggregate
 patch once, give Pierre a stable cache key, and hand `ParsedDiff` only the
 active `FileDiffMetadata`. Reuse `PierreTree` and the Local Changes file-header
 strip for hosted changed-file navigation instead of maintaining a second flat
-list or letting Pierre render a padded, provider-specific diff card.
+list or letting Pierre render a padded, provider-specific diff card. Keep the
+changes workspace inside the tab panel's actual content width: a negative
+margin into the detail padding is still clipped by the tab's `overflow: hidden`
+and cuts off right-aligned diff totals with more than one digit.

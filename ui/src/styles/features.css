@@ -4772,9 +4772,8 @@ textarea.clone-input {
 .pr-changes {
   height: 100%;
   min-height: 0;
-  /* Use the trailing detail padding for diff width without shifting the file
-     list behind the tab panel's clipped left edge. */
-  margin: 0 calc(0px - clamp(18px, 4vw, 42px)) 0 0;
+  min-width: 0;
+  width: 100%;
 }
 .pr-file-tree {
   display: flex;
