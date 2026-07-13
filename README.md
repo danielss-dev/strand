@@ -77,8 +77,9 @@ keyboard alone, and the mouse stays first-class.
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box.
 - **Everyday Git** — staging with per-change-block stage / discard / unstage
-  inline in the diff, fetch / pull / push with streaming progress, branches,
-  tags, stashes, remotes, cherry-pick, revert, merge, and a fully
+  inline in the diff; fetch / pull / push with streaming progress (the first
+  push creates and tracks the branch on `origin`); branches, tags, stashes,
+  remotes, cherry-pick, revert, merge, and a fully
   keyboard-operable interactive rebase (reorder, reword, squash, fixup,
   drop) with conflict-pause Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a

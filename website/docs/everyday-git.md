@@ -38,6 +38,8 @@ The sparkle button next to the subject field (or `Mod+Shift+M`, or the palette a
 
 The topbar Fetch / Pull / Push buttons show real ahead/behind counts. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure.
 
+The first push of a new local branch creates the same-named branch on `origin` and sets it as the upstream, so later Push and Pull actions work normally. If the branch already has an upstream or an explicit push destination, Strand leaves that routing to Git.
+
 | Shortcut | Action |
 |---|---|
 | `Mod+P` | Push |

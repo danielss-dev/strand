@@ -210,7 +210,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ### Network
 - ☑ `fetch` (shell-out to `git fetch --prune`)
 - ☑ `pull` (shell-out; rebase flag supported, no UI yet)
-- ☑ `push` (shell-out; `--force-with-lease` flag supported, no UI yet)
+- ☑ `push` (shell-out; `--force-with-lease` flag supported, no UI yet;
+  `Repo::push` creates `origin/<branch>` and sets it as upstream on the first
+  push of an otherwise unconfigured local branch — DAN-10)
 - ☑ Credentials: inherit user's `git` config (helper, SSH agent) via
   shell-out + `GIT_TERMINAL_PROMPT=0`. Native `auth-git2` integration
   with OS keychain is a future polish.
