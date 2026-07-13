@@ -1292,7 +1292,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     provider CLI. The `PullRequestConversation` timeline now includes a
     keyboard-operable Write/Preview composer, Markdown formatting toolbar,
     hosted screenshot/image insertion, explicit click-to-load image previews,
-    character count, author markers, and comment permalinks. Replies, new
+    character count, provider avatars with initials fallback, and comment
+    permalinks. Replies, new
     inline comments, direct binary attachment uploads, suggestions, and thread
     resolution remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.

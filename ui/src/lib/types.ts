@@ -204,6 +204,7 @@ export interface PullRequestCheck {
 export interface PullRequestComment {
   id: string;
   author: string;
+  avatar_url: string | null;
   body: string;
   created_at: string;
   url: string;

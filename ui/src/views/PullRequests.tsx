@@ -339,12 +339,26 @@ function PullRequestConversation({
         </div>
         {pr.comments.length > 0 ? pr.comments.map((comment) => {
           const commentUrl = markdownUrl(comment.url, pr.url);
+          const avatarUrl = markdownUrl(comment.avatar_url ?? undefined);
           return (
             <div className={`pr-comment-row${comment.is_system ? ' system' : ''}`} key={comment.id}>
               <div className="pr-comment-marker" aria-hidden="true">
                 {comment.is_system
                   ? <Icon name="history" size={14} />
-                  : <span>{authorInitials(comment.author)}</span>}
+                  : (
+                    <>
+                      <span>{authorInitials(comment.author)}</span>
+                      {avatarUrl && (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(event) => { event.currentTarget.hidden = true; }}
+                        />
+                      )}
+                    </>
+                  )}
               </div>
               <article className="pr-comment">
                 <header>

@@ -1573,7 +1573,8 @@ head is refused instead of merged silently.
 
 **Hosted PR conversation polish (2026-07-13):** Conversation now reads as a
 proper review timeline with author/activity markers, separated metadata and
-Markdown bodies, inline file context, and direct comment permalinks. The
+Markdown bodies, inline file context, provider avatars with initials fallback,
+and direct comment permalinks. The
 comment composer gained keyboard-operable Write/Preview tabs, formatting for
 common Markdown blocks, a hosted screenshot/image action, live character
 count, and clearer submission feedback. Remote images remain inert until the

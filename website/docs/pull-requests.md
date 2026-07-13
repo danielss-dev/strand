@@ -55,8 +55,10 @@ does not report a recognized state.
 
 Conversation displays GitHub comments and Azure DevOps thread comments as safe
 Markdown in a timeline with author markers, timestamps, and inline file paths
-for Azure comments. Select a comment timestamp to open that comment directly on
-the provider host.
+for Azure comments. GitHub and Azure profile images appear when the provider
+supplies a usable identity; initials remain visible if an avatar is absent or
+cannot load. Select a comment timestamp to open that comment directly on the
+provider host.
 
 Use **Write** to compose a top-level comment and **Preview** to inspect the
 rendered result before sending. The formatting toolbar supports bold, italic,
