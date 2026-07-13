@@ -983,7 +983,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   a Close action returns to Local Changes)
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`,
   rendered with Pierre's read-only `<File>` (syntax-highlighted, app-themed).
-  Shiki-direct highlighting deferred — `<File>` already covers it.
+  Shiki-direct highlighting deferred — `<File>` already covers it. Mod+F
+  searches the source with wrap-around match navigation and virtualized-line
+  scrolling (`FileSearchBar` + `searchFileText`).
 - ☑ Preview tab — rendered view for renderable text files, tab only offered
   for them (`PreviewTab` in `FileView.tsx`): SVG through the image pipeline
   (`ImagePreview`, data-URL `<img>`), markdown through `lib/markdown.tsx`

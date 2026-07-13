@@ -35,7 +35,7 @@ const CATEGORY_HINT: Partial<Record<CommandCategory, string>> = {
 /** Surface-local shortcuts, documented for discoverability (not rebindable). */
 const CONTEXT_SHORTCUTS: { keys: string; plain?: boolean; label: string }[] = [
   { keys: 'Mod+Enter', label: 'Commit (from the message box)' },
-  { keys: 'Mod+F', label: 'Search within the current diff' },
+  { keys: 'Mod+F', label: 'Search within the current file or diff' },
   { keys: '/', plain: true, label: 'Search commits (All Commits view)' },
   { keys: 'j / k', plain: true, label: 'Next / previous file (Review queue · Local Changes)' },
   { keys: 'n / p', plain: true, label: 'Next / previous change block in the diff' },

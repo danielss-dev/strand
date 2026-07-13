@@ -5537,7 +5537,7 @@ select.clone-input {
   border-top: 0.5px solid var(--border);
 }
 
-/* ─── In-diff text search (⌘F, Local Changes + Review) ─────────────────── */
+/* ─── In-file / in-diff text search (Mod+F) ───────────────────────────── */
 
 /* Positioning anchor wrapping the diff pane, so the floating bar pins to its
    top-right regardless of which pane variant renders inside. */

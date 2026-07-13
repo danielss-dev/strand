@@ -93,7 +93,7 @@ Each view has its own small set of fixed (non-rebindable) keys. Settings → Key
 | `Delete` / `Backspace` | Discard immediately, no confirm |
 | `c` | Focus the commit subject field |
 | `Mod+Enter` | Commit (from the message box) |
-| `Mod+F` | Search within the current diff |
+| `Mod+F` | Search within the current file or diff |
 
 ### Review queue (Review and Workspace Review)
 

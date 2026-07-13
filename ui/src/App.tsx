@@ -1127,11 +1127,11 @@ export function App() {
         } },
         { id: 'search-commits', label: 'Search commits…', group: 'Actions', shortcut: '/', keywords: 'find filter grep message author hash', run: () => { requestCommitSearch(); } },
         { id: 'search-content', label: 'Search file contents…', group: 'Actions', keywords: 'pickaxe content diff code history full grep -G -S', run: () => { requestCommitSearch('content'); } },
-        // Opens the ⌘F bar in whichever diff view is showing; other views
-        // route to Local Changes first (the signal is consumed on mount).
-        { id: 'search-diff', label: 'Search in diff…', group: 'Actions', shortcut: formatBinding('Mod+F', platform), keywords: 'find in diff grep text content search', run: () => {
+        // Opens the contextual Mod+F bar. A file view searches its source;
+        // diff surfaces search their current pool; other views route local.
+        { id: 'search-diff', label: view === 'file' ? 'Search in file…' : 'Search in diff…', group: 'Actions', shortcut: formatBinding('Mod+F', platform), keywords: 'find in file diff grep text content search', run: () => {
           const v = useRepo.getState().view;
-          if (v !== 'local' && v !== 'review' && v !== 'workspace-review') setView('local');
+          if (v !== 'file' && v !== 'local' && v !== 'review' && v !== 'workspace-review') setView('local');
           requestDiffSearch();
         } },
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
@@ -1296,7 +1296,7 @@ export function App() {
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
-      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab,
+      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees]);
 
   const rootStyle = {

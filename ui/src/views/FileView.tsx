@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
 import { Diff } from '../components/Diff';
+import { FileSearchBar, focusFileSearchInput } from '../components/FileSearchBar';
 import { Icon, type IconName } from '../components/Icon';
 import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
 import { imageMime, isImagePath } from '../lib/image';
@@ -53,6 +54,9 @@ export function FileView({ path }: { path: string }) {
   const tab = useRepo((s) => s.fileTab);
   const setTab = useRepo((s) => s.setFileTab);
   const jumpToCommit = useRepo((s) => s.jumpFromFile);
+  const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
+  const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const close = () => { setView('local'); selectFile(null); };
 
@@ -62,6 +66,30 @@ export function FileView({ path }: { path: string }) {
   // open (selectFile only picks it for previewable paths), but fall back
   // rather than render an empty body if that ever changes.
   const active = tab === 'preview' && !previewable ? 'content' : tab;
+
+  const openSearch = useCallback(() => {
+    if (active !== 'content') setTab('content');
+    setSearchOpen(true);
+    focusFileSearchInput();
+  }, [active, setTab]);
+
+  useEffect(() => {
+    if (!diffSearchSignal) return;
+    openSearch();
+    clearDiffSearch();
+  }, [diffSearchSignal, openSearch, clearDiffSearch]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'f') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
+      e.preventDefault();
+      openSearch();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openSearch]);
 
   return (
     <div className="main">
@@ -104,7 +132,15 @@ export function FileView({ path }: { path: string }) {
       </div>
       <div className="fv-body">
         {/* `key={path}` resets each tab's internal load state when the file changes. */}
-        {active === 'content' && <ContentTab key={path} path={path} repoPath={activePath} />}
+        {active === 'content' && (
+          <ContentTab
+            key={path}
+            path={path}
+            repoPath={activePath}
+            searchOpen={searchOpen}
+            onCloseSearch={() => setSearchOpen(false)}
+          />
+        )}
         {active === 'preview' && <PreviewTab key={path} path={path} repoPath={activePath} />}
         {active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
         {active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
@@ -120,11 +156,60 @@ function FvEmpty({ children }: { children: React.ReactNode }) {
 
 // ─── Content ──────────────────────────────────────────────────────────────
 
-function ContentTab({ path, repoPath }: { path: string; repoPath: string | null }) {
+function ContentTab({
+  path,
+  repoPath,
+  searchOpen,
+  onCloseSearch,
+}: {
+  path: string;
+  repoPath: string | null;
+  searchOpen: boolean;
+  onCloseSearch: () => void;
+}) {
   const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const selectLine = useCallback((line: number | null) => setSelectedLine(line), []);
+
+  useEffect(() => {
+    if (selectedLine == null || !data) return;
+    let attempts = 0;
+    let cancelled = false;
+    let timer: number | null = null;
+    const attempt = () => {
+      if (cancelled) return;
+      const host = scrollRef.current;
+      if (!host) return;
+      const container = host.querySelector('diffs-container');
+      const row = container?.shadowRoot?.querySelector<HTMLElement>(
+        `[data-line][data-line-index="${selectedLine - 1}"]`,
+      );
+      if (row) {
+        const rr = row.getBoundingClientRect();
+        const hr = host.getBoundingClientRect();
+        host.scrollTo({ top: host.scrollTop + rr.top - hr.top - (host.clientHeight - rr.height) / 2 });
+        return;
+      }
+      const total = Math.max(1, data.text.split('\n').length);
+      host.scrollTo({ top: ((selectedLine - 0.5) / total) * host.scrollHeight - host.clientHeight / 2 });
+      if (++attempts < 12) timer = window.setTimeout(attempt, 120);
+    };
+    const frame = requestAnimationFrame(attempt);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [selectedLine, data]);
+
+  const closeSearch = useCallback(() => {
+    setSelectedLine(null);
+    onCloseSearch();
+  }, [onCloseSearch]);
 
   useEffect(() => {
     if (!repoPath) return;
@@ -160,12 +245,19 @@ function ContentTab({ path, repoPath }: { path: string; repoPath: string | null 
   // JSX to skip the excess-property check — same as MergeResolver).
   const opts = { theme: pierreTheme, disableBackground: true, disableFileHeader: true };
   return (
-    <div className="fv-tab">
+    <div className="fv-tab diff-search-host">
       {data.truncated && (
         <div className="fv-banner">Large file — showing the first part only.</div>
       )}
-      <div className="fv-pierre">
-        <PierreFile file={{ name: path, contents: data.text }} options={opts} />
+      {searchOpen && (
+        <FileSearchBar text={data.text} onSelect={selectLine} onClose={closeSearch} />
+      )}
+      <div className="fv-pierre" ref={scrollRef}>
+        <PierreFile
+          file={{ name: path, contents: data.text }}
+          options={opts}
+          selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
+        />
       </div>
     </div>
   );

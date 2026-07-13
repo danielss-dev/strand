@@ -40,7 +40,7 @@ shortcuts").
 | `Mod+Shift+T` | Toggle light/dark theme |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
-`Mod+Enter` commit · `Mod+F` search in diff · `/` search commits · `j`/`k`
+`Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
 diff · palette `↑↓`/`↵`/`⇥`/`Esc`.
 

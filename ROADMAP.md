@@ -1503,6 +1503,13 @@ button live (AppImage), stale ~10 MB installer claims corrected to real
 Workspaces and AI-commit-messages cards fill the feature grid, and Docs is
 linked from the nav, footer, and ⌘K palette.
 
+**In-file search (2026-07-13):** The file view's read-only Content tab now
+supports contextual Mod+F search, with case-insensitive matching, wrap-around
+keyboard navigation, Pierre line highlighting, and centered jumps that keep
+working when large files are virtualized. Invoking search from Preview,
+History, Compare, or Blame switches to the searchable source; the command
+palette exposes the same action.
+
 ---
 
 ## 1.1+ — Post-1.0

@@ -35,7 +35,7 @@ Every global shortcut in Strand is rebindable here. Shortcuts are grouped by cat
 
 Rebindable defaults include the command palette (`Mod+K`), views `Mod+1`–`Mod+6`, push/pull/fetch/sync, the theme toggle, the repo switcher (`Mod+E`), and the AI commit-message suggestion (`Mod+Shift+M`). The full table lives in [Keyboard and palette](keyboard-and-palette.md).
 
-Below the rebindable list, a **Context shortcuts** card documents the fixed, surface-local keys — things like `Mod+Enter` to commit from the message box, `Mod+F` to search within the current diff, `/` to search commits, and `j`/`k` to step files in the Review queue and Local Changes. These are not rebindable; the card is a reference so you can look them up without leaving Settings.
+Below the rebindable list, a **Context shortcuts** card documents the fixed, surface-local keys — things like `Mod+Enter` to commit from the message box, `Mod+F` to search within the current file or diff, `/` to search commits, and `j`/`k` to step files in the Review queue and Local Changes. These are not rebindable; the card is a reference so you can look them up without leaving Settings.
 
 ## Git
 

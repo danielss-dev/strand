@@ -80,6 +80,10 @@ Open any file from the sidebar's **Files** tab or the command palette to get a d
 | Compare | This file diffed between any two of its revisions |
 | Blame | Per-line authorship |
 
+Press `Mod+F` anywhere in the file view to switch to Content and search the
+file's source. `Enter` / `Shift+Enter` (or `Down` / `Up`) move through matches
+with wrapping; `Esc` closes the search.
+
 ### Preview
 
 Markdown renders as a document — including repo-relative images and Mermaid diagrams — and SVG files render as an image. The tab only appears for files Strand can preview.
