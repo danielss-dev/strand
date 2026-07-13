@@ -63,7 +63,8 @@ keyboard alone, and the mouse stays first-class.
 - **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
   opening automatically. Each PR gets a full-width workspace: read rendered
-  Markdown descriptions and conversations, add top-level comments, inspect
+  Markdown descriptions and timeline conversations, compose top-level comments
+  with formatting, preview, and hosted screenshot links, inspect
   lazily loaded code changes in the Local Changes-style Pierre file tree and
   diff workspace, see color-coded provider checks, and merge with merge-commit,
   squash, or rebase through a GitHub-style split merge control.

@@ -54,10 +54,24 @@ does not report a recognized state.
 ### Conversation
 
 Conversation displays GitHub comments and Azure DevOps thread comments as safe
-Markdown. Azure inline comments include their file path. Write a top-level
-Markdown comment in the composer and choose **Add comment**, or press
-`Mod+Enter`. The comment is submitted through the signed-in provider CLI; Strand
-does not receive or store the provider token.
+Markdown in a timeline with author markers, timestamps, and inline file paths
+for Azure comments. Select a comment timestamp to open that comment directly on
+the provider host.
+
+Use **Write** to compose a top-level comment and **Preview** to inspect the
+rendered result before sending. The formatting toolbar supports bold, italic,
+inline or fenced code, quotes, bulleted/numbered/task lists, links, and images.
+Select existing text before choosing a format to wrap or prefix it. Choose
+**Comment** or press `Mod+Enter` to send through the signed-in provider CLI;
+Strand does not receive or store the provider token.
+
+The image action inserts standard Markdown for a screenshot or image that
+already has an `http(s)` URL. This also works with image Markdown copied from
+the provider website. Direct local-file upload is not currently available
+because the supported GitHub and Azure CLI paths do not share a stable binary
+attachment API. Images in descriptions, previews, and comments stay unloaded
+until you explicitly choose **Show image**, preventing a PR from silently
+making a remote tracking request when opened.
 
 ### Changes
 

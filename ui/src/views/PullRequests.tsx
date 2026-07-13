@@ -7,6 +7,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ParsedDiff } from '../components/Diff';
 import { Icon, type IconName } from '../components/Icon';
 import { PierreTree } from '../components/PierreTree';
+import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
 import { renderMarkdown } from '../lib/markdown';
 import {
   checkTone,
@@ -52,6 +53,30 @@ function CheckStatus({ check }: { check: PullRequestCheck }) {
   );
 }
 
+function ProviderImage({ src, alt, baseUrl }: { src: string; alt: string; baseUrl?: string }) {
+  const [visible, setVisible] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const url = markdownUrl(src, baseUrl);
+  if (!url) return <span className="markdown-image invalid">[Image unavailable: {alt || 'attachment'}]</span>;
+  if (!visible || failed) {
+    return (
+      <span className="markdown-image">
+        <button type="button" onClick={() => { setFailed(false); setVisible(true); }}>
+          <Icon name="eye" size={13} />
+          {failed ? 'Try image again' : `Show image${alt ? `: ${alt}` : ''}`}
+        </button>
+        <small>Loaded only when you choose to view it</small>
+      </span>
+    );
+  }
+  return (
+    <span className="markdown-image loaded">
+      <img src={url} alt={alt || 'Comment attachment'} onError={() => setFailed(true)} />
+      {alt && <small>{alt}</small>}
+    </span>
+  );
+}
+
 function ProviderMarkdown({ source, baseUrl }: { source: string; baseUrl?: string }) {
   return (
     <div className="markdown">
@@ -60,14 +85,29 @@ function ProviderMarkdown({ source, baseUrl }: { source: string; baseUrl?: strin
           const url = markdownUrl(href, baseUrl);
           if (url) void shellOpen(url);
         },
-        // PR content is untrusted and should not trigger silent remote image
-        // requests. Keep the alt text readable; the full content stays on host.
-        renderImage: (_src, alt, key) => (
-          <span className="markdown-image" key={key}>[Image: {alt || 'attachment'}]</span>
-        ),
+        // PR content is untrusted. Images stay inert until the user explicitly
+        // reveals one, so opening a PR never leaks a remote request.
+        renderImage: (src, alt, key) => <ProviderImage src={src} alt={alt} baseUrl={baseUrl} key={key} />,
       })}
     </div>
   );
+}
+
+const COMMENT_TOOLS: { format: CommentFormat; label: string; mark: string }[] = [
+  { format: 'bold', label: 'Bold', mark: 'B' },
+  { format: 'italic', label: 'Italic', mark: 'I' },
+  { format: 'code', label: 'Code', mark: '<>' },
+  { format: 'quote', label: 'Quote', mark: '❯' },
+  { format: 'bullet-list', label: 'Bulleted list', mark: '•' },
+  { format: 'numbered-list', label: 'Numbered list', mark: '1.' },
+  { format: 'task-list', label: 'Task list', mark: '☑' },
+  { format: 'link', label: 'Link', mark: '↗' },
+  { format: 'image', label: 'Image or screenshot by URL', mark: '▧' },
+];
+
+function authorInitials(author: string): string {
+  const words = author.trim().split(/[\s_-]+/).filter(Boolean);
+  return (words.length > 1 ? words.slice(0, 2).map((word) => word[0]).join('') : author.slice(0, 2)).toUpperCase();
 }
 
 function PullRequestOverview({ pr }: { pr: PullRequest }) {
@@ -138,8 +178,25 @@ function PullRequestConversation({
 }) {
   const platform = useSettings((state) => state.platform);
   const [draft, setDraft] = useState('');
+  const [mode, setMode] = useState<'write' | 'preview'>('write');
   const [posting, setPosting] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectMode = (next: 'write' | 'preview') => {
+    setMode(next);
+    requestAnimationFrame(() => document.getElementById(`pr-comment-${pr.id}-${next}-tab`)?.focus());
+  };
+
+  const format = (kind: CommentFormat) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const edit = applyCommentFormat(draft, textarea.selectionStart, textarea.selectionEnd, kind);
+    setDraft(edit.value);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+    });
+  };
 
   const submit = async () => {
     const body = draft.trim();
@@ -175,43 +232,141 @@ function PullRequestConversation({
           void submit();
         }}
       >
-        <label htmlFor={`pr-comment-${pr.id}`}>Add a comment</label>
-        <textarea
-          id={`pr-comment-${pr.id}`}
-          value={draft}
-          maxLength={65_536}
-          rows={4}
-          placeholder="Write a Markdown comment…"
-          disabled={posting}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        <div className="pr-composer-head">
+          <label htmlFor={`pr-comment-${pr.id}`}>Add to the conversation</label>
+          <div
+            className="pr-composer-tabs"
+            role="tablist"
+            aria-label="Comment editor mode"
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
               event.preventDefault();
-              void submit();
-            }
-          }}
-        />
+              selectMode(mode === 'write' ? 'preview' : 'write');
+            }}
+          >
+            <button
+              type="button"
+              role="tab"
+              id={`pr-comment-${pr.id}-write-tab`}
+              aria-controls={`pr-comment-${pr.id}-write-panel`}
+              aria-selected={mode === 'write'}
+              tabIndex={mode === 'write' ? 0 : -1}
+              onClick={() => setMode('write')}
+            >
+              <Icon name="edit" size={12} /> Write
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`pr-comment-${pr.id}-preview-tab`}
+              aria-controls={`pr-comment-${pr.id}-preview-panel`}
+              aria-selected={mode === 'preview'}
+              tabIndex={mode === 'preview' ? 0 : -1}
+              onClick={() => setMode('preview')}
+            >
+              <Icon name="eye" size={12} /> Preview
+            </button>
+          </div>
+        </div>
+        <div className="pr-comment-editor">
+          <div className="pr-comment-tools" role="toolbar" aria-label="Markdown formatting">
+            {COMMENT_TOOLS.map((tool) => (
+              <button
+                type="button"
+                key={tool.format}
+                aria-label={tool.label}
+                title={tool.label}
+                disabled={posting || mode === 'preview'}
+                onClick={() => format(tool.format)}
+              >
+                <span aria-hidden="true">{tool.mark}</span>
+              </button>
+            ))}
+          </div>
+          {mode === 'write' ? (
+            <div
+              className="pr-comment-write"
+              role="tabpanel"
+              id={`pr-comment-${pr.id}-write-panel`}
+              aria-labelledby={`pr-comment-${pr.id}-write-tab`}
+            >
+              <textarea
+                ref={textareaRef}
+                id={`pr-comment-${pr.id}`}
+                value={draft}
+                maxLength={65_536}
+                rows={6}
+                placeholder="Leave a comment…"
+                disabled={posting}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault();
+                    void submit();
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              className="pr-comment-preview"
+              role="tabpanel"
+              id={`pr-comment-${pr.id}-preview-panel`}
+              aria-labelledby={`pr-comment-${pr.id}-preview-tab`}
+            >
+              {draft.trim()
+                ? <ProviderMarkdown source={draft} baseUrl={pr.url} />
+                : <p className="pr-muted">Nothing to preview yet.</p>}
+            </div>
+          )}
+        </div>
         <div className="pr-comment-actions">
-          <span>Markdown supported · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter to send</span>
+          <div>
+            <span>Markdown supported · Image URLs stay private until clicked</span>
+            <span>{draft.length.toLocaleString()} / 65,536 · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter to send</span>
+          </div>
           <button type="submit" className="btn" disabled={posting || !draft.trim()}>
-            {posting ? 'Adding…' : 'Add comment'}
+            {posting ? 'Commenting…' : 'Comment'}
           </button>
         </div>
         {message && <p className={`pr-comment-message ${message.tone}`} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
       </form>
 
       <section className="pr-comments" aria-label="Pull request comments">
-        {pr.comments.length > 0 ? pr.comments.map((comment) => (
-          <article className={`pr-comment${comment.is_system ? ' system' : ''}`} key={comment.id}>
-            <header>
-              <strong>{comment.author}</strong>
-              {comment.path && <code>{comment.path}</code>}
-              {comment.is_system && <span>system</span>}
-              <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
-            </header>
-            <ProviderMarkdown source={comment.body} baseUrl={comment.url || pr.url} />
-          </article>
-        )) : <p className="pr-muted">No comments yet.</p>}
+        <div className="pr-comments-head">
+          <h3>Conversation</h3>
+          <span>{pr.comments.length} {pr.comments.length === 1 ? 'comment' : 'comments'}</span>
+        </div>
+        {pr.comments.length > 0 ? pr.comments.map((comment) => {
+          const commentUrl = markdownUrl(comment.url, pr.url);
+          return (
+            <div className={`pr-comment-row${comment.is_system ? ' system' : ''}`} key={comment.id}>
+              <div className="pr-comment-marker" aria-hidden="true">
+                {comment.is_system
+                  ? <Icon name="history" size={14} />
+                  : <span>{authorInitials(comment.author)}</span>}
+              </div>
+              <article className="pr-comment">
+                <header>
+                  <div className="pr-comment-author">
+                    <strong>{comment.author}</strong>
+                    {comment.is_system && <span>system</span>}
+                    {comment.path && <code>{comment.path}</code>}
+                  </div>
+                  {commentUrl ? (
+                    <button type="button" className="pr-comment-time" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
+                      <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
+                      <Icon name="external" size={10} />
+                    </button>
+                  ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
+                </header>
+                <div className="pr-comment-body">
+                  <ProviderMarkdown source={comment.body} baseUrl={commentUrl || pr.url} />
+                </div>
+              </article>
+            </div>
+          );
+        }) : <p className="pr-muted">No comments yet.</p>}
       </section>
     </div>
   );
