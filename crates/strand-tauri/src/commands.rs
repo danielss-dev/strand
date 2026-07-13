@@ -200,6 +200,27 @@ pub async fn repo_pull_request(path: String, id: u64) -> CmdResult<pull_requests
     .await
 }
 
+/// Unified patch for one hosted pull request. This stays lazy because provider
+/// diffs can be much larger than the overview metadata.
+#[tauri::command(async)]
+pub async fn repo_pull_request_diff(path: String, id: u64) -> CmdResult<String> {
+    run_blocking("pull request diff", move || {
+        pull_requests::diff(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Add a top-level provider discussion comment. Authentication remains in the
+/// signed-in provider CLI; the comment body is sent through stdin/temp input,
+/// never interpolated into a shell command.
+#[tauri::command(async)]
+pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> CmdResult<()> {
+    run_blocking("pull request comment", move || {
+        pull_requests::add_comment(&path, id, &body).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

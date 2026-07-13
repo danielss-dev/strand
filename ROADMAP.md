@@ -1060,10 +1060,11 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   entry below)
 - ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
   flow, shipped 2026-07-06 (see changelog entry below)
-- ◐ Hosted pull-request workspace — GitHub + Azure DevOps read-only list/detail
-  shipped 2026-07-13 through authenticated provider CLIs; hosted diffs,
-  discussion/review actions, policies/checks, and merge controls remain. GitLab
-  and Bitbucket are follow-on provider adapters.
+- ◐ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
+  rendered Markdown, color-coded checks, discussions with top-level comment
+  creation, and lazy selected-file Pierre diffs shipped 2026-07-13 through
+  authenticated provider CLIs. Inline/review actions, Azure policies, and merge
+  controls remain; GitLab and Bitbucket are follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
@@ -1539,6 +1540,15 @@ GraphQL operation. GitHub rejected that shape as up to 1,000,000 possible nodes
 strictly shallow and `repo_pull_request` runs `gh pr view` only after selection
 settles for 120ms. Non-auth provider errors no longer append a misleading
 "sign in" instruction.
+
+**Hosted PR review details (2026-07-13):** Pull request detail is now split into
+keyboard-operable Overview, Conversation, and Changes tabs. Descriptions and
+comments use Strand's safe Markdown renderer; provider checks carry semantic
+success/running/failure colors; GitHub comments and Azure thread comments are
+readable in-app, with top-level comment creation via the signed-in CLI. Changes
+load only when requested, parse the provider patch once, and mount just the
+selected file through the shared Pierre wrapper. Azure source/target objects
+are fetched with source-only refspecs that leave refs and FETCH_HEAD untouched.
 
 ---
 

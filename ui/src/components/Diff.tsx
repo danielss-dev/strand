@@ -1,4 +1,4 @@
-import { getSingularPatch } from '@pierre/diffs';
+import { getSingularPatch, type FileDiffMetadata } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, PatchDiff } from '@pierre/diffs/react';
 import { useMemo, type CSSProperties } from 'react';
 
@@ -22,6 +22,10 @@ export interface DiffProps {
   hideFileHeader?: boolean;
   className?: string;
   style?: CSSProperties;
+}
+
+export interface ParsedDiffProps extends Omit<DiffProps, 'patch'> {
+  fileDiff: FileDiffMetadata;
 }
 
 /**
@@ -111,5 +115,29 @@ export function Diff({
     <PierreFileDiff fileDiff={fileDiff} options={options} className={className} style={style} />
   ) : (
     <PatchDiff patch={patch} options={options} className={className} style={style} />
+  );
+}
+
+/** Render an already-parsed provider patch through Strand's Pierre boundary. */
+export function ParsedDiff({
+  fileDiff,
+  layout = 'unified',
+  hideFileHeader = false,
+  className,
+  style,
+}: ParsedDiffProps) {
+  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const diffIndicators = useSettings((s) => s.diffIndicators);
+  const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
+  const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
+  const options = {
+    diffStyle: layout,
+    theme: pierreTheme,
+    disableBackground: true,
+    disableFileHeader: hideFileHeader,
+    ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
+  } as const;
+  return (
+    <PierreFileDiff fileDiff={fileDiff} options={options} className={className} style={style} />
   );
 }

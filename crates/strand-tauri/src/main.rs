@@ -78,6 +78,8 @@ fn main() {
             commands::repo_refs,
             commands::repo_pull_requests,
             commands::repo_pull_request,
+            commands::repo_pull_request_diff,
+            commands::repo_pull_request_comment,
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
             commands::repo_diff_between,

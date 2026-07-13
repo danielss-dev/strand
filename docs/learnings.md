@@ -1113,3 +1113,24 @@ settled row. Other providers follow the same boundary even if their present API
 would tolerate a large response. Generation-gate responses so a slow previous
 selection cannot replace the active detail, and append login guidance only
 when stderr actually indicates authentication failure.
+
+---
+
+## Hosted PR content stays safe and heavy changes stay tab-lazy
+
+**Rule.** Render provider descriptions and comments through the shared
+React-element Markdown renderer: no raw HTML and no automatic remote image
+requests. Fetch and parse a hosted patch only after the Changes tab opens, and
+mount only the selected file through Strand's Pierre wrapper.
+
+**Why.** Pull-request content is untrusted input inside an IPC-privileged
+webview. Remote images also leak that the PR was viewed. Separately, eager patch
+downloads and one Pierre mount per changed file turn list navigation into a
+network/render hot path and repeat the large-diff freezes already solved in
+Local Changes and Review.
+
+**How to apply.** Reuse `renderMarkdown` with a provider URL resolver and an
+alt-text image handler. Keep provider list/detail, discussion, and diff calls
+separate; mount the changes component conditionally by tab. Parse the aggregate
+patch once, give Pierre a stable cache key, and hand `ParsedDiff` only the
+active `FileDiffMetadata`.

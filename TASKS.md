@@ -1268,7 +1268,7 @@ tree: watch the agent work, review fast, accept or reject safely.
 ## Hosted pull requests (started 2026-07-13)
 
 - ◐ Provider-neutral Pull Requests workspace for the active repository.
-  - ☑ Read-only GitHub + Azure DevOps list/detail slice (`pull_requests.rs`,
+  - ☑ GitHub + Azure DevOps list/detail overview (`pull_requests.rs`,
     `repo_pull_requests` + lazy `repo_pull_request`, `views/PullRequests.tsx`):
     detects the provider from `origin`/supported remotes, loads a shallow latest
     100 open/closed/merged PR index through the signed-in `gh` or `az` CLI, then
@@ -1278,10 +1278,20 @@ tree: watch the agent work, review fast, accept or reject safely.
     possible-node cap). Resizable list/detail panes, arrow or j/k
     selection, Enter/double-click/Open-on-host, refresh, command-palette entry,
     and actionable missing-CLI/auth errors.
-  - ☐ Hosted diff and changed-files tree, using lazy/virtualized Pierre renders.
-  - ☐ Full discussion threads, inline comments, suggestions, and comment creation.
+  - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
+    `PullRequestChanges`): provider patches load only when Changes opens; the
+    keyboard-operable file list mounts one selected Pierre diff at a time and
+    follows the app's split/stacked appearance settings. Azure comparisons
+    fetch source/target objects without updating repository refs or FETCH_HEAD.
+  - ◐ Discussion threads and comment creation: Conversation reads GitHub
+    comments and Azure thread comments (including inline file context) as safe
+    Markdown and creates top-level Markdown comments through the signed-in
+    provider CLI. Replies, new inline comments, suggestions, and thread
+    resolution remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
-  - ☐ Checks, Azure policies, merge queue/auto-complete, and required-review detail.
+  - ◐ Checks render provider states as green success, yellow running, red
+    failure, or neutral. Azure policies, merge queue/auto-complete, and
+    required-review detail remain.
   - ☐ Update/check out the PR branch; close/reopen; merge with provider-supported strategies.
   - ☐ GitLab merge-request adapter.
   - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.

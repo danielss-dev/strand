@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
+import type { FileDiffMetadata } from '@pierre/diffs';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
-import { Icon } from '../components/Icon';
-import { useRepo } from '../stores/repo';
+import { ParsedDiff } from '../components/Diff';
+import { Icon, type IconName } from '../components/Icon';
+import { renderMarkdown } from '../lib/markdown';
+import { checkTone, diffStats, markdownUrl, parsePullRequestPatch } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
-import type { PullRequest, PullRequestList } from '../lib/types';
+import type { PullRequest, PullRequestCheck, PullRequestList } from '../lib/types';
+import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
 
 const providerName = (provider: PullRequestList['repository']['provider']) =>
   provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
@@ -26,26 +31,38 @@ function dateLabel(value: string): string {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-function PullRequestDetails({ pr }: { pr: PullRequest }) {
-  const open = () => { if (pr.url) void shellOpen(pr.url); };
+function CheckStatus({ check }: { check: PullRequestCheck }) {
+  const tone = checkTone(check.status);
+  const icon: IconName = tone === 'success' ? 'check' : tone === 'failed' ? 'x' : tone === 'running' ? 'refresh' : 'circle';
   return (
-    <article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
-      <header className="pr-detail-head">
-        <div>
-          <div className="pr-detail-kicker">#{pr.id} · {pr.author}</div>
-          <h2>{pr.title}</h2>
-        </div>
-        <button type="button" className="btn" onClick={open} disabled={!pr.url}>
-          <Icon name="external" size={13} /> Open on host
-        </button>
-      </header>
+    <strong className={`pr-check-status ${tone}`}>
+      <Icon name={icon} size={12} className={tone === 'running' ? 'spin' : undefined} />
+      {check.status.toLowerCase()}
+    </strong>
+  );
+}
 
-      <div className="pr-pills" aria-label="Pull request status">
-        <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
-        {pr.review_status && <span>{pr.review_status.toLowerCase()}</span>}
-        {pr.merge_status && <span>{pr.merge_status.toLowerCase()}</span>}
-      </div>
+function ProviderMarkdown({ source, baseUrl }: { source: string; baseUrl?: string }) {
+  return (
+    <div className="markdown">
+      {renderMarkdown(source, {
+        onLinkClick: (href) => {
+          const url = markdownUrl(href, baseUrl);
+          if (url) void shellOpen(url);
+        },
+        // PR content is untrusted and should not trigger silent remote image
+        // requests. Keep the alt text readable; the full content stays on host.
+        renderImage: (_src, alt, key) => (
+          <span className="markdown-image" key={key}>[Image: {alt || 'attachment'}]</span>
+        ),
+      })}
+    </div>
+  );
+}
 
+function PullRequestOverview({ pr }: { pr: PullRequest }) {
+  return (
+    <div className="pr-tab-scroll">
       <dl className="pr-meta-grid">
         <div><dt>Branches</dt><dd><code>{pr.source_branch}</code> → <code>{pr.target_branch}</code></dd></div>
         <div><dt>Created</dt><dd>{dateLabel(pr.created_at) || 'Not reported'}</dd></div>
@@ -68,7 +85,7 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
       <section className="pr-detail-section">
         <h3>Description</h3>
         {pr.description
-          ? <pre className="pr-description">{pr.description}</pre>
+          ? <ProviderMarkdown source={pr.description} baseUrl={pr.url} />
           : <p className="pr-muted">No description.</p>}
       </section>
 
@@ -91,11 +108,312 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
         {pr.checks.length > 0 ? (
           <ul className="pr-facts">
             {pr.checks.map((check, index) => (
-              <li key={`${check.name}:${index}`}><span>{check.name}</span><strong>{check.status.toLowerCase()}</strong></li>
+              <li key={`${check.name}:${index}`}><span>{check.name}</span><CheckStatus check={check} /></li>
             ))}
           </ul>
         ) : <p className="pr-muted">No checks reported.</p>}
       </section>
+    </div>
+  );
+}
+
+function PullRequestConversation({
+  path,
+  pr,
+  onUpdated,
+}: {
+  path: string;
+  pr: PullRequest;
+  onUpdated: (next: PullRequest) => void;
+}) {
+  const platform = useSettings((state) => state.platform);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  const submit = async () => {
+    const body = draft.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    setMessage(null);
+    let posted = false;
+    try {
+      await tauri.repoPullRequestComment(path, pr.id, body);
+      posted = true;
+      setDraft('');
+      const next = await tauri.repoPullRequest(path, pr.id);
+      onUpdated(next);
+      setMessage({ tone: 'ok', text: 'Comment added.' });
+    } catch (caught) {
+      setMessage({
+        tone: 'error',
+        text: posted
+          ? `Comment was added, but the discussion could not refresh: ${errMessage(caught)}`
+          : errMessage(caught),
+      });
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div className="pr-tab-scroll pr-conversation">
+      <form
+        className="pr-comment-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <label htmlFor={`pr-comment-${pr.id}`}>Add a comment</label>
+        <textarea
+          id={`pr-comment-${pr.id}`}
+          value={draft}
+          maxLength={65_536}
+          rows={4}
+          placeholder="Write a Markdown comment…"
+          disabled={posting}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+        />
+        <div className="pr-comment-actions">
+          <span>Markdown supported · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter to send</span>
+          <button type="submit" className="btn" disabled={posting || !draft.trim()}>
+            {posting ? 'Adding…' : 'Add comment'}
+          </button>
+        </div>
+        {message && <p className={`pr-comment-message ${message.tone}`} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
+      </form>
+
+      <section className="pr-comments" aria-label="Pull request comments">
+        {pr.comments.length > 0 ? pr.comments.map((comment) => (
+          <article className={`pr-comment${comment.is_system ? ' system' : ''}`} key={comment.id}>
+            <header>
+              <strong>{comment.author}</strong>
+              {comment.path && <code>{comment.path}</code>}
+              {comment.is_system && <span>system</span>}
+              <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
+            </header>
+            <ProviderMarkdown source={comment.body} baseUrl={comment.url || pr.url} />
+          </article>
+        )) : <p className="pr-muted">No comments yet.</p>}
+      </section>
+    </div>
+  );
+}
+
+function fileState(file: FileDiffMetadata): string {
+  if (file.type === 'new') return 'A';
+  if (file.type === 'deleted') return 'D';
+  if (file.type.startsWith('rename')) return 'R';
+  return 'M';
+}
+
+function PullRequestChanges({ path, pr }: { path: string; pr: PullRequest }) {
+  const diffMode = useSettings((state) => state.diffMode);
+  const [patch, setPatch] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [selected, setSelected] = useState(0);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    const current = ++generation.current;
+    setLoading(true);
+    setError(null);
+    void tauri.repoPullRequestDiff(path, pr.id).then(
+      (next) => {
+        if (generation.current === current) setPatch(next);
+      },
+      (caught) => {
+        if (generation.current === current) setError(errMessage(caught));
+      },
+    ).finally(() => {
+      if (generation.current === current) setLoading(false);
+    });
+    return () => { generation.current += 1; };
+  }, [path, pr.id, reload]);
+
+  const parsed = useMemo(() => {
+    if (patch == null) return { files: [] as FileDiffMetadata[], error: null as string | null };
+    try {
+      return { files: parsePullRequestPatch(patch), error: null };
+    } catch (caught) {
+      return { files: [] as FileDiffMetadata[], error: errMessage(caught) };
+    }
+  }, [patch]);
+  const files = parsed.files;
+  const selectedFile = files[selected] ?? null;
+
+  useEffect(() => {
+    if (selected >= files.length) setSelected(Math.max(0, files.length - 1));
+  }, [files.length, selected]);
+
+  const move = (delta: number) => {
+    if (!files.length) return;
+    const next = Math.min(files.length - 1, Math.max(0, selected + delta));
+    setSelected(next);
+    document.getElementById(`pr-file-${pr.id}-${next}`)?.scrollIntoView({ block: 'nearest' });
+  };
+
+  if (loading) {
+    return <div className="pr-empty pr-tab-empty" aria-live="polite"><Icon name="refresh" size={24} className="spin" /><strong>Loading code changes…</strong></div>;
+  }
+  if (error || parsed.error) {
+    return (
+      <div className="pr-empty pr-tab-empty" role="alert">
+        <Icon name="changes" size={24} />
+        <strong>Could not load code changes</strong>
+        <p>{error || `The provider patch could not be parsed: ${parsed.error}`}</p>
+        <button type="button" className="btn" onClick={() => setReload((value) => value + 1)}>Try again</button>
+      </div>
+    );
+  }
+  if (!files.length) {
+    return <div className="pr-empty pr-tab-empty"><Icon name="check" size={24} /><strong>No textual changes</strong><p>The provider returned no renderable patch for this pull request.</p></div>;
+  }
+
+  return (
+    <div className="pr-changes">
+      <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes">
+        <Panel defaultSize={28} minSize={18} maxSize={48}>
+          <div
+            className="pr-file-list"
+            role="listbox"
+            aria-label="Changed files"
+            aria-activedescendant={`pr-file-${pr.id}-${selected}`}
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' || event.key === 'j') { event.preventDefault(); move(1); }
+              else if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); }
+              else if (event.key === 'Home') { event.preventDefault(); setSelected(0); }
+              else if (event.key === 'End') { event.preventDefault(); setSelected(files.length - 1); }
+            }}
+          >
+            <div className="pr-file-count">{files.length} changed {files.length === 1 ? 'file' : 'files'}</div>
+            {files.map((file, index) => {
+              const stats = diffStats(file);
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === selected}
+                  id={`pr-file-${pr.id}-${index}`}
+                  key={`${file.prevName || ''}:${file.name}:${index}`}
+                  className={`pr-file-row${index === selected ? ' selected' : ''}`}
+                  onClick={() => setSelected(index)}
+                >
+                  <span className={`pr-file-state ${file.type}`}>{fileState(file)}</span>
+                  <span className="pr-file-name" title={file.name}>{file.name}</span>
+                  <span className="pr-file-stats"><b>+{stats.additions}</b><i>−{stats.deletions}</i></span>
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+        <PanelResizeHandle className="rs-handle vert" />
+        <Panel minSize={35}>
+          <div className="pr-diff-scroll">
+            {selectedFile && <ParsedDiff fileDiff={selectedFile} layout={diffMode === 'split' ? 'split' : 'unified'} />}
+          </div>
+        </Panel>
+      </PanelGroup>
+    </div>
+  );
+}
+
+type DetailTab = 'overview' | 'conversation' | 'changes';
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'conversation', label: 'Conversation' },
+  { id: 'changes', label: 'Changes' },
+];
+
+function PullRequestDetails({
+  path,
+  pr,
+  onUpdated,
+}: {
+  path: string;
+  pr: PullRequest;
+  onUpdated: (next: PullRequest) => void;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
+  const open = () => { if (pr.url) void shellOpen(pr.url); };
+  const selectTab = (next: DetailTab) => {
+    setTab(next);
+    document.getElementById(`pr-tab-${pr.id}-${next}`)?.focus();
+  };
+  const tabIndex = DETAIL_TABS.findIndex((item) => item.id === tab);
+
+  return (
+    <article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
+      <header className="pr-detail-head">
+        <div>
+          <div className="pr-detail-kicker">#{pr.id} · {pr.author}</div>
+          <h2>{pr.title}</h2>
+        </div>
+        <button type="button" className="btn" onClick={open} disabled={!pr.url}>
+          <Icon name="external" size={13} /> Open on host
+        </button>
+      </header>
+
+      <div className="pr-pills" aria-label="Pull request status">
+        <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
+        {pr.review_status && <span>{pr.review_status.toLowerCase()}</span>}
+        {pr.merge_status && <span>{pr.merge_status.toLowerCase()}</span>}
+      </div>
+
+      <div
+        className="pr-detail-tabs"
+        role="tablist"
+        aria-label="Pull request details"
+        onKeyDown={(event) => {
+          let next = tabIndex;
+          if (event.key === 'ArrowRight') next = (tabIndex + 1) % DETAIL_TABS.length;
+          else if (event.key === 'ArrowLeft') next = (tabIndex - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
+          else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = DETAIL_TABS.length - 1;
+          else return;
+          event.preventDefault();
+          selectTab(DETAIL_TABS[next].id);
+        }}
+      >
+        {DETAIL_TABS.map((item) => {
+          const count = item.id === 'conversation' ? pr.comment_count : item.id === 'changes' ? pr.changed_files : null;
+          return (
+            <button
+              type="button"
+              role="tab"
+              id={`pr-tab-${pr.id}-${item.id}`}
+              aria-selected={tab === item.id}
+              aria-controls={`pr-panel-${pr.id}-${item.id}`}
+              tabIndex={tab === item.id ? 0 : -1}
+              key={item.id}
+              onClick={() => setTab(item.id)}
+            >
+              {item.label}{count != null ? <span>{count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className={`pr-tab-panel ${tab}`}
+        role="tabpanel"
+        id={`pr-panel-${pr.id}-${tab}`}
+        aria-labelledby={`pr-tab-${pr.id}-${tab}`}
+      >
+        {tab === 'overview' && <PullRequestOverview pr={pr} />}
+        {tab === 'conversation' && <PullRequestConversation path={path} pr={pr} onUpdated={onUpdated} />}
+        {tab === 'changes' && <PullRequestChanges path={path} pr={pr} />}
+      </div>
     </article>
   );
 }
@@ -262,15 +580,16 @@ export function PullRequests() {
                   <Icon name="remote" size={24} />
                   <strong>Could not load PR #{selectedId}</strong>
                   <p>{detailError}</p>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setDetailReload((value) => value + 1)}
-                  >
-                    Try again
-                  </button>
+                  <button type="button" className="btn" onClick={() => setDetailReload((value) => value + 1)}>Try again</button>
                 </div>
-              ) : detail ? <PullRequestDetails pr={detail} /> : null}
+              ) : detail && path ? (
+                <PullRequestDetails
+                  key={`${path}:${detail.id}`}
+                  path={path}
+                  pr={detail}
+                  onUpdated={setDetail}
+                />
+              ) : null}
             </Panel>
           </PanelGroup>
         </div>

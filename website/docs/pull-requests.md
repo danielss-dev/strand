@@ -27,13 +27,37 @@ the divider to resize the list; Strand remembers the size.
 The list loads only compact row data; after selection settles, Strand loads the
 rich metadata for that one PR. This keeps large repositories below provider
 query limits and avoids starting a CLI call for every key-repeat while you move
-through the list. The detail pane shows title, state, author, source and target
-branches, description, dates, labels, reviewers, review and merge state,
-file/addition/deletion/comment/commit counts, and CI checks when available.
-Azure does not expose every discussion or check field through the same command,
-so absent data is shown honestly rather than inferred.
+through the list. The detail workspace has three tabs. Use `Left`/`Right`,
+`Home`, and `End` while the tab bar is focused.
 
-This first slice is read-only. Hosted diffs, comment threads, suggestions,
-approve/request-changes actions, Azure policies, branch updates, and merge
-controls are planned but are not presented as available yet. GitLab and
-Bitbucket adapters will use the same workspace in a later slice.
+### Overview
+
+Overview shows title, state, author, source and target branches, dates, labels,
+reviewers, review and merge state, file/addition/deletion/comment/commit counts,
+and CI checks when available. Descriptions render as Markdown without executing
+raw HTML or silently loading remote images. Checks are green when successful,
+yellow while running or queued, red when failed, and neutral when the provider
+does not report a recognized state.
+
+### Conversation
+
+Conversation displays GitHub comments and Azure DevOps thread comments as safe
+Markdown. Azure inline comments include their file path. Write a top-level
+Markdown comment in the composer and choose **Add comment**, or press
+`Mod+Enter`. The comment is submitted through the signed-in provider CLI; Strand
+does not receive or store the provider token.
+
+### Changes
+
+Changes loads only when its tab opens. The left pane lists changed files; use
+`Up`/`Down`, `j`/`k`, `Home`, or `End` to select one. The right pane renders the
+selected patch through Strand's Pierre diff wrapper and follows the configured
+stacked/split diff appearance. Only one file diff is mounted at a time to keep
+large PRs responsive. Provider patches larger than 16 MB are not rendered.
+
+Azure does not expose every check or policy field through the same provider
+command, so absent data is shown honestly rather than inferred. Replies, new
+inline comments, suggestions, approve/request-changes actions, Azure policies,
+branch updates, and merge controls are planned but are not presented as
+available yet. GitLab and Bitbucket adapters will use the same workspace in a
+later slice.

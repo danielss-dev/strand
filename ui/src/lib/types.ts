@@ -200,6 +200,17 @@ export interface PullRequestCheck {
   status: string;
 }
 
+export interface PullRequestComment {
+  id: string;
+  author: string;
+  body: string;
+  created_at: string;
+  url: string;
+  is_system: boolean;
+  /** Azure inline threads report their file; top-level comments are null. */
+  path: string | null;
+}
+
 export interface PullRequest {
   id: number;
   title: string;
@@ -222,6 +233,7 @@ export interface PullRequest {
   labels: string[];
   reviewers: PullRequestReviewer[];
   checks: PullRequestCheck[];
+  comments: PullRequestComment[];
 }
 
 export interface PullRequestList {

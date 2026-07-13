@@ -6,7 +6,7 @@
 //! limits and large repositories remain predictable.
 
 use std::{
-    io::Read,
+    io::{Read, Write},
     process::Stdio,
     thread,
     time::{Duration, Instant},
@@ -19,6 +19,8 @@ use strand_core::Repo;
 use crate::ai::bin::{base_command, resolve_cli};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_COMMENT_BYTES: usize = 65_536;
+const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
 const GITHUB_LIST_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
     "url,reviewDecision"
@@ -58,6 +60,17 @@ pub struct PullRequestCheck {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PullRequestComment {
+    pub id: String,
+    pub author: String,
+    pub body: String,
+    pub created_at: String,
+    pub url: String,
+    pub is_system: bool,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PullRequest {
     pub id: u64,
     pub title: String,
@@ -80,6 +93,7 @@ pub struct PullRequest {
     pub labels: Vec<String>,
     pub reviewers: Vec<PullRequestReviewer>,
     pub checks: Vec<PullRequestCheck>,
+    pub comments: Vec<PullRequestComment>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -122,6 +136,31 @@ pub fn detail(path: &str, id: u64) -> Result<PullRequest> {
             project,
             repo,
         } => detail_azure(path, organization, project, repo, id),
+    }
+}
+
+pub fn diff(path: &str, id: u64) -> Result<String> {
+    let (remote, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => diff_github(path, owner, repo, id),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => diff_azure(path, remote, organization, project, repo, id),
+    }
+}
+
+pub fn add_comment(path: &str, id: u64, body: &str) -> Result<()> {
+    validate_comment(body)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => add_comment_github(path, owner, repo, id, body),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => add_comment_azure(path, organization, project, repo, id, body),
     }
 }
 
@@ -201,6 +240,35 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
     parse_github_pr(&value).ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))
 }
 
+fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    let output = run_command(
+        cwd,
+        "gh",
+        &["pr", "diff", &id, "--repo", &slug, "--color", "never"],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    if output.len() > MAX_DIFF_BYTES {
+        return Err("Pull request diff exceeds Strand's 16 MB display limit".into());
+    }
+    String::from_utf8(output)
+        .map_err(|error| format!("GitHub CLI returned a non-UTF-8 diff: {error}"))
+}
+
+fn add_comment_github(cwd: &str, owner: String, repo: String, id: u64, body: &str) -> Result<()> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    run_command_input(
+        cwd,
+        "gh",
+        &["pr", "comment", &id, "--repo", &slug, "--body-file", "-"],
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(body.as_bytes()),
+    )?;
+    Ok(())
+}
+
 fn list_azure(
     cwd: &str,
     remote: String,
@@ -255,6 +323,15 @@ fn detail_azure(
     repo: String,
     id: u64,
 ) -> Result<PullRequest> {
+    let value = azure_pr_value(cwd, &organization, id)?;
+    let mut pull_request = parse_azure_pr(&value, &organization, &project, &repo)
+        .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
+    pull_request.comments = azure_comments(cwd, &organization, &project, &repo, id)?;
+    pull_request.comment_count = pull_request.comments.len();
+    Ok(pull_request)
+}
+
+fn azure_pr_value(cwd: &str, organization: &str, id: u64) -> Result<Value> {
     let organization_url = format!("https://dev.azure.com/{organization}/");
     let id = id.to_string();
     let output = run_command(
@@ -274,13 +351,185 @@ fn detail_azure(
         ],
         &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
     )?;
+    serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))
+}
+
+fn azure_comments(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+) -> Result<Vec<PullRequestComment>> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id_text = id.to_string();
+    let project_arg = format!("project={project}");
+    let repository_arg = format!("repositoryId={repo}");
+    let pull_request_arg = format!("pullRequestId={id}");
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "devops",
+            "invoke",
+            "--area",
+            "git",
+            "--resource",
+            "pullRequestThreads",
+            "--route-parameters",
+            &project_arg,
+            &repository_arg,
+            &pull_request_arg,
+            "--organization",
+            &organization_url,
+            "--api-version",
+            "7.1",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
     let value: Value = serde_json::from_slice(&output)
-        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
-    parse_azure_pr(&value, &organization, &project, &repo)
-        .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))
+        .map_err(|error| format!("Azure CLI returned invalid discussion JSON: {error}"))?;
+    Ok(parse_azure_comments(
+        &value,
+        &format!(
+            "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id_text}"
+        ),
+    ))
+}
+
+fn add_comment_azure(
+    cwd: &str,
+    organization: String,
+    project: String,
+    repo: String,
+    id: u64,
+    body: &str,
+) -> Result<()> {
+    let mut request = tempfile::NamedTempFile::new()
+        .map_err(|error| format!("Could not prepare Azure comment: {error}"))?;
+    serde_json::to_writer(
+        &mut request,
+        &serde_json::json!({
+            "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
+            "status": 1
+        }),
+    )
+    .map_err(|error| format!("Could not encode Azure comment: {error}"))?;
+    request
+        .flush()
+        .map_err(|error| format!("Could not prepare Azure comment: {error}"))?;
+    let request_path = request
+        .path()
+        .to_str()
+        .ok_or_else(|| "Azure comment request path is not valid UTF-8".to_string())?;
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let project_arg = format!("project={project}");
+    let repository_arg = format!("repositoryId={repo}");
+    let pull_request_arg = format!("pullRequestId={id}");
+    run_command(
+        cwd,
+        "az",
+        &[
+            "devops",
+            "invoke",
+            "--area",
+            "git",
+            "--resource",
+            "pullRequestThreads",
+            "--route-parameters",
+            &project_arg,
+            &repository_arg,
+            &pull_request_arg,
+            "--organization",
+            &organization_url,
+            "--api-version",
+            "7.1",
+            "--http-method",
+            "POST",
+            "--in-file",
+            request_path,
+            "--media-type",
+            "application/json",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
+fn diff_azure(
+    cwd: &str,
+    remote: String,
+    organization: String,
+    _project: String,
+    _repo: String,
+    id: u64,
+) -> Result<String> {
+    let value = azure_pr_value(cwd, &organization, id)?;
+    let source_ref = text(value.get("sourceRefName"))
+        .ok_or_else(|| "Azure PR did not report its source branch".to_string())?;
+    let target_ref = text(value.get("targetRefName"))
+        .ok_or_else(|| "Azure PR did not report its target branch".to_string())?;
+    let source_commit = text(value.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure PR did not report its source commit".to_string())?;
+    let target_commit = text(value.pointer("/lastMergeTargetCommit/commitId"))
+        .ok_or_else(|| "Azure PR did not report its target commit".to_string())?;
+    let source_remote = text(value.pointer("/forkSource/repository/remoteUrl"));
+
+    let local = Repo::discover(cwd).map_err(|error| error.to_string())?;
+    if source_remote
+        .as_deref()
+        .is_none_or(|source| source == remote)
+    {
+        local
+            .fetch_refs_for_read(&remote, &[target_ref.as_str(), source_ref.as_str()])
+            .map_err(|error| error.to_string())?;
+    } else {
+        local
+            .fetch_refs_for_read(&remote, &[target_ref.as_str()])
+            .map_err(|error| error.to_string())?;
+        local
+            .fetch_refs_for_read(
+                source_remote.as_deref().expect("checked above"),
+                &[source_ref.as_str()],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    let base = local
+        .merge_base(&target_commit, &source_commit)
+        .map_err(|error| error.to_string())?;
+    let files = local
+        .diff_between(&base, &source_commit)
+        .map_err(|error| error.to_string())?;
+    let patch = files
+        .into_iter()
+        .map(|file| file.patch)
+        .filter(|patch| !patch.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if patch.len() > MAX_DIFF_BYTES {
+        return Err("Pull request diff exceeds Strand's 16 MB display limit".into());
+    }
+    Ok(patch)
 }
 
 fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<Vec<u8>> {
+    run_command_input(cwd, program, args, envs, None)
+}
+
+fn run_command_input(
+    cwd: &str,
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin_data: Option<&[u8]>,
+) -> Result<Vec<u8>> {
     // Resolve strictly through PATH before setting the untrusted repository as
     // cwd. On Windows, CreateProcess otherwise searches cwd and could execute
     // a repository-owned `gh.exe`/`az.exe`. Reuse the AI CLI resolver so batch
@@ -300,7 +549,11 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
         .args(args)
         .current_dir(cwd)
         .envs(envs.iter().copied())
-        .stdin(Stdio::null())
+        .stdin(if stdin_data.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|e| {
@@ -311,6 +564,11 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
         };
         format!("Could not start {program}: {e}. {install}.")
     })?;
+
+    let mut stdin_writer = child.stdin.take().map(|mut stdin| {
+        let data = stdin_data.unwrap_or_default().to_vec();
+        thread::spawn(move || stdin.write_all(&data))
+    });
 
     // Drain both pipes while the command runs. A 100-PR JSON response easily
     // exceeds an OS pipe buffer; waiting for exit before reading can deadlock.
@@ -337,6 +595,9 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
                 let _ = child.wait();
                 let _ = stdout_reader.join();
                 let _ = stderr_reader.join();
+                if let Some(writer) = stdin_writer.take() {
+                    let _ = writer.join();
+                }
                 return Err(format!("{program} wait failed: {error}"));
             }
         }
@@ -345,6 +606,9 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
             let _ = child.wait();
             let _ = stdout_reader.join();
             let _ = stderr_reader.join();
+            if let Some(writer) = stdin_writer.take() {
+                let _ = writer.join();
+            }
             return Err(format!("{program} timed out after 30 seconds"));
         }
         thread::sleep(Duration::from_millis(25));
@@ -355,6 +619,12 @@ fn run_command(cwd: &str, program: &str, args: &[&str], envs: &[(&str, &str)]) -
     let stderr = stderr_reader
         .join()
         .map_err(|_| format!("{program} error reader failed"))?;
+    if let Some(writer) = stdin_writer.take() {
+        writer
+            .join()
+            .map_err(|_| format!("{program} input writer failed"))?
+            .map_err(|error| format!("{program} input failed: {error}"))?;
+    }
     if !status.success() {
         let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
         let hint = auth_hint(program, &stderr);
@@ -389,8 +659,32 @@ fn auth_hint(program: &str, stderr: &str) -> &'static str {
     }
 }
 
+fn validate_comment(body: &str) -> Result<()> {
+    if body.trim().is_empty() {
+        return Err("Comment cannot be empty".into());
+    }
+    if body.len() > MAX_COMMENT_BYTES {
+        return Err("Comment exceeds Strand's 64 KB limit".into());
+    }
+    Ok(())
+}
+
 fn parse_github_pr(value: &Value) -> Option<PullRequest> {
     let id = value.get("number")?.as_u64()?;
+    let comments = array(value, "comments")
+        .iter()
+        .filter_map(|comment| {
+            Some(PullRequestComment {
+                id: text(comment.get("id"))?,
+                author: text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
+                body: text(comment.get("body")).unwrap_or_default(),
+                created_at: text(comment.get("createdAt")).unwrap_or_default(),
+                url: text(comment.get("url")).unwrap_or_default(),
+                is_system: false,
+                path: None,
+            })
+        })
+        .collect::<Vec<_>>();
     let reviewers = array(value, "latestReviews")
         .iter()
         .filter_map(|review| {
@@ -443,7 +737,7 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
         description: text(value.get("body")).unwrap_or_default(),
         merge_status: text(value.get("mergeStateStatus")).unwrap_or_default(),
         review_status: text(value.get("reviewDecision")).unwrap_or_default(),
-        comment_count: array(value, "comments").len(),
+        comment_count: comments.len(),
         commit_count: array(value, "commits").len(),
         additions: value.get("additions").and_then(Value::as_u64),
         deletions: value.get("deletions").and_then(Value::as_u64),
@@ -454,6 +748,7 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
             .collect(),
         reviewers,
         checks,
+        comments,
     })
 }
 
@@ -530,7 +825,55 @@ fn parse_azure_pr(
             .collect(),
         reviewers,
         checks: Vec::new(),
+        comments: Vec::new(),
     })
+}
+
+fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> {
+    let threads = value
+        .get("value")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    threads
+        .iter()
+        .filter(|thread| {
+            !thread
+                .get("isDeleted")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .flat_map(|thread| {
+            let thread_id = thread.get("id").and_then(Value::as_u64).unwrap_or(0);
+            let path = text(thread.pointer("/threadContext/filePath"));
+            array(thread, "comments").iter().filter_map(move |comment| {
+                if comment
+                    .get("isDeleted")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    return None;
+                }
+                let body = text(comment.get("content")).unwrap_or_default();
+                if body.trim().is_empty() {
+                    return None;
+                }
+                let comment_id = comment.get("id").and_then(Value::as_u64).unwrap_or(0);
+                Some(PullRequestComment {
+                    id: format!("{thread_id}:{comment_id}"),
+                    author: text(comment.pointer("/author/displayName"))
+                        .unwrap_or_else(|| "unknown".into()),
+                    body,
+                    created_at: text(comment.get("publishedDate")).unwrap_or_default(),
+                    url: pr_url.to_string(),
+                    is_system: text(comment.get("commentType"))
+                        .is_some_and(|kind| kind.eq_ignore_ascii_case("system")),
+                    path: path.clone(),
+                })
+            })
+        })
+        .collect()
 }
 
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
@@ -720,6 +1063,7 @@ mod tests {
         assert_eq!(github.id, 42);
         assert_eq!(github.state, "open");
         assert_eq!(github.comment_count, 1);
+        assert_eq!(github.comments.len(), 1);
         assert_eq!(github.reviewers[0].status, "APPROVED");
         assert_eq!(github.checks[0].status, "SUCCESS");
 
@@ -754,5 +1098,42 @@ mod tests {
         );
         assert!(auth_hint("gh", "authentication required").contains("gh auth login"));
         assert!(auth_hint("az", "Please run az login").contains("az login"));
+    }
+
+    #[test]
+    fn normalizes_github_and_azure_comments() {
+        let github: Value = serde_json::from_str(
+            r#"{
+              "number": 42,
+              "comments": [{
+                "id": "IC_1", "body": "**Looks good**", "createdAt": "2026-07-13T12:00:00Z",
+                "url": "https://github.com/acme/repo/pull/42#issuecomment-1",
+                "author": {"login": "octo"}
+              }]
+            }"#,
+        )
+        .unwrap();
+        let github = parse_github_pr(&github).unwrap();
+        assert_eq!(github.comments[0].author, "octo");
+        assert_eq!(github.comments[0].body, "**Looks good**");
+
+        let azure: Value = serde_json::from_str(
+            r#"{"value":[{"id":9,"threadContext":{"filePath":"/src/lib.rs"},"comments":[
+              {"id":1,"content":"Please rename this","commentType":"text","publishedDate":"2026-07-13T12:00:00Z","author":{"displayName":"Ada"}},
+              {"id":2,"content":"Policy updated","commentType":"system","author":{"displayName":"Build Service"}}
+            ]}]}"#,
+        )
+        .unwrap();
+        let comments = parse_azure_comments(&azure, "https://dev.azure.com/acme/pr/7");
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].path.as_deref(), Some("/src/lib.rs"));
+        assert!(comments[1].is_system);
+    }
+
+    #[test]
+    fn rejects_empty_and_oversized_comments() {
+        assert!(validate_comment(" \n ").is_err());
+        assert!(validate_comment("Looks good").is_ok());
+        assert!(validate_comment(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err());
     }
 }

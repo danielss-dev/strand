@@ -61,10 +61,11 @@ keyboard alone, and the mouse stays first-class.
   beside the scrollbar shows where every edit sits in the file (click to
   jump).
 - **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
-  for the active repository in a resizable list/detail workspace, including
-  descriptions, branches, labels, reviewers, merge/review state, counts, and
-  provider-reported checks. Authentication stays in the signed-in `gh` / `az`
-  CLI; review and merge actions are still in progress.
+  for the active repository in a resizable workspace. Read rendered Markdown
+  descriptions and conversations, add top-level comments, inspect lazily loaded
+  code changes with Pierre, and see color-coded provider checks alongside
+  branches, labels, reviewers, and merge/review state. Authentication stays in
+  the signed-in `gh` / `az` CLI; review and merge actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the
