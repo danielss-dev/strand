@@ -125,9 +125,11 @@ keyboard alone, and the mouse stays first-class.
   `.code-workspace`), native macOS
   menubar, open in your editor or terminal, settings (⌘,) for appearance / diff /
   git / integrations / AI, in-app updates.
-- **AI commit messages** — suggest subject + body from staged changes via
-  your ChatGPT subscription (Codex CLI) or Claude Code CLI; Settings → AI
-  for sign-in, provider choice, and CLI health checks.
+- **AI commit messages** — suggest subject + body from staged changes (or all
+  unstaged changes when nothing is staged) via
+  your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
+  (`claude-sonnet-5`); Settings → AI for sign-in, provider choice, and CLI
+  health checks.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

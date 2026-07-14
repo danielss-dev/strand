@@ -32,7 +32,7 @@ The commit form takes a subject and an optional description body. `Mod+Enter` in
 
 ### AI commit message suggestions
 
-The sparkle button next to the subject field (or `Mod+Shift+M`, or the palette action "Suggest commit message") generates a commit message from your **staged** changes. Suggestions use your own subscription CLIs — the Codex CLI (ChatGPT) or the Claude Code CLI — with no Strand-side API key. Pick the provider and sign in under Settings → AI; see [Settings](settings.md) for setup.
+The sparkle button next to the subject field (or `Mod+Shift+M`, or the palette action "Suggest commit message") generates a commit message from your **staged** changes. If nothing is staged, it uses all unstaged changes instead, so it is available as soon as there is work to describe. Suggestions use your own subscription CLIs — the Codex CLI (ChatGPT) or the Claude Code CLI — with no Strand-side API key. Pick the provider and sign in under Settings → AI; see [Settings](settings.md) for setup.
 
 ## Fetch, pull, push
 

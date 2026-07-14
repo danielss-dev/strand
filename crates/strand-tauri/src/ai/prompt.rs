@@ -3,7 +3,7 @@ use strand_core::diff::{DiffStatus, FileDiff};
 const MAX_FILES: usize = 8;
 const MAX_TOTAL_CHARS: usize = 12_000;
 
-const INSTRUCTION: &str = "Write a git commit message for the staged changes below.\n\
+const INSTRUCTION: &str = "Write a git commit message for the changes below.\n\
 Use conventional commit style when appropriate.\n\
 Reply with JSON only, no markdown fences: {\"subject\":\"...\",\"body\":\"...\"}\n\
 Keep subject at most 72 characters. Body may be empty string if not needed.";
@@ -14,10 +14,10 @@ Reply with JSON only, no markdown fences: {\"title\":\"...\",\"description\":\".
 Keep the title concise. Write a useful Markdown description that explains what changed and why.\n\
 Mention testing only when the changes provide clear evidence; do not invent results or implementation details.";
 
-/// Build the user prompt sent to Codex / Claude from staged file diffs.
+/// Build the user prompt sent to Codex / Claude from the selected file diffs.
 pub fn build_prompt(diffs: &[FileDiff]) -> String {
     let mut out = String::from(INSTRUCTION);
-    out.push_str("\n\n## Staged changes\n");
+    out.push_str("\n\n## Changes\n");
     append_diffs(&mut out, diffs);
     out
 }
