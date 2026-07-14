@@ -1295,7 +1295,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     the configured AI subscription to draft editable title/description text
     from the committed merge-base diff (`repo_suggest_pull_request`). The
     creation shell is viewport-bounded with a scrolling body and pinned footer,
-    so resizing a long description cannot hide Cancel/Create PR.
+    so resizing a long description cannot hide Cancel/Create PR. GitHub's
+    missing-head/base GraphQL failures are translated into actionable
+    push-source/select-target guidance instead of exposing raw SHA errors.
   - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
     list/detail/tabs/drafts/scroll stay mounted during updates and failures;
     lightweight activity gates rich-detail reloads, patches reload only for a

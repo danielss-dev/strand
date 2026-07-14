@@ -555,7 +555,8 @@ fn create_github(
         &args,
         &[("GH_PROMPT_DISABLED", "1")],
         Some(description.as_bytes()),
-    )?;
+    )
+    .map_err(|error| map_github_create_error(error, &source_branch, &target_branch))?;
     let url = String::from_utf8(output)
         .map_err(|error| format!("GitHub CLI returned invalid text: {error}"))?
         .lines()
@@ -571,6 +572,21 @@ fn create_github(
         .and_then(|value| value.parse::<u64>().ok())
         .ok_or_else(|| "GitHub created the pull request but returned no usable PR URL".to_string())?;
     Ok(PullRequestCreateOutcome { id, url })
+}
+
+fn map_github_create_error(error: String, source_branch: &str, target_branch: &str) -> String {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("head sha can't be blank") || lower.contains("head ref must be a branch") {
+        return format!(
+            "Source branch `{source_branch}` is not available on GitHub. Push this branch to the repository remote, then create the pull request again."
+        );
+    }
+    if lower.contains("base sha can't be blank") || lower.contains("base ref must be a branch") {
+        return format!(
+            "Target branch `{target_branch}` is not available on GitHub. Choose an existing remote branch and try again."
+        );
+    }
+    error
 }
 
 fn activity_github(
@@ -2330,6 +2346,32 @@ mod tests {
             &"x".repeat(MAX_PR_DESCRIPTION_BYTES + 1),
         )
         .is_err());
+    }
+
+    #[test]
+    fn maps_github_missing_branch_errors_to_actionable_guidance() {
+        let source_error = map_github_create_error(
+            "gh failed: GraphQL: Head sha can't be blank, Base sha can't be blank, Head ref must be a branch".into(),
+            "feature/topic",
+            "main",
+        );
+        assert_eq!(
+            source_error,
+            "Source branch `feature/topic` is not available on GitHub. Push this branch to the repository remote, then create the pull request again."
+        );
+
+        let target_error = map_github_create_error(
+            "gh failed: GraphQL: Base ref must be a branch".into(),
+            "feature/topic",
+            "release",
+        );
+        assert!(target_error.contains("Target branch `release`"));
+
+        let unrelated = "gh failed: rate limited".to_string();
+        assert_eq!(
+            map_github_create_error(unrelated.clone(), "feature/topic", "main"),
+            unrelated
+        );
     }
 
     #[test]

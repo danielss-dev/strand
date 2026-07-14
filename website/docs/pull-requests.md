@@ -27,7 +27,8 @@ Strand opens the new PR and follows it automatically.
 
 Strand does not push as part of this action. Push the checked-out branch first
 so it exists on the provider; if it is missing, the provider error stays in the
-dialog and no local state is changed. Authentication continues to use the
+dialog with guidance to push the source branch, and no local state is changed.
+Authentication continues to use the
 signed-in `gh` or `az` CLI.
 
 “Draft pull request with AI…” in the command palette opens the same dialog,
