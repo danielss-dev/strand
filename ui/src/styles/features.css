@@ -4568,8 +4568,28 @@ textarea.clone-input {
   white-space: nowrap;
 }
 
-.pr-create-dialog form { display: flex; flex-direction: column; min-height: 0; }
-.pr-create-description { min-height: 112px !important; }
+.pr-create-dialog {
+  max-height: calc(100vh - 128px);
+}
+.pr-create-dialog form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.pr-create-dialog .clone-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.pr-create-dialog .clone-foot {
+  flex: none;
+  background: var(--bg-panel);
+}
+.pr-create-description {
+  min-height: 112px !important;
+  max-height: min(45vh, 420px);
+}
 .pr-ai-fill-row { display: flex; align-items: center; gap: 9px; }
 .pr-ai-fill-row > span { color: var(--text-dim); font-size: 10.5px; }
 .pr-ai-fill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

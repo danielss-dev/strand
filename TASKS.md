@@ -1293,7 +1293,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     open and automatically follow the result. Strand never silently pushes the
     source branch as part of PR creation. **Fill with Codex/Claude Code** uses
     the configured AI subscription to draft editable title/description text
-    from the committed merge-base diff (`repo_suggest_pull_request`).
+    from the committed merge-base diff (`repo_suggest_pull_request`). The
+    creation shell is viewport-bounded with a scrolling body and pinned footer,
+    so resizing a long description cannot hide Cancel/Create PR.
   - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
     list/detail/tabs/drafts/scroll stay mounted during updates and failures;
     lightweight activity gates rich-detail reloads, patches reload only for a
