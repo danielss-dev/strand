@@ -1064,8 +1064,9 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   rendered Markdown, color-coded checks, discussions with top-level comment
   creation, current-branch auto-open, and full-width lazy selected-file Pierre
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
-  actions, Azure policies, and merge controls remain; GitLab and Bitbucket are
-  follow-on provider adapters.
+  comments plus GitHub thread replies/resolution and merge controls now ship;
+  batched review actions and richer Azure parity remain. GitLab and Bitbucket
+  are follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
@@ -1640,6 +1641,15 @@ read-only suggestion uses committed changes from the target branch's merge base
 to local `HEAD`; it never includes unstaged drafts or creates the PR itself.
 Vendor CLI health errors remain distinct from signed-out sessions, and sign-in
 is preflighted before Strand reports that the browser or CLI flow has started.
+
+**Hosted PR thread writes shipped (2026-07-15):** GitHub review-thread cards
+now expose provider-permission-gated Reply and Resolve/Reopen actions. Writes
+use stable GraphQL thread node IDs through the signed-in `gh` CLI, with bodies
+and variables sent over stdin; the small mutation outcomes patch both the
+inline Changes card and flattened Conversation timeline locally, preserving the
+mounted Pierre diff, file selection, scroll, focus, and per-thread drafts.
+Coordinate-based new comments retain their exact-head guard; replies and thread
+state do not need one because they target an existing stable thread.
 
 ---
 

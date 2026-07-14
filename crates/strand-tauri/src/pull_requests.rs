@@ -20,6 +20,7 @@ use crate::ai::bin::{base_command, resolve_cli};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
+const MAX_THREAD_ID_BYTES: usize = 512;
 const MAX_PR_DESCRIPTION_BYTES: usize = 65_536;
 const MAX_PR_TITLE_BYTES: usize = 512;
 const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
@@ -63,6 +64,9 @@ const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: Strin
           id
           isResolved
           isOutdated
+          viewerCanReply
+          viewerCanResolve
+          viewerCanUnresolve
           path
           line
           startLine
@@ -75,6 +79,24 @@ const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: Strin
         }
       }
     }
+  }
+}"#;
+const GITHUB_THREAD_REPLY_MUTATION: &str = r#"mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: {
+    pullRequestReviewThreadId: $threadId,
+    body: $body
+  }) {
+    comment { id body createdAt url path author { login avatarUrl } }
+  }
+}"#;
+const GITHUB_THREAD_RESOLVE_MUTATION: &str = r#"mutation($threadId: ID!) {
+  resolveReviewThread(input: { threadId: $threadId }) {
+    thread { id isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve }
+  }
+}"#;
+const GITHUB_THREAD_UNRESOLVE_MUTATION: &str = r#"mutation($threadId: ID!) {
+  unresolveReviewThread(input: { threadId: $threadId }) {
+    thread { id isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve }
   }
 }"#;
 type Result<T> = std::result::Result<T, String>;
@@ -135,7 +157,20 @@ pub struct PullRequestReviewThread {
     pub side: PullRequestDiffSide,
     pub is_resolved: bool,
     pub is_outdated: bool,
+    pub can_reply: bool,
+    pub can_resolve: bool,
+    pub can_unresolve: bool,
     pub comments: Vec<PullRequestComment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestReviewThreadUpdate {
+    pub id: String,
+    pub is_resolved: bool,
+    pub is_outdated: bool,
+    pub can_reply: bool,
+    pub can_resolve: bool,
+    pub can_unresolve: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -421,6 +456,35 @@ pub fn add_inline_comment(
         }
         HostRepo::Azure { .. } => Err(
             "Inline Azure DevOps comments need iteration tracking metadata that Strand does not load yet. Open this pull request on Azure DevOps to comment on these lines."
+                .to_string(),
+        ),
+    }
+}
+
+pub fn reply_to_thread(path: &str, thread_id: &str, body: &str) -> Result<PullRequestComment> {
+    validate_comment(body)?;
+    validate_thread_id(thread_id)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { .. } => reply_to_thread_github(path, thread_id, body),
+        HostRepo::Azure { .. } => Err(
+            "Azure DevOps review-thread replies are not available yet. Open this pull request on Azure DevOps to reply."
+                .to_string(),
+        ),
+    }
+}
+
+pub fn set_thread_resolved(
+    path: &str,
+    thread_id: &str,
+    resolved: bool,
+) -> Result<PullRequestReviewThreadUpdate> {
+    validate_thread_id(thread_id)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { .. } => set_thread_resolved_github(path, thread_id, resolved),
+        HostRepo::Azure { .. } => Err(
+            "Azure DevOps review-thread resolution is not available yet. Open this pull request on Azure DevOps to update the thread."
                 .to_string(),
         ),
     }
@@ -769,6 +833,55 @@ fn add_inline_comment_github(
         Some(&input),
     )?;
     Ok(())
+}
+
+fn reply_to_thread_github(cwd: &str, thread_id: &str, body: &str) -> Result<PullRequestComment> {
+    let value = run_github_graphql_mutation(
+        cwd,
+        GITHUB_THREAD_REPLY_MUTATION,
+        serde_json::json!({ "threadId": thread_id, "body": body }),
+    )?;
+    parse_github_thread_reply(&value).ok_or_else(|| {
+        "GitHub accepted the reply request but returned an incomplete comment".to_string()
+    })
+}
+
+fn set_thread_resolved_github(
+    cwd: &str,
+    thread_id: &str,
+    resolved: bool,
+) -> Result<PullRequestReviewThreadUpdate> {
+    let mutation = if resolved {
+        GITHUB_THREAD_RESOLVE_MUTATION
+    } else {
+        GITHUB_THREAD_UNRESOLVE_MUTATION
+    };
+    let value = run_github_graphql_mutation(
+        cwd,
+        mutation,
+        serde_json::json!({ "threadId": thread_id }),
+    )?;
+    parse_github_thread_update(&value, resolved).ok_or_else(|| {
+        "GitHub accepted the thread update but returned incomplete thread state".to_string()
+    })
+}
+
+fn github_graphql_payload(query: &str, variables: Value) -> Value {
+    serde_json::json!({ "query": query, "variables": variables })
+}
+
+fn run_github_graphql_mutation(cwd: &str, query: &str, variables: Value) -> Result<Value> {
+    let input = serde_json::to_vec(&github_graphql_payload(query, variables))
+        .map_err(|error| format!("Could not encode GitHub review-thread request: {error}"))?;
+    let output = run_command_input(
+        cwd,
+        "gh",
+        &["api", "graphql", "--method", "POST", "--input", "-"],
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(&input),
+    )?;
+    serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))
 }
 
 fn github_inline_comment_payload(
@@ -1463,6 +1576,18 @@ fn validate_comment(body: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_thread_id(thread_id: &str) -> Result<()> {
+    if thread_id.trim().is_empty()
+        || thread_id.len() > MAX_THREAD_ID_BYTES
+        || thread_id.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return Err(
+            "Review thread is missing or invalid; refresh the pull request and try again".into(),
+        );
+    }
+    Ok(())
+}
+
 fn validate_create(
     source_branch: &str,
     target_branch: &str,
@@ -1828,10 +1953,67 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
                     .get("isOutdated")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
+                can_reply: thread
+                    .get("viewerCanReply")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                can_resolve: thread
+                    .get("viewerCanResolve")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                can_unresolve: thread
+                    .get("viewerCanUnresolve")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
                 comments,
             })
         })
         .collect()
+}
+
+fn parse_github_thread_reply(value: &Value) -> Option<PullRequestComment> {
+    let comment = value.pointer("/data/addPullRequestReviewThreadReply/comment")?;
+    let author = text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into());
+    Some(PullRequestComment {
+        id: text(comment.get("id"))?,
+        avatar_url: text(comment.pointer("/author/avatarUrl"))
+            .or_else(|| github_avatar_url(&author)),
+        author,
+        body: text(comment.get("body")).unwrap_or_default(),
+        created_at: text(comment.get("createdAt")).unwrap_or_default(),
+        url: text(comment.get("url")).unwrap_or_default(),
+        is_system: false,
+        path: text(comment.get("path")),
+    })
+}
+
+fn parse_github_thread_update(
+    value: &Value,
+    resolved: bool,
+) -> Option<PullRequestReviewThreadUpdate> {
+    let mutation = if resolved {
+        "resolveReviewThread"
+    } else {
+        "unresolveReviewThread"
+    };
+    let thread = value.pointer(&format!("/data/{mutation}/thread"))?;
+    Some(PullRequestReviewThreadUpdate {
+        id: text(thread.get("id"))?,
+        is_resolved: thread.get("isResolved").and_then(Value::as_bool)?,
+        is_outdated: thread.get("isOutdated").and_then(Value::as_bool)?,
+        can_reply: thread
+            .get("viewerCanReply")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        can_resolve: thread
+            .get("viewerCanResolve")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        can_unresolve: thread
+            .get("viewerCanUnresolve")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
 }
 
 fn parse_azure_pr(
@@ -2292,6 +2474,17 @@ mod tests {
     }
 
     #[test]
+    fn github_review_thread_query_requests_write_capabilities() {
+        for field in [
+            "viewerCanReply",
+            "viewerCanResolve",
+            "viewerCanUnresolve",
+        ] {
+            assert!(GITHUB_REVIEW_THREADS_QUERY.contains(field));
+        }
+    }
+
+    #[test]
     fn normalizes_github_activity_with_stable_ids() {
         let value = serde_json::json!({
             "number": 42,
@@ -2400,6 +2593,7 @@ mod tests {
         let value = serde_json::json!({
             "data": { "repository": { "pullRequest": { "reviewThreads": { "nodes": [{
                 "id": "PRRT_1", "isResolved": false, "isOutdated": false,
+                "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false,
                 "path": "src/lib.rs", "line": 29, "startLine": 27,
                 "originalLine": 29, "originalStartLine": 27, "diffSide": "RIGHT",
                 "comments": { "nodes": [
@@ -2419,6 +2613,9 @@ mod tests {
         assert_eq!((threads[0].start_line, threads[0].end_line), (27, 29));
         assert_eq!(threads[0].side, PullRequestDiffSide::Additions);
         assert!(!threads[0].is_resolved);
+        assert!(threads[0].can_reply);
+        assert!(threads[0].can_resolve);
+        assert!(!threads[0].can_unresolve);
         assert_eq!(threads[0].comments.len(), 2);
         assert_eq!(threads[0].comments[1].author, "ada");
         assert_eq!(threads[0].comments[0].path.as_deref(), Some("src/lib.rs"));
@@ -2429,6 +2626,99 @@ mod tests {
         assert!(validate_comment(" \n ").is_err());
         assert!(validate_comment("Looks good").is_ok());
         assert!(validate_comment(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn review_thread_capabilities_fail_closed_when_missing() {
+        let value = serde_json::json!({
+            "data": { "repository": { "pullRequest": { "reviewThreads": { "nodes": [{
+                "id": "PRRT_1", "path": "src/lib.rs", "line": 3, "diffSide": "RIGHT",
+                "comments": { "nodes": [{ "id": "PRRC_1", "body": "Question",
+                    "createdAt": "2026-07-13T12:00:00Z", "url": "https://example.test/comment",
+                    "author": { "login": "octo" } }] }
+            }] } } } }
+        });
+        let threads = parse_github_review_threads(&value);
+        assert_eq!(threads.len(), 1);
+        assert!(!threads[0].can_reply);
+        assert!(!threads[0].can_resolve);
+        assert!(!threads[0].can_unresolve);
+    }
+
+    #[test]
+    fn builds_and_parses_github_thread_mutations() {
+        let payload = github_graphql_payload(
+            GITHUB_THREAD_REPLY_MUTATION,
+            serde_json::json!({ "threadId": "PRRT_1", "body": "Fixed." }),
+        );
+        assert_eq!(payload["variables"]["threadId"], "PRRT_1");
+        assert_eq!(payload["variables"]["body"], "Fixed.");
+        assert!(payload["query"]
+            .as_str()
+            .unwrap()
+            .contains("addPullRequestReviewThreadReply"));
+
+        let reply = parse_github_thread_reply(&serde_json::json!({
+            "data": { "addPullRequestReviewThreadReply": { "comment": {
+                "id": "PRRC_2", "body": "Fixed.", "createdAt": "2026-07-15T10:00:00Z",
+                "url": "https://github.com/acme/repo/pull/42#discussion_r2", "path": "src/lib.rs",
+                "author": { "login": "ada", "avatarUrl": "https://avatars.example/ada" }
+            } } }
+        }))
+        .unwrap();
+        assert_eq!(reply.id, "PRRC_2");
+        assert_eq!(reply.path.as_deref(), Some("src/lib.rs"));
+
+        for resolved in [true, false] {
+            let value = if resolved {
+                serde_json::json!({ "data": { "resolveReviewThread": { "thread": {
+                    "id": "PRRT_1", "isResolved": true, "isOutdated": false,
+                    "viewerCanReply": true, "viewerCanResolve": false, "viewerCanUnresolve": true
+                } } } })
+            } else {
+                serde_json::json!({ "data": { "unresolveReviewThread": { "thread": {
+                    "id": "PRRT_1", "isResolved": false, "isOutdated": false,
+                    "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false
+                } } } })
+            };
+            let update = parse_github_thread_update(&value, resolved).unwrap();
+            assert_eq!(update.is_resolved, resolved);
+            assert_eq!(update.can_unresolve, resolved);
+        }
+    }
+
+    #[test]
+    fn validates_thread_ids_and_rejects_azure_thread_writes() {
+        assert!(validate_thread_id("PRRT_kwDOExample").is_ok());
+        assert!(validate_thread_id(" ").is_err());
+        assert!(validate_thread_id("bad\nid").is_err());
+        assert!(validate_thread_id(&"x".repeat(MAX_THREAD_ID_BYTES + 1)).is_err());
+
+        let dir = std::env::temp_dir().join(format!(
+            "strand-pr-thread-provider-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q"]);
+        git(
+            &dir,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://dev.azure.com/acme/project/_git/repo",
+            ],
+        );
+        let path = dir.to_str().unwrap();
+        assert!(reply_to_thread(path, "thread-1", "Reply")
+            .unwrap_err()
+            .contains("not available"));
+        assert!(set_thread_resolved(path, "thread-1", true)
+            .unwrap_err()
+            .contains("not available"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -5293,8 +5293,16 @@ textarea.clone-input {
   background: color-mix(in oklch, var(--bg-panel), transparent 25%);
 }
 .pr-inline-thread > header strong { color: var(--text); font: 500 10px var(--font-mono); }
-.pr-inline-thread > header > div { display: flex; gap: 5px; }
-.pr-inline-thread > header span {
+.pr-inline-thread-head-actions,
+.pr-inline-thread-labels { display: flex; align-items: center; gap: 5px; }
+.pr-inline-thread-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+.pr-inline-thread-head-actions .h-link {
+  min-height: 22px;
+  padding: 2px 5px;
+  border-radius: var(--r-sm);
+  font-size: 9px;
+}
+.pr-inline-thread-labels span {
   padding: 1px 5px;
   border: 0.5px solid var(--border-strong);
   border-radius: 999px;
@@ -5338,6 +5346,34 @@ textarea.clone-input {
 }
 .pr-inline-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .pr-inline-thread-comment > .markdown { font-size: 11px; }
+.pr-thread-message {
+  padding: 6px 11px;
+  border-top: 0.5px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.pr-thread-message.ok { color: var(--add); }
+.pr-thread-message.error { color: var(--del); }
+.pr-thread-reply {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border-top: 0.5px solid var(--border);
+  background: color-mix(in oklch, var(--bg-panel), transparent 35%);
+}
+.pr-thread-reply textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: 8px 9px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg-base);
+  color: var(--text);
+  font: 11.5px/1.45 var(--font-ui);
+}
+.pr-thread-reply textarea:focus { border-color: var(--accent); }
 .pr-inline-message {
   padding: 5px 10px;
   border-bottom: 0.5px solid var(--border);

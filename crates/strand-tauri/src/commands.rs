@@ -302,6 +302,35 @@ pub async fn repo_pull_request_inline_comment(
     .await
 }
 
+/// Reply to an existing provider review thread. The provider thread ID is a
+/// stable target, so this write does not depend on diff coordinates or head SHA.
+#[tauri::command(async)]
+pub async fn repo_pull_request_thread_reply(
+    path: String,
+    thread_id: String,
+    body: String,
+) -> CmdResult<pull_requests::PullRequestComment> {
+    run_blocking("pull request thread reply", move || {
+        pull_requests::reply_to_thread(&path, &thread_id, &body)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Resolve or reopen an existing provider review thread.
+#[tauri::command(async)]
+pub async fn repo_pull_request_thread_resolve(
+    path: String,
+    thread_id: String,
+    resolved: bool,
+) -> CmdResult<pull_requests::PullRequestReviewThreadUpdate> {
+    run_blocking("pull request thread resolution", move || {
+        pull_requests::set_thread_resolved(&path, &thread_id, resolved)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Merge a hosted pull request through its provider. The expected source
 /// commit prevents merging unseen updates; provider policies remain enforced.
 #[tauri::command(async)]

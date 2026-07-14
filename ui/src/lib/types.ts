@@ -221,7 +221,19 @@ export interface PullRequestReviewThread {
   side: 'deletions' | 'additions';
   is_resolved: boolean;
   is_outdated: boolean;
+  can_reply: boolean;
+  can_resolve: boolean;
+  can_unresolve: boolean;
   comments: PullRequestComment[];
+}
+
+export interface PullRequestReviewThreadUpdate {
+  id: string;
+  is_resolved: boolean;
+  is_outdated: boolean;
+  can_reply: boolean;
+  can_resolve: boolean;
+  can_unresolve: boolean;
 }
 
 export interface PullRequest {

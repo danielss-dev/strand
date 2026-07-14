@@ -1326,9 +1326,12 @@ tree: watch the agent work, review fast, accept or reject safely.
     line-range selection, persistent fetched thread cards with replies and
     resolved/outdated state, and an annotation-row composer through
     `repo_pull_request_inline_comment`, with
-    exact-head validation before publishing. Reply creation, Azure
-    iteration-tracked inline comments, direct binary attachment uploads,
-    suggestions, and thread resolution remain.
+    exact-head validation before publishing. GitHub thread cards now publish
+    immediate replies and Resolve/Reopen writes through provider-capability-
+    gated GraphQL mutations, patching Changes + Conversation locally without a
+    detail/patch reload (`repo_pull_request_thread_reply`,
+    `repo_pull_request_thread_resolve`). Azure iteration-tracked inline writes,
+    direct binary attachment uploads, and suggestions remain.
   - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
   - ◐ PR review ledger + merge-readiness model (see
     `docs/pull-request-improvements.md`).

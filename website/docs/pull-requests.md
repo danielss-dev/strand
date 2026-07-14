@@ -186,13 +186,21 @@ line or range. Replies stay grouped in the same card, and resolved or outdated
 threads are labeled. The same review comments also appear in Conversation, so
 comments added on GitHub are visible after refreshing the pull request.
 
+When GitHub reports that your account can write to a thread, its card exposes
+**Reply** and **Resolve** or **Reopen**. Replies publish immediately; use
+`Mod+Enter` to send or `Esc` to close the reply editor without losing its draft.
+Successful writes update both the inline card and Conversation without
+reloading the patch or moving your current file and scroll position. These
+actions target the existing provider thread rather than a line coordinate, so
+they remain valid when GitHub permits them on a resolved or outdated thread.
+
 Azure policy evaluations participate in readiness when their dedicated query
 succeeds. A failed or incomplete policy query remains unknown instead of being
 treated as green. Azure inline
 comments also require provider iteration/change-tracking coordinates that the
 current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
-Creating replies, resolving threads, suggestions, approve/request-changes actions, richer Azure policy details,
+Suggestions, approve/request-changes actions, richer Azure policy details,
 branch updates, and close/reopen controls are planned but are not presented as
 available yet. GitLab and Bitbucket adapters will use the same workspace in a
 later slice.

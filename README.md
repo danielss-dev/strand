@@ -78,8 +78,8 @@ keyboard alone, and the mouse stays first-class.
   lazily loaded code changes in the Local Changes-style Pierre file tree,
   switch stacked/split layout in place, jump from timeline comments to their
   file/thread, read GitHub review threads with replies directly beneath their code,
-  and add stale-head-guarded comments to selected
-  line ranges. A compact readiness ledger combines review,
+  reply to them, resolve or reopen them, and add stale-head-guarded comments to
+  selected line ranges. A compact readiness ledger combines review,
   checks, conflicts, merge state, and provider freshness before merging with
   merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies

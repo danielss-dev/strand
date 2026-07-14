@@ -17,6 +17,8 @@ import {
   pullRequestReadiness,
   pullRequestForBranch,
   relativeTimeLabel,
+  withPullRequestThreadReply,
+  withPullRequestThreadUpdate,
 } from '../lib/pullRequests';
 import { pullRequestActivityChanged, pullRequestFollowKey } from '../lib/pullRequestActivity';
 import { errMessage, tauri } from '../lib/tauri';
@@ -408,10 +410,37 @@ function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
   return 'modified';
 }
 
-function PullRequestInlineThread({ thread, prUrl }: { thread: PullRequestReviewThread; prUrl: string }) {
+function PullRequestInlineThread({
+  thread,
+  prUrl,
+  replying,
+  replyDraft,
+  writeKind,
+  message,
+  platform,
+  onStartReply,
+  onCancelReply,
+  onReplyDraft,
+  onSubmitReply,
+  onSetResolved,
+}: {
+  thread: PullRequestReviewThread;
+  prUrl: string;
+  replying: boolean;
+  replyDraft: string;
+  writeKind: 'reply' | 'resolve' | undefined;
+  message: { tone: 'ok' | 'error'; text: string } | undefined;
+  platform: string;
+  onStartReply: () => void;
+  onCancelReply: () => void;
+  onReplyDraft: (value: string) => void;
+  onSubmitReply: () => void;
+  onSetResolved: (resolved: boolean) => void;
+}) {
   const lineLabel = thread.start_line === thread.end_line
     ? `${thread.end_line}`
     : `${thread.start_line}–${thread.end_line}`;
+  const busy = writeKind != null;
   return (
     <article
       id={`pr-review-thread-${thread.id}`}
@@ -420,9 +449,45 @@ function PullRequestInlineThread({ thread, prUrl }: { thread: PullRequestReviewT
     >
       <header>
         <strong>{thread.side === 'deletions' ? 'Old' : 'New'} line{thread.start_line === thread.end_line ? '' : 's'} {lineLabel}</strong>
-        <div>
-          {thread.is_resolved && <span>Resolved</span>}
-          {thread.is_outdated && <span>Outdated</span>}
+        <div className="pr-inline-thread-head-actions">
+          <div className="pr-inline-thread-labels">
+            {thread.is_resolved && <span>Resolved</span>}
+            {thread.is_outdated && <span>Outdated</span>}
+          </div>
+          {thread.can_reply && (
+            <button
+              type="button"
+              id={`pr-thread-reply-${thread.id}`}
+              className="h-link"
+              aria-expanded={replying}
+              disabled={busy}
+              onClick={replying ? onCancelReply : onStartReply}
+            >
+              {replying ? 'Cancel reply' : 'Reply'}
+            </button>
+          )}
+          {!thread.is_resolved && thread.can_resolve && (
+            <button
+              type="button"
+              id={`pr-thread-state-${thread.id}`}
+              className="h-link"
+              disabled={busy}
+              onClick={() => onSetResolved(true)}
+            >
+              {writeKind === 'resolve' ? 'Resolving…' : 'Resolve'}
+            </button>
+          )}
+          {thread.is_resolved && thread.can_unresolve && (
+            <button
+              type="button"
+              id={`pr-thread-state-${thread.id}`}
+              className="h-link"
+              disabled={busy}
+              onClick={() => onSetResolved(false)}
+            >
+              {writeKind === 'resolve' ? 'Reopening…' : 'Reopen'}
+            </button>
+          )}
         </div>
       </header>
       {thread.comments.map((comment) => {
@@ -447,6 +512,47 @@ function PullRequestInlineThread({ thread, prUrl }: { thread: PullRequestReviewT
           </section>
         );
       })}
+      {message && (
+        <div className={`pr-thread-message ${message.tone}`} role={message.tone === 'error' ? 'alert' : 'status'}>
+          {message.text}
+        </div>
+      )}
+      {replying && (
+        <form
+          className="pr-thread-reply"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitReply();
+          }}
+        >
+          <textarea
+            id={`pr-thread-reply-input-${thread.id}`}
+            value={replyDraft}
+            onChange={(event) => onReplyDraft(event.target.value)}
+            placeholder="Reply to this thread…"
+            rows={3}
+            maxLength={65_536}
+            disabled={writeKind === 'reply'}
+            autoFocus
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancelReply();
+              } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                onSubmitReply();
+              }
+            }}
+          />
+          <div className="pr-inline-actions">
+            <span>{replyDraft.length.toLocaleString()} / 65,536 · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter</span>
+            <button type="button" className="btn" onClick={onCancelReply} disabled={writeKind === 'reply'}>Cancel</button>
+            <button type="submit" className="btn primary" disabled={!replyDraft.trim() || writeKind === 'reply'}>
+              {writeKind === 'reply' ? 'Replying…' : 'Reply'}
+            </button>
+          </div>
+        </form>
+      )}
     </article>
   );
 }
@@ -489,7 +595,16 @@ function PullRequestChanges({
   const [commentDraft, setCommentDraft] = useState('');
   const [postingComment, setPostingComment] = useState(false);
   const [commentMessage, setCommentMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [threadWrites, setThreadWrites] = useState<Record<string, 'reply' | 'resolve'>>({});
+  const [threadMessages, setThreadMessages] = useState<Record<string, { tone: 'ok' | 'error'; text: string }>>({});
   const generation = useRef(0);
+  const currentPr = useRef(pr);
+
+  useEffect(() => {
+    currentPr.current = pr;
+  }, [pr]);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -643,6 +758,101 @@ function PullRequestChanges({
     }
   };
 
+  const focusThreadControl = (threadId: string, control: 'reply' | 'state') => {
+    requestAnimationFrame(() => document.getElementById(`pr-thread-${control}-${threadId}`)?.focus({ preventScroll: true }));
+  };
+
+  const startThreadReply = (threadId: string) => {
+    setReplyingThreadId(threadId);
+    setThreadMessages((current) => {
+      if (!current[threadId]) return current;
+      const next = { ...current };
+      delete next[threadId];
+      return next;
+    });
+    requestAnimationFrame(() => document.getElementById(`pr-thread-reply-input-${threadId}`)?.focus());
+  };
+
+  const cancelThreadReply = (threadId: string) => {
+    setReplyingThreadId((current) => current === threadId ? null : current);
+    focusThreadControl(threadId, 'reply');
+  };
+
+  const setThreadReplyDraft = (threadId: string, value: string) => {
+    setReplyDrafts((current) => ({ ...current, [threadId]: value }));
+  };
+
+  const submitThreadReply = async (thread: PullRequestReviewThread) => {
+    const body = (replyDrafts[thread.id] ?? '').trim();
+    if (!body || threadWrites[thread.id]) return;
+    setThreadWrites((current) => ({ ...current, [thread.id]: 'reply' }));
+    setThreadMessages((current) => {
+      const next = { ...current };
+      delete next[thread.id];
+      return next;
+    });
+    try {
+      const reply = await tauri.repoPullRequestThreadReply(path, thread.id, body);
+      const next = withPullRequestThreadReply(currentPr.current, thread.id, reply);
+      currentPr.current = next;
+      onUpdated(next);
+      setReplyDrafts((current) => {
+        const next = { ...current };
+        delete next[thread.id];
+        return next;
+      });
+      setReplyingThreadId((current) => current === thread.id ? null : current);
+      setThreadMessages((current) => ({
+        ...current,
+        [thread.id]: { tone: 'ok', text: 'Reply added.' },
+      }));
+      focusThreadControl(thread.id, 'reply');
+    } catch (caught) {
+      setThreadMessages((current) => ({
+        ...current,
+        [thread.id]: { tone: 'error', text: errMessage(caught) },
+      }));
+    } finally {
+      setThreadWrites((current) => {
+        const next = { ...current };
+        delete next[thread.id];
+        return next;
+      });
+    }
+  };
+
+  const setThreadResolved = async (thread: PullRequestReviewThread, resolved: boolean) => {
+    if (threadWrites[thread.id]) return;
+    setThreadWrites((current) => ({ ...current, [thread.id]: 'resolve' }));
+    setThreadMessages((current) => {
+      const next = { ...current };
+      delete next[thread.id];
+      return next;
+    });
+    try {
+      const update = await tauri.repoPullRequestThreadResolve(path, thread.id, resolved);
+      const next = withPullRequestThreadUpdate(currentPr.current, update);
+      currentPr.current = next;
+      onUpdated(next);
+      setThreadMessages((current) => ({
+        ...current,
+        [thread.id]: { tone: 'ok', text: resolved ? 'Thread resolved.' : 'Thread reopened.' },
+      }));
+      focusThreadControl(thread.id, 'state');
+    } catch (caught) {
+      setThreadMessages((current) => ({
+        ...current,
+        [thread.id]: { tone: 'error', text: errMessage(caught) },
+      }));
+    } finally {
+      setThreadWrites((current) => {
+        const next = { ...current };
+        delete next[thread.id];
+        return next;
+      });
+    }
+  };
+
   const move = (delta: number) => {
     if (!treePaths.length) return;
     const current = selectedPath ? treePaths.indexOf(selectedPath) : -1;
@@ -757,9 +967,27 @@ function PullRequestChanges({
                     lineAnnotations={inlineAnnotations}
                     onLineSelected={inlineCommentsSupported ? selectLines : undefined}
                     onGutterUtilityClick={inlineCommentsSupported ? openInlineComment : undefined}
-                    renderAnnotation={(annotation) => annotation.metadata.kind === 'thread' ? (
-                      <PullRequestInlineThread thread={annotation.metadata.thread} prUrl={pr.url} />
-                    ) : selectedLines ? (
+                    renderAnnotation={(annotation) => {
+                      if (annotation.metadata.kind === 'thread') {
+                        const thread = annotation.metadata.thread;
+                        return (
+                          <PullRequestInlineThread
+                            thread={thread}
+                            prUrl={pr.url}
+                            replying={replyingThreadId === thread.id}
+                            replyDraft={replyDrafts[thread.id] ?? ''}
+                            writeKind={threadWrites[thread.id]}
+                            message={threadMessages[thread.id]}
+                            platform={platform}
+                            onStartReply={() => startThreadReply(thread.id)}
+                            onCancelReply={() => cancelThreadReply(thread.id)}
+                            onReplyDraft={(value) => setThreadReplyDraft(thread.id, value)}
+                            onSubmitReply={() => { void submitThreadReply(thread); }}
+                            onSetResolved={(resolved) => { void setThreadResolved(thread, resolved); }}
+                          />
+                        );
+                      }
+                      return selectedLines ? (
                       <form
                         className="pr-inline-composer"
                         onSubmit={(event) => {
@@ -798,7 +1026,8 @@ function PullRequestChanges({
                           </button>
                         </div>
                       </form>
-                    ) : null}
+                      ) : null;
+                    }}
                   />
                 )}
               </>
@@ -1227,6 +1456,9 @@ export function PullRequests({
       ...current,
       pull_requests: current.pull_requests.map((item) => item.id === next.id ? next : item),
     } : current);
+    // The next visible activity poll becomes the new baseline instead of
+    // treating our own provider write as a remote change and reloading detail.
+    visibleActivity.current = null;
     if (path && data) {
       const key = pullRequestFollowKey(data.repository, next.id);
       if (usePullRequests.getState().followed[key]) {
