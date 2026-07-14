@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { repoAiStyle } from '../lib/db';
 import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
 import type {
   AiSensitiveDecision,
   AiSensitiveFile,
+  AiInputCoverage,
+  AiProvider,
   PullRequestCreateOutcome,
   PullRequestProvider,
   Refs,
@@ -30,6 +33,8 @@ export function PullRequestCreateDialog({
   sourceBranch,
   refs,
   knownTargets,
+  commonDir,
+  autoFill = false,
   onCreated,
   onClose,
 }: {
@@ -38,6 +43,8 @@ export function PullRequestCreateDialog({
   sourceBranch: string;
   refs: Refs | null;
   knownTargets: string[];
+  commonDir: string;
+  autoFill?: boolean;
   onCreated: (outcome: PullRequestCreateOutcome) => void;
   onClose: () => void;
 }) {
@@ -59,11 +66,16 @@ export function PullRequestCreateDialog({
     fingerprint: string;
     files: AiSensitiveFile[];
   } | null>(null);
+  const [coverage, setCoverage] = useState<AiInputCoverage | null>(null);
+  const [providerUsed, setProviderUsed] = useState<AiProvider | null>(null);
+  const [undoDraft, setUndoDraft] = useState<{ title: string; description: string } | null>(null);
+  const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef<{ opId: string; target: string; provider: typeof aiProvider } | null>(null);
   const suggestingRef = useRef(false);
+  const autoFillStartedRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -149,7 +161,10 @@ export function PullRequestCreateDialog({
     }
   }
 
-  async function fillWithAi(sensitiveDecision: AiSensitiveDecision = { mode: 'scan' }) {
+  async function fillWithAi(
+    sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
+    selectedProvider: AiProvider = aiProvider,
+  ) {
     const target = targetBranch.trim();
     if (busy || suggestingRef.current) return;
     if (!target) {
@@ -157,18 +172,24 @@ export function PullRequestCreateDialog({
       return;
     }
     const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const request = { opId, target, provider: aiProvider };
+    const request = { opId, target, provider: selectedProvider };
     requestRef.current = request;
     suggestingRef.current = true;
     setSuggesting(true);
     setError(null);
     setSensitivePrompt(null);
+    setCoverage(null);
+    setProviderUsed(null);
+    setUndoDraft(null);
+    setRetryProvider(null);
     try {
+      const styleInstruction = await repoAiStyle.get(commonDir);
+      if (requestRef.current !== request) return;
       const outcome = await tauri.repoSuggestPullRequest(
         path,
         target,
-        aiProvider,
-        { opId, sensitiveDecision, styleInstruction: null },
+        selectedProvider,
+        { opId, sensitiveDecision, styleInstruction },
         openaiCli,
         anthropicCli,
       );
@@ -177,15 +198,19 @@ export function PullRequestCreateDialog({
         setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
         return;
       }
+      if (outcome.provider !== selectedProvider || targetBranch.trim() !== target) return;
+      setUndoDraft({ title, description });
       setTitle(outcome.suggestion.title);
       setDescription(outcome.suggestion.description);
+      setCoverage(outcome.coverage);
+      setProviderUsed(outcome.provider);
       window.requestAnimationFrame(() => titleRef.current?.focus());
     } catch (caught) {
       if (requestRef.current !== request || isCancelled(caught)) return;
       const message = gitErrorHint(caught);
       if (message.startsWith(AI_AUTH_REQUIRED)) {
         try {
-          await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
+          await tauri.aiProviderLogin(selectedProvider, openaiCli, anthropicCli);
           if (mountedRef.current) {
             setError('Sign-in started — complete it in the browser or CLI window, then click Fill with AI again.');
           }
@@ -194,6 +219,7 @@ export function PullRequestCreateDialog({
         }
       } else if (mountedRef.current) {
         setError(`AI suggestion failed: ${message}`);
+        setRetryProvider(selectedProvider === 'openai' ? 'anthropic' : 'openai');
       }
     } finally {
       if (requestRef.current === request) {
@@ -203,6 +229,12 @@ export function PullRequestCreateDialog({
       }
     }
   }
+
+  useEffect(() => {
+    if (!autoFill || autoFillStartedRef.current || !targetBranch.trim()) return;
+    autoFillStartedRef.current = true;
+    void fillWithAi();
+  }, [autoFill, targetBranch]);
 
   const providerLabel = provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
   const aiProviderLabel = aiProvider === 'openai' ? 'Codex' : 'Claude Code';
@@ -251,6 +283,28 @@ export function PullRequestCreateDialog({
               <span>Uses committed changes against the target branch.</span>
               {suggesting ? <button type="button" className="btn" onClick={cancelSuggestion}>Cancel</button> : null}
             </div>
+            {coverage && providerUsed ? (
+              <p className="settings-hint" role="status">
+                Generated with {providerUsed === 'openai' ? 'Codex' : 'Claude Code'} · {coverage.patchFiles} of {coverage.patchFiles + coverage.omittedPatchFiles} patches included
+                {coverage.truncatedPatchFiles ? `; ${coverage.truncatedPatchFiles} truncated` : ''}
+                {coverage.sensitiveExcludedFiles ? `; ${coverage.sensitiveExcludedFiles} sensitive excluded` : ''}.
+              </p>
+            ) : null}
+            {undoDraft ? (
+              <button
+                type="button"
+                className="h-link"
+                onClick={() => {
+                  setTitle(undoDraft.title);
+                  setDescription(undoDraft.description);
+                  setUndoDraft(null);
+                  setCoverage(null);
+                  setProviderUsed(null);
+                }}
+              >
+                Undo AI replacement
+              </button>
+            ) : null}
 
             <label className="clone-field">
               <span className="lbl">Title</span>
@@ -311,7 +365,16 @@ export function PullRequestCreateDialog({
                   <button type="button" className="btn" onClick={() => setSensitivePrompt(null)}>Cancel</button>
                 </div>
               </div>
-            ) : error ? <div className="clone-error" role="alert">{error}</div> : null}
+            ) : error ? (
+              <div className="clone-error" role="alert">
+                {error}
+                {retryProvider ? (
+                  <div><button type="button" className="h-link" onClick={() => void fillWithAi({ mode: 'scan' }, retryProvider)}>
+                    Retry with {retryProvider === 'openai' ? 'Codex' : 'Claude Code'}
+                  </button></div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="clone-foot">

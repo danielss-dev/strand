@@ -124,6 +124,7 @@ pub fn provider_logout(provider: AiProvider, cli_override: Option<&str>) -> Resu
     adapter(provider).logout(cli_override)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn suggest_commit_message_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
@@ -132,6 +133,8 @@ pub fn suggest_commit_message_with_request(
     cancel: Option<&bin::AiCancelHandle>,
     decision: &AiSensitiveDecision,
     scope: AiInputScope,
+    recent_subjects: &[String],
+    style_instruction: Option<&str>,
 ) -> Result<AiGenerationOutcome<CommitMessageSuggestion>, String> {
     if diffs.is_empty() {
         return Err("Nothing changed — make a change before generating a message.".into());
@@ -139,26 +142,39 @@ pub fn suggest_commit_message_with_request(
     let prepared = match input::prepare_input(diffs, scope, decision)? {
         input::InputPreparation::NeedsConfirmation {
             fingerprint,
-            coverage,
+            mut coverage,
             sensitive_files,
         } => {
+            let built = prompt::build_prompt(
+                diffs,
+                recent_subjects,
+                style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+            );
+            apply_prompt_coverage(&mut coverage, &built);
             return Ok(AiGenerationOutcome::NeedsConfirmation {
                 fingerprint,
                 coverage,
                 sensitive_files,
-            })
+            });
         }
         input::InputPreparation::Ready(prepared) => prepared,
     };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_prompt(
+        &prepared.diffs,
+        recent_subjects,
+        style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+    );
+    apply_prompt_coverage(&mut coverage, &built);
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",
-        prompt::build_prompt(&prepared.diffs)
+        built.text
     );
     let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
     let suggestion = parse::parse_suggestion(&raw)?;
     Ok(AiGenerationOutcome::Generated {
         suggestion,
-        coverage: prepared.coverage,
+        coverage,
         provider,
     })
 }
@@ -173,6 +189,8 @@ pub fn suggest_pull_request_with_request(
     cli_override: Option<&str>,
     cancel: Option<&bin::AiCancelHandle>,
     decision: &AiSensitiveDecision,
+    recent_subjects: &[String],
+    style_instruction: Option<&str>,
 ) -> Result<AiGenerationOutcome<PullRequestSuggestion>, String> {
     if diffs.is_empty() {
         return Err(format!(
@@ -182,28 +200,60 @@ pub fn suggest_pull_request_with_request(
     let prepared = match input::prepare_input(diffs, AiInputScope::Committed, decision)? {
         input::InputPreparation::NeedsConfirmation {
             fingerprint,
-            coverage,
+            mut coverage,
             sensitive_files,
         } => {
+            let built = prompt::build_pull_request_prompt(
+                source_branch,
+                target_branch,
+                diffs,
+                recent_subjects,
+                style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+            );
+            apply_prompt_coverage(&mut coverage, &built);
             return Ok(AiGenerationOutcome::NeedsConfirmation {
                 fingerprint,
                 coverage,
                 sensitive_files,
-            })
+            });
         }
         input::InputPreparation::Ready(prepared) => prepared,
     };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_pull_request_prompt(
+        source_branch,
+        target_branch,
+        &prepared.diffs,
+        recent_subjects,
+        style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+    );
+    apply_prompt_coverage(&mut coverage, &built);
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"title\":\"...\",\"description\":\"...\"}}",
-        prompt::build_pull_request_prompt(source_branch, target_branch, &prepared.diffs)
+        built.text
     );
     let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
     let suggestion = parse::parse_pull_request_suggestion(&raw)?;
     Ok(AiGenerationOutcome::Generated {
         suggestion,
-        coverage: prepared.coverage,
+        coverage,
         provider,
     })
+}
+
+pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
+    let mut end = value.len().min(max_bytes);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
+fn apply_prompt_coverage(coverage: &mut input::AiInputCoverage, built: &prompt::PromptBuild) {
+    coverage.manifest_files = built.manifest_files;
+    coverage.patch_files = built.patch_files;
+    coverage.omitted_patch_files = built.omitted_patch_files;
+    coverage.truncated_patch_files = built.truncated_patch_files;
 }
 
 #[cfg(test)]
@@ -261,5 +311,13 @@ mod tests {
         assert!(err.contains("Error: spawn /vendor/codex ENOENT"));
         assert!(!err.contains("stack trace"));
         assert!(err.contains("Settings → AI"));
+    }
+
+    #[test]
+    fn truncates_recent_subjects_on_utf8_boundaries() {
+        let subject = "é".repeat(100);
+        let truncated = truncate_utf8(&subject, 120);
+        assert_eq!(truncated.len(), 120);
+        assert!(truncated.is_char_boundary(truncated.len()));
     }
 }

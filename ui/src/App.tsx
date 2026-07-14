@@ -1126,6 +1126,19 @@ export function App() {
             selectFile(null);
             window.setTimeout(() => window.dispatchEvent(new CustomEvent('strand:pull-request-create')), 50);
           },
+        } satisfies PaletteAction, {
+          id: 'pull-request-draft-ai',
+          label: 'Draft pull request with AI…',
+          group: 'Actions',
+          keywords: 'pr ai codex claude generate title description current branch',
+          run: () => {
+            setView('pull-requests');
+            selectFile(null);
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent(
+              'strand:pull-request-create',
+              { detail: { autoFill: true } },
+            )), 50);
+          },
         } satisfies PaletteAction] : []),
         ...(view === 'pull-requests' ? [
           {

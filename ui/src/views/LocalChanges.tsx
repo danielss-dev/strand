@@ -15,7 +15,8 @@ import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
 import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
-import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { repoAiStyle } from '../lib/db';
+import { EDITABLE_SELECTOR, eventInside, formatBinding } from '../lib/keys';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
 import { hashFileDiff, sliceChangeBlock, type SliceDirection } from '../lib/patch';
@@ -23,7 +24,7 @@ import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import type { AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
+import type { AiInputCoverage, AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
 import { MergeResolver } from './MergeResolver';
 import { ConflictLanding } from './ConflictLanding';
 
@@ -1273,12 +1274,14 @@ function BlockActions({
 
 function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: boolean }) {
   const activePath = useRepo((s) => s.activePath);
+  const commonDir = useRepo((s) => s.meta?.common_dir ?? null);
   const commit = useRepo((s) => s.commit);
   const suggestCommitSignal = useRepo((s) => s.suggestCommitSignal);
   const clearSuggestCommitMessage = useRepo((s) => s.clearSuggestCommitMessage);
   const aiProvider = useSettings((s) => s.aiProvider);
   const openaiCli = useSettings((s) => s.openaiCli);
   const anthropicCli = useSettings((s) => s.anthropicCli);
+  const platform = useSettings((s) => s.platform);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [amend, setAmend] = useState(false);
@@ -1289,6 +1292,10 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     fingerprint: string;
     files: AiSensitiveFile[];
   } | null>(null);
+  const [coverage, setCoverage] = useState<AiInputCoverage | null>(null);
+  const [providerUsed, setProviderUsed] = useState<AiProvider | null>(null);
+  const [undoDraft, setUndoDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef<{ opId: string; path: string; provider: typeof aiProvider } | null>(null);
@@ -1310,20 +1317,29 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
 
   useEffect(() => cancelSuggestion, [activePath, aiProvider, openaiCli, anthropicCli, cancelSuggestion]);
 
-  const suggest = useCallback(async (sensitiveDecision: AiSensitiveDecision = { mode: 'scan' }) => {
+  const suggest = useCallback(async (
+    sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
+    provider: AiProvider = aiProvider,
+  ) => {
     if (!activePath || !hasChanges || suggestingRef.current) return;
     const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const request = { opId, path: activePath, provider: aiProvider };
+    const request = { opId, path: activePath, provider };
     requestRef.current = request;
     suggestingRef.current = true;
     setSuggesting(true);
     setCommitError(null);
     setSensitivePrompt(null);
+    setCoverage(null);
+    setProviderUsed(null);
+    setUndoDraft(null);
+    setRetryProvider(null);
     try {
+      const styleInstruction = commonDir ? await repoAiStyle.get(commonDir) : null;
+      if (requestRef.current !== request) return;
       const outcome = await tauri.repoSuggestCommitMessage(
         activePath,
-        aiProvider,
-        { opId, sensitiveDecision, styleInstruction: null },
+        provider,
+        { opId, sensitiveDecision, styleInstruction },
         openaiCli,
         anthropicCli,
       );
@@ -1332,13 +1348,17 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
         return;
       }
+      if (outcome.provider !== provider) return;
+      setUndoDraft({ subject, body });
       applyMessage({ subject: outcome.suggestion.subject, body: outcome.suggestion.body ?? '' });
+      setCoverage(outcome.coverage);
+      setProviderUsed(outcome.provider);
     } catch (e) {
       if (requestRef.current !== request || isCancelled(e)) return;
       const msg = gitErrorHint(e);
       if (msg.startsWith(AI_AUTH_REQUIRED)) {
         try {
-          await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
+          await tauri.aiProviderLogin(provider, openaiCli, anthropicCli);
           setCommitError('Sign-in started — complete it in the browser or CLI window, then click Suggest again.');
         } catch (loginErr) {
           console.error('ai provider login failed', loginErr);
@@ -1348,6 +1368,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       }
       console.error('suggest commit message failed', e);
       setCommitError(`Suggestion failed: ${msg}`);
+      setRetryProvider(provider === 'openai' ? 'anthropic' : 'openai');
     } finally {
       if (requestRef.current === request) {
         requestRef.current = null;
@@ -1355,7 +1376,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         setSuggesting(false);
       }
     }
-  }, [activePath, aiProvider, anthropicCli, hasChanges, openaiCli]);
+  }, [activePath, aiProvider, anthropicCli, body, commonDir, hasChanges, openaiCli, subject]);
 
   useEffect(() => {
     if (!suggestCommitSignal) return;
@@ -1374,6 +1395,9 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       setSubject('');
       setBody('');
       setAmend(false);
+      setUndoDraft(null);
+      setCoverage(null);
+      setProviderUsed(null);
     } catch (e) {
       console.error('commit failed', e);
       setCommitError(`Commit failed: ${gitErrorHint(e)}`);
@@ -1447,7 +1471,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
           onClick={() => void submit()}
         >
           {amend ? 'Amend' : 'Commit'}
-          <span className="kbd-inline">⌘↵</span>
+          <span className="kbd-inline">{formatBinding('Mod+Enter', platform)}</span>
         </button>
       </div>
       <textarea
@@ -1456,6 +1480,27 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
+      {coverage && providerUsed && (
+        <div className="settings-hint" role="status">
+          Generated with {providerUsed === 'openai' ? 'Codex' : 'Claude Code'} · {coverage.patchFiles} of {coverage.patchFiles + coverage.omittedPatchFiles} patches included
+          {coverage.truncatedPatchFiles ? `; ${coverage.truncatedPatchFiles} truncated` : ''}
+          {coverage.sensitiveExcludedFiles ? `; ${coverage.sensitiveExcludedFiles} sensitive excluded` : ''}.
+        </div>
+      )}
+      {undoDraft && (
+        <button
+          type="button"
+          className="h-link"
+          onClick={() => {
+            applyMessage(undoDraft);
+            setUndoDraft(null);
+            setCoverage(null);
+            setProviderUsed(null);
+          }}
+        >
+          Undo AI replacement
+        </button>
+      )}
       {sensitivePrompt && (
         <div className="cb-error" role="alert">
           <div>Potentially sensitive files were excluded pending confirmation:</div>
@@ -1474,6 +1519,11 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       {commitError && (
         <div className="cb-error" role="alert">
           {commitError}
+          {retryProvider && (
+            <div><button type="button" className="h-link" onClick={() => void suggest({ mode: 'scan' }, retryProvider)}>
+              Retry with {retryProvider === 'openai' ? 'Codex' : 'Claude Code'}
+            </button></div>
+          )}
         </div>
       )}
     </div>

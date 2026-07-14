@@ -1,7 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { repoAiStyle } from '../../lib/db';
 import { errMessage, tauri } from '../../lib/tauri';
 import type { AiProvider, AiProviderStatus } from '../../lib/types';
+import { useRepo } from '../../stores/repo';
 import { useSettings } from '../../stores/settings';
 
 const PROVIDERS: { id: AiProvider; label: string }[] = [
@@ -28,11 +30,24 @@ export function AiSection() {
   const openaiCli = useSettings((s) => s.openaiCli);
   const anthropicCli = useSettings((s) => s.anthropicCli);
   const set = useSettings((s) => s.set);
+  const meta = useRepo((s) => s.meta);
 
   const [openaiStatus, setOpenaiStatus] = useState<CliStatus>(null);
   const [anthropicStatus, setAnthropicStatus] = useState<CliStatus>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [repoStyle, setRepoStyle] = useState('');
+
+  useEffect(() => {
+    let current = true;
+    setRepoStyle('');
+    if (meta?.common_dir) {
+      void repoAiStyle.get(meta.common_dir).then((value) => {
+        if (current) setRepoStyle(value ?? '');
+      });
+    }
+    return () => { current = false; };
+  }, [meta?.common_dir]);
 
   const checkBoth = useCallback(async () => {
     setBusy(true);
@@ -103,6 +118,27 @@ export function AiSection() {
           ))}
         </select>
         <p className="settings-hint">{panelHint}</p>
+      </div>
+
+      <div className="settings-field">
+        <span className="settings-field-label">Repository writing profile</span>
+        <textarea
+          className="clone-input"
+          aria-label="Repository AI writing profile"
+          disabled={!meta?.common_dir}
+          maxLength={1_000}
+          placeholder={meta ? 'Optional style, terminology, or audience guidance' : 'Open a repository to set its writing profile'}
+          value={repoStyle}
+          onChange={(event) => setRepoStyle(event.target.value)}
+          onBlur={() => {
+            if (meta?.common_dir) void repoAiStyle.set(meta.common_dir, repoStyle);
+          }}
+        />
+        <p className="settings-hint">
+          {meta
+            ? `Shared by this repository family. ${repoStyle.length}/1,000 characters.`
+            : 'Recent commit subjects are still used automatically when no profile is set.'}
+        </p>
       </div>
 
       <div className="settings-field">

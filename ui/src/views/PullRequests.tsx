@@ -1037,7 +1037,7 @@ export function PullRequests({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState<'manual' | 'ai' | false>(false);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
   const autoOpenedContext = useRef<string | null>(null);
@@ -1296,12 +1296,12 @@ export function PullRequests({
   }, [detail, requestMergeMenu]);
 
   useEffect(() => {
-    const onCreateRequest = () => {
+    const onCreateRequest = (event: Event) => {
       if (!path || !currentBranch) {
         onToast('Check out a branch before creating a pull request.', 'error');
         return;
       }
-      setCreateOpen(true);
+      setCreateOpen((event as CustomEvent<{ autoFill?: boolean }>).detail?.autoFill ? 'ai' : 'manual');
     };
     window.addEventListener('strand:pull-request-create', onCreateRequest);
     return () => window.removeEventListener('strand:pull-request-create', onCreateRequest);
@@ -1316,6 +1316,8 @@ export function PullRequests({
           sourceBranch={currentBranch}
           refs={refs}
           knownTargets={data.pull_requests.map((pr) => pr.target_branch)}
+          commonDir={meta?.common_dir ?? path}
+          autoFill={createOpen === 'ai'}
           onCreated={createdPullRequest}
           onClose={() => setCreateOpen(false)}
         />
@@ -1352,7 +1354,7 @@ export function PullRequests({
             className="btn pr-create-button"
             disabled={!path || !data || !currentBranch}
             title={currentBranch ? `Create a pull request from ${currentBranch}` : 'Check out a branch first'}
-            onClick={() => setCreateOpen(true)}
+            onClick={() => setCreateOpen('manual')}
           >
             <Icon name="plus" size={12} />
             Create PR

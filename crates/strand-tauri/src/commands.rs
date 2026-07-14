@@ -1314,6 +1314,11 @@ pub async fn repo_suggest_commit_message(
         } else {
             (staged_diffs, ai::AiInputScope::Staged)
         };
+        let recent_subjects = repo
+            .log_head(8)?
+            .into_iter()
+            .map(|commit| ai::truncate_utf8(&commit.subject, 120).to_string())
+            .collect::<Vec<_>>();
         let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
         ai::suggest_commit_message_with_request(
             provider,
@@ -1323,6 +1328,8 @@ pub async fn repo_suggest_commit_message(
             Some(&cancel),
             &request.sensitive_decision,
             scope,
+            &recent_subjects,
+            request.style_instruction.as_deref(),
         )
         .map_err(CmdError::from_msg)
     })
@@ -1378,6 +1385,11 @@ pub async fn repo_suggest_pull_request(
             .unwrap_or_else(|| target_branch.clone());
         let merge_base = repo.merge_base(&target_ref, "HEAD")?;
         let diffs = repo.diff_between(&merge_base, "HEAD")?;
+        let recent_subjects = repo
+            .log_head(8)?
+            .into_iter()
+            .map(|commit| ai::truncate_utf8(&commit.subject, 120).to_string())
+            .collect::<Vec<_>>();
         let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
         ai::suggest_pull_request_with_request(
             provider,
@@ -1388,6 +1400,8 @@ pub async fn repo_suggest_pull_request(
             override_path.as_deref(),
             Some(&cancel),
             &request.sensitive_decision,
+            &recent_subjects,
+            request.style_instruction.as_deref(),
         )
         .map_err(CmdError::from_msg)
     })
