@@ -1300,7 +1300,15 @@ pub async fn repo_suggest_commit_message(
 ) -> CmdResult<ai::CommitMessageSuggestion> {
     run_blocking("ai suggest", move || {
         let repo = Repo::discover(&path)?;
-        let diffs = repo.diff_staged()?;
+        // A commit must use staged changes, but a suggestion is useful before
+        // the user has staged anything. Prefer the exact staged set whenever
+        // it exists; otherwise describe the whole working-tree delta.
+        let staged_diffs = repo.diff_staged()?;
+        let diffs = if staged_diffs.is_empty() {
+            repo.diff_unstaged()?
+        } else {
+            staged_diffs
+        };
         let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
         ai::suggest_commit_message(
             provider,

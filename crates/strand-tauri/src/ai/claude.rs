@@ -4,6 +4,8 @@ use super::bin::{resolve_claude, run_capture, spawn_detached, STATUS_TIMEOUT, SU
 use super::AiProviderStatus;
 
 const CLAUDE_INSTALL: &str = "https://code.claude.com/docs/en/setup";
+/// A fast, focused model is sufficient for short commit and PR copy.
+const SUGGEST_MODEL: &str = "claude-sonnet-5";
 
 pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
     let Some(bin) = resolve_claude(cli_override) else {
@@ -88,6 +90,8 @@ pub fn suggest(
         &bin,
         &[
             "-p",
+            "--model",
+            SUGGEST_MODEL,
             "--output-format",
             "json",
             "--tools",

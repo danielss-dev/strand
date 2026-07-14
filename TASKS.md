@@ -1760,7 +1760,8 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 
 - ☑ Rust `ai/` module + IPC (`ai_provider_*`, `repo_suggest_commit_message`)
 - ☑ Settings → AI (ChatGPT / Claude Code sign-in, custom CLI paths)
-- ☑ CommitBar Suggest + palette / ⌘⇧M shortcut
+- ☑ CommitBar Suggest + palette / ⌘⇧M shortcut (prefers the staged diff; falls
+  back to all unstaged changes when no staged diff exists)
 - ☑ Pull-request title/description suggestions from committed merge-base diffs
   (`repo_suggest_pull_request`, Create PR **Fill with Codex/Claude Code**)
 - ☑ Windows CLI spawning hardened (DAN-11: `ai/bin.rs` resolves `.exe`/`.cmd`/

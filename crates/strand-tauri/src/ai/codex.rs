@@ -4,6 +4,8 @@ use super::bin::{resolve_codex, run_capture, spawn_detached, STATUS_TIMEOUT, SUG
 use super::AiProviderStatus;
 
 const CODEX_INSTALL: &str = "https://developers.openai.com/codex";
+/// A fast, focused model is sufficient for short commit and PR copy.
+const SUGGEST_MODEL: &str = "gpt-5.6-luna";
 
 pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
     let Some(bin) = resolve_codex(cli_override) else {
@@ -61,6 +63,8 @@ pub fn suggest(
         &bin,
         &[
             "exec",
+            "--model",
+            SUGGEST_MODEL,
             "--cd",
             repo_path.to_str().ok_or("invalid repo path")?,
             "--sandbox",

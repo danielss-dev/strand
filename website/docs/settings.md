@@ -53,12 +53,13 @@ Configure the external editor and terminal that Strand's "Open in editor" (`Mod+
 
 ## AI
 
-Strand can suggest a commit message from staged changes or draft pull-request
-text from committed branch changes. It has no API key of its own — suggestions
-run through a CLI you already have, on your own subscription. Auth and billing
-stay entirely in the vendor's CLI; Strand only orchestrates it.
+Strand can suggest a commit message from staged changes, or all unstaged changes
+when nothing is staged, and draft pull-request text from committed branch
+changes. It has no API key of its own — suggestions run through a CLI you
+already have, on your own subscription. Auth and billing stay entirely in the
+vendor's CLI; Strand only orchestrates it.
 
-- **AI writing provider** — "OpenAI (ChatGPT subscription)" (default), which uses your ChatGPT subscription via the Codex CLI, or "Anthropic (Claude Code CLI)", which uses the Claude Code CLI (`claude`).
+- **AI writing provider** — "OpenAI (ChatGPT subscription)" (default), which uses your ChatGPT subscription via the Codex CLI (`gpt-5.6-luna`), or "Anthropic (Claude Code CLI)", which uses the Claude Code CLI (`claude-sonnet-5`). These fixed, focused models keep short commit-message and PR-draft requests responsive rather than inheriting your coding CLI's default model.
 - **Codex CLI** — an optional custom path (leave empty to use `codex` on PATH), a status line, and **Sign in with ChatGPT** / **Sign out** buttons.
 - **Claude Code CLI** — an optional custom path (leave empty to use `claude` on PATH), a status line, and **Sign in to Claude Code** / **Sign out** buttons.
 - **Check CLI status** — checks both CLIs and reports whether each is missing,

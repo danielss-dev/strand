@@ -398,7 +398,7 @@ export function LocalChanges() {
         </PanelGroup>
       </div>
 
-      <CommitBar canCommit={staged.length > 0} />
+      <CommitBar canCommit={staged.length > 0} hasChanges={staged.length > 0 || unstaged.length > 0} />
 
       {resolverFile && (
         <MergeResolver path={resolverFile} onClose={() => setResolverFile(null)} />
@@ -1271,7 +1271,7 @@ function BlockActions({
 
 // ─── Commit bar ─────────────────────────────────────────────────────────────
 
-function CommitBar({ canCommit }: { canCommit: boolean }) {
+function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: boolean }) {
   const activePath = useRepo((s) => s.activePath);
   const commit = useRepo((s) => s.commit);
   const suggestCommitSignal = useRepo((s) => s.suggestCommitSignal);
@@ -1311,7 +1311,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   }
 
   const suggest = useCallback(async () => {
-    if (!activePath || !canCommit) return;
+    if (!activePath || !hasChanges) return;
     setSuggesting(true);
     setCommitError(null);
     try {
@@ -1339,7 +1339,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
     } finally {
       setSuggesting(false);
     }
-  }, [activePath, aiProvider, anthropicCli, canCommit, openaiCli]);
+  }, [activePath, aiProvider, anthropicCli, hasChanges, openaiCli]);
 
   useEffect(() => {
     if (!suggestCommitSignal) return;
@@ -1369,11 +1369,13 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
   // Missing CLI does not disable the button: clicking surfaces the backend's
   // install/sign-in hint inline, instead of a dead control (DAN-11).
-  const suggestDisabled = suggesting || submitting || !canCommit;
+  const suggestDisabled = suggesting || submitting || !hasChanges;
   const suggestTitle = suggesting
     ? 'Generating commit message…'
-    : !canCommit
-      ? 'Stage changes to suggest a commit message'
+    : !hasChanges
+      ? 'Make changes to suggest a commit message'
+      : !canCommit
+        ? 'Suggest commit message from all unstaged changes'
       : !aiInstalled
         ? 'Install the CLI (Settings → AI) to enable suggestions'
         : 'Suggest commit message from staged changes';

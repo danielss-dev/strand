@@ -117,7 +117,7 @@ pub fn suggest_commit_message(
     cli_override: Option<&str>,
 ) -> Result<CommitMessageSuggestion, String> {
     if diffs.is_empty() {
-        return Err("Nothing staged — stage changes before generating a message.".into());
+        return Err("Nothing changed — make a change before generating a message.".into());
     }
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",

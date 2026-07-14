@@ -1661,15 +1661,17 @@ is preflighted before Strand reports that the browser or CLI flow has started.
   `docs/strand-cli.md` + task breakdown in TASKS.md.
 - Plugin / extension surface
 - AI features (writing suggestions, conflict hints) — PRD Q3
-  - ☑ Commit message suggestions from staged diffs (Codex / Claude Code CLIs)
+  - ☑ Commit message suggestions from staged diffs, or all unstaged changes
+    when nothing is staged (Codex / Claude Code CLIs)
   - ☑ Pull-request title/description suggestions from committed branch diffs
 - ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
   foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 
-**AI commit messages (2026-07-01):** Subscription-first suggestions from staged
-diffs — Codex CLI (`codex login` / `codex exec`) for ChatGPT Plus, Claude Code
-CLI (`claude -p`) for Anthropic. Rust `ai/` module + four IPC commands; Settings
-→ AI for sign-in; CommitBar sparkle button; palette + ⌘⇧M. Verified:
+**AI commit messages (2026-07-01):** Subscription-first suggestions prefer the
+staged diff, and fall back to all unstaged changes when no staged diff exists —
+Codex CLI (`codex login` / `codex exec`) for ChatGPT Plus, Claude Code CLI
+(`claude -p`) for Anthropic. Rust `ai/` module + four IPC commands; Settings →
+AI for sign-in; CommitBar sparkle button; palette + ⌘⇧M. Verified:
 `cargo test -p strand-tauri`, `pnpm --filter ./ui exec tsc --noEmit`.
 
 ---
