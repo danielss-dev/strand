@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use super::bin::{resolve_codex, run_capture, spawn_detached, STATUS_TIMEOUT, SUGGEST_TIMEOUT};
+use super::bin::{
+    resolve_codex, run_capture, run_capture_cancellable, spawn_detached, AiCancelHandle,
+    STATUS_TIMEOUT, SUGGEST_TIMEOUT,
+};
 use super::AiProviderStatus;
 
 pub struct Codex;
@@ -24,8 +27,9 @@ impl super::AiProviderAdapter for Codex {
         repo_path: &Path,
         prompt: &str,
         cli_override: Option<&str>,
+        cancel: Option<&AiCancelHandle>,
     ) -> Result<String, String> {
-        suggest(repo_path, prompt, cli_override)
+        suggest(repo_path, prompt, cli_override, cancel)
     }
 }
 
@@ -80,6 +84,7 @@ pub fn suggest(
     _repo_path: &Path,
     prompt: &str,
     cli_override: Option<&str>,
+    cancel: Option<&AiCancelHandle>,
 ) -> Result<String, String> {
     let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
     let isolated = tempfile::tempdir()
@@ -87,7 +92,7 @@ pub fn suggest(
 
     // `-` makes `codex exec` read the prompt from stdin — see the note in
     // `claude::suggest` for why prompts don't travel as argv.
-    match run_capture(
+    match run_capture_cancellable(
         &bin,
         &[
             "exec",
@@ -108,6 +113,7 @@ pub fn suggest(
         Some(isolated.path()),
         Some(prompt),
         SUGGEST_TIMEOUT,
+        cancel,
     ) {
         Ok(out) => Ok(out),
         Err(err) => {

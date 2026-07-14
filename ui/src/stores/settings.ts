@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { KeyOverrides } from '../lib/keys';
+import type { AiProvider } from '../lib/types';
 
 /** A concrete theme that maps to a `[data-theme]` token set in tokens.css. */
 export type Theme = 'dark' | 'light';
@@ -37,9 +38,6 @@ export type ExternalTool =
   | { kind: 'preset'; id: string }
   | { kind: 'custom'; template: string }
   | null;
-
-/** AI provider for writing suggestions. */
-export type AiProvider = 'openai' | 'anthropic';
 
 /** The concrete theme already applied to `<html>` by the pre-paint inline
  * script in index.html — the exact (pref + OS) resolution, with no second

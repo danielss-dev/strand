@@ -31,13 +31,13 @@ use tauri::{Emitter, State};
 
 use crate::ai;
 use crate::pull_requests::{self, PullRequestList};
-use crate::state::AppState;
+use crate::state::{AppState, OperationCancelHandle};
 
 /// Register / clear a cancellable op's handle under `op_id` so
 /// `repo_cancel_op` can find it while the blocking task runs.
-fn register_op(state: &AppState, op_id: &Option<String>, cancel: &CancelHandle) {
+fn register_op(state: &AppState, op_id: &Option<String>, cancel: OperationCancelHandle) {
     if let (Some(id), Ok(mut ops)) = (op_id.as_deref(), state.ops.lock()) {
-        ops.insert(id.to_string(), cancel.clone());
+        ops.insert(id.to_string(), cancel);
     }
 }
 
@@ -542,7 +542,7 @@ pub async fn repo_fetch(
     state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
-    register_op(&state, &op_id, &cancel);
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
     let result = run_blocking("fetch", move || {
         let repo = Repo::discover(&path)?;
         repo.fetch(
@@ -568,7 +568,7 @@ pub async fn repo_pull(
     state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
-    register_op(&state, &op_id, &cancel);
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
     let result = run_blocking("pull", move || {
         let repo = Repo::discover(&path)?;
         repo.pull(
@@ -594,7 +594,7 @@ pub async fn repo_push(
     state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
     let cancel = CancelHandle::new();
-    register_op(&state, &op_id, &cancel);
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
     let result = run_blocking("push", move || {
         let repo = Repo::discover(&path)?;
         repo.push(
@@ -620,7 +620,7 @@ pub async fn repo_clone(
     state: State<'_, AppState>,
 ) -> CmdResult<CloneOutcome> {
     let cancel = CancelHandle::new();
-    register_op(&state, &op_id, &cancel);
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
     let result = run_blocking("clone", move || {
         core_clone(
             &url,
@@ -1297,28 +1297,38 @@ pub async fn repo_suggest_commit_message(
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
-) -> CmdResult<ai::CommitMessageSuggestion> {
-    run_blocking("ai suggest", move || {
+    request: ai::AiGenerationRequest,
+    state: State<'_, AppState>,
+) -> CmdResult<ai::AiGenerationOutcome<ai::CommitMessageSuggestion>> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(request.op_id.clone());
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("ai suggest", move || {
         let repo = Repo::discover(&path)?;
         // A commit must use staged changes, but a suggestion is useful before
         // the user has staged anything. Prefer the exact staged set whenever
         // it exists; otherwise describe the whole working-tree delta.
         let staged_diffs = repo.diff_staged()?;
-        let diffs = if staged_diffs.is_empty() {
-            repo.diff_unstaged()?
+        let (diffs, scope) = if staged_diffs.is_empty() {
+            (repo.diff_unstaged()?, ai::AiInputScope::Unstaged)
         } else {
-            staged_diffs
+            (staged_diffs, ai::AiInputScope::Staged)
         };
         let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-        ai::suggest_commit_message(
+        ai::suggest_commit_message_with_request(
             provider,
             repo.path(),
             &diffs,
             override_path.as_deref(),
+            Some(&cancel),
+            &request.sensitive_decision,
+            scope,
         )
         .map_err(CmdError::from_msg)
     })
-    .await
+    .await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 #[tauri::command(async)]
@@ -1328,8 +1338,13 @@ pub async fn repo_suggest_pull_request(
     provider: ai::AiProvider,
     openai_cli: Option<String>,
     anthropic_cli: Option<String>,
-) -> CmdResult<ai::PullRequestSuggestion> {
-    run_blocking("ai suggest pull request", move || {
+    request: ai::AiGenerationRequest,
+    state: State<'_, AppState>,
+) -> CmdResult<ai::AiGenerationOutcome<ai::PullRequestSuggestion>> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(request.op_id.clone());
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("ai suggest pull request", move || {
         let target_branch = target_branch.trim().to_string();
         if target_branch.is_empty() || target_branch.contains(['\r', '\n', '\0']) {
             return Err(CmdError::from_msg("Target branch is invalid".into()));
@@ -1364,17 +1379,21 @@ pub async fn repo_suggest_pull_request(
         let merge_base = repo.merge_base(&target_ref, "HEAD")?;
         let diffs = repo.diff_between(&merge_base, "HEAD")?;
         let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
-        ai::suggest_pull_request(
+        ai::suggest_pull_request_with_request(
             provider,
             repo.path(),
             &meta.branch,
             &target_branch,
             &diffs,
             override_path.as_deref(),
+            Some(&cancel),
+            &request.sensitive_decision,
         )
         .map_err(CmdError::from_msg)
     })
-    .await
+    .await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 impl CmdError {

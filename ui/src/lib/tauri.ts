@@ -3,6 +3,8 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import type {
   AiProvider,
   AiProviderStatus,
+  AiGenerationOutcome,
+  AiGenerationRequest,
   BaseBranch,
   BlameLine,
   CheckoutOutcome,
@@ -119,14 +121,16 @@ export const tauri = {
     path: string,
     targetBranch: string,
     provider: AiProvider,
+    request: AiGenerationRequest,
     openaiCli?: string | null,
     anthropicCli?: string | null,
-  ) => invoke<PullRequestSuggestion>('repo_suggest_pull_request', {
+  ) => invoke<AiGenerationOutcome<PullRequestSuggestion>>('repo_suggest_pull_request', {
     path,
     targetBranch,
     provider,
     openaiCli: openaiCli ?? null,
     anthropicCli: anthropicCli ?? null,
+    request,
   }),
   repoPullRequestActivity: (path: string, id: number) =>
     invoke<PullRequestActivitySnapshot>('repo_pull_request_activity', { path, id }),
@@ -491,14 +495,16 @@ export const tauri = {
   repoSuggestCommitMessage: (
     path: string,
     provider: AiProvider,
+    request: AiGenerationRequest,
     openaiCli?: string | null,
     anthropicCli?: string | null,
   ) =>
-    invoke<CommitMessageSuggestion>('repo_suggest_commit_message', {
+    invoke<AiGenerationOutcome<CommitMessageSuggestion>>('repo_suggest_commit_message', {
       path,
       provider,
       openaiCli: openaiCli ?? null,
       anthropicCli: anthropicCli ?? null,
+      request,
     }),
 };
 

@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
-import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, tauri } from '../lib/tauri';
-import type { PullRequestCreateOutcome, PullRequestProvider, Refs } from '../lib/types';
+import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
+import type {
+  AiSensitiveDecision,
+  AiSensitiveFile,
+  PullRequestCreateOutcome,
+  PullRequestProvider,
+  Refs,
+} from '../lib/types';
 import { useSettings } from '../stores/settings';
 
 function targetBranches(refs: Refs | null, sourceBranch: string, knownTargets: string[]): string[] {
@@ -49,9 +55,15 @@ export function PullRequestCreateDialog({
   const [busy, setBusy] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sensitivePrompt, setSensitivePrompt] = useState<{
+    fingerprint: string;
+    files: AiSensitiveFile[];
+  } | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
+  const requestRef = useRef<{ opId: string; target: string; provider: typeof aiProvider } | null>(null);
+  const suggestingRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -63,13 +75,33 @@ export function PullRequestCreateDialog({
     return () => previous?.focus?.();
   }, []);
 
+  function cancelSuggestion() {
+    const request = requestRef.current;
+    requestRef.current = null;
+    suggestingRef.current = false;
+    setSuggesting(false);
+    if (request) void tauri.repoCancelOp(request.opId);
+  }
+
+  function closeDialog() {
+    cancelSuggestion();
+    onClose();
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
+      if (event.key === 'Escape' && !busy) closeDialog();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [busy, onClose]);
+
+  useEffect(() => () => {
+    const request = requestRef.current;
+    requestRef.current = null;
+    suggestingRef.current = false;
+    if (request) void tauri.repoCancelOp(request.opId);
+  }, [path, targetBranch, aiProvider, openaiCli, anthropicCli]);
 
   function trapFocus(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -117,28 +149,39 @@ export function PullRequestCreateDialog({
     }
   }
 
-  async function fillWithAi() {
+  async function fillWithAi(sensitiveDecision: AiSensitiveDecision = { mode: 'scan' }) {
     const target = targetBranch.trim();
-    if (busy || suggesting) return;
+    if (busy || suggestingRef.current) return;
     if (!target) {
       setError('Choose a target branch before generating pull request content.');
       return;
     }
+    const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const request = { opId, target, provider: aiProvider };
+    requestRef.current = request;
+    suggestingRef.current = true;
     setSuggesting(true);
     setError(null);
+    setSensitivePrompt(null);
     try {
-      const suggestion = await tauri.repoSuggestPullRequest(
+      const outcome = await tauri.repoSuggestPullRequest(
         path,
         target,
         aiProvider,
+        { opId, sensitiveDecision, styleInstruction: null },
         openaiCli,
         anthropicCli,
       );
-      if (!mountedRef.current) return;
-      setTitle(suggestion.title);
-      setDescription(suggestion.description);
+      if (!mountedRef.current || requestRef.current !== request) return;
+      if (outcome.status === 'needs_confirmation') {
+        setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
+        return;
+      }
+      setTitle(outcome.suggestion.title);
+      setDescription(outcome.suggestion.description);
       window.requestAnimationFrame(() => titleRef.current?.focus());
     } catch (caught) {
+      if (requestRef.current !== request || isCancelled(caught)) return;
       const message = gitErrorHint(caught);
       if (message.startsWith(AI_AUTH_REQUIRED)) {
         try {
@@ -153,7 +196,11 @@ export function PullRequestCreateDialog({
         setError(`AI suggestion failed: ${message}`);
       }
     } finally {
-      if (mountedRef.current) setSuggesting(false);
+      if (requestRef.current === request) {
+        requestRef.current = null;
+        suggestingRef.current = false;
+        if (mountedRef.current) setSuggesting(false);
+      }
     }
   }
 
@@ -166,7 +213,7 @@ export function PullRequestCreateDialog({
     <div
       className="palette-backdrop"
       onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
+        if (event.target === event.currentTarget && !busy) closeDialog();
       }}
     >
       <div
@@ -180,7 +227,7 @@ export function PullRequestCreateDialog({
         <div className="clone-head">
           <Icon name="remote" size={15} />
           <span className="title">Create pull request</span>
-          <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={onClose}>×</button>
+          <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={closeDialog}>×</button>
         </div>
 
         <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
@@ -202,6 +249,7 @@ export function PullRequestCreateDialog({
                 {suggesting ? 'Generating…' : `${aiActionLabel} with ${aiProviderLabel}`}
               </button>
               <span>Uses committed changes against the target branch.</span>
+              {suggesting ? <button type="button" className="btn" onClick={cancelSuggestion}>Cancel</button> : null}
             </div>
 
             <label className="clone-field">
@@ -253,11 +301,21 @@ export function PullRequestCreateDialog({
               <span>Create as draft</span>
             </label>
 
-            {error ? <div className="clone-error" role="alert">{error}</div> : null}
+            {sensitivePrompt ? (
+              <div className="clone-error" role="alert">
+                <div>Potentially sensitive files require confirmation:</div>
+                <ul>{sensitivePrompt.files.map((file) => <li key={file.path}>{file.path}</li>)}</ul>
+                <div className="settings-row">
+                  <button type="button" className="btn primary" onClick={() => void fillWithAi({ mode: 'exclude', fingerprint: sensitivePrompt.fingerprint })}>Generate without them</button>
+                  <button type="button" className="btn" onClick={() => void fillWithAi({ mode: 'include', fingerprint: sensitivePrompt.fingerprint })}>Include and generate</button>
+                  <button type="button" className="btn" onClick={() => setSensitivePrompt(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : error ? <div className="clone-error" role="alert">{error}</div> : null}
           </div>
 
           <div className="clone-foot">
-            <button type="button" className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+            <button type="button" className="btn" disabled={busy} onClick={closeDialog}>Cancel</button>
             <button type="submit" className="btn primary" disabled={busy || suggesting}>
               {busy ? 'Creating…' : 'Create pull request'}
             </button>

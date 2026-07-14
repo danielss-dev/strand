@@ -1,6 +1,10 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 
 const MAX_STDOUT_BYTES: usize = 1_048_576;
@@ -11,6 +15,23 @@ const MAX_STDERR_BYTES: usize = 262_144;
 pub const STATUS_TIMEOUT: Duration = Duration::from_secs(30);
 /// Ceiling for a full model round-trip when suggesting a commit message.
 pub const SUGGEST_TIMEOUT: Duration = Duration::from_secs(120);
+
+#[derive(Clone, Default)]
+pub struct AiCancelHandle(Arc<AtomicBool>);
+
+impl AiCancelHandle {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 /// Resolve the Codex CLI binary: user override, then `codex` on PATH.
 pub fn resolve_codex(override_path: Option<&str>) -> Option<PathBuf> {
@@ -110,6 +131,17 @@ pub fn run_capture(
     stdin_data: Option<&str>,
     timeout: Duration,
 ) -> Result<String, String> {
+    run_capture_cancellable(program, args, cwd, stdin_data, timeout, None)
+}
+
+pub fn run_capture_cancellable(
+    program: &Path,
+    args: &[&str],
+    cwd: Option<&Path>,
+    stdin_data: Option<&str>,
+    timeout: Duration,
+    cancel: Option<&AiCancelHandle>,
+) -> Result<String, String> {
     let mut cmd = base_command(program, true);
     cmd.args(args);
     if let Some(cwd) = cwd {
@@ -123,9 +155,17 @@ pub fn run_capture(
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
     let mut child = cmd
         .spawn()
         .map_err(|e| spawn_error(program, &e.to_string()))?;
+    #[cfg(windows)]
+    let job = WindowsJob::assign(&child)?;
 
     // Feed stdin and drain both output pipes on threads: a full pipe buffer
     // (or a child that never reads stdin) must not deadlock the wait loop.
@@ -135,25 +175,36 @@ pub fn run_capture(
             let _ = pipe.write_all(data.as_bytes());
         });
     }
+    let output_exceeded = Arc::new(AtomicBool::new(false));
     let stdout_thread = child
         .stdout
         .take()
-        .map(|pipe| drain_pipe(pipe, MAX_STDOUT_BYTES));
+        .map(|pipe| drain_pipe(pipe, MAX_STDOUT_BYTES, output_exceeded.clone()));
     let stderr_thread = child
         .stderr
         .take()
-        .map(|pipe| drain_pipe(pipe, MAX_STDERR_BYTES));
+        .map(|pipe| drain_pipe(pipe, MAX_STDERR_BYTES, output_exceeded.clone()));
 
-    let Some(status) = wait_with_timeout(&mut child, timeout) else {
-        let _ = child.kill();
+    let wait = wait_with_timeout(&mut child, timeout, cancel, &output_exceeded);
+    let Some(status) = wait.status else {
+        #[cfg(unix)]
+        kill_process_tree(&mut child);
+        #[cfg(windows)]
+        kill_process_tree(&mut child, &job);
         let _ = child.wait();
-        let _ = join_pipe(stdout_thread);
-        let _ = join_pipe(stderr_thread);
-        return Err(format!(
-            "`{}` timed out after {}s",
-            program.display(),
-            timeout.as_secs()
-        ));
+        let stdout = join_pipe(stdout_thread);
+        let stderr = join_pipe(stderr_thread);
+        return Err(if wait.cancelled {
+            "cancelled".into()
+        } else if wait.output_exceeded {
+            output_limit_error(program, &stdout, &stderr)
+        } else {
+            format!(
+                "`{}` timed out after {}s",
+                program.display(),
+                timeout.as_secs()
+            )
+        });
     };
 
     let stdout = join_pipe(stdout_thread);
@@ -192,6 +243,7 @@ struct CapturedOutput {
 fn drain_pipe<R: Read + Send + 'static>(
     mut pipe: R,
     max_bytes: usize,
+    output_exceeded: Arc<AtomicBool>,
 ) -> std::thread::JoinHandle<CapturedOutput> {
     std::thread::spawn(move || {
         let mut retained = Vec::new();
@@ -203,7 +255,10 @@ fn drain_pipe<R: Read + Send + 'static>(
                 Ok(read) => {
                     let remaining = max_bytes.saturating_sub(retained.len());
                     retained.extend_from_slice(&chunk[..read.min(remaining)]);
-                    exceeded |= read > remaining;
+                    if read > remaining {
+                        exceeded = true;
+                        output_exceeded.store(true, Ordering::Release);
+                    }
                 }
             }
         }
@@ -223,15 +278,130 @@ fn join_pipe(handle: Option<std::thread::JoinHandle<CapturedOutput>>) -> Capture
         })
 }
 
-fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
+struct WaitOutcome {
+    status: Option<ExitStatus>,
+    cancelled: bool,
+    output_exceeded: bool,
+}
+
+fn wait_with_timeout(
+    child: &mut Child,
+    timeout: Duration,
+    cancel: Option<&AiCancelHandle>,
+    output_exceeded: &AtomicBool,
+) -> WaitOutcome {
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Some(status),
-            Ok(None) if Instant::now() >= deadline => return None,
+            Ok(Some(status)) => {
+                return WaitOutcome {
+                    status: Some(status),
+                    cancelled: false,
+                    output_exceeded: false,
+                }
+            }
+            Ok(None) if cancel.is_some_and(AiCancelHandle::is_cancelled) => {
+                return WaitOutcome {
+                    status: None,
+                    cancelled: true,
+                    output_exceeded: false,
+                };
+            }
+            Ok(None) if output_exceeded.load(Ordering::Acquire) => {
+                return WaitOutcome {
+                    status: None,
+                    cancelled: false,
+                    output_exceeded: true,
+                };
+            }
+            Ok(None) if Instant::now() >= deadline => {
+                return WaitOutcome {
+                    status: None,
+                    cancelled: false,
+                    output_exceeded: false,
+                };
+            }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(_) => return None,
+            Err(_) => {
+                return WaitOutcome {
+                    status: None,
+                    cancelled: false,
+                    output_exceeded: false,
+                }
+            }
         }
+    }
+}
+
+fn output_limit_error(program: &Path, stdout: &CapturedOutput, stderr: &CapturedOutput) -> String {
+    if stdout.exceeded {
+        format!("`{}` produced more than 1 MB on stdout", program.display())
+    } else if stderr.exceeded {
+        format!(
+            "`{}` produced more than 256 KB on stderr",
+            program.display()
+        )
+    } else {
+        format!("`{}` exceeded Strand's output limit", program.display())
+    }
+}
+
+#[cfg(unix)]
+fn kill_process_tree(child: &mut Child) {
+    // SAFETY: the child was created as the leader of its own process group.
+    unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
+}
+
+#[cfg(windows)]
+fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
+    job.terminate();
+    let _ = child.kill();
+}
+
+#[cfg(windows)]
+struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+impl WindowsJob {
+    fn assign(child: &Child) -> Result<Self, String> {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        };
+
+        // SAFETY: Win32 handles are checked and closed on every failure path.
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return Err("Could not create a Windows job for the AI provider".into());
+            }
+            let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, child.id());
+            if process.is_null() {
+                CloseHandle(job);
+                return Err("Could not open the AI provider process for cancellation".into());
+            }
+            let assigned = AssignProcessToJobObject(job, process);
+            CloseHandle(process);
+            if assigned == 0 {
+                CloseHandle(job);
+                return Err("Could not attach the AI provider to its cancellation job".into());
+            }
+            Ok(Self(job))
+        }
+    }
+
+    fn terminate(&self) {
+        // SAFETY: `self.0` is a live job handle owned by this wrapper.
+        unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1) };
+    }
+}
+
+#[cfg(windows)]
+impl Drop for WindowsJob {
+    fn drop(&mut self) {
+        // SAFETY: this wrapper uniquely owns the job handle.
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
     }
 }
 
@@ -364,5 +534,28 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("timed out"), "unexpected error: {err}");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn run_capture_cancels_process_group() {
+        let cancel = AiCancelHandle::new();
+        let trigger = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            trigger.cancel();
+        });
+        let started = Instant::now();
+        let err = run_capture_cancellable(
+            Path::new("/bin/sh"),
+            &["-c", "sleep 30 & wait"],
+            None,
+            None,
+            SUGGEST_TIMEOUT,
+            Some(&cancel),
+        )
+        .unwrap_err();
+        assert_eq!(err, "cancelled");
+        assert!(started.elapsed() < Duration::from_secs(3));
     }
 }

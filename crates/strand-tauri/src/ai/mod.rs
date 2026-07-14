@@ -6,8 +6,11 @@
 pub(crate) mod bin;
 mod claude;
 mod codex;
+mod input;
 mod parse;
 mod prompt;
+
+pub use input::{AiGenerationOutcome, AiGenerationRequest, AiInputScope, AiSensitiveDecision};
 
 use serde::{Deserialize, Serialize};
 use strand_core::diff::FileDiff;
@@ -21,6 +24,7 @@ trait AiProviderAdapter: Sync {
         repo_path: &std::path::Path,
         prompt: &str,
         cli_override: Option<&str>,
+        cancel: Option<&bin::AiCancelHandle>,
     ) -> Result<String, String>;
 }
 
@@ -120,42 +124,86 @@ pub fn provider_logout(provider: AiProvider, cli_override: Option<&str>) -> Resu
     adapter(provider).logout(cli_override)
 }
 
-pub fn suggest_commit_message(
+pub fn suggest_commit_message_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
     diffs: &[FileDiff],
     cli_override: Option<&str>,
-) -> Result<CommitMessageSuggestion, String> {
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+    scope: AiInputScope,
+) -> Result<AiGenerationOutcome<CommitMessageSuggestion>, String> {
     if diffs.is_empty() {
         return Err("Nothing changed — make a change before generating a message.".into());
     }
+    let prepared = match input::prepare_input(diffs, scope, decision)? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            coverage,
+            sensitive_files,
+        } => {
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            })
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",
-        prompt::build_prompt(diffs)
+        prompt::build_prompt(&prepared.diffs)
     );
-    let raw = adapter(provider).suggest(repo_path, &text, cli_override)?;
-    parse::parse_suggestion(&raw)
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let suggestion = parse::parse_suggestion(&raw)?;
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage: prepared.coverage,
+        provider,
+    })
 }
 
-pub fn suggest_pull_request(
+#[allow(clippy::too_many_arguments)]
+pub fn suggest_pull_request_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
     source_branch: &str,
     target_branch: &str,
     diffs: &[FileDiff],
     cli_override: Option<&str>,
-) -> Result<PullRequestSuggestion, String> {
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+) -> Result<AiGenerationOutcome<PullRequestSuggestion>, String> {
     if diffs.is_empty() {
         return Err(format!(
             "No committed changes were found between {target_branch} and {source_branch}."
         ));
     }
+    let prepared = match input::prepare_input(diffs, AiInputScope::Committed, decision)? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            coverage,
+            sensitive_files,
+        } => {
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            })
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"title\":\"...\",\"description\":\"...\"}}",
-        prompt::build_pull_request_prompt(source_branch, target_branch, diffs)
+        prompt::build_pull_request_prompt(source_branch, target_branch, &prepared.diffs)
     );
-    let raw = adapter(provider).suggest(repo_path, &text, cli_override)?;
-    parse::parse_pull_request_suggestion(&raw)
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let suggestion = parse::parse_pull_request_suggestion(&raw)?;
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage: prepared.coverage,
+        provider,
+    })
 }
 
 #[cfg(test)]

@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use super::bin::{resolve_claude, run_capture, spawn_detached, STATUS_TIMEOUT, SUGGEST_TIMEOUT};
+use super::bin::{
+    resolve_claude, run_capture, run_capture_cancellable, spawn_detached, AiCancelHandle,
+    STATUS_TIMEOUT, SUGGEST_TIMEOUT,
+};
 use super::AiProviderStatus;
 
 pub struct Claude;
@@ -24,8 +27,9 @@ impl super::AiProviderAdapter for Claude {
         repo_path: &Path,
         prompt: &str,
         cli_override: Option<&str>,
+        cancel: Option<&AiCancelHandle>,
     ) -> Result<String, String> {
-        suggest(repo_path, prompt, cli_override)
+        suggest(repo_path, prompt, cli_override, cancel)
     }
 }
 
@@ -106,13 +110,14 @@ pub fn suggest(
     repo_path: &Path,
     prompt: &str,
     cli_override: Option<&str>,
+    cancel: Option<&AiCancelHandle>,
 ) -> Result<String, String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
 
     // The prompt travels via stdin (`claude -p` reads it there): it can
     // exceed the Windows command-line ceiling and, when the CLI is an npm
     // `.cmd` shim run through `cmd /C`, multi-line args would be re-parsed.
-    match run_capture(
+    match run_capture_cancellable(
         &bin,
         &[
             "-p",
@@ -131,6 +136,7 @@ pub fn suggest(
         Some(repo_path),
         Some(prompt),
         SUGGEST_TIMEOUT,
+        cancel,
     ) {
         Ok(out) => extract_claude_print_output(out),
         Err(err) => {

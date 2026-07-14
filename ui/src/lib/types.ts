@@ -595,3 +595,52 @@ export interface CommitMessageSuggestion {
   subject: string;
   body: string | null;
 }
+
+export type AiSensitiveDecision =
+  | { mode: 'scan' }
+  | { mode: 'exclude'; fingerprint: string }
+  | { mode: 'include'; fingerprint: string };
+
+export interface AiGenerationRequest {
+  opId: string;
+  sensitiveDecision: AiSensitiveDecision;
+  styleInstruction: string | null;
+}
+
+export type AiInputScope = 'staged' | 'unstaged' | 'committed';
+
+export interface AiInputCoverage {
+  scope: AiInputScope;
+  totalFiles: number;
+  manifestFiles: number;
+  patchFiles: number;
+  omittedPatchFiles: number;
+  truncatedPatchFiles: number;
+  sensitiveExcludedFiles: number;
+}
+
+export type AiSensitiveKind =
+  | 'environment_file'
+  | 'credential_file'
+  | 'private_key'
+  | 'certificate'
+  | 'credential_pattern';
+
+export interface AiSensitiveFile {
+  path: string;
+  kinds: AiSensitiveKind[];
+}
+
+export type AiGenerationOutcome<T> =
+  | {
+      status: 'needs_confirmation';
+      fingerprint: string;
+      coverage: AiInputCoverage;
+      sensitiveFiles: AiSensitiveFile[];
+    }
+  | {
+      status: 'generated';
+      suggestion: T;
+      coverage: AiInputCoverage;
+      provider: AiProvider;
+    };
