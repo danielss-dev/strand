@@ -270,7 +270,7 @@ export function PullRequestCreateDialog({
         <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <div className="clone-body">
             <p className="stash-blurb">
-              Create on {providerLabel} from <code>{sourceBranch}</code>. Strand will not push the branch; it must already exist on the remote.
+              Create on {providerLabel} from <code>{sourceBranch}</code>. If the branch is not on the repository remote yet, Strand will push it first.
             </p>
 
             <div className="pr-ai-fill-row">

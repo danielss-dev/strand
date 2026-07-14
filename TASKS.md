@@ -1290,14 +1290,15 @@ tree: watch the agent work, review fast, accept or reject safely.
     (`repo_pull_request_create`, `PullRequestCreateDialog`): the PR toolbar and
     command palette create GitHub or Azure DevOps PRs with title, description,
     target branch, and draft state through the signed-in provider CLI, then
-    open and automatically follow the result. Strand never silently pushes the
-    source branch as part of PR creation. **Fill with Codex/Claude Code** uses
+    open and automatically follow the result. When the checked-out source branch
+    is missing from the detected remote, Strand pushes current `HEAD` first and
+    sets upstream only when none exists (`push_current_to_remote`). **Fill with Codex/Claude Code** uses
     the configured AI subscription to draft editable title/description text
     from the committed merge-base diff (`repo_suggest_pull_request`). The
     creation shell is viewport-bounded with a scrolling body and pinned footer,
     so resizing a long description cannot hide Cancel/Create PR. GitHub's
-    missing-head/base GraphQL failures are translated into actionable
-    push-source/select-target guidance instead of exposing raw SHA errors.
+    missing-head/base GraphQL failures are translated into actionable guidance
+    instead of exposing raw SHA errors.
   - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
     list/detail/tabs/drafts/scroll stay mounted during updates and failures;
     lightweight activity gates rich-detail reloads, patches reload only for a

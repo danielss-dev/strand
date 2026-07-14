@@ -1632,8 +1632,9 @@ command palette now open a keyboard-operable creation dialog for the checked-out
 branch. GitHub and Azure DevOps creation share one typed IPC path and support a
 title, Markdown description, target branch, and draft state through the
 provider CLI. A successful PR opens immediately and joins the follow monitor;
-creation deliberately requires the source branch to exist remotely instead of
-hiding an implicit push. The dialog can also fill or replace its editable title
+when the checked-out source branch is absent from the detected remote, creation
+first publishes current `HEAD` with a non-force push and preserves any existing
+upstream. The dialog can also fill or replace its editable title
 and Markdown description through the configured Codex or Claude Code CLI. That
 read-only suggestion uses committed changes from the target branch's merge base
 to local `HEAD`; it never includes unstaged drafts or creates the PR itself.

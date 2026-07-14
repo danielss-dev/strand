@@ -25,15 +25,15 @@ GitHub or Azure DevOps pull request from the checked-out branch with a title,
 Markdown description, target branch, and optional draft state. After creation,
 Strand opens the new PR and follows it automatically.
 
-Strand does not push as part of this action. Push the checked-out branch first
-so it exists on the provider; if it is missing, the provider error stays in the
-dialog with guidance to push the source branch, and no local state is changed.
-Authentication continues to use the
-signed-in `gh` or `az` CLI.
+If the checked-out branch does not exist on the detected repository remote,
+Strand pushes it before asking the provider to create the PR. A branch without
+an upstream starts tracking that remote branch; an existing upstream on another
+remote is preserved. A failed push leaves the dialog open and the PR is not
+created. Authentication continues to use the signed-in `gh` or `az` CLI.
 
 “Draft pull request with AI…” in the command palette opens the same dialog,
-resolves its default target, and then starts generation. It still does not push
-or create anything automatically.
+resolves its default target, and then starts generation. AI generation itself
+does not push or create anything automatically.
 
 Choose **Fill with Codex** or **Fill with Claude Code** to draft both editable
 fields using the AI provider selected in **Settings → AI**. Strand compares the

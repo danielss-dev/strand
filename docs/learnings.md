@@ -1233,22 +1233,26 @@ unknown and retain the last complete baseline.
 
 ---
 
-## Pull-request creation never implies a push
+## Pull-request creation publishes a missing source branch deliberately
 
-**Rule.** Creating a hosted pull request is a provider write against a branch
-that already exists remotely. Do not silently push, set an upstream, or publish
-other local commits as part of that action.
+**Rule.** Creating a hosted pull request may publish the checked-out source
+branch when that exact branch is absent from the detected repository remote.
+Push only current `HEAD`, never force, and invoke the provider only after the
+push succeeds. Set the detected remote as upstream only when no upstream exists;
+preserve an existing upstream on another remote.
 
-**Why.** A push changes Git state and can publish more work than the creation
-dialog describes. Keeping it separate makes the source commit and provider
-failure predictable, and preserves the user's ability to inspect or amend the
-branch before publishing it.
+**Why.** PR creation cannot succeed without a hosted source branch. Making the
+publish step part of the explicit Create action removes a predictable dead end,
+while checking the active branch and using a non-force push bounds the write to
+the branch and commit named by the dialog.
 
-**How to apply.** The creation UI names the checked-out source branch, explains
-that it must already exist remotely, and sends only title, description, target,
-and draft state through `repo_pull_request_create`. Surface missing-branch and
-authentication failures inline. After success, query the new PR by branch,
-open it, and enroll it in the existing follow monitor.
+**How to apply.** The creation UI names the checked-out source branch and
+explains that Strand will push it if missing. Before provider creation, verify
+that the requested source still equals the checked-out branch, inspect the
+local remote-tracking refs, and explicitly push `HEAD` to the detected remote
+only when its branch is absent. Surface push and authentication failures inline.
+After success, query the new PR by branch, open it, and enroll it in the existing
+follow monitor.
 
 AI-assisted PR writing follows the same separation. Build its prompt from the
 committed merge-base-to-`HEAD` diff only, keep Codex in its read-only sandbox

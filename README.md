@@ -64,8 +64,9 @@ keyboard alone, and the mouse stays first-class.
   for the active repository, with the active PR for your checked-out branch
   opening and being followed automatically even before the PR view is opened.
   Create a PR or draft for the checked-out branch from the toolbar or command
-  palette, choosing its title, description, and target branch without an
-  implicit push. Optionally draft the editable title and description from the
+  palette, choosing its title, description, and target branch; Strand publishes
+  the checked-out branch first when it is not on the repository remote yet.
+  Optionally draft the editable title and description from the
   committed branch delta using the configured Codex or Claude Code subscription.
   Persistent Follow controls and native desktop notifications surface new
   comments, review decisions, failed checks, pushes, and merged/closed state.
