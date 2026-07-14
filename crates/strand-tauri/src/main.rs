@@ -51,6 +51,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::default().build())
         .plugin(tauri_plugin_process::init())
@@ -77,6 +78,9 @@ fn main() {
             commands::repo_search_log,
             commands::repo_refs,
             commands::repo_pull_requests,
+            commands::repo_pull_request_for_branch,
+            commands::repo_pull_request_create,
+            commands::repo_pull_request_activity,
             commands::repo_pull_request,
             commands::repo_pull_request_diff,
             commands::repo_pull_request_comment,
@@ -170,6 +174,7 @@ fn main() {
             commands::ai_provider_login,
             commands::ai_provider_logout,
             commands::repo_suggest_commit_message,
+            commands::repo_suggest_pull_request,
             commands::crash_report_check,
         ])
         .setup(|app| {

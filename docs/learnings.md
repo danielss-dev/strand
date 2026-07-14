@@ -1014,7 +1014,11 @@ to `claude` is the supported path for Claude Code users.
   sandbox) so suggestion runs can't mutate the repo.
 - Don't gate Suggest on upfront sign-in — run the vendor CLI first; on failure,
   check `auth status` / `login status` on the bin and only then open the login
-  flow (`AI_AUTH_REQUIRED` prefix from Rust → UI calls `ai_provider_login`).
+  flow (`AI_AUTH_REQUIRED` prefix from Rust → UI calls `ai_provider_login`). A
+  failed status command is **not** automatically a logged-out result: a launcher
+  can exist while its packaged executable is missing or corrupt. Preserve that
+  health error, and preflight detached login flows with `--version`, so the UI
+  never claims sign-in started when the vendor CLI could not run.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
   **Check CLI status** button — no auto auth probe on open. Optional manual
   sign-in/out per CLI remains.
@@ -1175,3 +1179,52 @@ completion requests include `lastMergeSourceCommit`. Keep required checks,
 reviews, queues, and branch policies provider-authoritative, preserve their
 failure text next to the initiating control, and refresh the PR after a
 successful request because queued completion may leave it active temporarily.
+
+---
+
+## Background PR refreshes use activity snapshots, never patches
+
+**Rule.** A followed pull request is monitored with its provider-neutral
+activity snapshot only: identity/state/head SHA, stable comment and review IDs,
+and normalized check or policy states. Background work must never request or
+parse the hosted patch, and a shallow-list refresh must not invalidate the
+currently mounted detail.
+
+**Why.** Pull-request patches are the largest provider response and the most
+expensive UI resource. Polling them would waste provider/CLI work, repeatedly
+parse large diffs, and destroy the reviewer's focus, scroll, file selection, and
+unsent drafts. Provider failures also must not turn a previously known failure
+green or erase a successful activity baseline.
+
+**How to apply.** Poll immediately after hydration, at a modest interval, and
+on focus without overlapping cycles. Share in-flight activity calls with the
+visible PR. Revalidate rich detail only when the activity fingerprint changes;
+reload the patch only when the head SHA changes. Keep the old patch visible
+while that replacement loads or fails, label it stale, and disable writes that
+depend on exact patch coordinates. Treat incomplete policy/check reads as
+unknown and retain the last complete baseline.
+
+---
+
+## Pull-request creation never implies a push
+
+**Rule.** Creating a hosted pull request is a provider write against a branch
+that already exists remotely. Do not silently push, set an upstream, or publish
+other local commits as part of that action.
+
+**Why.** A push changes Git state and can publish more work than the creation
+dialog describes. Keeping it separate makes the source commit and provider
+failure predictable, and preserves the user's ability to inspect or amend the
+branch before publishing it.
+
+**How to apply.** The creation UI names the checked-out source branch, explains
+that it must already exist remotely, and sends only title, description, target,
+and draft state through `repo_pull_request_create`. Surface missing-branch and
+authentication failures inline. After success, query the new PR by branch,
+open it, and enroll it in the existing follow monitor.
+
+AI-assisted PR writing follows the same separation. Build its prompt from the
+committed merge-base-to-`HEAD` diff only, keep Codex in its read-only sandbox
+and Claude Code tools disabled, and return editable text without invoking the
+host provider. Never describe staged/unstaged work as though it were already in
+the pull request.

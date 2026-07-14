@@ -1,4 +1,4 @@
-use super::CommitMessageSuggestion;
+use super::{CommitMessageSuggestion, PullRequestSuggestion};
 
 /// Extract `{ subject, body }` from CLI stdout — JSON object, fenced JSON, or
 /// embedded JSON in prose.
@@ -29,13 +29,37 @@ pub fn parse_suggestion(raw: &str) -> Result<CommitMessageSuggestion, String> {
     ))
 }
 
+/// Extract and normalize a PR title/description from provider output.
+pub fn parse_pull_request_suggestion(raw: &str) -> Result<PullRequestSuggestion, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("AI returned an empty response.".into());
+    }
+
+    let parsed = serde_json::from_str::<PullRequestSuggestion>(trimmed)
+        .ok()
+        .or_else(|| {
+            extract_json_object(trimmed)
+                .and_then(|json| serde_json::from_str::<PullRequestSuggestion>(&json).ok())
+        })
+        .or_else(|| {
+            extract_fenced_json(trimmed)
+                .and_then(|json| serde_json::from_str::<PullRequestSuggestion>(&json).ok())
+        })
+        .ok_or_else(|| {
+            format!(
+                "Could not parse pull request content from AI output. Expected JSON with title and description fields.\n\n{trimmed}"
+            )
+        })?;
+    normalize_pull_request(parsed)
+}
+
 fn normalize(mut s: CommitMessageSuggestion) -> Result<CommitMessageSuggestion, String> {
     s.subject = s.subject.trim().to_string();
     if s.subject.is_empty() {
         return Err("AI returned an empty subject.".into());
     }
-    if s.subject.len() > 72 {
-        s.subject.truncate(72);
+    if truncate_utf8_bytes(&mut s.subject, 72) {
         s.subject = s.subject.trim_end().to_string();
     }
     s.body = s
@@ -43,6 +67,33 @@ fn normalize(mut s: CommitMessageSuggestion) -> Result<CommitMessageSuggestion, 
         .map(|b| b.trim().to_string())
         .filter(|b| !b.is_empty());
     Ok(s)
+}
+
+fn normalize_pull_request(
+    mut suggestion: PullRequestSuggestion,
+) -> Result<PullRequestSuggestion, String> {
+    suggestion.title = suggestion.title.trim().to_string();
+    truncate_utf8_bytes(&mut suggestion.title, 512);
+    if suggestion.title.is_empty() {
+        return Err("AI returned an empty pull request title.".into());
+    }
+    suggestion.description = suggestion.description.trim().to_string();
+    if suggestion.description.len() > 65_536 {
+        return Err("AI returned a pull request description over Strand's 64 KB limit.".into());
+    }
+    Ok(suggestion)
+}
+
+fn truncate_utf8_bytes(value: &mut String, max_bytes: usize) -> bool {
+    if value.len() <= max_bytes {
+        return false;
+    }
+    let mut end = max_bytes;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.truncate(end);
+    true
 }
 
 /// Find the first `{ ... }` object in text (brace-balanced, naive string skip).
@@ -123,5 +174,31 @@ mod tests {
         let raw = format!(r#"{{"subject":"{long}","body":null}}"#);
         let s = parse_suggestion(&raw).unwrap();
         assert!(s.subject.len() <= 72);
+    }
+
+    #[test]
+    fn parses_pull_request_json_in_prose() {
+        let raw = "Draft:\n{\"title\":\" Add PR creation \",\"description\":\"## Summary\\n\\n- Add dialog\"}\nDone.";
+        let suggestion = parse_pull_request_suggestion(raw).unwrap();
+        assert_eq!(suggestion.title, "Add PR creation");
+        assert!(suggestion.description.contains("Add dialog"));
+    }
+
+    #[test]
+    fn rejects_empty_pull_request_title() {
+        let raw = r#"{"title":" ","description":"Details"}"#;
+        assert!(parse_pull_request_suggestion(raw).is_err());
+    }
+
+    #[test]
+    fn truncates_pull_request_title_on_a_utf8_boundary() {
+        let raw = serde_json::json!({
+            "title": "é".repeat(300),
+            "description": "Details"
+        })
+        .to_string();
+        let suggestion = parse_pull_request_suggestion(&raw).unwrap();
+        assert!(suggestion.title.len() <= 512);
+        assert!(suggestion.title.is_char_boundary(suggestion.title.len()));
     }
 }

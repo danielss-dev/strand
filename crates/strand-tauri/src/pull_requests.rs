@@ -20,7 +20,11 @@ use crate::ai::bin::{base_command, resolve_cli};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
+const MAX_PR_DESCRIPTION_BYTES: usize = 65_536;
+const MAX_PR_TITLE_BYTES: usize = 512;
 const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
+const GITHUB_BRANCH_STATE: &str = "open";
+const AZURE_BRANCH_STATUS: &str = "active";
 const GITHUB_LIST_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
     "url,reviewDecision"
@@ -30,6 +34,27 @@ const GITHUB_DETAIL_FIELDS: &str = concat!(
     "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
     "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
 );
+const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      number title state url updatedAt headRefName headRefOid
+      comments(last: 100) { nodes { id author { login } } }
+      reviews(last: 100) { nodes { id state author { login } } }
+      reviewThreads(last: 100) {
+        nodes { comments(last: 100) { nodes { id author { login } } } }
+      }
+      statusCheckRollup {
+        contexts(first: 100) {
+          nodes {
+            __typename
+            ... on CheckRun { databaseId name status conclusion }
+            ... on StatusContext { id context state }
+          }
+        }
+      }
+    }
+  }
+}"#;
 const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
@@ -137,6 +162,7 @@ pub struct PullRequest {
     pub labels: Vec<String>,
     pub reviewers: Vec<PullRequestReviewer>,
     pub checks: Vec<PullRequestCheck>,
+    pub checks_complete: bool,
     pub comments: Vec<PullRequestComment>,
     pub review_threads: Vec<PullRequestReviewThread>,
 }
@@ -145,6 +171,56 @@ pub struct PullRequest {
 pub struct PullRequestList {
     pub repository: PullRequestRepository,
     pub pull_requests: Vec<PullRequest>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestBranchMatch {
+    pub repository: PullRequestRepository,
+    pub pull_request: PullRequest,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestCreateOutcome {
+    pub id: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestActivityComment {
+    pub id: String,
+    pub author: String,
+    pub kind: String,
+    pub is_system: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestActivityReview {
+    pub id: String,
+    pub author: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestActivityCheck {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestActivitySnapshot {
+    pub repository: PullRequestRepository,
+    pub id: u64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub source_branch: String,
+    pub source_commit: String,
+    pub updated_at: String,
+    pub comments: Vec<PullRequestActivityComment>,
+    pub reviews: Vec<PullRequestActivityReview>,
+    pub checks: Vec<PullRequestActivityCheck>,
+    pub checks_complete: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -176,6 +252,69 @@ pub fn list(path: &str) -> Result<PullRequestList> {
             project,
             repo,
         } => list_azure(path, remote, organization, project, repo),
+    }
+}
+
+pub fn for_branch(path: &str, branch: &str) -> Result<Option<PullRequestBranchMatch>> {
+    let (remote, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => for_branch_github(path, remote, owner, repo, branch),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => for_branch_azure(path, remote, organization, project, repo, branch),
+    }
+}
+
+pub fn create(
+    path: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    validate_create(source_branch, target_branch, title, description)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => create_github(
+            path,
+            &owner,
+            &repo,
+            source_branch,
+            target_branch,
+            title,
+            description,
+            is_draft,
+        ),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => create_azure(
+            path,
+            &organization,
+            &project,
+            &repo,
+            source_branch,
+            target_branch,
+            title,
+            description,
+            is_draft,
+        ),
+    }
+}
+
+pub fn activity(path: &str, id: u64) -> Result<PullRequestActivitySnapshot> {
+    let (remote, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => activity_github(path, remote, owner, repo, id),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => activity_azure(path, remote, organization, project, repo, id),
     }
 }
 
@@ -266,9 +405,19 @@ pub fn merge(
         HostRepo::GitHub { owner, repo } => {
             merge_github(path, &owner, &repo, id, strategy, expected_head)
         }
-        HostRepo::Azure { organization, project, repo } => {
-            merge_azure(path, &organization, &project, &repo, id, strategy, expected_head)
-        }
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => merge_azure(
+            path,
+            &organization,
+            &project,
+            &repo,
+            id,
+            strategy,
+            expected_head,
+        ),
     }
 }
 
@@ -326,6 +475,138 @@ fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result
     })
 }
 
+fn for_branch_github(
+    cwd: &str,
+    remote: String,
+    owner: String,
+    repo: String,
+    branch: &str,
+) -> Result<Option<PullRequestBranchMatch>> {
+    let slug = format!("{owner}/{repo}");
+    let branch = branch.strip_prefix("refs/heads/").unwrap_or(branch);
+    let output = run_command(
+        cwd,
+        "gh",
+        &[
+            "pr",
+            "list",
+            "--repo",
+            &slug,
+            "--head",
+            branch,
+            "--state",
+            GITHUB_BRANCH_STATE,
+            "--limit",
+            "1",
+            "--json",
+            GITHUB_LIST_FIELDS,
+        ],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let values: Vec<Value> = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
+    Ok(values
+        .first()
+        .and_then(parse_github_pr)
+        .map(|pull_request| PullRequestBranchMatch {
+            repository: PullRequestRepository {
+                provider: PullRequestProvider::GitHub,
+                remote,
+                label: slug,
+            },
+            pull_request,
+        }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_github(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    let slug = format!("{owner}/{repo}");
+    let source_branch = branch_name(source_branch.to_string());
+    let target_branch = branch_name(target_branch.to_string());
+    let mut args = vec![
+        "pr",
+        "create",
+        "--repo",
+        &slug,
+        "--head",
+        &source_branch,
+        "--base",
+        &target_branch,
+        "--title",
+        title,
+        "--body-file",
+        "-",
+    ];
+    if is_draft {
+        args.push("--draft");
+    }
+    let output = run_command_input(
+        cwd,
+        "gh",
+        &args,
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(description.as_bytes()),
+    )?;
+    let url = String::from_utf8(output)
+        .map_err(|error| format!("GitHub CLI returned invalid text: {error}"))?
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let id = url
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| "GitHub created the pull request but returned no usable PR URL".to_string())?;
+    Ok(PullRequestCreateOutcome { id, url })
+}
+
+fn activity_github(
+    cwd: &str,
+    remote: String,
+    owner: String,
+    repo: String,
+    id: u64,
+) -> Result<PullRequestActivitySnapshot> {
+    let query = format!("query={GITHUB_ACTIVITY_QUERY}");
+    let owner_arg = format!("owner={owner}");
+    let repo_arg = format!("repo={repo}");
+    let number = format!("number={id}");
+    let output = run_command(
+        cwd,
+        "gh",
+        &[
+            "api", "graphql", "-f", &query, "-F", &owner_arg, "-F", &repo_arg, "-F", &number,
+        ],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid activity JSON: {error}"))?;
+    let pull_request = value
+        .pointer("/data/repository/pullRequest")
+        .ok_or_else(|| format!("GitHub returned no activity data for PR #{id}"))?;
+    parse_github_activity(
+        pull_request,
+        PullRequestRepository {
+            provider: PullRequestProvider::GitHub,
+            remote,
+            label: format!("{owner}/{repo}"),
+        },
+    )
+}
+
 fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<PullRequest> {
     let slug = format!("{owner}/{repo}");
     let id_string = id.to_string();
@@ -347,6 +628,7 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
     let mut pull_request = parse_github_pr(&value)
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
+    pull_request.checks_complete = true;
     let review_threads = github_review_threads(cwd, &owner, &repo, id)?;
     pull_request.comments.extend(
         review_threads
@@ -535,6 +817,116 @@ fn list_azure(
     })
 }
 
+fn for_branch_azure(
+    cwd: &str,
+    remote: String,
+    organization: String,
+    project: String,
+    repo: String,
+    branch: &str,
+) -> Result<Option<PullRequestBranchMatch>> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let branch = branch.strip_prefix("refs/heads/").unwrap_or(branch);
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "list",
+            "--organization",
+            &organization_url,
+            "--project",
+            &project,
+            "--repository",
+            &repo,
+            "--source-branch",
+            branch,
+            "--status",
+            AZURE_BRANCH_STATUS,
+            "--top",
+            "1",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let values: Vec<Value> = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
+    Ok(values.first().and_then(|value| {
+        parse_azure_pr(value, &organization, &project, &repo).map(|pull_request| {
+            PullRequestBranchMatch {
+                repository: PullRequestRepository {
+                    provider: PullRequestProvider::AzureDevOps,
+                    remote,
+                    label: format!("{organization}/{project}/{repo}"),
+                },
+                pull_request,
+            }
+        })
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let source_branch = branch_name(source_branch.to_string());
+    let target_branch = branch_name(target_branch.to_string());
+    let draft = if is_draft { "true" } else { "false" };
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "create",
+            "--organization",
+            &organization_url,
+            "--project",
+            project,
+            "--repository",
+            repo,
+            "--source-branch",
+            &source_branch,
+            "--target-branch",
+            &target_branch,
+            "--title",
+            title,
+            "--description",
+            description,
+            "--draft",
+            draft,
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
+    let id = value
+        .get("pullRequestId")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "Azure CLI created the pull request but returned no PR id".to_string())?;
+    Ok(PullRequestCreateOutcome {
+        id,
+        url: format!(
+            "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"
+        ),
+    })
+}
+
 fn detail_azure(
     cwd: &str,
     organization: String,
@@ -547,7 +939,67 @@ fn detail_azure(
         .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
     pull_request.comments = azure_comments(cwd, &organization, &project, &repo, id)?;
     pull_request.comment_count = pull_request.comments.len();
+    if let Ok(checks) = azure_policies(cwd, &organization, id) {
+        pull_request.checks = checks
+            .iter()
+            .map(|check| PullRequestCheck {
+                name: check.name.clone(),
+                status: check.status.clone(),
+            })
+            .collect();
+        pull_request.checks_complete = true;
+    }
     Ok(pull_request)
+}
+
+fn activity_azure(
+    cwd: &str,
+    remote: String,
+    organization: String,
+    project: String,
+    repo: String,
+    id: u64,
+) -> Result<PullRequestActivitySnapshot> {
+    let value = azure_pr_value(cwd, &organization, id)?;
+    let pull_request = parse_azure_pr(&value, &organization, &project, &repo)
+        .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
+    let comments = azure_comments(cwd, &organization, &project, &repo, id)?
+        .into_iter()
+        .map(|comment| PullRequestActivityComment {
+            id: comment.id,
+            author: comment.author,
+            kind: if comment.path.is_some() {
+                "thread"
+            } else {
+                "comment"
+            }
+            .into(),
+            is_system: comment.is_system,
+        })
+        .collect();
+    let reviews = array(&value, "reviewers")
+        .iter()
+        .filter_map(parse_azure_activity_review)
+        .collect();
+    let checks = azure_policies(cwd, &organization, id)?;
+    Ok(PullRequestActivitySnapshot {
+        repository: PullRequestRepository {
+            provider: PullRequestProvider::AzureDevOps,
+            remote,
+            label: format!("{organization}/{project}/{repo}"),
+        },
+        id: pull_request.id,
+        title: pull_request.title,
+        url: pull_request.url,
+        state: pull_request.state,
+        source_branch: pull_request.source_branch,
+        source_commit: pull_request.source_commit,
+        updated_at: pull_request.updated_at,
+        comments,
+        reviews,
+        checks,
+        checks_complete: true,
+    })
 }
 
 fn azure_pr_value(cwd: &str, organization: &str, id: u64) -> Result<Value> {
@@ -618,6 +1070,34 @@ fn azure_comments(
             "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id_text}"
         ),
     ))
+}
+
+fn azure_policies(cwd: &str, organization: &str, id: u64) -> Result<Vec<PullRequestActivityCheck>> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id = id.to_string();
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "policy",
+            "list",
+            "--id",
+            &id,
+            "--organization",
+            &organization_url,
+            "--top",
+            "100",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid policy JSON: {error}"))?;
+    Ok(parse_azure_policies(&value))
 }
 
 fn add_comment_azure(
@@ -934,6 +1414,29 @@ fn validate_comment(body: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_create(
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+) -> Result<()> {
+    for (label, branch) in [("Source", source_branch), ("Target", target_branch)] {
+        if branch.trim().is_empty() || branch.contains(['\r', '\n', '\0']) {
+            return Err(format!("{label} branch is invalid"));
+        }
+    }
+    if title.trim().is_empty() {
+        return Err("Pull request title is required".into());
+    }
+    if title.contains(['\r', '\n', '\0']) || title.len() > MAX_PR_TITLE_BYTES {
+        return Err("Pull request title is invalid or exceeds Strand's 512-byte limit".into());
+    }
+    if description.len() > MAX_PR_DESCRIPTION_BYTES {
+        return Err("Pull request description exceeds Strand's 64 KB limit".into());
+    }
+    Ok(())
+}
+
 fn validate_commit(commit: &str) -> Result<()> {
     if !matches!(commit.len(), 40 | 64) || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("Pull request source commit is missing or invalid; refresh the PR and try again".into());
@@ -955,6 +1458,175 @@ fn azure_merge_strategy(strategy: PullRequestMergeStrategy) -> &'static str {
         PullRequestMergeStrategy::Squash => "squash",
         PullRequestMergeStrategy::Rebase => "rebase",
     }
+}
+
+fn parse_github_activity(
+    value: &Value,
+    repository: PullRequestRepository,
+) -> Result<PullRequestActivitySnapshot> {
+    let id = value
+        .get("number")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "GitHub activity did not include a pull request number".to_string())?;
+    let mut comments = value
+        .pointer("/comments/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|comment| {
+            Some(PullRequestActivityComment {
+                id: text(comment.get("id"))?,
+                author: text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
+                kind: "comment".into(),
+                is_system: false,
+            })
+        })
+        .collect::<Vec<_>>();
+    for thread in value
+        .pointer("/reviewThreads/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+    {
+        comments.extend(
+            thread
+                .pointer("/comments/nodes")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|comment| {
+                    Some(PullRequestActivityComment {
+                        id: text(comment.get("id"))?,
+                        author: text(comment.pointer("/author/login"))
+                            .unwrap_or_else(|| "unknown".into()),
+                        kind: "thread".into(),
+                        is_system: false,
+                    })
+                }),
+        );
+    }
+    comments.sort_by(|left, right| left.id.cmp(&right.id));
+    comments.dedup_by(|left, right| left.id == right.id);
+
+    let reviews = value
+        .pointer("/reviews/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|review| {
+            Some(PullRequestActivityReview {
+                id: text(review.get("id"))?,
+                author: text(review.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
+                state: text(review.get("state")).unwrap_or_else(|| "unknown".into()),
+            })
+        })
+        .collect();
+    let checks = value
+        .pointer("/statusCheckRollup/contexts/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(parse_github_activity_check)
+        .collect();
+
+    Ok(PullRequestActivitySnapshot {
+        repository,
+        id,
+        title: text(value.get("title")).unwrap_or_default(),
+        url: text(value.get("url")).unwrap_or_default(),
+        state: text(value.get("state"))
+            .unwrap_or_else(|| "unknown".into())
+            .to_lowercase(),
+        source_branch: text(value.get("headRefName")).unwrap_or_default(),
+        source_commit: text(value.get("headRefOid")).unwrap_or_default(),
+        updated_at: text(value.get("updatedAt")).unwrap_or_default(),
+        comments,
+        reviews,
+        checks,
+        checks_complete: true,
+    })
+}
+
+fn parse_github_activity_check(value: &Value) -> Option<PullRequestActivityCheck> {
+    let kind = text(value.get("__typename")).unwrap_or_else(|| "Check".into());
+    let name = text(value.get("name")).or_else(|| text(value.get("context")))?;
+    let raw_id = value
+        .get("databaseId")
+        .and_then(Value::as_i64)
+        .map(|id| id.to_string())
+        .or_else(|| text(value.get("id")))
+        .unwrap_or_else(|| name.clone());
+    Some(PullRequestActivityCheck {
+        id: format!("{kind}:{raw_id}"),
+        name,
+        status: text(value.get("conclusion"))
+            .filter(|status| !status.is_empty())
+            .or_else(|| text(value.get("state")))
+            .or_else(|| text(value.get("status")))
+            .unwrap_or_else(|| "unknown".into()),
+    })
+}
+
+fn parse_azure_activity_review(value: &Value) -> Option<PullRequestActivityReview> {
+    let vote = value.get("vote").and_then(Value::as_i64).unwrap_or(0);
+    Some(PullRequestActivityReview {
+        id: text(value.get("id"))
+            .or_else(|| text(value.get("descriptor")))
+            .or_else(|| text(value.get("uniqueName")))?,
+        author: text(value.get("displayName")).unwrap_or_else(|| "unknown".into()),
+        state: match vote {
+            10 => "approved",
+            5 => "approved_with_suggestions",
+            -5 => "waiting_for_author",
+            -10 => "changes_requested",
+            _ => "pending",
+        }
+        .into(),
+    })
+}
+
+fn parse_azure_policies(value: &Value) -> Vec<PullRequestActivityCheck> {
+    value
+        .as_array()
+        .or_else(|| value.get("value").and_then(Value::as_array))
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|policy| {
+            let name = text(policy.pointer("/configuration/type/displayName"))
+                .or_else(|| text(policy.pointer("/configuration/settings/displayName")))
+                .unwrap_or_else(|| "Azure policy".into());
+            Some(PullRequestActivityCheck {
+                id: text(policy.get("evaluationId"))
+                    .or_else(|| {
+                        policy
+                            .get("configuration")
+                            .and_then(|config| config.get("id"))
+                            .and_then(Value::as_i64)
+                            .map(|id| id.to_string())
+                    })
+                    .unwrap_or_else(|| name.clone()),
+                name,
+                status: normalize_azure_policy_status(
+                    &text(policy.get("status")).unwrap_or_else(|| "unknown".into()),
+                ),
+            })
+        })
+        .collect()
+}
+
+fn normalize_azure_policy_status(status: &str) -> String {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "approved" => "success",
+        "rejected" | "broken" => "failure",
+        "queued" | "running" => "pending",
+        value => value,
+    }
+    .into()
 }
 
 fn parse_github_pr(value: &Value) -> Option<PullRequest> {
@@ -1039,6 +1711,7 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
             .collect(),
         reviewers,
         checks,
+        checks_complete: value.get("statusCheckRollup").is_some(),
         comments,
         review_threads: Vec::new(),
     })
@@ -1186,6 +1859,7 @@ fn parse_azure_pr(
             .collect(),
         reviewers,
         checks: Vec::new(),
+        checks_complete: false,
         comments: Vec::new(),
         review_threads: Vec::new(),
     })
@@ -1478,6 +2152,98 @@ mod tests {
     }
 
     #[test]
+    fn branch_lookup_is_active_only_and_uses_shallow_fields() {
+        assert_eq!(GITHUB_BRANCH_STATE, "open");
+        assert_eq!(AZURE_BRANCH_STATUS, "active");
+        for nested in [
+            "comments",
+            "commits",
+            "latestReviews",
+            "statusCheckRollup",
+            "body",
+        ] {
+            assert!(!GITHUB_LIST_FIELDS.contains(nested));
+        }
+    }
+
+    #[test]
+    fn github_activity_query_is_bounded_and_never_requests_a_patch() {
+        assert!(GITHUB_ACTIVITY_QUERY.contains("comments(last: 100)"));
+        assert!(GITHUB_ACTIVITY_QUERY.contains("reviews(last: 100)"));
+        assert!(GITHUB_ACTIVITY_QUERY.contains("reviewThreads(last: 100)"));
+        assert!(GITHUB_ACTIVITY_QUERY.contains("contexts(first: 100)"));
+        for heavy in ["patch", "diff", "files(", "body"] {
+            assert!(!GITHUB_ACTIVITY_QUERY.contains(heavy));
+        }
+    }
+
+    #[test]
+    fn normalizes_github_activity_with_stable_ids() {
+        let value = serde_json::json!({
+            "number": 42,
+            "title": "Ship it",
+            "state": "OPEN",
+            "url": "https://github.com/acme/app/pull/42",
+            "updatedAt": "2026-07-14T10:00:00Z",
+            "headRefName": "feature",
+            "headRefOid": "1111111111111111111111111111111111111111",
+            "comments": { "nodes": [
+                { "id": "IC_1", "author": { "login": "ada" } }
+            ] },
+            "reviews": { "nodes": [
+                { "id": "PRR_1", "state": "APPROVED", "author": { "login": "grace" } }
+            ] },
+            "reviewThreads": { "nodes": [{ "comments": { "nodes": [
+                { "id": "PRRC_1", "author": { "login": "linus" } }
+            ] } }] },
+            "statusCheckRollup": { "contexts": { "nodes": [
+                { "__typename": "CheckRun", "databaseId": 99, "name": "CI", "status": "COMPLETED", "conclusion": "FAILURE" },
+                { "__typename": "StatusContext", "id": "SC_1", "context": "lint", "state": "SUCCESS" }
+            ] } }
+        });
+        let activity = parse_github_activity(
+            &value,
+            PullRequestRepository {
+                provider: PullRequestProvider::GitHub,
+                remote: "origin".into(),
+                label: "acme/app".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            activity.source_commit,
+            "1111111111111111111111111111111111111111"
+        );
+        assert_eq!(activity.comments[0].id, "IC_1");
+        assert_eq!(activity.comments[1].id, "PRRC_1");
+        assert_eq!(activity.reviews[0].id, "PRR_1");
+        assert_eq!(activity.checks[0].id, "CheckRun:99");
+        assert_eq!(activity.checks[0].status, "FAILURE");
+        assert_eq!(activity.checks[1].id, "StatusContext:SC_1");
+        assert!(activity.checks_complete);
+    }
+
+    #[test]
+    fn normalizes_azure_policy_states_for_readiness() {
+        let value = serde_json::json!([
+            { "evaluationId": "one", "status": "approved", "configuration": { "type": { "displayName": "Build" } } },
+            { "evaluationId": "two", "status": "rejected", "configuration": { "type": { "displayName": "Coverage" } } },
+            { "evaluationId": "three", "status": "broken", "configuration": { "type": { "displayName": "Security" } } },
+            { "evaluationId": "four", "status": "queued", "configuration": { "type": { "displayName": "Deploy" } } },
+            { "evaluationId": "five", "status": "running", "configuration": { "type": { "displayName": "Test" } } }
+        ]);
+        let checks = parse_azure_policies(&value);
+        assert_eq!(
+            checks
+                .iter()
+                .map(|check| check.status.as_str())
+                .collect::<Vec<_>>(),
+            ["success", "failure", "failure", "pending", "pending",]
+        );
+        assert_eq!(checks[1].id, "two");
+    }
+
+    #[test]
     fn normalizes_github_and_azure_comments() {
         let github: Value = serde_json::from_str(
             r#"{
@@ -1549,6 +2315,21 @@ mod tests {
         assert!(validate_comment(" \n ").is_err());
         assert!(validate_comment("Looks good").is_ok());
         assert!(validate_comment(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn validates_pull_request_creation_fields() {
+        assert!(validate_create("feature", "main", "Ship it", "Details").is_ok());
+        assert!(validate_create("feature", "main", " ", "Details").is_err());
+        assert!(validate_create("feature\nother", "main", "Ship it", "Details").is_err());
+        assert!(validate_create("feature", "main\0other", "Ship it", "Details").is_err());
+        assert!(validate_create(
+            "feature",
+            "main",
+            "Ship it",
+            &"x".repeat(MAX_PR_DESCRIPTION_BYTES + 1),
+        )
+        .is_err());
     }
 
     #[test]

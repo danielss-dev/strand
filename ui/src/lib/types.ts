@@ -247,6 +247,8 @@ export interface PullRequest {
   labels: string[];
   reviewers: PullRequestReviewer[];
   checks: PullRequestCheck[];
+  /** True when the provider's complete check/policy query succeeded. */
+  checks_complete: boolean;
   comments: PullRequestComment[];
   review_threads: PullRequestReviewThread[];
 }
@@ -254,6 +256,55 @@ export interface PullRequest {
 export interface PullRequestList {
   repository: PullRequestRepository;
   pull_requests: PullRequest[];
+}
+
+export interface PullRequestBranchMatch {
+  repository: PullRequestRepository;
+  pull_request: PullRequest;
+}
+
+export interface PullRequestCreateOutcome {
+  id: number;
+  url: string;
+}
+
+export interface PullRequestSuggestion {
+  title: string;
+  description: string;
+}
+
+export interface PullRequestActivityComment {
+  id: string;
+  author: string;
+  kind: string;
+  is_system: boolean;
+}
+
+export interface PullRequestActivityReview {
+  id: string;
+  author: string;
+  state: string;
+}
+
+export interface PullRequestActivityCheck {
+  id: string;
+  name: string;
+  status: string;
+}
+
+export interface PullRequestActivitySnapshot {
+  repository: PullRequestRepository;
+  id: number;
+  title: string;
+  url: string;
+  state: string;
+  source_branch: string;
+  source_commit: string;
+  updated_at: string;
+  comments: PullRequestActivityComment[];
+  reviews: PullRequestActivityReview[];
+  checks: PullRequestActivityCheck[];
+  checks_complete: boolean;
 }
 
 /** The branch a ref was forked from + the fork point to review against. */
@@ -526,7 +577,7 @@ export interface Snapshot {
   submodules: Submodule[];
 }
 
-/** AI provider for commit message suggestions (matches Rust `AiProvider`). */
+/** AI provider for writing suggestions (matches Rust `AiProvider`). */
 export type AiProvider = 'openai' | 'anthropic';
 
 /** Status of a vendor CLI + login session (Settings → AI). */
@@ -535,6 +586,8 @@ export interface AiProviderStatus {
   installed: boolean;
   logged_in: boolean;
   account_hint?: string | null;
+  /** The CLI exists but failed its status probe. */
+  error?: string | null;
 }
 
 /** Suggested commit message from `repo_suggest_commit_message`. */

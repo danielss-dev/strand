@@ -17,14 +17,65 @@ If the CLI is missing, signed out, or cannot access the repository, the view
 shows the provider error and the setup command. Provider calls time out after
 30 seconds instead of blocking the app indefinitely.
 
+## Create a PR
+
+Choose **Create PR** in the Pull Requests toolbar, or run “Pull Requests:
+create for current branch…” from the command palette. The dialog creates a
+GitHub or Azure DevOps pull request from the checked-out branch with a title,
+Markdown description, target branch, and optional draft state. After creation,
+Strand opens the new PR and follows it automatically.
+
+Strand does not push as part of this action. Push the checked-out branch first
+so it exists on the provider; if it is missing, the provider error stays in the
+dialog and no local state is changed. Authentication continues to use the
+signed-in `gh` or `az` CLI.
+
+Choose **Fill with Codex** or **Fill with Claude Code** to draft both editable
+fields using the AI provider selected in **Settings → AI**. Strand compares the
+selected target branch's merge base with local `HEAD` and sends that bounded,
+committed diff to the configured vendor CLI. Staged and unstaged changes are not
+included. If the fields already contain text, the button changes to **Replace**
+so overwriting the current draft is explicit. AI generation does not push the
+branch, contact GitHub/Azure DevOps, or create the PR; review and edit the result
+before choosing **Create pull request**.
+
 ## Browse PRs
 
 The list contains up to the latest 100 open, closed, and merged pull requests.
 If the checked-out branch has an active PR, Strand opens that PR automatically.
+It also follows that PR in the background even if you never open Pull Requests.
 Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
 use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
 toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
+
+## Follow PR activity
+
+Choose **Follow** in a PR header, or run “Pull Requests: follow open pull
+request” from the command palette. Followed rows carry a bell badge. Strand
+persists followed PRs, their last successful activity snapshot, and the most
+recent worktree path for that hosted repository across relaunches. Switching
+branches may add another automatically followed PR; it does not remove earlier
+ones.
+
+While Strand is running or minimized, it checks followed PRs after startup,
+every 60 seconds, and when the window regains focus. A single desktop
+notification per PR can summarize new non-system comments or thread replies,
+approvals or requested changes, newly failing checks or Azure policies, a new
+head commit, and merged or closed state. The first successful snapshot is only
+a baseline and never notifies. Merged or closed PRs notify once and are then
+removed from Following.
+
+The first follow asks for desktop-notification permission. Denying permission
+does not stop following; Strand keeps a persistent warning and a later manual
+Follow attempt can ask again. Explicitly choosing **Following** to unfollow
+mutes automatic following for that PR until you manually follow it again.
+Automatic removal after merge or close does not create that mute.
+
+Provider or network failures keep the last successful snapshot and retry later,
+so a temporary outage cannot create false activity or turn an unknown check
+state green. Monitoring uses small provider activity queries and never fetches
+or parses patches.
 
 For an active, non-draft PR, choose **Merge** in the detail header or run
 "Pull Requests: merge open pull request…" from the command palette. The
@@ -47,9 +98,13 @@ you choose Merge.
 
 The list loads only compact row data; Strand loads rich metadata only after a
 PR is opened. This keeps large repositories below provider query limits and
-means moving through the list does not start provider calls. The opened PR uses
-the full content width and has three tabs. Use `Left`/`Right`, `Home`, and `End`
-while the tab bar is focused.
+means moving through the list does not start provider calls. Refreshing keeps
+the current list or detail mounted, including focus, scroll, active tab, file
+selection, and unsent drafts. The toolbar shows **Updating…**, the last update
+age, or a non-blocking failure with Retry instead of blanking the workspace.
+Lightweight activity reloads rich detail only when something changed. The
+opened PR uses the full content width and has three tabs. Use `Left`/`Right`,
+`Home`, and `End` while the tab bar is focused.
 
 ### Overview
 
@@ -109,17 +164,24 @@ the pull request head is still the commit used by the displayed patch; if it
 changed, the draft stays in place and Changes asks you to refresh and reselect.
 Closed and merged pull requests stay read-only.
 
+When a new head commit is detected, Strand keeps the existing patch visible
+while the replacement loads and labels it stale. Inline-comment submission is
+disabled until the new patch succeeds, so comments cannot be anchored to old
+coordinates. Background monitoring never reloads a patch when the head SHA is
+unchanged.
+
 Fetched GitHub review threads remain visible directly beneath their anchored
 line or range. Replies stay grouped in the same card, and resolved or outdated
 threads are labeled. The same review comments also appear in Conversation, so
 comments added on GitHub are visible after refreshing the pull request.
 
-Azure does not expose every check or policy field through the same provider
-command, so absent data is shown honestly rather than inferred. Azure inline
+Azure policy evaluations participate in readiness when their dedicated query
+succeeds. A failed or incomplete policy query remains unknown instead of being
+treated as green. Azure inline
 comments also require provider iteration/change-tracking coordinates that the
 current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
-Creating replies, resolving threads, suggestions, approve/request-changes actions, Azure policy details,
+Creating replies, resolving threads, suggestions, approve/request-changes actions, richer Azure policy details,
 branch updates, and close/reopen controls are planned but are not presented as
 available yet. GitLab and Bitbucket adapters will use the same workspace in a
 later slice.

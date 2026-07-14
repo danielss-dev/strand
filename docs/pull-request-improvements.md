@@ -5,11 +5,18 @@
 > `PullRequests.tsx` workspace and keeps Strand's performance, keyboard, provider-
 > neutral, and resizable-pane rules as hard constraints.
 
-> Implementation status (2026-07-13): the readiness ledger, in-context
+> Implementation status (2026-07-14): the readiness ledger, in-context
 > stacked/split controls, Pierre line-range selection, and stale-head-guarded
-> GitHub inline publishing are now present on `codex/pr-review-ledger`. Inline
-> comments publish immediately in this first slice; the pending **Add to
-> review** queue described below remains the intended batched-review workflow.
+> GitHub inline publishing are present. Followed PRs now persist across relaunch,
+> the checked-out branch auto-follows independently of this view, native
+> notifications report review activity, and list/detail/patch refreshes use
+> stale-while-revalidate resource boundaries. The checked-out branch can now
+> create a GitHub or Azure DevOps PR/draft from the toolbar or command palette,
+> then opens and follows it without an implicit push. Its title and description
+> can be drafted from committed changes through the configured Codex or Claude
+> Code subscription while remaining editable. Inline comments still publish
+> immediately; the pending **Add to review** queue described below remains the
+> intended batched-review workflow.
 
 ## Outcome
 
@@ -90,8 +97,10 @@ Sources:
    review summary, and batched submission are still host-only.
 7. **No commit/version lens.** A reviewer cannot understand how the PR evolved
    or isolate changes since an earlier pass.
-8. **Refresh is manual.** CI and review feedback can become stale while the PR
-   remains open, with no visible “last updated” age.
+8. **Refresh now follows activity signals.** Lightweight snapshots update on a
+   60-second cadence and focus, while populated content stays mounted. Rich
+   detail reloads only after activity changes and patches only after the head
+   SHA changes; independent Checks and Commits tabs remain future work.
 
 ## Recommended UX and UI
 
@@ -195,6 +204,11 @@ reuse Strand's existing worktree safety and overlap checks; a hosted PR must not
 quietly take over a dirty checkout.
 
 #### 7. Refresh by signal, not by whole-page polling
+
+Implemented in the followed-PR slice: the global monitor shares in-flight
+activity requests with the visible view, never downloads patches, and preserves
+successful baselines through provider failures. The remaining work here is to
+split Checks and Commits into their own lazy resources.
 
 - Show the last successful provider refresh time.
 - Refresh lightweight readiness data on window focus and on a modest interval

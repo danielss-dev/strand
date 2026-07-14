@@ -12,19 +12,30 @@ pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
             installed: false,
             logged_in: false,
             account_hint: None,
+            error: None,
         };
     };
 
-    let (logged_in, hint) = match run_capture(&bin, &["auth", "status"], None, None, STATUS_TIMEOUT) {
-        Ok(out) => parse_auth_status(&out),
-        Err(_) => (false, None),
-    };
+    let (logged_in, hint, error) =
+        match run_capture(&bin, &["auth", "status"], None, None, STATUS_TIMEOUT) {
+            Ok(out) => {
+                let (logged_in, hint) = parse_auth_status(&out);
+                (logged_in, hint, None)
+            }
+            Err(err) if super::is_auth_failure(&err) => (false, None, None),
+            Err(err) => (
+                false,
+                None,
+                Some(super::cli_health_error("Claude Code", &err)),
+            ),
+        };
 
     AiProviderStatus {
         provider: super::AiProvider::Anthropic,
         installed: true,
         logged_in,
         account_hint: hint,
+        error,
     }
 }
 
@@ -53,6 +64,8 @@ fn parse_auth_status(out: &str) -> (bool, Option<String>) {
 
 pub fn login(cli_override: Option<&str>) -> Result<(), String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
+    run_capture(&bin, &["--version"], None, None, STATUS_TIMEOUT)
+        .map_err(|err| super::cli_health_error("Claude Code", &err))?;
     spawn_detached(&bin, &["auth", "login"], None)
 }
 
@@ -61,12 +74,12 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
     run_capture(&bin, &["auth", "logout"], None, None, STATUS_TIMEOUT).map(|_| ())
 }
 
-pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Result<String, String> {
+pub fn suggest(
+    repo_path: &Path,
+    prompt: &str,
+    cli_override: Option<&str>,
+) -> Result<String, String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
-
-    let full_prompt = format!(
-        "{prompt}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}"
-    );
 
     // The prompt travels via stdin (`claude -p` reads it there): it can
     // exceed the Windows command-line ceiling and, when the CLI is an npm
@@ -86,13 +99,13 @@ pub fn suggest(repo_path: &Path, prompt: &str, cli_override: Option<&str>) -> Re
             "*",
         ],
         Some(repo_path),
-        Some(&full_prompt),
+        Some(prompt),
         SUGGEST_TIMEOUT,
     ) {
         Ok(out) => extract_claude_print_output(out),
         Err(err) => {
-            let logged_in = status(cli_override).logged_in;
-            Err(super::map_cli_failure(logged_in, "Claude Code", err))
+            let status = status(cli_override);
+            Err(super::map_cli_failure(&status, "Claude Code", err))
         }
     }
 }
@@ -129,8 +142,7 @@ mod tests {
 
     #[test]
     fn auth_status_json_reports_email() {
-        let (logged_in, hint) =
-            parse_auth_status(r#"{"loggedIn":true,"email":"a@b.c"}"#);
+        let (logged_in, hint) = parse_auth_status(r#"{"loggedIn":true,"email":"a@b.c"}"#);
         assert!(logged_in);
         assert_eq!(hint.as_deref(), Some("a@b.c"));
     }

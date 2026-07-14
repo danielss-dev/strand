@@ -1327,7 +1327,7 @@ function CommitBar({ canCommit }: { canCommit: boolean }) {
       if (msg.startsWith(AI_AUTH_REQUIRED)) {
         try {
           await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
-          setCommitError('Browser opened — complete sign-in, then click Suggest again.');
+          setCommitError('Sign-in started — complete it in the browser or CLI window, then click Suggest again.');
         } catch (loginErr) {
           console.error('ai provider login failed', loginErr);
           setCommitError(`Sign-in failed: ${gitErrorHint(loginErr)}`);

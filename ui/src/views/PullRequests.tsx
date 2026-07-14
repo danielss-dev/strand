@@ -18,12 +18,15 @@ import {
   pullRequestForBranch,
   relativeTimeLabel,
 } from '../lib/pullRequests';
+import { pullRequestActivityChanged, pullRequestFollowKey } from '../lib/pullRequestActivity';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
-import type { PullRequest, PullRequestCheck, PullRequestComment, PullRequestList, PullRequestReviewThread } from '../lib/types';
+import type { PullRequest, PullRequestActivitySnapshot, PullRequestCheck, PullRequestComment, PullRequestCreateOutcome, PullRequestList, PullRequestReviewThread } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
+import { PullRequestCreateDialog } from './PullRequestCreateDialog';
 
 const providerName = (provider: PullRequestList['repository']['provider']) =>
   provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
@@ -494,7 +497,10 @@ function PullRequestChanges({
     setError(null);
     void tauri.repoPullRequestDiff(path, pr.id).then(
       (next) => {
-        if (generation.current === current) setPatch(next);
+        if (generation.current === current) {
+          setPatch(next);
+          setError(null);
+        }
       },
       (caught) => {
         if (generation.current === current) setError(errMessage(caught));
@@ -503,7 +509,7 @@ function PullRequestChanges({
       if (generation.current === current) setLoading(false);
     });
     return () => { generation.current += 1; };
-  }, [path, pr.id, reload]);
+  }, [path, pr.id, pr.source_commit, reload]);
 
   const parsed = useMemo(() => {
     if (patch == null) return { files: [] as FileDiffMetadata[], error: null as string | null };
@@ -555,8 +561,9 @@ function PullRequestChanges({
     setCommentMessage(null);
   }, [selectedPath]);
 
+  const stalePatch = patch != null && (loading || error != null);
   const openForReview = pr.state === 'open' || pr.state === 'active';
-  const inlineCommentsSupported = provider === 'git_hub' && openForReview;
+  const inlineCommentsSupported = provider === 'git_hub' && openForReview && !stalePatch;
   const selectLines = useCallback((range: SelectedLineRange | null) => {
     if (!inlineCommentsSupported || !range) {
       setSelectedLines(null);
@@ -600,7 +607,7 @@ function PullRequestChanges({
   }, [selectedLines, selectedThreads]);
 
   const submitInlineComment = async () => {
-    if (!selectedFile || !selectedLines || postingComment) return;
+    if (!selectedFile || !selectedLines || postingComment || stalePatch) return;
     const body = commentDraft.trim();
     if (!body) return;
     const side = selectedLines.side ?? 'additions';
@@ -643,10 +650,10 @@ function PullRequestChanges({
     setSelectedPath(treePaths[next]);
   };
 
-  if (loading) {
+  if (loading && patch == null) {
     return <div className="pr-empty pr-tab-empty" aria-live="polite"><Icon name="refresh" size={24} className="spin" /><strong>Loading code changes…</strong></div>;
   }
-  if (error || parsed.error) {
+  if ((error && patch == null) || parsed.error) {
     return (
       <div className="pr-empty pr-tab-empty" role="alert">
         <Icon name="changes" size={24} />
@@ -662,6 +669,13 @@ function PullRequestChanges({
 
   return (
     <div className="pr-changes">
+      {stalePatch && (
+        <div className={`pr-inline-refresh${error ? ' error' : ''}`} role={error ? 'alert' : 'status'}>
+          <Icon name={error ? 'x' : 'refresh'} size={12} className={loading ? 'spin' : undefined} />
+          <span>{error ? `Could not update changes: ${error}` : 'Updating changes for the latest push…'}</span>
+          {error && <button type="button" className="h-link" onClick={() => setReload((value) => value + 1)}>Retry</button>}
+        </div>
+      )}
       <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes-v2">
         <Panel defaultSize={22} minSize={14} maxSize={36}>
           <div
@@ -809,12 +823,18 @@ function PullRequestDetails({
   pr,
   onUpdated,
   onToast,
+  followed,
+  notificationPermission,
+  onToggleFollow,
 }: {
   path: string;
   provider: PullRequestList['repository']['provider'];
   pr: PullRequest;
   onUpdated: (next: PullRequest) => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
+  followed: boolean;
+  notificationPermission: 'unknown' | 'granted' | 'denied';
+  onToggleFollow: () => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const [changesTarget, setChangesTarget] = useState<PullRequestChangesTarget | null>(null);
@@ -867,6 +887,15 @@ function PullRequestDetails({
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
+          <button
+            type="button"
+            className={`btn pr-follow${followed ? ' on' : ''}`}
+            aria-pressed={followed}
+            onClick={onToggleFollow}
+            title={followed ? 'Stop following this pull request' : 'Follow this pull request'}
+          >
+            <Icon name="bell" size={13} /> {followed ? 'Following' : 'Follow'}
+          </button>
           <PullRequestMergeControl
             path={path}
             provider={provider}
@@ -898,6 +927,11 @@ function PullRequestDetails({
           <span title={dateLabel(pr.updated_at) || undefined}>
             <Icon name="history" size={11} /> Updated {relativeTimeLabel(pr.updated_at)}
           </span>
+          {followed && notificationPermission === 'denied' && (
+            <span className="pr-notification-warning" title="Allow Strand notifications in system settings">
+              <Icon name="bell" size={11} /> Notifications blocked
+            </span>
+          )}
         </div>
         {readiness.details.length > 0 && (
           <details className="pr-readiness-details">
@@ -980,7 +1014,19 @@ export function PullRequests({
 }) {
   const path = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
+  const refs = useRepo((state) => state.refs);
   const currentBranch = meta && !meta.detached ? meta.branch : null;
+  const followed = usePullRequests((state) => state.followed);
+  const notificationPermission = usePullRequests((state) => state.permission);
+  const activityRevision = usePullRequests((state) => state.activityRevision);
+  const follow = usePullRequests((state) => state.follow);
+  const unfollow = usePullRequests((state) => state.unfollow);
+  const setActive = usePullRequests((state) => state.setActive);
+  const clearActive = usePullRequests((state) => state.clearActive);
+  const activity = usePullRequests((state) => state.activity);
+  const pollFollowed = usePullRequests((state) => state.pollAll);
+  const seedAfterProviderWrite = usePullRequests((state) => state.seedAfterProviderWrite);
+  const followBranchMatch = usePullRequests((state) => state.followBranchMatch);
   const [data, setData] = useState<PullRequestList | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openedId, setOpenedId] = useState<number | null>(null);
@@ -990,9 +1036,12 @@ export function PullRequests({
   const [detailReload, setDetailReload] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
   const autoOpenedContext = useRef<string | null>(null);
+  const visibleActivity = useRef<PullRequestActivitySnapshot | null>(null);
 
   const refresh = useCallback(async () => {
     if (!path) return;
@@ -1017,16 +1066,24 @@ export function PullRequests({
         autoOpenedContext.current = autoOpenContext;
         setOpenedId(branchPullRequest?.id ?? null);
       }
+      setLastUpdatedAt(Date.now());
     } catch (caught) {
       if (generation.current !== current) return;
-      setData(null);
-      setSelectedId(null);
-      setOpenedId(null);
       setError(errMessage(caught));
     } finally {
       if (generation.current === current) setLoading(false);
     }
   }, [currentBranch, path]);
+
+  useEffect(() => {
+    setData(null);
+    setSelectedId(null);
+    setOpenedId(null);
+    setDetail(null);
+    setError(null);
+    setDetailError(null);
+    visibleActivity.current = null;
+  }, [path]);
 
   useEffect(() => {
     void refresh();
@@ -1044,16 +1101,82 @@ export function PullRequests({
     () => data?.pull_requests.find((pr) => pr.id === openedId) ?? null,
     [data, openedId],
   );
+  const openedKey = data && openedId != null
+    ? pullRequestFollowKey(data.repository, openedId)
+    : null;
+  const openedFollowed = openedKey ? followed[openedKey] ?? null : null;
+  const openedRevision = openedKey ? activityRevision[openedKey] ?? 0 : 0;
+  const observedRevision = useRef(0);
 
   useEffect(() => {
-    if (!path || openedId == null || !data) {
+    observedRevision.current = openedRevision;
+  }, [openedKey]);
+
+  useEffect(() => {
+    if (!openedKey || openedRevision === observedRevision.current) return;
+    observedRevision.current = openedRevision;
+    setDetailReload((value) => value + 1);
+  }, [openedKey, openedRevision]);
+
+  useEffect(() => {
+    const pr = detail ?? openedSummary;
+    if (!path || !data || !pr) return;
+    const key = pullRequestFollowKey(data.repository, pr.id);
+    setActive(path, data.repository, pr);
+    return () => clearActive(key);
+  }, [clearActive, data, detail, openedSummary, path, setActive]);
+
+  useEffect(() => {
+    if (!path || !data || openedId == null || openedFollowed) {
+      visibleActivity.current = null;
+      return;
+    }
+    let cancelled = false;
+    const revalidate = async () => {
+      try {
+        const next = await activity(path, openedId);
+        if (cancelled) return;
+        const previous = visibleActivity.current;
+        visibleActivity.current = next;
+        if (previous && pullRequestActivityChanged(previous, next)) {
+          setDetailReload((value) => value + 1);
+        }
+      } catch {
+        // Full-detail refresh keeps its own visible error state; background
+        // activity failures do not replace or clear the current PR.
+      }
+    };
+    void revalidate();
+    const timer = window.setInterval(() => { void revalidate(); }, 60_000);
+    const onFocus = () => { void revalidate(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [activity, data, openedFollowed, openedId, path]);
+
+  useEffect(() => {
+    if (openedId != null || !data) return;
+    const timer = window.setInterval(() => { void refresh(); }, 60_000);
+    const onFocus = () => { void refresh(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [data, openedId, refresh]);
+
+  useEffect(() => {
+    if (!path || openedId == null) {
       setDetail(null);
       setDetailError(null);
       setDetailLoading(false);
       return;
     }
     const current = ++detailGeneration.current;
-    setDetail(null);
+    setDetail((currentDetail) => currentDetail?.id === openedId ? currentDetail : null);
     setDetailError(null);
     setDetailLoading(true);
     // Briefly coalesce rapid pointer activation; keyboard list navigation does
@@ -1061,7 +1184,11 @@ export function PullRequests({
     const timer = window.setTimeout(() => {
       void tauri.repoPullRequest(path, openedId).then(
         (next) => {
-          if (detailGeneration.current === current) setDetail(next);
+          if (detailGeneration.current === current) {
+            setDetail(next);
+            setDetailError(null);
+            setLastUpdatedAt(Date.now());
+          }
         },
         (caught) => {
           if (detailGeneration.current === current) setDetailError(errMessage(caught));
@@ -1074,7 +1201,7 @@ export function PullRequests({
       window.clearTimeout(timer);
       detailGeneration.current += 1;
     };
-  }, [path, openedId, data, detailReload]);
+  }, [path, openedId, detailReload]);
 
   const move = (delta: number) => {
     if (!data?.pull_requests.length) return;
@@ -1100,7 +1227,59 @@ export function PullRequests({
       ...current,
       pull_requests: current.pull_requests.map((item) => item.id === next.id ? next : item),
     } : current);
-  }, []);
+    if (path && data) {
+      const key = pullRequestFollowKey(data.repository, next.id);
+      if (usePullRequests.getState().followed[key]) {
+        void seedAfterProviderWrite(path, next.id).catch(() => {});
+      }
+    }
+  }, [data, path, seedAfterProviderWrite]);
+
+  const toggleFollow = useCallback(() => {
+    if (!path || !data || !detail) return;
+    const key = pullRequestFollowKey(data.repository, detail.id);
+    if (followed[key]) {
+      void unfollow(key, true).then(
+        () => onToast(`Stopped following PR #${detail.id}`),
+        (caught) => onToast(`Could not unfollow PR #${detail.id}: ${errMessage(caught)}`, 'error'),
+      );
+    } else {
+      void follow(path, data.repository, detail, true).then(
+        () => onToast(`Following PR #${detail.id}`),
+        (caught) => onToast(`Could not follow PR #${detail.id}: ${errMessage(caught)}`, 'error'),
+      );
+    }
+  }, [data, detail, follow, followed, onToast, path, unfollow]);
+
+  const manualRefresh = useCallback(() => {
+    void refresh();
+    if (openedId != null) setDetailReload((value) => value + 1);
+  }, [openedId, refresh]);
+
+  const createdPullRequest = useCallback((outcome: PullRequestCreateOutcome) => {
+    setCreateOpen(false);
+    onToast(`Created pull request #${outcome.id}`);
+    if (!path || !currentBranch) return;
+    void tauri.repoPullRequestForBranch(path, currentBranch).then((match) => {
+      if (!match) {
+        void refresh();
+        return;
+      }
+      setData((current) => ({
+        repository: match.repository,
+        pull_requests: [
+          match.pull_request,
+          ...(current?.pull_requests.filter((item) => item.id !== match.pull_request.id) ?? []),
+        ],
+      }));
+      setSelectedId(match.pull_request.id);
+      setOpenedId(match.pull_request.id);
+      setDetail(null);
+      void followBranchMatch(path, match).catch(() => {});
+    }, () => {
+      void refresh();
+    });
+  }, [currentBranch, followBranchMatch, onToast, path, refresh]);
 
   const requestMergeMenu = useCallback((pr: PullRequest | null) => {
     if (!pr || pr.is_draft || !['open', 'active'].includes(pr.state) || !pr.source_commit) {
@@ -1116,8 +1295,31 @@ export function PullRequests({
     return () => window.removeEventListener('strand:pull-request-merge', onMergeRequest);
   }, [detail, requestMergeMenu]);
 
+  useEffect(() => {
+    const onCreateRequest = () => {
+      if (!path || !currentBranch) {
+        onToast('Check out a branch before creating a pull request.', 'error');
+        return;
+      }
+      setCreateOpen(true);
+    };
+    window.addEventListener('strand:pull-request-create', onCreateRequest);
+    return () => window.removeEventListener('strand:pull-request-create', onCreateRequest);
+  }, [currentBranch, onToast, path]);
+
   return (
     <div className="pr-view">
+      {createOpen && path && data && currentBranch ? (
+        <PullRequestCreateDialog
+          path={path}
+          provider={data.repository.provider}
+          sourceBranch={currentBranch}
+          refs={refs}
+          knownTargets={data.pull_requests.map((pr) => pr.target_branch)}
+          onCreated={createdPullRequest}
+          onClose={() => setCreateOpen(false)}
+        />
+      ) : null}
       <div className="pr-toolbar">
         <div>
           {openedId != null ? (
@@ -1131,19 +1333,40 @@ export function PullRequests({
             <span>{providerName(data.repository.provider)} · {data.repository.label} · {data.repository.remote}</span>
           ) : null}
         </div>
-        <button type="button" className="h-link" onClick={() => void refresh()} disabled={loading}>
-          <Icon name="refresh" size={12} className={loading ? 'spin' : ''} />
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="pr-toolbar-actions">
+          {openedFollowed?.error ? (
+            <span className="pr-refresh-failed" role="status" title={openedFollowed.error}>
+              Updates delayed · <button type="button" className="h-link" onClick={() => void pollFollowed()}>Retry</button>
+            </span>
+          ) : (error && data) || (detailError && detail) ? (
+            <span className="pr-refresh-failed" role="alert" title={detailError ?? error ?? undefined}>Refresh failed</span>
+          ) : lastUpdatedAt ? (
+            <span>Updated {relativeTimeLabel(new Date(lastUpdatedAt).toISOString())}</span>
+          ) : null}
+          <button type="button" className="h-link" onClick={manualRefresh} disabled={loading || detailLoading}>
+            <Icon name="refresh" size={12} className={loading || detailLoading ? 'spin' : ''} />
+            {loading || detailLoading ? 'Updating…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            className="btn pr-create-button"
+            disabled={!path || !data || !currentBranch}
+            title={currentBranch ? `Create a pull request from ${currentBranch}` : 'Check out a branch first'}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Icon name="plus" size={12} />
+            Create PR
+          </button>
+        </div>
       </div>
 
-      {error ? (
+      {error && !data ? (
         <div className="pr-empty" role="alert">
           <Icon name="remote" size={28} />
           <strong>Pull requests are not available yet</strong>
           <p>{error}</p>
           <span>Strand uses the signed-in provider CLI so it never stores your access token.</span>
-          <button type="button" className="btn" onClick={() => void refresh()}>Try again</button>
+          <button type="button" className="btn" onClick={manualRefresh}>Try again</button>
         </div>
       ) : loading && !data ? (
         <div className="pr-empty" aria-live="polite"><Icon name="refresh" size={28} className="spin" /><strong>Loading pull requests…</strong></div>
@@ -1168,7 +1391,9 @@ export function PullRequests({
                   else if (event.key === 'Enter' && selectedSummary) { event.preventDefault(); openPullRequest(selectedSummary.id); }
                 }}
               >
-                {data.pull_requests.map((pr) => (
+                {data.pull_requests.map((pr) => {
+                  const isFollowed = Boolean(followed[pullRequestFollowKey(data.repository, pr.id)]);
+                  return (
                   <button
                     type="button"
                     role="option"
@@ -1179,13 +1404,32 @@ export function PullRequests({
                     className={`pr-row${pr.id === selectedId ? ' selected' : ''}`}
                     onClick={() => openPullRequest(pr.id)}
                   >
-                    <span className="pr-row-top"><b>#{pr.id}</b><span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span></span>
+                    <span className="pr-row-top">
+                      <b>#{pr.id}</b>
+                      <span className="pr-row-status">
+                        {isFollowed && <span className="pr-followed-badge" title="Following"><Icon name="bell" size={11} /> Following</span>}
+                        <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
+                      </span>
+                    </span>
                     <strong>{pr.title}</strong>
                     <span className="pr-row-meta">{pr.author} · {pr.source_branch} → {pr.target_branch}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
+          ) : detail && path ? (
+            <PullRequestDetails
+              key={`${path}:${detail.id}`}
+              path={path}
+              provider={data.repository.provider}
+              pr={detail}
+              onUpdated={updatePullRequest}
+              onToast={onToast}
+              followed={Boolean(openedFollowed)}
+              notificationPermission={notificationPermission}
+              onToggleFollow={toggleFollow}
+            />
           ) : detailLoading ? (
             <div className="pr-empty pr-detail-empty" aria-live="polite">
               <Icon name="refresh" size={24} className="spin" />
@@ -1198,15 +1442,6 @@ export function PullRequests({
               <p>{detailError}</p>
               <button type="button" className="btn" onClick={() => setDetailReload((value) => value + 1)}>Try again</button>
             </div>
-          ) : detail && path ? (
-            <PullRequestDetails
-              key={`${path}:${detail.id}`}
-              path={path}
-              provider={data.repository.provider}
-              pr={detail}
-              onUpdated={updatePullRequest}
-              onToast={onToast}
-            />
           ) : null}
         </div>
       ) : null}

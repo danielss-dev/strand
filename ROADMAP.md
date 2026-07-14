@@ -1615,6 +1615,31 @@ code in Changes, so a refresh reflects comments created in Strand or on GitHub.
 Conversation now links file-backed comments straight to that file/thread in
 Changes and transfers keyboard focus to the destination.
 
+**Followed PRs and seamless refresh shipped (2026-07-14):** Strand now follows
+the checked-out branch's active GitHub or Azure DevOps PR even when the PR view
+has never opened, with persistent manual follow/mute state and lightweight,
+patch-free activity baselines shared across worktrees. A global two-at-a-time
+monitor polls on hydration, every 60 seconds, and window focus; it coalesces
+new comments/replies, review decisions, failed checks/policies, pushes, and
+terminal state into native notifications, then auto-unfollows merged/closed
+PRs. The PR workspace now refreshes stale-while-revalidate: existing list,
+detail, focus, tabs, drafts, scroll, and patch stay mounted; rich detail reloads
+only after activity changes, and the patch reloads only for a new head while a
+stale copy remains read-only.
+
+**Create pull requests shipped (2026-07-14):** The Pull Requests toolbar and
+command palette now open a keyboard-operable creation dialog for the checked-out
+branch. GitHub and Azure DevOps creation share one typed IPC path and support a
+title, Markdown description, target branch, and draft state through the
+provider CLI. A successful PR opens immediately and joins the follow monitor;
+creation deliberately requires the source branch to exist remotely instead of
+hiding an implicit push. The dialog can also fill or replace its editable title
+and Markdown description through the configured Codex or Claude Code CLI. That
+read-only suggestion uses committed changes from the target branch's merge base
+to local `HEAD`; it never includes unstaged drafts or creates the PR itself.
+Vendor CLI health errors remain distinct from signed-out sessions, and sign-in
+is preflighted before Strand reports that the browser or CLI flow has started.
+
 ---
 
 ## 1.1+ — Post-1.0
@@ -1635,8 +1660,9 @@ Changes and transfers keyboard focus to the destination.
   Same static binary as the remote-SSH `strandd` (`--stdio` mode). Designed 2026-06-12:
   `docs/strand-cli.md` + task breakdown in TASKS.md.
 - Plugin / extension surface
-- AI features (commit message suggestions, conflict hints) — PRD Q3
+- AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs (Codex / Claude Code CLIs)
+  - ☑ Pull-request title/description suggestions from committed branch diffs
 - ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
   foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 
