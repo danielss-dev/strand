@@ -12,6 +12,25 @@ mod prompt;
 use serde::{Deserialize, Serialize};
 use strand_core::diff::FileDiff;
 
+trait AiProviderAdapter: Sync {
+    fn status(&self, cli_override: Option<&str>) -> AiProviderStatus;
+    fn login(&self, cli_override: Option<&str>) -> Result<(), String>;
+    fn logout(&self, cli_override: Option<&str>) -> Result<(), String>;
+    fn suggest(
+        &self,
+        repo_path: &std::path::Path,
+        prompt: &str,
+        cli_override: Option<&str>,
+    ) -> Result<String, String>;
+}
+
+fn adapter(provider: AiProvider) -> &'static dyn AiProviderAdapter {
+    match provider {
+        AiProvider::Openai => &codex::CODEX,
+        AiProvider::Anthropic => &claude::CLAUDE,
+    }
+}
+
 /// Prefix for errors where the vendor CLI is installed but not signed in.
 /// The UI opens the provider login flow when it sees this.
 pub const AI_AUTH_REQUIRED: &str = "AI_AUTH_REQUIRED:";
@@ -90,24 +109,15 @@ pub struct PullRequestSuggestion {
 }
 
 pub fn provider_status(provider: AiProvider, cli_override: Option<&str>) -> AiProviderStatus {
-    match provider {
-        AiProvider::Openai => codex::status(cli_override),
-        AiProvider::Anthropic => claude::status(cli_override),
-    }
+    adapter(provider).status(cli_override)
 }
 
 pub fn provider_login(provider: AiProvider, cli_override: Option<&str>) -> Result<(), String> {
-    match provider {
-        AiProvider::Openai => codex::login(cli_override),
-        AiProvider::Anthropic => claude::login(cli_override),
-    }
+    adapter(provider).login(cli_override)
 }
 
 pub fn provider_logout(provider: AiProvider, cli_override: Option<&str>) -> Result<(), String> {
-    match provider {
-        AiProvider::Openai => codex::logout(cli_override),
-        AiProvider::Anthropic => claude::logout(cli_override),
-    }
+    adapter(provider).logout(cli_override)
 }
 
 pub fn suggest_commit_message(
@@ -123,10 +133,7 @@ pub fn suggest_commit_message(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",
         prompt::build_prompt(diffs)
     );
-    let raw = match provider {
-        AiProvider::Openai => codex::suggest(repo_path, &text, cli_override)?,
-        AiProvider::Anthropic => claude::suggest(repo_path, &text, cli_override)?,
-    };
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override)?;
     parse::parse_suggestion(&raw)
 }
 
@@ -147,10 +154,7 @@ pub fn suggest_pull_request(
         "{}\n\nRemember: reply with JSON only: {{\"title\":\"...\",\"description\":\"...\"}}",
         prompt::build_pull_request_prompt(source_branch, target_branch, diffs)
     );
-    let raw = match provider {
-        AiProvider::Openai => codex::suggest(repo_path, &text, cli_override)?,
-        AiProvider::Anthropic => claude::suggest(repo_path, &text, cli_override)?,
-    };
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override)?;
     parse::parse_pull_request_suggestion(&raw)
 }
 

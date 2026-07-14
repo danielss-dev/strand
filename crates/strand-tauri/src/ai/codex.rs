@@ -3,6 +3,32 @@ use std::path::Path;
 use super::bin::{resolve_codex, run_capture, spawn_detached, STATUS_TIMEOUT, SUGGEST_TIMEOUT};
 use super::AiProviderStatus;
 
+pub struct Codex;
+pub static CODEX: Codex = Codex;
+
+impl super::AiProviderAdapter for Codex {
+    fn status(&self, cli_override: Option<&str>) -> AiProviderStatus {
+        status(cli_override)
+    }
+
+    fn login(&self, cli_override: Option<&str>) -> Result<(), String> {
+        login(cli_override)
+    }
+
+    fn logout(&self, cli_override: Option<&str>) -> Result<(), String> {
+        logout(cli_override)
+    }
+
+    fn suggest(
+        &self,
+        repo_path: &Path,
+        prompt: &str,
+        cli_override: Option<&str>,
+    ) -> Result<String, String> {
+        suggest(repo_path, prompt, cli_override)
+    }
+}
+
 const CODEX_INSTALL: &str = "https://developers.openai.com/codex";
 /// A fast, focused model is sufficient for short commit and PR copy.
 const SUGGEST_MODEL: &str = "gpt-5.6-luna";
@@ -51,11 +77,13 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
 }
 
 pub fn suggest(
-    repo_path: &Path,
+    _repo_path: &Path,
     prompt: &str,
     cli_override: Option<&str>,
 ) -> Result<String, String> {
     let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
+    let isolated = tempfile::tempdir()
+        .map_err(|err| format!("Could not create an isolated Codex workspace: {err}"))?;
 
     // `-` makes `codex exec` read the prompt from stdin — see the note in
     // `claude::suggest` for why prompts don't travel as argv.
@@ -63,15 +91,21 @@ pub fn suggest(
         &bin,
         &[
             "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--ignore-user-config",
+            "--ignore-rules",
             "--model",
             SUGGEST_MODEL,
-            "--cd",
-            repo_path.to_str().ok_or("invalid repo path")?,
             "--sandbox",
             "read-only",
+            "--ask-for-approval",
+            "never",
+            "-c",
+            "web_search=\"disabled\"",
             "-",
         ],
-        Some(repo_path),
+        Some(isolated.path()),
         Some(prompt),
         SUGGEST_TIMEOUT,
     ) {

@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
+const MAX_STDOUT_BYTES: usize = 1_048_576;
+const MAX_STDERR_BYTES: usize = 262_144;
+
 /// Ceiling for quick CLI calls (auth status, logout). Node-based CLIs can
 /// take seconds to cold-start, but they must never hang the UI forever.
 pub const STATUS_TIMEOUT: Duration = Duration::from_secs(30);
@@ -23,7 +26,7 @@ pub(crate) fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Op
     if let Some(p) = override_path {
         let path = PathBuf::from(p);
         if path.is_file() {
-            return Some(path);
+            return std::fs::canonicalize(path).ok();
         }
         return None;
     }
@@ -46,14 +49,14 @@ fn find_in_dirs(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
         for ext in ["exe", "cmd", "bat"] {
             let candidate = dir.join(format!("{name}.{ext}"));
             if candidate.is_file() {
-                return Some(candidate);
+                return std::fs::canonicalize(candidate).ok();
             }
         }
         #[cfg(not(windows))]
         {
             let candidate = dir.join(name);
             if candidate.is_file() {
-                return Some(candidate);
+                return std::fs::canonicalize(candidate).ok();
             }
         }
     }
@@ -68,9 +71,9 @@ fn find_in_dirs(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
 pub(crate) fn base_command(program: &Path, hide_console: bool) -> Command {
     #[cfg(windows)]
     {
-        let is_batch = program.extension().is_some_and(|e| {
-            e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat")
-        });
+        let is_batch = program
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"));
         let mut cmd = if is_batch {
             let mut c = Command::new("cmd");
             c.arg("/C").arg(program);
@@ -112,9 +115,13 @@ pub fn run_capture(
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
     }
-    cmd.stdin(if stdin_data.is_some() { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdin(if stdin_data.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    })
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
 
     let mut child = cmd
         .spawn()
@@ -128,12 +135,20 @@ pub fn run_capture(
             let _ = pipe.write_all(data.as_bytes());
         });
     }
-    let stdout_thread = child.stdout.take().map(drain_pipe);
-    let stderr_thread = child.stderr.take().map(drain_pipe);
+    let stdout_thread = child
+        .stdout
+        .take()
+        .map(|pipe| drain_pipe(pipe, MAX_STDOUT_BYTES));
+    let stderr_thread = child
+        .stderr
+        .take()
+        .map(|pipe| drain_pipe(pipe, MAX_STDERR_BYTES));
 
     let Some(status) = wait_with_timeout(&mut child, timeout) else {
         let _ = child.kill();
         let _ = child.wait();
+        let _ = join_pipe(stdout_thread);
+        let _ = join_pipe(stderr_thread);
         return Err(format!(
             "`{}` timed out after {}s",
             program.display(),
@@ -143,6 +158,20 @@ pub fn run_capture(
 
     let stdout = join_pipe(stdout_thread);
     let stderr = join_pipe(stderr_thread);
+    if stdout.exceeded {
+        return Err(format!(
+            "`{}` produced more than 1 MB on stdout",
+            program.display()
+        ));
+    }
+    if stderr.exceeded {
+        return Err(format!(
+            "`{}` produced more than 256 KB on stderr",
+            program.display()
+        ));
+    }
+    let stdout = stdout.text;
+    let stderr = stderr.text;
     if status.success() {
         Ok(stdout)
     } else {
@@ -155,19 +184,43 @@ pub fn run_capture(
     }
 }
 
-fn drain_pipe<R: Read + Send + 'static>(mut pipe: R) -> std::thread::JoinHandle<Vec<u8>> {
+struct CapturedOutput {
+    text: String,
+    exceeded: bool,
+}
+
+fn drain_pipe<R: Read + Send + 'static>(
+    mut pipe: R,
+    max_bytes: usize,
+) -> std::thread::JoinHandle<CapturedOutput> {
     std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = pipe.read_to_end(&mut buf);
-        buf
+        let mut retained = Vec::new();
+        let mut chunk = [0u8; 8192];
+        let mut exceeded = false;
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    let remaining = max_bytes.saturating_sub(retained.len());
+                    retained.extend_from_slice(&chunk[..read.min(remaining)]);
+                    exceeded |= read > remaining;
+                }
+            }
+        }
+        CapturedOutput {
+            text: String::from_utf8_lossy(&retained).trim().to_string(),
+            exceeded,
+        }
     })
 }
 
-fn join_pipe(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> String {
+fn join_pipe(handle: Option<std::thread::JoinHandle<CapturedOutput>>) -> CapturedOutput {
     handle
         .and_then(|h| h.join().ok())
-        .map(|b| String::from_utf8_lossy(&b).trim().to_string())
-        .unwrap_or_default()
+        .unwrap_or(CapturedOutput {
+            text: String::new(),
+            exceeded: false,
+        })
 }
 
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
@@ -215,9 +268,10 @@ mod tests {
     fn override_path_used_when_file_exists() {
         let path = std::env::current_exe().unwrap();
         let resolved = resolve_cli("nonexistent", Some(path.to_str().unwrap()));
-        assert_eq!(resolved, Some(path));
+        assert_eq!(resolved, std::fs::canonicalize(path).ok());
     }
 
+    #[cfg(windows)]
     fn temp_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("strand-ai-bin-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
