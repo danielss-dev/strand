@@ -496,7 +496,7 @@ mod tests {
         std::fs::write(dir.join("codex"), "#!/bin/sh\n").unwrap();
         std::fs::write(dir.join("codex.cmd"), "@echo off\r\n").unwrap();
         let found = find_in_dirs("codex", &[dir.clone()]);
-        assert_eq!(found, Some(dir.join("codex.cmd")));
+        assert_eq!(found, std::fs::canonicalize(dir.join("codex.cmd")).ok());
         std::fs::remove_dir_all(&dir).ok();
     }
 
