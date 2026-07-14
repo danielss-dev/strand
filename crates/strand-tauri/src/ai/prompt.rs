@@ -287,6 +287,41 @@ mod tests {
     }
 
     #[test]
+    fn includes_at_most_eight_small_patches() {
+        let diffs = (0..12)
+            .map(|index| sample_diff(&format!("src/{index}.rs"), "+small"))
+            .collect::<Vec<_>>();
+        let built = build_prompt(&diffs, &[], None);
+        assert_eq!(built.patch_files, 8);
+        assert_eq!(built.omitted_patch_files, 4);
+    }
+
+    #[test]
+    fn manifest_reports_files_beyond_its_count_and_byte_budgets() {
+        let diffs = (0..250)
+            .map(|index| sample_diff(&format!("very/long/generated/path/{index:03}.rs"), "+x"))
+            .collect::<Vec<_>>();
+        let built = build_prompt(&diffs, &[], None);
+        assert!(built.manifest_files < 200);
+        assert!(built.text.contains("remaining-by-status"));
+        assert!(built.text.contains("\"modified\""));
+    }
+
+    #[test]
+    fn dependency_only_changes_still_supply_patches() {
+        let built = build_prompt(
+            &[
+                sample_diff("Cargo.lock", "+dependency"),
+                sample_diff("pnpm-lock.yaml", "+package"),
+            ],
+            &[],
+            None,
+        );
+        assert_eq!(built.patch_files, 2);
+        assert!(built.text.contains("+dependency"));
+    }
+
+    #[test]
     fn binary_only_change_stays_in_manifest() {
         let mut diff = sample_diff("image.png", "not sent");
         diff.binary = true;

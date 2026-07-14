@@ -1774,6 +1774,18 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 - ☑ Broken vendor-CLI installs stay distinct from signed-out sessions
   (`AiProviderStatus.error`, auth-failure classification, and `--version`
   login preflight prevent false “browser opened” messages)
+- ☑ AI provider execution hardened and cancellable (`AiProviderAdapter`,
+  canonical CLI resolution, isolated read-only Codex cwd/argv, bounded
+  stdout/stderr, process-group/Windows Job Object teardown, and shared
+  network/AI `repo_cancel_op` registry)
+- ☑ Sensitive-input confirmation contract (`AiGenerationOutcome` scan →
+  exclude/include fingerprint retry; classifications contain paths and kinds
+  only, and changed diffs invalidate confirmation)
+- ☑ Deterministic large-change context and writing UX (`AiInputCoverage`,
+  200-file/4 KB manifest, ranked 8-patch/12 KB context with 3 KB per-file
+  caps, recent HEAD subjects, `common_dir` repository writing profiles,
+  coverage/provider labels, Cancel, one-step undo, cross-provider retry, and
+  “Draft pull request with AI…” palette action)
 - ☐ Rebase reword suggestions (share CommitBar generator)
 - ☐ Conflict-resolution hints — PRD Q3 follow-up
 

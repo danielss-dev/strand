@@ -129,7 +129,11 @@ keyboard alone, and the mouse stays first-class.
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
   (`claude-sonnet-5`); Settings → AI for sign-in, provider choice, and CLI
-  health checks.
+  health checks. Generation is cancellable, scans conservative sensitive-file
+  signals before provider launch, reports partial-context coverage, preserves
+  the replaced draft for one-step undo, and can retry explicitly with the other
+  provider without changing your default. Repository-family writing profiles
+  keep terminology and style consistent across worktrees.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

@@ -1006,7 +1006,7 @@ to `claude` is the supported path for Claude Code users.
 
 **How to apply.**
 
-- New AI providers implement the `CommitMessageGenerator` trait in
+- New AI providers implement the minimal `AiProviderAdapter` boundary in
   `crates/strand-tauri/src/ai/` — don't add direct HTTP + key storage without
   an explicit product decision.
 - Spawn argv directly (no shell), same safety model as `external.rs`.
@@ -1022,6 +1022,33 @@ to `claude` is the supported path for Claude Code users.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
   **Check CLI status** button — no auto auth probe on open. Optional manual
   sign-in/out per CLI remains.
+
+---
+
+## AI writing treats repository data as untrusted and generation as cancellable
+
+**Rule.** AI writing may send only Strand's explicitly bounded prompt. Codex
+runs in a fresh empty temporary directory with its ephemeral/no-repo-check,
+ignore-user-config/rules, read-only, no-web flags; provider executable paths are
+canonicalized before any cwd change. Both providers receive the same
+untrusted-data preamble and delimited branch, path, profile, example, manifest,
+and patch sections. Never log or persist prompts, output, or matched secret
+values.
+
+Every generation is an operation, not a fire-and-forget promise. Register its
+`AiCancelHandle` in `AppState.ops`, give it a unique `opId`, kill and reap its
+whole Unix process group or Windows Job Object on timeout/cancel/output overflow,
+and apply results only while repository, provider, and PR target identity still
+match. Repository/provider/target changes and dialog teardown cancel in flight;
+the UI keeps cancellation quiet and exposes a visible Cancel action.
+
+Before launch, scan only conservative sensitive path/content signals. Return
+path plus classification, never a matched value. Confirmation is two-pass and
+fingerprinted: exclusion removes the whole flagged file, inclusion is explicit,
+and any diff change requires confirmation again. Context stays deterministic and
+bounded: a compact manifest, ranked textual patches with per-file/global caps,
+and additive `AiInputCoverage`. Repository writing profiles are keyed by
+canonical `RepoMeta.common_dir`, so linked worktrees share one policy.
 
 ---
 

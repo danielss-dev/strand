@@ -95,6 +95,8 @@ pub fn suggest(
     match run_capture_cancellable(
         &bin,
         &[
+            "--ask-for-approval",
+            "never",
             "exec",
             "--ephemeral",
             "--skip-git-repo-check",
@@ -104,8 +106,6 @@ pub fn suggest(
             SUGGEST_MODEL,
             "--sandbox",
             "read-only",
-            "--ask-for-approval",
-            "never",
             "-c",
             "web_search=\"disabled\"",
             "-",
@@ -165,5 +165,44 @@ mod tests {
         assert!(login_error.contains("Reinstall or update"));
 
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn suggestion_uses_isolated_cwd_and_non_interactive_flags() {
+        let temp = tempfile::tempdir().unwrap();
+        let launcher = temp.path().join("codex-test");
+        let record = temp.path().join("record");
+        std::fs::write(
+            &launcher,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$PWD\" > '{}'\nprintf '%s\\n' \"$@\" >> '{}'\nprintf '{{\"subject\":\"test\",\"body\":\"\"}}\\n'\n",
+                record.display(),
+                record.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&launcher).unwrap().permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&launcher, permissions).unwrap();
+        let repo = temp.path().join("untrusted-repo");
+        std::fs::create_dir(&repo).unwrap();
+
+        let output = suggest(&repo, "bounded prompt", launcher.to_str(), None).unwrap();
+        assert!(output.contains("\"subject\":\"test\""));
+        let invocation = std::fs::read_to_string(record).unwrap();
+        let cwd = invocation.lines().next().unwrap();
+        assert_ne!(Path::new(cwd), repo);
+        assert!(!invocation.contains(repo.to_str().unwrap()));
+        for required in [
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "read-only",
+            "never",
+            "web_search=\"disabled\"",
+        ] {
+            assert!(invocation.contains(required), "missing flag: {required}");
+        }
     }
 }

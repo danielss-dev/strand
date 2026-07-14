@@ -1664,6 +1664,9 @@ is preflighted before Strand reports that the browser or CLI flow has started.
   - ☑ Commit message suggestions from staged diffs, or all unstaged changes
     when nothing is staged (Codex / Claude Code CLIs)
   - ☑ Pull-request title/description suggestions from committed branch diffs
+  - ☑ Isolated, cancellable provider execution with sensitive-file confirmation,
+    deterministic bounded context, per-repository writing profiles, coverage,
+    undo, and explicit alternate-provider retry
 - ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
   foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 
@@ -1673,6 +1676,16 @@ Codex CLI (`codex login` / `codex exec`) for ChatGPT Plus, Claude Code CLI
 (`claude -p`) for Anthropic. Rust `ai/` module + four IPC commands; Settings →
 AI for sign-in; CommitBar sparkle button; palette + ⌘⇧M. Verified:
 `cargo test -p strand-tauri`, `pnpm --filter ./ui exec tsc --noEmit`.
+
+**AI writing hardening shipped (2026-07-14):** Codex now runs from an empty
+temporary directory with repository access and web search disabled; both vendor
+CLIs use bounded output, process-tree cancellation, and a shared untrusted-data
+prompt contract. Commit and PR generation scan conservative sensitive signals
+before launch, require a fingerprinted include/exclude decision, rank bounded
+large-change context deterministically, report coverage/provider identity, and
+support repository-family writing profiles, Cancel, Undo, alternate-provider
+retry, and an AI-first PR palette action. CI now exercises the Tauri suite and
+AI subprocess lifecycle on Unix and Windows.
 
 ---
 

@@ -16,6 +16,7 @@ import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { repoAiStyle } from '../lib/db';
+import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { EDITABLE_SELECTOR, eventInside, formatBinding } from '../lib/keys';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
@@ -1343,7 +1344,10 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         openaiCli,
         anthropicCli,
       );
-      if (requestRef.current !== request || useRepo.getState().activePath !== activePath) return;
+      if (requestRef.current !== request || !aiRequestMatches(request, {
+        path: useRepo.getState().activePath ?? '',
+        provider,
+      })) return;
       if (outcome.status === 'needs_confirmation') {
         setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
         return;
@@ -1368,7 +1372,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       }
       console.error('suggest commit message failed', e);
       setCommitError(`Suggestion failed: ${msg}`);
-      setRetryProvider(provider === 'openai' ? 'anthropic' : 'openai');
+      setRetryProvider(otherAiProvider(provider));
     } finally {
       if (requestRef.current === request) {
         requestRef.current = null;
@@ -1482,9 +1486,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       />
       {coverage && providerUsed && (
         <div className="settings-hint" role="status">
-          Generated with {providerUsed === 'openai' ? 'Codex' : 'Claude Code'} · {coverage.patchFiles} of {coverage.patchFiles + coverage.omittedPatchFiles} patches included
-          {coverage.truncatedPatchFiles ? `; ${coverage.truncatedPatchFiles} truncated` : ''}
-          {coverage.sensitiveExcludedFiles ? `; ${coverage.sensitiveExcludedFiles} sensitive excluded` : ''}.
+          {aiCoverageLabel(coverage, providerUsed)}
         </div>
       )}
       {undoDraft && (

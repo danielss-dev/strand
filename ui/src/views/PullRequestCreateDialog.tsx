@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { repoAiStyle } from '../lib/db';
 import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
 import type {
@@ -73,7 +74,7 @@ export function PullRequestCreateDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
-  const requestRef = useRef<{ opId: string; target: string; provider: typeof aiProvider } | null>(null);
+  const requestRef = useRef<{ opId: string; path: string; target: string; provider: typeof aiProvider } | null>(null);
   const suggestingRef = useRef(false);
   const autoFillStartedRef = useRef(false);
 
@@ -172,7 +173,7 @@ export function PullRequestCreateDialog({
       return;
     }
     const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const request = { opId, target, provider: selectedProvider };
+    const request = { opId, path, target, provider: selectedProvider };
     requestRef.current = request;
     suggestingRef.current = true;
     setSuggesting(true);
@@ -198,7 +199,11 @@ export function PullRequestCreateDialog({
         setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
         return;
       }
-      if (outcome.provider !== selectedProvider || targetBranch.trim() !== target) return;
+      if (outcome.provider !== selectedProvider || !aiRequestMatches(request, {
+        path,
+        provider: selectedProvider,
+        target: targetBranch.trim(),
+      })) return;
       setUndoDraft({ title, description });
       setTitle(outcome.suggestion.title);
       setDescription(outcome.suggestion.description);
@@ -219,7 +224,7 @@ export function PullRequestCreateDialog({
         }
       } else if (mountedRef.current) {
         setError(`AI suggestion failed: ${message}`);
-        setRetryProvider(selectedProvider === 'openai' ? 'anthropic' : 'openai');
+        setRetryProvider(otherAiProvider(selectedProvider));
       }
     } finally {
       if (requestRef.current === request) {
@@ -285,9 +290,7 @@ export function PullRequestCreateDialog({
             </div>
             {coverage && providerUsed ? (
               <p className="settings-hint" role="status">
-                Generated with {providerUsed === 'openai' ? 'Codex' : 'Claude Code'} · {coverage.patchFiles} of {coverage.patchFiles + coverage.omittedPatchFiles} patches included
-                {coverage.truncatedPatchFiles ? `; ${coverage.truncatedPatchFiles} truncated` : ''}
-                {coverage.sensitiveExcludedFiles ? `; ${coverage.sensitiveExcludedFiles} sensitive excluded` : ''}.
+                {aiCoverageLabel(coverage, providerUsed)}
               </p>
             ) : null}
             {undoDraft ? (

@@ -46,12 +46,33 @@ pub fn resolve_claude(override_path: Option<&str>) -> Option<PathBuf> {
 pub(crate) fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Option<PathBuf> {
     if let Some(p) = override_path {
         let path = PathBuf::from(p);
-        if path.is_file() {
-            return std::fs::canonicalize(path).ok();
-        }
-        return None;
+        return canonical_spawnable(&path);
     }
     which_on_path(default_name)
+}
+
+fn canonical_spawnable(path: &Path) -> Option<PathBuf> {
+    if !path.is_file() {
+        return None;
+    }
+    let canonical = std::fs::canonicalize(path).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        (canonical.metadata().ok()?.permissions().mode() & 0o111 != 0).then_some(canonical)
+    }
+    #[cfg(windows)]
+    {
+        canonical
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                ["exe", "cmd", "bat"]
+                    .iter()
+                    .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+            })
+            .then_some(canonical)
+    }
 }
 
 fn which_on_path(name: &str) -> Option<PathBuf> {
@@ -69,15 +90,15 @@ fn find_in_dirs(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
         #[cfg(windows)]
         for ext in ["exe", "cmd", "bat"] {
             let candidate = dir.join(format!("{name}.{ext}"));
-            if candidate.is_file() {
-                return std::fs::canonicalize(candidate).ok();
+            if let Some(canonical) = canonical_spawnable(&candidate) {
+                return Some(canonical);
             }
         }
         #[cfg(not(windows))]
         {
             let candidate = dir.join(name);
-            if candidate.is_file() {
-                return std::fs::canonicalize(candidate).ok();
+            if let Some(canonical) = canonical_spawnable(&candidate) {
+                return Some(canonical);
             }
         }
     }
@@ -433,12 +454,31 @@ fn spawn_error(program: &Path, detail: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn override_path_used_when_file_exists() {
         let path = std::env::current_exe().unwrap();
         let resolved = resolve_cli("nonexistent", Some(path.to_str().unwrap()));
         assert_eq!(resolved, std::fs::canonicalize(path).ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn override_rejects_non_executable_file() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        assert_eq!(resolve_cli("nonexistent", file.path().to_str()), None);
+    }
+
+    #[test]
+    fn drain_pipe_retains_only_its_byte_ceiling() {
+        let exceeded = Arc::new(AtomicBool::new(false));
+        let captured = drain_pipe(Cursor::new(vec![b'x'; 64]), 16, exceeded.clone())
+            .join()
+            .unwrap();
+        assert_eq!(captured.text.len(), 16);
+        assert!(captured.exceeded);
+        assert!(exceeded.load(Ordering::Acquire));
     }
 
     #[cfg(windows)]
@@ -549,6 +589,29 @@ mod tests {
         let err = run_capture_cancellable(
             Path::new("/bin/sh"),
             &["-c", "sleep 30 & wait"],
+            None,
+            None,
+            SUGGEST_TIMEOUT,
+            Some(&cancel),
+        )
+        .unwrap_err();
+        assert_eq!(err, "cancelled");
+        assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn run_capture_cancels_process_group() {
+        let cancel = AiCancelHandle::new();
+        let trigger = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            trigger.cancel();
+        });
+        let started = Instant::now();
+        let err = run_capture_cancellable(
+            Path::new("cmd.exe"),
+            &["/C", "ping", "-n", "30", "127.0.0.1"],
             None,
             None,
             SUGGEST_TIMEOUT,

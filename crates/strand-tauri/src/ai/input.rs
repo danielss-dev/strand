@@ -192,14 +192,22 @@ fn classify_path(path: &str, kinds: &mut BTreeSet<AiSensitiveKind>) {
     }
     if matches!(
         name,
-        "id_rsa" | "id_ed25519" | "credentials.json" | "credentials.yml" | "credentials.yaml"
+        "id_rsa"
+            | "id_ed25519"
+            | "credentials"
+            | "credentials.json"
+            | "credentials.yml"
+            | "credentials.yaml"
+            | ".netrc"
+            | ".npmrc"
+            | ".pypirc"
     ) {
         kinds.insert(AiSensitiveKind::CredentialFile);
     }
     if name.ends_with(".key") {
         kinds.insert(AiSensitiveKind::PrivateKey);
     }
-    if [".pem", ".p12", ".pfx"]
+    if [".pem", ".p12", ".pfx", ".crt", ".cer"]
         .iter()
         .any(|extension| name.ends_with(extension))
     {
@@ -300,5 +308,54 @@ mod tests {
             .unwrap(),
             InputPreparation::NeedsConfirmation { .. }
         ));
+    }
+
+    #[test]
+    fn classifies_representative_sensitive_paths_and_markers() {
+        let diffs = vec![
+            diff(".aws/credentials", "+profile"),
+            diff("certs/client.crt", "+certificate"),
+            diff("config/app.txt", "+-----BEGIN OPENSSH PRIVATE KEY-----"),
+        ];
+        let InputPreparation::NeedsConfirmation {
+            sensitive_files, ..
+        } = prepare_input(&diffs, AiInputScope::Staged, &AiSensitiveDecision::Scan).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(sensitive_files.len(), 3);
+        assert!(sensitive_files[0]
+            .kinds
+            .contains(&AiSensitiveKind::CredentialFile));
+        assert!(sensitive_files[1]
+            .kinds
+            .contains(&AiSensitiveKind::Certificate));
+        assert!(sensitive_files[2]
+            .kinds
+            .contains(&AiSensitiveKind::PrivateKey));
+    }
+
+    #[test]
+    fn exclusion_never_sends_flagged_files() {
+        let diffs = vec![
+            diff(".env", "+TOKEN=secret-value-123456"),
+            diff("src/lib.rs", "+safe"),
+        ];
+        let InputPreparation::NeedsConfirmation { fingerprint, .. } =
+            prepare_input(&diffs, AiInputScope::Staged, &AiSensitiveDecision::Scan).unwrap()
+        else {
+            panic!()
+        };
+        let InputPreparation::Ready(prepared) = prepare_input(
+            &diffs,
+            AiInputScope::Staged,
+            &AiSensitiveDecision::Exclude { fingerprint },
+        )
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(prepared.diffs.len(), 1);
+        assert_eq!(prepared.diffs[0].path, "src/lib.rs");
+        assert_eq!(prepared.coverage.sensitive_excluded_files, 1);
     }
 }

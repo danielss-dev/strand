@@ -64,6 +64,10 @@ vendor's CLI; Strand only orchestrates it.
 - **Claude Code CLI** — an optional custom path (leave empty to use `claude` on PATH), a status line, and **Sign in to Claude Code** / **Sign out** buttons.
 - **Check CLI status** — checks both CLIs and reports whether each is missing,
   signed out, signed in, or installed but unable to run.
+- **Repository writing profile** — up to 1,000 characters of optional style,
+  terminology, or audience guidance for the active repository family. Linked
+  worktrees share the profile through their canonical `common_dir`; an empty
+  profile uses recent commit subjects only.
 
 To get a commit suggestion, stage some changes and press the sparkle button next
 to the commit subject field in Local Changes, use `Mod+Shift+M`, or run "Suggest
@@ -74,6 +78,11 @@ provider's browser or CLI flow, and once you complete it you run the action
 again. If a CLI launcher is present but its packaged executable is broken,
 Strand keeps that distinct from “signed out” and shows a repair hint beside the
 form rather than claiming that sign-in opened.
+
+Strand never runs an automatic provider-status subprocess from Local Changes.
+Provider checks remain explicit here. Writing generation is user-initiated,
+uses bounded local context, and does not add Strand telemetry or persist prompts,
+outputs, or sensitive classifications.
 
 ## Updates
 
