@@ -1686,7 +1686,9 @@ before launch, require a fingerprinted include/exclude decision, rank bounded
 large-change context deterministically, report coverage/provider identity, and
 support repository-family writing profiles, Cancel, Undo, alternate-provider
 retry, and an AI-first PR palette action. CI now exercises the Tauri suite and
-AI subprocess lifecycle on Unix and Windows.
+AI subprocess lifecycle in the normal Linux Rust gate; the dedicated Windows
+job was removed because its full Tauri build took roughly five minutes for a
+one-second platform-specific test suite.
 
 ---
 

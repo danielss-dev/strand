@@ -1791,6 +1791,9 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   caps, recent HEAD subjects, `common_dir` repository writing profiles,
   coverage/provider labels, Cancel, one-step undo, cross-provider retry, and
   “Draft pull request with AI…” palette action)
+- ☑ AI subprocess lifecycle tests run in the normal Linux Tauri gate; the
+  dedicated Linux/Windows matrix was removed after its Windows full-crate build
+  added roughly five minutes to exercise a one-second scoped suite
 - ☐ Rebase reword suggestions (share CommitBar generator)
 - ☐ Conflict-resolution hints — PRD Q3 follow-up
 
