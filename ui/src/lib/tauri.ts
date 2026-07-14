@@ -24,6 +24,7 @@ import type {
   PullRequest,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
+  PullRequestCreateOutcome,
   PullRequestList,
   PullRequestMergeStrategy,
   RebaseEntry,
@@ -103,6 +104,16 @@ export const tauri = {
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
   repoPullRequestForBranch: (path: string, branch: string) =>
     invoke<PullRequestBranchMatch | null>('repo_pull_request_for_branch', { path, branch }),
+  repoPullRequestCreate: (
+    path: string,
+    sourceBranch: string,
+    targetBranch: string,
+    title: string,
+    description: string,
+    isDraft: boolean,
+  ) => invoke<PullRequestCreateOutcome>('repo_pull_request_create', {
+    path, sourceBranch, targetBranch, title, description, isDraft,
+  }),
   repoPullRequestActivity: (path: string, id: number) =>
     invoke<PullRequestActivitySnapshot>('repo_pull_request_activity', { path, id }),
   repoPullRequest: (path: string, id: number) => invoke<PullRequest>('repo_pull_request', { path, id }),

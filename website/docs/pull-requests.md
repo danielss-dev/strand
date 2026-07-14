@@ -17,6 +17,19 @@ If the CLI is missing, signed out, or cannot access the repository, the view
 shows the provider error and the setup command. Provider calls time out after
 30 seconds instead of blocking the app indefinitely.
 
+## Create a PR
+
+Choose **Create PR** in the Pull Requests toolbar, or run “Pull Requests:
+create for current branch…” from the command palette. The dialog creates a
+GitHub or Azure DevOps pull request from the checked-out branch with a title,
+Markdown description, target branch, and optional draft state. After creation,
+Strand opens the new PR and follows it automatically.
+
+Strand does not push as part of this action. Push the checked-out branch first
+so it exists on the provider; if it is missing, the provider error stays in the
+dialog and no local state is changed. Authentication continues to use the
+signed-in `gh` or `az` CLI.
+
 ## Browse PRs
 
 The list contains up to the latest 100 open, closed, and merged pull requests.

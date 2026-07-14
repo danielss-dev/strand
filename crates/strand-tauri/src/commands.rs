@@ -203,6 +203,32 @@ pub async fn repo_pull_request_for_branch(
     .await
 }
 
+/// Create a pull request for an existing remote branch through the signed-in
+/// provider CLI. Strand deliberately does not push as part of this action.
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub async fn repo_pull_request_create(
+    path: String,
+    source_branch: String,
+    target_branch: String,
+    title: String,
+    description: String,
+    is_draft: bool,
+) -> CmdResult<pull_requests::PullRequestCreateOutcome> {
+    run_blocking("create pull request", move || {
+        pull_requests::create(
+            &path,
+            &source_branch,
+            &target_branch,
+            &title,
+            &description,
+            is_draft,
+        )
+        .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Small, patch-free snapshot used by the followed-PR monitor.
 #[tauri::command(async)]
 pub async fn repo_pull_request_activity(

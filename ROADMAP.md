@@ -1627,6 +1627,14 @@ detail, focus, tabs, drafts, scroll, and patch stay mounted; rich detail reloads
 only after activity changes, and the patch reloads only for a new head while a
 stale copy remains read-only.
 
+**Create pull requests shipped (2026-07-14):** The Pull Requests toolbar and
+command palette now open a keyboard-operable creation dialog for the checked-out
+branch. GitHub and Azure DevOps creation share one typed IPC path and support a
+title, Markdown description, target branch, and draft state through the
+provider CLI. A successful PR opens immediately and joins the follow monitor;
+creation deliberately requires the source branch to exist remotely instead of
+hiding an implicit push.
+
 ---
 
 ## 1.1+ — Post-1.0

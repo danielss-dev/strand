@@ -1286,6 +1286,12 @@ tree: watch the agent work, review fast, accept or reject safely.
     worktree deduplication, SQLite-backed baselines, bounded two-PR polling,
     native coalesced notifications, and terminal auto-unfollow survive
     navigation and relaunch.
+  - ☑ Create pull requests from the checked-out branch
+    (`repo_pull_request_create`, `PullRequestCreateDialog`): the PR toolbar and
+    command palette create GitHub or Azure DevOps PRs with title, description,
+    target branch, and draft state through the signed-in provider CLI, then
+    open and automatically follow the result. Strand never silently pushes the
+    source branch as part of PR creation.
   - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
     list/detail/tabs/drafts/scroll stay mounted during updates and failures;
     lightweight activity gates rich-detail reloads, patches reload only for a

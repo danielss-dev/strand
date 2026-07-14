@@ -20,6 +20,8 @@ use crate::ai::bin::{base_command, resolve_cli};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
+const MAX_PR_DESCRIPTION_BYTES: usize = 65_536;
+const MAX_PR_TITLE_BYTES: usize = 512;
 const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
 const GITHUB_BRANCH_STATE: &str = "open";
 const AZURE_BRANCH_STATUS: &str = "active";
@@ -178,6 +180,12 @@ pub struct PullRequestBranchMatch {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PullRequestCreateOutcome {
+    pub id: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PullRequestActivityComment {
     pub id: String,
     pub author: String,
@@ -256,6 +264,45 @@ pub fn for_branch(path: &str, branch: &str) -> Result<Option<PullRequestBranchMa
             project,
             repo,
         } => for_branch_azure(path, remote, organization, project, repo, branch),
+    }
+}
+
+pub fn create(
+    path: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    validate_create(source_branch, target_branch, title, description)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => create_github(
+            path,
+            &owner,
+            &repo,
+            source_branch,
+            target_branch,
+            title,
+            description,
+            is_draft,
+        ),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => create_azure(
+            path,
+            &organization,
+            &project,
+            &repo,
+            source_branch,
+            target_branch,
+            title,
+            description,
+            is_draft,
+        ),
     }
 }
 
@@ -469,6 +516,61 @@ fn for_branch_github(
             },
             pull_request,
         }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_github(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    let slug = format!("{owner}/{repo}");
+    let source_branch = branch_name(source_branch.to_string());
+    let target_branch = branch_name(target_branch.to_string());
+    let mut args = vec![
+        "pr",
+        "create",
+        "--repo",
+        &slug,
+        "--head",
+        &source_branch,
+        "--base",
+        &target_branch,
+        "--title",
+        title,
+        "--body-file",
+        "-",
+    ];
+    if is_draft {
+        args.push("--draft");
+    }
+    let output = run_command_input(
+        cwd,
+        "gh",
+        &args,
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(description.as_bytes()),
+    )?;
+    let url = String::from_utf8(output)
+        .map_err(|error| format!("GitHub CLI returned invalid text: {error}"))?
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let id = url
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| "GitHub created the pull request but returned no usable PR URL".to_string())?;
+    Ok(PullRequestCreateOutcome { id, url })
 }
 
 fn activity_github(
@@ -764,6 +866,65 @@ fn for_branch_azure(
             }
         })
     }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let source_branch = branch_name(source_branch.to_string());
+    let target_branch = branch_name(target_branch.to_string());
+    let draft = if is_draft { "true" } else { "false" };
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "create",
+            "--organization",
+            &organization_url,
+            "--project",
+            project,
+            "--repository",
+            repo,
+            "--source-branch",
+            &source_branch,
+            "--target-branch",
+            &target_branch,
+            "--title",
+            title,
+            "--description",
+            description,
+            "--draft",
+            draft,
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
+    let id = value
+        .get("pullRequestId")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "Azure CLI created the pull request but returned no PR id".to_string())?;
+    Ok(PullRequestCreateOutcome {
+        id,
+        url: format!(
+            "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"
+        ),
+    })
 }
 
 fn detail_azure(
@@ -1249,6 +1410,29 @@ fn validate_comment(body: &str) -> Result<()> {
     }
     if body.len() > MAX_COMMENT_BYTES {
         return Err("Comment exceeds Strand's 64 KB limit".into());
+    }
+    Ok(())
+}
+
+fn validate_create(
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+) -> Result<()> {
+    for (label, branch) in [("Source", source_branch), ("Target", target_branch)] {
+        if branch.trim().is_empty() || branch.contains(['\r', '\n', '\0']) {
+            return Err(format!("{label} branch is invalid"));
+        }
+    }
+    if title.trim().is_empty() {
+        return Err("Pull request title is required".into());
+    }
+    if title.contains(['\r', '\n', '\0']) || title.len() > MAX_PR_TITLE_BYTES {
+        return Err("Pull request title is invalid or exceeds Strand's 512-byte limit".into());
+    }
+    if description.len() > MAX_PR_DESCRIPTION_BYTES {
+        return Err("Pull request description exceeds Strand's 64 KB limit".into());
     }
     Ok(())
 }
@@ -2131,6 +2315,21 @@ mod tests {
         assert!(validate_comment(" \n ").is_err());
         assert!(validate_comment("Looks good").is_ok());
         assert!(validate_comment(&"x".repeat(MAX_COMMENT_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn validates_pull_request_creation_fields() {
+        assert!(validate_create("feature", "main", "Ship it", "Details").is_ok());
+        assert!(validate_create("feature", "main", " ", "Details").is_err());
+        assert!(validate_create("feature\nother", "main", "Ship it", "Details").is_err());
+        assert!(validate_create("feature", "main\0other", "Ship it", "Details").is_err());
+        assert!(validate_create(
+            "feature",
+            "main",
+            "Ship it",
+            &"x".repeat(MAX_PR_DESCRIPTION_BYTES + 1),
+        )
+        .is_err());
     }
 
     #[test]

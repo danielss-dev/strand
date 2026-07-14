@@ -263,6 +263,11 @@ export interface PullRequestBranchMatch {
   pull_request: PullRequest;
 }
 
+export interface PullRequestCreateOutcome {
+  id: number;
+  url: string;
+}
+
 export interface PullRequestActivityComment {
   id: string;
   author: string;

@@ -4559,6 +4559,17 @@ textarea.clone-input {
 .pr-toolbar .h-link { display: inline-flex; align-items: center; gap: 5px; }
 .pr-toolbar .pr-back { flex: 0 0 auto; color: var(--text); font-weight: 600; }
 .pr-toolbar .pr-refresh-failed { color: var(--del); }
+.pr-toolbar .pr-create-button {
+  min-height: 26px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.pr-create-dialog form { display: flex; flex-direction: column; min-height: 0; }
+.pr-create-description { min-height: 112px !important; }
 
 .pr-main { flex: 1; min-height: 0; }
 

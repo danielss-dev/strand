@@ -21,11 +21,12 @@ import {
 import { pullRequestActivityChanged, pullRequestFollowKey } from '../lib/pullRequestActivity';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
-import type { PullRequest, PullRequestActivitySnapshot, PullRequestCheck, PullRequestComment, PullRequestList, PullRequestReviewThread } from '../lib/types';
+import type { PullRequest, PullRequestActivitySnapshot, PullRequestCheck, PullRequestComment, PullRequestCreateOutcome, PullRequestList, PullRequestReviewThread } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
+import { PullRequestCreateDialog } from './PullRequestCreateDialog';
 
 const providerName = (provider: PullRequestList['repository']['provider']) =>
   provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
@@ -1013,6 +1014,7 @@ export function PullRequests({
 }) {
   const path = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
+  const refs = useRepo((state) => state.refs);
   const currentBranch = meta && !meta.detached ? meta.branch : null;
   const followed = usePullRequests((state) => state.followed);
   const notificationPermission = usePullRequests((state) => state.permission);
@@ -1024,6 +1026,7 @@ export function PullRequests({
   const activity = usePullRequests((state) => state.activity);
   const pollFollowed = usePullRequests((state) => state.pollAll);
   const seedAfterProviderWrite = usePullRequests((state) => state.seedAfterProviderWrite);
+  const followBranchMatch = usePullRequests((state) => state.followBranchMatch);
   const [data, setData] = useState<PullRequestList | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openedId, setOpenedId] = useState<number | null>(null);
@@ -1034,6 +1037,7 @@ export function PullRequests({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
   const autoOpenedContext = useRef<string | null>(null);
@@ -1252,6 +1256,31 @@ export function PullRequests({
     if (openedId != null) setDetailReload((value) => value + 1);
   }, [openedId, refresh]);
 
+  const createdPullRequest = useCallback((outcome: PullRequestCreateOutcome) => {
+    setCreateOpen(false);
+    onToast(`Created pull request #${outcome.id}`);
+    if (!path || !currentBranch) return;
+    void tauri.repoPullRequestForBranch(path, currentBranch).then((match) => {
+      if (!match) {
+        void refresh();
+        return;
+      }
+      setData((current) => ({
+        repository: match.repository,
+        pull_requests: [
+          match.pull_request,
+          ...(current?.pull_requests.filter((item) => item.id !== match.pull_request.id) ?? []),
+        ],
+      }));
+      setSelectedId(match.pull_request.id);
+      setOpenedId(match.pull_request.id);
+      setDetail(null);
+      void followBranchMatch(path, match).catch(() => {});
+    }, () => {
+      void refresh();
+    });
+  }, [currentBranch, followBranchMatch, onToast, path, refresh]);
+
   const requestMergeMenu = useCallback((pr: PullRequest | null) => {
     if (!pr || pr.is_draft || !['open', 'active'].includes(pr.state) || !pr.source_commit) {
       onToast('Open an active, non-draft pull request before merging.', 'error');
@@ -1266,8 +1295,31 @@ export function PullRequests({
     return () => window.removeEventListener('strand:pull-request-merge', onMergeRequest);
   }, [detail, requestMergeMenu]);
 
+  useEffect(() => {
+    const onCreateRequest = () => {
+      if (!path || !currentBranch) {
+        onToast('Check out a branch before creating a pull request.', 'error');
+        return;
+      }
+      setCreateOpen(true);
+    };
+    window.addEventListener('strand:pull-request-create', onCreateRequest);
+    return () => window.removeEventListener('strand:pull-request-create', onCreateRequest);
+  }, [currentBranch, onToast, path]);
+
   return (
     <div className="pr-view">
+      {createOpen && path && data && currentBranch ? (
+        <PullRequestCreateDialog
+          path={path}
+          provider={data.repository.provider}
+          sourceBranch={currentBranch}
+          refs={refs}
+          knownTargets={data.pull_requests.map((pr) => pr.target_branch)}
+          onCreated={createdPullRequest}
+          onClose={() => setCreateOpen(false)}
+        />
+      ) : null}
       <div className="pr-toolbar">
         <div>
           {openedId != null ? (
@@ -1282,6 +1334,16 @@ export function PullRequests({
           ) : null}
         </div>
         <div className="pr-toolbar-actions">
+          <button
+            type="button"
+            className="btn pr-create-button"
+            disabled={!path || !data || !currentBranch}
+            title={currentBranch ? `Create a pull request from ${currentBranch}` : 'Check out a branch first'}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Icon name="plus" size={12} />
+            Create PR
+          </button>
           {openedFollowed?.error ? (
             <span className="pr-refresh-failed" role="status" title={openedFollowed.error}>
               Updates delayed · <button type="button" className="h-link" onClick={() => void pollFollowed()}>Retry</button>

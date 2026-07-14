@@ -1199,3 +1199,22 @@ reload the patch only when the head SHA changes. Keep the old patch visible
 while that replacement loads or fails, label it stale, and disable writes that
 depend on exact patch coordinates. Treat incomplete policy/check reads as
 unknown and retain the last complete baseline.
+
+---
+
+## Pull-request creation never implies a push
+
+**Rule.** Creating a hosted pull request is a provider write against a branch
+that already exists remotely. Do not silently push, set an upstream, or publish
+other local commits as part of that action.
+
+**Why.** A push changes Git state and can publish more work than the creation
+dialog describes. Keeping it separate makes the source commit and provider
+failure predictable, and preserves the user's ability to inspect or amend the
+branch before publishing it.
+
+**How to apply.** The creation UI names the checked-out source branch, explains
+that it must already exist remotely, and sends only title, description, target,
+and draft state through `repo_pull_request_create`. Surface missing-branch and
+authentication failures inline. After success, query the new PR by branch,
+open it, and enroll it in the existing follow monitor.

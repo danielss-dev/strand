@@ -1116,6 +1116,17 @@ export function App() {
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
         { id: 'pull-requests', label: 'Show: Pull Requests', group: 'Actions', keywords: 'pr github azure devops code review merge request', run: () => { setView('pull-requests'); selectFile(null); } },
+        ...(!meta.detached ? [{
+          id: 'pull-request-create',
+          label: 'Pull Requests: create for current branch…',
+          group: 'Actions',
+          keywords: 'pr github azure devops open publish current branch',
+          run: () => {
+            setView('pull-requests');
+            selectFile(null);
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('strand:pull-request-create')), 50);
+          },
+        } satisfies PaletteAction] : []),
         ...(view === 'pull-requests' ? [
           {
             id: 'pull-request-merge',

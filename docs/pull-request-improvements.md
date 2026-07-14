@@ -10,7 +10,9 @@
 > GitHub inline publishing are present. Followed PRs now persist across relaunch,
 > the checked-out branch auto-follows independently of this view, native
 > notifications report review activity, and list/detail/patch refreshes use
-> stale-while-revalidate resource boundaries. Inline comments still publish
+> stale-while-revalidate resource boundaries. The checked-out branch can now
+> create a GitHub or Azure DevOps PR/draft from the toolbar or command palette,
+> then opens and follows it without an implicit push. Inline comments still publish
 > immediately; the pending **Add to review** queue described below remains the
 > intended batched-review workflow.
 

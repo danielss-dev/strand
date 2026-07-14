@@ -79,6 +79,7 @@ fn main() {
             commands::repo_refs,
             commands::repo_pull_requests,
             commands::repo_pull_request_for_branch,
+            commands::repo_pull_request_create,
             commands::repo_pull_request_activity,
             commands::repo_pull_request,
             commands::repo_pull_request_diff,
