@@ -1,7 +1,12 @@
 import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
 
 import { hashPatch } from './patch';
-import type { PullRequest, PullRequestProvider } from './types';
+import type {
+  PullRequest,
+  PullRequestComment,
+  PullRequestProvider,
+  PullRequestReviewThreadUpdate,
+} from './types';
 
 export type CheckTone = 'success' | 'running' | 'failed' | 'neutral';
 
@@ -206,6 +211,47 @@ export function relativeTimeLabel(value: string, now = Date.now()): string {
 export function parsePullRequestPatch(patch: string): FileDiffMetadata[] {
   if (!patch.trim()) return [];
   return parsePatchFiles(patch, `pr:${hashPatch(patch)}`, true).flatMap((parsed) => parsed.files);
+}
+
+export function withPullRequestThreadReply(
+  pr: PullRequest,
+  threadId: string,
+  reply: PullRequestComment,
+): PullRequest {
+  const thread = pr.review_threads.find((candidate) => candidate.id === threadId);
+  if (!thread) return pr;
+  const normalizedReply = reply.path ? reply : { ...reply, path: thread.path };
+  const reviewThreads = pr.review_threads.map((candidate) => candidate.id === threadId
+    ? {
+        ...candidate,
+        comments: candidate.comments.some((comment) => comment.id === reply.id)
+          ? candidate.comments
+          : [...candidate.comments, normalizedReply]
+              .sort((left, right) => left.created_at.localeCompare(right.created_at)),
+      }
+    : candidate);
+  const comments = [...pr.comments];
+  if (!comments.some((comment) => comment.id === reply.id)) comments.push(normalizedReply);
+  comments.sort((left, right) => left.created_at.localeCompare(right.created_at));
+  return {
+    ...pr,
+    review_threads: reviewThreads,
+    comments,
+    comment_count: comments.length,
+  };
+}
+
+export function withPullRequestThreadUpdate(
+  pr: PullRequest,
+  update: PullRequestReviewThreadUpdate,
+): PullRequest {
+  if (!pr.review_threads.some((thread) => thread.id === update.id)) return pr;
+  return {
+    ...pr,
+    review_threads: pr.review_threads.map((thread) => thread.id === update.id
+      ? { ...thread, ...update }
+      : thread),
+  };
 }
 
 export function diffStats(file: FileDiffMetadata): { additions: number; deletions: number } {

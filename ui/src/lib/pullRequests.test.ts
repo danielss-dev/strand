@@ -20,9 +20,11 @@ const {
   pullRequestReadiness,
   pullRequestForBranch,
   relativeTimeLabel,
+  withPullRequestThreadReply,
+  withPullRequestThreadUpdate,
 } = await import('./pullRequests');
 
-import type { PullRequest } from './types';
+import type { PullRequest, PullRequestComment, PullRequestReviewThread } from './types';
 
 function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
@@ -155,5 +157,81 @@ describe('pullRequestForBranch', () => {
     expect(pullRequestForBranch(pullRequests, 'missing')).toBeNull();
     expect(pullRequestForBranch([{ id: 3, source_branch: 'feature', state: 'merged' }], 'feature'))
       .toBeNull();
+  });
+});
+
+describe('review thread state updates', () => {
+  const firstComment: PullRequestComment = {
+    id: 'comment-1',
+    author: 'octo',
+    avatar_url: null,
+    body: 'Please fix this.',
+    created_at: '2026-07-15T10:00:00Z',
+    url: 'https://github.com/acme/repo/pull/42#discussion_r1',
+    is_system: false,
+    path: 'src/lib.rs',
+  };
+  const thread: PullRequestReviewThread = {
+    id: 'thread-1',
+    path: 'src/lib.rs',
+    start_line: 10,
+    end_line: 12,
+    side: 'additions',
+    is_resolved: false,
+    is_outdated: false,
+    can_reply: true,
+    can_resolve: true,
+    can_unresolve: false,
+    comments: [firstComment],
+  };
+
+  it('adds a reply to its thread and the chronological Conversation timeline', () => {
+    const reply: PullRequestComment = {
+      ...firstComment,
+      id: 'comment-2',
+      author: 'ada',
+      body: 'Fixed.',
+      created_at: '2026-07-15T09:55:00Z',
+      path: null,
+    };
+    const updated = withPullRequestThreadReply(pullRequest({
+      comments: [firstComment],
+      review_threads: [thread],
+      comment_count: 1,
+    }), thread.id, reply);
+    expect(updated.review_threads[0].comments.map((comment) => comment.id))
+      .toEqual(['comment-2', 'comment-1']);
+    expect(updated.comments.map((comment) => comment.id)).toEqual(['comment-2', 'comment-1']);
+    expect(updated.comments[0].path).toBe('src/lib.rs');
+    expect(updated.comment_count).toBe(2);
+  });
+
+  it('deduplicates a repeated provider reply outcome', () => {
+    const pr = pullRequest({ comments: [firstComment], review_threads: [thread], comment_count: 1 });
+    const once = withPullRequestThreadReply(pr, thread.id, firstComment);
+    const twice = withPullRequestThreadReply(once, thread.id, firstComment);
+    expect(twice.review_threads[0].comments).toHaveLength(1);
+    expect(twice.comments).toHaveLength(1);
+    expect(twice.comment_count).toBe(1);
+  });
+
+  it('updates only the matching thread state and capabilities', () => {
+    const other = { ...thread, id: 'thread-2' };
+    const pr = pullRequest({ review_threads: [thread, other] });
+    const updated = withPullRequestThreadUpdate(pr, {
+      id: thread.id,
+      is_resolved: true,
+      is_outdated: false,
+      can_reply: true,
+      can_resolve: false,
+      can_unresolve: true,
+    });
+    expect(updated.review_threads[0]).toMatchObject({
+      is_resolved: true,
+      can_resolve: false,
+      can_unresolve: true,
+    });
+    expect(updated.review_threads[1]).toBe(other);
+    expect(updated.comments).toBe(pr.comments);
   });
 });

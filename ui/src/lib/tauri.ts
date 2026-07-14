@@ -26,9 +26,11 @@ import type {
   PullRequest,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
+  PullRequestComment,
   PullRequestCreateOutcome,
   PullRequestList,
   PullRequestMergeStrategy,
+  PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
   RebaseEntry,
   RebaseStep,
@@ -151,6 +153,12 @@ export const tauri = {
   ) => invoke<void>('repo_pull_request_inline_comment', {
     path, id, body, filePath, startLine, endLine, side, expectedHead,
   }),
+  repoPullRequestThreadReply: (path: string, threadId: string, body: string) =>
+    invoke<PullRequestComment>('repo_pull_request_thread_reply', { path, threadId, body }),
+  repoPullRequestThreadResolve: (path: string, threadId: string, resolved: boolean) =>
+    invoke<PullRequestReviewThreadUpdate>('repo_pull_request_thread_resolve', {
+      path, threadId, resolved,
+    }),
   repoPullRequestMerge: (
     path: string,
     id: number,

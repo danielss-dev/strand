@@ -1259,3 +1259,25 @@ committed merge-base-to-`HEAD` diff only, keep Codex in its read-only sandbox
 and Claude Code tools disabled, and return editable text without invoking the
 host provider. Never describe staged/unstaged work as though it were already in
 the pull request.
+
+---
+
+## Hosted thread writes use node IDs and provider capabilities, not head guards
+
+**Rule.** New inline comments remain coordinate writes and must carry the exact
+reviewed head SHA. Replies and Resolve/Reopen target an existing provider thread
+by its stable node ID instead: gate those controls on the provider's
+`viewerCanReply` / `viewerCanResolve` / `viewerCanUnresolve` fields and let the
+provider reject stale permissions. Missing capability fields fail closed.
+
+**Why.** Applying the coordinate-write head guard to thread writes would block
+valid replies on outdated threads and valid resolution after a push. GitHub's
+thread mutation already names the unambiguous object, while the capability
+fields express the signed-in viewer's current authority.
+
+**How to apply.** Send GraphQL mutations and variables through stdin to the
+resolved provider CLI, never interpolate user text into argv. Return the small
+comment/thread outcome and patch the active PR locally so a reply does not
+reload the rich detail or hosted patch, remount Pierre, or discard scroll,
+focus, file selection, and per-thread drafts. Background monitoring can then
+seed its activity baseline through the existing post-write path.
