@@ -40,7 +40,7 @@ Preview locally with `pnpm site` from the repo root (serves on
   there drives the sidebar and prev/next pager). Cross-page links are plain
   relative `foo.md` links — the viewer rewrites them (and they render on
   GitHub too). Keep the guide in sync with app releases: every claim in it
-  was fact-checked against `ui/src` on 2026-07-08 (v0.9.0).
+  was fact-checked against `ui/src` on 2026-07-08 (v0.10.0).
 
 ## Before launch
 

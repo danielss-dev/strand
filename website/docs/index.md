@@ -16,7 +16,7 @@ Strand is keyboard-first but never keyboard-only — the mouse stays first-class
 
 ## Status
 
-Strand is in **alpha**, currently at **v0.9.x**. It is used daily on large real-world repositories, but some gaps remain (for example line-level staging below the change-block level, and the interactive-rebase `edit` action). Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager).
+Strand is in **alpha**, currently at **v0.10.x**. It is used daily on large real-world repositories, but some gaps remain (for example line-level staging below the change-block level, and the interactive-rebase `edit` action). Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager).
 
 Strand is open source under AGPL-3.0, free for individuals forever, with an honor-system commercial license for companies — no license keys, feature gating, or telemetry.
 
