@@ -1633,7 +1633,12 @@ branch. GitHub and Azure DevOps creation share one typed IPC path and support a
 title, Markdown description, target branch, and draft state through the
 provider CLI. A successful PR opens immediately and joins the follow monitor;
 creation deliberately requires the source branch to exist remotely instead of
-hiding an implicit push.
+hiding an implicit push. The dialog can also fill or replace its editable title
+and Markdown description through the configured Codex or Claude Code CLI. That
+read-only suggestion uses committed changes from the target branch's merge base
+to local `HEAD`; it never includes unstaged drafts or creates the PR itself.
+Vendor CLI health errors remain distinct from signed-out sessions, and sign-in
+is preflighted before Strand reports that the browser or CLI flow has started.
 
 ---
 
@@ -1655,8 +1660,9 @@ hiding an implicit push.
   Same static binary as the remote-SSH `strandd` (`--stdio` mode). Designed 2026-06-12:
   `docs/strand-cli.md` + task breakdown in TASKS.md.
 - Plugin / extension surface
-- AI features (commit message suggestions, conflict hints) — PRD Q3
+- AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs (Codex / Claude Code CLIs)
+  - ☑ Pull-request title/description suggestions from committed branch diffs
 - ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
   foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 

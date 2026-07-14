@@ -174,6 +174,7 @@ fn main() {
             commands::ai_provider_login,
             commands::ai_provider_logout,
             commands::repo_suggest_commit_message,
+            commands::repo_suggest_pull_request,
             commands::crash_report_check,
         ])
         .setup(|app| {

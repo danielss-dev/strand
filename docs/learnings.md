@@ -1014,7 +1014,11 @@ to `claude` is the supported path for Claude Code users.
   sandbox) so suggestion runs can't mutate the repo.
 - Don't gate Suggest on upfront sign-in — run the vendor CLI first; on failure,
   check `auth status` / `login status` on the bin and only then open the login
-  flow (`AI_AUTH_REQUIRED` prefix from Rust → UI calls `ai_provider_login`).
+  flow (`AI_AUTH_REQUIRED` prefix from Rust → UI calls `ai_provider_login`). A
+  failed status command is **not** automatically a logged-out result: a launcher
+  can exist while its packaged executable is missing or corrupt. Preserve that
+  health error, and preflight detached login flows with `--version`, so the UI
+  never claims sign-in started when the vendor CLI could not run.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
   **Check CLI status** button — no auto auth probe on open. Optional manual
   sign-in/out per CLI remains.
@@ -1218,3 +1222,9 @@ that it must already exist remotely, and sends only title, description, target,
 and draft state through `repo_pull_request_create`. Surface missing-branch and
 authentication failures inline. After success, query the new PR by branch,
 open it, and enroll it in the existing follow monitor.
+
+AI-assisted PR writing follows the same separation. Build its prompt from the
+committed merge-base-to-`HEAD` diff only, keep Codex in its read-only sandbox
+and Claude Code tools disabled, and return editable text without invoking the
+host provider. Never describe staged/unstaged work as though it were already in
+the pull request.

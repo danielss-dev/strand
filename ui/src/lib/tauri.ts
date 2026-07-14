@@ -27,6 +27,7 @@ import type {
   PullRequestCreateOutcome,
   PullRequestList,
   PullRequestMergeStrategy,
+  PullRequestSuggestion,
   RebaseEntry,
   RebaseStep,
   Refs,
@@ -113,6 +114,19 @@ export const tauri = {
     isDraft: boolean,
   ) => invoke<PullRequestCreateOutcome>('repo_pull_request_create', {
     path, sourceBranch, targetBranch, title, description, isDraft,
+  }),
+  repoSuggestPullRequest: (
+    path: string,
+    targetBranch: string,
+    provider: AiProvider,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) => invoke<PullRequestSuggestion>('repo_suggest_pull_request', {
+    path,
+    targetBranch,
+    provider,
+    openaiCli: openaiCli ?? null,
+    anthropicCli: anthropicCli ?? null,
   }),
   repoPullRequestActivity: (path: string, id: number) =>
     invoke<PullRequestActivitySnapshot>('repo_pull_request_activity', { path, id }),

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
-import { errMessage, tauri } from '../lib/tauri';
+import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, tauri } from '../lib/tauri';
 import type { PullRequestCreateOutcome, PullRequestProvider, Refs } from '../lib/types';
+import { useSettings } from '../stores/settings';
 
 function targetBranches(refs: Refs | null, sourceBranch: string, knownTargets: string[]): string[] {
   const candidates = [
@@ -34,6 +35,9 @@ export function PullRequestCreateDialog({
   onCreated: (outcome: PullRequestCreateOutcome) => void;
   onClose: () => void;
 }) {
+  const aiProvider = useSettings((state) => state.aiProvider);
+  const openaiCli = useSettings((state) => state.openaiCli);
+  const anthropicCli = useSettings((state) => state.anthropicCli);
   const targets = useMemo(
     () => targetBranches(refs, sourceBranch, knownTargets),
     [knownTargets, refs, sourceBranch],
@@ -43,8 +47,10 @@ export function PullRequestCreateDialog({
   const [targetBranch, setTargetBranch] = useState(targets[0] ?? 'main');
   const [draft, setDraft] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -83,7 +89,7 @@ export function PullRequestCreateDialog({
   }
 
   async function submit() {
-    if (busy) return;
+    if (busy || suggesting) return;
     if (!title.trim()) {
       setError('Title is required.');
       return;
@@ -111,7 +117,50 @@ export function PullRequestCreateDialog({
     }
   }
 
+  async function fillWithAi() {
+    const target = targetBranch.trim();
+    if (busy || suggesting) return;
+    if (!target) {
+      setError('Choose a target branch before generating pull request content.');
+      return;
+    }
+    setSuggesting(true);
+    setError(null);
+    try {
+      const suggestion = await tauri.repoSuggestPullRequest(
+        path,
+        target,
+        aiProvider,
+        openaiCli,
+        anthropicCli,
+      );
+      if (!mountedRef.current) return;
+      setTitle(suggestion.title);
+      setDescription(suggestion.description);
+      window.requestAnimationFrame(() => titleRef.current?.focus());
+    } catch (caught) {
+      const message = gitErrorHint(caught);
+      if (message.startsWith(AI_AUTH_REQUIRED)) {
+        try {
+          await tauri.aiProviderLogin(aiProvider, openaiCli, anthropicCli);
+          if (mountedRef.current) {
+            setError('Sign-in started — complete it in the browser or CLI window, then click Fill with AI again.');
+          }
+        } catch (loginError) {
+          if (mountedRef.current) setError(`Sign-in failed: ${gitErrorHint(loginError)}`);
+        }
+      } else if (mountedRef.current) {
+        setError(`AI suggestion failed: ${message}`);
+      }
+    } finally {
+      if (mountedRef.current) setSuggesting(false);
+    }
+  }
+
   const providerLabel = provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
+  const aiProviderLabel = aiProvider === 'openai' ? 'Codex' : 'Claude Code';
+  const fieldsDisabled = busy || suggesting;
+  const aiActionLabel = title.trim() || description.trim() ? 'Replace' : 'Fill';
 
   return (
     <div
@@ -140,13 +189,29 @@ export function PullRequestCreateDialog({
               Create on {providerLabel} from <code>{sourceBranch}</code>. Strand will not push the branch; it must already exist on the remote.
             </p>
 
+            <div className="pr-ai-fill-row">
+              <button
+                type="button"
+                className="btn pr-ai-fill"
+                aria-busy={suggesting}
+                disabled={busy || suggesting || !targetBranch.trim()}
+                title={`${aiActionLabel} the editable title and description with ${aiProviderLabel}, using committed branch changes`}
+                onClick={() => void fillWithAi()}
+              >
+                <Icon name={suggesting ? 'refresh' : 'sparkle'} size={13} className={suggesting ? 'spin' : undefined} />
+                {suggesting ? 'Generating…' : `${aiActionLabel} with ${aiProviderLabel}`}
+              </button>
+              <span>Uses committed changes against the target branch.</span>
+            </div>
+
             <label className="clone-field">
               <span className="lbl">Title</span>
               <input
+                ref={titleRef}
                 autoFocus
                 className="clone-input"
                 value={title}
-                disabled={busy}
+                disabled={fieldsDisabled}
                 maxLength={512}
                 onChange={(event) => setTitle(event.target.value)}
               />
@@ -158,7 +223,7 @@ export function PullRequestCreateDialog({
                 className="clone-input"
                 value={targetBranch}
                 list="pr-target-branches"
-                disabled={busy}
+                disabled={fieldsDisabled}
                 onChange={(event) => setTargetBranch(event.target.value)}
               />
               <datalist id="pr-target-branches">
@@ -171,7 +236,7 @@ export function PullRequestCreateDialog({
               <textarea
                 className="clone-input pr-create-description"
                 value={description}
-                disabled={busy}
+                disabled={fieldsDisabled}
                 maxLength={65_536}
                 placeholder="What changed, and why?"
                 onChange={(event) => setDescription(event.target.value)}
@@ -182,7 +247,7 @@ export function PullRequestCreateDialog({
               <input
                 type="checkbox"
                 checked={draft}
-                disabled={busy}
+                disabled={fieldsDisabled}
                 onChange={(event) => setDraft(event.target.checked)}
               />
               <span>Create as draft</span>
@@ -193,7 +258,7 @@ export function PullRequestCreateDialog({
 
           <div className="clone-foot">
             <button type="button" className="btn" disabled={busy} onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy || suggesting}>
               {busy ? 'Creating…' : 'Create pull request'}
             </button>
           </div>

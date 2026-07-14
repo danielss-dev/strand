@@ -14,12 +14,13 @@ type CliStatus = AiProviderStatus | null;
 function formatCliStatus(status: CliStatus, cliLabel: string): string {
   if (!status) return 'Not checked yet.';
   if (!status.installed) return `${cliLabel} CLI not found on PATH or at the custom path above.`;
+  if (status.error) return status.error;
   if (status.logged_in) return status.account_hint ?? 'Signed in';
   return 'Installed but not signed in';
 }
 
 /**
- * AI — commit message suggestions via vendor CLIs (Codex / Claude Code).
+ * AI writing suggestions via vendor CLIs (Codex / Claude Code).
  * Auth and billing stay in the official tools; Strand only orchestrates them.
  */
 export function AiSection() {
@@ -55,7 +56,7 @@ export function AiSection() {
     setMessage(null);
     try {
       await tauri.aiProviderLogin(provider, openaiCli, anthropicCli);
-      setMessage('Browser opened — complete sign-in there, then click Check CLI status.');
+      setMessage('Sign-in started — complete it in the browser or CLI window, then click Check CLI status.');
     } catch (e) {
       setMessage(errMessage(e));
     } finally {
@@ -79,16 +80,16 @@ export function AiSection() {
 
   const panelHint =
     aiProvider === 'openai'
-      ? 'Uses your ChatGPT subscription via the Codex CLI. Sign-in is prompted when you first suggest a message.'
-      : 'Uses the Claude Code CLI (`claude`). Sign-in is prompted when you first suggest a message.';
+      ? 'Uses your ChatGPT subscription via the Codex CLI. Sign-in is prompted when you first generate text.'
+      : 'Uses the Claude Code CLI (`claude`). Sign-in is prompted when you first generate text.';
 
   return (
     <section className="settings-section" aria-label="AI">
       <div className="settings-field">
-        <span className="settings-field-label">Commit message provider</span>
+        <span className="settings-field-label">AI writing provider</span>
         <select
           className="settings-select"
-          aria-label="Commit message provider"
+          aria-label="AI writing provider"
           value={aiProvider}
           onChange={(e) => {
             setMessage(null);

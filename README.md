@@ -65,7 +65,8 @@ keyboard alone, and the mouse stays first-class.
   opening and being followed automatically even before the PR view is opened.
   Create a PR or draft for the checked-out branch from the toolbar or command
   palette, choosing its title, description, and target branch without an
-  implicit push.
+  implicit push. Optionally draft the editable title and description from the
+  committed branch delta using the configured Codex or Claude Code subscription.
   Persistent Follow controls and native desktop notifications surface new
   comments, review decisions, failed checks, pushes, and merged/closed state.
   Refreshes keep existing content, focus, tabs, drafts, and diffs in place
@@ -126,7 +127,7 @@ keyboard alone, and the mouse stays first-class.
   git / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes via
   your ChatGPT subscription (Codex CLI) or Claude Code CLI; Settings → AI
-  for sign-in and provider choice.
+  for sign-in, provider choice, and CLI health checks.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

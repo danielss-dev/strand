@@ -4570,6 +4570,9 @@ textarea.clone-input {
 
 .pr-create-dialog form { display: flex; flex-direction: column; min-height: 0; }
 .pr-create-description { min-height: 112px !important; }
+.pr-ai-fill-row { display: flex; align-items: center; gap: 9px; }
+.pr-ai-fill-row > span { color: var(--text-dim); font-size: 10.5px; }
+.pr-ai-fill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 .pr-main { flex: 1; min-height: 0; }
 

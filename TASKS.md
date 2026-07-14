@@ -1291,7 +1291,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     command palette create GitHub or Azure DevOps PRs with title, description,
     target branch, and draft state through the signed-in provider CLI, then
     open and automatically follow the result. Strand never silently pushes the
-    source branch as part of PR creation.
+    source branch as part of PR creation. **Fill with Codex/Claude Code** uses
+    the configured AI subscription to draft editable title/description text
+    from the committed merge-base diff (`repo_suggest_pull_request`).
   - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
     list/detail/tabs/drafts/scroll stay mounted during updates and failures;
     lightweight activity gates rich-detail reloads, patches reload only for a
@@ -1754,11 +1756,13 @@ as the remote-SSH daemon** (`--stdio` mode) — shares the `strand-ops`
 extraction above as prerequisite. **Do not start before 1.0 ships**
 (ROADMAP §1.1+).
 
-### AI (commit message suggestions)
+### AI writing suggestions
 
 - ☑ Rust `ai/` module + IPC (`ai_provider_*`, `repo_suggest_commit_message`)
 - ☑ Settings → AI (ChatGPT / Claude Code sign-in, custom CLI paths)
 - ☑ CommitBar Suggest + palette / ⌘⇧M shortcut
+- ☑ Pull-request title/description suggestions from committed merge-base diffs
+  (`repo_suggest_pull_request`, Create PR **Fill with Codex/Claude Code**)
 - ☑ Windows CLI spawning hardened (DAN-11: `ai/bin.rs` resolves `.exe`/`.cmd`/
   `.bat` only — never npm's extensionless POSIX shims — and runs batch shims
   via `cmd /C`; prompts travel over stdin; null stdin + 30s/120s timeouts so
@@ -1766,6 +1770,9 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   stops per-call console flashes in the release build; CommitBar surfaces
   suggest failures inline as "Suggestion failed: …" instead of a silently
   disabled sparkle / mislabeled "Commit failed:")
+- ☑ Broken vendor-CLI installs stay distinct from signed-out sessions
+  (`AiProviderStatus.error`, auth-failure classification, and `--version`
+  login preflight prevent false “browser opened” messages)
 - ☐ Rebase reword suggestions (share CommitBar generator)
 - ☐ Conflict-resolution hints — PRD Q3 follow-up
 

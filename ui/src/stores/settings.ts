@@ -38,7 +38,7 @@ export type ExternalTool =
   | { kind: 'custom'; template: string }
   | null;
 
-/** AI provider for commit message suggestions. */
+/** AI provider for writing suggestions. */
 export type AiProvider = 'openai' | 'anthropic';
 
 /** The concrete theme already applied to `<html>` by the pre-paint inline
@@ -108,7 +108,7 @@ export interface SettingsState {
   defaultCloneDir: string | null;
   editorTool: ExternalTool;
   terminalTool: ExternalTool;
-  /** Default AI provider for commit message suggestions. */
+  /** Default AI provider for writing suggestions. */
   aiProvider: AiProvider;
   /** Optional override path to the Codex CLI binary. */
   openaiCli: string | null;

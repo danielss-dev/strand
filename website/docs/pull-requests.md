@@ -30,6 +30,15 @@ so it exists on the provider; if it is missing, the provider error stays in the
 dialog and no local state is changed. Authentication continues to use the
 signed-in `gh` or `az` CLI.
 
+Choose **Fill with Codex** or **Fill with Claude Code** to draft both editable
+fields using the AI provider selected in **Settings → AI**. Strand compares the
+selected target branch's merge base with local `HEAD` and sends that bounded,
+committed diff to the configured vendor CLI. Staged and unstaged changes are not
+included. If the fields already contain text, the button changes to **Replace**
+so overwriting the current draft is explicit. AI generation does not push the
+branch, contact GitHub/Azure DevOps, or create the PR; review and edit the result
+before choosing **Create pull request**.
+
 ## Browse PRs
 
 The list contains up to the latest 100 open, closed, and merged pull requests.

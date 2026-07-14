@@ -1239,7 +1239,7 @@ pub fn repo_stash_drop(path: String, index: usize) -> CmdResult<()> {
     Ok(())
 }
 
-// ─── AI commit message suggestions ─────────────────────────────────────────
+// ─── AI writing suggestions ────────────────────────────────────────────────
 
 fn ai_cli_override(provider: ai::AiProvider, openai: Option<String>, anthropic: Option<String>) -> Option<String> {
     match provider {
@@ -1305,6 +1305,62 @@ pub async fn repo_suggest_commit_message(
         ai::suggest_commit_message(
             provider,
             repo.path(),
+            &diffs,
+            override_path.as_deref(),
+        )
+        .map_err(CmdError::from_msg)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_suggest_pull_request(
+    path: String,
+    target_branch: String,
+    provider: ai::AiProvider,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+) -> CmdResult<ai::PullRequestSuggestion> {
+    run_blocking("ai suggest pull request", move || {
+        let target_branch = target_branch.trim().to_string();
+        if target_branch.is_empty() || target_branch.contains(['\r', '\n', '\0']) {
+            return Err(CmdError::from_msg("Target branch is invalid".into()));
+        }
+        let repo = Repo::discover(&path)?;
+        let meta = repo.meta()?;
+        if meta.detached {
+            return Err(CmdError::from_msg(
+                "Check out a branch before generating pull request content.".into(),
+            ));
+        }
+        let refs = repo.refs()?;
+        let target_ref = refs
+            .branches
+            .iter()
+            .find(|branch| branch.name == target_branch)
+            .map(|branch| branch.full_name.clone())
+            .or_else(|| {
+                refs.remote_branches
+                    .iter()
+                    .find(|branch| branch.name == target_branch)
+                    .map(|branch| branch.full_name.clone())
+            })
+            .or_else(|| {
+                refs.remote_branches
+                    .iter()
+                    .filter(|branch| branch.branch == target_branch)
+                    .min_by_key(|branch| (branch.remote != "origin", branch.name.clone()))
+                    .map(|branch| branch.full_name.clone())
+            })
+            .unwrap_or_else(|| target_branch.clone());
+        let merge_base = repo.merge_base(&target_ref, "HEAD")?;
+        let diffs = repo.diff_between(&merge_base, "HEAD")?;
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::suggest_pull_request(
+            provider,
+            repo.path(),
+            &meta.branch,
+            &target_branch,
             &diffs,
             override_path.as_deref(),
         )

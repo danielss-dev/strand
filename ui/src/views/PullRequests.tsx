@@ -1334,16 +1334,6 @@ export function PullRequests({
           ) : null}
         </div>
         <div className="pr-toolbar-actions">
-          <button
-            type="button"
-            className="btn pr-create-button"
-            disabled={!path || !data || !currentBranch}
-            title={currentBranch ? `Create a pull request from ${currentBranch}` : 'Check out a branch first'}
-            onClick={() => setCreateOpen(true)}
-          >
-            <Icon name="plus" size={12} />
-            Create PR
-          </button>
           {openedFollowed?.error ? (
             <span className="pr-refresh-failed" role="status" title={openedFollowed.error}>
               Updates delayed · <button type="button" className="h-link" onClick={() => void pollFollowed()}>Retry</button>
@@ -1356,6 +1346,16 @@ export function PullRequests({
           <button type="button" className="h-link" onClick={manualRefresh} disabled={loading || detailLoading}>
             <Icon name="refresh" size={12} className={loading || detailLoading ? 'spin' : ''} />
             {loading || detailLoading ? 'Updating…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            className="btn pr-create-button"
+            disabled={!path || !data || !currentBranch}
+            title={currentBranch ? `Create a pull request from ${currentBranch}` : 'Check out a branch first'}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Icon name="plus" size={12} />
+            Create PR
           </button>
         </div>
       </div>

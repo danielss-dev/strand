@@ -53,14 +53,26 @@ Configure the external editor and terminal that Strand's "Open in editor" (`Mod+
 
 ## AI
 
-Strand can suggest a commit message from your staged changes. It has no API key of its own — suggestions run through a CLI you already have, on your own subscription. Auth and billing stay entirely in the vendor's CLI; Strand only orchestrates it.
+Strand can suggest a commit message from staged changes or draft pull-request
+text from committed branch changes. It has no API key of its own — suggestions
+run through a CLI you already have, on your own subscription. Auth and billing
+stay entirely in the vendor's CLI; Strand only orchestrates it.
 
-- **Commit message provider** — "OpenAI (ChatGPT subscription)" (default), which uses your ChatGPT subscription via the Codex CLI, or "Anthropic (Claude Code CLI)", which uses the Claude Code CLI (`claude`).
+- **AI writing provider** — "OpenAI (ChatGPT subscription)" (default), which uses your ChatGPT subscription via the Codex CLI, or "Anthropic (Claude Code CLI)", which uses the Claude Code CLI (`claude`).
 - **Codex CLI** — an optional custom path (leave empty to use `codex` on PATH), a status line, and **Sign in with ChatGPT** / **Sign out** buttons.
 - **Claude Code CLI** — an optional custom path (leave empty to use `claude` on PATH), a status line, and **Sign in to Claude Code** / **Sign out** buttons.
-- **Check CLI status** — checks both CLIs and reports whether each is installed and signed in.
+- **Check CLI status** — checks both CLIs and reports whether each is missing,
+  signed out, signed in, or installed but unable to run.
 
-To get a suggestion, stage some changes and press the sparkle button next to the commit subject field in Local Changes, use `Mod+Shift+M`, or run "Suggest commit message" from the palette. If the CLI isn't installed or you aren't signed in, the button stays clickable and the hint appears inline — sign-in opens your browser, and once you complete it you click Suggest again. Failures surface inline on the commit bar rather than in a hidden log.
+To get a commit suggestion, stage some changes and press the sparkle button next
+to the commit subject field in Local Changes, use `Mod+Shift+M`, or run "Suggest
+commit message" from the palette. To draft a PR, use **Fill with Codex/Claude
+Code** in the Create PR dialog. If the CLI isn't installed or you aren't signed
+in, the action stays clickable and the hint appears inline. Sign-in starts the
+provider's browser or CLI flow, and once you complete it you run the action
+again. If a CLI launcher is present but its packaged executable is broken,
+Strand keeps that distinct from “signed out” and shows a repair hint beside the
+form rather than claiming that sign-in opened.
 
 ## Updates
 

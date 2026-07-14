@@ -268,6 +268,11 @@ export interface PullRequestCreateOutcome {
   url: string;
 }
 
+export interface PullRequestSuggestion {
+  title: string;
+  description: string;
+}
+
 export interface PullRequestActivityComment {
   id: string;
   author: string;
@@ -572,7 +577,7 @@ export interface Snapshot {
   submodules: Submodule[];
 }
 
-/** AI provider for commit message suggestions (matches Rust `AiProvider`). */
+/** AI provider for writing suggestions (matches Rust `AiProvider`). */
 export type AiProvider = 'openai' | 'anthropic';
 
 /** Status of a vendor CLI + login session (Settings → AI). */
@@ -581,6 +586,8 @@ export interface AiProviderStatus {
   installed: boolean;
   logged_in: boolean;
   account_hint?: string | null;
+  /** The CLI exists but failed its status probe. */
+  error?: string | null;
 }
 
 /** Suggested commit message from `repo_suggest_commit_message`. */
