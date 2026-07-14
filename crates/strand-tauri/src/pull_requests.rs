@@ -1596,11 +1596,11 @@ fn parse_azure_policies(value: &Value) -> Vec<PullRequestActivityCheck> {
         .map(Vec::as_slice)
         .unwrap_or(&[])
         .iter()
-        .filter_map(|policy| {
+        .map(|policy| {
             let name = text(policy.pointer("/configuration/type/displayName"))
                 .or_else(|| text(policy.pointer("/configuration/settings/displayName")))
                 .unwrap_or_else(|| "Azure policy".into());
-            Some(PullRequestActivityCheck {
+            PullRequestActivityCheck {
                 id: text(policy.get("evaluationId"))
                     .or_else(|| {
                         policy
@@ -1614,7 +1614,7 @@ fn parse_azure_policies(value: &Value) -> Vec<PullRequestActivityCheck> {
                 status: normalize_azure_policy_status(
                     &text(policy.get("status")).unwrap_or_else(|| "unknown".into()),
                 ),
-            })
+            }
         })
         .collect()
 }
