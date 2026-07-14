@@ -163,6 +163,16 @@ export const repoDiffMode = {
   },
 };
 
+/** Per-repository-family guidance for AI-generated commit and PR text. */
+export const repoAiStyle = {
+  get(commonDir: string): Promise<string | null> {
+    return settings.get<string>(`ai-style:${commonDir}`);
+  },
+  set(commonDir: string, instruction: string): Promise<void> {
+    return settings.set(`ai-style:${commonDir}`, instruction.slice(0, 1_000));
+  },
+};
+
 /**
  * Repo workspaces (named multi-repo groups). The whole list lives under one
  * `workspaces` key and the active-workspace id under `active-workspace`, both

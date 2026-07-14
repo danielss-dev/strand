@@ -21,7 +21,22 @@ pub struct AppState {
     pub watchers: Mutex<HashMap<String, RepoWatcher>>,
     /// In-flight cancellable ops (clone/fetch/pull/push), keyed by the
     /// frontend-generated op id.
-    pub ops: Mutex<HashMap<String, CancelHandle>>,
+    pub ops: Mutex<HashMap<String, OperationCancelHandle>>,
+}
+
+#[derive(Clone)]
+pub enum OperationCancelHandle {
+    Network(CancelHandle),
+    Ai(crate::ai::bin::AiCancelHandle),
+}
+
+impl OperationCancelHandle {
+    pub fn cancel(&self) {
+        match self {
+            Self::Network(handle) => handle.cancel(),
+            Self::Ai(handle) => handle.cancel(),
+        }
+    }
 }
 
 pub fn migrations() -> Vec<Migration> {

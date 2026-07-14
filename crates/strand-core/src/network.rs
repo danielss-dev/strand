@@ -162,6 +162,26 @@ impl Repo {
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
+    /// Push the current branch to an explicit remote. This is used by hosted
+    /// PR creation when the source branch does not exist on that remote yet.
+    /// Existing upstream configuration is preserved unless `set_upstream` is
+    /// requested explicitly.
+    pub fn push_current_to_remote(
+        &self,
+        remote: &str,
+        set_upstream: bool,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        validate_remote_arg(remote, "remote")?;
+        let mut args = vec!["push", "--progress"];
+        if set_upstream {
+            args.push("--set-upstream");
+        }
+        args.extend(["--", remote, "HEAD"]);
+        run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
     /// A freshly-created local branch has no push destination under Git's
     /// default `push.default=simple`. Establish `origin/<branch>` on its first
     /// push, but leave every configured push route (upstream, pushRemote, or
@@ -696,6 +716,31 @@ mod tests {
         std::fs::write(local.join("a.txt"), "two\n").unwrap();
         git(&local, &["commit", "-qam", "second"]);
         repo.push(false, |_| {}, None).unwrap();
+        assert_eq!(
+            git(&local, &["rev-parse", "HEAD"]),
+            git(&local, &["rev-parse", "refs/remotes/origin/topic"])
+        );
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn explicit_remote_push_preserves_an_existing_upstream() {
+        let (repo, local, base) = push_fixture();
+        let other = base.join("other.git");
+        git(&base, &["init", "--bare", other.to_str().unwrap()]);
+        git(&local, &["remote", "add", "other", other.to_str().unwrap()]);
+        git(&local, &["config", "branch.topic.remote", "other"]);
+        git(&local, &["config", "branch.topic.merge", "refs/heads/topic"]);
+
+        repo.push_current_to_remote("origin", false, |_| {}, None)
+            .unwrap();
+
+        assert_eq!(
+            git(&local, &["config", "--get", "branch.topic.remote"]),
+            "other"
+        );
         assert_eq!(
             git(&local, &["rev-parse", "HEAD"]),
             git(&local, &["rev-parse", "refs/remotes/origin/topic"])

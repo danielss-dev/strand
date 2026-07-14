@@ -6,11 +6,34 @@
 pub(crate) mod bin;
 mod claude;
 mod codex;
+mod input;
 mod parse;
 mod prompt;
 
+pub use input::{AiGenerationOutcome, AiGenerationRequest, AiInputScope, AiSensitiveDecision};
+
 use serde::{Deserialize, Serialize};
 use strand_core::diff::FileDiff;
+
+trait AiProviderAdapter: Sync {
+    fn status(&self, cli_override: Option<&str>) -> AiProviderStatus;
+    fn login(&self, cli_override: Option<&str>) -> Result<(), String>;
+    fn logout(&self, cli_override: Option<&str>) -> Result<(), String>;
+    fn suggest(
+        &self,
+        repo_path: &std::path::Path,
+        prompt: &str,
+        cli_override: Option<&str>,
+        cancel: Option<&bin::AiCancelHandle>,
+    ) -> Result<String, String>;
+}
+
+fn adapter(provider: AiProvider) -> &'static dyn AiProviderAdapter {
+    match provider {
+        AiProvider::Openai => &codex::CODEX,
+        AiProvider::Anthropic => &claude::CLAUDE,
+    }
+}
 
 /// Prefix for errors where the vendor CLI is installed but not signed in.
 /// The UI opens the provider login flow when it sees this.
@@ -90,68 +113,147 @@ pub struct PullRequestSuggestion {
 }
 
 pub fn provider_status(provider: AiProvider, cli_override: Option<&str>) -> AiProviderStatus {
-    match provider {
-        AiProvider::Openai => codex::status(cli_override),
-        AiProvider::Anthropic => claude::status(cli_override),
-    }
+    adapter(provider).status(cli_override)
 }
 
 pub fn provider_login(provider: AiProvider, cli_override: Option<&str>) -> Result<(), String> {
-    match provider {
-        AiProvider::Openai => codex::login(cli_override),
-        AiProvider::Anthropic => claude::login(cli_override),
-    }
+    adapter(provider).login(cli_override)
 }
 
 pub fn provider_logout(provider: AiProvider, cli_override: Option<&str>) -> Result<(), String> {
-    match provider {
-        AiProvider::Openai => codex::logout(cli_override),
-        AiProvider::Anthropic => claude::logout(cli_override),
-    }
+    adapter(provider).logout(cli_override)
 }
 
-pub fn suggest_commit_message(
+#[allow(clippy::too_many_arguments)]
+pub fn suggest_commit_message_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
     diffs: &[FileDiff],
     cli_override: Option<&str>,
-) -> Result<CommitMessageSuggestion, String> {
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+    scope: AiInputScope,
+    recent_subjects: &[String],
+    style_instruction: Option<&str>,
+) -> Result<AiGenerationOutcome<CommitMessageSuggestion>, String> {
     if diffs.is_empty() {
         return Err("Nothing changed — make a change before generating a message.".into());
     }
+    let prepared = match input::prepare_input(diffs, scope, decision)? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            mut coverage,
+            sensitive_files,
+        } => {
+            let built = prompt::build_prompt(
+                diffs,
+                recent_subjects,
+                style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+            );
+            apply_prompt_coverage(&mut coverage, &built);
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            });
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_prompt(
+        &prepared.diffs,
+        recent_subjects,
+        style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+    );
+    apply_prompt_coverage(&mut coverage, &built);
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",
-        prompt::build_prompt(diffs)
+        built.text
     );
-    let raw = match provider {
-        AiProvider::Openai => codex::suggest(repo_path, &text, cli_override)?,
-        AiProvider::Anthropic => claude::suggest(repo_path, &text, cli_override)?,
-    };
-    parse::parse_suggestion(&raw)
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let suggestion = parse::parse_suggestion(&raw)?;
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage,
+        provider,
+    })
 }
 
-pub fn suggest_pull_request(
+#[allow(clippy::too_many_arguments)]
+pub fn suggest_pull_request_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
     source_branch: &str,
     target_branch: &str,
     diffs: &[FileDiff],
     cli_override: Option<&str>,
-) -> Result<PullRequestSuggestion, String> {
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+    recent_subjects: &[String],
+    style_instruction: Option<&str>,
+) -> Result<AiGenerationOutcome<PullRequestSuggestion>, String> {
     if diffs.is_empty() {
         return Err(format!(
             "No committed changes were found between {target_branch} and {source_branch}."
         ));
     }
+    let prepared = match input::prepare_input(diffs, AiInputScope::Committed, decision)? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            mut coverage,
+            sensitive_files,
+        } => {
+            let built = prompt::build_pull_request_prompt(
+                source_branch,
+                target_branch,
+                diffs,
+                recent_subjects,
+                style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+            );
+            apply_prompt_coverage(&mut coverage, &built);
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            });
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_pull_request_prompt(
+        source_branch,
+        target_branch,
+        &prepared.diffs,
+        recent_subjects,
+        style_instruction.map(|style| truncate_utf8(style.trim(), 1_000)),
+    );
+    apply_prompt_coverage(&mut coverage, &built);
     let text = format!(
         "{}\n\nRemember: reply with JSON only: {{\"title\":\"...\",\"description\":\"...\"}}",
-        prompt::build_pull_request_prompt(source_branch, target_branch, diffs)
+        built.text
     );
-    let raw = match provider {
-        AiProvider::Openai => codex::suggest(repo_path, &text, cli_override)?,
-        AiProvider::Anthropic => claude::suggest(repo_path, &text, cli_override)?,
-    };
-    parse::parse_pull_request_suggestion(&raw)
+    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let suggestion = parse::parse_pull_request_suggestion(&raw)?;
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage,
+        provider,
+    })
+}
+
+pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
+    let mut end = value.len().min(max_bytes);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
+fn apply_prompt_coverage(coverage: &mut input::AiInputCoverage, built: &prompt::PromptBuild) {
+    coverage.manifest_files = built.manifest_files;
+    coverage.patch_files = built.patch_files;
+    coverage.omitted_patch_files = built.omitted_patch_files;
+    coverage.truncated_patch_files = built.truncated_patch_files;
 }
 
 #[cfg(test)]
@@ -209,5 +311,13 @@ mod tests {
         assert!(err.contains("Error: spawn /vendor/codex ENOENT"));
         assert!(!err.contains("stack trace"));
         assert!(err.contains("Settings → AI"));
+    }
+
+    #[test]
+    fn truncates_recent_subjects_on_utf8_boundaries() {
+        let subject = "é".repeat(100);
+        let truncated = truncate_utf8(&subject, 120);
+        assert_eq!(truncated.len(), 120);
+        assert!(truncated.is_char_boundary(truncated.len()));
     }
 }

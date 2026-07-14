@@ -1006,7 +1006,7 @@ to `claude` is the supported path for Claude Code users.
 
 **How to apply.**
 
-- New AI providers implement the `CommitMessageGenerator` trait in
+- New AI providers implement the minimal `AiProviderAdapter` boundary in
   `crates/strand-tauri/src/ai/` — don't add direct HTTP + key storage without
   an explicit product decision.
 - Spawn argv directly (no shell), same safety model as `external.rs`.
@@ -1022,6 +1022,33 @@ to `claude` is the supported path for Claude Code users.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
   **Check CLI status** button — no auto auth probe on open. Optional manual
   sign-in/out per CLI remains.
+
+---
+
+## AI writing treats repository data as untrusted and generation as cancellable
+
+**Rule.** AI writing may send only Strand's explicitly bounded prompt. Codex
+runs in a fresh empty temporary directory with its ephemeral/no-repo-check,
+ignore-user-config/rules, read-only, no-web flags; provider executable paths are
+canonicalized before any cwd change. Both providers receive the same
+untrusted-data preamble and delimited branch, path, profile, example, manifest,
+and patch sections. Never log or persist prompts, output, or matched secret
+values.
+
+Every generation is an operation, not a fire-and-forget promise. Register its
+`AiCancelHandle` in `AppState.ops`, give it a unique `opId`, kill and reap its
+whole Unix process group or Windows Job Object on timeout/cancel/output overflow,
+and apply results only while repository, provider, and PR target identity still
+match. Repository/provider/target changes and dialog teardown cancel in flight;
+the UI keeps cancellation quiet and exposes a visible Cancel action.
+
+Before launch, scan only conservative sensitive path/content signals. Return
+path plus classification, never a matched value. Confirmation is two-pass and
+fingerprinted: exclusion removes the whole flagged file, inclusion is explicit,
+and any diff change requires confirmation again. Context stays deterministic and
+bounded: a compact manifest, ranked textual patches with per-file/global caps,
+and additive `AiInputCoverage`. Repository writing profiles are keyed by
+canonical `RepoMeta.common_dir`, so linked worktrees share one policy.
 
 ---
 
@@ -1206,22 +1233,26 @@ unknown and retain the last complete baseline.
 
 ---
 
-## Pull-request creation never implies a push
+## Pull-request creation publishes a missing source branch deliberately
 
-**Rule.** Creating a hosted pull request is a provider write against a branch
-that already exists remotely. Do not silently push, set an upstream, or publish
-other local commits as part of that action.
+**Rule.** Creating a hosted pull request may publish the checked-out source
+branch when that exact branch is absent from the detected repository remote.
+Push only current `HEAD`, never force, and invoke the provider only after the
+push succeeds. Set the detected remote as upstream only when no upstream exists;
+preserve an existing upstream on another remote.
 
-**Why.** A push changes Git state and can publish more work than the creation
-dialog describes. Keeping it separate makes the source commit and provider
-failure predictable, and preserves the user's ability to inspect or amend the
-branch before publishing it.
+**Why.** PR creation cannot succeed without a hosted source branch. Making the
+publish step part of the explicit Create action removes a predictable dead end,
+while checking the active branch and using a non-force push bounds the write to
+the branch and commit named by the dialog.
 
-**How to apply.** The creation UI names the checked-out source branch, explains
-that it must already exist remotely, and sends only title, description, target,
-and draft state through `repo_pull_request_create`. Surface missing-branch and
-authentication failures inline. After success, query the new PR by branch,
-open it, and enroll it in the existing follow monitor.
+**How to apply.** The creation UI names the checked-out source branch and
+explains that Strand will push it if missing. Before provider creation, verify
+that the requested source still equals the checked-out branch, inspect the
+local remote-tracking refs, and explicitly push `HEAD` to the detected remote
+only when its branch is absent. Surface push and authentication failures inline.
+After success, query the new PR by branch, open it, and enroll it in the existing
+follow monitor.
 
 AI-assisted PR writing follows the same separation. Build its prompt from the
 committed merge-base-to-`HEAD` diff only, keep Codex in its read-only sandbox

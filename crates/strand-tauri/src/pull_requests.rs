@@ -276,7 +276,8 @@ pub fn create(
     is_draft: bool,
 ) -> Result<PullRequestCreateOutcome> {
     validate_create(source_branch, target_branch, title, description)?;
-    let (_, host) = host_for_path(path)?;
+    let (remote, host) = host_for_path(path)?;
+    ensure_source_branch_on_remote(path, &remote, source_branch)?;
     match host {
         HostRepo::GitHub { owner, repo } => create_github(
             path,
@@ -304,6 +305,38 @@ pub fn create(
             is_draft,
         ),
     }
+}
+
+fn ensure_source_branch_on_remote(path: &str, remote: &str, source_branch: &str) -> Result<()> {
+    let repo = Repo::discover(path).map_err(|error| error.to_string())?;
+    let meta = repo.meta().map_err(|error| error.to_string())?;
+    if meta.detached || meta.branch != source_branch {
+        return Err(format!(
+            "Source branch `{source_branch}` is not the checked-out branch; switch to it before creating the pull request"
+        ));
+    }
+
+    let refs = repo.refs().map_err(|error| error.to_string())?;
+    if refs
+        .remote_branches
+        .iter()
+        .any(|branch| branch.remote == remote && branch.branch == source_branch)
+    {
+        return Ok(());
+    }
+
+    let set_upstream = refs
+        .branches
+        .iter()
+        .find(|branch| branch.is_head)
+        .is_some_and(|branch| branch.upstream.is_none());
+    repo.push_current_to_remote(remote, set_upstream, |_| {}, None)
+        .map_err(|error| {
+            format!(
+                "Could not push source branch `{source_branch}` to `{remote}` before creating the pull request: {error}"
+            )
+        })?;
+    Ok(())
 }
 
 pub fn activity(path: &str, id: u64) -> Result<PullRequestActivitySnapshot> {
@@ -555,7 +588,8 @@ fn create_github(
         &args,
         &[("GH_PROMPT_DISABLED", "1")],
         Some(description.as_bytes()),
-    )?;
+    )
+    .map_err(|error| map_github_create_error(error, &source_branch, &target_branch))?;
     let url = String::from_utf8(output)
         .map_err(|error| format!("GitHub CLI returned invalid text: {error}"))?
         .lines()
@@ -571,6 +605,21 @@ fn create_github(
         .and_then(|value| value.parse::<u64>().ok())
         .ok_or_else(|| "GitHub created the pull request but returned no usable PR URL".to_string())?;
     Ok(PullRequestCreateOutcome { id, url })
+}
+
+fn map_github_create_error(error: String, source_branch: &str, target_branch: &str) -> String {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("head sha can't be blank") || lower.contains("head ref must be a branch") {
+        return format!(
+            "Source branch `{source_branch}` is not available on GitHub. Push this branch to the repository remote, then create the pull request again."
+        );
+    }
+    if lower.contains("base sha can't be blank") || lower.contains("base ref must be a branch") {
+        return format!(
+            "Target branch `{target_branch}` is not available on GitHub. Choose an existing remote branch and try again."
+        );
+    }
+    error
 }
 
 fn activity_github(
@@ -2052,6 +2101,21 @@ fn hex(value: u8) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{path::Path, process::Command};
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
 
     #[test]
     fn parses_supported_remote_shapes() {
@@ -2092,6 +2156,56 @@ mod tests {
     fn rejects_unimplemented_hosts() {
         assert_eq!(parse_remote("git@gitlab.com:acme/web.git"), None);
         assert_eq!(parse_remote("https://bitbucket.org/acme/web.git"), None);
+    }
+
+    #[test]
+    fn publishes_only_a_missing_checked_out_source_branch() {
+        let base = std::env::temp_dir().join(format!(
+            "strand-pr-source-push-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let local = base.join("local");
+        let remote = base.join("remote.git");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&local).unwrap();
+        git(&local, &["init", "-q", "-b", "topic"]);
+        git(&local, &["config", "user.name", "Test"]);
+        git(&local, &["config", "user.email", "test@example.com"]);
+        git(&local, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(local.join("a.txt"), "one\n").unwrap();
+        git(&local, &["add", "a.txt"]);
+        git(&local, &["commit", "-q", "-m", "first"]);
+        git(&base, &["init", "-q", "--bare", remote.to_str().unwrap()]);
+        git(
+            &local,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+
+        ensure_source_branch_on_remote(local.to_str().unwrap(), "origin", "topic").unwrap();
+        let published = git(&local, &["rev-parse", "refs/remotes/origin/topic"]);
+        assert_eq!(published, git(&local, &["rev-parse", "HEAD"]));
+        assert_eq!(
+            git(&local, &["config", "--get", "branch.topic.remote"]),
+            "origin"
+        );
+
+        std::fs::write(local.join("a.txt"), "two\n").unwrap();
+        git(&local, &["commit", "-qam", "second"]);
+        ensure_source_branch_on_remote(local.to_str().unwrap(), "origin", "topic").unwrap();
+        assert_eq!(
+            git(&local, &["rev-parse", "refs/remotes/origin/topic"]),
+            published,
+            "PR creation must not push again once the remote branch exists"
+        );
+        assert!(ensure_source_branch_on_remote(
+            local.to_str().unwrap(),
+            "origin",
+            "different"
+        )
+        .is_err());
+
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]
@@ -2330,6 +2444,32 @@ mod tests {
             &"x".repeat(MAX_PR_DESCRIPTION_BYTES + 1),
         )
         .is_err());
+    }
+
+    #[test]
+    fn maps_github_missing_branch_errors_to_actionable_guidance() {
+        let source_error = map_github_create_error(
+            "gh failed: GraphQL: Head sha can't be blank, Base sha can't be blank, Head ref must be a branch".into(),
+            "feature/topic",
+            "main",
+        );
+        assert_eq!(
+            source_error,
+            "Source branch `feature/topic` is not available on GitHub. Push this branch to the repository remote, then create the pull request again."
+        );
+
+        let target_error = map_github_create_error(
+            "gh failed: GraphQL: Base ref must be a branch".into(),
+            "feature/topic",
+            "release",
+        );
+        assert!(target_error.contains("Target branch `release`"));
+
+        let unrelated = "gh failed: rate limited".to_string();
+        assert_eq!(
+            map_github_create_error(unrelated.clone(), "feature/topic", "main"),
+            unrelated
+        );
     }
 
     #[test]

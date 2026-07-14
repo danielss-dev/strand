@@ -120,11 +120,13 @@ describe('formatBinding', () => {
   it('renders mac glyphs joined tight', () => {
     expect(formatBinding('Mod+Shift+P', 'mac')).toBe('⌘⇧P');
     expect(formatBinding('Mod+,', 'mac')).toBe('⌘,');
+    expect(formatBinding('Mod+Enter', 'mac')).toBe('⌘↵');
   });
 
   it('renders windows words joined with +', () => {
     expect(formatBinding('Mod+Shift+P', 'win11')).toBe('Ctrl+Shift+P');
     expect(formatBinding('Mod+1', 'win11')).toBe('Ctrl+1');
+    expect(formatBinding('Mod+Enter', 'win11')).toBe('Ctrl+Enter');
   });
 
   it('returns empty for an unbound command', () => {

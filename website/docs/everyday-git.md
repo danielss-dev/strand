@@ -34,6 +34,14 @@ The commit form takes a subject and an optional description body. `Mod+Enter` in
 
 The sparkle button next to the subject field (or `Mod+Shift+M`, or the palette action "Suggest commit message") generates a commit message from your **staged** changes. If nothing is staged, it uses all unstaged changes instead, so it is available as soon as there is work to describe. Suggestions use your own subscription CLIs — the Codex CLI (ChatGPT) or the Claude Code CLI — with no Strand-side API key. Pick the provider and sign in under Settings → AI; see [Settings](settings.md) for setup.
 
+Generation is explicit and cancellable. Strand sends a bounded manifest plus
+the highest-signal patches and shows the resulting coverage beside the draft.
+If conservative path or content checks flag potentially sensitive files, choose
+to exclude them, explicitly include them, or cancel; changed input requires a
+new confirmation. **Undo AI replacement** restores the subject and body that
+were present immediately before generation. A non-authentication failure can
+be retried with the other provider without changing the default in Settings.
+
 ## Fetch, pull, push
 
 The topbar Fetch / Pull / Push buttons show real ahead/behind counts. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure.

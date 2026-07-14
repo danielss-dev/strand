@@ -54,6 +54,9 @@ jobs:
       - name: Test strand-core
         run: cargo test -p strand-core
 
+      - name: Test strand-tauri
+        run: cargo test -p strand-tauri
+
       - name: Clippy (deny warnings)
         run: cargo clippy -p strand-core -p strand-tauri -- -D warnings
 

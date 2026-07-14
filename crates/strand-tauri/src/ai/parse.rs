@@ -1,5 +1,8 @@
 use super::{CommitMessageSuggestion, PullRequestSuggestion};
 
+const MAX_COMMIT_BODY_BYTES: usize = 65_536;
+const MAX_DIAGNOSTIC_BYTES: usize = 2_048;
+
 /// Extract `{ subject, body }` from CLI stdout — JSON object, fenced JSON, or
 /// embedded JSON in prose.
 pub fn parse_suggestion(raw: &str) -> Result<CommitMessageSuggestion, String> {
@@ -25,7 +28,8 @@ pub fn parse_suggestion(raw: &str) -> Result<CommitMessageSuggestion, String> {
     }
 
     Err(format!(
-        "Could not parse commit message from AI output. Expected JSON with subject and body fields.\n\n{trimmed}"
+        "Could not parse commit message from AI output. Expected JSON with subject and body fields.\n\n{}",
+        diagnostic_excerpt(trimmed)
     ))
 }
 
@@ -48,7 +52,8 @@ pub fn parse_pull_request_suggestion(raw: &str) -> Result<PullRequestSuggestion,
         })
         .ok_or_else(|| {
             format!(
-                "Could not parse pull request content from AI output. Expected JSON with title and description fields.\n\n{trimmed}"
+                "Could not parse pull request content from AI output. Expected JSON with title and description fields.\n\n{}",
+                diagnostic_excerpt(trimmed)
             )
         })?;
     normalize_pull_request(parsed)
@@ -66,6 +71,12 @@ fn normalize(mut s: CommitMessageSuggestion) -> Result<CommitMessageSuggestion, 
         .body
         .map(|b| b.trim().to_string())
         .filter(|b| !b.is_empty());
+    if s.body
+        .as_ref()
+        .is_some_and(|body| body.len() > MAX_COMMIT_BODY_BYTES)
+    {
+        return Err("AI returned a commit message body over Strand's 64 KB limit.".into());
+    }
     Ok(s)
 }
 
@@ -94,6 +105,17 @@ fn truncate_utf8_bytes(value: &mut String, max_bytes: usize) -> bool {
     }
     value.truncate(end);
     true
+}
+
+fn diagnostic_excerpt(value: &str) -> String {
+    if value.len() <= MAX_DIAGNOSTIC_BYTES {
+        return value.to_string();
+    }
+    let mut end = MAX_DIAGNOSTIC_BYTES;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n… (output truncated)", &value[..end])
 }
 
 /// Find the first `{ ... }` object in text (brace-balanced, naive string skip).
@@ -174,6 +196,19 @@ mod tests {
         let raw = format!(r#"{{"subject":"{long}","body":null}}"#);
         let s = parse_suggestion(&raw).unwrap();
         assert!(s.subject.len() <= 72);
+    }
+
+    #[test]
+    fn rejects_oversized_commit_body() {
+        let raw = serde_json::json!({ "subject": "fix: bounded", "body": "x".repeat(MAX_COMMIT_BODY_BYTES + 1) }).to_string();
+        assert!(parse_suggestion(&raw).unwrap_err().contains("64 KB"));
+    }
+
+    #[test]
+    fn caps_parse_diagnostics_on_utf8_boundaries() {
+        let err = parse_suggestion(&"é".repeat(MAX_DIAGNOSTIC_BYTES)).unwrap_err();
+        assert!(err.contains("output truncated"));
+        assert!(err.len() < MAX_DIAGNOSTIC_BYTES + 256);
     }
 
     #[test]
