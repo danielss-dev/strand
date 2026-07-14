@@ -1279,6 +1279,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     arrow or j/k selects and Enter/click opens. Back restores list focus, and
     refresh, open-on-host, command-palette entry, and actionable CLI/auth errors
     remain available.
+  - ☑ Persistent followed-PR monitoring (`repo_pull_request_for_branch`,
+    `repo_pull_request_activity`, `stores/pullRequests.ts`,
+    `PullRequestMonitor`): the active branch's open PR auto-follows without the
+    PR view mounted; manual Follow/Unfollow, muted auto-follow keys, hosted-PR
+    worktree deduplication, SQLite-backed baselines, bounded two-PR polling,
+    native coalesced notifications, and terminal auto-unfollow survive
+    navigation and relaunch.
+  - ☑ Seamless stale-while-revalidate refresh (`PullRequests.tsx`): populated
+    list/detail/tabs/drafts/scroll stay mounted during updates and failures;
+    lightweight activity gates rich-detail reloads, patches reload only for a
+    changed head, and a stale patch remains readable but cannot submit inline
+    comments until its replacement succeeds.
   - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
     `PullRequestChanges`): provider patches load only when Changes opens; the
     keyboard-operable 22% Pierre folder tree and compact Local Changes-style
@@ -1335,8 +1347,10 @@ tree: watch the agent work, review fast, accept or reject safely.
     where the provider exposes a boundary, safe Open in worktree / Update branch,
     suggestions, and unresolved-feedback export for external agents.
   - ◐ Checks render provider states as green success, yellow running, red
-    failure, or neutral. Azure policies, merge queue/auto-complete, and
-    required-review detail remain.
+    failure, or neutral. Azure PR policy evaluations now join readiness and
+    background activity when their query succeeds; incomplete policy calls
+    remain neutral. Merge queue/auto-complete and richer required-review detail
+    remain.
   - ◐ Hosted PR lifecycle actions.
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
       stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).

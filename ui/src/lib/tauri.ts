@@ -22,6 +22,8 @@ import type {
   NetworkOutcome,
   Progress,
   PullRequest,
+  PullRequestActivitySnapshot,
+  PullRequestBranchMatch,
   PullRequestList,
   PullRequestMergeStrategy,
   RebaseEntry,
@@ -99,6 +101,10 @@ export const tauri = {
     invoke<Commit[]>('repo_search_log', { path, query, mode, limit }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
+  repoPullRequestForBranch: (path: string, branch: string) =>
+    invoke<PullRequestBranchMatch | null>('repo_pull_request_for_branch', { path, branch }),
+  repoPullRequestActivity: (path: string, id: number) =>
+    invoke<PullRequestActivitySnapshot>('repo_pull_request_activity', { path, id }),
   repoPullRequest: (path: string, id: number) => invoke<PullRequest>('repo_pull_request', { path, id }),
   repoPullRequestDiff: (path: string, id: number) =>
     invoke<string>('repo_pull_request_diff', { path, id }),

@@ -15,6 +15,7 @@
     "core:event:default",
     "dialog:default",
     "os:default",
+    "notification:default",
     "updater:default",
     "process:default",
     "sql:default",

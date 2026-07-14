@@ -1615,6 +1615,18 @@ code in Changes, so a refresh reflects comments created in Strand or on GitHub.
 Conversation now links file-backed comments straight to that file/thread in
 Changes and transfers keyboard focus to the destination.
 
+**Followed PRs and seamless refresh shipped (2026-07-14):** Strand now follows
+the checked-out branch's active GitHub or Azure DevOps PR even when the PR view
+has never opened, with persistent manual follow/mute state and lightweight,
+patch-free activity baselines shared across worktrees. A global two-at-a-time
+monitor polls on hydration, every 60 seconds, and window focus; it coalesces
+new comments/replies, review decisions, failed checks/policies, pushes, and
+terminal state into native notifications, then auto-unfollows merged/closed
+PRs. The PR workspace now refreshes stale-while-revalidate: existing list,
+detail, focus, tabs, drafts, scroll, and patch stay mounted; rich detail reloads
+only after activity changes, and the patch reloads only for a new head while a
+stale copy remains read-only.
+
 ---
 
 ## 1.1+ — Post-1.0

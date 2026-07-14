@@ -141,8 +141,10 @@ export function pullRequestReadiness(
       : 'Merge readiness was not reported.');
   }
 
-  if (provider === 'azure_dev_ops') {
-    unknown.push('Azure policy and check details are not reported by this integration.');
+  if (!pr.checks_complete) {
+    unknown.push(provider === 'azure_dev_ops'
+      ? 'Azure policy and check details could not be loaded.'
+      : 'Provider check details could not be loaded.');
   }
 
   if (details.length > 0) {

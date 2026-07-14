@@ -48,6 +48,7 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     labels: [],
     reviewers: [],
     checks: [{ name: 'CI', status: 'SUCCESS' }],
+    checks_complete: true,
     comments: [],
     review_threads: [],
     ...overrides,
@@ -91,6 +92,7 @@ describe('pullRequestReadiness', () => {
     const readiness = pullRequestReadiness(pullRequest({
       merge_status: 'succeeded',
       checks: [],
+      checks_complete: false,
     }), 'azure_dev_ops');
     expect(readiness.tone).toBe('neutral');
     expect(readiness.label).toBe('Status incomplete');

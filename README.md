@@ -62,7 +62,12 @@ keyboard alone, and the mouse stays first-class.
   jump).
 - **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
-  opening automatically. Each PR gets a full-width workspace: read rendered
+  opening and being followed automatically even before the PR view is opened.
+  Persistent Follow controls and native desktop notifications surface new
+  comments, review decisions, failed checks, pushes, and merged/closed state.
+  Refreshes keep existing content, focus, tabs, drafts, and diffs in place
+  while lightweight activity is revalidated in the background. Each PR gets a
+  full-width workspace: read rendered
   Markdown descriptions and avatar-led timeline conversations, compose
   top-level comments with formatting, preview, and hosted screenshot links, inspect
   lazily loaded code changes in the Local Changes-style Pierre file tree,

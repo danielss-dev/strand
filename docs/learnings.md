@@ -1175,3 +1175,27 @@ completion requests include `lastMergeSourceCommit`. Keep required checks,
 reviews, queues, and branch policies provider-authoritative, preserve their
 failure text next to the initiating control, and refresh the PR after a
 successful request because queued completion may leave it active temporarily.
+
+---
+
+## Background PR refreshes use activity snapshots, never patches
+
+**Rule.** A followed pull request is monitored with its provider-neutral
+activity snapshot only: identity/state/head SHA, stable comment and review IDs,
+and normalized check or policy states. Background work must never request or
+parse the hosted patch, and a shallow-list refresh must not invalidate the
+currently mounted detail.
+
+**Why.** Pull-request patches are the largest provider response and the most
+expensive UI resource. Polling them would waste provider/CLI work, repeatedly
+parse large diffs, and destroy the reviewer's focus, scroll, file selection, and
+unsent drafts. Provider failures also must not turn a previously known failure
+green or erase a successful activity baseline.
+
+**How to apply.** Poll immediately after hydration, at a modest interval, and
+on focus without overlapping cycles. Share in-flight activity calls with the
+visible PR. Revalidate rich detail only when the activity fingerprint changes;
+reload the patch only when the head SHA changes. Keep the old patch visible
+while that replacement loads or fails, label it stale, and disable writes that
+depend on exact patch coordinates. Treat incomplete policy/check reads as
+unknown and retain the last complete baseline.

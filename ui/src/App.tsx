@@ -11,11 +11,13 @@ import { Icon } from './components/Icon';
 import { copyToClipboard } from './components/PierreTree';
 import { Presence } from './components/Presence';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
+import { PullRequestMonitor } from './components/PullRequestMonitor';
 import { RepoRail } from './components/RepoRail';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
 import { FONTS, useSettings } from './stores/settings';
+import { usePullRequests } from './stores/pullRequests';
 import { useRepo } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
@@ -208,6 +210,10 @@ export function App() {
   // handful of user-created entries, so subscribing whole is cheap.
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
+  const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
+  const activePullRequestFollowed = usePullRequests((s) =>
+    activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
+  const toggleActivePullRequest = usePullRequests((s) => s.toggleActive);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
@@ -1110,13 +1116,28 @@ export function App() {
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
         { id: 'review-view', label: 'Show: Review', group: 'Actions', shortcut: keyHint('view-review'), keywords: 'ai agent review session changes verdict', run: () => { setView('review'); selectFile(null); } },
         { id: 'pull-requests', label: 'Show: Pull Requests', group: 'Actions', keywords: 'pr github azure devops code review merge request', run: () => { setView('pull-requests'); selectFile(null); } },
-        ...(view === 'pull-requests' ? [{
-          id: 'pull-request-merge',
-          label: 'Pull Requests: merge open pull request…',
-          group: 'Actions',
-          keywords: 'pr github azure devops complete squash rebase',
-          run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-merge')),
-        } satisfies PaletteAction] : []),
+        ...(view === 'pull-requests' ? [
+          {
+            id: 'pull-request-merge',
+            label: 'Pull Requests: merge open pull request…',
+            group: 'Actions',
+            keywords: 'pr github azure devops complete squash rebase',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-merge')),
+          } satisfies PaletteAction,
+          ...(activePullRequestKey ? [{
+            id: 'pull-request-follow',
+            label: activePullRequestFollowed
+              ? 'Pull Requests: unfollow open pull request'
+              : 'Pull Requests: follow open pull request',
+            group: 'Actions',
+            keywords: 'pr notifications bell watch follow unfollow',
+            run: () => {
+              void toggleActivePullRequest().catch((caught) => {
+                showToast(`Could not update pull request following: ${errMessage(caught)}`, 'error');
+              });
+            },
+          } satisfies PaletteAction] : []),
+        ] : []),
         { id: 'workspace-review-view', label: 'Show: Workspace Review', group: 'Actions', shortcut: keyHint('view-workspace-review'), keywords: 'workspace review aggregate cross repo multi combined agent', run: () => { setView('workspace-review'); selectFile(null); } },
         { id: 'worktrees', label: 'Show: Worktrees',  group: 'Actions', shortcut: keyHint('view-worktrees'), keywords: 'worktree agent feature checkout overview', run: () => { setView('worktrees'); selectFile(null); } },
         { id: 'tab-next', label: 'Next repository', group: 'Actions', shortcut: keyHint('tab-next'), keywords: 'switch repo tab next cycle', run: () => cycleTab(1) },
@@ -1306,7 +1327,8 @@ export function App() {
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
-      workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees]);
+      workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
+      activePullRequestKey, activePullRequestFollowed, toggleActivePullRequest]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1316,6 +1338,7 @@ export function App() {
 
   return (
     <div className="os-bg" data-theme={theme} data-density={density} data-platform={platform} style={rootStyle}>
+      <PullRequestMonitor />
       <div className="strand-window">
         <Topbar
           onOpenPalette={() => setPaletteOpen(true)}

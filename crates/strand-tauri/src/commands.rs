@@ -190,6 +190,31 @@ pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     .await
 }
 
+/// Active pull request for one checked-out branch. This targeted query lets
+/// automatic following work without loading the full hosted-PR workspace.
+#[tauri::command(async)]
+pub async fn repo_pull_request_for_branch(
+    path: String,
+    branch: String,
+) -> CmdResult<Option<pull_requests::PullRequestBranchMatch>> {
+    run_blocking("pull request for branch", move || {
+        pull_requests::for_branch(&path, &branch).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Small, patch-free snapshot used by the followed-PR monitor.
+#[tauri::command(async)]
+pub async fn repo_pull_request_activity(
+    path: String,
+    id: u64,
+) -> CmdResult<pull_requests::PullRequestActivitySnapshot> {
+    run_blocking("pull request activity", move || {
+        pull_requests::activity(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Rich fields for one selected pull request. Kept separate from the list so
 /// GitHub never expands every PR's nested GraphQL connections in one query.
 #[tauri::command(async)]
