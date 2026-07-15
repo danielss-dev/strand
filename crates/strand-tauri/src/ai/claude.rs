@@ -26,16 +26,17 @@ impl super::AiProviderAdapter for Claude {
         &self,
         repo_path: &Path,
         prompt: &str,
+        model: Option<&str>,
         cli_override: Option<&str>,
         cancel: Option<&AiCancelHandle>,
     ) -> Result<String, String> {
-        suggest(repo_path, prompt, cli_override, cancel)
+        suggest(repo_path, prompt, model, cli_override, cancel)
     }
 }
 
 const CLAUDE_INSTALL: &str = "https://code.claude.com/docs/en/setup";
 /// A fast, focused model is sufficient for short commit and PR copy.
-const SUGGEST_MODEL: &str = "claude-sonnet-5";
+const DEFAULT_SUGGEST_MODEL: &str = "claude-sonnet-5";
 
 pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
     let Some(bin) = resolve_claude(cli_override) else {
@@ -109,10 +110,14 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
 pub fn suggest(
     repo_path: &Path,
     prompt: &str,
+    model: Option<&str>,
     cli_override: Option<&str>,
     cancel: Option<&AiCancelHandle>,
 ) -> Result<String, String> {
     let bin = resolve_claude(cli_override).ok_or_else(not_installed)?;
+    let model = model
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(DEFAULT_SUGGEST_MODEL);
 
     // The prompt travels via stdin (`claude -p` reads it there): it can
     // exceed the Windows command-line ceiling and, when the CLI is an npm
@@ -122,7 +127,7 @@ pub fn suggest(
         &[
             "-p",
             "--model",
-            SUGGEST_MODEL,
+            model,
             "--output-format",
             "json",
             "--tools",

@@ -132,8 +132,10 @@ keyboard alone, and the mouse stays first-class.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
-  (`claude-sonnet-5`); Settings → AI for sign-in, provider choice, and CLI
-  health checks. Packaged builds resolve these tools and their runtimes through
+  (`claude-sonnet-5` by default); Settings → AI for focused provider sign-in,
+  per-provider model selection used by commit and PR generation, and CLI health
+  checks with a remembered connected indicator. Packaged builds resolve these
+  tools and their runtimes through
   the user's shell `PATH`; custom paths remain available. Generation is
   cancellable, scans conservative sensitive-file
   signals before provider launch, reports partial-context coverage, preserves

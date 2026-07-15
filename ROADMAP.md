@@ -1716,6 +1716,12 @@ AI subprocess lifecycle in the normal Linux Rust gate; the dedicated Windows
 job was removed because its full Tauri build took roughly five minutes for a
 one-second platform-specific test suite.
 
+**AI provider setup refined (2026-07-15):** Settings → AI now reveals only the
+selected provider's account and CLI controls, remembers a writing-model choice
+for each provider, and routes that model through both commit-message and
+pull-request generation. Last-checked connection state is also retained so a
+saved CLI login remains visibly connected when Settings is reopened.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

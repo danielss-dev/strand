@@ -22,6 +22,16 @@ export type RepoNav = 'rail' | 'tabs';
 
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
+export type OpenAiModel = 'gpt-5.6-luna' | 'gpt-5.6-terra' | 'gpt-5.6-sol';
+export type AnthropicModel = 'claude-haiku-4-5' | 'claude-sonnet-5' | 'claude-opus-4-8';
+
+/** Last explicitly checked CLI connection state. Credentials remain owned by
+ * the vendor CLI; this snapshot only lets Settings reflect that saved login. */
+export interface AiConnectionSnapshot {
+  installed: boolean;
+  loggedIn: boolean;
+  checkedAt: number;
+}
 
 /** Pierre's change-marker style: `classic` = +/− signs, `bars` = colored
  * edge bars (Pierre's default), `none` = background tint only. */
@@ -108,6 +118,12 @@ export interface SettingsState {
   terminalTool: ExternalTool;
   /** Default AI provider for writing suggestions. */
   aiProvider: AiProvider;
+  /** Codex model used for commit-message and pull-request writing. */
+  openaiModel: OpenAiModel;
+  /** Claude model used for commit-message and pull-request writing. */
+  anthropicModel: AnthropicModel;
+  /** Last checked connection state for each vendor CLI. */
+  aiConnectionStatus: Record<AiProvider, AiConnectionSnapshot | null>;
   /** Optional override path to the Codex CLI binary. */
   openaiCli: string | null;
   /** Optional override path to the Claude Code CLI binary. */
@@ -203,6 +219,9 @@ export const useSettings = create<SettingsState>()(
       editorTool: null,
       terminalTool: null,
       aiProvider: 'openai',
+      openaiModel: 'gpt-5.6-luna',
+      anthropicModel: 'claude-sonnet-5',
+      aiConnectionStatus: { openai: null, anthropic: null },
       openaiCli: null,
       anthropicCli: null,
       updateAutoCheck: true,
