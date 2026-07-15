@@ -6,6 +6,34 @@ that future work (yours or another agent's) needs to respect.
 
 ---
 
+## Desktop CLI children need the user's shell PATH, including dependencies
+
+**Rule.** Packaged GUI apps must not use their inherited process `PATH` as the
+only source for hosted-provider and AI CLIs. Resolve the user's interactive
+login-shell PATH once, off the launch hot path, merge it ahead of inherited
+fallback directories, and pass it explicitly to each child. Keep executable
+lookup canonical and complete it before setting an untrusted repository as the
+child's working directory.
+
+**Why.** Finder/LaunchServices and Linux desktop launchers commonly omit
+Homebrew, `~/.local/bin`, and version-manager directories. That made installed
+`gh`, `codex`, and `claude` binaries appear missing in release builds. Resolving
+only the launcher path is insufficient: npm shims commonly use
+`#!/usr/bin/env node`, so the launched child also needs the recovered PATH or it
+still fails at runtime. Searching after switching to a repository working
+directory is unsafe on Windows because `CreateProcess` may select a
+repository-owned executable.
+
+**How to apply.** `strand-tauri/path_env.rs` owns the bounded, background shell
+capture and conventional Homebrew/local-bin fallbacks when shell startup fails.
+`ai/bin.rs::resolve_cli` treats blank custom overrides as unset, searches that
+effective path, and `base_command` applies it to GitHub, Azure, Codex, and
+Claude children. Reuse that boundary for new hosted-provider CLIs; do not add
+ad hoc `which` calls or mutate the process environment after Tauri worker
+threads have started.
+
+---
+
 ## UI must be responsive and resizable
 
 **Rule.** The app needs to feel responsive at any window size, and every

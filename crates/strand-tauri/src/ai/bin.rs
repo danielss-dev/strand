@@ -44,7 +44,7 @@ pub fn resolve_claude(override_path: Option<&str>) -> Option<PathBuf> {
 }
 
 pub(crate) fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Option<PathBuf> {
-    if let Some(p) = override_path {
+    if let Some(p) = override_path.filter(|path| !path.trim().is_empty()) {
         let path = PathBuf::from(p);
         return canonical_spawnable(&path);
     }
@@ -76,7 +76,7 @@ fn canonical_spawnable(path: &Path) -> Option<PathBuf> {
 }
 
 fn which_on_path(name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
+    let path_var = crate::path_env::effective_path()?;
     let dirs: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
     find_in_dirs(name, &dirs)
 }
@@ -128,12 +128,19 @@ pub(crate) fn base_command(program: &Path, hide_console: bool) -> Command {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
+        if let Some(path) = crate::path_env::effective_path() {
+            cmd.env("PATH", path);
+        }
         cmd
     }
     #[cfg(not(windows))]
     {
         let _ = hide_console;
-        Command::new(program)
+        let mut cmd = Command::new(program);
+        if let Some(path) = crate::path_env::effective_path() {
+            cmd.env("PATH", path);
+        }
+        cmd
     }
 }
 
@@ -461,6 +468,12 @@ mod tests {
         let path = std::env::current_exe().unwrap();
         let resolved = resolve_cli("nonexistent", Some(path.to_str().unwrap()));
         assert_eq!(resolved, std::fs::canonicalize(path).ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn blank_override_falls_back_to_path() {
+        assert!(resolve_cli("sh", Some(" \t ")).is_some());
     }
 
     #[cfg(unix)]

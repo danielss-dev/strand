@@ -1659,6 +1659,14 @@ short-hash context and read-only tree actions. Opening a historical file pins
 Content, image/SVG previews, Markdown, and repo-relative Markdown images to the
 same revision instead of accidentally reading the mutable working tree.
 
+**Packaged CLI discovery fixed (2026-07-15):** Desktop launches now recover
+the user's interactive login-shell PATH once in the background and pass the
+merged value directly to hosted-provider and AI CLI children. Release builds
+therefore find Homebrew, local-bin, and version-manager installs of
+`gh`/`az`/`codex`/`claude`, including npm launchers whose `env node` runtime
+also depends on PATH, while executable lookup remains outside the untrusted
+repository working directory.
+
 ---
 
 ## 1.1+ — Post-1.0
