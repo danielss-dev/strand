@@ -1782,6 +1782,11 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   stops per-call console flashes in the release build; CommitBar surfaces
   suggest failures inline as "Suggestion failed: …" instead of a silently
   disabled sparkle / mislabeled "Commit failed:")
+- ☑ Desktop-launch CLI environment restoration (`path_env.rs` asynchronously
+  captures the interactive login-shell PATH once and retains conventional
+  Homebrew/local-bin fallbacks; shared canonical lookup, blank-override
+  normalization, and child PATH propagation make `gh`/`az`/`codex`/`claude`
+  plus npm runtimes available in packaged apps without searching the repo)
 - ☑ Broken vendor-CLI installs stay distinct from signed-out sessions
   (`AiProviderStatus.error`, auth-failure classification, and `--version`
   login preflight prevent false “browser opened” messages)

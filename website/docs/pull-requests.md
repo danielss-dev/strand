@@ -13,6 +13,10 @@ or stores its access token:
 - GitHub requires [GitHub CLI](https://cli.github.com/) and `gh auth login`.
 - Azure DevOps requires Azure CLI, the `azure-devops` extension, and `az login`.
 
+Packaged desktop builds import the interactive login-shell `PATH`, including
+Homebrew, local-bin, and version-manager locations that GUI launchers normally
+omit. Restart Strand after changing shell startup files or installing a CLI.
+
 If the CLI is missing, signed out, or cannot access the repository, the view
 shows the provider error and the setup command. Provider calls time out after
 30 seconds instead of blocking the app indefinitely.

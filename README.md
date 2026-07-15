@@ -83,7 +83,9 @@ keyboard alone, and the mouse stays first-class.
   checks, conflicts, merge state, and provider freshness before merging with
   merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
-  remain enforced. Azure inline comments need iteration tracking and
+  remain enforced. Packaged desktop builds import the user's shell `PATH`, so
+  Homebrew and version-manager CLI installs work without a custom path. Azure
+  inline comments need iteration tracking and
   submit-review and other lifecycle actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
@@ -131,7 +133,9 @@ keyboard alone, and the mouse stays first-class.
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
   (`claude-sonnet-5`); Settings → AI for sign-in, provider choice, and CLI
-  health checks. Generation is cancellable, scans conservative sensitive-file
+  health checks. Packaged builds resolve these tools and their runtimes through
+  the user's shell `PATH`; custom paths remain available. Generation is
+  cancellable, scans conservative sensitive-file
   signals before provider launch, reports partial-context coverage, preserves
   the replaced draft for one-step undo, and can retry explicitly with the other
   provider without changing your default. Repository-family writing profiles
