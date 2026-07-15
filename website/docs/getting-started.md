@@ -62,7 +62,9 @@ Open repositories appear either as a vertical icon rail or a horizontal tab stri
 The sidebar has four primary rows — **Local Changes** (with an unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and two tabs below them:
 
 - **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row actions live in right-click context menus.
-- **Files** — the working-tree file tree; clicking a file opens it in the file view.
+- **Files** — the working-tree file tree; when a commit is selected in All
+  Commits, it re-roots to that commit and shows its short hash. Clicking a file
+  opens the matching working-tree or historical version in the file view.
 
 ### Main views
 

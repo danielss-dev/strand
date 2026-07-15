@@ -116,7 +116,8 @@ keyboard alone, and the mouse stays first-class.
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
 - **File view** — highlighted source, `--follow` history, compare any two
-  revisions, blame, and rendered previews for markdown and SVG.
+  revisions, blame, and rendered previews for markdown and SVG; selecting a
+  commit re-roots the Files tree and pins opened content to that revision.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, saveable as named **workspaces** (the repos behind

@@ -165,6 +165,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const remoteTags = useRepo((s) => s.remoteTags);
   const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
   const workTree = useRepo((s) => s.workTree);
+  const selectedCommit = useRepo((s) => s.selectedCommit);
   const refreshTree = useRepo((s) => s.refreshTree);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const moveEntries = useRepo((s) => s.moveEntries);
@@ -332,36 +333,53 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     );
   }, [submodules, filter]);
 
-  // Files tab: lazily fetch the working-tree listing when the tab is shown
-  // (keyed on `meta?.path` so a tab switch reloads it). Ongoing freshness
-  // comes from `refreshSnapshot` — every write op and watcher tick updates
-  // `workTree` from the same statuses walk — so this effect deliberately
-  // does NOT depend on `status`: the old status dep re-walked the working
-  // tree over IPC a second time on every stage toggle.
+  // Files tab: lazily fetch the selected commit's immutable tree, or the
+  // working-tree listing when no commit detail is open. Working-tree freshness
+  // comes from `refreshSnapshot`, so this deliberately does NOT depend on
+  // `status`: the old status dep re-walked the tree after every stage toggle.
   const [treeLoading, setTreeLoading] = useState(false);
+  const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
+  const [treeError, setTreeError] = useState<string | null>(null);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
     let cancelled = false;
     setTreeLoading(true);
-    void refreshTree().finally(() => {
-      if (!cancelled) setTreeLoading(false);
-    });
+    setTreeError(null);
+    if (selectedCommit) setRevisionTree(null);
+    const load = selectedCommit
+      ? tauri.repoTreeAt(meta.path, selectedCommit).then((tree) => {
+          if (!cancelled) setRevisionTree(tree);
+        })
+      : refreshTree().then(() => {
+          if (!cancelled) setRevisionTree(null);
+        });
+    void load
+      .catch((e) => {
+        if (!cancelled) {
+          setRevisionTree(null);
+          setTreeError(errMessage(e));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTreeLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [tab, meta?.path, refreshTree]);
+  }, [tab, meta?.path, selectedCommit, refreshTree]);
 
-  // Files tab — the Pierre tree is fed the whole working-tree listing.
+  // Files tab — Pierre receives either the selected revision or working tree.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
   // (git tab only) no longer touches this list.
-  const filePaths = useMemo(() => workTree.map((e) => e.path), [workTree]);
+  const displayedTree = selectedCommit ? (revisionTree ?? []) : workTree;
+  const filePaths = useMemo(() => displayedTree.map((e) => e.path), [displayedTree]);
   const fileGitStatus = useMemo<GitStatusEntry[]>(
     () =>
-      workTree.flatMap((e) => {
+      displayedTree.flatMap((e) => {
         const s = workStatusToGit(e.status);
         return s ? [{ path: e.path, status: s }] : [];
       }),
-    [workTree],
+    [displayedTree],
   );
   // Rename / move — the drop handler for drag-to-move in the tree, and the
   // dialog behind the context menu's keyboard-operable equivalent.
@@ -389,9 +407,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const fileMenu = useCallback(
     (targets: string[]): TreeMenuItem[] => {
       const items: TreeMenuItem[] = [
-        { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0]) },
+        { label: 'Open', icon: 'content', onSelect: () => selectFile(targets[0], selectedCommit) },
       ];
-      if (targets.length === 1) {
+      if (!selectedCommit && targets.length === 1) {
         items.push({
           label: 'Rename / move…',
           icon: 'file',
@@ -400,6 +418,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       }
       // .gitignore quick actions for a single untracked file.
       if (
+        !selectedCommit &&
         targets.length === 1 &&
         workTree.some((e) => e.path === targets[0] && e.status === 'UNTRACKED')
       ) {
@@ -424,7 +443,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       });
       return items;
     },
-    [selectFile, workTree, gitignoreAdd, openIgnoreDialog, onToast],
+    [selectFile, selectedCommit, workTree, gitignoreAdd, openIgnoreDialog, onToast],
   );
 
   const renameDialog = renameTarget ? (
@@ -1037,16 +1056,25 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       ) : (
         <div className="side-files">
           {renameDialog}
+          {selectedCommit && (
+            <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
+              Files at <code>{selectedCommit.slice(0, 7)}</code>
+            </div>
+          )}
           <PierreTree
             paths={filePaths}
             gitStatus={fileGitStatus}
-            onMove={moveTo}
+            onMove={selectedCommit ? undefined : moveTo}
             selectedPath={selectedFile}
-            onSelect={(p) => selectFile(p)}
+            onSelect={(p) => selectFile(p, selectedCommit)}
             menuItems={fileMenu}
             search
             initialExpansion="closed"
-            emptyLabel={treeLoading ? 'Loading working tree…' : 'No files in the working tree.'}
+            emptyLabel={
+              treeLoading
+                ? selectedCommit ? 'Loading commit tree…' : 'Loading working tree…'
+                : treeError ?? (selectedCommit ? 'No files at this commit.' : 'No files in the working tree.')
+            }
           />
         </div>
       )}

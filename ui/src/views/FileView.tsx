@@ -33,7 +33,8 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
 
 /**
  * Tabbed file view (PRD §6.5), wired to `strand-core`:
- * - **Content** — the working-tree file, syntax-highlighted via Pierre's `<File>`.
+ * - **Content** — the working-tree file or selected revision,
+ *   syntax-highlighted via Pierre's `<File>`.
  * - **Preview** — rendered form of a renderable text file (SVG as an image,
  *   markdown as a document); the tab only shows for those files.
  * - **History** — `git log --follow` for the path; selecting a commit shows
@@ -45,6 +46,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
  */
 export function FileView({ path }: { path: string }) {
   const activePath = useRepo((s) => s.activePath);
+  const revision = useRepo((s) => s.selectedFileRevision);
   const meta = useRepo((s) => s.meta);
   const repoName = repoFamilyName(meta);
   const setView = useRepo((s) => s.setView);
@@ -102,6 +104,7 @@ export function FileView({ path }: { path: string }) {
           <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} title={path}>
             {path}
           </span>
+          {revision && <span className="ref-chip head">{revision.slice(0, 7)}</span>}
         </div>
         <div className="h-actions">
           <button
@@ -137,11 +140,14 @@ export function FileView({ path }: { path: string }) {
             key={path}
             path={path}
             repoPath={activePath}
+            revision={revision}
             searchOpen={searchOpen}
             onCloseSearch={() => setSearchOpen(false)}
           />
         )}
-        {active === 'preview' && <PreviewTab key={path} path={path} repoPath={activePath} />}
+        {active === 'preview' && (
+          <PreviewTab key={path} path={path} repoPath={activePath} revision={revision} />
+        )}
         {active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
         {active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
         {active === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
@@ -159,11 +165,13 @@ function FvEmpty({ children }: { children: React.ReactNode }) {
 function ContentTab({
   path,
   repoPath,
+  revision,
   searchOpen,
   onCloseSearch,
 }: {
   path: string;
   repoPath: string | null;
+  revision: string | null;
   searchOpen: boolean;
   onCloseSearch: () => void;
 }) {
@@ -218,12 +226,12 @@ function ContentTab({
     setError(null);
     setData(null);
     tauri
-      .repoFileContent(repoPath, path, null)
+      .repoFileContent(repoPath, path, revision)
       .then((c) => { if (!cancelled) setData(c); })
       .catch((e) => { if (!cancelled) setError(errMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [repoPath, path]);
+  }, [repoPath, path, revision]);
 
   if (loading) return <FvEmpty>Loading…</FvEmpty>;
   if (error) return <FvEmpty>{error}</FvEmpty>;
@@ -233,7 +241,7 @@ function ContentTab({
     // binaries stay a note.
     return isImagePath(path) ? (
       <div className="fv-tab">
-        <ImagePreview path={path} src={{ rev: null }} />
+        <ImagePreview path={path} src={{ rev: revision }} />
       </div>
     ) : (
       <FvEmpty>Binary file — no preview.</FvEmpty>
@@ -271,23 +279,40 @@ function ContentTab({
  * through `lib/markdown` (React elements only — repo content can't inject
  * HTML into the webview).
  */
-function PreviewTab({ path, repoPath }: { path: string; repoPath: string | null }) {
+function PreviewTab({
+  path,
+  repoPath,
+  revision,
+}: {
+  path: string;
+  repoPath: string | null;
+  revision: string | null;
+}) {
   if (isSvgPath(path)) {
     return (
       <div className="fv-tab">
-        <ImagePreview path={path} src={{ rev: null }} />
+        <ImagePreview path={path} src={{ rev: revision }} />
       </div>
     );
   }
-  return <MarkdownPreview path={path} repoPath={repoPath} />;
+  return <MarkdownPreview path={path} repoPath={repoPath} revision={revision} />;
 }
 
-function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | null }) {
+function MarkdownPreview({
+  path,
+  repoPath,
+  revision,
+}: {
+  path: string;
+  repoPath: string | null;
+  revision: string | null;
+}) {
   const selectFile = useRepo((s) => s.selectFile);
   const setFileTab = useRepo((s) => s.setFileTab);
   // Re-fetch when the watcher refreshes — the agent-review loop edits docs
   // under us, and a stale preview defeats its purpose.
   const diffsTick = useRepo((s) => s.diffsTick);
+  const refetchKey = revision ? 0 : diffsTick;
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -297,11 +322,11 @@ function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | 
     // Keep the previous render while revalidating; only the first load (data
     // still null) shows the placeholder.
     tauri
-      .repoFileContent(repoPath, path, null)
+      .repoFileContent(repoPath, path, revision)
       .then((c) => { if (!cancelled) { setData(c); setError(null); } })
       .catch((e) => { if (!cancelled) setError(errMessage(e)); });
     return () => { cancelled = true; };
-  }, [repoPath, path, diffsTick]);
+  }, [repoPath, path, revision, refetchKey]);
 
   const dir = useMemo(() => {
     const i = path.lastIndexOf('/');
@@ -316,7 +341,7 @@ function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | 
         if (href.startsWith('#')) return; // in-document anchors: no heading ids in v1
         const target = resolveRelative(dir, href);
         if (!target) return;
-        selectFile(target);
+        selectFile(target, revision);
         // Stay in reading mode across doc → doc links even when the
         // `fileOpenTab` setting opens files on the raw source.
         if (isPreviewablePath(target)) setFileTab('preview');
@@ -327,14 +352,14 @@ function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | 
         }
         const target = resolveRelative(dir, src);
         return target && isImagePath(target) ? (
-          <RepoImage key={key} path={target} alt={alt} />
+          <RepoImage key={key} path={target} alt={alt} revision={revision} />
         ) : (
           <span key={key} className="md-img-fallback">{alt || src}</span>
         );
       },
       renderMermaid: (code, key) => <Mermaid key={key} code={code} />,
     });
-  }, [data, dir, selectFile, setFileTab]);
+  }, [data, dir, revision, selectFile, setFileTab]);
 
   if (error && !data) return <FvEmpty>{error}</FvEmpty>;
   if (!data) return <FvEmpty>Loading…</FvEmpty>;
@@ -352,9 +377,9 @@ function MarkdownPreview({ path, repoPath }: { path: string; repoPath: string | 
   );
 }
 
-/** Repo-relative image referenced from a markdown file, read off the worktree. */
-function RepoImage({ path, alt }: { path: string; alt: string }) {
-  const state = useBlob(path, { rev: null });
+/** Repo-relative image referenced from a markdown file, read at its revision. */
+function RepoImage({ path, alt, revision }: { path: string; alt: string; revision: string | null }) {
+  const state = useBlob(path, { rev: revision });
   if (state.kind === 'loading') return null;
   if (state.kind !== 'ok' || state.blob.too_large) {
     return <span className="md-img-fallback" title={path}>{alt || basename(path)}</span>;

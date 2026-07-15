@@ -56,7 +56,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   rename-following with per-path add/del counts)
 - ☑ Merge base of two commit-ishes (`Repo::merge_base` in `refs.rs` — git2
   `revparse_single` + `merge_base`; powers the worktree review-vs-base baseline)
-- ☐ Tree listing for a commit (powers file tree at a revision)
+- ☑ Tree listing for a commit (`Repo::tree_at` + `repo_tree_at`, path-sorted
+  blob/gitlink walk with focused revision tests)
 - ☑ File content at a revision (`Repo::file_content` — working tree from disk via
   `safe_workdir_path`, or a blob at a revision; binary heuristic + 2 MB cap)
 - ☑ Raw file blob at worktree / index / revision (`Repo::file_blob` in `file.rs` —
@@ -256,6 +257,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Read commands: `repo_open`, `repo_meta`, `repo_status`, `repo_log`,
   `repo_search_log`,
   `repo_refs`, `repo_diff_unstaged` / `_staged` / `_between`, `repo_tree`,
+  `repo_tree_at`,
   `repo_submodules`, `repo_blame`, `repo_reflog`, `repo_file_content`,
   `repo_file_blob`, `repo_file_history`, `repo_diff_commit_file`,
   `repo_merge_base`
@@ -773,7 +775,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Right-click a graph row → `ContextMenu` with the same actions (Checkout /
   Tag… / Cherry-pick / Revert / Copy SHA); keyboard-operable via Menu key /
   Shift+F10 on the focused row (opens at the row corner)
-- ☐ Files tab re-roots to the selected commit (PRD §6.2 — needs `repo_tree_at`)
+- ☑ Files tab re-roots to the selected commit (`repo_tree_at` feeds a read-only
+  Pierre tree; opened Content/Preview files stay pinned to that revision)
 - ☑ Search bar — wired in the All Commits header (`Commits.tsx`). A field picker
   (Message / Author / Hash, via `ContextMenu`) + text input highlight matching
   rows **in place** (`.match` wash + accent-bolded substring) without filtering,
