@@ -223,6 +223,9 @@ export interface RepoState {
    *  navigation (selecting a file, opening a repo, switching tabs). */
   fileReturn: string | null;
   selectedFile: string | null;
+  /** Revision the selected file was opened from in the Files tree; `null`
+   * means the mutable working-tree copy. */
+  selectedFileRevision: string | null;
   selectedRef: string | null;
 
   /** Re-open the tabs the user had open last time (called once at app start). */
@@ -622,7 +625,7 @@ export interface RepoState {
   forgetRecent(path: string): Promise<void>;
 
   setView(view: View): void;
-  selectFile(path: string | null): void;
+  selectFile(path: string | null, revision?: string | null): void;
   selectRef(ref: string | null): void;
   /** Set the active file-view tab. */
   setFileTab(tab: FileTab): void;
@@ -747,6 +750,7 @@ const EMPTY_ACTIVE = {
   lastBulkDiscard: null as { oid: string; count: number; path: string } | null,
   lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
+  selectedFileRevision: null as string | null,
   fileReturn: null as string | null,
   selectedCommit: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
@@ -2004,9 +2008,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   // Opening a file resets the file-view tab — Preview for renderable files
   // when the `fileOpenTab` setting says so, Content otherwise — and drops any
   // stale back-target; closing (null) just drops the back-target.
-  selectFile: (selectedFile) =>
+  selectFile: (selectedFile, revision = null) =>
     set({
       selectedFile,
+      selectedFileRevision: selectedFile ? revision : null,
       view: selectedFile ? 'file' : get().view,
       fileReturn: null,
       ...(selectedFile

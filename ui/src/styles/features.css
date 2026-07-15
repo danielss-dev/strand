@@ -5952,6 +5952,17 @@ textarea.clone-input {
   display: flex;
   flex-direction: column;
 }
+.side-files-revision {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.side-files-revision code {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
 
 /* ── Worktrees overview ─────────────────────────────────────────────────── */
 .wt-view {

@@ -1,9 +1,10 @@
-//! Working-tree file listing — powers the Files sidebar tab.
+//! Repository file listings — powers the Files sidebar tab.
 //!
-//! Lists every tracked file (from the index) plus untracked-but-not-ignored
-//! files, each tagged with its change status so the UI can paint a badge.
-//! The frontend groups the flat list into a folder tree (it already does the
-//! same for the Local Changes and Branches trees).
+//! The working-tree path lists every tracked file (from the index) plus
+//! untracked-but-not-ignored files, each tagged with its change status so the
+//! UI can paint a badge. The revision path walks a commit tree and returns the
+//! immutable file set at that point in history. The frontend groups either
+//! flat list into a folder tree.
 
 use std::collections::BTreeMap;
 
@@ -26,6 +27,33 @@ impl Repo {
         let repo = self.git2()?;
         let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
         from_index_and_statuses(repo, &statuses)
+    }
+
+    /// List every file present at `rev`. Revision entries are immutable and
+    /// therefore carry no working-tree status badge.
+    pub fn tree_at(&self, rev: &str) -> Result<Vec<WorkTreeEntry>> {
+        let repo = self.git2()?;
+        let tree = repo.revparse_single(rev)?.peel_to_commit()?.tree()?;
+        let mut entries = Vec::new();
+
+        tree.walk(git2::TreeWalkMode::PreOrder, |root, entry| {
+            let is_file = matches!(
+                entry.kind(),
+                Some(git2::ObjectType::Blob | git2::ObjectType::Commit)
+            );
+            if is_file {
+                if let Some(name) = entry.name() {
+                    entries.push(WorkTreeEntry {
+                        path: format!("{root}{name}"),
+                        status: None,
+                    });
+                }
+            }
+            git2::TreeWalkResult::Ok
+        })?;
+
+        entries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        Ok(entries)
     }
 }
 
@@ -84,4 +112,88 @@ fn classify(s: git2::Status) -> StatusKind {
         return StatusKind::Renamed;
     }
     StatusKind::Modified
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn scratch_repo() -> (Repo, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-tree-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = git2::Repository::init(&dir).unwrap();
+        {
+            let mut cfg = git.config().unwrap();
+            cfg.set_str("user.name", "Test").unwrap();
+            cfg.set_str("user.email", "test@example.com").unwrap();
+        }
+        (Repo::discover(&dir).unwrap(), dir)
+    }
+
+    fn commit_all(repo: &Repo, message: &str) -> String {
+        let git = repo.git2().unwrap();
+        let mut index = git.index().unwrap();
+        index
+            .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = git.find_tree(tree_oid).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let parent = git.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+        git.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn tree_at_lists_the_selected_revision_only() {
+        let (repo, dir) = scratch_repo();
+        std::fs::create_dir_all(dir.join("src/nested")).unwrap();
+        std::fs::write(dir.join("README.md"), "first\n").unwrap();
+        std::fs::write(dir.join("src/nested/a.rs"), "fn a() {}\n").unwrap();
+        let first = commit_all(&repo, "first");
+
+        std::fs::remove_file(dir.join("README.md")).unwrap();
+        std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+        let second = commit_all(&repo, "second");
+
+        assert_eq!(
+            repo.tree_at(&first)
+                .unwrap()
+                .into_iter()
+                .map(|e| (e.path, e.status))
+                .collect::<Vec<_>>(),
+            vec![("README.md".into(), None), ("src/nested/a.rs".into(), None),]
+        );
+        assert_eq!(
+            repo.tree_at(&second)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.path)
+                .collect::<Vec<_>>(),
+            vec!["src/b.rs", "src/nested/a.rs"]
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn tree_at_accepts_refs_and_rejects_unknown_revisions() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join(Path::new("a.txt")), "a\n").unwrap();
+        commit_all(&repo, "first");
+
+        assert_eq!(repo.tree_at("HEAD").unwrap()[0].path, "a.txt");
+        assert!(repo.tree_at("does-not-exist").is_err());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

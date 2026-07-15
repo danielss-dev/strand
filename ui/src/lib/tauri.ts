@@ -256,6 +256,8 @@ export const tauri = {
   repoCheckoutCommit: (path: string, rev: string) =>
     invoke<CheckoutOutcome>('repo_checkout_commit', { path, rev }),
   repoTree: (path: string) => invoke<WorkTreeEntry[]>('repo_tree', { path }),
+  repoTreeAt: (path: string, rev: string) =>
+    invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
   repoSubmoduleUpdate: (
     path: string,

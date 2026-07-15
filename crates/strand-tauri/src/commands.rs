@@ -697,6 +697,14 @@ pub async fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
 }
 
 #[tauri::command(async)]
+pub async fn repo_tree_at(path: String, rev: String) -> CmdResult<Vec<WorkTreeEntry>> {
+    run_blocking("tree at revision", move || {
+        Ok(Repo::discover(&path)?.tree_at(&rev)?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
 pub async fn repo_submodules(path: String) -> CmdResult<Vec<Submodule>> {
     run_blocking("submodules", move || Ok(Repo::discover(&path)?.submodules()?)).await
 }

@@ -1058,6 +1058,8 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   base commit; distinct diamond marker + `stash@{n}` chip; right-click Apply/Pop/Drop)
 - ☑ Drag-and-drop renames in file tree — shipped 2026-07-06 (see changelog
   entry below)
+- ☑ File tree re-roots to the selected commit; historical Content/Preview reads
+  stay pinned to that revision — shipped 2026-07-15
 - ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
   flow, shipped 2026-07-06 (see changelog entry below)
 - ◐ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
@@ -1650,6 +1652,12 @@ inline Changes card and flattened Conversation timeline locally, preserving the
 mounted Pierre diff, file selection, scroll, focus, and per-thread drafts.
 Coordinate-based new comments retain their exact-head guard; replies and thread
 state do not need one because they target an existing stable thread.
+
+**Revision file tree shipped (2026-07-15):** Selecting a commit now re-roots
+the sidebar Files tab through `Repo::tree_at` / `repo_tree_at`, with a visible
+short-hash context and read-only tree actions. Opening a historical file pins
+Content, image/SVG previews, Markdown, and repo-relative Markdown images to the
+same revision instead of accidentally reading the mutable working tree.
 
 ---
 

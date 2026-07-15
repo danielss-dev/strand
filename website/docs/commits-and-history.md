@@ -14,7 +14,7 @@ Rows are decorated with chips:
 
 ### Commit detail panel
 
-Selecting a commit (click or `Enter`) opens a detail panel on the right with the full message, a metadata grid, the list of changed files, and the diff of the focused file. Image changes render as before/after previews. Drag the divider to resize the panel; the split is remembered. Press `Escape` to close it.
+Selecting a commit (click or `Enter`) opens a detail panel on the right with the full message, a metadata grid, the list of changed files, and the diff of the focused file. It also re-roots the sidebar's **Files** tab to that commit; the short hash above the tree makes the historical context explicit. Historical trees are read-only, and opening a file keeps Content and Preview pinned to that revision. Image changes render as before/after previews. Drag the divider to resize the panel; the split is remembered. Press `Escape` to close it and return Files to the working tree.
 
 ### Keyboard
 
@@ -74,8 +74,8 @@ Open any file from the sidebar's **Files** tab or the command palette to get a d
 
 | Tab | What it shows |
 | --- | --- |
-| Content | The working-tree file, syntax-highlighted; images get a checkerboard preview |
-| Preview | Rendered form of the file (only for previewable files) |
+| Content | The working-tree file, or the selected commit's version, syntax-highlighted; images get a checkerboard preview |
+| Preview | Rendered form of the working-tree or selected-commit file (only for previewable files) |
 | History | The file's commit history, following renames (`git log --follow`) |
 | Compare | This file diffed between any two of its revisions |
 | Blame | Per-line authorship |
