@@ -23,6 +23,7 @@ trait AiProviderAdapter: Sync {
         &self,
         repo_path: &std::path::Path,
         prompt: &str,
+        model: Option<&str>,
         cli_override: Option<&str>,
         cancel: Option<&bin::AiCancelHandle>,
     ) -> Result<String, String>;
@@ -129,6 +130,7 @@ pub fn suggest_commit_message_with_request(
     provider: AiProvider,
     repo_path: &std::path::Path,
     diffs: &[FileDiff],
+    model: Option<&str>,
     cli_override: Option<&str>,
     cancel: Option<&bin::AiCancelHandle>,
     decision: &AiSensitiveDecision,
@@ -170,7 +172,7 @@ pub fn suggest_commit_message_with_request(
         "{}\n\nRemember: reply with JSON only: {{\"subject\":\"...\",\"body\":\"...\"}}",
         built.text
     );
-    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let raw = adapter(provider).suggest(repo_path, &text, model, cli_override, cancel)?;
     let suggestion = parse::parse_suggestion(&raw)?;
     Ok(AiGenerationOutcome::Generated {
         suggestion,
@@ -186,6 +188,7 @@ pub fn suggest_pull_request_with_request(
     source_branch: &str,
     target_branch: &str,
     diffs: &[FileDiff],
+    model: Option<&str>,
     cli_override: Option<&str>,
     cancel: Option<&bin::AiCancelHandle>,
     decision: &AiSensitiveDecision,
@@ -232,7 +235,7 @@ pub fn suggest_pull_request_with_request(
         "{}\n\nRemember: reply with JSON only: {{\"title\":\"...\",\"description\":\"...\"}}",
         built.text
     );
-    let raw = adapter(provider).suggest(repo_path, &text, cli_override, cancel)?;
+    let raw = adapter(provider).suggest(repo_path, &text, model, cli_override, cancel)?;
     let suggestion = parse::parse_pull_request_suggestion(&raw)?;
     Ok(AiGenerationOutcome::Generated {
         suggestion,

@@ -50,6 +50,8 @@ export function PullRequestCreateDialog({
   onClose: () => void;
 }) {
   const aiProvider = useSettings((state) => state.aiProvider);
+  const openaiModel = useSettings((state) => state.openaiModel);
+  const anthropicModel = useSettings((state) => state.anthropicModel);
   const openaiCli = useSettings((state) => state.openaiCli);
   const anthropicCli = useSettings((state) => state.anthropicCli);
   const targets = useMemo(
@@ -74,7 +76,7 @@ export function PullRequestCreateDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
-  const requestRef = useRef<{ opId: string; path: string; target: string; provider: typeof aiProvider } | null>(null);
+  const requestRef = useRef<{ opId: string; path: string; target: string; provider: typeof aiProvider; model: string } | null>(null);
   const suggestingRef = useRef(false);
   const autoFillStartedRef = useRef(false);
 
@@ -114,7 +116,7 @@ export function PullRequestCreateDialog({
     requestRef.current = null;
     suggestingRef.current = false;
     if (request) void tauri.repoCancelOp(request.opId);
-  }, [path, targetBranch, aiProvider, openaiCli, anthropicCli]);
+  }, [path, targetBranch, aiProvider, openaiCli, anthropicCli, openaiModel, anthropicModel]);
 
   function trapFocus(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -173,7 +175,8 @@ export function PullRequestCreateDialog({
       return;
     }
     const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const request = { opId, path, target, provider: selectedProvider };
+    const model = selectedProvider === 'openai' ? openaiModel : anthropicModel;
+    const request = { opId, path, target, provider: selectedProvider, model };
     requestRef.current = request;
     suggestingRef.current = true;
     setSuggesting(true);
@@ -190,6 +193,7 @@ export function PullRequestCreateDialog({
         path,
         target,
         selectedProvider,
+        model,
         { opId, sensitiveDecision, styleInstruction },
         openaiCli,
         anthropicCli,

@@ -1771,6 +1771,9 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 
 - ☑ Rust `ai/` module + IPC (`ai_provider_*`, `repo_suggest_commit_message`)
 - ☑ Settings → AI (ChatGPT / Claude Code sign-in, custom CLI paths)
+- ☑ Provider-focused AI settings + persisted per-provider writing models used
+  by commit and PR generation (`AiSection`, `openaiModel` / `anthropicModel`,
+  model-aware vendor CLI argv, remembered last-checked connection state)
 - ☑ CommitBar Suggest + palette / ⌘⇧M shortcut (prefers the staged diff; falls
   back to all unstaged changes when no staged diff exists)
 - ☑ Pull-request title/description suggestions from committed merge-base diffs

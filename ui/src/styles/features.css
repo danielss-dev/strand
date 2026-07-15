@@ -3971,6 +3971,103 @@ textarea.clone-input {
   color: var(--text-2);
 }
 
+/* AI settings — provider selection reveals one focused account card. */
+.ai-settings {
+  max-width: 720px;
+}
+.ai-settings-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ai-settings-intro .settings-field-label {
+  color: var(--text);
+  font-size: 14px;
+}
+.ai-settings-intro p,
+.ai-provider-head p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ai-model-select {
+  min-width: 190px !important;
+}
+.ai-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 9px;
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.ai-provider-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ai-provider-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ai-provider-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 55%;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-align: right;
+}
+.ai-provider-status i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.ai-provider-status[data-state='ready'] {
+  color: var(--text-2);
+}
+.ai-provider-status[data-state='ready'] i {
+  background: var(--add);
+}
+.ai-provider-status[data-state='attention'] i {
+  background: var(--warn);
+}
+.ai-cli-path {
+  gap: 6px;
+}
+.ai-cli-path .settings-field-label {
+  font-size: 11px;
+}
+.ai-cli-path em {
+  margin-left: 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+}
+.ai-provider-actions {
+  flex-wrap: wrap;
+}
+.ai-sign-out {
+  margin-left: auto;
+}
+.ai-provider-message {
+  color: var(--text-2);
+}
+.ai-writing-profile {
+  min-height: 88px;
+  resize: vertical;
+}
+
 /* Keyboard settings — rebindable shortcut rows + context reference. */
 .kb-head {
   display: flex;

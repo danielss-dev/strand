@@ -26,16 +26,17 @@ impl super::AiProviderAdapter for Codex {
         &self,
         repo_path: &Path,
         prompt: &str,
+        model: Option<&str>,
         cli_override: Option<&str>,
         cancel: Option<&AiCancelHandle>,
     ) -> Result<String, String> {
-        suggest(repo_path, prompt, cli_override, cancel)
+        suggest(repo_path, prompt, model, cli_override, cancel)
     }
 }
 
 const CODEX_INSTALL: &str = "https://developers.openai.com/codex";
 /// A fast, focused model is sufficient for short commit and PR copy.
-const SUGGEST_MODEL: &str = "gpt-5.6-luna";
+const DEFAULT_SUGGEST_MODEL: &str = "gpt-5.6-luna";
 
 pub fn status(cli_override: Option<&str>) -> AiProviderStatus {
     let Some(bin) = resolve_codex(cli_override) else {
@@ -83,12 +84,16 @@ pub fn logout(cli_override: Option<&str>) -> Result<(), String> {
 pub fn suggest(
     _repo_path: &Path,
     prompt: &str,
+    model: Option<&str>,
     cli_override: Option<&str>,
     cancel: Option<&AiCancelHandle>,
 ) -> Result<String, String> {
     let bin = resolve_codex(cli_override).ok_or_else(not_installed)?;
     let isolated = tempfile::tempdir()
         .map_err(|err| format!("Could not create an isolated Codex workspace: {err}"))?;
+    let model = model
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(DEFAULT_SUGGEST_MODEL);
 
     // `-` makes `codex exec` read the prompt from stdin — see the note in
     // `claude::suggest` for why prompts don't travel as argv.
@@ -103,7 +108,7 @@ pub fn suggest(
             "--ignore-user-config",
             "--ignore-rules",
             "--model",
-            SUGGEST_MODEL,
+            model,
             "--sandbox",
             "read-only",
             "-c",
@@ -187,7 +192,14 @@ mod tests {
         let repo = temp.path().join("untrusted-repo");
         std::fs::create_dir(&repo).unwrap();
 
-        let output = suggest(&repo, "bounded prompt", launcher.to_str(), None).unwrap();
+        let output = suggest(
+            &repo,
+            "bounded prompt",
+            Some("gpt-test-model"),
+            launcher.to_str(),
+            None,
+        )
+        .unwrap();
         assert!(output.contains("\"subject\":\"test\""));
         let invocation = std::fs::read_to_string(record).unwrap();
         let cwd = invocation.lines().next().unwrap();
@@ -201,6 +213,7 @@ mod tests {
             "read-only",
             "never",
             "web_search=\"disabled\"",
+            "gpt-test-model",
         ] {
             assert!(invocation.contains(required), "missing flag: {required}");
         }

@@ -1048,8 +1048,11 @@ to `claude` is the supported path for Claude Code users.
   health error, and preflight detached login flows with `--version`, so the UI
   never claims sign-in started when the vendor CLI could not run.
 - Settings → AI shows per-CLI status (Codex + Claude Code) via an explicit
-  **Check CLI status** button — no auto auth probe on open. Optional manual
-  sign-in/out per CLI remains.
+  status button — no auto auth probe on open. Its last explicitly checked
+  installed/logged-in result may be persisted for immediate UI continuity, but
+  never credentials or provider account identifiers; label it as CLI-saved and
+  keep the status button as the explicit refresh. Changing the custom CLI path
+  invalidates that cached result. Optional manual sign-in/out per CLI remains.
 
 ---
 

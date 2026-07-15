@@ -59,11 +59,19 @@ changes. It has no API key of its own — suggestions run through a CLI you
 already have, on your own subscription. Auth and billing stay entirely in the
 vendor's CLI; Strand only orchestrates it.
 
-- **AI writing provider** — "OpenAI (ChatGPT subscription)" (default), which uses your ChatGPT subscription via the Codex CLI (`gpt-5.6-luna`), or "Anthropic (Claude Code CLI)", which uses the Claude Code CLI (`claude-sonnet-5`). These fixed, focused models keep short commit-message and PR-draft requests responsive rather than inheriting your coding CLI's default model.
-- **Codex CLI** — an optional custom path (leave empty to use `codex` on PATH), a status line, and **Sign in with ChatGPT** / **Sign out** buttons.
-- **Claude Code CLI** — an optional custom path (leave empty to use `claude` on PATH), a status line, and **Sign in to Claude Code** / **Sign out** buttons.
-- **Check CLI status** — checks both CLIs and reports whether each is missing,
-  signed out, signed in, or installed but unable to run.
+- **Provider** — choose OpenAI (default) or Anthropic. The account card below
+  shows only the selected provider's CLI path, sign-in, sign-out, and status
+  controls.
+- **Model** — choose the selected provider's writing model. Strand remembers
+  one choice per provider and uses it for both commit-message suggestions and
+  pull-request drafts. The performance-first defaults remain `gpt-5.6-luna`
+  and `claude-sonnet-5`.
+- **Provider account** — optionally override the selected provider's CLI path
+  (leave empty to use `codex` or `claude` on PATH), sign in or out, and check
+  whether the CLI is missing, signed out, signed in, or unable to run. Strand
+  remembers the last checked connection indicator, so returning to Settings
+  still shows **Connected**. Credentials remain stored only by the vendor CLI;
+  **Refresh status** checks that external session again.
 - **Repository writing profile** — up to 1,000 characters of optional style,
   terminology, or audience guidance for the active repository family. Linked
   worktrees share the profile through their canonical `common_dir`; an empty

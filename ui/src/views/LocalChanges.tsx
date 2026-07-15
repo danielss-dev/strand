@@ -1280,6 +1280,8 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
   const suggestCommitSignal = useRepo((s) => s.suggestCommitSignal);
   const clearSuggestCommitMessage = useRepo((s) => s.clearSuggestCommitMessage);
   const aiProvider = useSettings((s) => s.aiProvider);
+  const openaiModel = useSettings((s) => s.openaiModel);
+  const anthropicModel = useSettings((s) => s.anthropicModel);
   const openaiCli = useSettings((s) => s.openaiCli);
   const anthropicCli = useSettings((s) => s.anthropicCli);
   const platform = useSettings((s) => s.platform);
@@ -1299,7 +1301,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
   const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
 
   const subjectRef = useRef<HTMLInputElement>(null);
-  const requestRef = useRef<{ opId: string; path: string; provider: typeof aiProvider } | null>(null);
+  const requestRef = useRef<{ opId: string; path: string; provider: typeof aiProvider; model: string } | null>(null);
   const suggestingRef = useRef(false);
 
   function applyMessage(m: { subject: string; body: string }) {
@@ -1316,7 +1318,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     if (request) void tauri.repoCancelOp(request.opId);
   }, []);
 
-  useEffect(() => cancelSuggestion, [activePath, aiProvider, openaiCli, anthropicCli, cancelSuggestion]);
+  useEffect(() => cancelSuggestion, [activePath, aiProvider, openaiCli, anthropicCli, openaiModel, anthropicModel, cancelSuggestion]);
 
   const suggest = useCallback(async (
     sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
@@ -1324,7 +1326,8 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
   ) => {
     if (!activePath || !hasChanges || suggestingRef.current) return;
     const opId = `ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const request = { opId, path: activePath, provider };
+    const model = provider === 'openai' ? openaiModel : anthropicModel;
+    const request = { opId, path: activePath, provider, model };
     requestRef.current = request;
     suggestingRef.current = true;
     setSuggesting(true);
@@ -1340,6 +1343,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       const outcome = await tauri.repoSuggestCommitMessage(
         activePath,
         provider,
+        model,
         { opId, sensitiveDecision, styleInstruction },
         openaiCli,
         anthropicCli,
@@ -1380,7 +1384,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         setSuggesting(false);
       }
     }
-  }, [activePath, aiProvider, anthropicCli, body, commonDir, hasChanges, openaiCli, subject]);
+  }, [activePath, aiProvider, anthropicCli, anthropicModel, body, commonDir, hasChanges, openaiCli, openaiModel, subject]);
 
   useEffect(() => {
     if (!suggestCommitSignal) return;

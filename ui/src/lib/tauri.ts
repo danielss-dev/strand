@@ -123,6 +123,7 @@ export const tauri = {
     path: string,
     targetBranch: string,
     provider: AiProvider,
+    model: string,
     request: AiGenerationRequest,
     openaiCli?: string | null,
     anthropicCli?: string | null,
@@ -130,6 +131,7 @@ export const tauri = {
     path,
     targetBranch,
     provider,
+    model,
     openaiCli: openaiCli ?? null,
     anthropicCli: anthropicCli ?? null,
     request,
@@ -505,6 +507,7 @@ export const tauri = {
   repoSuggestCommitMessage: (
     path: string,
     provider: AiProvider,
+    model: string,
     request: AiGenerationRequest,
     openaiCli?: string | null,
     anthropicCli?: string | null,
@@ -512,6 +515,7 @@ export const tauri = {
     invoke<AiGenerationOutcome<CommitMessageSuggestion>>('repo_suggest_commit_message', {
       path,
       provider,
+      model,
       openaiCli: openaiCli ?? null,
       anthropicCli: anthropicCli ?? null,
       request,
