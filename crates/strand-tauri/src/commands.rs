@@ -1378,6 +1378,7 @@ pub async fn repo_suggest_commit_message(
 }
 
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
 pub async fn repo_suggest_pull_request(
     path: String,
     target_branch: String,
