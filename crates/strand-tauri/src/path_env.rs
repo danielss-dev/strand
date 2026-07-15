@@ -38,7 +38,7 @@ fn resolve_effective_path() -> Option<OsString> {
     {
         let conventional = conventional_desktop_path();
         let fallback = merge_paths(conventional.as_deref(), inherited.as_deref());
-        return merge_paths(shell_path().as_deref(), fallback.as_deref());
+        merge_paths(shell_path().as_deref(), fallback.as_deref())
     }
     #[cfg(not(unix))]
     inherited
