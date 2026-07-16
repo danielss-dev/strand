@@ -1,4 +1,8 @@
-import type { FileTreeIconConfig } from '@pierre/trees';
+import {
+  createFileTreeIconResolver,
+  getBuiltInSpriteSheet,
+  type FileTreeIconConfig,
+} from '@pierre/trees';
 
 import assemblySvg from 'material-icon-theme/icons/assembly.svg?raw';
 import clojureSvg from 'material-icon-theme/icons/clojure.svg?raw';
@@ -113,3 +117,15 @@ export const TREE_ICONS: FileTreeIconConfig = {
   },
   byFileExtension: MATERIAL_ICONS_BY_EXTENSION,
 };
+
+const TREE_ICON_RESOLVER = createFileTreeIconResolver(TREE_ICONS);
+
+/** Built-in + Strand extension symbols for non-Pierre surfaces that need the
+ * exact same file icons as the shared tree. */
+export const TREE_ICON_SPRITE_SHEETS =
+  getBuiltInSpriteSheet('complete') + (TREE_ICONS.spriteSheet ?? '');
+
+/** Resolve a file path through the exact icon rules PierreTree uses. */
+export function resolveTreeFileIcon(path: string) {
+  return TREE_ICON_RESOLVER.resolveIcon('file-tree-icon-file', path);
+}

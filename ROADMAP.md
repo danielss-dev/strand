@@ -79,11 +79,8 @@ system ported verbatim. No real feature surface yet.
 - ☑ **File tree**
   - ☑ Working-tree view, status badges, click to file detail (`Repo::work_tree`
     lists index entries overlaid with status; Sidebar Files tab renders a
-    folder tree with per-file status badges; click opens the file in FileView)
-  - Built as a custom tree reusing the existing `buildTree`/`sortTree`
-    primitives rather than pulling in `@pierre/trees` — no new dependency,
-    matches the Branches/Local-Changes trees. (FileView's Content/History/
-    Compare/Blame tabs are still placeholders — that's 0.5 work.)
+    Pierre folder tree with per-file status badges; file rows open FileView and
+    folder rows open a keyboard-operable immediate-contents index)
 - ☑ **macOS packaging** — *release CI builds, signs, and notarizes the
   universal DMG (v0.5.0, 2026-06-12). See `docs/packaging.md` for the runbook.*
   - ☑ Real app icon (squircle on the Apple grid — commit `aefc189`)
@@ -1751,6 +1748,12 @@ also reads the native desktop permission directly on Windows, bypassing Tauri
 2.3.3's false-denied Web Notification shim. Verified in an isolated running
 Tauri app with the process PATH stripped to Windows system directories: Codex
 was discovered, executed, and recognized the existing ChatGPT login.
+
+**Folder contents shipped (2026-07-17):** Selecting a folder in the Files tree
+now opens a real Contents view instead of trying to read the directory as a
+file. The index reuses the loaded working/revision tree, shows immediate child
+folders and files with the tree's shared file-type icons and descendant/change
+counts, and supports Arrow/Home/End navigation plus Enter/Space activation.
 
 ---
 

@@ -132,8 +132,11 @@ keyboard alone, and the mouse stays first-class.
 - **File view** — highlighted source, `--follow` history, compare any two
   revisions, blame, and rendered previews for markdown and SVG; the Files tree
   uses recognizable language and tool logos, and selecting a commit re-roots it
-  while pinning opened content to that revision. Right-click any working-tree
-  file to open that exact path in your configured external editor.
+  while pinning opened content to that revision. Selecting a folder opens its
+  immediate contents with the same file-type icons, file/change counts, and
+  keyboard navigation.
+  Right-click any working-tree file to open that exact path in your configured
+  external editor.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, saveable as named **workspaces** (the repos behind

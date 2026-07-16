@@ -707,8 +707,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Copy path; the section header `sync` action updates all (`--init --recursive`).
 - ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
   click-to-open; lazily loaded when the Files tab is shown and refreshed on
-  status change. Built with the existing `buildTree`/`sortTree` primitives
-  (no `@pierre/trees` dependency).
+  status change. `PierreTree` now reports whether a selected row is a file or
+  synthesized folder; `FileView.DirectoryTab` renders a folder's immediate
+  children with the shared tree file-type icons, descendant/change counts, and
+  keyboard navigation without sending the directory path to
+  `repo_file_content`.
 - ☑ Language-aware icons for source types missing from Pierre's complete set
   (`lib/treeIcons.ts`: real Material Icon Theme SVG marks in one static custom
   sprite + file-rule maps shared by every `PierreTree`, including C#, F#,

@@ -227,6 +227,8 @@ export interface RepoState {
    *  navigation (selecting a file, opening a repo, switching tabs). */
   fileReturn: string | null;
   selectedFile: string | null;
+  /** The selected Files-tree path is a synthesized folder row, not a file. */
+  selectedFileIsDirectory: boolean;
   /** Revision the selected file was opened from in the Files tree; `null`
    * means the mutable working-tree copy. */
   selectedFileRevision: string | null;
@@ -638,7 +640,7 @@ export interface RepoState {
   forgetRecent(path: string): Promise<void>;
 
   setView(view: View): void;
-  selectFile(path: string | null, revision?: string | null): void;
+  selectFile(path: string | null, revision?: string | null, isDirectory?: boolean): void;
   selectRef(ref: string | null): void;
   /** Set the active file-view tab. */
   setFileTab(tab: FileTab): void;
@@ -770,6 +772,7 @@ const EMPTY_ACTIVE = {
   lastBulkDiscard: null as { oid: string; count: number; path: string } | null,
   lastDiscard: null as { patch: string; label: string; path: string } | null,
   selectedFile: null as string | null,
+  selectedFileIsDirectory: false,
   selectedFileRevision: null as string | null,
   fileReturn: null as string | null,
   selectedCommit: null as string | null,
@@ -1483,11 +1486,15 @@ export const useRepo = create<RepoState>((set, get) => ({
       if (sel && get().view === 'file') {
         for (const m of done) {
           if (sel === m.from) {
-            get().selectFile(m.to);
+            get().selectFile(m.to, null, get().selectedFileIsDirectory);
             break;
           }
           if (sel.startsWith(m.from + '/')) {
-            get().selectFile(m.to + sel.slice(m.from.length));
+            get().selectFile(
+              m.to + sel.slice(m.from.length),
+              null,
+              get().selectedFileIsDirectory,
+            );
             break;
           }
         }
@@ -2073,9 +2080,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   // Opening a file resets the file-view tab — Preview for renderable files
   // when the `fileOpenTab` setting says so, Content otherwise — and drops any
   // stale back-target; closing (null) just drops the back-target.
-  selectFile: (selectedFile, revision = null) =>
+  selectFile: (selectedFile, revision = null, isDirectory = false) =>
     set({
       selectedFile,
+      selectedFileIsDirectory: selectedFile ? isDirectory : false,
       selectedFileRevision: selectedFile ? revision : null,
       view: selectedFile ? 'file' : get().view,
       fileReturn: null,
