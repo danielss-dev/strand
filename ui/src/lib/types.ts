@@ -161,6 +161,8 @@ export interface RemoteBranch {
   branch: string;
   full_name: string;
   target: string;
+  /** Remote tip is contained by the primary branch; safe for merged cleanup. */
+  merged: boolean;
 }
 
 export interface Remote {

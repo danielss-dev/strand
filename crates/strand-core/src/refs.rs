@@ -47,6 +47,10 @@ pub struct RemoteBranch {
     /// Full ref name, e.g. `refs/remotes/origin/main`.
     pub full_name: String,
     pub target: String,
+    /// True when this remote-tracking tip is reachable from the repository's
+    /// primary branch. Used by bulk cleanup; ordinary explicit deletion still
+    /// allows any remote branch behind confirmation.
+    pub merged: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,7 +180,7 @@ impl Repo {
 
         let primary_branch = primary_branch(repo);
         let branches = collect_branches(repo, primary_branch.as_ref());
-        let remote_branches = collect_remote_branches(repo);
+        let remote_branches = collect_remote_branches(repo, primary_branch.as_ref());
         let remotes = collect_remotes(repo);
         let tags = collect_tags(repo);
 
@@ -314,7 +318,10 @@ fn primary_branch(repo: &git2::Repository) -> Option<(String, git2::Oid)> {
     Some((head.shorthand()?.to_string(), head.target()?))
 }
 
-fn collect_remote_branches(repo: &git2::Repository) -> Vec<RemoteBranch> {
+fn collect_remote_branches(
+    repo: &git2::Repository,
+    primary_branch: Option<&(String, git2::Oid)>,
+) -> Vec<RemoteBranch> {
     let iter = match repo.branches(Some(git2::BranchType::Remote)) {
         Ok(it) => it,
         Err(_) => return Vec::new(),
@@ -337,6 +344,14 @@ fn collect_remote_branches(repo: &git2::Repository) -> Vec<RemoteBranch> {
             None => (String::new(), name.clone()),
         };
         let full_name = branch.get().name().unwrap_or("").to_string();
+        let merged = primary_branch
+            .map(|(_, primary_target)| {
+                *primary_target == target
+                    || repo
+                        .graph_descendant_of(*primary_target, target)
+                        .unwrap_or(false)
+            })
+            .unwrap_or(false);
 
         out.push(RemoteBranch {
             name,
@@ -344,6 +359,7 @@ fn collect_remote_branches(repo: &git2::Repository) -> Vec<RemoteBranch> {
             branch: branch_part,
             full_name,
             target: target.to_string(),
+            merged,
         });
     }
 
@@ -586,6 +602,8 @@ mod tests {
         std::fs::write(dir.join("unmerged.txt"), "unmerged\n").unwrap();
         git(&dir, &["add", "unmerged.txt"]);
         git(&dir, &["commit", "-q", "-m", "unmerged"]);
+        git(&dir, &["update-ref", "refs/remotes/origin/feature", "feature"]);
+        git(&dir, &["update-ref", "refs/remotes/origin/unmerged", "unmerged"]);
         // Re-checking out an already merged feature must not make either the
         // feature itself or its primary branch look safe to delete.
         git(&dir, &["checkout", "-q", "feature"]);
@@ -593,6 +611,16 @@ mod tests {
         let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
         let refs = repo.refs().unwrap();
         assert_eq!(refs.primary_branch.as_deref(), Some("main"));
+        let remote_merged = |name: &str| {
+            refs.remote_branches
+                .iter()
+                .find(|branch| branch.name == name)
+                .unwrap()
+                .merged
+        };
+        assert!(remote_merged("origin/main"));
+        assert!(remote_merged("origin/feature"));
+        assert!(!remote_merged("origin/unmerged"));
         let branches = refs.branches;
         let merged = |name: &str| branches.iter().find(|b| b.name == name).unwrap().merged;
 

@@ -654,6 +654,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   ancestry against the repository's primary branch; sidebar icons and
   commit-graph ref chips mark contained non-current branches that are safe to
   delete, without mislabeling the primary branch while a feature is checked out).
+- ☑ Clear merged branches in bulk (`BranchCleanupDialog` +
+  `mergedBranchCleanupPlan`: palette action with per-branch local selection,
+  opt-in matching upstream/origin deletion, checked-out-worktree exclusion,
+  remote-tip containment via `RemoteBranch.merged`, and a deletion-time
+  `Repo::delete_branch(force=false)` containment/worktree guard).
 - ☑ Ref clipboard/context expansion (2026-07-16): local branches copy name /
   full ref / SHA and the current branch exposes Pull + Push strategy submenus;
   remote branches copy short name / remote ref / SHA; tags copy name / SHA and

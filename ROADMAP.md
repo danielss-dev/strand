@@ -73,6 +73,9 @@ system ported verbatim. No real feature surface yet.
     are the top folders), click-to-checkout, hover-delete with confirm
   - ☑ Topbar branch dropdown wired end-to-end: checkout a local branch,
     create + track a remote branch, or `Create branch…` via prompt
+  - ☑ Clear merged branches from the command palette with per-branch local and
+    matching remote selection (`BranchCleanupDialog`; worktree-held branches
+    stay protected)
 - ☑ **File tree**
   - ☑ Working-tree view, status badges, click to file detail (`Repo::work_tree`
     lists index entries overlaid with status; Sidebar Files tab renders a
@@ -1704,6 +1707,14 @@ carry Git ancestry against the repository's primary branch (remote HEAD first,
 then conventional local defaults), the sidebar overlays a merged check on
 contained branch icons, and commit-graph ref chips carry the same state. The
 primary and current branches never mark themselves.
+
+**Merged branch cleanup shipped (2026-07-17):** “Clear merged branches…” in the
+command palette opens a keyboard-operable local/remote ref picker. Contained
+local branches start selected, matching upstream (or same-named `origin`) refs
+are opt-in only when their own tips are contained, primary refs are never
+offered, and branches held by any worktree stay excluded. Remote failures
+leave the local recovery ref in place and bulk completion reports partial
+errors without stopping the remaining cleanup.
 
 **File context-menu editor launch (2026-07-16):** Working-tree files in the
 sidebar Files tree, Local Changes, Review, and Workspace Review now expose

@@ -167,9 +167,11 @@ impl Repo {
     /// Delete a local branch by short name. Refuses to delete the current
     /// branch — git can't either, since HEAD would be left dangling.
     ///
-    /// `force` mirrors `git branch -D`: when false, git2 still refuses to
-    /// delete a branch whose tip isn't reachable from HEAD or its upstream.
-    pub fn delete_branch(&self, name: &str, _force: bool) -> Result<()> {
+    /// `force` mirrors `git branch -D`. Without it, re-check that the branch
+    /// tip is contained by the repository's primary branch at deletion time.
+    /// This keeps a confirmation opened from stale UI state from deleting a
+    /// branch that moved in the meantime.
+    pub fn delete_branch(&self, name: &str, force: bool) -> Result<()> {
         let repo = self.git2()?;
         let mut branch = repo.find_branch(name, git2::BranchType::Local)?;
         if branch.is_head() {
@@ -177,10 +179,35 @@ impl Repo {
                 "cannot delete branch {name}: it is the current branch"
             )));
         }
-        // git2's `Branch::delete` is the unconditional form (matches
-        // `git branch -D`). The "safe" check that vanilla git applies
-        // (merged into HEAD or upstream) lives one layer up; we leave it
-        // to the UI to confirm before calling with force=false today.
+        if let Some(worktree) = self
+            .worktrees()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|worktree| !worktree.is_current && worktree.branch.as_deref() == Some(name))
+        {
+            return Err(crate::Error::Other(format!(
+                "cannot delete branch {name}: it is checked out in worktree {}",
+                worktree.path
+            )));
+        }
+        // git2's `Branch::delete` is unconditional, so the safe form must be
+        // enforced explicitly before calling it.
+        if !force {
+            let refs = self.refs()?;
+            if !refs
+                .branches
+                .iter()
+                .any(|candidate| candidate.name == name && candidate.merged)
+            {
+                let target = refs
+                    .primary_branch
+                    .as_deref()
+                    .unwrap_or("the primary branch");
+                return Err(crate::Error::Other(format!(
+                    "cannot delete branch {name}: it is not merged into {target}"
+                )));
+            }
+        }
         branch.delete()?;
         Ok(())
     }
@@ -273,6 +300,14 @@ mod tests {
         // HEAD still on main and the workdir/index are clean.
         assert_eq!(git(&dir, &["symbolic-ref", "--short", "HEAD"]), "main");
         assert_eq!(git(&dir, &["status", "--porcelain"]), "");
+        let err = repo.delete_branch("feature", true).unwrap_err();
+        assert!(err.to_string().contains("checked out in worktree"));
+        assert!(repo
+            .refs()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|branch| branch.name == "feature"));
 
         git(&dir, &["worktree", "remove", wt.to_str().unwrap()]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -341,5 +376,42 @@ mod tests {
         drop(repo);
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(remote);
+    }
+
+    #[test]
+    fn safe_delete_rechecks_primary_branch_containment() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+
+        git(&dir, &["switch", "-q", "-c", "unmerged"]);
+        std::fs::write(dir.join("feature.txt"), "feature\n").unwrap();
+        git(&dir, &["add", "feature.txt"]);
+        git(&dir, &["commit", "-q", "-m", "feature"]);
+        git(&dir, &["switch", "-q", "main"]);
+
+        let err = repo.delete_branch("unmerged", false).unwrap_err();
+        assert!(err.to_string().contains("not merged into main"));
+        assert!(repo
+            .refs()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|branch| branch.name == "unmerged"));
+
+        git(
+            &dir,
+            &["merge", "-q", "--no-ff", "unmerged", "-m", "merge feature"],
+        );
+        repo.delete_branch("unmerged", false).unwrap();
+        assert!(!repo
+            .refs()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|branch| branch.name == "unmerged"));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

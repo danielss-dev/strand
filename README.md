@@ -117,10 +117,10 @@ keyboard alone, and the mouse stays first-class.
   any local branch to a chosen remote destination; upstream set/change/unset;
   selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
   local branches merged into the primary branch are marked in the sidebar and
-  commit graph; branches,
-  tags, stashes, remotes, cherry-pick, revert, merge, and a fully
-  keyboard-operable interactive rebase (reorder, reword, squash, fixup,
-  drop) with conflict-pause Continue / Abort.
+  commit graph and can be cleared in bulk with independent local/remote
+  selection; branches, tags, stashes, remotes, cherry-pick, revert, merge, and
+  a fully keyboard-operable interactive rebase (reorder, reword, squash,
+  fixup, drop) with conflict-pause Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
   resizable commit detail panel, in-graph search by message / author / hash, a
   vertical activity-timeline rail (commit-density histogram you can scrub to

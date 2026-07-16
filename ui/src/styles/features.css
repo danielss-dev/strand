@@ -3164,6 +3164,139 @@ textarea.clone-input {
   border-top: 0.5px solid var(--border);
 }
 
+/* Merged-branch cleanup: a compact two-lane local/remote ref picker. */
+.branch-cleanup-dialog {
+  width: 660px;
+}
+.branch-cleanup-grid {
+  overflow: hidden;
+  border: 0.5px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-elev);
+}
+.branch-cleanup-grid-head,
+.branch-cleanup-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 132px minmax(170px, 0.9fr);
+  align-items: center;
+  gap: 10px;
+}
+.branch-cleanup-grid-head {
+  min-height: 34px;
+  padding: 0 10px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+.branch-cleanup-scope,
+.branch-cleanup-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  cursor: pointer;
+}
+.branch-cleanup-scope input,
+.branch-cleanup-option input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.branch-cleanup-scope:has(input:disabled),
+.branch-cleanup-option:has(input:disabled) {
+  opacity: 0.52;
+  cursor: default;
+}
+.branch-cleanup-rows {
+  max-height: min(42vh, 340px);
+  overflow-y: auto;
+}
+.branch-cleanup-row {
+  min-height: 38px;
+  padding: 0 10px;
+  box-shadow: 0 0.5px 0 var(--border);
+  font-size: var(--type-ui-sm);
+  transition: background 0.1s ease;
+}
+.branch-cleanup-row:last-child {
+  box-shadow: none;
+}
+.branch-cleanup-row:focus-within {
+  background: var(--bg-hover);
+}
+.branch-cleanup-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-2);
+}
+.branch-cleanup-name svg {
+  flex: none;
+  color: var(--add);
+}
+.branch-cleanup-name code,
+.branch-cleanup-option code,
+.branch-cleanup-missing {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.branch-cleanup-option {
+  color: var(--text-muted);
+}
+.branch-cleanup-option.remote code {
+  min-width: 0;
+  color: var(--text-2);
+}
+.branch-cleanup-missing {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.branch-cleanup-empty,
+.branch-cleanup-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: var(--type-ui-sm);
+  line-height: 1.4;
+}
+.branch-cleanup-empty {
+  background: var(--add-bg);
+  color: var(--text-2);
+}
+.branch-cleanup-empty svg {
+  flex: none;
+  color: var(--add);
+}
+.branch-cleanup-note {
+  background: color-mix(in srgb, var(--warn) 11%, transparent);
+  color: var(--text-muted);
+}
+.branch-cleanup-note svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn);
+}
+.branch-cleanup-note code {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.branch-cleanup-summary {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-dim);
+  font-size: var(--type-ui-sm);
+  font-family: var(--font-mono);
+}
+
 /* ─── Manage workspaces dialog ─── */
 .ws-mgr {
   width: 680px;

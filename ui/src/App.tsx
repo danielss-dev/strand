@@ -48,6 +48,7 @@ import { CloneDialog } from './views/CloneDialog';
 import { SettingsDialog, type SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { BranchDialog } from './views/BranchDialog';
+import { BranchCleanupDialog } from './views/BranchCleanupDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
 import { RebaseEditor } from './views/RebaseEditor';
@@ -246,6 +247,7 @@ export function App() {
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   const [branchDialog, setBranchDialog] = useState<{ start: string | null; label: string } | null>(null);
+  const [branchCleanupOpen, setBranchCleanupOpen] = useState(false);
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   // null = closed; otherwise the branch to rename.
@@ -1397,6 +1399,7 @@ export function App() {
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true, keepIndex: false }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false, keepIndex: false }) },
         { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
+        { id: 'branch-cleanup', label: 'Clear merged branches…', group: 'Actions', keywords: 'branch delete merged local remote origin cleanup prune', run: () => setBranchCleanupOpen(true) },
         // Renaming the short OID HEAD shows while detached is meaningless —
         // only offer the rename on a real branch.
         ...(meta.branch && !meta.detached
@@ -1732,6 +1735,13 @@ export function App() {
           start={branchDialog.start}
           startLabel={branchDialog.label}
           onClose={() => setBranchDialog(null)}
+        />
+      )}
+
+      {branchCleanupOpen && (
+        <BranchCleanupDialog
+          onClose={() => setBranchCleanupOpen(false)}
+          onToast={showToast}
         />
       )}
 

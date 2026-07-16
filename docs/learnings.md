@@ -1435,6 +1435,17 @@ ancestry (`graph_descendant_of`, including equal tips), and refresh it through
 the existing snapshot path after history or checkout operations. Squash merges
 do not preserve ancestry and therefore do not receive this mark.
 
+**Bulk cleanup extension (2026-07-17).** `RemoteBranch.merged` applies the same
+containment test to remote-tracking tips, but does not suppress the primary ref
+(`origin/main` is contained and therefore true). `mergedBranchCleanupPlan`
+pairs remote deletion only with an already-merged local candidate, requires
+the remote tip to be contained too, and explicitly rejects any remote whose
+branch portion is the primary branch. This matters because a remote can advance
+after its local branch was merged. Local cleanup calls
+`Repo::delete_branch(force=false)`, which re-checks containment and linked-
+worktree occupancy at deletion time; never rely on a frozen dialog snapshot as
+the final destructive-operation guard.
+
 ---
 
 ## Windows CLI launch uses persisted PATH and cmd-compatible canonical paths
