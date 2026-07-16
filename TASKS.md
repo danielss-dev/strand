@@ -650,6 +650,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   section `+`, and palette "Create branch…" from HEAD) / Merge into <current>
   (opens `MergeDialog`) / Rebase <current> onto this (confirm) / Delete branch
   (confirm). HEAD shows a disabled "Current branch".
+- ☑ Merged-branch indicators (DAN-19 — `refs::Branch.merged` uses commit
+  ancestry against the checked-out branch; sidebar icons and commit-graph ref
+  chips mark branches whose tips are already contained and safe to delete).
 - ☑ Ref clipboard/context expansion (2026-07-16): local branches copy name /
   full ref / SHA and the current branch exposes Pull + Push strategy submenus;
   remote branches copy short name / remote ref / SHA; tags copy name / SHA and

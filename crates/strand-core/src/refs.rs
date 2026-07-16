@@ -18,6 +18,9 @@ pub struct Branch {
     pub target: String,
     /// True if HEAD is on this branch.
     pub is_head: bool,
+    /// True when this branch's tip is reachable from the checked-out branch.
+    /// HEAD itself is never marked merged.
+    pub merged: bool,
     /// Tracking branch, if any (e.g. `origin/main`).
     pub upstream: Option<UpstreamRef>,
     /// Commits on this branch not in upstream.
@@ -189,6 +192,7 @@ fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
         Err(_) => return Vec::new(),
     };
 
+    let head_target = repo.head().ok().and_then(|head| head.target());
     let mut out = Vec::new();
     for entry in iter.flatten() {
         let (branch, _) = entry;
@@ -199,6 +203,12 @@ fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
         };
         let full_name = branch.get().name().unwrap_or("").to_string();
         let is_head = branch.is_head();
+        let merged = !is_head
+            && head_target
+                .map(|head| {
+                    head == target || repo.graph_descendant_of(head, target).unwrap_or(false)
+                })
+                .unwrap_or(false);
 
         let (upstream, ahead, behind) = match branch.upstream() {
             Ok(up) => {
@@ -227,6 +237,7 @@ fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
             full_name,
             target: target.to_string(),
             is_head,
+            merged,
             upstream,
             ahead,
             behind,
@@ -467,6 +478,51 @@ mod tests {
         // portal30 itself forked from main.
         let hit = repo.detect_base_branch("portal30").unwrap().unwrap();
         assert_eq!(hit.name, "main");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refs_marks_only_branches_merged_into_head() {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-merged-refs-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+
+        std::fs::write(dir.join("root.txt"), "root\n").unwrap();
+        git(&dir, &["add", "root.txt"]);
+        git(&dir, &["commit", "-q", "-m", "root"]);
+        git(&dir, &["branch", "same-tip"]);
+
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        std::fs::write(dir.join("feature.txt"), "feature\n").unwrap();
+        git(&dir, &["add", "feature.txt"]);
+        git(&dir, &["commit", "-q", "-m", "feature"]);
+        git(&dir, &["checkout", "-q", "main"]);
+        git(&dir, &["merge", "-q", "--no-ff", "--no-edit", "feature"]);
+
+        git(&dir, &["checkout", "-q", "-b", "unmerged"]);
+        std::fs::write(dir.join("unmerged.txt"), "unmerged\n").unwrap();
+        git(&dir, &["add", "unmerged.txt"]);
+        git(&dir, &["commit", "-q", "-m", "unmerged"]);
+        git(&dir, &["checkout", "-q", "main"]);
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        let branches = repo.refs().unwrap().branches;
+        let merged = |name: &str| branches.iter().find(|b| b.name == name).unwrap().merged;
+
+        assert!(merged("feature"));
+        assert!(merged("same-tip"));
+        assert!(!merged("unmerged"));
+        assert!(!merged("main"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

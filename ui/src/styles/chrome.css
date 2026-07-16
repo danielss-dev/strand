@@ -1092,6 +1092,24 @@
     color: var(--text-dim);
     white-space: nowrap;
 }
+.side-row .branch-icon-merged {
+    position: relative;
+    opacity: 1;
+}
+.side-row .branch-merged-mark {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--add);
+    color: var(--bg-base);
+    box-shadow: 0 0 0 1px var(--bg-base);
+}
 
 /* Upstream drift — ahead is green (`N↑`), behind is red (`N↓`). */
 .side-row .drift {

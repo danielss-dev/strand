@@ -978,8 +978,13 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                           ) : chips && chips.length > 0 ? (
                             <span className="ref-chips">
                               {chips.map((chip) => (
-                                <span key={chip.key} className={`ref-chip ${chip.kind}`}>
+                                <span
+                                  key={chip.key}
+                                  className={`ref-chip ${chip.kind}${chip.merged ? ' merged' : ''}`}
+                                  title={chip.title}
+                                >
                                   {chip.label}
+                                  {chip.merged && <span className="ref-chip-merged" aria-label="merged">✓</span>}
                                 </span>
                               ))}
                             </span>
@@ -1186,10 +1191,13 @@ interface RefChip {
   key: string;
   label: string;
   kind: 'head' | 'local' | 'remote' | 'tag';
+  merged?: boolean;
+  title?: string;
 }
 
 function indexRefs(refs: Refs): Map<string, RefChip[]> {
   const m = new Map<string, RefChip[]>();
+  const currentBranch = refs.branches.find((b) => b.is_head)?.name;
   const push = (oid: string, chip: RefChip) => {
     const arr = m.get(oid);
     if (arr) arr.push(chip);
@@ -1200,6 +1208,10 @@ function indexRefs(refs: Refs): Map<string, RefChip[]> {
       key: `b:${b.full_name}`,
       label: b.name,
       kind: b.is_head ? 'head' : 'local',
+      merged: b.merged,
+      title: b.merged
+        ? `Merged into ${currentBranch ?? 'the checked-out branch'}; safe to delete`
+        : undefined,
     });
   }
   for (const rb of refs.remote_branches) {

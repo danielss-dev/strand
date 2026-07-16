@@ -67,7 +67,7 @@ The sidebar's Git tab holds collapsible **Worktrees, Branches, Remotes, Tags, St
 
 ### Branches
 
-Branches render as a flat list with their full names visible. Clicking a branch reveals its tip commit in the graph; double-click (or `Enter`) checks it out. The context menu offers: Checkout, Push to remote…, Set/Change upstream…, New branch from here…, New worktree from here…, Rename branch…, Merge into the current branch, Rebase the current branch onto this, Interactive rebase (on the current branch), and Delete branch. It can also copy the branch name, full ref, or tip SHA; the current branch adds pull and push strategy submenus.
+Branches render as a flat list with their full names visible. A green check over the branch icon means that branch's tip is already contained in the checked-out branch, so deleting it will not discard its commits; the same check appears on its commit-graph chip. Clicking a branch reveals its tip commit in the graph; double-click (or `Enter`) checks it out. The context menu offers: Checkout, Push to remote…, Set/Change upstream…, New branch from here…, New worktree from here…, Rename branch…, Merge into the current branch, Rebase the current branch onto this, Interactive rebase (on the current branch), and Delete branch. It can also copy the branch name, full ref, or tip SHA; the current branch adds pull and push strategy submenus.
 
 The topbar branch dropdown also checks out local branches, tracks remote ones, and has an inline "Create branch…" field with prefix autocomplete. A detached HEAD shows a "detached" chip.
 
