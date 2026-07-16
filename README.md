@@ -122,10 +122,10 @@ keyboard alone, and the mouse stays first-class.
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
 - **File view** — highlighted source, `--follow` history, compare any two
-  revisions, blame, and rendered previews for markdown and SVG; selecting a
-  commit re-roots the Files tree and pins opened content to that revision.
-  Right-click any working-tree file to open that exact path in your configured
-  external editor.
+  revisions, blame, and rendered previews for markdown and SVG; the Files tree
+  uses recognizable language and tool logos, and selecting a commit re-roots it
+  while pinning opened content to that revision. Right-click any working-tree
+  file to open that exact path in your configured external editor.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, saveable as named **workspaces** (the repos behind

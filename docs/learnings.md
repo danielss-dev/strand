@@ -6,6 +6,24 @@ that future work (yours or another agent's) needs to respect.
 
 ---
 
+## Extend Pierre's file icons through the shared tree config
+
+**Rule.** All `PierreTree` surfaces use `lib/treeIcons.ts`'s `TREE_ICONS`.
+When a source type is missing from Pierre's built-in `complete` set, extend the
+static custom SVG sprite and file-rule maps there; do not patch rows in the
+shadow DOM or add per-view icon rules. Prefer selected raw SVGs from the pinned
+`material-icon-theme` package over handwritten letter badges. Brand-colored
+marks intentionally keep their own colors; the filename and status lane remain
+the Git-state signals.
+
+**Why.** Pierre resolves custom extension rules before its built-ins and
+injects one custom sprite into its shadow root. A shared, module-level config
+keeps every tree consistent and pays the parsing/setup cost only when the tree
+model is created. Namespace source SVG IDs while converting them to symbols so
+gradients and masks cannot collide inside the combined sprite.
+
+---
+
 ## Desktop CLI children need the user's shell PATH, including dependencies
 
 **Rule.** Packaged GUI apps must not use their inherited process `PATH` as the

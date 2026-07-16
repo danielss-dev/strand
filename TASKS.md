@@ -703,6 +703,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   click-to-open; lazily loaded when the Files tab is shown and refreshed on
   status change. Built with the existing `buildTree`/`sortTree` primitives
   (no `@pierre/trees` dependency).
+- ☑ Language-aware icons for source types missing from Pierre's complete set
+  (`lib/treeIcons.ts`: real Material Icon Theme SVG marks in one static custom
+  sprite + file-rule maps shared by every `PierreTree`, including C#, F#,
+  Visual Basic, JVM, scripting, CMake, Razor, and XML files).
 - ☑ Drag-and-drop rename / move in the Files tree (2026-07-06). `PierreTree`
   grew an opt-in `onMove(sources, targetDir)`: **pointer-based** drag (rows
   live in Pierre's shadow root where nothing can be marked `draggable`, but

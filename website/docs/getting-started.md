@@ -63,11 +63,13 @@ The sidebar has four primary rows — **Local Changes** (with an unstaged-count 
 
 - **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row right-click menus include upstream management, explicit branch-to-remote push, selected-branch fetch/pull, and copy actions.
 - **Files** — the working-tree file tree; when a commit is selected in All
-  Commits, it re-roots to that commit and shows its short hash. Clicking a file
-  opens the matching working-tree or historical version in the file view.
-  Right-click a working-tree file and choose **Open in editor** to open that
-  exact path with the editor selected in Settings → Integrations. The external
-  action is intentionally hidden while browsing a historical commit.
+  Commits, it re-roots to that commit and shows its short hash. Recognizable
+  logos identify common source types, including C#, F#, Visual Basic, JVM and
+  scripting languages, CMake, Razor, and XML. Clicking a file opens the matching
+  working-tree or historical version in the file view. Right-click a
+  working-tree file and choose **Open in editor** to open that exact path with
+  the editor selected in Settings → Integrations. The external action is
+  intentionally hidden while browsing a historical commit.
 
 ### Main views
 

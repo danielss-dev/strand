@@ -14,6 +14,7 @@ import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusEntry } from '@pierre/trees';
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { TREE_ICONS } from '../lib/treeIcons';
 import type { DiffStatus, StatusKind } from '../lib/types';
 
 // ─── status mapping ───────────────────────────────────────────────────────
@@ -260,7 +261,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     initialExpansion,
     flattenEmptyDirectories: true,
     itemHeight: 24,
-    icons: { set: 'complete', colored: true },
+    icons: TREE_ICONS,
     search: search ?? false,
     renderRowDecoration: (ctx) =>
       rowDecorationRef.current?.(ctx.item.path, ctx.item.kind) ?? null,
