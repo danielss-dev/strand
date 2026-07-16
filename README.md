@@ -83,7 +83,8 @@ keyboard alone, and the mouse stays first-class.
   file/thread, read GitHub review threads with replies directly beneath their code,
   reply to them, resolve or reopen them, and add stale-head-guarded comments to
   selected line ranges. A compact readiness ledger combines review,
-  checks, conflicts, merge state, and provider freshness before merging with
+  checks, conflicts, merge state, and provider freshness. Permission-backed
+  drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
   remain enforced. Packaged desktop builds import the user's shell `PATH`, so

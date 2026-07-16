@@ -4844,12 +4844,12 @@ textarea.clone-input {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 20px clamp(18px, 4vw, 42px) 0;
+  padding: 16px clamp(18px, 4vw, 42px) 0;
   display: flex;
   flex-direction: column;
 }
 
-.pr-detail-head { margin-top: clamp(28px, 5vh, 54px); display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.pr-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .pr-detail-head > div { min-width: 0; }
 .pr-detail-head h2 { margin: 5px 0 0; color: var(--text); font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
 .pr-detail-head .btn { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
@@ -4877,6 +4877,7 @@ textarea.clone-input {
   box-shadow: 0 0 0 0.5px oklch(0 0 0 / .22) inset;
 }
 .pr-merge-main { padding: 0 12px; border-radius: 6px 0 0 6px; }
+.pr-ready-main { border-radius: 6px; }
 .pr-merge-toggle {
   width: 31px;
   padding: 0;
@@ -4996,7 +4997,6 @@ textarea.clone-input {
 
 @media (max-width: 700px) {
   .pr-detail { padding-inline: 12px; }
-  .pr-detail-head { margin-top: 24px; }
   .pr-detail-head h2 { font-size: 18px; }
   .pr-summary-facts > div { grid-template-columns: 1fr; gap: 4px; }
   .pr-code-overview { overflow-x: auto; }

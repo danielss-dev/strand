@@ -14,6 +14,7 @@ if (typeof navigator === 'undefined') {
 
 const {
   buildPullRequestTimeline,
+  canMarkPullRequestReady,
   checkTone,
   diffStats,
   filterPullRequests,
@@ -36,6 +37,7 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     title: 'Ship it',
     state: 'open',
     is_draft: false,
+    can_mark_ready: false,
     author: 'octo',
     source_branch: 'feature',
     source_commit: '1'.repeat(40),
@@ -63,6 +65,23 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     ...overrides,
   };
 }
+
+describe('canMarkPullRequestReady', () => {
+  it('requires an active draft and a provider-confirmed viewer capability', () => {
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: true, can_mark_ready: true }),
+    )).toBe(true);
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: true, can_mark_ready: false }),
+    )).toBe(false);
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: false, can_mark_ready: true }),
+    )).toBe(false);
+    expect(canMarkPullRequestReady(
+      pullRequest({ state: 'closed', is_draft: true, can_mark_ready: true }),
+    )).toBe(false);
+  });
+});
 
 describe('checkTone', () => {
   it('normalizes provider success, running, and failure states', () => {

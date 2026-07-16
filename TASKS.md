@@ -1441,6 +1441,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     remain neutral. Merge queue/auto-complete and richer required-review detail
     remain.
   - ◐ Hosted PR lifecycle actions.
+    - ☑ Mark permission-backed drafts ready for review
+      (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer
+      capability + Azure author match, and the substituted header action).
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
       stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
     - ☐ Update/check out the PR branch.

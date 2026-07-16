@@ -11,6 +11,7 @@ import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
 import { renderMarkdown } from '../lib/markdown';
 import {
   buildPullRequestTimeline,
+  canMarkPullRequestReady,
   checkTone,
   diffStats,
   filterPullRequests,
@@ -1652,8 +1653,20 @@ export function PullRequests({
   }, [currentBranch, followBranchMatch, onToast, path, refresh]);
 
   const requestMergeMenu = useCallback((pr: PullRequest | null) => {
-    if (!pr || pr.is_draft || !['open', 'active'].includes(pr.state) || !pr.source_commit) {
-      onToast('Open an active, non-draft pull request before merging.', 'error');
+    if (pr && canMarkPullRequestReady(pr)) {
+      window.dispatchEvent(new CustomEvent('strand:pull-request-ready'));
+      return;
+    }
+    if (!pr || !['open', 'active'].includes(pr.state)) {
+      onToast('Open an active pull request before merging.', 'error');
+      return;
+    }
+    if (pr.is_draft) {
+      onToast('The signed-in provider account cannot mark this draft ready for review.', 'error');
+      return;
+    }
+    if (!pr.source_commit) {
+      onToast('Refresh this pull request before merging.', 'error');
       return;
     }
     window.dispatchEvent(new CustomEvent('strand:pull-request-merge-menu'));

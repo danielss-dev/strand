@@ -347,6 +347,17 @@ pub async fn repo_pull_request_merge(
     .await
 }
 
+/// Move a draft pull request into review through the signed-in provider.
+/// Provider permissions remain authoritative; the detail capability only
+/// controls whether Strand presents the action.
+#[tauri::command(async)]
+pub async fn repo_pull_request_ready(path: String, id: u64) -> CmdResult<()> {
+    run_blocking("mark pull request ready", move || {
+        pull_requests::mark_ready(&path, id).map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

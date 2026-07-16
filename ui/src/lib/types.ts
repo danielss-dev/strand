@@ -254,6 +254,8 @@ export interface PullRequest {
   title: string;
   state: string;
   is_draft: boolean;
+  /** True only when activated detail confirms the signed-in viewer may publish this draft. */
+  can_mark_ready: boolean;
   author: string;
   source_branch: string;
   source_commit: string;

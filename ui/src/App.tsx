@@ -1300,9 +1300,9 @@ export function App() {
           } satisfies PaletteAction,
           {
             id: 'pull-request-merge',
-            label: 'Pull Requests: merge open pull request…',
+            label: 'Pull Requests: merge or mark ready…',
             group: 'Actions',
-            keywords: 'pr github azure devops complete squash rebase',
+            keywords: 'pr github azure devops complete squash rebase draft review ready',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-merge')),
           } satisfies PaletteAction,
           ...(activePullRequestKey ? [{

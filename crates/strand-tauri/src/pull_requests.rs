@@ -59,6 +59,7 @@ const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $n
 const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
+      viewerCanUpdate
       reviewThreads(first: 100) {
         nodes {
           id
@@ -190,6 +191,7 @@ pub struct PullRequest {
     pub title: String,
     pub state: String,
     pub is_draft: bool,
+    pub can_mark_ready: bool,
     pub author: String,
     pub source_branch: String,
     pub source_commit: String,
@@ -532,6 +534,14 @@ pub fn merge(
     }
 }
 
+pub fn mark_ready(path: &str, id: u64) -> Result<()> {
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => mark_ready_github(path, &owner, &repo, id),
+        HostRepo::Azure { organization, .. } => mark_ready_azure(path, &organization, id),
+    }
+}
+
 fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let repo = Repo::discover(path).map_err(|error| error.to_string())?;
     let refs = repo.refs().map_err(|error| error.to_string())?;
@@ -781,7 +791,8 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         commit.url = Some(format!("https://github.com/{owner}/{repo}/commit/{}", commit.id));
     }
     pull_request.checks_complete = true;
-    let review_threads = github_review_threads(cwd, &owner, &repo, id)?;
+    let (review_threads, can_mark_ready) = github_review_threads(cwd, &owner, &repo, id)?;
+    pull_request.can_mark_ready = pull_request.is_draft && can_mark_ready;
     pull_request.comments.extend(
         review_threads
             .iter()
@@ -800,7 +811,7 @@ fn github_review_threads(
     owner: &str,
     repo: &str,
     id: u64,
-) -> Result<Vec<PullRequestReviewThread>> {
+) -> Result<(Vec<PullRequestReviewThread>, bool)> {
     let query = format!("query={GITHUB_REVIEW_THREADS_QUERY}");
     let owner = format!("owner={owner}");
     let repo = format!("repo={repo}");
@@ -813,7 +824,10 @@ fn github_review_threads(
     )?;
     let value: Value = serde_json::from_slice(&output)
         .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))?;
-    Ok(parse_github_review_threads(&value))
+    Ok((
+        parse_github_review_threads(&value),
+        parse_github_can_mark_ready(&value),
+    ))
 }
 
 fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String> {
@@ -966,6 +980,18 @@ fn merge_github(
             "pr", "merge", &id, "--repo", &slug, github_merge_flag(strategy),
             "--match-head-commit", expected_head,
         ],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    Ok(())
+}
+
+fn mark_ready_github(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<()> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    run_command(
+        cwd,
+        "gh",
+        &["pr", "ready", &id, "--repo", &slug],
         &[("GH_PROMPT_DISABLED", "1")],
     )?;
     Ok(())
@@ -1175,8 +1201,21 @@ fn detail_azure(
     repo: String,
     id: u64,
 ) -> Result<PullRequest> {
-    let value = azure_pr_value(cwd, &organization, id)?;
-    let mut pull_request = parse_azure_pr(&value, &organization, &project, &repo, None)
+    let (value, viewer) = thread::scope(|scope| {
+        let value = scope.spawn(|| azure_pr_value(cwd, &organization, id));
+        let viewer = scope.spawn(|| azure_viewer(cwd));
+        (value.join(), viewer.join())
+    });
+    let value = value
+        .map_err(|_| "Azure pull-request query worker failed".to_string())??;
+    let viewer = viewer.ok().and_then(Result::ok);
+    let mut pull_request = parse_azure_pr(
+        &value,
+        &organization,
+        &project,
+        &repo,
+        viewer.as_deref(),
+    )
         .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
     let (comments, commits, checks) = thread::scope(|scope| {
         let comments = scope.spawn(|| azure_comments(cwd, &organization, &project, &repo, id));
@@ -1494,6 +1533,31 @@ fn merge_azure(
             "--organization", &organization_url, "--api-version", "7.1",
             "--http-method", "PATCH", "--in-file", request_path,
             "--media-type", "application/json", "--output", "json", "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
+fn mark_ready_azure(cwd: &str, organization: &str, id: u64) -> Result<()> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id = id.to_string();
+    run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "update",
+            "--id",
+            &id,
+            "--draft",
+            "false",
+            "--organization",
+            &organization_url,
+            "--output",
+            "json",
+            "--only-show-errors",
         ],
         &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
     )?;
@@ -1995,6 +2059,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
             .get("isDraft")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        can_mark_ready: false,
         author: author.clone(),
         source_branch: text(value.get("headRefName")).unwrap_or_default(),
         source_commit: text(value.get("headRefOid")).unwrap_or_default(),
@@ -2133,6 +2198,13 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
         .collect()
 }
 
+fn parse_github_can_mark_ready(value: &Value) -> bool {
+    value
+        .pointer("/data/repository/pullRequest/viewerCanUpdate")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 fn parse_github_thread_reply(value: &Value) -> Option<PullRequestComment> {
     let comment = value.pointer("/data/addPullRequestReviewThreadReply/comment")?;
     let author = text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into());
@@ -2188,6 +2260,11 @@ fn parse_azure_pr(
     let id = value.get("pullRequestId")?.as_u64()?;
     let author = text(value.pointer("/createdBy/displayName")).unwrap_or_else(|| "unknown".into());
     let author_identity = text(value.pointer("/createdBy/uniqueName"));
+    let authored_by_viewer = viewer.is_some_and(|identity| {
+        author_identity
+            .as_deref()
+            .is_some_and(|author| author.eq_ignore_ascii_case(identity))
+    });
     let reviewers = array(value, "reviewers")
         .iter()
         .filter_map(|reviewer| {
@@ -2234,6 +2311,11 @@ fn parse_azure_pr(
             .get("isDraft")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        can_mark_ready: authored_by_viewer
+            && value
+                .get("isDraft")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         author,
         source_branch: branch_name(text(value.get("sourceRefName")).unwrap_or_default()),
         source_commit: text(value.pointer("/lastMergeSourceCommit/commitId")).unwrap_or_default(),
@@ -2259,11 +2341,7 @@ fn parse_azure_pr(
         checks_complete: false,
         comments: Vec::new(),
         review_threads: Vec::new(),
-        authored_by_viewer: viewer.is_some_and(|identity| {
-            author_identity
-                .as_deref()
-                .is_some_and(|author| author.eq_ignore_ascii_case(identity))
-        }),
+        authored_by_viewer,
         commits: parse_azure_commits(value),
     })
 }
@@ -2612,6 +2690,7 @@ mod tests {
         assert_eq!(github.source_commit, "1111111111111111111111111111111111111111");
         assert_eq!(github.completed_at.as_deref(), Some("2026-07-15T10:00:00Z"));
         assert!(github.authored_by_viewer);
+        assert!(!github.can_mark_ready);
         assert_eq!(github.comment_count, 1);
         assert_eq!(github.comments.len(), 1);
         assert_eq!(github.commits[0].title, "Finish the inbox");
@@ -2644,6 +2723,7 @@ mod tests {
         assert_eq!(azure.source_commit, "2222222222222222222222222222222222222222");
         assert_eq!(azure.completed_at.as_deref(), Some("2026-07-15T12:00:00Z"));
         assert!(azure.authored_by_viewer);
+        assert!(azure.can_mark_ready);
         assert_eq!(azure.review_status, "approved");
         assert!(azure.reviewers[0].required);
 
@@ -2740,7 +2820,9 @@ mod tests {
 
     #[test]
     fn github_review_thread_query_requests_write_capabilities() {
+        assert!(!GITHUB_LIST_FIELDS.contains("viewerCanUpdate"));
         for field in [
+            "viewerCanUpdate",
             "viewerCanReply",
             "viewerCanResolve",
             "viewerCanUnresolve",
@@ -2857,7 +2939,7 @@ mod tests {
     #[test]
     fn normalizes_github_review_threads_with_replies_and_ranges() {
         let value = serde_json::json!({
-            "data": { "repository": { "pullRequest": { "reviewThreads": { "nodes": [{
+            "data": { "repository": { "pullRequest": { "viewerCanUpdate": true, "reviewThreads": { "nodes": [{
                 "id": "PRRT_1", "isResolved": false, "isOutdated": false,
                 "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false,
                 "path": "src/lib.rs", "line": 29, "startLine": 27,
@@ -2874,6 +2956,7 @@ mod tests {
         });
 
         let threads = parse_github_review_threads(&value);
+        assert!(parse_github_can_mark_ready(&value));
         assert_eq!(threads.len(), 1);
         assert_eq!(threads[0].path, "src/lib.rs");
         assert_eq!((threads[0].start_line, threads[0].end_line), (27, 29));
@@ -2905,6 +2988,7 @@ mod tests {
             }] } } } }
         });
         let threads = parse_github_review_threads(&value);
+        assert!(!parse_github_can_mark_ready(&value));
         assert_eq!(threads.len(), 1);
         assert!(!threads[0].can_reply);
         assert!(!threads[0].can_resolve);

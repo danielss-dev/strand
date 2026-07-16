@@ -105,8 +105,16 @@ so a temporary outage cannot create false activity or turn an unknown check
 state green. Monitoring uses small provider activity queries and never fetches
 or parses patches.
 
-For an active, non-draft PR, choose **Merge** in the detail header or run
-"Pull Requests: merge open pull request…" from the command palette. The
+For a draft PR, the detail header replaces Merge with **Ready for review** when
+the signed-in provider account can change that PR's stage. GitHub uses its
+viewer update capability; Azure DevOps presents the action conservatively for
+the signed-in PR author, and the provider remains authoritative if permissions
+changed. A successful transition refreshes the current detail in place and the
+normal Merge control appears. The command-palette action “Pull Requests: merge
+or mark ready…” follows the same rule.
+
+For an active, non-draft PR, choose **Merge** in the detail header or run that
+command-palette action. The
 split merge control works like GitHub: its primary button immediately runs the
 selected strategy, while the adjacent chevron opens a keyboard-operable menu
 for merge-commit, squash, and rebase. Required checks, reviews, branch policies,
@@ -131,8 +139,9 @@ the current list or detail mounted, including focus, scroll, active tab, file
 selection, and unsent drafts. The toolbar shows **Updating…**, the last update
 age, or a non-blocking failure with Retry instead of blanking the workspace.
 Lightweight activity reloads rich detail only when something changed. The
-opened PR uses the full content width and keeps its three tabs centered in the
-PR toolbar. Use `Left`/`Right`, `Home`, and `End` while the tab bar is focused.
+opened PR uses the full content width, starts directly beneath the compact PR
+toolbar, and keeps its three tabs centered there. Use `Left`/`Right`, `Home`,
+and `End` while the tab bar is focused.
 
 ### Summary
 

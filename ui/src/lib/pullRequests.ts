@@ -303,6 +303,12 @@ export function parsePullRequestPatch(patch: string): FileDiffMetadata[] {
   return parsePatchFiles(patch, `pr:${hashPatch(patch)}`, true).flatMap((parsed) => parsed.files);
 }
 
+export function canMarkPullRequestReady(pr: PullRequest): boolean {
+  return pr.is_draft
+    && pr.can_mark_ready
+    && ['open', 'active'].includes(pr.state.toLowerCase());
+}
+
 export function withPullRequestThreadReply(
   pr: PullRequest,
   threadId: string,

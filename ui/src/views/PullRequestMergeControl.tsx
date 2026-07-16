@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { canMarkPullRequestReady } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import type { PullRequest, PullRequestMergeStrategy, PullRequestProvider } from '../lib/types';
 
@@ -58,7 +59,8 @@ export function PullRequestMergeControl({
   const mountedRef = useRef(true);
   const selectedIndex = STRATEGIES.findIndex((item) => item.value === strategy);
   const selected = STRATEGIES[selectedIndex];
-  const disabled = Boolean(disabledReason) || busy;
+  const markReady = canMarkPullRequestReady(pr);
+  const disabled = (markReady ? false : Boolean(disabledReason)) || busy;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -134,6 +136,54 @@ export function PullRequestMergeControl({
       if (mountedRef.current) setBusy(false);
     }
   };
+
+  const submitReady = useCallback(async () => {
+    if (!markReady || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tauri.repoPullRequestReady(path, pr.id);
+      let next: PullRequest;
+      try {
+        next = await tauri.repoPullRequest(path, pr.id);
+      } catch (refreshError) {
+        onToast(
+          `PR #${pr.id} was marked ready, but it could not refresh: ${errMessage(refreshError)}`,
+          'error',
+        );
+        return;
+      }
+      onMerged(next);
+      onToast(`PR #${pr.id} is ready for review`);
+    } catch (caught) {
+      if (mountedRef.current) setError(errMessage(caught));
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
+  }, [busy, markReady, onMerged, onToast, path, pr.id]);
+
+  useEffect(() => {
+    const onReadyRequest = () => { void submitReady(); };
+    window.addEventListener('strand:pull-request-ready', onReadyRequest);
+    return () => window.removeEventListener('strand:pull-request-ready', onReadyRequest);
+  }, [submitReady]);
+
+  if (markReady) {
+    return (
+      <div className="pr-merge-control">
+        <button
+          type="button"
+          className="pr-merge-main pr-ready-main"
+          disabled={busy}
+          title={`Mark ready for review on ${providerName(provider)}`}
+          onClick={() => void submitReady()}
+        >
+          {busy ? 'Marking ready…' : 'Ready for review'}
+        </button>
+        {error && <div className="pr-merge-error" role="alert">{error}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="pr-merge-control" ref={rootRef}>

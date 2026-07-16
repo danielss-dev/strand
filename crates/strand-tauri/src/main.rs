@@ -94,6 +94,7 @@ fn main() {
             commands::repo_pull_request_thread_reply,
             commands::repo_pull_request_thread_resolve,
             commands::repo_pull_request_merge,
+            commands::repo_pull_request_ready,
             commands::repo_diff_unstaged,
             commands::repo_diff_staged,
             commands::repo_diff_between,
