@@ -4,6 +4,7 @@ import {
   recents as recentsDb,
   remoteTagsCache,
   repoDiffMode,
+  repoPullMode,
   reviewSession,
   settings as settingsDb,
   type StoredBaseline,
@@ -17,11 +18,14 @@ import { errMessage, tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
   Commit,
+  BranchPushRequest,
   CommitSearchMode,
   FileDiff,
   FileStatus,
   MergeMode,
   Progress,
+  PullMode,
+  PushMode,
   RebaseEntry,
   RebaseStep,
   RecentRepo,
@@ -404,10 +408,17 @@ export interface RepoState {
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
+  /** Default strategy used by the primary Pull action for this repository. */
+  pullMode: PullMode;
+  setPullMode(mode: PullMode): void;
+  loadRepoPullMode(): Promise<void>;
   /** `opId` (when given) registers the op as cancellable via `repoCancelOp`. */
   fetch(onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
-  pull(rebase?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
-  push(forceWithLease?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pull(mode?: PullMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  push(mode?: PushMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  fetchBranch(remote: string, branch: string, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pullBranch(remote: string, branch: string, mode?: PullMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pushBranch(request: BranchPushRequest, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
 
   checkout(branch: string): Promise<void>;
   /** Check out an arbitrary commit as a detached HEAD. */
@@ -422,6 +433,8 @@ export interface RepoState {
   deleteRemoteBranch(remote: string, branch: string, onProgress?: (p: Progress) => void): Promise<string>;
   /** Rename a local branch; its upstream config moves along, HEAD follows. */
   renameBranch(oldName: string, newName: string): Promise<void>;
+  /** Set/change (`origin/main`) or unset (`null`) a local branch upstream. */
+  setBranchUpstream(branch: string, upstream: string | null): Promise<void>;
 
   /** Add a remote (`git remote add`). */
   addRemote(name: string, url: string): Promise<void>;
@@ -734,6 +747,7 @@ export function makeReviewNote(
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
+  pullMode: 'default' as PullMode,
   status: [] as FileStatus[],
   commits: [] as Commit[],
   commitSearchResults: [] as Commit[],
@@ -894,6 +908,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
     void persistSession(get());
     void get().loadRepoDiffMode();
+    void get().loadRepoPullMode();
     // Start the working-tree watcher so agent/CLI writes refresh the view
     // without waiting for window focus. Best-effort — a watcher failure
     // (e.g. exotic filesystem) degrades to focus-refresh, not an error.
@@ -953,6 +968,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     });
     void persistSession(get());
     if (neighbor) {
+      void get().loadRepoPullMode();
       void Promise.all([
         get().refreshLocalChanges(),
         get().refreshLog(),
@@ -972,6 +988,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     });
     void persistSession(get());
     void get().loadRepoDiffMode();
+    void get().loadRepoPullMode();
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
@@ -1565,6 +1582,21 @@ export const useRepo = create<RepoState>((set, get) => ({
       tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
     }));
   },
+  setPullMode(mode) {
+    set({ pullMode: mode });
+    const path = get().activePath;
+    if (path) void repoPullMode.set(path, mode);
+  },
+  async loadRepoPullMode() {
+    const path = get().activePath;
+    if (!path) return;
+    const saved = await repoPullMode.get(path);
+    if (get().activePath !== path) return;
+    const mode = saved && ['default', 'merge', 'rebase', 'fast-forward-only'].includes(saved)
+      ? saved
+      : 'default';
+    set({ pullMode: mode });
+  },
   async fetch(onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
@@ -1572,18 +1604,39 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshSnapshot();
     return res.output;
   },
-  async pull(rebase = false, onProgress, opId) {
+  async pull(mode, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPull(path, rebase, onProgress, opId);
+    const res = await tauri.repoPull(path, mode ?? get().pullMode, onProgress, opId);
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
-  async push(forceWithLease = false, onProgress, opId) {
+  async push(mode = 'default', onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPush(path, forceWithLease, onProgress, opId);
+    const res = await tauri.repoPush(path, mode, onProgress, opId);
     await get().refreshSnapshot();
+    return res.output;
+  },
+  async fetchBranch(remote, branch, onProgress, opId) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoBranchFetch(path, remote, branch, onProgress, opId);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    return res.output;
+  },
+  async pullBranch(remote, branch, mode, onProgress, opId) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoBranchPull(path, remote, branch, mode ?? get().pullMode, onProgress, opId);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    return res.output;
+  },
+  async pushBranch(request, onProgress, opId) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    const res = await tauri.repoBranchPush(path, request, onProgress, opId);
+    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
 
@@ -1629,6 +1682,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoBranchRename(path, oldName, newName);
     // Refs ride along in the snapshot; the graph's ref chips read the log.
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async setBranchUpstream(branch, upstream) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoBranchSetUpstream(path, branch, upstream);
+    await get().refreshLocalChanges();
   },
   async addRemote(name, url) {
     const path = get().activePath;

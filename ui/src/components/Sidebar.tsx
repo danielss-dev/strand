@@ -8,8 +8,20 @@ import { ignorePatterns } from '../lib/ignore';
 import { worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
-import type { Branch, RemoteBranch, Stash, Submodule, SubmoduleState, Tag, Worktree, WorktreeHealth } from '../lib/types';
+import type {
+  Branch,
+  PullMode,
+  PushMode,
+  RemoteBranch,
+  Stash,
+  Submodule,
+  SubmoduleState,
+  Tag,
+  Worktree,
+  WorktreeHealth,
+} from '../lib/types';
 import type { RemoteDialogMode } from '../views/RemoteDialog';
+import type { BranchNetworkDialogMode } from '../views/BranchNetworkDialog';
 import { RenameFileDialog } from '../views/RenameFileDialog';
 import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
 
@@ -80,6 +92,16 @@ interface SidebarProps {
   onManageRemote: (mode: RemoteDialogMode) => void;
   /** Open the Rename-branch dialog for the branch `name`. */
   onRenameBranch: (name: string) => void;
+  /** Open branch upstream/push configuration for any local branch. */
+  onManageBranchNetwork: (mode: BranchNetworkDialogMode) => void;
+  /** Current-branch network actions, owned by App so progress/cancellation stay global. */
+  onPull: (mode?: PullMode) => void;
+  onPush: (mode?: PushMode) => void;
+  onForcePush: () => void;
+  onFetchBranch: (branch: RemoteBranch) => void;
+  onPullBranch: (branch: RemoteBranch, mode?: PullMode) => void;
+  /** Open one working-tree file in the configured external editor. */
+  onOpenFileInEditor: (file: string) => void;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }
@@ -141,7 +163,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -151,6 +173,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const recents = useRepo((s) => s.recents);
   const forgetRecent = useRepo((s) => s.forgetRecent);
   const refs = useRepo((s) => s.refs);
+  const pullMode = useRepo((s) => s.pullMode);
+  const setBranchUpstream = useRepo((s) => s.setBranchUpstream);
   const checkout = useRepo((s) => s.checkout);
   const checkoutCommit = useRepo((s) => s.checkoutCommit);
   const revealInGraph = useRepo((s) => s.revealInGraph);
@@ -411,6 +435,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       ];
       if (!selectedCommit && targets.length === 1) {
         items.push({
+          label: 'Open in editor',
+          icon: 'external',
+          onSelect: () => onOpenFileInEditor(targets[0]),
+        });
+      }
+      if (!selectedCommit && targets.length === 1) {
+        items.push({
           label: 'Rename / move…',
           icon: 'file',
           onSelect: () => setRenameTarget(targets[0]),
@@ -443,7 +474,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       });
       return items;
     },
-    [selectFile, selectedCommit, workTree, gitignoreAdd, openIgnoreDialog, onToast],
+    [selectFile, selectedCommit, workTree, gitignoreAdd, openIgnoreDialog, onOpenFileInEditor, onToast],
   );
 
   const renameDialog = renameTarget ? (
@@ -555,6 +586,28 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       const up = b.upstream?.name;
       return [
         { label: 'Current branch', disabled: true, onSelect: () => {} },
+        {
+          label: 'Pull',
+          icon: 'arrow-down',
+          submenu: [
+            { label: `Repository default (${pullMode === 'default' ? 'Git configuration' : pullMode})`, icon: 'check', onSelect: () => onPull() },
+            { label: 'Use Git configuration', onSelect: () => onPull('default') },
+            { label: 'Merge (fast-forward if possible)', onSelect: () => onPull('merge') },
+            { label: 'Rebase', onSelect: () => onPull('rebase') },
+            { label: 'Fast-forward only', onSelect: () => onPull('fast-forward-only') },
+          ],
+        },
+        { label: 'Push to remote…', icon: 'remote', onSelect: () => onManageBranchNetwork({ kind: 'push', branch: b }) },
+        { label: b.upstream ? `Change upstream (${b.upstream.name})…` : 'Set upstream…', icon: 'remote', onSelect: () => onManageBranchNetwork({ kind: 'upstream', branch: b }) },
+        {
+          label: 'Push',
+          icon: 'arrow-up',
+          submenu: [
+            { label: 'Current branch', onSelect: () => onPush('default') },
+            { label: 'With annotated tags', onSelect: () => onPush('follow-tags') },
+            { label: 'Force with lease…', danger: true, onSelect: onForcePush },
+          ],
+        },
         newBranchItem,
         newWorktreeItem,
         renameItem,
@@ -566,6 +619,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
               ? onInteractiveRebase(up, up)
               : onToast('No upstream configured — use “Rebase from here” on a commit'),
         },
+        { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
+        { label: 'Copy full ref', icon: 'file', onSelect: () => { void copyToClipboard(b.full_name); onToast('Branch ref copied'); } },
+        { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
       ];
     }
     const wt = worktreeByBranch.get(b.name);
@@ -575,6 +631,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       wt
         ? { label: 'Open worktree', icon: 'worktree', onSelect: () => void openWorktree(wt.path) }
         : { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+      { label: 'Push to remote…', icon: 'arrow-up', onSelect: () => onManageBranchNetwork({ kind: 'push', branch: b }) },
+      { label: b.upstream ? `Change upstream (${b.upstream.name})…` : 'Set upstream…', icon: 'remote', onSelect: () => onManageBranchNetwork({ kind: 'upstream', branch: b }) },
       newBranchItem,
       newWorktreeItem,
       renameItem,
@@ -584,6 +642,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
       items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
     }
+    items.push(
+      { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
+      { label: 'Copy full ref', icon: 'file', onSelect: () => { void copyToClipboard(b.full_name); onToast('Branch ref copied'); } },
+      { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
+    );
     items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) });
     return items;
   };
@@ -591,6 +654,33 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const remoteMenu = (rb: RemoteBranch): MenuItem[] => {
     const local = localByUpstream.get(rb.name);
     const items: MenuItem[] = [];
+    items.push({ label: 'Fetch this branch', icon: 'arrow-down', onSelect: () => onFetchBranch(rb) });
+    if (currentBranch) {
+      items.push({
+        label: `Pull into ${currentBranch}`,
+        icon: 'arrow-down',
+        submenu: [
+          { label: `Repository default (${pullMode === 'default' ? 'Git configuration' : pullMode})`, confirm: true, onSelect: () => onPullBranch(rb) },
+          { label: 'Use Git configuration', confirm: true, onSelect: () => onPullBranch(rb, 'default') },
+          { label: 'Merge (fast-forward if possible)', confirm: true, onSelect: () => onPullBranch(rb, 'merge') },
+          { label: 'Rebase', confirm: true, onSelect: () => onPullBranch(rb, 'rebase') },
+          { label: 'Fast-forward only', confirm: true, onSelect: () => onPullBranch(rb, 'fast-forward-only') },
+        ],
+      });
+      const head = refs.branches.find((branch) => branch.is_head);
+      if (head && head.upstream?.name !== rb.name) {
+        items.push({
+          label: `Set as upstream for ${head.name}`,
+          icon: 'remote',
+          onSelect: () => {
+            void setBranchUpstream(head.name, rb.name).then(
+              () => onToast(`${head.name} now tracks ${rb.name}`),
+              (caught) => onToast(`Upstream failed: ${errMessage(caught)}`, 'error'),
+            );
+          },
+        });
+      }
+    }
     if (local) {
       items.push(
         local.is_head
@@ -598,11 +688,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           : { label: `Checkout ${local.name}`, icon: 'branch', onSelect: () => void runBranchOp(() => checkout(local.name)) },
       );
     }
-    items.push({
-      label: 'Create local branch & track',
-      icon: 'branch',
-      onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)),
-    });
+    if (!local) {
+      items.push({
+        label: 'Create local branch & track',
+        icon: 'branch',
+        onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)),
+      });
+    }
     // Same create, but with a chosen name (auto-tracks — core wires upstream
     // when the start point is a remote-tracking branch).
     items.push({
@@ -615,6 +707,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       icon: 'worktree',
       onSelect: () => onCreateWorktree({ ref: rb.name, label: rb.name }),
     });
+    items.push(
+      { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(rb.branch); onToast('Branch name copied'); } },
+      { label: 'Copy remote ref', icon: 'file', onSelect: () => { void copyToClipboard(rb.name); onToast('Remote branch ref copied'); } },
+      { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(rb.target); onToast('Commit SHA copied'); } },
+    );
     items.push({
       label: `Delete branch on ${rb.remote}`,
       icon: 'trash',
@@ -658,6 +755,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
+      { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
+      { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
     ];
     if (tagRemote) {
       items.push({ label: `Push to ${tagRemote}`, icon: 'arrow-up', onSelect: () => runTagPush(tg.name) });
@@ -673,6 +772,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         onSelect: () => runTagDeleteRemote(tg.name),
       });
     }
+    items.push(
+      { label: 'Copy tag name', icon: 'file', onSelect: () => { void copyToClipboard(tg.name); onToast('Tag name copied'); } },
+      { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(tg.target); onToast('Commit SHA copied'); } },
+    );
     items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteTag(tg.name)) });
     return items;
   };
@@ -680,6 +783,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const stashMenu = (s: Stash): MenuItem[] => [
     { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(() => stashApply(s.index)) },
     { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
+    { label: 'Copy stash name', icon: 'file', onSelect: () => { void copyToClipboard(`stash@{${s.index}}`); onToast('Stash name copied'); } },
+    { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(s.oid); onToast('Commit SHA copied'); } },
     { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => stashDrop(s.index)) },
   ];
 

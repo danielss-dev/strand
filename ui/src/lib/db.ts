@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
+import type { PullMode, RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -160,6 +160,21 @@ export const repoDiffMode = {
   },
   set(repoPath: string, mode: DiffMode): Promise<void> {
     return settings.set(`diff-mode:${repoPath}`, mode);
+  },
+};
+
+/**
+ * Per-repo default pull integration strategy. `default` delegates to Git's
+ * own configuration; an explicit value overrides it for the normal Pull
+ * button, shortcut, and Sync flow. Explicit one-off menu actions do not write
+ * this preference.
+ */
+export const repoPullMode = {
+  get(repoPath: string): Promise<PullMode | null> {
+    return settings.get<PullMode>(`pull-mode:${repoPath}`);
+  },
+  set(repoPath: string, mode: PullMode): Promise<void> {
+    return settings.set(`pull-mode:${repoPath}`, mode);
   },
 };
 

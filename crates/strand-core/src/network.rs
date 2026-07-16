@@ -81,6 +81,32 @@ pub struct Progress {
     pub raw: String,
 }
 
+/// How `git pull` should integrate the fetched upstream branch.
+/// `Default` delegates to the user's git configuration; explicit modes
+/// override it for one operation.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PullMode {
+    #[default]
+    Default,
+    /// Fast-forward when possible, otherwise create a merge commit.
+    Merge,
+    Rebase,
+    FastForwardOnly,
+}
+
+/// How the current branch should be pushed. Plain `--force` is intentionally
+/// absent; Strand only exposes the guarded force-with-lease variant.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PushMode {
+    #[default]
+    Default,
+    /// Push reachable annotated tags along with the current branch.
+    FollowTags,
+    ForceWithLease,
+}
+
 impl Repo {
     /// Fetch provider-reported branch tips for a read-only comparison without
     /// updating FETCH_HEAD or any local/remote-tracking ref. Hosted PR views
@@ -133,29 +159,43 @@ impl Repo {
 
     pub fn pull(
         &self,
-        rebase: bool,
+        mode: PullMode,
         on_progress: impl FnMut(Progress),
         cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
-        let mut args = vec!["pull", "--progress"];
-        if rebase {
-            args.push("--rebase");
-        }
+        let args = pull_args(mode);
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
-    /// Push the current branch. If `force_with_lease` is set, uses the safer
-    /// force variant — plain `--force` is never exposed from the UI.
-    pub fn push(
+    /// Fetch and integrate one explicitly selected branch from `remote` into
+    /// the currently checked-out branch. The refspec also refreshes the
+    /// corresponding remote-tracking ref, so the sidebar cannot remain stale
+    /// after a successful pull.
+    pub fn pull_branch(
         &self,
-        force_with_lease: bool,
+        remote: &str,
+        branch: &str,
+        mode: PullMode,
         on_progress: impl FnMut(Progress),
         cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
-        let mut args = vec!["push", "--progress"];
-        if force_with_lease {
-            args.push("--force-with-lease");
-        }
+        self.ensure_remote(remote)?;
+        let source = validate_branch_ref(branch, "remote branch")?;
+        let destination = validate_tracking_ref(remote, branch)?;
+        let refspec = format!("+{source}:{destination}");
+        let mut args = pull_args(mode);
+        args.extend(["--", remote, refspec.as_str()]);
+        run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    /// Push the current branch. Plain `--force` is never exposed from the UI.
+    pub fn push(
+        &self,
+        mode: PushMode,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        let mut args = push_args(mode);
         if self.should_set_origin_upstream() {
             args.extend(["--set-upstream", "--", "origin", "HEAD"]);
         }
@@ -180,6 +220,56 @@ impl Repo {
         }
         args.extend(["--", remote, "HEAD"]);
         run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    /// Push any local branch without checking it out first. The source and
+    /// destination are fully qualified so Git never guesses which namespace
+    /// is intended. `set_upstream` deliberately applies to `branch`, not HEAD.
+    pub fn push_branch(
+        &self,
+        branch: &str,
+        remote: &str,
+        remote_branch: &str,
+        mode: PushMode,
+        set_upstream: bool,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        self.ensure_remote(remote)?;
+        let source = validate_branch_ref(branch, "local branch")?;
+        self.git2()?.find_branch(branch, git2::BranchType::Local)?;
+        let destination = validate_branch_ref(remote_branch, "remote branch")?;
+        let refspec = format!("{source}:{destination}");
+        let mut args = push_args(mode);
+        if set_upstream {
+            args.push("--set-upstream");
+        }
+        args.extend(["--", remote, refspec.as_str()]);
+        run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    /// Refresh one remote-tracking branch without fetching every ref on the
+    /// remote. The leading `+` matches normal remote fetch refspecs: a remote
+    /// force-push is reflected locally instead of leaving a stale tip.
+    pub fn fetch_branch(
+        &self,
+        remote: &str,
+        branch: &str,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        self.ensure_remote(remote)?;
+        let source = validate_branch_ref(branch, "remote branch")?;
+        let destination = validate_tracking_ref(remote, branch)?;
+        let refspec = format!("+{source}:{destination}");
+        let args = ["fetch", "--progress", "--", remote, refspec.as_str()];
+        run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    fn ensure_remote(&self, remote: &str) -> Result<()> {
+        validate_remote_arg(remote, "remote")?;
+        self.git2()?.find_remote(remote)?;
+        Ok(())
     }
 
     /// A freshly-created local branch has no push destination under Git's
@@ -304,6 +394,44 @@ impl Repo {
         }
         Ok(names.into_iter().collect())
     }
+}
+
+fn pull_args(mode: PullMode) -> Vec<&'static str> {
+    let mut args = vec!["pull", "--progress"];
+    match mode {
+        PullMode::Default => {}
+        PullMode::Merge => args.extend(["--no-rebase", "--ff"]),
+        PullMode::Rebase => args.push("--rebase"),
+        PullMode::FastForwardOnly => args.push("--ff-only"),
+    }
+    args
+}
+
+fn push_args(mode: PushMode) -> Vec<&'static str> {
+    let mut args = vec!["push", "--progress"];
+    match mode {
+        PushMode::Default => {}
+        PushMode::FollowTags => args.push("--follow-tags"),
+        PushMode::ForceWithLease => args.push("--force-with-lease"),
+    }
+    args
+}
+
+fn validate_branch_ref(branch: &str, what: &str) -> Result<String> {
+    let branch = branch.trim();
+    let full = format!("refs/heads/{branch}");
+    if branch.is_empty() || !git2::Reference::is_valid_name(&full) {
+        return Err(Error::Other(format!("invalid {what} name: {branch}")));
+    }
+    Ok(full)
+}
+
+fn validate_tracking_ref(remote: &str, branch: &str) -> Result<String> {
+    let full = format!("refs/remotes/{remote}/{}", branch.trim());
+    if !git2::Reference::is_valid_name(&full) {
+        return Err(Error::Other(format!("invalid remote-tracking ref: {remote}/{branch}")));
+    }
+    Ok(full)
 }
 
 /// Clone `url` into `dest` (the full target directory — git creates it).
@@ -634,7 +762,7 @@ mod tests {
     #[test]
     fn hosted_comparison_fetch_does_not_update_repository_refs() {
         let (publisher, publisher_path, base) = push_fixture();
-        publisher.push(false, |_| {}, None).unwrap();
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
         let topic = git(&publisher_path, &["rev-parse", "HEAD"]);
 
         let consumer_path = base.join("consumer");
@@ -699,7 +827,7 @@ mod tests {
     fn first_push_creates_origin_branch_and_upstream() {
         let (repo, local, base) = push_fixture();
 
-        repo.push(false, |_| {}, None).unwrap();
+        repo.push(PushMode::Default, |_| {}, None).unwrap();
         assert_eq!(
             git(&local, &["config", "--get", "branch.topic.remote"]),
             "origin"
@@ -715,7 +843,7 @@ mod tests {
 
         std::fs::write(local.join("a.txt"), "two\n").unwrap();
         git(&local, &["commit", "-qam", "second"]);
-        repo.push(false, |_| {}, None).unwrap();
+        repo.push(PushMode::Default, |_| {}, None).unwrap();
         assert_eq!(
             git(&local, &["rev-parse", "HEAD"]),
             git(&local, &["rev-parse", "refs/remotes/origin/topic"])
@@ -748,5 +876,104 @@ mod tests {
 
         drop(repo);
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pushes_a_non_current_branch_to_an_explicit_destination_and_tracks_it() {
+        let (repo, local, base) = push_fixture();
+        git(&local, &["branch", "feature"]);
+        git(&local, &["switch", "feature"]);
+        std::fs::write(local.join("a.txt"), "feature\n").unwrap();
+        git(&local, &["commit", "-qam", "feature"]);
+        git(&local, &["switch", "topic"]);
+
+        repo.push_branch(
+            "feature",
+            "origin",
+            "published-feature",
+            PushMode::Default,
+            true,
+            |_| {},
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(git(&local, &["branch", "--show-current"]), "topic");
+        assert_eq!(
+            git(&local, &["rev-parse", "refs/heads/feature"]),
+            git(&local, &["rev-parse", "refs/remotes/origin/published-feature"])
+        );
+        assert_eq!(git(&local, &["config", "branch.feature.remote"]), "origin");
+        assert_eq!(
+            git(&local, &["config", "branch.feature.merge"]),
+            "refs/heads/published-feature"
+        );
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn fetches_then_pulls_one_selected_remote_branch() {
+        let (publisher, publisher_path, base) = push_fixture();
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+        let first = git(&publisher_path, &["rev-parse", "HEAD"]);
+        let remote = base.join("remote.git");
+        git(&remote, &["symbolic-ref", "HEAD", "refs/heads/topic"]);
+
+        let consumer_path = base.join("consumer");
+        git(&base, &["clone", "-q", remote.to_str().unwrap(), consumer_path.to_str().unwrap()]);
+        git(&consumer_path, &["config", "commit.gpgsign", "false"]);
+
+        std::fs::write(publisher_path.join("a.txt"), "two\n").unwrap();
+        git(&publisher_path, &["commit", "-qam", "second"]);
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+        let second = git(&publisher_path, &["rev-parse", "HEAD"]);
+
+        let consumer = Repo::discover(&consumer_path).unwrap();
+        consumer.fetch_branch("origin", "topic", |_| {}, None).unwrap();
+        assert_eq!(git(&consumer_path, &["rev-parse", "HEAD"]), first);
+        assert_eq!(
+            git(&consumer_path, &["rev-parse", "refs/remotes/origin/topic"]),
+            second
+        );
+
+        consumer
+            .pull_branch("origin", "topic", PullMode::FastForwardOnly, |_| {}, None)
+            .unwrap();
+        assert_eq!(git(&consumer_path, &["rev-parse", "HEAD"]), second);
+        assert_eq!(git(&consumer_path, &["branch", "--show-current"]), "topic");
+
+        drop(consumer);
+        drop(publisher);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn explicit_pull_modes_override_git_config() {
+        assert_eq!(pull_args(PullMode::Default), ["pull", "--progress"]);
+        assert_eq!(pull_args(PullMode::Merge), ["pull", "--progress", "--no-rebase", "--ff"]);
+        assert_eq!(pull_args(PullMode::Rebase), ["pull", "--progress", "--rebase"]);
+        assert_eq!(pull_args(PullMode::FastForwardOnly), ["pull", "--progress", "--ff-only"]);
+    }
+
+    #[test]
+    fn guarded_push_modes_never_use_plain_force() {
+        assert_eq!(push_args(PushMode::Default), ["push", "--progress"]);
+        assert_eq!(push_args(PushMode::FollowTags), ["push", "--progress", "--follow-tags"]);
+        let forced = push_args(PushMode::ForceWithLease);
+        assert_eq!(forced, ["push", "--progress", "--force-with-lease"]);
+        assert!(!forced.contains(&"--force"));
+    }
+
+    #[test]
+    fn explicit_branch_refs_reject_invalid_names() {
+        assert_eq!(validate_branch_ref("feature/nested", "branch").unwrap(), "refs/heads/feature/nested");
+        assert!(validate_branch_ref("", "branch").is_err());
+        // Dash-leading short names are safe because the generated full ref is
+        // passed after `--`; validity, not option-like spelling, is the gate.
+        assert_eq!(validate_branch_ref("--force", "branch").unwrap(), "refs/heads/--force");
+        assert!(validate_branch_ref("../escape", "branch").is_err());
+        assert!(validate_tracking_ref("origin", "bad..name").is_err());
     }
 }

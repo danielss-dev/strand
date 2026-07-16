@@ -47,7 +47,7 @@ Open repositories become tabs that are restored the next time you launch Strand.
 The topbar carries the current view's title and the repository-level controls:
 
 - **Branch dropdown** — check out local branches, track remote ones, or create a branch inline.
-- **Fetch / Pull / Push buttons** — with live ahead/behind counts and streaming progress. Shortcuts: `Mod+Shift+Y` fetch, `Mod+Shift+P` pull, `Mod+P` push, `Mod+Shift+S` sync (fetch + pull + push).
+- **Fetch / Pull / Push buttons** — with live ahead/behind counts and streaming progress. The adjacent chevron opens explicit pull strategies (including a saved per-repository default) and push/tag/guarded-force variants. Shortcuts: `Mod+Shift+Y` fetch, `Mod+Shift+P` pull, `Mod+P` push, `Mod+Shift+S` sync (fetch + the saved pull strategy + push).
 - **Stash split button** — stash everything in one click, or open the chevron menu for snapshot and untracked-file variants.
 - **Refresh** (`Mod+R`), plus buttons to open the repository in your configured external editor (`Mod+Shift+E`) or terminal (`Mod+Shift+C`).
 
@@ -61,10 +61,13 @@ Open repositories appear either as a vertical icon rail or a horizontal tab stri
 
 The sidebar has four primary rows — **Local Changes** (with an unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and two tabs below them:
 
-- **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row actions live in right-click context menus.
+- **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row right-click menus include upstream management, explicit branch-to-remote push, selected-branch fetch/pull, and copy actions.
 - **Files** — the working-tree file tree; when a commit is selected in All
   Commits, it re-roots to that commit and shows its short hash. Clicking a file
   opens the matching working-tree or historical version in the file view.
+  Right-click a working-tree file and choose **Open in editor** to open that
+  exact path with the editor selected in Settings → Integrations. The external
+  action is intentionally hidden while browsing a historical commit.
 
 ### Main views
 

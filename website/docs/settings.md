@@ -46,7 +46,7 @@ Everything else about git — credentials, SSH keys, commit signing — is inher
 
 ## Integrations
 
-Configure the external editor and terminal that Strand's "Open in editor" (`Mod+Shift+E`) and "Open in terminal" (`Mod+Shift+C`) actions use, along with the matching topbar buttons and palette entries.
+Configure the external editor and terminal that Strand's "Open in editor" (`Mod+Shift+E`) and "Open in terminal" (`Mod+Shift+C`) actions use, along with the matching topbar buttons and palette entries. Single-file context menus in Files, Local Changes, Review, and Workspace Review also use this editor setting and pass the right-clicked file directly.
 
 - **External editor** — a dropdown of per-platform presets, None, or "Custom command…". Custom commands are templates with `{file}`, `{line}`, and `{dir}` placeholders, and a **Test** button lets you verify the command before relying on it.
 - **Terminal** — the same style of picker; the template takes a `{dir}` placeholder and opens the repository folder.

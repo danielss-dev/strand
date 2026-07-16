@@ -6,6 +6,8 @@ Strand is a complete daily-driver Git client alongside its review features. This
 
 Local Changes is a pure staging workspace: an Unstaged pane and a Staged pane (hierarchical file trees with status badges), a diff pane, and the commit form.
 
+Right-click a single file in Local Changes or Review and choose **Open in editor** to open that exact working-tree path with the editor selected in Settings → Integrations. The same action is available in the sidebar Files tree and in each repository inside Workspace Review. Multi-file selections keep their batch actions and omit this single-file command.
+
 - The view opens with a "show all" stacked diff of every changed file. Clicking the Unstaged or Staged column title re-selects that side's full changeset, and selecting a folder row aggregates the diffs beneath it.
 - Stage or unstage a whole file from its row, or use **Stage all** / **Unstage all** for the whole side.
 - **Change-block staging**: each change block in the diff has inline **Stage** and **Discard** buttons (**Unstage** on the staged side), so you can commit part of a file. The change block is the smallest unit — there is no single-line staging.
@@ -44,9 +46,11 @@ be retried with the other provider without changing the default in Settings.
 
 ## Fetch, pull, push
 
-The topbar Fetch / Pull / Push buttons show real ahead/behind counts. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure.
+The topbar Fetch / Pull / Push buttons show real ahead/behind counts. The adjacent chevron opens the full network menu: pull using Git's configured behavior, an explicit merge, rebase, or fast-forward-only; save one of those choices as this repository's default; push the current branch, follow annotated tags, push every tag, or force-push with a lease. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure. Sync runs fetch, then the repository's default pull, then push, and stops at the first failed stage.
 
-The first push of a new local branch creates the same-named branch on `origin` and sets it as the upstream, so later Push and Pull actions work normally. If the branch already has an upstream or an explicit push destination, Strand leaves that routing to Git.
+Force-push is deliberately guarded: Strand only exposes `--force-with-lease`, names the branch and upstream in a confirmation dialog, and refuses the update if the remote branch moved since the last fetch. Plain `--force` is not available. The same strategy actions are keyboard-reachable from the command palette; the current branch's context menu also exposes the pull and push variants.
+
+The first push of a new local branch creates the same-named branch on `origin` and sets it as the upstream, so later Push and Pull actions work normally. A branch's context menu can also set, change, or remove its upstream, or push that branch to a chosen remote and destination without checking it out. The explicit push dialog can set the new destination as upstream and offers the same safe push strategies.
 
 | Shortcut | Action |
 |---|---|
@@ -63,21 +67,21 @@ The sidebar's Git tab holds collapsible **Worktrees, Branches, Remotes, Tags, St
 
 ### Branches
 
-Branches render as a folder tree (`feature/foo` nests under `feature/`). Clicking a branch reveals its tip commit in the graph; double-click (or `Enter`) checks it out. The context menu offers: Checkout, New branch from here…, New worktree from here…, Rename branch…, Merge into the current branch, Rebase the current branch onto this, Interactive rebase (on the current branch), and Delete branch.
+Branches render as a flat list with their full names visible. Clicking a branch reveals its tip commit in the graph; double-click (or `Enter`) checks it out. The context menu offers: Checkout, Push to remote…, Set/Change upstream…, New branch from here…, New worktree from here…, Rename branch…, Merge into the current branch, Rebase the current branch onto this, Interactive rebase (on the current branch), and Delete branch. It can also copy the branch name, full ref, or tip SHA; the current branch adds pull and push strategy submenus.
 
 The topbar branch dropdown also checks out local branches, tracks remote ones, and has an inline "Create branch…" field with prefix autocomplete. A detached HEAD shows a "detached" chip.
 
 ### Remotes
 
-Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves offer checkout-or-track ("Create local branch & track"), New worktree from here…, and Delete branch on the remote. The remote folder menu has Edit URL…, Rename…, Copy URL, and Remove remote. The section `+` (or the palette's "Add remote…") adds a remote.
+Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu has Edit URL…, Rename…, Copy URL, and Remove remote. The section `+` (or the palette's "Add remote…") adds a remote.
 
 ### Tags
 
-Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
+Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
 
 ### Stashes
 
-Double-clicking a stash (or `Enter`) applies it; the menu offers Apply, Pop, and Drop. The section `+` opens the stash dialog: a message, a selectable file checklist for partial stashes, "Include untracked files", and "Keep changes in working directory" (which turns the stash into a snapshot). The topbar **Stash split button** opens the stash dialog, with a chevron menu for snapshot and untracked/keep-index variants plus "Pop latest". Stashes also appear inline on the commit graph as diamond nodes — see [Commits & History](commits-and-history.md).
+Double-clicking a stash (or `Enter`) applies it; the menu offers Apply, Pop, Drop, and copy actions for its `stash@{n}` reference or SHA. The section `+` opens the stash dialog: a message, a selectable file checklist for partial stashes, "Include untracked files", and "Keep changes in working directory" (which turns the stash into a snapshot). The topbar **Stash split button** opens the stash dialog, with a chevron menu for snapshot and untracked/keep-index variants plus "Pop latest". Stashes also appear inline on the commit graph as diamond nodes — see [Commits & History](commits-and-history.md).
 
 ### Submodules
 

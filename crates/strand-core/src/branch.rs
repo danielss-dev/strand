@@ -198,6 +198,21 @@ impl Repo {
         branch.rename(new, false)?;
         Ok(())
     }
+
+    /// Set, change, or unset the tracking branch for any local branch.
+    /// `upstream` uses Git's short remote-branch spelling (`origin/main`).
+    /// Passing `None` removes both branch remote/merge config entries.
+    pub fn set_branch_upstream(&self, name: &str, upstream: Option<&str>) -> Result<()> {
+        let repo = self.git2()?;
+        let mut branch = repo.find_branch(name, git2::BranchType::Local)?;
+        if let Some(upstream) = upstream {
+            repo.find_branch(upstream, git2::BranchType::Remote)?;
+            branch.set_upstream(Some(upstream))?;
+        } else {
+            branch.set_upstream(None)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -290,5 +305,41 @@ mod tests {
         assert_eq!(git(&dir, &["symbolic-ref", "HEAD"]), "refs/heads/trunk");
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn sets_changes_and_unsets_a_branch_upstream() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+        git(&dir, &["branch", "feature"]);
+        git(&dir, &["branch", "other"]);
+
+        let remote = dir.with_file_name(format!(
+            "{}-remote.git",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = std::fs::remove_dir_all(&remote);
+        git(&dir, &["init", "-q", "--bare", remote.to_str().unwrap()]);
+        git(&dir, &["remote", "add", "origin", remote.to_str().unwrap()]);
+        git(&dir, &["push", "-q", "origin", "main", "other"]);
+        git(&dir, &["fetch", "-q", "origin"]);
+
+        repo.set_branch_upstream("feature", Some("origin/main")).unwrap();
+        let branch = repo.refs().unwrap().branches.into_iter().find(|b| b.name == "feature").unwrap();
+        assert_eq!(branch.upstream.unwrap().name, "origin/main");
+
+        repo.set_branch_upstream("feature", Some("origin/other")).unwrap();
+        let branch = repo.refs().unwrap().branches.into_iter().find(|b| b.name == "feature").unwrap();
+        assert_eq!(branch.upstream.unwrap().name, "origin/other");
+
+        repo.set_branch_upstream("feature", None).unwrap();
+        let branch = repo.refs().unwrap().branches.into_iter().find(|b| b.name == "feature").unwrap();
+        assert!(branch.upstream.is_none());
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(remote);
     }
 }

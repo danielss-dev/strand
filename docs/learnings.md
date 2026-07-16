@@ -1312,3 +1312,65 @@ comment/thread outcome and patch the active PR locally so a reply does not
 reload the rich detail or hosted patch, remount Pierre, or discard scroll,
 focus, file selection, and per-thread drafts. Background monitoring can then
 seed its activity baseline through the existing post-write path.
+
+---
+
+## Network variants are typed, and destructive pushes are lease-guarded
+
+**Rule.** Pull and push variants cross the IPC boundary as explicit `PullMode`
+and `PushMode` values. The default mode preserves the user's Git configuration;
+explicit modes add only the requested flag. Strand exposes force-push only as
+`--force-with-lease` and never offers plain `--force`.
+
+**Why.** Boolean flags stop scaling once the client offers merge, rebase,
+fast-forward-only, tag-following, and guarded rewrite behavior. Typed modes keep
+the Rust command, TypeScript wrapper, store, progress copy, and UI action in
+agreement. A lease prevents silently overwriting remote work that arrived
+after the user's last fetch.
+
+**How to apply.** Add new strategies to the shared mode union instead of
+creating one-off IPC commands. Route UI entry points through the App-owned
+network callbacks so busy guards, cancellation, progress, refresh, and errors
+remain consistent. Any history-rewriting network action must name its target,
+explain the safety check, and require explicit confirmation.
+
+---
+
+## Explicit branch network operations use qualified refs and never switch HEAD
+
+**Rule.** Branch-scoped fetch, pull, and push operations validate Git ref names,
+build fully qualified `refs/heads/...` and `refs/remotes/...` refspecs, and pass
+the remote/refspec after `--`. Pushing a non-current branch must name that local
+ref directly; never check it out as an implementation shortcut. A selected
+branch pull refreshes its remote-tracking ref as part of the same refspec.
+
+**Why.** Letting Git guess a namespace makes branch/tag collisions ambiguous,
+while checkout-before-push mutates the user's active worktree and fails when a
+branch belongs to another worktree. Updating the tracking ref prevents the
+sidebar from showing stale state after a successful selected-branch pull.
+
+**How to apply.** Keep explicit ref operations in `network.rs`, reuse typed
+`PullMode` / `PushMode`, the streaming cancellation path, and App-owned busy
+state. Per-repository network preferences belong in the settings database;
+asynchronous loads must re-check the active repository path before applying a
+saved value so rapid tab switches cannot leak one repository's policy into
+another.
+
+---
+
+## Row context actions use their target, not ambient selection
+
+**Rule.** A row context-menu action must receive the row's repository and item
+identity explicitly. Do not implement it by reading the globally selected file,
+branch, commit, or repository when the action runs.
+
+**Why.** Right-click does not necessarily change selection, and multi-repository
+views intentionally keep one active repository while exposing rows from several.
+Reading ambient state can therefore open or mutate a different item than the one
+whose menu the user invoked.
+
+**How to apply.** Build menu callbacks from the targets passed by the tree or
+row component, then route that explicit identity through the App-owned action.
+If an operation only makes sense for one target, omit it for multi-selection.
+For historical file trees, hide working-tree-only actions instead of applying
+them to a same-named current file.

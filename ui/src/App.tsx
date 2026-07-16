@@ -67,9 +67,23 @@ import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog } from './views/WorktreeDialog';
 import { WorktreeMergeDialog } from './views/WorktreeMergeDialog';
+import { ForcePushDialog } from './views/ForcePushDialog';
+import { BranchNetworkDialog, type BranchNetworkDialogMode } from './views/BranchNetworkDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
 import { RepoSwitcher } from './views/RepoSwitcher';
-import type { CrashCheck, FileDiff, Progress, RepoMeta, StatusKind, Worktree, WorktreeHealth } from './lib/types';
+import type {
+  CrashCheck,
+  BranchPushRequest,
+  FileDiff,
+  Progress,
+  PullMode,
+  PushMode,
+  RepoMeta,
+  RemoteBranch,
+  StatusKind,
+  Worktree,
+  WorktreeHealth,
+} from './lib/types';
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -182,6 +196,11 @@ export function App() {
   const fetchRepo = useRepo((s) => s.fetch);
   const pullRepo = useRepo((s) => s.pull);
   const pushRepo = useRepo((s) => s.push);
+  const fetchBranch = useRepo((s) => s.fetchBranch);
+  const pullBranch = useRepo((s) => s.pullBranch);
+  const pushBranch = useRepo((s) => s.pushBranch);
+  const pullMode = useRepo((s) => s.pullMode);
+  const setPullMode = useRepo((s) => s.setPullMode);
   const pushAllTags = useRepo((s) => s.pushAllTags);
   const abortOperation = useRepo((s) => s.abortOperation);
   const stashes = useRepo((s) => s.stashes);
@@ -231,6 +250,7 @@ export function App() {
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
+  const [branchNetworkDialog, setBranchNetworkDialog] = useState<BranchNetworkDialogMode | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
   const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
   // null = closed; otherwise the interactive-rebase base (revspec before the
@@ -316,6 +336,7 @@ export function App() {
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [forcePushOpen, setForcePushOpen] = useState(false);
   // Brief "done" pulses: after a sync op succeeds the button flashes a
   // check instead of raising a toast. Cleared after the pulse animation.
   const [syncDone, setSyncDone] = useState(false);
@@ -375,20 +396,28 @@ export function App() {
       .catch((e) => showToast(`Open terminal failed: ${errMessage(e)}`, 'error'));
   }, [showToast, openSettingsAt]);
 
-  const openInEditor = useCallback(() => {
-    const path = useRepo.getState().activePath;
-    if (!path) return;
+  const openEditorTarget = useCallback((path: string, file: string | null) => {
     const template = editorTemplate(useSettings.getState().editorTool);
     if (!template) {
       showToast('Choose an editor in Settings → Integrations');
       openSettingsAt('integrations');
       return;
     }
-    // With no file selected the repo directory opens instead.
-    const file = useRepo.getState().selectedFile;
     tauri.repoOpenInEditor(path, file, null, template)
       .catch((e) => showToast(`Open editor failed: ${errMessage(e)}`, 'error'));
   }, [showToast, openSettingsAt]);
+
+  const openActiveFileInEditor = useCallback((file: string) => {
+    const path = useRepo.getState().activePath;
+    if (path) openEditorTarget(path, file);
+  }, [openEditorTarget]);
+
+  const openInEditor = useCallback(() => {
+    const path = useRepo.getState().activePath;
+    if (!path) return;
+    // With no file selected the repo directory opens instead.
+    openEditorTarget(path, useRepo.getState().selectedFile);
+  }, [openEditorTarget]);
 
   // Copy a diff list to the clipboard (raw patch or Markdown) and confirm
   // with a file count — powers the palette's "Copy … diff" actions.
@@ -578,8 +607,8 @@ export function App() {
     void setActiveTab(next.path);
   }, []);
 
-  const onSync = useCallback(async () => {
-    if (syncing) return;
+  const onFetch = useCallback(async () => {
+    if (syncing || pulling || pushing) return;
     setSyncing(true);
     setNetProgress('Fetching…');
     const opId = nextOpId();
@@ -596,47 +625,168 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [fetchRepo, showToast, flashDone, syncing, nextOpId]);
+  }, [fetchRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
-  const onPull = useCallback(async () => {
-    if (pulling) return;
+  const onPull = useCallback(async (mode?: PullMode) => {
+    if (syncing || pulling || pushing) return;
+    const effectiveMode = mode ?? pullMode;
+    const label = effectiveMode === 'rebase'
+      ? 'Pull with rebase'
+      : effectiveMode === 'fast-forward-only'
+        ? 'Fast-forward-only pull'
+        : effectiveMode === 'merge'
+          ? 'Pull with merge'
+          : 'Pull';
     setPulling(true);
-    setNetProgress('Pulling…');
+    setNetProgress(`${label}…`);
     const opId = nextOpId();
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pullRepo(false, undefined, opId);
+      await pullRepo(effectiveMode, undefined, opId);
       flashDone(setPullDone);
     } catch (e) {
-      if (isCancelled(e)) showToast('Pull cancelled');
-      else showToast(`Pull failed: ${errMessage(e)}`, 'error');
+      if (isCancelled(e)) showToast(`${label} cancelled`);
+      else showToast(`${label} failed: ${errMessage(e)}`, 'error');
     } finally {
       setPulling(false);
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [pullRepo, showToast, flashDone, pulling, nextOpId]);
+  }, [pullRepo, showToast, flashDone, syncing, pulling, pushing, pullMode, nextOpId]);
 
-  const onPush = useCallback(async () => {
-    if (pushing) return;
+  const onPush = useCallback(async (mode: PushMode = 'default') => {
+    if (syncing || pulling || pushing) return;
+    const label = mode === 'force-with-lease'
+      ? 'Force push with lease'
+      : mode === 'follow-tags'
+        ? 'Push with annotated tags'
+        : 'Push';
     setPushing(true);
-    setNetProgress('Pushing…');
+    setNetProgress(`${label}…`);
     const opId = nextOpId();
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pushRepo(false, undefined, opId);
+      await pushRepo(mode, undefined, opId);
       flashDone(setPushDone);
     } catch (e) {
-      if (isCancelled(e)) showToast('Push cancelled');
-      else showToast(`Push failed: ${errMessage(e)}`, 'error');
+      if (isCancelled(e)) showToast(`${label} cancelled`);
+      else showToast(`${label} failed: ${errMessage(e)}`, 'error');
     } finally {
       setPushing(false);
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [pushRepo, showToast, flashDone, pushing, nextOpId]);
+  }, [pushRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
+
+  const onPushAllTags = useCallback(async () => {
+    if (syncing || pulling || pushing) return;
+    setPushing(true);
+    setNetProgress('Pushing all tags…');
+    await waitForPaint();
+    try {
+      await pushAllTags();
+      flashDone(setPushDone);
+    } catch (e) {
+      showToast(`Push all tags failed: ${errMessage(e)}`, 'error');
+    } finally {
+      setPushing(false);
+      setNetProgress(null);
+    }
+  }, [pushAllTags, showToast, flashDone, syncing, pulling, pushing]);
+
+  const onFetchBranch = useCallback(async (remoteBranch: RemoteBranch) => {
+    if (syncing || pulling || pushing) return;
+    setSyncing(true);
+    setNetProgress(`Fetching ${remoteBranch.name}…`);
+    const opId = nextOpId();
+    setNetOpId(opId);
+    await waitForPaint();
+    try {
+      await fetchBranch(remoteBranch.remote, remoteBranch.branch, undefined, opId);
+      flashDone(setSyncDone);
+      showToast(`Fetched ${remoteBranch.name}`);
+    } catch (caught) {
+      if (isCancelled(caught)) showToast(`Fetch ${remoteBranch.name} cancelled`);
+      else showToast(`Fetch ${remoteBranch.name} failed: ${errMessage(caught)}`, 'error');
+    } finally {
+      setSyncing(false);
+      setNetProgress(null);
+      setNetOpId(null);
+    }
+  }, [fetchBranch, flashDone, nextOpId, pulling, pushing, showToast, syncing]);
+
+  const onPullBranch = useCallback(async (remoteBranch: RemoteBranch, mode?: PullMode) => {
+    if (syncing || pulling || pushing) return;
+    const effectiveMode = mode ?? pullMode;
+    setPulling(true);
+    setNetProgress(`Pulling ${remoteBranch.name}…`);
+    const opId = nextOpId();
+    setNetOpId(opId);
+    await waitForPaint();
+    try {
+      await pullBranch(remoteBranch.remote, remoteBranch.branch, effectiveMode, undefined, opId);
+      flashDone(setPullDone);
+      showToast(`Pulled ${remoteBranch.name} into the current branch`);
+    } catch (caught) {
+      if (isCancelled(caught)) showToast(`Pull ${remoteBranch.name} cancelled`);
+      else showToast(`Pull ${remoteBranch.name} failed: ${errMessage(caught)}`, 'error');
+    } finally {
+      setPulling(false);
+      setNetProgress(null);
+      setNetOpId(null);
+    }
+  }, [flashDone, nextOpId, pullBranch, pullMode, pulling, pushing, showToast, syncing]);
+
+  const onPushBranch = useCallback(async (request: BranchPushRequest) => {
+    if (syncing || pulling || pushing) return;
+    setPushing(true);
+    setNetProgress(`Pushing ${request.branch} to ${request.remote}/${request.remoteBranch}…`);
+    const opId = nextOpId();
+    setNetOpId(opId);
+    await waitForPaint();
+    try {
+      await pushBranch(request, undefined, opId);
+      flashDone(setPushDone);
+      showToast(`Pushed ${request.branch} to ${request.remote}/${request.remoteBranch}`);
+    } catch (caught) {
+      if (isCancelled(caught)) showToast(`Push ${request.branch} cancelled`);
+      else showToast(`Push ${request.branch} failed: ${errMessage(caught)}`, 'error');
+    } finally {
+      setPushing(false);
+      setNetProgress(null);
+      setNetOpId(null);
+    }
+  }, [flashDone, nextOpId, pulling, pushBranch, pushing, showToast, syncing]);
+
+  const onSync = useCallback(async () => {
+    if (syncing || pulling || pushing) return;
+    setSyncing(true);
+    const opId = nextOpId();
+    setNetOpId(opId);
+    let phase = 'Fetch';
+    try {
+      setNetProgress('Sync: fetching…');
+      await waitForPaint();
+      await fetchRepo(undefined, opId);
+      phase = 'Pull';
+      setNetProgress('Sync: pulling…');
+      await pullRepo(pullMode, undefined, opId);
+      phase = 'Push';
+      setNetProgress('Sync: pushing…');
+      await pushRepo('default', undefined, opId);
+      flashDone(setSyncDone);
+      showToast('Sync complete');
+    } catch (caught) {
+      if (isCancelled(caught)) showToast(`Sync cancelled during ${phase.toLowerCase()}`);
+      else showToast(`${phase} failed during sync: ${errMessage(caught)}`, 'error');
+    } finally {
+      setSyncing(false);
+      setNetProgress(null);
+      setNetOpId(null);
+    }
+  }, [fetchRepo, flashDone, nextOpId, pullMode, pullRepo, pulling, pushRepo, pushing, showToast, syncing]);
 
   // Keyboard refresh — same snapshot-based refresh the header button runs
   // (meta/refs/tree/submodules ride along with status), guarded on an open repo.
@@ -683,7 +833,7 @@ export function App() {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
     },
-    'fetch': () => { void onSync(); },
+    'fetch': () => { void onFetch(); },
     'pull': () => { void onPull(); },
     'push': () => { void onPush(); },
     'sync': () => { void onSync(); },
@@ -692,7 +842,7 @@ export function App() {
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
   }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
-       onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
+       onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
        requestSuggestCommitMessage]);
   const commandHandlersRef = useRef(commandHandlers);
   commandHandlersRef.current = commandHandlers;
@@ -1243,26 +1393,28 @@ export function App() {
         // Renaming the short OID HEAD shows while detached is meaningless —
         // only offer the rename on a real branch.
         ...(meta.branch && !meta.detached
-          ? [{ id: 'branch-rename', label: 'Rename current branch…', group: 'Actions', keywords: 'branch rename move', run: () => setRenameBranchDialog({ name: meta.branch }) } satisfies PaletteAction]
+          ? [
+              { id: 'branch-rename', label: 'Rename current branch…', group: 'Actions', keywords: 'branch rename move', run: () => setRenameBranchDialog({ name: meta.branch }) } satisfies PaletteAction,
+              ...(() => {
+                const branch = refs.branches.find((candidate) => candidate.is_head);
+                return branch ? [
+                  { id: 'branch-upstream', label: 'Manage current branch upstream…', group: 'Actions', keywords: 'branch track tracking set change unset remote upstream', run: () => setBranchNetworkDialog({ kind: 'upstream', branch }) } satisfies PaletteAction,
+                  { id: 'branch-push-explicit', label: 'Push current branch to…', group: 'Actions', keywords: 'branch push remote destination refspec publish', run: () => setBranchNetworkDialog({ kind: 'push', branch }) } satisfies PaletteAction,
+                ] : [];
+              })(),
+            ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
-        { id: 'push-tags', label: 'Push all tags', group: 'Actions', run: () => {
-          void (async () => {
-            setNetProgress('Pushing tags…');
-            try {
-              await pushAllTags();
-              showToast('Pushed all tags');
-            } catch (e) {
-              showToast(`Push tags failed: ${errMessage(e)}`, 'error');
-            } finally {
-              setNetProgress(null);
-            }
-          })();
-        } },
-        { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onSync },
+        { id: 'push-tags', label: 'Push all tags', group: 'Actions', keywords: 'push upload publish tags remote', run: onPushAllTags },
+        { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onFetch },
         { id: 'pull',    label: 'Pull', group: 'Actions', shortcut: keyHint('pull'), keywords: 'pull merge remote download integrate', run: onPull },
+        { id: 'pull-merge', label: 'Pull: merge (fast-forward if possible)', group: 'Actions', keywords: 'pull merge fetch integrate ff', run: () => { void onPull('merge'); } },
+        { id: 'pull-rebase', label: 'Pull: rebase', group: 'Actions', keywords: 'pull rebase fetch linear autostash', run: () => { void onPull('rebase'); } },
+        { id: 'pull-ff-only', label: 'Pull: fast-forward only', group: 'Actions', keywords: 'pull fetch ff-only safe refuse diverged', run: () => { void onPull('fast-forward-only'); } },
         { id: 'push',    label: 'Push', group: 'Actions', shortcut: keyHint('push'), keywords: 'push upload publish remote', run: onPush },
+        { id: 'push-follow-tags', label: 'Push with annotated tags', group: 'Actions', keywords: 'push follow tags upload publish remote', run: () => { void onPush('follow-tags'); } },
+        { id: 'push-force-lease', label: 'Force push with lease…', group: 'Actions', keywords: 'push force lease rewrite remote history safe', run: () => setForcePushOpen(true) },
         { id: 'sync',    label: 'Sync (Fetch + Pull + Push)', group: 'Actions', shortcut: keyHint('sync'), run: onSync },
         // Gated on a non-root HEAD commit — HEAD~1 must exist to reset to.
         ...(meta.head_oid && commits.find((c) => c.hash === meta.head_oid)?.parents.length
@@ -1344,8 +1496,8 @@ export function App() {
       run: () => { void openByPath(r.path); },
     }));
     return [...base, ...repoActions, ...workspaceActions, ...recentActions];
-  }, [setView, selectFile, onSync, onPull, onPush, openViaDialog, openByPath, setTheme, recents,
-      pushAllTags, showToast, meta, abortOperation, requestCommitSearch,
+  }, [setView, selectFile, onFetch, onSync, onPull, onPush, onPushAllTags, openViaDialog, openByPath, setTheme, recents,
+      showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
@@ -1366,9 +1518,16 @@ export function App() {
       <div className="strand-window">
         <Topbar
           onOpenPalette={() => setPaletteOpen(true)}
-          onSync={onSync}
+          onFetch={onFetch}
           onPull={onPull}
           onPush={onPush}
+          onPushAllTags={onPushAllTags}
+          onForcePush={() => setForcePushOpen(true)}
+          pullMode={pullMode}
+          onSetPullMode={(mode) => {
+            setPullMode(mode);
+            showToast(`Repository pull default: ${mode === 'default' ? 'Git configuration' : mode}`);
+          }}
           syncing={syncing}
           pulling={pulling}
           pushing={pushing}
@@ -1412,6 +1571,13 @@ export function App() {
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onManageRemote={(mode) => setRemoteDialog(mode)}
                 onRenameBranch={(name) => setRenameBranchDialog({ name })}
+                onManageBranchNetwork={(mode) => setBranchNetworkDialog(mode)}
+                onPull={onPull}
+                onPush={onPush}
+                onForcePush={() => setForcePushOpen(true)}
+                onFetchBranch={onFetchBranch}
+                onPullBranch={onPullBranch}
+                onOpenFileInEditor={openActiveFileInEditor}
                 onToast={showToast}
               />
             </Panel>
@@ -1423,10 +1589,10 @@ export function App() {
                 <div className="main">
                   <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                   <OpBanner onToast={showToast} />
-                  {view === 'local' && <LocalChanges />}
-                  {view === 'review' && <Review />}
+                  {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
+                  {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
                   {view === 'pull-requests' && <PullRequests onToast={showToast} />}
-                  {view === 'workspace-review' && <WorkspaceReview />}
+                  {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
                   {view === 'reflog' && (
                     <Reflog
                       onResetTo={(target, label) => setResetDialog({ target, label })}
@@ -1574,6 +1740,15 @@ export function App() {
         />
       )}
 
+      {branchNetworkDialog && (
+        <BranchNetworkDialog
+          mode={branchNetworkDialog}
+          onClose={() => setBranchNetworkDialog(null)}
+          onPush={(request) => { void onPushBranch(request); }}
+          onToast={showToast}
+        />
+      )}
+
       {mergeDialog && (
         <MergeDialog
           source={mergeDialog.source}
@@ -1598,6 +1773,18 @@ export function App() {
           label={resetDialog.label}
           onClose={() => setResetDialog(null)}
           onToast={showToast}
+        />
+      )}
+
+      {forcePushOpen && meta && (
+        <ForcePushDialog
+          branch={meta.branch}
+          upstream={refs.branches.find((branch) => branch.is_head)?.upstream?.name ?? null}
+          onClose={() => setForcePushOpen(false)}
+          onConfirm={() => {
+            setForcePushOpen(false);
+            void onPush('force-with-lease');
+          }}
         />
       )}
 

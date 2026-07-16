@@ -365,6 +365,21 @@ export interface Progress {
   raw: string;
 }
 
+/** One-off integration strategy for a pull. `default` honors git config. */
+export type PullMode = 'default' | 'merge' | 'rebase' | 'fast-forward-only';
+
+/** Push variants exposed by Strand. Unsafe plain force is intentionally absent. */
+export type PushMode = 'default' | 'follow-tags' | 'force-with-lease';
+
+/** Explicit refspec push; the source branch does not need to be checked out. */
+export interface BranchPushRequest {
+  branch: string;
+  remote: string;
+  remoteBranch: string;
+  mode: PushMode;
+  setUpstream: boolean;
+}
+
 export interface CloneOutcome {
   /** Absolute path of the cloned working tree, ready to open. */
   path: string;
