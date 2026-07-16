@@ -1480,6 +1480,13 @@
   background: var(--bg-active);
   box-shadow: 0 0 0 0.5px var(--accent) inset;
 }
+.ref-chip.local.merged {
+  box-shadow: 0 0 0 0.5px color-mix(in oklch, var(--add) 55%, var(--border)) inset;
+}
+.ref-chip-merged {
+  color: var(--add);
+  font-weight: 700;
+}
 .ref-chip.remote {
   color: var(--text-muted);
 }

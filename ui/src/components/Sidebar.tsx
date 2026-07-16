@@ -925,7 +925,14 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         icon={b.is_head ? 'check' : wt ? 'worktree' : 'branch'}
         label={b.name}
         meta={wt ? 'worktree' : undefined}
-        title={wt ? `${b.name} — checked out in worktree ${wt.path}; double-click to open it` : undefined}
+        merged={b.merged}
+        title={
+          wt
+            ? `${b.name} — checked out in worktree ${wt.path}; double-click to open it`
+            : b.merged && currentBranch
+              ? `${b.name} — merged into ${currentBranch}; safe to delete`
+              : undefined
+        }
         active={b.is_head}
         ahead={b.upstream ? b.ahead : 0}
         behind={b.upstream ? b.behind : 0}
@@ -1333,6 +1340,8 @@ interface SideLeafProps {
   ahead?: number;
   /** Commits behind upstream — rendered as a red `N↓`. */
   behind?: number;
+  /** Branch tip is already reachable from the checked-out branch. */
+  merged?: boolean;
   /** Highlights the row (the checked-out branch). */
   active?: boolean;
   /** Tooltip; defaults to the label. */
@@ -1351,7 +1360,7 @@ interface SideLeafProps {
  * — also lives in a right-click menu opened via `onMenu`. Keyboard users open
  * it with the Menu key or Shift+F10, positioned at the row's corner.
  */
-function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
+function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, merged, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const openKeyboardMenu = () => {
     const r = rowRef.current?.getBoundingClientRect();
@@ -1382,7 +1391,14 @@ function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, active, tit
       tabIndex={0}
     >
       <span className="folder-chev" aria-hidden />
-      <span className="ico"><Icon name={icon} size={13} /></span>
+      <span className={'ico' + (merged ? ' branch-icon-merged' : '')}>
+        <Icon name={icon} size={13} />
+        {merged && (
+          <span className="branch-merged-mark" aria-label="merged">
+            <Icon name="check" size={6} stroke={2.5} />
+          </span>
+        )}
+      </span>
       <span className="row-text">
         <span className="label">{label}</span>
         {ahead > 0 || behind > 0 ? (

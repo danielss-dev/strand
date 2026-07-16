@@ -148,6 +148,8 @@ export interface Branch {
   full_name: string;
   target: string;
   is_head: boolean;
+  /** Tip is reachable from the checked-out branch; HEAD itself is false. */
+  merged: boolean;
   upstream: UpstreamRef | null;
   ahead: number;
   behind: number;

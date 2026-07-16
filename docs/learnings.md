@@ -1374,3 +1374,22 @@ row component, then route that explicit identity through the App-owned action.
 If an operation only makes sense for one target, omit it for multi-selection.
 For historical file trees, hide working-tree-only actions instead of applying
 them to a same-named current file.
+
+---
+
+## A merged branch mark means containment by the checked-out branch
+
+**Rule.** `refs::Branch.merged` is true only when the local branch tip is
+reachable from the checked-out branch tip; the checked-out branch itself is
+always false. Sidebar and commit-graph indicators must use this field instead
+of guessing from ahead/behind counts or the loaded log window.
+
+**Why.** Upstream drift answers a remote-sync question, not whether deleting a
+local branch would orphan its commits. The graph view is intentionally bounded,
+so client-side ancestry checks would also produce false negatives for older
+merged branches.
+
+**How to apply.** Compute the flag while collecting refs with libgit2 commit
+ancestry (`graph_descendant_of`, including equal tips), and refresh it through
+the existing snapshot path after history or checkout operations. Squash merges
+do not preserve ancestry and therefore do not receive this mark.
