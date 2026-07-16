@@ -1710,6 +1710,18 @@ and path to the existing safe integration launcher; historical commit files and
 multi-file selections intentionally omit the action. Verified by TypeScript,
 all 233 frontend tests, and the editor-launch safety suite.
 
+**Pull-request inbox and chronology shipped (2026-07-16):** The repository PR
+workspace now opens onto a searchable All / Authored / Completed inbox backed
+by the signed-in provider account, while its bounded latest-100 query remains
+free of comments, checks, threads, and commits. Detail navigation keeps compact
+Summary / Timeline / Code tabs centered in the PR toolbar: normalized GitHub and Azure commits join comments
+and lifecycle markers on one deterministic chronology rail; Summary owns the
+compact facts, collapsible description/checks, and shared comment draft; Code
+adds compare/commit/file/line totals while keeping line counts in the selected
+file header and preserving the one-mounted-diff boundary. Verified in the running Tauri app with keyboard and
+pointer navigation, dark/light themes, 900px and wide layouts, preserved
+composer drafts, resizable Code rail, and one mounted Pierre diff.
+
 ---
 
 ## 1.1+ — Post-1.0

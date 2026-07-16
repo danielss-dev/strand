@@ -10,8 +10,12 @@ import { PierreTree } from '../components/PierreTree';
 import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
 import { renderMarkdown } from '../lib/markdown';
 import {
+  buildPullRequestTimeline,
   checkTone,
   diffStats,
+  filterPullRequests,
+  reconcilePullRequestSelection,
+  type PullRequestInboxFilter,
   markdownUrl,
   parsePullRequestPatch,
   pullRequestReadiness,
@@ -117,76 +121,20 @@ function authorInitials(author: string): string {
   return (words.length > 1 ? words.slice(0, 2).map((word) => word[0]).join('') : author.slice(0, 2)).toUpperCase();
 }
 
-function PullRequestOverview({ pr }: { pr: PullRequest }) {
-  return (
-    <div className="pr-tab-scroll">
-      <dl className="pr-meta-grid">
-        <div><dt>Branches</dt><dd><code>{pr.source_branch}</code> → <code>{pr.target_branch}</code></dd></div>
-        <div><dt>Created</dt><dd>{dateLabel(pr.created_at) || 'Not reported'}</dd></div>
-        <div><dt>Updated</dt><dd>{dateLabel(pr.updated_at) || 'Not reported'}</dd></div>
-        <div><dt>Changes</dt><dd>{[
-          pr.changed_files != null ? `${pr.changed_files} files` : null,
-          pr.additions != null ? `+${pr.additions}` : null,
-          pr.deletions != null ? `−${pr.deletions}` : null,
-        ].filter(Boolean).join(' · ') || 'Not reported'}</dd></div>
-        <div><dt>Discussion</dt><dd>{pr.comment_count} comments · {pr.commit_count} commits</dd></div>
-      </dl>
-
-      {pr.labels.length > 0 && (
-        <section className="pr-detail-section">
-          <h3>Labels</h3>
-          <div className="pr-pills">{pr.labels.map((label) => <span key={label}>{label}</span>)}</div>
-        </section>
-      )}
-
-      <section className="pr-detail-section">
-        <h3>Description</h3>
-        {pr.description
-          ? <ProviderMarkdown source={pr.description} baseUrl={pr.url} />
-          : <p className="pr-muted">No description.</p>}
-      </section>
-
-      <section className="pr-detail-section">
-        <h3>Reviewers</h3>
-        {pr.reviewers.length > 0 ? (
-          <ul className="pr-facts">
-            {pr.reviewers.map((reviewer, index) => (
-              <li key={`${reviewer.name}:${index}`}>
-                <span>{reviewer.name}{reviewer.required ? ' · required' : ''}</span>
-                <strong>{reviewer.status.toLowerCase()}</strong>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="pr-muted">No reviewers reported.</p>}
-      </section>
-
-      <section className="pr-detail-section">
-        <h3>Checks</h3>
-        {pr.checks.length > 0 ? (
-          <ul className="pr-facts">
-            {pr.checks.map((check, index) => (
-              <li key={`${check.name}:${index}`}><span>{check.name}</span><CheckStatus check={check} /></li>
-            ))}
-          </ul>
-        ) : <p className="pr-muted">No checks reported.</p>}
-      </section>
-    </div>
-  );
-}
-
-function PullRequestConversation({
+function PullRequestCommentComposer({
   path,
   pr,
+  draft,
+  onDraft,
   onUpdated,
-  onViewInChanges,
 }: {
   path: string;
   pr: PullRequest;
+  draft: string;
+  onDraft: (draft: string) => void;
   onUpdated: (next: PullRequest) => void;
-  onViewInChanges: (comment: PullRequestComment) => void;
 }) {
   const platform = useSettings((state) => state.platform);
-  const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<'write' | 'preview'>('write');
   const [posting, setPosting] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -200,7 +148,7 @@ function PullRequestConversation({
     const textarea = textareaRef.current;
     if (!textarea) return;
     const edit = applyCommentFormat(draft, textarea.selectionStart, textarea.selectionEnd, kind);
-    setDraft(edit.value);
+    onDraft(edit.value);
     requestAnimationFrame(() => {
       textarea.focus();
       textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
@@ -216,7 +164,7 @@ function PullRequestConversation({
     try {
       await tauri.repoPullRequestComment(path, pr.id, body);
       posted = true;
-      setDraft('');
+      onDraft('');
       const next = await tauri.repoPullRequest(path, pr.id);
       onUpdated(next);
       setMessage({ tone: 'ok', text: 'Comment added.' });
@@ -233,9 +181,8 @@ function PullRequestConversation({
   };
 
   return (
-    <div className="pr-tab-scroll pr-conversation">
       <form
-        className="pr-comment-form"
+        className="pr-comment-form pr-comment-form-compact"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -307,7 +254,7 @@ function PullRequestConversation({
                 rows={6}
                 placeholder="Leave a comment…"
                 disabled={posting}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => onDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                     event.preventDefault();
@@ -340,65 +287,181 @@ function PullRequestConversation({
         </div>
         {message && <p className={`pr-comment-message ${message.tone}`} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
       </form>
+  );
+}
 
-      <section className="pr-comments" aria-label="Pull request comments">
-        <div className="pr-comments-head">
-          <h3>Conversation</h3>
-          <span>{pr.comments.length} {pr.comments.length === 1 ? 'comment' : 'comments'}</span>
+function PullRequestCommentCard({
+  comment,
+  pr,
+  onViewInCode,
+}: {
+  comment: PullRequestComment;
+  pr: PullRequest;
+  onViewInCode: (comment: PullRequestComment) => void;
+}) {
+  const commentUrl = markdownUrl(comment.url, pr.url);
+  const avatarUrl = markdownUrl(comment.avatar_url ?? undefined);
+  return (
+    <div className={`pr-comment-row${comment.is_system ? ' system' : ''}`}>
+      <div className="pr-comment-marker" aria-hidden="true">
+        {comment.is_system ? <Icon name="history" size={14} /> : (
+          <>
+            <span>{authorInitials(comment.author)}</span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt=""
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.hidden = true; }}
+              />
+            )}
+          </>
+        )}
+      </div>
+      <article className="pr-comment">
+        <header>
+          <div className="pr-comment-author">
+            <strong>{comment.author}</strong>
+            {comment.is_system && <span>system</span>}
+            {comment.path && <code>{comment.path}</code>}
+          </div>
+          <div className="pr-comment-links">
+            {comment.path && (
+              <button type="button" onClick={() => onViewInCode(comment)} title="View this comment in Code">
+                <Icon name="changes" size={11} /> View in Code
+              </button>
+            )}
+            {commentUrl ? (
+              <button type="button" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
+                <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
+                <Icon name="external" size={10} />
+              </button>
+            ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
+          </div>
+        </header>
+        <div className="pr-comment-body">
+          <ProviderMarkdown source={comment.body} baseUrl={commentUrl || pr.url} />
         </div>
-        {pr.comments.length > 0 ? pr.comments.map((comment) => {
-          const commentUrl = markdownUrl(comment.url, pr.url);
-          const avatarUrl = markdownUrl(comment.avatar_url ?? undefined);
-          return (
-            <div className={`pr-comment-row${comment.is_system ? ' system' : ''}`} key={comment.id}>
-              <div className="pr-comment-marker" aria-hidden="true">
-                {comment.is_system
-                  ? <Icon name="history" size={14} />
-                  : (
-                    <>
-                      <span>{authorInitials(comment.author)}</span>
-                      {avatarUrl && (
-                        <img
-                          src={avatarUrl}
-                          alt=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={(event) => { event.currentTarget.hidden = true; }}
-                        />
-                      )}
-                    </>
-                  )}
-              </div>
-              <article className="pr-comment">
-                <header>
-                  <div className="pr-comment-author">
-                    <strong>{comment.author}</strong>
-                    {comment.is_system && <span>system</span>}
-                    {comment.path && <code>{comment.path}</code>}
-                  </div>
-                  <div className="pr-comment-links">
-                    {comment.path && (
-                      <button type="button" onClick={() => onViewInChanges(comment)} title="View this comment in Changes">
-                        <Icon name="changes" size={11} />
-                        View in changes
-                      </button>
-                    )}
-                    {commentUrl ? (
-                      <button type="button" onClick={() => void shellOpen(commentUrl)} title="Open this comment on host">
-                        <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>
-                        <Icon name="external" size={10} />
-                      </button>
-                    ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
-                  </div>
-                </header>
-                <div className="pr-comment-body">
-                  <ProviderMarkdown source={comment.body} baseUrl={commentUrl || pr.url} />
+      </article>
+    </div>
+  );
+}
+
+function PullRequestSummary({
+  path,
+  pr,
+  draft,
+  onDraft,
+  onUpdated,
+}: {
+  path: string;
+  pr: PullRequest;
+  draft: string;
+  onDraft: (draft: string) => void;
+  onUpdated: (next: PullRequest) => void;
+}) {
+  const reviewers = pr.reviewers.length
+    ? pr.reviewers.map((reviewer) => reviewer.name).join(', ')
+    : 'No reviewers';
+  return (
+    <div className="pr-tab-scroll pr-summary">
+      <dl className="pr-summary-facts">
+        <div><dt><Icon name="branch" size={14} /> Branch</dt><dd><code>{pr.source_branch}</code><Icon name="chev-right" size={11} /><code>{pr.target_branch}</code></dd></div>
+        <div><dt><Icon name="blame" size={14} /> Reviewers</dt><dd>{reviewers}</dd></div>
+        <div><dt><Icon name="changes" size={14} /> Comments</dt><dd>{pr.comment_count || 'No comments'}</dd></div>
+        <div><dt><Icon name="history" size={14} /> Commits</dt><dd>{pr.commit_count || pr.commits.length || 'No commits reported'}</dd></div>
+        <div><dt><Icon name="changes" size={14} /> Code</dt><dd>{[
+          pr.changed_files != null ? `${pr.changed_files} files` : null,
+          pr.additions != null ? `+${pr.additions}` : null,
+          pr.deletions != null ? `−${pr.deletions}` : null,
+        ].filter(Boolean).join(' · ') || 'Change totals unavailable'}</dd></div>
+      </dl>
+
+      {pr.labels.length > 0 && <div className="pr-pills">{pr.labels.map((label) => <span key={label}>{label}</span>)}</div>}
+
+      <details className="pr-summary-section" open>
+        <summary>Description</summary>
+        <div className="pr-summary-section-body">
+          {pr.description ? <ProviderMarkdown source={pr.description} baseUrl={pr.url} /> : <p className="pr-muted">No description.</p>}
+        </div>
+      </details>
+
+      <details className="pr-summary-section" open>
+        <summary>Checks <span>{pr.checks.length}</span></summary>
+        <div className="pr-summary-section-body">
+          {pr.checks.length > 0 ? (
+            <ul className="pr-facts">
+              {pr.checks.map((check, index) => (
+                <li key={`${check.name}:${index}`}><span>{check.name}</span><CheckStatus check={check} /></li>
+              ))}
+            </ul>
+          ) : <p className="pr-muted">No checks reported.</p>}
+        </div>
+      </details>
+
+      <section className="pr-summary-comments">
+        <h3>Comments <span>{pr.comments.length}</span></h3>
+        <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
+      </section>
+    </div>
+  );
+}
+
+function PullRequestTimeline({
+  path,
+  pr,
+  draft,
+  onDraft,
+  onUpdated,
+  onViewInCode,
+}: {
+  path: string;
+  pr: PullRequest;
+  draft: string;
+  onDraft: (draft: string) => void;
+  onUpdated: (next: PullRequest) => void;
+  onViewInCode: (comment: PullRequestComment) => void;
+}) {
+  const events = useMemo(() => buildPullRequestTimeline(pr), [pr]);
+  return (
+    <div className="pr-tab-scroll pr-timeline">
+      <div className="pr-timeline-feed" aria-label="Pull request timeline">
+        {events.map((event) => {
+          if (event.kind === 'comment') {
+            return <PullRequestCommentCard key={event.id} comment={event.comment} pr={pr} onViewInCode={onViewInCode} />;
+          }
+          if (event.kind === 'commit') {
+            const avatarUrl = markdownUrl(event.commit.avatar_url ?? undefined);
+            return (
+              <div className="pr-timeline-event pr-commit-event" key={event.id}>
+                <div className="pr-timeline-marker" aria-hidden="true">
+                  <span>{authorInitials(event.commit.author)}</span>
+                  {avatarUrl && <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.hidden = true; }} />}
                 </div>
-              </article>
+                <div className="pr-timeline-event-body">
+                  <div><strong>{event.commit.author}</strong> added a commit</div>
+                  <button type="button" disabled={!event.commit.url} onClick={() => event.commit.url && void shellOpen(event.commit.url)}>
+                    <code>{event.commit.id.slice(0, 7)}</code><span>{event.commit.title}</span>{event.commit.url && <Icon name="external" size={10} />}
+                  </button>
+                  <time dateTime={event.at}>{dateLabel(event.at)}</time>
+                </div>
+              </div>
+            );
+          }
+          const completed = event.kind === 'completed';
+          return (
+            <div className={`pr-timeline-event pr-lifecycle-event${completed ? ` ${event.state}` : ''}`} key={event.id}>
+              <div className="pr-timeline-marker" aria-hidden="true"><Icon name={completed ? (event.state === 'merged' ? 'check' : 'x') : 'branch'} size={14} /></div>
+              <div className="pr-timeline-event-body">
+                <strong>{completed ? `Pull request ${event.state}` : 'Pull request opened'}</strong>
+                <time dateTime={event.at}>{dateLabel(event.at)}</time>
+              </div>
             </div>
           );
-        }) : <p className="pr-muted">No comments yet.</p>}
-      </section>
+        })}
+      </div>
+      <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
     </div>
   );
 }
@@ -641,6 +704,17 @@ function PullRequestChanges({
     () => files.map((file) => ({ path: file.name, status: fileGitStatus(file) })),
     [files],
   );
+  const fileStats = useMemo(
+    () => new Map(files.map((file) => [file.name, diffStats(file)])),
+    [files],
+  );
+  const parsedTotals = useMemo(
+    () => [...fileStats.values()].reduce(
+      (total, stats) => ({ additions: total.additions + stats.additions, deletions: total.deletions + stats.deletions }),
+      { additions: 0, deletions: 0 },
+    ),
+    [fileStats],
+  );
   const selectedFile = selectedPath ? filesByPath.get(selectedPath) ?? null : null;
   const selectedStats = selectedFile ? diffStats(selectedFile) : null;
   const selectedThreads = useMemo(
@@ -882,10 +956,18 @@ function PullRequestChanges({
       {stalePatch && (
         <div className={`pr-inline-refresh${error ? ' error' : ''}`} role={error ? 'alert' : 'status'}>
           <Icon name={error ? 'x' : 'refresh'} size={12} className={loading ? 'spin' : undefined} />
-          <span>{error ? `Could not update changes: ${error}` : 'Updating changes for the latest push…'}</span>
+          <span>{error ? `Could not update code: ${error}` : 'Updating code for the latest push…'}</span>
           {error && <button type="button" className="h-link" onClick={() => setReload((value) => value + 1)}>Retry</button>}
         </div>
       )}
+      <div className="pr-code-overview" aria-label="Code change summary">
+        <span><Icon name="branch" size={12} /><code>{pr.source_branch}</code><Icon name="chev-right" size={10} /><code>{pr.target_branch}</code></span>
+        <span>{pr.commit_count || pr.commits.length} {pr.commit_count === 1 || pr.commits.length === 1 ? 'commit' : 'commits'}</span>
+        <span>{files.length} changed {files.length === 1 ? 'file' : 'files'}</span>
+        <span className="stat-add">+{pr.additions ?? parsedTotals.additions}</span>
+        <span className="stat-del">−{pr.deletions ?? parsedTotals.deletions}</span>
+      </div>
+      <div className="pr-changes-body">
       <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes-v2">
         <Panel defaultSize={22} minSize={14} maxSize={36}>
           <div
@@ -1035,21 +1117,75 @@ function PullRequestChanges({
           </div>
         </Panel>
       </PanelGroup>
+      </div>
     </div>
   );
 }
 
-type DetailTab = 'overview' | 'conversation' | 'changes';
+type DetailTab = 'summary' | 'timeline' | 'code';
 const DETAIL_TABS: { id: DetailTab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'conversation', label: 'Conversation' },
-  { id: 'changes', label: 'Changes' },
+  { id: 'summary', label: 'Summary' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'code', label: 'Code' },
 ];
+
+function PullRequestDetailTabs({
+  pr,
+  tab,
+  onSelect,
+}: {
+  pr: PullRequest;
+  tab: DetailTab;
+  onSelect: (tab: DetailTab) => void;
+}) {
+  const tabIndex = DETAIL_TABS.findIndex((item) => item.id === tab);
+  const selectTab = (next: DetailTab) => {
+    onSelect(next);
+    requestAnimationFrame(() => document.getElementById(`pr-tab-${pr.id}-${next}`)?.focus());
+  };
+  return (
+    <div
+      className="pr-detail-tabs"
+      role="tablist"
+      aria-label="Pull request details"
+      onKeyDown={(event) => {
+        let next = tabIndex;
+        if (event.key === 'ArrowRight') next = (tabIndex + 1) % DETAIL_TABS.length;
+        else if (event.key === 'ArrowLeft') next = (tabIndex - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = DETAIL_TABS.length - 1;
+        else return;
+        event.preventDefault();
+        selectTab(DETAIL_TABS[next].id);
+      }}
+    >
+      {DETAIL_TABS.map((item) => {
+        const count = item.id === 'timeline' ? pr.comment_count + pr.commits.length : item.id === 'code' ? pr.changed_files : null;
+        return (
+          <button
+            type="button"
+            role="tab"
+            id={`pr-tab-${pr.id}-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls={`pr-panel-${pr.id}-${item.id}`}
+            tabIndex={tab === item.id ? 0 : -1}
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+          >
+            {item.label}{count != null ? <span>{count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function PullRequestDetails({
   path,
   provider,
   pr,
+  tab,
+  onTabChange,
   onUpdated,
   onToast,
   followed,
@@ -1059,21 +1195,18 @@ function PullRequestDetails({
   path: string;
   provider: PullRequestList['repository']['provider'];
   pr: PullRequest;
+  tab: DetailTab;
+  onTabChange: (tab: DetailTab) => void;
   onUpdated: (next: PullRequest) => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
   followed: boolean;
   notificationPermission: 'unknown' | 'granted' | 'denied';
   onToggleFollow: () => void;
 }) {
-  const [tab, setTab] = useState<DetailTab>('overview');
+  const [commentDraft, setCommentDraft] = useState('');
   const [changesTarget, setChangesTarget] = useState<PullRequestChangesTarget | null>(null);
   const changesRequest = useRef(0);
   const open = () => { if (pr.url) void shellOpen(pr.url); };
-  const selectTab = (next: DetailTab) => {
-    setTab(next);
-    document.getElementById(`pr-tab-${pr.id}-${next}`)?.focus();
-  };
-  const tabIndex = DETAIL_TABS.findIndex((item) => item.id === tab);
   const readiness = pullRequestReadiness(pr, provider);
   const readinessIcon: IconName = readiness.tone === 'ready'
     ? 'check'
@@ -1092,7 +1225,7 @@ function PullRequestDetails({
       : !pr.source_commit
         ? 'Refresh this pull request before merging'
         : '';
-  const viewCommentInChanges = (comment: PullRequestComment) => {
+  const viewCommentInCode = (comment: PullRequestComment) => {
     if (!comment.path) return;
     const thread = (pr.review_threads ?? []).find((candidate) =>
       candidate.comments.some((item) => item.id === comment.id));
@@ -1102,7 +1235,7 @@ function PullRequestDetails({
       threadId: thread?.id ?? null,
       requestId: changesRequest.current,
     });
-    setTab('changes');
+    onTabChange('code');
   };
   const completeChangesNavigation = useCallback((requestId: number) => {
     setChangesTarget((current) => current?.requestId === requestId ? null : current);
@@ -1112,7 +1245,7 @@ function PullRequestDetails({
     <article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
       <header className="pr-detail-head">
         <div>
-          <div className="pr-detail-kicker">#{pr.id} · {pr.author}</div>
+          <div className="pr-detail-kicker">{pr.author} · {relativeTimeLabel(pr.created_at)} · {displayState(pr)}</div>
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
@@ -1173,55 +1306,31 @@ function PullRequestDetails({
       </div>
 
       <div
-        className="pr-detail-tabs"
-        role="tablist"
-        aria-label="Pull request details"
-        onKeyDown={(event) => {
-          let next = tabIndex;
-          if (event.key === 'ArrowRight') next = (tabIndex + 1) % DETAIL_TABS.length;
-          else if (event.key === 'ArrowLeft') next = (tabIndex - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
-          else if (event.key === 'Home') next = 0;
-          else if (event.key === 'End') next = DETAIL_TABS.length - 1;
-          else return;
-          event.preventDefault();
-          selectTab(DETAIL_TABS[next].id);
-        }}
-      >
-        {DETAIL_TABS.map((item) => {
-          const count = item.id === 'conversation' ? pr.comment_count : item.id === 'changes' ? pr.changed_files : null;
-          return (
-            <button
-              type="button"
-              role="tab"
-              id={`pr-tab-${pr.id}-${item.id}`}
-              aria-selected={tab === item.id}
-              aria-controls={`pr-panel-${pr.id}-${item.id}`}
-              tabIndex={tab === item.id ? 0 : -1}
-              key={item.id}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}{count != null ? <span>{count}</span> : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <div
         className={`pr-tab-panel ${tab}`}
         role="tabpanel"
         id={`pr-panel-${pr.id}-${tab}`}
         aria-labelledby={`pr-tab-${pr.id}-${tab}`}
       >
-        {tab === 'overview' && <PullRequestOverview pr={pr} />}
-        {tab === 'conversation' && (
-          <PullRequestConversation
+        {tab === 'summary' && (
+          <PullRequestSummary
             path={path}
             pr={pr}
+            draft={commentDraft}
+            onDraft={setCommentDraft}
             onUpdated={onUpdated}
-            onViewInChanges={viewCommentInChanges}
           />
         )}
-        {tab === 'changes' && (
+        {tab === 'timeline' && (
+          <PullRequestTimeline
+            path={path}
+            pr={pr}
+            draft={commentDraft}
+            onDraft={setCommentDraft}
+            onUpdated={onUpdated}
+            onViewInCode={viewCommentInCode}
+          />
+        )}
+        {tab === 'code' && (
           <PullRequestChanges
             path={path}
             provider={provider}
@@ -1257,9 +1366,12 @@ export function PullRequests({
   const seedAfterProviderWrite = usePullRequests((state) => state.seedAfterProviderWrite);
   const followBranchMatch = usePullRequests((state) => state.followBranchMatch);
   const [data, setData] = useState<PullRequestList | null>(null);
+  const [inboxFilter, setInboxFilter] = useState<PullRequestInboxFilter>('all');
+  const [inboxQuery, setInboxQuery] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openedId, setOpenedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PullRequest | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>('summary');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailReload, setDetailReload] = useState(0);
@@ -1306,6 +1418,8 @@ export function PullRequests({
 
   useEffect(() => {
     setData(null);
+    setInboxFilter('all');
+    setInboxQuery('');
     setSelectedId(null);
     setOpenedId(null);
     setDetail(null);
@@ -1315,6 +1429,10 @@ export function PullRequests({
   }, [path]);
 
   useEffect(() => {
+    setDetailTab('summary');
+  }, [path, openedId]);
+
+  useEffect(() => {
     void refresh();
     return () => {
       generation.current += 1;
@@ -1322,9 +1440,13 @@ export function PullRequests({
     };
   }, [refresh]);
 
+  const filteredPullRequests = useMemo(
+    () => filterPullRequests(data?.pull_requests ?? [], inboxFilter, inboxQuery),
+    [data, inboxFilter, inboxQuery],
+  );
   const selectedSummary = useMemo(
-    () => data?.pull_requests.find((pr) => pr.id === selectedId) ?? null,
-    [data, selectedId],
+    () => filteredPullRequests.find((pr) => pr.id === selectedId) ?? null,
+    [filteredPullRequests, selectedId],
   );
   const openedSummary = useMemo(
     () => data?.pull_requests.find((pr) => pr.id === openedId) ?? null,
@@ -1336,6 +1458,20 @@ export function PullRequests({
   const openedFollowed = openedKey ? followed[openedKey] ?? null : null;
   const openedRevision = openedKey ? activityRevision[openedKey] ?? 0 : 0;
   const observedRevision = useRef(0);
+
+  useEffect(() => {
+    if (openedId != null) return;
+    setSelectedId((current) => reconcilePullRequestSelection(filteredPullRequests, current));
+  }, [filteredPullRequests, openedId]);
+
+  useEffect(() => {
+    const focusSearch = () => {
+      setOpenedId(null);
+      requestAnimationFrame(() => document.getElementById('pr-inbox-search')?.focus());
+    };
+    window.addEventListener('strand:pull-request-search', focusSearch);
+    return () => window.removeEventListener('strand:pull-request-search', focusSearch);
+  }, []);
 
   useEffect(() => {
     observedRevision.current = openedRevision;
@@ -1433,11 +1569,11 @@ export function PullRequests({
   }, [path, openedId, detailReload]);
 
   const move = (delta: number) => {
-    if (!data?.pull_requests.length) return;
-    const index = Math.max(0, data.pull_requests.findIndex((pr) => pr.id === selectedId));
-    const next = Math.min(data.pull_requests.length - 1, Math.max(0, index + delta));
-    setSelectedId(data.pull_requests[next].id);
-    document.getElementById(`pr-row-${data.pull_requests[next].id}`)?.scrollIntoView({ block: 'nearest' });
+    if (!filteredPullRequests.length) return;
+    const index = Math.max(0, filteredPullRequests.findIndex((pr) => pr.id === selectedId));
+    const next = Math.min(filteredPullRequests.length - 1, Math.max(0, index + delta));
+    setSelectedId(filteredPullRequests[next].id);
+    document.getElementById(`pr-row-${filteredPullRequests[next].id}`)?.scrollIntoView({ block: 'nearest' });
   };
 
   const openPullRequest = (id: number) => {
@@ -1454,7 +1590,9 @@ export function PullRequests({
     setDetail(next);
     setData((current) => current ? {
       ...current,
-      pull_requests: current.pull_requests.map((item) => item.id === next.id ? next : item),
+      pull_requests: current.pull_requests.map((item) => item.id === next.id
+        ? { ...next, authored_by_viewer: item.authored_by_viewer }
+        : item),
     } : current);
     // The next visible activity poll becomes the new baseline instead of
     // treating our own provider write as a remote change and reloading detail.
@@ -1498,9 +1636,9 @@ export function PullRequests({
         return;
       }
       setData((current) => ({
-        repository: match.repository,
+        repository: current?.repository ?? match.repository,
         pull_requests: [
-          match.pull_request,
+          { ...match.pull_request, authored_by_viewer: true },
           ...(current?.pull_requests.filter((item) => item.id !== match.pull_request.id) ?? []),
         ],
       }));
@@ -1554,19 +1692,20 @@ export function PullRequests({
           onClose={() => setCreateOpen(false)}
         />
       ) : null}
-      <div className="pr-toolbar">
+      <div className={`pr-toolbar${openedId != null && detail ? ' detail' : ''}`}>
         <div>
           {openedId != null ? (
             <button type="button" className="h-link pr-back" onClick={closePullRequest}>
               <Icon name="chev-left" size={12} /> Pull Requests
             </button>
-          ) : <strong>Pull Requests</strong>}
+          ) : null}
           {data && openedSummary ? (
             <span>#{openedSummary.id} · {openedSummary.title}</span>
-          ) : data ? (
-            <span>{providerName(data.repository.provider)} · {data.repository.label} · {data.repository.remote}</span>
           ) : null}
         </div>
+        {openedId != null && detail ? (
+          <PullRequestDetailTabs pr={detail} tab={detailTab} onSelect={setDetailTab} />
+        ) : null}
         <div className="pr-toolbar-actions">
           {openedFollowed?.error ? (
             <span className="pr-refresh-failed" role="status" title={openedFollowed.error}>
@@ -1610,6 +1749,73 @@ export function PullRequests({
         <div className="pr-main">
           {openedId == null ? (
             <div className="pr-list-screen">
+              <div className="pr-inbox-head">
+                <h1>Pull requests</h1>
+                <p>
+                  Review and track work across {providerName(data.repository.provider)}
+                  {data.repository.viewer ? <> as <strong>{data.repository.viewer}</strong></> : null}.
+                </p>
+              </div>
+              <div className="pr-inbox-controls">
+                <label className="pr-inbox-search" htmlFor="pr-inbox-search">
+                  <Icon name="search" size={17} />
+                  <input
+                    id="pr-inbox-search"
+                    type="search"
+                    value={inboxQuery}
+                    placeholder="Search pull requests"
+                    autoComplete="off"
+                    onChange={(event) => setInboxQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown' && filteredPullRequests.length) {
+                        event.preventDefault();
+                        document.getElementById('pr-listbox')?.focus();
+                      }
+                    }}
+                  />
+                  {inboxQuery && (
+                    <button type="button" onClick={() => setInboxQuery('')} aria-label="Clear pull request search">
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
+                </label>
+                <div
+                  className="pr-inbox-filters"
+                  role="tablist"
+                  aria-label="Pull request filter"
+                  onKeyDown={(event) => {
+                    const filters: PullRequestInboxFilter[] = ['all', 'authored', 'completed'];
+                    const index = filters.indexOf(inboxFilter);
+                    let next = index;
+                    if (event.key === 'ArrowRight') next = (index + 1) % filters.length;
+                    else if (event.key === 'ArrowLeft') next = (index - 1 + filters.length) % filters.length;
+                    else if (event.key === 'Home') next = 0;
+                    else if (event.key === 'End') next = filters.length - 1;
+                    else return;
+                    event.preventDefault();
+                    setInboxFilter(filters[next]);
+                    requestAnimationFrame(() => document.getElementById(`pr-filter-${filters[next]}`)?.focus());
+                  }}
+                >
+                  {([
+                    ['all', 'All', data.pull_requests.length],
+                    ['authored', 'Authored', data.pull_requests.filter((pr) => pr.authored_by_viewer).length],
+                    ['completed', 'Completed', data.pull_requests.filter((pr) => ['merged', 'closed', 'completed', 'abandoned'].includes(pr.state.toLowerCase())).length],
+                  ] as const).map(([id, label, count]) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      id={`pr-filter-${id}`}
+                      aria-selected={inboxFilter === id}
+                      tabIndex={inboxFilter === id ? 0 : -1}
+                      key={id}
+                      onClick={() => setInboxFilter(id)}
+                    >
+                      {label}<span>{count}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div
                 id="pr-listbox"
                 className="pr-list"
@@ -1620,12 +1826,12 @@ export function PullRequests({
                 onKeyDown={(event) => {
                   if (event.key === 'ArrowDown' || event.key === 'j') { event.preventDefault(); move(1); }
                   else if (event.key === 'ArrowUp' || event.key === 'k') { event.preventDefault(); move(-1); }
-                  else if (event.key === 'Home') { event.preventDefault(); setSelectedId(data.pull_requests[0]?.id ?? null); }
-                  else if (event.key === 'End') { event.preventDefault(); setSelectedId(data.pull_requests.at(-1)?.id ?? null); }
+                  else if (event.key === 'Home') { event.preventDefault(); setSelectedId(filteredPullRequests[0]?.id ?? null); }
+                  else if (event.key === 'End') { event.preventDefault(); setSelectedId(filteredPullRequests.at(-1)?.id ?? null); }
                   else if (event.key === 'Enter' && selectedSummary) { event.preventDefault(); openPullRequest(selectedSummary.id); }
                 }}
               >
-                {data.pull_requests.map((pr) => {
+                {filteredPullRequests.map((pr) => {
                   const isFollowed = Boolean(followed[pullRequestFollowKey(data.repository, pr.id)]);
                   return (
                   <button
@@ -1638,18 +1844,35 @@ export function PullRequests({
                     className={`pr-row${pr.id === selectedId ? ' selected' : ''}`}
                     onClick={() => openPullRequest(pr.id)}
                   >
-                    <span className="pr-row-top">
-                      <b>#{pr.id}</b>
+                    <span className="pr-row-symbol" aria-hidden="true"><Icon name="branch" size={18} /></span>
+                    <span className="pr-row-content">
+                      <strong>{pr.title}</strong>
+                      <span className="pr-row-meta"><b>{pr.author}</b> · {data.repository.label} · <code>{pr.source_branch}</code></span>
+                    </span>
+                    <span className="pr-row-trailing">
+                      <time dateTime={pr.updated_at || pr.created_at}>{relativeTimeLabel(pr.updated_at || pr.created_at)}</time>
                       <span className="pr-row-status">
                         {isFollowed && <span className="pr-followed-badge" title="Following"><Icon name="bell" size={11} /> Following</span>}
                         <span className={`pr-state ${displayState(pr)}`}>{displayState(pr)}</span>
                       </span>
+                      {(pr.additions != null || pr.deletions != null) && (
+                        <span className="pr-row-diff"><span>+{pr.additions ?? 0}</span><span>−{pr.deletions ?? 0}</span></span>
+                      )}
                     </span>
-                    <strong>{pr.title}</strong>
-                    <span className="pr-row-meta">{pr.author} · {pr.source_branch} → {pr.target_branch}</span>
                   </button>
                   );
                 })}
+                {filteredPullRequests.length === 0 && (
+                  <div className="pr-inbox-empty" role="status">
+                    <Icon name={inboxFilter === 'completed' ? 'check' : 'search'} size={22} />
+                    <strong>{inboxFilter === 'authored' && !data.repository.viewer
+                      ? 'Signed-in account unavailable'
+                      : inboxQuery ? 'No matching pull requests' : `No ${inboxFilter} pull requests`}</strong>
+                    <p>{inboxFilter === 'authored' && !data.repository.viewer
+                      ? `Strand could not identify the account signed into ${providerName(data.repository.provider)}. Refresh after signing in again.`
+                      : 'Try another filter or search term.'}</p>
+                  </div>
+                )}
               </div>
             </div>
           ) : detail && path ? (
@@ -1658,6 +1881,8 @@ export function PullRequests({
               path={path}
               provider={data.repository.provider}
               pr={detail}
+              tab={detailTab}
+              onTabChange={setDetailTab}
               onUpdated={updatePullRequest}
               onToast={onToast}
               followed={Boolean(openedFollowed)}

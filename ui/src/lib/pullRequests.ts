@@ -1,12 +1,102 @@
 import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
 
 import { hashPatch } from './patch';
+import { match } from './fuzzy';
 import type {
   PullRequest,
   PullRequestComment,
+  PullRequestCommit,
   PullRequestProvider,
   PullRequestReviewThreadUpdate,
 } from './types';
+
+export type PullRequestInboxFilter = 'all' | 'authored' | 'completed';
+
+export type PullRequestTimelineEvent =
+  | { kind: 'opened'; id: string; at: string }
+  | { kind: 'commit'; id: string; at: string; commit: PullRequestCommit }
+  | { kind: 'comment'; id: string; at: string; comment: PullRequestComment }
+  | { kind: 'completed'; id: string; at: string; state: 'merged' | 'closed' };
+
+export function isCompletedPullRequest(pr: PullRequest): boolean {
+  return ['merged', 'closed', 'completed', 'abandoned'].includes(pr.state.toLowerCase());
+}
+
+export function filterPullRequests(
+  pullRequests: readonly PullRequest[],
+  filter: PullRequestInboxFilter,
+  query: string,
+): PullRequest[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return pullRequests
+    .map((pr, index) => ({ pr, index }))
+    .filter(({ pr }) => {
+      if (filter === 'authored' && !pr.authored_by_viewer) return false;
+      if (filter === 'completed' && !isCompletedPullRequest(pr)) return false;
+      return true;
+    })
+    .map(({ pr, index }) => {
+      if (!normalizedQuery) return { pr, index, score: 0 };
+      const result = match(
+        normalizedQuery,
+        pr.title,
+        `#${pr.id} ${pr.author} ${pr.source_branch} ${pr.target_branch}`,
+      );
+      return result ? { pr, index, score: result.score } : null;
+    })
+    .filter((result): result is { pr: PullRequest; index: number; score: number } => result != null)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ pr }) => pr);
+}
+
+export function reconcilePullRequestSelection(
+  pullRequests: readonly PullRequest[],
+  selectedId: number | null,
+): number | null {
+  if (selectedId != null && pullRequests.some((pr) => pr.id === selectedId)) return selectedId;
+  return pullRequests[0]?.id ?? null;
+}
+
+export function buildPullRequestTimeline(pr: PullRequest): PullRequestTimelineEvent[] {
+  const fallbackAt = pr.updated_at || pr.created_at;
+  const events: PullRequestTimelineEvent[] = [
+    { kind: 'opened', id: `opened:${pr.id}`, at: pr.created_at },
+  ];
+  for (const commit of pr.commits) {
+    events.push({
+      kind: 'commit',
+      id: `commit:${commit.id}`,
+      at: commit.committed_at || fallbackAt,
+      commit,
+    });
+  }
+  const seenComments = new Set<string>();
+  for (const comment of pr.comments) {
+    if (seenComments.has(comment.id)) continue;
+    seenComments.add(comment.id);
+    events.push({
+      kind: 'comment',
+      id: `comment:${comment.id}`,
+      at: comment.created_at || fallbackAt,
+      comment,
+    });
+  }
+  if (pr.completed_at && isCompletedPullRequest(pr)) {
+    events.push({
+      kind: 'completed',
+      id: `completed:${pr.id}`,
+      at: pr.completed_at,
+      state: ['merged', 'completed'].includes(pr.state.toLowerCase()) ? 'merged' : 'closed',
+    });
+  }
+  const rank = { opened: 0, commit: 1, comment: 2, completed: 3 } as const;
+  return events.sort((left, right) => {
+    const leftAt = Date.parse(left.at);
+    const rightAt = Date.parse(right.at);
+    const time = (Number.isNaN(leftAt) ? 0 : leftAt) - (Number.isNaN(rightAt) ? 0 : rightAt);
+    return time || rank[left.kind] - rank[right.kind] || left.id.localeCompare(right.id);
+  });
+}
 
 export type CheckTone = 'success' | 'running' | 'failed' | 'neutral';
 

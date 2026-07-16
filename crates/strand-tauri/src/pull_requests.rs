@@ -28,11 +28,11 @@ const GITHUB_BRANCH_STATE: &str = "open";
 const AZURE_BRANCH_STATUS: &str = "active";
 const GITHUB_LIST_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
-    "url,reviewDecision"
+    "closedAt,mergedAt,url,reviewDecision,additions,deletions,changedFiles"
 );
 const GITHUB_DETAIL_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
-    "url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
+    "closedAt,mergedAt,url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
     "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
 );
 const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
@@ -121,6 +121,7 @@ pub struct PullRequestRepository {
     pub provider: PullRequestProvider,
     pub remote: String,
     pub label: String,
+    pub viewer: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -134,6 +135,16 @@ pub struct PullRequestReviewer {
 pub struct PullRequestCheck {
     pub name: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestCommit {
+    pub id: String,
+    pub title: String,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    pub committed_at: String,
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -185,6 +196,7 @@ pub struct PullRequest {
     pub target_branch: String,
     pub created_at: String,
     pub updated_at: String,
+    pub completed_at: Option<String>,
     pub url: String,
     pub description: String,
     pub merge_status: String,
@@ -200,6 +212,8 @@ pub struct PullRequest {
     pub checks_complete: bool,
     pub comments: Vec<PullRequestComment>,
     pub review_threads: Vec<PullRequestReviewThread>,
+    pub authored_by_viewer: bool,
+    pub commits: Vec<PullRequestCommit>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -542,31 +556,41 @@ fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result
     // commits, reviews, and checks across 100 PRs can exceed GitHub's 500k
     // possible-node cap even for a modest repository. Rich fields load only
     // for the selected PR via `detail_github`.
-    let output = run_command(
-        cwd,
-        "gh",
-        &[
-            "pr",
-            "list",
-            "--repo",
-            &slug,
-            "--state",
-            "all",
-            "--limit",
-            "100",
-            "--json",
-            GITHUB_LIST_FIELDS,
-        ],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
+    let (output, viewer) = thread::scope(|scope| {
+        let viewer = scope.spawn(|| github_viewer(cwd));
+        let output = run_command(
+            cwd,
+            "gh",
+            &[
+                "pr",
+                "list",
+                "--repo",
+                &slug,
+                "--state",
+                "all",
+                "--limit",
+                "100",
+                "--json",
+                GITHUB_LIST_FIELDS,
+            ],
+            &[("GH_PROMPT_DISABLED", "1")],
+        );
+        let viewer = viewer.join().ok().and_then(Result::ok);
+        (output, viewer)
+    });
+    let output = output?;
     let values: Vec<Value> = serde_json::from_slice(&output)
         .map_err(|e| format!("GitHub CLI returned invalid JSON: {e}"))?;
-    let pull_requests = values.iter().filter_map(parse_github_pr).collect();
+    let pull_requests = values
+        .iter()
+        .filter_map(|value| parse_github_pr(value, viewer.as_deref()))
+        .collect();
     Ok(PullRequestList {
         repository: PullRequestRepository {
             provider: PullRequestProvider::GitHub,
             remote,
             label: slug,
+            viewer,
         },
         pull_requests,
     })
@@ -604,15 +628,26 @@ fn for_branch_github(
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
     Ok(values
         .first()
-        .and_then(parse_github_pr)
+        .and_then(|value| parse_github_pr(value, None))
         .map(|pull_request| PullRequestBranchMatch {
             repository: PullRequestRepository {
                 provider: PullRequestProvider::GitHub,
                 remote,
                 label: slug,
+                viewer: None,
             },
             pull_request,
         }))
+}
+
+fn github_viewer(cwd: &str) -> Result<String> {
+    let output = run_command(
+        cwd,
+        "gh",
+        &["api", "user", "--jq", ".login"],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    non_empty_text(&output, "GitHub CLI returned no signed-in account")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -716,6 +751,7 @@ fn activity_github(
             provider: PullRequestProvider::GitHub,
             remote,
             label: format!("{owner}/{repo}"),
+            viewer: None,
         },
     )
 }
@@ -739,8 +775,11 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
     )?;
     let value: Value = serde_json::from_slice(&output)
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
-    let mut pull_request = parse_github_pr(&value)
+    let mut pull_request = parse_github_pr(&value, None)
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
+    for commit in &mut pull_request.commits {
+        commit.url = Some(format!("https://github.com/{owner}/{repo}/commit/{}", commit.id));
+    }
     pull_request.checks_complete = true;
     let review_threads = github_review_threads(cwd, &owner, &repo, id)?;
     pull_request.comments.extend(
@@ -940,40 +979,49 @@ fn list_azure(
     repo: String,
 ) -> Result<PullRequestList> {
     let organization_url = format!("https://dev.azure.com/{organization}/");
-    let output = run_command(
-        cwd,
-        "az",
-        &[
-            "repos",
-            "pr",
-            "list",
-            "--organization",
-            &organization_url,
-            "--project",
-            &project,
-            "--repository",
-            &repo,
-            "--status",
-            "all",
-            "--top",
-            "100",
-            "--output",
-            "json",
-            "--only-show-errors",
-        ],
-        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
-    )?;
+    let (output, viewer) = thread::scope(|scope| {
+        let viewer = scope.spawn(|| azure_viewer(cwd));
+        let output = run_command(
+            cwd,
+            "az",
+            &[
+                "repos",
+                "pr",
+                "list",
+                "--organization",
+                &organization_url,
+                "--project",
+                &project,
+                "--repository",
+                &repo,
+                "--status",
+                "all",
+                "--top",
+                "100",
+                "--output",
+                "json",
+                "--only-show-errors",
+            ],
+            &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+        );
+        let viewer = viewer.join().ok().and_then(Result::ok);
+        (output, viewer)
+    });
+    let output = output?;
     let values: Vec<Value> = serde_json::from_slice(&output)
         .map_err(|e| format!("Azure CLI returned invalid JSON: {e}"))?;
     let pull_requests = values
         .iter()
-        .filter_map(|value| parse_azure_pr(value, &organization, &project, &repo))
+        .filter_map(|value| {
+            parse_azure_pr(value, &organization, &project, &repo, viewer.as_deref())
+        })
         .collect();
     Ok(PullRequestList {
         repository: PullRequestRepository {
             provider: PullRequestProvider::AzureDevOps,
             remote,
             label: format!("{organization}/{project}/{repo}"),
+            viewer,
         },
         pull_requests,
     })
@@ -1017,17 +1065,48 @@ fn for_branch_azure(
     let values: Vec<Value> = serde_json::from_slice(&output)
         .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
     Ok(values.first().and_then(|value| {
-        parse_azure_pr(value, &organization, &project, &repo).map(|pull_request| {
+        parse_azure_pr(value, &organization, &project, &repo, None)
+        .map(|pull_request| {
             PullRequestBranchMatch {
                 repository: PullRequestRepository {
                     provider: PullRequestProvider::AzureDevOps,
                     remote,
                     label: format!("{organization}/{project}/{repo}"),
+                    viewer: None,
                 },
                 pull_request,
             }
         })
     }))
+}
+
+fn azure_viewer(cwd: &str) -> Result<String> {
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "account",
+            "show",
+            "--query",
+            "user.name",
+            "--output",
+            "tsv",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    non_empty_text(&output, "Azure CLI returned no signed-in account")
+}
+
+fn non_empty_text(output: &[u8], empty_message: &str) -> Result<String> {
+    let value = String::from_utf8(output.to_vec())
+        .map_err(|error| format!("Provider CLI returned invalid text: {error}"))?;
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        Err(empty_message.into())
+    } else {
+        Ok(value)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1097,11 +1176,21 @@ fn detail_azure(
     id: u64,
 ) -> Result<PullRequest> {
     let value = azure_pr_value(cwd, &organization, id)?;
-    let mut pull_request = parse_azure_pr(&value, &organization, &project, &repo)
+    let mut pull_request = parse_azure_pr(&value, &organization, &project, &repo, None)
         .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
-    pull_request.comments = azure_comments(cwd, &organization, &project, &repo, id)?;
+    let (comments, commits, checks) = thread::scope(|scope| {
+        let comments = scope.spawn(|| azure_comments(cwd, &organization, &project, &repo, id));
+        let commits = scope.spawn(|| azure_commits(cwd, &organization, &project, &repo, id));
+        let checks = scope.spawn(|| azure_policies(cwd, &organization, id));
+        (comments.join(), commits.join(), checks.join())
+    });
+    pull_request.comments = comments
+        .map_err(|_| "Azure discussion query worker failed".to_string())??;
     pull_request.comment_count = pull_request.comments.len();
-    if let Ok(checks) = azure_policies(cwd, &organization, id) {
+    pull_request.commits = commits
+        .map_err(|_| "Azure commit query worker failed".to_string())??;
+    pull_request.commit_count = pull_request.commits.len();
+    if let Ok(Ok(checks)) = checks {
         pull_request.checks = checks
             .iter()
             .map(|check| PullRequestCheck {
@@ -1123,7 +1212,7 @@ fn activity_azure(
     id: u64,
 ) -> Result<PullRequestActivitySnapshot> {
     let value = azure_pr_value(cwd, &organization, id)?;
-    let pull_request = parse_azure_pr(&value, &organization, &project, &repo)
+    let pull_request = parse_azure_pr(&value, &organization, &project, &repo, None)
         .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
     let comments = azure_comments(cwd, &organization, &project, &repo, id)?
         .into_iter()
@@ -1149,6 +1238,7 @@ fn activity_azure(
             provider: PullRequestProvider::AzureDevOps,
             remote,
             label: format!("{organization}/{project}/{repo}"),
+            viewer: None,
         },
         id: pull_request.id,
         title: pull_request.title,
@@ -1232,6 +1322,46 @@ fn azure_comments(
             "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id_text}"
         ),
     ))
+}
+
+fn azure_commits(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+) -> Result<Vec<PullRequestCommit>> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let project_arg = format!("project={project}");
+    let repository_arg = format!("repositoryId={repo}");
+    let pull_request_arg = format!("pullRequestId={id}");
+    let output = run_command(
+        cwd,
+        "az",
+        &[
+            "devops",
+            "invoke",
+            "--area",
+            "git",
+            "--resource",
+            "pullRequestCommits",
+            "--route-parameters",
+            &project_arg,
+            &repository_arg,
+            &pull_request_arg,
+            "--organization",
+            &organization_url,
+            "--api-version",
+            "7.1",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid commit JSON: {error}"))?;
+    Ok(parse_azure_commits(&value))
 }
 
 fn azure_policies(cwd: &str, organization: &str, id: u64) -> Result<Vec<PullRequestActivityCheck>> {
@@ -1803,8 +1933,9 @@ fn normalize_azure_policy_status(status: &str) -> String {
     .into()
 }
 
-fn parse_github_pr(value: &Value) -> Option<PullRequest> {
+fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
     let id = value.get("number")?.as_u64()?;
+    let author = text(value.pointer("/author/login")).unwrap_or_else(|| "unknown".into());
     let comments = array(value, "comments")
         .iter()
         .filter_map(|comment| {
@@ -1864,12 +1995,13 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
             .get("isDraft")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        author: text(value.pointer("/author/login")).unwrap_or_else(|| "unknown".into()),
+        author: author.clone(),
         source_branch: text(value.get("headRefName")).unwrap_or_default(),
         source_commit: text(value.get("headRefOid")).unwrap_or_default(),
         target_branch: text(value.get("baseRefName")).unwrap_or_default(),
         created_at: text(value.get("createdAt")).unwrap_or_default(),
         updated_at: text(value.get("updatedAt")).unwrap_or_default(),
+        completed_at: text(value.get("mergedAt")).or_else(|| text(value.get("closedAt"))),
         url: text(value.get("url")).unwrap_or_default(),
         description: text(value.get("body")).unwrap_or_default(),
         merge_status: text(value.get("mergeStateStatus")).unwrap_or_default(),
@@ -1888,7 +2020,37 @@ fn parse_github_pr(value: &Value) -> Option<PullRequest> {
         checks_complete: value.get("statusCheckRollup").is_some(),
         comments,
         review_threads: Vec::new(),
+        authored_by_viewer: viewer
+            .is_some_and(|login| login.eq_ignore_ascii_case(&author)),
+        commits: parse_github_commits(value),
     })
+}
+
+fn parse_github_commits(value: &Value) -> Vec<PullRequestCommit> {
+    array(value, "commits")
+        .iter()
+        .filter_map(|commit| {
+            let author_value = array(commit, "authors").first();
+            let login = author_value.and_then(|author| text(author.get("login")));
+            let author = author_value
+                .and_then(|author| {
+                    text(author.get("name"))
+                        .or_else(|| text(author.get("login")))
+                        .or_else(|| text(author.get("email")))
+                })
+                .unwrap_or_else(|| "unknown".into());
+            Some(PullRequestCommit {
+                id: text(commit.get("oid"))?,
+                title: text(commit.get("messageHeadline")).unwrap_or_else(|| "Untitled commit".into()),
+                author,
+                avatar_url: login.as_deref().and_then(github_avatar_url),
+                committed_at: text(commit.get("committedDate"))
+                    .or_else(|| text(commit.get("authoredDate")))
+                    .unwrap_or_default(),
+                url: None,
+            })
+        })
+        .collect()
 }
 
 fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
@@ -2021,8 +2183,11 @@ fn parse_azure_pr(
     organization: &str,
     project: &str,
     repo: &str,
+    viewer: Option<&str>,
 ) -> Option<PullRequest> {
     let id = value.get("pullRequestId")?.as_u64()?;
+    let author = text(value.pointer("/createdBy/displayName")).unwrap_or_else(|| "unknown".into());
+    let author_identity = text(value.pointer("/createdBy/uniqueName"));
     let reviewers = array(value, "reviewers")
         .iter()
         .filter_map(|reviewer| {
@@ -2069,12 +2234,13 @@ fn parse_azure_pr(
             .get("isDraft")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        author: text(value.pointer("/createdBy/displayName")).unwrap_or_else(|| "unknown".into()),
+        author,
         source_branch: branch_name(text(value.get("sourceRefName")).unwrap_or_default()),
         source_commit: text(value.pointer("/lastMergeSourceCommit/commitId")).unwrap_or_default(),
         target_branch: branch_name(text(value.get("targetRefName")).unwrap_or_default()),
         created_at: text(value.get("creationDate")).unwrap_or_default(),
         updated_at: text(value.get("closedDate")).unwrap_or_default(),
+        completed_at: text(value.get("closedDate")),
         url: format!("https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"),
         description: text(value.get("description")).unwrap_or_default(),
         merge_status: text(value.get("mergeStatus")).unwrap_or_default(),
@@ -2093,7 +2259,38 @@ fn parse_azure_pr(
         checks_complete: false,
         comments: Vec::new(),
         review_threads: Vec::new(),
+        authored_by_viewer: viewer.is_some_and(|identity| {
+            author_identity
+                .as_deref()
+                .is_some_and(|author| author.eq_ignore_ascii_case(identity))
+        }),
+        commits: parse_azure_commits(value),
     })
+}
+
+fn parse_azure_commits(value: &Value) -> Vec<PullRequestCommit> {
+    value
+        .get("value")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|commit| {
+            Some(PullRequestCommit {
+                id: text(commit.get("commitId"))?,
+                title: text(commit.get("comment"))
+                    .and_then(|comment| comment.lines().next().map(str::to_string))
+                    .unwrap_or_else(|| "Untitled commit".into()),
+                author: text(commit.pointer("/author/name")).unwrap_or_else(|| "unknown".into()),
+                avatar_url: text(commit.pointer("/author/imageUrl")),
+                committed_at: text(commit.pointer("/committer/date"))
+                    .or_else(|| text(commit.pointer("/author/date")))
+                    .unwrap_or_default(),
+                url: text(commit.get("remoteUrl")),
+            })
+        })
+        .collect()
 }
 
 fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> {
@@ -2394,44 +2591,86 @@ mod tests {
     fn normalizes_github_and_azure_payloads() {
         let github: Value = serde_json::from_str(
             r#"{
-              "number": 42, "title": "Ship it", "state": "OPEN", "isDraft": false,
+              "number": 42, "title": "Ship it", "state": "MERGED", "isDraft": false,
               "author": {"login": "octo"}, "headRefName": "feature", "baseRefName": "main",
               "headRefOid": "1111111111111111111111111111111111111111",
-              "comments": [{"id": "c"}], "commits": [{"oid": "a"}],
+              "mergedAt": "2026-07-15T10:00:00Z",
+              "comments": [{"id": "c"}], "commits": [{
+                "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "messageHeadline": "Finish the inbox",
+                "committedDate": "2026-07-15T09:30:00Z",
+                "authors": [{"login": "octo", "name": "Octo Cat"}]
+              }],
               "latestReviews": [{"author": {"login": "reviewer"}, "state": "APPROVED"}],
               "statusCheckRollup": [{"name": "CI", "status": "COMPLETED", "conclusion": "SUCCESS"}]
             }"#,
         )
         .unwrap();
-        let github = parse_github_pr(&github).unwrap();
+        let github = parse_github_pr(&github, Some("OCTO")).unwrap();
         assert_eq!(github.id, 42);
-        assert_eq!(github.state, "open");
+        assert_eq!(github.state, "merged");
         assert_eq!(github.source_commit, "1111111111111111111111111111111111111111");
+        assert_eq!(github.completed_at.as_deref(), Some("2026-07-15T10:00:00Z"));
+        assert!(github.authored_by_viewer);
         assert_eq!(github.comment_count, 1);
         assert_eq!(github.comments.len(), 1);
+        assert_eq!(github.commits[0].title, "Finish the inbox");
+        assert_eq!(github.commits[0].author, "Octo Cat");
         assert_eq!(github.reviewers[0].status, "APPROVED");
         assert_eq!(github.checks[0].status, "SUCCESS");
 
         let azure: Value = serde_json::from_str(
             r#"{
               "pullRequestId": 7, "title": "Azure PR", "status": "active", "isDraft": true,
-              "createdBy": {"displayName": "Ada"}, "sourceRefName": "refs/heads/topic",
+              "createdBy": {"displayName": "Ada", "uniqueName": "ada@example.com"},
+              "sourceRefName": "refs/heads/topic",
               "targetRefName": "refs/heads/main",
+              "closedDate": "2026-07-15T12:00:00Z",
               "lastMergeSourceCommit": {"commitId": "2222222222222222222222222222222222222222"},
               "reviewers": [{"displayName": "Grace", "vote": 10, "isRequired": true}]
             }"#,
         )
         .unwrap();
-        let azure = parse_azure_pr(&azure, "org", "project", "repo").unwrap();
+        let azure = parse_azure_pr(
+            &azure,
+            "org",
+            "project",
+            "repo",
+            Some("ADA@example.com"),
+        )
+        .unwrap();
         assert_eq!(azure.id, 7);
         assert_eq!(azure.source_branch, "topic");
         assert_eq!(azure.source_commit, "2222222222222222222222222222222222222222");
+        assert_eq!(azure.completed_at.as_deref(), Some("2026-07-15T12:00:00Z"));
+        assert!(azure.authored_by_viewer);
         assert_eq!(azure.review_status, "approved");
         assert!(azure.reviewers[0].required);
+
+        let commits = parse_azure_commits(&serde_json::json!({ "value": [{
+            "commitId": "3333333333333333333333333333333333333333",
+            "comment": "Normalize commits\n\nDetails",
+            "author": {
+              "name": "Ada",
+              "date": "2026-07-15T11:00:00Z",
+              "imageUrl": "https://dev.azure.com/org/_apis/GraphProfile/MemberAvatars/ada"
+            },
+            "remoteUrl": "https://dev.azure.com/org/project/_git/repo/commit/333"
+        }] }));
+        assert_eq!(commits[0].title, "Normalize commits");
+        assert_eq!(commits[0].author, "Ada");
+        assert_eq!(commits[0].committed_at, "2026-07-15T11:00:00Z");
+        assert_eq!(
+            commits[0].avatar_url.as_deref(),
+            Some("https://dev.azure.com/org/_apis/GraphProfile/MemberAvatars/ada")
+        );
     }
 
     #[test]
     fn github_list_query_stays_shallow_and_auth_hints_are_specific() {
+        for field in ["additions", "deletions", "changedFiles", "closedAt", "mergedAt"] {
+            assert!(GITHUB_LIST_FIELDS.contains(field));
+        }
         for nested in ["comments", "commits", "latestReviews", "statusCheckRollup"] {
             assert!(!GITHUB_LIST_FIELDS.contains(nested));
             assert!(GITHUB_DETAIL_FIELDS.contains(nested));
@@ -2445,6 +2684,32 @@ mod tests {
         );
         assert!(auth_hint("gh", "authentication required").contains("gh auth login"));
         assert!(auth_hint("az", "Please run az login").contains("az login"));
+    }
+
+    #[test]
+    fn identity_failure_is_optional_and_closed_github_prs_keep_their_completion_time() {
+        let value = serde_json::json!({
+            "number": 9,
+            "title": "Not merged",
+            "state": "CLOSED",
+            "author": { "login": "octo" },
+            "closedAt": "2026-07-15T13:00:00Z"
+        });
+        let pr = parse_github_pr(&value, None).unwrap();
+        assert!(!pr.authored_by_viewer);
+        assert_eq!(pr.state, "closed");
+        assert_eq!(pr.completed_at.as_deref(), Some("2026-07-15T13:00:00Z"));
+
+        let azure = serde_json::json!({
+            "pullRequestId": 10,
+            "title": "Missing account",
+            "status": "abandoned",
+            "createdBy": { "displayName": "Ada", "uniqueName": "ada@example.com" },
+            "closedDate": "2026-07-15T14:00:00Z"
+        });
+        let pr = parse_azure_pr(&azure, "org", "project", "repo", None).unwrap();
+        assert!(!pr.authored_by_viewer);
+        assert_eq!(pr.completed_at.as_deref(), Some("2026-07-15T14:00:00Z"));
     }
 
     #[test]
@@ -2514,6 +2779,7 @@ mod tests {
                 provider: PullRequestProvider::GitHub,
                 remote: "origin".into(),
                 label: "acme/app".into(),
+                viewer: None,
             },
         )
         .unwrap();
@@ -2563,7 +2829,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let github = parse_github_pr(&github).unwrap();
+        let github = parse_github_pr(&github, None).unwrap();
         assert_eq!(github.comments[0].author, "octo");
         assert_eq!(
             github.comments[0].avatar_url.as_deref(),

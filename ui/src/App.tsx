@@ -1292,6 +1292,13 @@ export function App() {
         } satisfies PaletteAction] : []),
         ...(view === 'pull-requests' ? [
           {
+            id: 'pull-request-search',
+            label: 'Pull Requests: search…',
+            group: 'Actions',
+            keywords: 'pr inbox find filter authored completed',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-search')),
+          } satisfies PaletteAction,
+          {
             id: 'pull-request-merge',
             label: 'Pull Requests: merge open pull request…',
             group: 'Actions',

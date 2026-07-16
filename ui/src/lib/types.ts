@@ -190,6 +190,8 @@ export interface PullRequestRepository {
   provider: PullRequestProvider;
   remote: string;
   label: string;
+  /** Signed-in provider account; null when the CLI cannot identify it. */
+  viewer: string | null;
 }
 
 export interface PullRequestReviewer {
@@ -201,6 +203,15 @@ export interface PullRequestReviewer {
 export interface PullRequestCheck {
   name: string;
   status: string;
+}
+
+export interface PullRequestCommit {
+  id: string;
+  title: string;
+  author: string;
+  avatar_url: string | null;
+  committed_at: string;
+  url: string | null;
 }
 
 export interface PullRequestComment {
@@ -249,6 +260,7 @@ export interface PullRequest {
   target_branch: string;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
   url: string;
   description: string;
   merge_status: string;
@@ -265,6 +277,8 @@ export interface PullRequest {
   checks_complete: boolean;
   comments: PullRequestComment[];
   review_threads: PullRequestReviewThread[];
+  authored_by_viewer: boolean;
+  commits: PullRequestCommit[];
 }
 
 export interface PullRequestList {
