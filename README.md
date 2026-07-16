@@ -87,8 +87,11 @@ keyboard alone, and the mouse stays first-class.
   drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
-  remain enforced. Packaged desktop builds import the user's shell `PATH`, so
-  Homebrew and version-manager CLI installs work without a custom path. Azure
+  remain enforced. Windows notification monitoring reads the native desktop
+  permission instead of WebView2's browser permission shim. Packaged desktop
+  builds recover the user's CLI `PATH` from the Unix login shell or persisted
+  Windows environment, so package-manager and version-manager installs work
+  without a custom path. Azure
   inline comments need iteration tracking and
   submit-review and other lifecycle actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
@@ -147,8 +150,8 @@ keyboard alone, and the mouse stays first-class.
   per-provider model selection used by commit and PR generation, and CLI health
   checks with a remembered connected indicator. Packaged builds resolve these
   tools and their runtimes through
-  the user's shell `PATH`; custom paths remain available. Generation is
-  cancellable, scans conservative sensitive-file
+  the user's recovered Unix or Windows `PATH`; custom paths remain available.
+  Generation is cancellable, scans conservative sensitive-file
   signals before provider launch, reports partial-context coverage, preserves
   the replaced draft for one-step undo, and can retry explicitly with the other
   provider without changing your default. Repository-family writing profiles

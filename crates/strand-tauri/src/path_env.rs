@@ -1,10 +1,11 @@
 //! Recover the user's shell `PATH` for desktop-launched CLI processes.
 //!
-//! macOS LaunchServices (and some Linux desktop launchers) start GUI apps with
-//! a minimal environment that omits Homebrew, npm version managers, and
-//! `~/.local/bin`. Resolve the interactive login shell once, then pass the
-//! merged path directly to child processes. We deliberately do not mutate the
-//! process environment after Tauri has started its worker threads.
+//! Desktop launchers can start GUI apps with a stale or minimal environment
+//! that omits package-manager and version-manager directories. Resolve the
+//! interactive login shell on Unix and merge the persisted user/machine PATH
+//! on Windows, then pass the result directly to child processes. We
+//! deliberately do not mutate the process environment after Tauri has started
+//! its worker threads.
 
 use std::ffi::{OsStr, OsString};
 use std::sync::OnceLock;
@@ -40,8 +41,87 @@ fn resolve_effective_path() -> Option<OsString> {
         let fallback = merge_paths(conventional.as_deref(), inherited.as_deref());
         merge_paths(shell_path().as_deref(), fallback.as_deref())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        // Explorer and already-running launchers can retain an older PATH
+        // after a CLI installer updates the persisted environment. Preserve
+        // the inherited ordering, then append any current registry entries it
+        // missed so a newly installed npm/WinGet/tool shim remains reachable.
+        let registered = merge_paths(
+            windows_registry_path(
+                windows_sys::Win32::System::Registry::HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+            )
+            .as_deref(),
+            windows_registry_path(
+                windows_sys::Win32::System::Registry::HKEY_CURRENT_USER,
+                "Environment",
+            )
+            .as_deref(),
+        );
+        merge_paths(inherited.as_deref(), registered.as_deref())
+    }
+    #[cfg(not(any(unix, windows)))]
     inherited
+}
+
+#[cfg(windows)]
+fn windows_registry_path(
+    root: windows_sys::Win32::System::Registry::HKEY,
+    key: &str,
+) -> Option<OsString> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows_sys::Win32::{
+        Foundation::ERROR_SUCCESS,
+        System::Registry::{RegGetValueW, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ},
+    };
+
+    let key: Vec<u16> = OsStr::new(key).encode_wide().chain(Some(0)).collect();
+    let value: Vec<u16> = OsStr::new("Path").encode_wide().chain(Some(0)).collect();
+    let flags = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ;
+    let mut bytes = 0u32;
+    // SAFETY: both strings are NUL-terminated and the first call only asks
+    // advapi32 for the required output size.
+    if unsafe {
+        RegGetValueW(
+            root,
+            key.as_ptr(),
+            value.as_ptr(),
+            flags,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut bytes,
+        )
+    } != ERROR_SUCCESS
+        || bytes < 2
+    {
+        return None;
+    }
+
+    let mut buffer = vec![0u16; (bytes as usize + 1) / 2];
+    // SAFETY: `buffer` owns at least the byte count returned by the size
+    // query, and RegGetValueW receives that capacity through `bytes`.
+    if unsafe {
+        RegGetValueW(
+            root,
+            key.as_ptr(),
+            value.as_ptr(),
+            flags,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr().cast(),
+            &mut bytes,
+        )
+    } != ERROR_SUCCESS
+    {
+        return None;
+    }
+    buffer.truncate(
+        buffer
+            .iter()
+            .position(|unit| *unit == 0)
+            .unwrap_or(buffer.len()),
+    );
+    (!buffer.is_empty()).then(|| OsString::from_wide(&buffer))
 }
 
 #[cfg(unix)]
@@ -63,7 +143,7 @@ fn conventional_desktop_path() -> Option<OsString> {
         .flatten()
 }
 
-#[cfg(any(unix, test))]
+#[cfg(any(unix, windows, test))]
 fn merge_paths(preferred: Option<&OsStr>, fallback: Option<&OsStr>) -> Option<OsString> {
     let mut dirs = Vec::new();
     for path in [preferred, fallback].into_iter().flatten() {
@@ -229,6 +309,29 @@ mod tests {
         assert_eq!(
             std::env::split_paths(&merged).collect::<Vec<_>>(),
             vec![std::path::PathBuf::from("/usr/bin")]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn persisted_windows_paths_fill_gaps_without_reordering_inherited_entries() {
+        let inherited = OsStr::new(r"C:\Inherited;C:\Shared");
+        let registered = merge_paths(
+            Some(OsStr::new(r"C:\Machine;C:\Shared")),
+            Some(OsStr::new(r"C:\Users\me\AppData\Roaming\npm")),
+        );
+        let merged = merge_paths(Some(inherited), registered.as_deref()).unwrap();
+        assert_eq!(
+            std::env::split_paths(&merged).collect::<Vec<_>>(),
+            [
+                r"C:\Inherited",
+                r"C:\Shared",
+                r"C:\Machine",
+                r"C:\Users\me\AppData\Roaming\npm",
+            ]
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect::<Vec<_>>()
         );
     }
 

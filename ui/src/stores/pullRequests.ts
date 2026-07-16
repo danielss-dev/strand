@@ -1,11 +1,11 @@
 import {
-  isPermissionGranted,
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
 import { create } from 'zustand';
 
 import { settings as settingsDb } from '../lib/db';
+import { isDesktopNotificationPermissionGranted } from '../lib/notifications';
 import {
   isTerminalPullRequest,
   pullRequestActivityChanged,
@@ -154,7 +154,7 @@ export const usePullRequests = create<PullRequestMonitorState>((set, get) => ({
     let permission: NotificationPermission = 'unknown';
     if (isTauri()) {
       try {
-        permission = await isPermissionGranted() ? 'granted' : 'denied';
+        permission = await isDesktopNotificationPermissionGranted() ? 'granted' : 'denied';
       } catch {
         permission = 'denied';
       }

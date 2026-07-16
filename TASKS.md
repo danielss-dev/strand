@@ -1349,7 +1349,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     PR view mounted; manual Follow/Unfollow, muted auto-follow keys, hosted-PR
     worktree deduplication, SQLite-backed baselines, bounded two-PR polling,
     native coalesced notifications, and terminal auto-unfollow survive
-    navigation and relaunch.
+    navigation and relaunch. Windows permission hydration bypasses Tauri
+    2.3.3's false-denied Web Notification shim (`lib/notifications.ts`).
   - ☑ Create pull requests from the checked-out branch
     (`repo_pull_request_create`, `PullRequestCreateDialog`): the PR toolbar and
     command palette create GitHub or Azure DevOps PRs with title, description,
@@ -1859,10 +1860,11 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   suggest failures inline as "Suggestion failed: …" instead of a silently
   disabled sparkle / mislabeled "Commit failed:")
 - ☑ Desktop-launch CLI environment restoration (`path_env.rs` asynchronously
-  captures the interactive login-shell PATH once and retains conventional
-  Homebrew/local-bin fallbacks; shared canonical lookup, blank-override
-  normalization, and child PATH propagation make `gh`/`az`/`codex`/`claude`
-  plus npm runtimes available in packaged apps without searching the repo)
+  captures the interactive login-shell PATH on Unix and merges persisted
+  Windows user/machine PATH entries; shared canonical lookup, Windows batch
+  path normalization + absolute `cmd.exe`, blank-override normalization, and
+  child PATH propagation make `gh`/`az`/`codex`/`claude` plus npm runtimes
+  available in packaged apps without searching the repo)
 - ☑ Broken vendor-CLI installs stay distinct from signed-out sessions
   (`AiProviderStatus.error`, auth-failure classification, and `--version`
   login preflight prevent false “browser opened” messages)
