@@ -65,8 +65,10 @@ The sidebar has four primary rows — **Local Changes** (with an unstaged-count 
 - **Files** — the working-tree file tree; when a commit is selected in All
   Commits, it re-roots to that commit and shows its short hash. Recognizable
   logos identify common source types, including C#, F#, Visual Basic, JVM and
-  scripting languages, CMake, Razor, and XML. Clicking a file opens the matching
-  working-tree or historical version in the file view. Right-click a
+  scripting languages, CMake, Razor, and XML. Clicking a folder opens an index
+  of its immediate child folders and files using the same file-type icons; use
+  Arrow keys, Home/End, and Enter/Space to navigate it. Clicking a file opens
+  the matching working-tree or historical version in the file view. Right-click a
   working-tree file and choose **Open in editor** to open that exact path with
   the editor selected in Settings → Integrations. The external action is
   intentionally hidden while browsing a historical commit.

@@ -93,6 +93,22 @@
 
   --gutter: oklch(0.235 0.008 65);
   --selection: oklch(0.74 0.165 var(--accent-h, 55) / 0.32);
+
+  /* Mirrors Pierre Trees' dark file-icon palette so icons rendered outside
+     its shadow root stay visually identical to the Files tree. */
+  --tree-icon-gray: #adadb1;
+  --tree-icon-red: #ff6762;
+  --tree-icon-vermilion: #d5512f;
+  --tree-icon-orange: #ffa359;
+  --tree-icon-yellow: #ffd452;
+  --tree-icon-green: #5ecc71;
+  --tree-icon-teal: #64d1db;
+  --tree-icon-cyan: #68cdf2;
+  --tree-icon-blue: #69b1ff;
+  --tree-icon-indigo: #9d6afb;
+  --tree-icon-purple: #d568ea;
+  --tree-icon-pink: #ff678d;
+  --tree-icon-mauve: #79697b;
 }
 
 /* ─── Light theme — warm cream ─── */
@@ -139,6 +155,21 @@
 
   --gutter: oklch(0.94 0.009 80);
   --selection: oklch(0.62 0.18 var(--accent-h, 55) / 0.22);
+
+  /* Pierre Trees' corresponding light file-icon palette. */
+  --tree-icon-gray: #84848a;
+  --tree-icon-red: #d52c36;
+  --tree-icon-vermilion: #ff8c5b;
+  --tree-icon-orange: #d47628;
+  --tree-icon-yellow: #d5a910;
+  --tree-icon-green: #199f43;
+  --tree-icon-teal: #17a5af;
+  --tree-icon-cyan: #1ca1c7;
+  --tree-icon-blue: #1a85d4;
+  --tree-icon-indigo: #693acf;
+  --tree-icon-purple: #a631be;
+  --tree-icon-pink: #d32a61;
+  --tree-icon-mauve: #594c5b;
 }
 
 /* Accent presets — a single OKLCH hue (`--accent-h`) drives every accent token

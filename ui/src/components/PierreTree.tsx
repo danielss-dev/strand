@@ -83,8 +83,8 @@ interface PierreTreeProps {
    * owned by Pierre; this only tracks the active row.
    */
   selectedPath?: string | null;
-  /** Fired with the active (last-selected) path, or `null` when the selection empties. */
-  onSelect?: (path: string | null) => void;
+  /** Fired with the active (last-selected) path and its kind, or `null` when the selection empties. */
+  onSelect?: (path: string | null, kind: 'file' | 'directory' | null) => void;
   /** Fired whenever Pierre's multi-selection changes (file paths only). */
   onMultiSelectionChange?: (paths: string[]) => void;
   /**
@@ -274,7 +274,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       const next = sel.length ? sel[sel.length - 1] : null;
       // Ignore the echo of our own reflection (covers null === null too).
       if (next === selectedRef.current) return;
-      onSelectRef.current?.(next);
+      onSelectRef.current?.(next, next ? (files.has(next) ? 'file' : 'directory') : null);
     },
   });
 
@@ -319,7 +319,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   const followFromFocus = useCallback(() => {
     const focused = model.getFocusedPath();
     if (focused && fileSetRef.current.has(focused) && focused !== selectedRef.current) {
-      onSelectRef.current?.(focused);
+      onSelectRef.current?.(focused, 'file');
     }
   }, [model]);
   useEffect(() => {

@@ -1178,7 +1178,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             gitStatus={fileGitStatus}
             onMove={selectedCommit ? undefined : moveTo}
             selectedPath={selectedFile}
-            onSelect={(p) => selectFile(p, selectedCommit)}
+            onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
             menuItems={fileMenu}
             search
             initialExpansion="closed"

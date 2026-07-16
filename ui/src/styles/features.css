@@ -1858,6 +1858,188 @@
   max-width: 440px;
   line-height: 1.5;
 }
+
+/* Directory Content tab — a compact repository-native index assembled from
+   the already-loaded flat tree. It intentionally reads like a file browser,
+   not an error/empty state, while staying visually subordinate to source. */
+.fv-directory {
+  background: var(--bg-base);
+}
+.fv-dir-summary {
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 16px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+  font-variant-numeric: tabular-nums;
+}
+.fv-dir-summary .dot {
+  color: var(--text-dim);
+}
+.fv-dir-list {
+  flex: 1;
+  min-height: 0;
+  margin: 14px;
+  overflow: auto;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  outline: none;
+}
+.fv-dir-list:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-glow);
+  border-color: var(--accent);
+}
+.fv-dir-row {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.fv-dir-row:last-child {
+  border-bottom: 0;
+}
+.fv-dir-row:hover,
+.fv-dir-row.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.fv-dir-list:focus .fv-dir-row.active {
+  background: var(--bg-sel);
+}
+.fv-dir-icon {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.fv-dir-icon.directory {
+  color: var(--accent);
+}
+.tree-icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.tree-file-icon {
+  display: block;
+  color: var(--tree-icon-gray);
+  fill: currentColor;
+}
+.tree-file-icon[data-icon-token="git"] {
+  color: var(--tree-icon-vermilion);
+}
+.tree-file-icon:is(
+  [data-icon-token="claude"],
+  [data-icon-token="html"],
+  [data-icon-token="json"],
+  [data-icon-token="rust"],
+  [data-icon-token="svg"],
+  [data-icon-token="swift"],
+  [data-icon-token="zig"],
+  [data-icon-token="zip"]
+) { color: var(--tree-icon-orange); }
+.tree-file-icon:is(
+  [data-icon-token="biome"],
+  [data-icon-token="c"],
+  [data-icon-token="cpp"],
+  [data-icon-token="docker"],
+  [data-icon-token="python"],
+  [data-icon-token="typescript"],
+  [data-icon-token="vscode"],
+  [data-icon-token="webpack"]
+) { color: var(--tree-icon-blue); }
+.tree-file-icon:is(
+  [data-icon-token="bash"],
+  [data-icon-token="markdown"],
+  [data-icon-token="svgo"],
+  [data-icon-token="vue"]
+) { color: var(--tree-icon-green); }
+.tree-file-icon:is(
+  [data-icon-token="graphql"],
+  [data-icon-token="image"],
+  [data-icon-token="sass"]
+) { color: var(--tree-icon-pink); }
+.tree-file-icon:is(
+  [data-icon-token="babel"],
+  [data-icon-token="browserslist"],
+  [data-icon-token="javascript"]
+) { color: var(--tree-icon-yellow); }
+.tree-file-icon:is(
+  [data-icon-token="bootstrap"],
+  [data-icon-token="css"],
+  [data-icon-token="eslint"],
+  [data-icon-token="terraform"],
+  [data-icon-token="wasm"]
+) { color: var(--tree-icon-indigo); }
+.tree-file-icon:is(
+  [data-icon-token="mcp"],
+  [data-icon-token="prettier"],
+  [data-icon-token="table"]
+) { color: var(--tree-icon-teal); }
+.tree-file-icon:is(
+  [data-icon-token="go"],
+  [data-icon-token="oxc"],
+  [data-icon-token="react"],
+  [data-icon-token="tailwind"]
+) { color: var(--tree-icon-cyan); }
+.tree-file-icon:is(
+  [data-icon-token="astro"],
+  [data-icon-token="database"],
+  [data-icon-token="vite"]
+) { color: var(--tree-icon-purple); }
+.tree-file-icon:is(
+  [data-icon-token="npm"],
+  [data-icon-token="postcss"],
+  [data-icon-token="ruby"],
+  [data-icon-token="svelte"],
+  [data-icon-token="yml"]
+) { color: var(--tree-icon-red); }
+.tree-file-icon[data-icon-token="bun"] {
+  color: var(--tree-icon-mauve);
+}
+.fv-dir-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
+}
+.fv-dir-meta,
+.fv-dir-status {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+  font-variant-numeric: tabular-nums;
+}
+.fv-dir-status.modified { color: var(--warn); }
+.fv-dir-status.added,
+.fv-dir-status.untracked { color: var(--add); }
+.fv-dir-status.deleted,
+.fv-dir-status.conflicted { color: var(--del); }
+.fv-dir-status.renamed { color: var(--accent); }
+.fv-dir-open {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.fv-dir-row:hover .fv-dir-open,
+.fv-dir-row.active .fv-dir-open {
+  color: var(--text-muted);
+}
 .fv-banner {
   flex-shrink: 0;
   padding: 6px 14px;

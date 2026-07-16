@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TREE_ICONS } from './treeIcons';
+import { resolveTreeFileIcon, TREE_ICONS } from './treeIcons';
 
 describe('TREE_ICONS', () => {
   it('adds real file-type icons missing from Pierre while retaining its complete set', () => {
@@ -45,5 +45,15 @@ describe('TREE_ICONS', () => {
     expect(spriteSheet).not.toContain('<text');
     expect(symbol('strand-tree-material-csharp')).toContain('#0288d1');
     expect(symbol('strand-tree-material-java')).toContain('#f44336');
+  });
+
+  it('resolves non-tree file rows through the same built-in and custom rules', () => {
+    expect(resolveTreeFileIcon('src/perfcheck.rs')).toMatchObject({
+      name: 'file-tree-builtin-rust',
+      token: 'rust',
+    });
+    expect(resolveTreeFileIcon('src/App.cs')).toMatchObject({
+      name: 'strand-tree-material-csharp',
+    });
   });
 });

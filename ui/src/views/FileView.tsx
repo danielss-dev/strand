@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
@@ -6,7 +14,9 @@ import { Diff } from '../components/Diff';
 import { FileSearchBar, focusFileSearchInput } from '../components/FileSearchBar';
 import { Icon, type IconName } from '../components/Icon';
 import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
+import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { imageMime, isImagePath } from '../lib/image';
+import { directoryEntries, type DirectoryEntry } from '../lib/directoryEntries';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { repoFamilyName } from '../lib/repoIdentity';
@@ -14,7 +24,14 @@ import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import type { BlameLine, FileContent, FileDiff, FileHistoryEntry } from '../lib/types';
+import type {
+  BlameLine,
+  FileContent,
+  FileDiff,
+  FileHistoryEntry,
+  StatusKind,
+  WorkTreeEntry,
+} from '../lib/types';
 
 type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
 
@@ -47,6 +64,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
 export function FileView({ path }: { path: string }) {
   const activePath = useRepo((s) => s.activePath);
   const revision = useRepo((s) => s.selectedFileRevision);
+  const isDirectory = useRepo((s) => s.selectedFileIsDirectory);
   const meta = useRepo((s) => s.meta);
   const repoName = repoFamilyName(meta);
   const setView = useRepo((s) => s.setView);
@@ -62,27 +80,33 @@ export function FileView({ path }: { path: string }) {
 
   const close = () => { setView('local'); selectFile(null); };
 
-  const previewable = isPreviewablePath(path);
-  const tabs = previewable ? TABS : TABS.filter((t) => t.id !== 'preview');
+  const previewable = !isDirectory && isPreviewablePath(path);
+  const tabs = isDirectory
+    ? [{ ...TABS[0], label: 'Contents', icon: 'folder-open' as const }]
+    : previewable
+      ? TABS
+      : TABS.filter((t) => t.id !== 'preview');
   // Defensive: the store can only hold 'preview' while a previewable file is
   // open (selectFile only picks it for previewable paths), but fall back
   // rather than render an empty body if that ever changes.
-  const active = tab === 'preview' && !previewable ? 'content' : tab;
+  const active = isDirectory || (tab === 'preview' && !previewable) ? 'content' : tab;
 
   const openSearch = useCallback(() => {
+    if (isDirectory) return;
     if (active !== 'content') setTab('content');
     setSearchOpen(true);
     focusFileSearchInput();
-  }, [active, setTab]);
+  }, [active, isDirectory, setTab]);
 
   useEffect(() => {
     if (!diffSearchSignal) return;
-    openSearch();
     clearDiffSearch();
+    openSearch();
   }, [diffSearchSignal, openSearch, clearDiffSearch]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isDirectory) return;
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'f') return;
       const target = e.target as HTMLElement | null;
       if (target?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
@@ -91,7 +115,9 @@ export function FileView({ path }: { path: string }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openSearch]);
+  }, [isDirectory, openSearch]);
+
+  const displayPath = isDirectory ? `${path.replace(/\/+$/, '')}/` : path;
 
   return (
     <div className="main">
@@ -101,8 +127,8 @@ export function FileView({ path }: { path: string }) {
             {repoName}
           </span>
           <span className="sep"><Icon name="chev-right" size={10} /></span>
-          <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} title={path}>
-            {path}
+          <span className="leaf" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} title={displayPath}>
+            {displayPath}
           </span>
           {revision && <span className="ref-chip head">{revision.slice(0, 7)}</span>}
         </div>
@@ -111,8 +137,8 @@ export function FileView({ path }: { path: string }) {
             type="button"
             className="icon-btn"
             onClick={close}
-            title="Close file"
-            aria-label="Close file"
+            title={isDirectory ? 'Close folder' : 'Close file'}
+            aria-label={isDirectory ? 'Close folder' : 'Close file'}
           >
             <Icon name="x" size={13} />
           </button>
@@ -135,7 +161,9 @@ export function FileView({ path }: { path: string }) {
       </div>
       <div className="fv-body">
         {/* `key={path}` resets each tab's internal load state when the file changes. */}
-        {active === 'content' && (
+        {isDirectory ? (
+          <DirectoryTab path={path} repoPath={activePath} revision={revision} />
+        ) : active === 'content' ? (
           <ContentTab
             key={path}
             path={path}
@@ -144,13 +172,13 @@ export function FileView({ path }: { path: string }) {
             searchOpen={searchOpen}
             onCloseSearch={() => setSearchOpen(false)}
           />
-        )}
-        {active === 'preview' && (
+        ) : null}
+        {!isDirectory && active === 'preview' && (
           <PreviewTab key={path} path={path} repoPath={activePath} revision={revision} />
         )}
-        {active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
-        {active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
-        {active === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
+        {!isDirectory && active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
+        {!isDirectory && active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
+        {!isDirectory && active === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
       </div>
     </div>
   );
@@ -158,6 +186,146 @@ export function FileView({ path }: { path: string }) {
 
 function FvEmpty({ children }: { children: React.ReactNode }) {
   return <div className="fv-empty">{children}</div>;
+}
+
+// ─── Directory contents ──────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<StatusKind, string> = {
+  MODIFIED: 'Modified',
+  ADDED: 'Added',
+  DELETED: 'Deleted',
+  RENAMED: 'Renamed',
+  UNTRACKED: 'Untracked',
+  CONFLICTED: 'Conflicted',
+};
+
+function countLabel(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function DirectoryTab({
+  path,
+  repoPath,
+  revision,
+}: {
+  path: string;
+  repoPath: string | null;
+  revision: string | null;
+}) {
+  const workTree = useRepo((s) => s.workTree);
+  const selectFile = useRepo((s) => s.selectFile);
+  const [revisionTree, setRevisionTree] = useState<WorkTreeEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!revision || !repoPath) return;
+    let cancelled = false;
+    setRevisionTree(null);
+    setError(null);
+    tauri
+      .repoTreeAt(repoPath, revision)
+      .then((tree) => { if (!cancelled) setRevisionTree(tree); })
+      .catch((e) => { if (!cancelled) setError(errMessage(e)); });
+    return () => { cancelled = true; };
+  }, [repoPath, revision]);
+
+  const source = revision ? revisionTree : workTree;
+  const entries = useMemo(() => directoryEntries(source ?? [], path), [source, path]);
+  const folderCount = entries.filter((entry) => entry.kind === 'directory').length;
+  const fileCount = entries.length - folderCount;
+
+  useEffect(() => {
+    setActiveIndex((current) => Math.min(current, Math.max(0, entries.length - 1)));
+  }, [entries.length]);
+
+  useEffect(() => {
+    rowRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  const open = useCallback(
+    (entry: DirectoryEntry) => {
+      selectFile(entry.path, revision, entry.kind === 'directory');
+    },
+    [revision, selectFile],
+  );
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (entries.length === 0) return;
+    let next = activeIndex;
+    if (event.key === 'ArrowDown') next = Math.min(entries.length - 1, activeIndex + 1);
+    else if (event.key === 'ArrowUp') next = Math.max(0, activeIndex - 1);
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = entries.length - 1;
+    else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open(entries[activeIndex]);
+      return;
+    } else return;
+    event.preventDefault();
+    setActiveIndex(next);
+  };
+
+  if (revision && !revisionTree && !error) return <FvEmpty>Loading folder…</FvEmpty>;
+  if (error) return <FvEmpty>{error}</FvEmpty>;
+  if (entries.length === 0) return <FvEmpty>This folder has no tracked or untracked files.</FvEmpty>;
+
+  return (
+    <div className="fv-tab fv-directory">
+      <TreeIconSprite />
+      <div className="fv-dir-summary">
+        <span>{countLabel(folderCount, 'folder')}</span>
+        <span className="dot" aria-hidden>·</span>
+        <span>{countLabel(fileCount, 'file')}</span>
+      </div>
+      <div
+        className="fv-dir-list"
+        role="listbox"
+        tabIndex={0}
+        aria-label={`Contents of ${path}`}
+        aria-activedescendant={`${listId}-${activeIndex}`}
+        onKeyDown={onKeyDown}
+      >
+        {entries.map((entry, index) => {
+          const folderMeta = [
+            countLabel(entry.fileCount, 'file'),
+            entry.changedCount ? `${entry.changedCount} changed` : '',
+          ].filter(Boolean).join(' · ');
+          return (
+            <div
+              id={`${listId}-${index}`}
+              key={entry.path}
+              ref={(node) => { rowRefs.current[index] = node; }}
+              role="option"
+              aria-selected={index === activeIndex}
+              className={'fv-dir-row' + (index === activeIndex ? ' active' : '')}
+              onMouseMove={() => setActiveIndex(index)}
+              onClick={() => open(entry)}
+            >
+              <span className={'fv-dir-icon ' + entry.kind} aria-hidden>
+                {entry.kind === 'directory' ? (
+                  <Icon name="folder" size={16} />
+                ) : (
+                  <TreeFileIcon path={entry.path} />
+                )}
+              </span>
+              <span className="fv-dir-name">{entry.name}{entry.kind === 'directory' ? '/' : ''}</span>
+              {entry.kind === 'directory' ? (
+                <span className="fv-dir-meta">{folderMeta}</span>
+              ) : entry.status ? (
+                <span className={`fv-dir-status ${entry.status.toLowerCase()}`}>
+                  {STATUS_LABELS[entry.status]}
+                </span>
+              ) : null}
+              <Icon name="chev-right" size={12} className="fv-dir-open" aria-hidden />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Content ──────────────────────────────────────────────────────────────
