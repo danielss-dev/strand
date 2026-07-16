@@ -1700,9 +1700,10 @@ tests, all 233 frontend tests, Rust/TypeScript checks, production build, and a
 live packaged-app menu/dialog pass.
 
 **Merged branch indicators (2026-07-16):** Closed DAN-19. Local branch refs now
-carry Git ancestry against the checked-out branch, the sidebar overlays a
-merged check on contained branch icons, and commit-graph ref chips carry the
-same state. The current branch never marks itself.
+carry Git ancestry against the repository's primary branch (remote HEAD first,
+then conventional local defaults), the sidebar overlays a merged check on
+contained branch icons, and commit-graph ref chips carry the same state. The
+primary and current branches never mark themselves.
 
 **File context-menu editor launch (2026-07-16):** Working-tree files in the
 sidebar Files tree, Local Changes, Review, and Workspace Review now expose
@@ -1729,6 +1730,16 @@ confirms a safe viewer capability. GitHub uses `viewerCanUpdate`; Azure exposes
 the transition only to the matched signed-in author and still lets the provider
 enforce current permissions. The detail title now starts at the compact content
 gutter instead of carrying a second responsive top margin.
+
+**Windows desktop integrations repaired (2026-07-16):** Strand now merges the
+persisted Windows user and machine PATH with its inherited environment, and
+normalizes canonical `\\?\...` npm batch launchers before passing them through
+an absolute system `cmd.exe`. Codex and other CLI-backed integrations therefore
+survive stale desktop-launch environments. Followed-PR notification hydration
+also reads the native desktop permission directly on Windows, bypassing Tauri
+2.3.3's false-denied Web Notification shim. Verified in an isolated running
+Tauri app with the process PATH stripped to Windows system directories: Codex
+was discovered, executed, and recognized the existing ChatGPT login.
 
 ---
 

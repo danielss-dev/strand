@@ -650,7 +650,13 @@ export interface RepoState {
   returnToFile(): void;
 }
 
-const EMPTY_REFS: Refs = { branches: [], remotes: [], remote_branches: [], tags: [] };
+const EMPTY_REFS: Refs = {
+  branches: [],
+  primary_branch: null,
+  remotes: [],
+  remote_branches: [],
+  tags: [],
+};
 
 /**
  * The remote tag pushes target by default: the current branch's upstream

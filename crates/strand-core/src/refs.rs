@@ -18,8 +18,8 @@ pub struct Branch {
     pub target: String,
     /// True if HEAD is on this branch.
     pub is_head: bool,
-    /// True when this branch's tip is reachable from the checked-out branch.
-    /// HEAD itself is never marked merged.
+    /// True when this branch's tip is reachable from the repository's primary
+    /// branch. The primary and checked-out branches are never marked merged.
     pub merged: bool,
     /// Tracking branch, if any (e.g. `origin/main`).
     pub upstream: Option<UpstreamRef>,
@@ -70,6 +70,8 @@ pub struct Tag {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Refs {
     pub branches: Vec<Branch>,
+    /// Primary branch used to determine merged local branches.
+    pub primary_branch: Option<String>,
     pub remotes: Vec<Remote>,
     pub remote_branches: Vec<RemoteBranch>,
     pub tags: Vec<Tag>,
@@ -172,13 +174,15 @@ impl Repo {
     pub fn refs(&self) -> Result<Refs> {
         let repo = self.git2()?;
 
-        let branches = collect_branches(repo);
+        let primary_branch = primary_branch(repo);
+        let branches = collect_branches(repo, primary_branch.as_ref());
         let remote_branches = collect_remote_branches(repo);
         let remotes = collect_remotes(repo);
         let tags = collect_tags(repo);
 
         Ok(Refs {
             branches,
+            primary_branch: primary_branch.map(|(name, _)| name),
             remotes,
             remote_branches,
             tags,
@@ -186,13 +190,15 @@ impl Repo {
     }
 }
 
-fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
+fn collect_branches(
+    repo: &git2::Repository,
+    primary_branch: Option<&(String, git2::Oid)>,
+) -> Vec<Branch> {
     let iter = match repo.branches(Some(git2::BranchType::Local)) {
         Ok(it) => it,
         Err(_) => return Vec::new(),
     };
 
-    let head_target = repo.head().ok().and_then(|head| head.target());
     let mut out = Vec::new();
     for entry in iter.flatten() {
         let (branch, _) = entry;
@@ -204,9 +210,13 @@ fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
         let full_name = branch.get().name().unwrap_or("").to_string();
         let is_head = branch.is_head();
         let merged = !is_head
-            && head_target
-                .map(|head| {
-                    head == target || repo.graph_descendant_of(head, target).unwrap_or(false)
+            && primary_branch
+                .map(|(primary_name, primary_target)| {
+                    name != *primary_name
+                        && (*primary_target == target
+                            || repo
+                                .graph_descendant_of(*primary_target, target)
+                                .unwrap_or(false))
                 })
                 .unwrap_or(false);
 
@@ -250,6 +260,58 @@ fn collect_branches(repo: &git2::Repository) -> Vec<Branch> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     out
+}
+
+/// Resolve the repository's integration branch. A remote's symbolic HEAD is
+/// authoritative; local conventional names cover repositories without one.
+/// Falling back to HEAD preserves useful behavior for custom local-only repos.
+fn primary_branch(repo: &git2::Repository) -> Option<(String, git2::Oid)> {
+    let mut remotes = repo
+        .remotes()
+        .ok()
+        .map(|names| {
+            names
+                .iter()
+                .flatten()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    remotes.sort_by(|a, b| (a != "origin").cmp(&(b != "origin")).then_with(|| a.cmp(b)));
+
+    for remote in remotes {
+        let prefix = format!("refs/remotes/{remote}/");
+        let Ok(reference) = repo.find_reference(&format!("{prefix}HEAD")) else {
+            continue;
+        };
+        let Some(name) = reference
+            .symbolic_target()
+            .and_then(|target| target.strip_prefix(&prefix))
+        else {
+            continue;
+        };
+        let Some(target) = reference
+            .resolve()
+            .ok()
+            .and_then(|resolved| resolved.target())
+        else {
+            continue;
+        };
+        return Some((name.to_string(), target));
+    }
+
+    for name in ["main", "master"] {
+        if let Some(target) = repo
+            .find_branch(name, git2::BranchType::Local)
+            .ok()
+            .and_then(|branch| branch.get().target())
+        {
+            return Some((name.to_string(), target));
+        }
+    }
+
+    let head = repo.head().ok()?;
+    Some((head.shorthand()?.to_string(), head.target()?))
 }
 
 fn collect_remote_branches(repo: &git2::Repository) -> Vec<RemoteBranch> {
@@ -483,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn refs_marks_only_branches_merged_into_head() {
+    fn refs_marks_only_branches_merged_into_primary_branch() {
         let dir = std::env::temp_dir().join(format!(
             "strand-merged-refs-test-{}-{:?}",
             std::process::id(),
@@ -500,6 +562,16 @@ mod tests {
         std::fs::write(dir.join("root.txt"), "root\n").unwrap();
         git(&dir, &["add", "root.txt"]);
         git(&dir, &["commit", "-q", "-m", "root"]);
+        git(&dir, &["remote", "add", "origin", "."]);
+        git(&dir, &["update-ref", "refs/remotes/origin/main", "main"]);
+        git(
+            &dir,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
         git(&dir, &["branch", "same-tip"]);
 
         git(&dir, &["checkout", "-q", "-b", "feature"]);
@@ -508,18 +580,23 @@ mod tests {
         git(&dir, &["commit", "-q", "-m", "feature"]);
         git(&dir, &["checkout", "-q", "main"]);
         git(&dir, &["merge", "-q", "--no-ff", "--no-edit", "feature"]);
+        git(&dir, &["update-ref", "refs/remotes/origin/main", "main"]);
 
         git(&dir, &["checkout", "-q", "-b", "unmerged"]);
         std::fs::write(dir.join("unmerged.txt"), "unmerged\n").unwrap();
         git(&dir, &["add", "unmerged.txt"]);
         git(&dir, &["commit", "-q", "-m", "unmerged"]);
-        git(&dir, &["checkout", "-q", "main"]);
+        // Re-checking out an already merged feature must not make either the
+        // feature itself or its primary branch look safe to delete.
+        git(&dir, &["checkout", "-q", "feature"]);
 
         let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
-        let branches = repo.refs().unwrap().branches;
+        let refs = repo.refs().unwrap();
+        assert_eq!(refs.primary_branch.as_deref(), Some("main"));
+        let branches = refs.branches;
         let merged = |name: &str| branches.iter().find(|b| b.name == name).unwrap().merged;
 
-        assert!(merged("feature"));
+        assert!(!merged("feature"));
         assert!(merged("same-tip"));
         assert!(!merged("unmerged"));
         assert!(!merged("main"));

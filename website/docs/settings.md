@@ -77,12 +77,13 @@ vendor's CLI; Strand only orchestrates it.
   worktrees share the profile through their canonical `common_dir`; an empty
   profile uses recent commit subjects only.
 
-In a packaged desktop build, PATH means the merged interactive login-shell
-PATH, not only the minimal environment supplied by the desktop launcher. This
-finds Homebrew, local-bin, and version-manager installs and also supplies
-runtime commands such as `node` to npm-installed CLIs. Restart Strand after
-changing shell startup files or installing a CLI; use the custom path only when
-you need to override shell resolution.
+In a packaged desktop build, PATH is recovered from the interactive login shell
+on macOS/Linux and from the persisted user and machine environment on Windows,
+then merged with the environment inherited at launch. This finds Homebrew,
+local-bin, npm, WinGet, and version-manager installs and also supplies runtime
+commands such as `node` to npm-installed CLIs. Restart Strand after changing
+shell startup files or installing a CLI; use the custom path only when you need
+to override automatic resolution.
 
 To get a commit suggestion, stage some changes and press the sparkle button next
 to the commit subject field in Local Changes, use `Mod+Shift+M`, or run "Suggest

@@ -94,11 +94,14 @@ head commit, and merged or closed state. The first successful snapshot is only
 a baseline and never notifies. Merged or closed PRs notify once and are then
 removed from Following.
 
-The first follow asks for desktop-notification permission. Denying permission
-does not stop following; Strand keeps a persistent warning and a later manual
-Follow attempt can ask again. Explicitly choosing **Following** to unfollow
-mutes automatic following for that PR until you manually follow it again.
-Automatic removal after merge or close does not create that mute.
+Strand checks desktop-notification permission when monitoring starts; a first
+manual follow requests it when the platform requires a prompt. On Windows,
+Strand reads Tauri's native desktop permission directly instead of WebView2's
+unrelated browser permission. Denying permission does not stop following:
+Strand keeps a persistent warning and a later manual Follow attempt can ask
+again. Explicitly choosing **Following** to unfollow mutes automatic following
+for that PR until you manually follow it again. Automatic removal after merge
+or close does not create that mute.
 
 Provider or network failures keep the last successful snapshot and retry later,
 so a temporary outage cannot create false activity or turn an unknown check

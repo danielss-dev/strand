@@ -117,8 +117,8 @@ pub(crate) fn base_command(program: &Path, hide_console: bool) -> Command {
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"));
         let mut cmd = if is_batch {
-            let mut c = Command::new("cmd");
-            c.arg("/C").arg(program);
+            let mut c = Command::new(windows_command_processor());
+            c.arg("/D").arg("/C").arg(windows_batch_path(program));
             c
         } else {
             Command::new(program)
@@ -142,6 +142,47 @@ pub(crate) fn base_command(program: &Path, hide_console: bool) -> Command {
         }
         cmd
     }
+}
+
+#[cfg(windows)]
+fn windows_command_processor() -> PathBuf {
+    let configured = std::env::var_os("ComSpec").map(PathBuf::from);
+    let system = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .map(|root| root.join("System32").join("cmd.exe"));
+    configured
+        .into_iter()
+        .chain(system)
+        .find_map(|path| canonical_spawnable(&path))
+        // Windows itself requires cmd.exe here; keep the fallback absolute so
+        // an opened repository can never supply a same-named executable.
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\cmd.exe"))
+}
+
+#[cfg(windows)]
+fn windows_batch_path(path: &Path) -> PathBuf {
+    use std::path::{Component, Prefix};
+
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return path.to_owned();
+    };
+    let mut compatible = match prefix.kind() {
+        Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:\\", drive as char)),
+        Prefix::VerbatimUNC(server, share) => {
+            let mut root = PathBuf::from(r"\\");
+            root.push(server);
+            root.push(share);
+            root
+        }
+        _ => return path.to_owned(),
+    };
+    for component in components {
+        if !matches!(component, Component::RootDir) {
+            compatible.push(component.as_os_str());
+        }
+    }
+    compatible
 }
 
 /// Run a CLI and capture stdout + stderr. Returns Err with stderr on
@@ -468,6 +509,36 @@ mod tests {
         let path = std::env::current_exe().unwrap();
         let resolved = resolve_cli("nonexistent", Some(path.to_str().unwrap()));
         assert_eq!(resolved, std::fs::canonicalize(path).ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn batch_launcher_uses_the_absolute_system_command_processor() {
+        let shell = windows_command_processor();
+        assert!(shell.is_absolute());
+        assert!(shell
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("cmd.exe")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn canonical_batch_launcher_runs_through_cmd() {
+        let dir = tempfile::tempdir().unwrap();
+        let launcher = dir.path().join("probe.cmd");
+        std::fs::write(&launcher, "@echo off\r\necho batch-ok\r\n").unwrap();
+        let canonical = canonical_spawnable(&launcher).unwrap();
+        assert_eq!(
+            run_capture(&canonical, &[], None, None, STATUS_TIMEOUT)
+                .unwrap()
+                .trim(),
+            "batch-ok"
+        );
+        assert_eq!(
+            windows_batch_path(Path::new(r"\\?\UNC\server\share\tool.cmd")),
+            PathBuf::from(r"\\server\share\tool.cmd")
+        );
     }
 
     #[cfg(unix)]

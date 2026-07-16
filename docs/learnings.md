@@ -1415,19 +1415,65 @@ them to a same-named current file.
 
 ---
 
-## A merged branch mark means containment by the checked-out branch
+## A merged branch mark means containment by the primary branch
 
 **Rule.** `refs::Branch.merged` is true only when the local branch tip is
-reachable from the checked-out branch tip; the checked-out branch itself is
-always false. Sidebar and commit-graph indicators must use this field instead
-of guessing from ahead/behind counts or the loaded log window.
+reachable from the repository's primary branch tip; the primary and checked-out
+branches themselves are always false. Resolve the primary branch from symbolic
+remote HEAD (preferring `origin`), then local `main`, local `master`, and finally
+the checked-out branch. Sidebar and commit-graph indicators must use this field
+instead of guessing from ahead/behind counts or the loaded log window.
 
 **Why.** Upstream drift answers a remote-sync question, not whether deleting a
-local branch would orphan its commits. The graph view is intentionally bounded,
-so client-side ancestry checks would also produce false negatives for older
-merged branches.
+local branch would orphan its commits. Using the checked-out feature as the
+containment target also mislabels its base (`main`) as an already-merged branch.
+The graph view is intentionally bounded, so client-side ancestry checks would
+also produce false negatives for older merged branches.
 
 **How to apply.** Compute the flag while collecting refs with libgit2 commit
 ancestry (`graph_descendant_of`, including equal tips), and refresh it through
 the existing snapshot path after history or checkout operations. Squash merges
 do not preserve ancestry and therefore do not receive this mark.
+
+---
+
+## Windows CLI launch uses persisted PATH and cmd-compatible canonical paths
+
+**Rule.** Build the Windows CLI environment by retaining inherited PATH order
+and appending current machine/user PATH entries from the registry. Resolve
+executables before changing cwd. Route `.cmd`/`.bat` through an absolute system
+`cmd.exe /D /C`, and remove only the canonical `\\?\` or `\\?\UNC\` prefix from
+the batch-file argument; native executables keep their canonical path.
+
+**Why.** Explorer and already-running desktop launchers can retain a PATH from
+before npm, WinGet, or another installer changed the persisted environment.
+Separately, `std::fs::canonicalize` returns verbatim Windows paths, which work
+with `CreateProcess` but make `cmd.exe` report that it cannot find an existing
+npm launcher. Resolving a bare command processor after entering a repository
+would also reopen the current-directory executable-search hazard.
+
+**How to apply.** Reuse `path_env::effective_path`, `ai::bin::resolve_cli`, and
+`ai::bin::base_command` for provider-style subprocesses. Regression tests must
+execute a canonicalized batch launcher, not merely assert that lookup found a
+file. For packaged-app verification, start Strand with a deliberately stripped
+process PATH and confirm a user-installed CLI plus its runtime still executes.
+
+---
+
+## Windows notification permission comes from the native plugin backend
+
+**Rule.** Until Tauri's notification shim changes, do not use its exported
+`isPermissionGranted()` as the source of truth on Windows. Invoke the native
+notification plugin permission command directly; keep the normal plugin flow
+on other platforms.
+
+**Why.** Tauri notification 2.3.3 replaces `window.Notification`, initializes
+its Windows permission value as `default`, and immediately converts that value
+to `denied` without asking the desktop backend. The backend itself reports
+desktop permission as granted, so Strand otherwise displays a persistent false
+"blocked" warning even when Windows notifications are enabled.
+
+**How to apply.** Keep the workaround isolated in `ui/src/lib/notifications.ts`
+and retain a platform-routing test. Re-evaluate it when upgrading the Tauri
+notification plugin; remove it only after a running Windows webview reports the
+same state through both paths.
