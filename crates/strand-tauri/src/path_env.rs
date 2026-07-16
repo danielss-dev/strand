@@ -63,6 +63,7 @@ fn conventional_desktop_path() -> Option<OsString> {
         .flatten()
 }
 
+#[cfg(any(unix, test))]
 fn merge_paths(preferred: Option<&OsStr>, fallback: Option<&OsStr>) -> Option<OsString> {
     let mut dirs = Vec::new();
     for path in [preferred, fallback].into_iter().flatten() {

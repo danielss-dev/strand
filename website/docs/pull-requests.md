@@ -57,6 +57,19 @@ alternate retry does not change the provider selected in Settings.
 ## Browse PRs
 
 The list contains up to the latest 100 open, closed, and merged pull requests.
+Use the local search field to match a PR number, title, author, source branch,
+or target branch without starting another provider request. The filter tabs are:
+
+- **All** — every returned status.
+- **Authored** — every status authored by the account signed into `gh` or `az`.
+- **Completed** — merged and closed-without-merge PRs, with distinct badges.
+
+If Strand cannot identify the signed-in provider account, All and Completed
+remain available and Authored shows a sign-in/refresh explanation. Search and
+filter state survive detail navigation and reset when the active repository
+changes. Run “Pull Requests: search…” from the command palette to return to the
+inbox and focus its search field.
+
 If the checked-out branch has an active PR, Strand opens that PR automatically.
 It also follows that PR in the background even if you never open Pull Requests.
 Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
@@ -92,8 +105,16 @@ so a temporary outage cannot create false activity or turn an unknown check
 state green. Monitoring uses small provider activity queries and never fetches
 or parses patches.
 
-For an active, non-draft PR, choose **Merge** in the detail header or run
-"Pull Requests: merge open pull request…" from the command palette. The
+For a draft PR, the detail header replaces Merge with **Ready for review** when
+the signed-in provider account can change that PR's stage. GitHub uses its
+viewer update capability; Azure DevOps presents the action conservatively for
+the signed-in PR author, and the provider remains authoritative if permissions
+changed. A successful transition refreshes the current detail in place and the
+normal Merge control appears. The command-palette action “Pull Requests: merge
+or mark ready…” follows the same rule.
+
+For an active, non-draft PR, choose **Merge** in the detail header or run that
+command-palette action. The
 split merge control works like GitHub: its primary button immediately runs the
 selected strategy, while the adjacent chevron opens a keyboard-operable menu
 for merge-commit, squash, and rebase. Required checks, reviews, branch policies,
@@ -118,28 +139,34 @@ the current list or detail mounted, including focus, scroll, active tab, file
 selection, and unsent drafts. The toolbar shows **Updating…**, the last update
 age, or a non-blocking failure with Retry instead of blanking the workspace.
 Lightweight activity reloads rich detail only when something changed. The
-opened PR uses the full content width and has three tabs. Use `Left`/`Right`,
-`Home`, and `End` while the tab bar is focused.
+opened PR uses the full content width, starts directly beneath the compact PR
+toolbar, and keeps its three tabs centered there. Use `Left`/`Right`, `Home`,
+and `End` while the tab bar is focused.
 
-### Overview
+### Summary
 
-Overview shows title, state, author, source and target branches, dates, labels,
-reviewers, review and merge state, file/addition/deletion/comment/commit counts,
-and CI checks when available. Descriptions render as Markdown without executing
+Summary shows the source → target branch, reviewers, comment and commit counts,
+and aggregate file/addition/deletion totals as compact fact rows. Description
+and checks are collapsible. Descriptions render as Markdown without executing
 raw HTML or silently loading remote images. Checks are green when successful,
 yellow while running or queued, red when failed, and neutral when the provider
-does not report a recognized state.
+does not report a recognized state. The compact comment composer is shared with
+Timeline, so an unsent draft survives tab switches and refreshes.
 
-### Conversation
+### Timeline
 
-Conversation displays GitHub issue and review-thread comments plus Azure
-DevOps thread comments as safe Markdown in a timeline with author markers,
-timestamps, and inline file paths for review comments. GitHub and Azure profile images appear when the provider
-supplies a usable identity; initials remain visible if an avatar is absent or
-cannot load. Select a comment timestamp to open that comment directly on the
-provider host. File-backed comments also show **View in changes**. It switches
-to Changes, selects the referenced file, and focuses the inline GitHub thread
-when the provider supplied its line coordinates.
+Timeline orders commits, GitHub issue/review-thread comments, Azure DevOps
+thread comments, and opened/merged/closed lifecycle markers oldest-first on one
+chronology rail. Commit events show the author, subject, short hash, timestamp,
+and a provider link when available. Comments render as safe Markdown with author
+markers, timestamps, and inline file paths. Commit metadata is fetched only for
+the opened PR; newly detected pushes refresh this chronology without making the
+inbox query heavy or loading Code. GitHub and Azure profile images appear when
+the provider supplies a usable identity; initials remain visible if an avatar
+is absent or cannot load. Select a comment timestamp to open that comment
+directly on the provider host. File-backed comments also show **View in Code**.
+It switches to Code, selects the referenced file, and focuses the inline GitHub
+thread when the provider supplied its line coordinates.
 
 Use **Write** to compose a top-level comment and **Preview** to inspect the
 rendered result before sending. The formatting toolbar supports bold, italic,
@@ -156,10 +183,13 @@ attachment API. Images in descriptions, previews, and comments stay unloaded
 until you explicitly choose **Show image**, preventing a PR from silently
 making a remote tracking request when opened.
 
-### Changes
+### Code
 
-Changes loads only when its tab opens. A narrow left rail groups changed files
-in the same Pierre folder tree used by Local Changes. Use the folder chevrons
+Code loads only when its tab opens. Its aggregate strip shows source → target,
+commit count, changed-file count, and total additions/deletions. A narrow left
+rail groups changed files in the same Pierre folder tree used by Local Changes;
+addition/deletion totals stay in the selected-file header instead of every
+tree row. Use the folder chevrons
 to expand or collapse paths; use `Up`/`Down`, `j`/`k`, `Home`, or `End` to
 select a file. The rest of the full-width workspace renders the selected patch
 edge to edge beneath the same compact, collapsible file header used by Local
@@ -176,7 +206,7 @@ inside the diff. **Add comment** publishes a GitHub review thread
 on that exact old- or new-file range; `Mod+Enter` sends from the composer.
 Before publishing, Strand verifies that
 the pull request head is still the commit used by the displayed patch; if it
-changed, the draft stays in place and Changes asks you to refresh and reselect.
+changed, the draft stays in place and Code asks you to refresh and reselect.
 Closed and merged pull requests stay read-only.
 
 When a new head commit is detected, Strand keeps the existing patch visible
@@ -187,13 +217,13 @@ unchanged.
 
 Fetched GitHub review threads remain visible directly beneath their anchored
 line or range. Replies stay grouped in the same card, and resolved or outdated
-threads are labeled. The same review comments also appear in Conversation, so
+threads are labeled. The same review comments also appear in Timeline, so
 comments added on GitHub are visible after refreshing the pull request.
 
 When GitHub reports that your account can write to a thread, its card exposes
 **Reply** and **Resolve** or **Reopen**. Replies publish immediately; use
 `Mod+Enter` to send or `Esc` to close the reply editor without losing its draft.
-Successful writes update both the inline card and Conversation without
+Successful writes update both the inline card and Timeline without
 reloading the patch or moving your current file and scroll position. These
 actions target the existing provider thread rather than a line coordinate, so
 they remain valid when GitHub permits them on a resolved or outdated thread.

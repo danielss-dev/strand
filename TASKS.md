@@ -1369,30 +1369,33 @@ tree: watch the agent work, review fast, accept or reject safely.
     changed head, and a stale patch remains readable but cannot submit inline
     comments until its replacement succeeds.
   - ☑ Hosted diff and changed-file browser (`repo_pull_request_diff`,
-    `PullRequestChanges`): provider patches load only when Changes opens; the
+    `PullRequestChanges`): provider patches load only when Code opens; the
     keyboard-operable 22% Pierre folder tree and compact Local Changes-style
     file header mount one selected, edge-to-edge diff at a time, leaving the
     rest of the full-width detail workspace for code and following the app's
-    split/stacked appearance settings. The file header now exposes the same
+    split/stacked appearance settings. Code now adds a source → target summary,
+    aggregate commit/file/line totals while a flex-height owner protects the
+    diff; line totals stay in the selected-file header rather than crowding
+    every tree row. The file header exposes the same
     persisted stacked/split controls in context. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
-  - ◐ Discussion threads and comment creation: Conversation reads GitHub
+  - ◐ Discussion threads and comment creation: Timeline reads GitHub
     issue comments, GitHub review-thread comments, and Azure thread comments
     (including inline file context) as safe
     Markdown and creates top-level Markdown comments through the signed-in
-    provider CLI. The `PullRequestConversation` timeline now includes a
+    provider CLI. The shared Summary/Timeline composer now includes a
     keyboard-operable Write/Preview composer, Markdown formatting toolbar,
     hosted screenshot/image insertion, explicit click-to-load image previews,
     character count, provider avatars with initials fallback, and comment
     permalinks. File-backed timeline comments expose a keyboard-operable
-    **View in changes** action that selects the file and focuses its fetched
-    GitHub thread when coordinates exist. GitHub Changes now uses Pierre's native hover-gutter `+`,
+    **View in Code** action that selects the file and focuses its fetched
+    GitHub thread when coordinates exist. GitHub Code uses Pierre's native hover-gutter `+`,
     line-range selection, persistent fetched thread cards with replies and
     resolved/outdated state, and an annotation-row composer through
     `repo_pull_request_inline_comment`, with
     exact-head validation before publishing. GitHub thread cards now publish
     immediate replies and Resolve/Reopen writes through provider-capability-
-    gated GraphQL mutations, patching Changes + Conversation locally without a
+    gated GraphQL mutations, patching Code + Timeline locally without a
     detail/patch reload (`repo_pull_request_thread_reply`,
     `repo_pull_request_thread_resolve`). Azure iteration-tracked inline writes,
     direct binary attachment uploads, and suggestions remain.
@@ -1418,11 +1421,17 @@ tree: watch the agent work, review fast, accept or reject safely.
   - ☐ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails.
-  - ☐ PR inbox controls over the shallow list: Open / Needs review / Mine /
-    Draft / Closed filters, fuzzy search, attention-first sort, and row-level
-    review/check state without expanding provider queries per row.
-  - ☐ Lazy Commits + independent Checks tabs; keep readiness persistent in the
-    PR header and deep-link unsupported provider detail to the host.
+  - ☑ Searchable repository PR inbox (`filterPullRequests`, `.pr-inbox-*`):
+    All, Authored, and Completed filter the shallow latest-100 list locally;
+    search covers number/title/author/source/target branches; provider-account
+    identity drives Authored without hiding All when identity lookup fails;
+    selection, j/k/arrows/Home/End/Enter, focus restoration, and palette search
+    remain keyboard-operable. Completed retains distinct merged/closed badges.
+  - ☑ Lazy commit chronology + integrated checks (`PullRequestCommit`,
+    `buildPullRequestTimeline`, `PullRequestSummary`): only opened PR detail
+    fetches normalized GitHub/Azure commits; Timeline combines commits,
+    flattened comments, and opened/merged/closed lifecycle markers with stable
+    ordering, while Summary keeps checks collapsible and readiness persistent.
   - ☐ Review evolution + local action: reliable “since my last review” compare
     where the provider exposes a boundary, safe Open in worktree / Update branch,
     suggestions, and unresolved-feedback export for external agents.
@@ -1432,6 +1441,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     remain neutral. Merge queue/auto-complete and richer required-review detail
     remain.
   - ◐ Hosted PR lifecycle actions.
+    - ☑ Mark permission-backed drafts ready for review
+      (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer
+      capability + Azure author match, and the substituted header action).
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
       stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
     - ☐ Update/check out the PR branch.

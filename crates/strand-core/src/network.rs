@@ -225,6 +225,7 @@ impl Repo {
     /// Push any local branch without checking it out first. The source and
     /// destination are fully qualified so Git never guesses which namespace
     /// is intended. `set_upstream` deliberately applies to `branch`, not HEAD.
+    #[allow(clippy::too_many_arguments)]
     pub fn push_branch(
         &self,
         branch: &str,

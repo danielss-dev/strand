@@ -1066,7 +1066,8 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   rendered Markdown, color-coded checks, discussions with top-level comment
   creation, current-branch auto-open, and full-width lazy selected-file Pierre
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
-  comments plus GitHub thread replies/resolution and merge controls now ship;
+  comments plus GitHub thread replies/resolution, permission-gated Ready for
+  review, and merge controls now ship;
   batched review actions and richer Azure parity remain. GitLab and Bitbucket
   are follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
@@ -1709,6 +1710,25 @@ sidebar Files tree, Local Changes, Review, and Workspace Review now expose
 and path to the existing safe integration launcher; historical commit files and
 multi-file selections intentionally omit the action. Verified by TypeScript,
 all 233 frontend tests, and the editor-launch safety suite.
+
+**Pull-request inbox and chronology shipped (2026-07-16):** The repository PR
+workspace now opens onto a searchable All / Authored / Completed inbox backed
+by the signed-in provider account, while its bounded latest-100 query remains
+free of comments, checks, threads, and commits. Detail navigation keeps compact
+Summary / Timeline / Code tabs centered in the PR toolbar: normalized GitHub and Azure commits join comments
+and lifecycle markers on one deterministic chronology rail; Summary owns the
+compact facts, collapsible description/checks, and shared comment draft; Code
+adds compare/commit/file/line totals while keeping line counts in the selected
+file header and preserving the one-mounted-diff boundary. Verified in the running Tauri app with keyboard and
+pointer navigation, dark/light themes, 900px and wide layouts, preserved
+composer drafts, resizable Code rail, and one mounted Pierre diff.
+
+**Draft review handoff shipped (2026-07-16):** Open drafts now replace the
+disabled merge control with **Ready for review** when activated provider detail
+confirms a safe viewer capability. GitHub uses `viewerCanUpdate`; Azure exposes
+the transition only to the matched signed-in author and still lets the provider
+enforce current permissions. The detail title now starts at the compact content
+gutter instead of carrying a second responsive top margin.
 
 ---
 

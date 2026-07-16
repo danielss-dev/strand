@@ -13,12 +13,17 @@ if (typeof navigator === 'undefined') {
 }
 
 const {
+  buildPullRequestTimeline,
+  canMarkPullRequestReady,
   checkTone,
   diffStats,
+  filterPullRequests,
+  isCompletedPullRequest,
   markdownUrl,
   parsePullRequestPatch,
   pullRequestReadiness,
   pullRequestForBranch,
+  reconcilePullRequestSelection,
   relativeTimeLabel,
   withPullRequestThreadReply,
   withPullRequestThreadUpdate,
@@ -32,12 +37,14 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     title: 'Ship it',
     state: 'open',
     is_draft: false,
+    can_mark_ready: false,
     author: 'octo',
     source_branch: 'feature',
     source_commit: '1'.repeat(40),
     target_branch: 'main',
     created_at: '2026-07-13T10:00:00Z',
     updated_at: '2026-07-13T11:00:00Z',
+    completed_at: null,
     url: 'https://github.com/acme/repo/pull/42',
     description: '',
     merge_status: 'CLEAN',
@@ -53,9 +60,28 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     checks_complete: true,
     comments: [],
     review_threads: [],
+    authored_by_viewer: true,
+    commits: [],
     ...overrides,
   };
 }
+
+describe('canMarkPullRequestReady', () => {
+  it('requires an active draft and a provider-confirmed viewer capability', () => {
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: true, can_mark_ready: true }),
+    )).toBe(true);
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: true, can_mark_ready: false }),
+    )).toBe(false);
+    expect(canMarkPullRequestReady(
+      pullRequest({ is_draft: false, can_mark_ready: true }),
+    )).toBe(false);
+    expect(canMarkPullRequestReady(
+      pullRequest({ state: 'closed', is_draft: true, can_mark_ready: true }),
+    )).toBe(false);
+  });
+});
 
 describe('checkTone', () => {
   it('normalizes provider success, running, and failure states', () => {
@@ -157,6 +183,110 @@ describe('pullRequestForBranch', () => {
     expect(pullRequestForBranch(pullRequests, 'missing')).toBeNull();
     expect(pullRequestForBranch([{ id: 3, source_branch: 'feature', state: 'merged' }], 'feature'))
       .toBeNull();
+  });
+});
+
+describe('pull request inbox', () => {
+  const rows = [
+    pullRequest({ id: 1, title: 'Fix authentication', author: 'ada', source_branch: 'auth/fix' }),
+    pullRequest({
+      id: 2,
+      title: 'Release 1.0',
+      author: 'grace',
+      source_branch: 'release',
+      state: 'merged',
+      completed_at: '2026-07-15T12:00:00Z',
+      authored_by_viewer: false,
+    }),
+    pullRequest({
+      id: 3,
+      title: 'Retire experiment',
+      author: 'linus',
+      source_branch: 'experiment',
+      state: 'closed',
+      completed_at: '2026-07-15T13:00:00Z',
+      authored_by_viewer: true,
+    }),
+  ];
+
+  it('filters authored and completed rows with merged and closed kept distinct', () => {
+    expect(filterPullRequests(rows, 'authored', '').map((pr) => pr.id)).toEqual([1, 3]);
+    expect(filterPullRequests(rows, 'completed', '').map((pr) => [pr.id, pr.state]))
+      .toEqual([[2, 'merged'], [3, 'closed']]);
+    expect(isCompletedPullRequest(rows[1])).toBe(true);
+    expect(isCompletedPullRequest(rows[2])).toBe(true);
+    expect(isCompletedPullRequest(rows[0])).toBe(false);
+  });
+
+  it('fuzzy searches number, title, author, and branch context', () => {
+    expect(filterPullRequests(rows, 'all', '#2').map((pr) => pr.id)).toEqual([2]);
+    expect(filterPullRequests(rows, 'all', 'authentication').map((pr) => pr.id)).toEqual([1]);
+    expect(filterPullRequests(rows, 'all', 'grace').map((pr) => pr.id)).toEqual([2]);
+    expect(filterPullRequests(rows, 'all', 'experiment').map((pr) => pr.id)).toEqual([3]);
+  });
+
+  it('retains a visible selection and otherwise selects the first filtered row', () => {
+    expect(reconcilePullRequestSelection(rows, 2)).toBe(2);
+    expect(reconcilePullRequestSelection([rows[2]], 2)).toBe(3);
+    expect(reconcilePullRequestSelection([], 2)).toBeNull();
+  });
+});
+
+describe('pull request timeline', () => {
+  const comment: PullRequestComment = {
+    id: 'comment-1',
+    author: 'ada',
+    avatar_url: null,
+    body: 'Ready to go.',
+    created_at: '2026-07-15T10:30:00Z',
+    url: '',
+    is_system: false,
+    path: null,
+  };
+
+  it('orders lifecycle, commits, and comments oldest-first with stable ties', () => {
+    const events = buildPullRequestTimeline(pullRequest({
+      state: 'merged',
+      created_at: '2026-07-15T09:00:00Z',
+      completed_at: '2026-07-15T11:00:00Z',
+      commits: [
+        {
+          id: 'b'.repeat(40),
+          title: 'Second alphabetical commit',
+          author: 'grace',
+          avatar_url: null,
+          committed_at: '2026-07-15T10:00:00Z',
+          url: null,
+        },
+        {
+          id: 'a'.repeat(40),
+          title: 'First alphabetical commit',
+          author: 'ada',
+          avatar_url: null,
+          committed_at: '2026-07-15T10:00:00Z',
+          url: null,
+        },
+      ],
+      comments: [comment],
+    }));
+    expect(events.map((event) => event.id)).toEqual([
+      'opened:42',
+      `commit:${'a'.repeat(40)}`,
+      `commit:${'b'.repeat(40)}`,
+      'comment:comment-1',
+      'completed:42',
+    ]);
+    expect(events.at(-1)).toMatchObject({ kind: 'completed', state: 'merged' });
+  });
+
+  it('deduplicates flattened review comments and emits a closed marker', () => {
+    const events = buildPullRequestTimeline(pullRequest({
+      state: 'closed',
+      completed_at: '2026-07-15T11:00:00Z',
+      comments: [comment, { ...comment }],
+    }));
+    expect(events.filter((event) => event.kind === 'comment')).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ kind: 'completed', state: 'closed' });
   });
 });
 

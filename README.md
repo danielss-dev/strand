@@ -71,16 +71,20 @@ keyboard alone, and the mouse stays first-class.
   Persistent Follow controls and native desktop notifications surface new
   comments, review decisions, failed checks, pushes, and merged/closed state.
   Refreshes keep existing content, focus, tabs, drafts, and diffs in place
-  while lightweight activity is revalidated in the background. Each PR gets a
-  full-width workspace: read rendered
-  Markdown descriptions and avatar-led timeline conversations, compose
-  top-level comments with formatting, preview, and hosted screenshot links, inspect
-  lazily loaded code changes in the Local Changes-style Pierre file tree,
+  while lightweight activity is revalidated in the background. The searchable
+  inbox filters All, Authored, and Completed PRs using the signed-in provider
+  identity while keeping the latest-100 query shallow. Each PR gets compact,
+  toolbar-centered Summary, Timeline, and Code tabs: read rendered Markdown descriptions,
+  follow commits/comments/lifecycle events on one chronology rail, compose
+  top-level comments from Summary or Timeline with one preserved draft, and inspect
+  lazily loaded code in the Local Changes-style Pierre file tree with aggregate
+  and selected-file addition/deletion totals,
   switch stacked/split layout in place, jump from timeline comments to their
   file/thread, read GitHub review threads with replies directly beneath their code,
   reply to them, resolve or reopen them, and add stale-head-guarded comments to
   selected line ranges. A compact readiness ledger combines review,
-  checks, conflicts, merge state, and provider freshness before merging with
+  checks, conflicts, merge state, and provider freshness. Permission-backed
+  drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control.
   Authentication stays in the signed-in `gh` / `az` CLI; provider policies
   remain enforced. Packaged desktop builds import the user's shell `PATH`, so

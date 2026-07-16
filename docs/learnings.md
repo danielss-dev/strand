@@ -1258,6 +1258,26 @@ successful request because queued completion may leave it active temporarily.
 
 ---
 
+## Hosted PR lifecycle controls fail closed on viewer capability
+
+**Rule.** A provider lifecycle action appears only when activated PR detail can
+establish that the signed-in provider account may perform it. GitHub draft
+handoff uses `PullRequest.viewerCanUpdate`; Azure's PR response has no equivalent
+viewer field, so Strand exposes Ready for review only to the signed-in PR author
+and still lets the PATCH enforce current permissions. Missing identity or
+capability data hides the transition rather than guessing from local Git config.
+
+**Why.** Draft state says what the PR is, not what the current user may change.
+Showing an enabled lifecycle button from state alone creates predictable
+permission failures and confuses a provider account with local commit identity.
+
+**How to apply.** Keep permission data on rich activated detail, never the
+shallow 100-row query. Refresh the same detail after a successful lifecycle
+write so the action, readiness strip, and state badge change together without
+reloading the hosted patch.
+
+---
+
 ## Background PR refreshes use activity snapshots, never patches
 
 **Rule.** A followed pull request is monitored with its provider-neutral

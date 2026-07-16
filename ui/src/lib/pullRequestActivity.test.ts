@@ -11,7 +11,7 @@ import type { PullRequestActivitySnapshot } from './types';
 
 function snapshot(overrides: Partial<PullRequestActivitySnapshot> = {}): PullRequestActivitySnapshot {
   return {
-    repository: { provider: 'git_hub', remote: 'origin', label: 'acme/app' },
+    repository: { provider: 'git_hub', remote: 'origin', label: 'acme/app', viewer: 'octo' },
     id: 42,
     title: 'Ship it',
     url: 'https://github.com/acme/app/pull/42',
