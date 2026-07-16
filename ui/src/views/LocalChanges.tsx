@@ -38,7 +38,7 @@ import { ConflictLanding } from './ConflictLanding';
  * menu (to be wired) so it can't be hit by accident. Clicking a file
  * selects it; ⌘↵ in the subject field commits.
  */
-export function LocalChanges() {
+export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file: string) => void }) {
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
   const status = useRepo((s) => s.status);
@@ -329,6 +329,7 @@ export function LocalChanges() {
                     onStash={() => requestStashDialog({ snapshot: false })}
                     onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                     actionLabel="Stage"
+                    onOpenFileInEditor={onOpenFileInEditor}
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                     isUntracked={(p) => untracked.has(p)}
                     onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
@@ -349,6 +350,7 @@ export function LocalChanges() {
                     onStash={() => requestStashDialog({ snapshot: false })}
                     onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
                     actionLabel="Unstage"
+                    onOpenFileInEditor={onOpenFileInEditor}
                     onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                     bulkLabel="Unstage all"
                   />
@@ -502,6 +504,8 @@ interface SectionProps {
   /** Stage (unstaged section) / Unstage (staged section) the given files. */
   onAction(files: string[]): void;
   actionLabel: string;
+  /** Open a single file in the configured external editor. */
+  onOpenFileInEditor(file: string): void;
   /** Discard the given files' working-tree changes — unstaged section only. */
   onDiscard?: (files: string[]) => void;
   /** Whether a path is untracked — gates the .gitignore quick actions
@@ -533,6 +537,7 @@ function FileSection({
   onStash,
   onAction,
   actionLabel,
+  onOpenFileInEditor,
   onDiscard,
   isUntracked,
   onIgnore,
@@ -555,9 +560,19 @@ function FileSection({
     (targets: string[]): TreeMenuItem[] => {
       const n = targets.length;
       const suffix = n > 1 ? ` ${n} files` : '';
-      const items: TreeMenuItem[] = [
-        { label: actionLabel + suffix, icon: staged ? 'minus' : 'plus', onSelect: () => onAction(targets) },
-      ];
+      const items: TreeMenuItem[] = [];
+      if (n === 1) {
+        items.push({
+          label: 'Open in editor',
+          icon: 'external',
+          onSelect: () => onOpenFileInEditor(targets[0]),
+        });
+      }
+      items.push({
+        label: actionLabel + suffix,
+        icon: staged ? 'minus' : 'plus',
+        onSelect: () => onAction(targets),
+      });
       if (onStash) {
         items.push({
           label: (n > 1 ? `Stash${suffix}` : 'Stash') + '…',
@@ -605,7 +620,18 @@ function FileSection({
       }
       return items;
     },
-    [actionLabel, staged, onAction, onStash, onDiscard, isUntracked, onIgnore, onIgnoreCustom, files],
+    [
+      actionLabel,
+      staged,
+      onAction,
+      onOpenFileInEditor,
+      onStash,
+      onDiscard,
+      isUntracked,
+      onIgnore,
+      onIgnoreCustom,
+      files,
+    ],
   );
 
   return (

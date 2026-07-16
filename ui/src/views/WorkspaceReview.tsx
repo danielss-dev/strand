@@ -63,7 +63,11 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * ⌘F searches every member's pool at once — each match is tagged with its
  * owning repo, and stepping through matches crosses repo boundaries.
  */
-export function WorkspaceReview() {
+export function WorkspaceReview({
+  onOpenFileInEditor,
+}: {
+  onOpenFileInEditor: (repoPath: string, file: string) => void;
+}) {
   const members = useWorkspaceReview((s) => s.members);
   const selection = useWorkspaceReview((s) => s.selection);
   const select = useWorkspaceReview((s) => s.select);
@@ -524,18 +528,24 @@ export function WorkspaceReview() {
       const allReviewed = known.every(
         (p) => verdicts.get(qk(member.path, p))!.verdict === 'reviewed',
       );
-      const items: TreeMenuItem[] = [
-        {
-          label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
-          icon: 'check',
-          onSelect: () => {
-            for (const p of known) {
-              const v = verdicts.get(qk(member.path, p))!;
-              if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(member.path, p, v.hash);
-            }
-          },
+      const items: TreeMenuItem[] = [];
+      if (n === 1) {
+        items.push({
+          label: 'Open in editor',
+          icon: 'external',
+          onSelect: () => onOpenFileInEditor(member.path, known[0]),
+        });
+      }
+      items.push({
+        label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
+        icon: 'check',
+        onSelect: () => {
+          for (const p of known) {
+            const v = verdicts.get(qk(member.path, p))!;
+            if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(member.path, p, v.hash);
+          }
         },
-      ];
+      });
       const unstagedTargets = known.filter((p) => isUnstaged(member, p));
       if (unstagedTargets.length > 0) {
         const un = unstagedTargets.length;
@@ -575,7 +585,15 @@ export function WorkspaceReview() {
       }
       return items;
     },
-    [verdicts, toggleReviewed, stageFiles, discardFiles, openInRepo, fail],
+    [
+      verdicts,
+      toggleReviewed,
+      stageFiles,
+      discardFiles,
+      openInRepo,
+      fail,
+      onOpenFileInEditor,
+    ],
   );
 
   const anyLoading = members.some((m) => m.loading);

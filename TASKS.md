@@ -22,6 +22,35 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ---
 
+## 1.0 Git-client parity program (audited 2026-07-16)
+
+Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-client-1.0-audit.md).
+
+- ☑ **Network/ref ergonomics — first slice.** Explicit pull modes (Git config,
+  merge+FF, rebase, FF-only), normal / follow-tags / all-tags pushes, guarded
+  force-with-lease with a dedicated confirmation, toolbar + palette access,
+  current-branch network submenus, ref/SHA copy actions, and branch/worktree
+  creation from tags (`PullMode` / `PushMode`, `ForcePushDialog`, sidebar menus).
+- ☑ **Network/ref ergonomics — second slice.** Set/change/unset upstream,
+  push a chosen non-current local branch to a chosen remote/ref, fetch/pull a
+  selected remote branch, and persist a per-repo default pull strategy
+  (`Repo::{set_branch_upstream,push_branch,fetch_branch,pull_branch}`,
+  `BranchNetworkDialog`, `repoPullMode`).
+- ☐ **Daily local Git close-out.** Initialize repository, line-level staging,
+  stash-to-branch, multi-commit cherry-pick/revert/compare, branch comparison,
+  interactive-rebase edit, and merge-preserving rebase.
+- ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
+  submission, update/check-out/close/reopen lifecycle actions, and Azure inline
+  review parity.
+- ☐ **Stable-release hardening.** Localization, production CSP/capability
+  audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
+  full keyboard/accessibility/release-quality pass.
+- ☐ **Power parity selection.** Decide which of bisect, LFS/signing UI,
+  repository maintenance, Git-flow, sparse checkout, patch workflows, and
+  custom actions fit the 1.0 date; the rest move explicitly to 1.1.
+
+---
+
 ## strand-core (Rust git engine)
 
 ### Reads
@@ -152,7 +181,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   [--delete] refs/tags/<tag>`; `Repo::push_all_tags` — `git push <remote>
   --tags`; both shell out via `run_git_streaming` like the other network ops.
   Default remote resolves to HEAD's upstream remote → `origin` → first remote.
-  `--follow-tags` on a branch push still not wired.)
+  Branch push now exposes `--follow-tags` through `PushMode::FollowTags`.)
 - ◐ Stash create / snapshot / apply / pop / drop (`stash_save` via `stash_save2`
   with `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
   `StashOutcome { oid: None }` instead of erroring; `stash_snapshot` keeps the
@@ -210,10 +239,25 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 
 ### Network
 - ☑ `fetch` (shell-out to `git fetch --prune`)
-- ☑ `pull` (shell-out; rebase flag supported, no UI yet)
-- ☑ `push` (shell-out; `--force-with-lease` flag supported, no UI yet;
+- ☑ `pull` (shell-out; typed `PullMode` exposes Git-config default, explicit
+  merge with fast-forward when possible, rebase, and fast-forward-only through
+  the toolbar network menu, current-branch context menu, and command palette)
+- ☑ `push` (shell-out; typed `PushMode` exposes normal, `--follow-tags`, and
+  guarded `--force-with-lease` pushes through the toolbar/branch menus and
+  command palette; plain `--force` is intentionally unavailable;
   `Repo::push` creates `origin/<branch>` and sets it as upstream on the first
   push of an otherwise unconfigured local branch — DAN-10)
+- ☑ Set / change / unset a local branch's upstream from the branch menu
+  (`Repo::set_branch_upstream`, `BranchNetworkDialog`).
+- ☑ Push a chosen non-current local branch to a chosen remote/ref without
+  checking it out first; first-push naming + set-upstream are explicit
+  (`Repo::push_branch`, `repo_branch_push`).
+- ☑ Pull/fetch a chosen remote branch from its context menu, with the same
+  strategy and progress/cancellation model as the current-branch toolbar
+  (`Repo::{pull_branch,fetch_branch}`, remote-branch context menu).
+- ◐ Persist a default pull strategy per repository and offer pull autostash as
+  an explicit one-operation/default preference (per-repo `repoPullMode` ships;
+  autostash remains).
 - ☑ Credentials: inherit user's `git` config (helper, SSH agent) via
   shell-out + `GIT_TERMINAL_PROMPT=0`. Native `auth-git2` integration
   with OS keychain is a future polish.
@@ -340,6 +384,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 ## Frontend — components & wiring
 
 ### Repo opening
+- ☐ Create a new local repository (initial branch + optional `.gitignore` /
+  first commit), as required by PRD §6.1 P0.
 - ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`.
   The picker is **multi-select** (`pickRepoDirectories`, `multiple: true`) — pick
   several folders at once and each opens as its own tab via `App.openMany`
@@ -569,8 +615,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
 - ☑ Fetch / Pull / Push handlers (shell out to `git`; spinner + shimmer
   + directional bobbing animation while in flight; success flashes an
   inline accent-colored check on the button — `.sync-done` in chrome.css,
-  `flashDone` in App.tsx — no longer a toast; failures still toast git
-  stderr)
+  `flashDone` in App.tsx — no longer a toast; failures still toast git stderr).
+  A keyboard-operable chevron menu adds pull via Git config / merge / rebase /
+  FF-only and push current / follow-tags / all-tags / force-with-lease; force
+  push crosses `ForcePushDialog` and names the lease protection.
 - ☑ Real ahead/behind counts (driven by `Repo::meta`)
 - ☑ Branch picker dropdown (lists local + remote branches with upstream
   + ahead/behind; checkout local branch, track a remote branch, and an
@@ -602,6 +650,10 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
   section `+`, and palette "Create branch…" from HEAD) / Merge into <current>
   (opens `MergeDialog`) / Rebase <current> onto this (confirm) / Delete branch
   (confirm). HEAD shows a disabled "Current branch".
+- ☑ Ref clipboard/context expansion (2026-07-16): local branches copy name /
+  full ref / SHA and the current branch exposes Pull + Push strategy submenus;
+  remote branches copy short name / remote ref / SHA; tags copy name / SHA and
+  can create a branch or worktree; stashes copy `stash@{n}` / SHA.
 - ☑ Remotes list as a tree rooted at the remote name (e.g. `origin/` is
   the top folder). **All** remote-tracking branches show, including ones a
   local branch already tracks (`origin/main` stays visible with only `main`
@@ -1063,7 +1115,9 @@ Legend: ☐ not started · ◐ in progress · ☑ done · ✗ blocked
     (`strand-core::external::build_argv`/`spawn_detached`, IPC
     `repo_open_in_editor` / `repo_open_in_terminal`); wired to the MainHeader
     Terminal / Open-externally buttons (formerly disabled stubs) and palette
-    "Open in editor" / "Open in terminal"
+    "Open in editor" / "Open in terminal"; single-file context menus in Files,
+    Local Changes, Review, and Workspace Review pass the clicked path to the
+    configured editor (`App.openEditorTarget`)
   - ☑ **Updates**: version + check/download/restart (`stores/updates.ts` on
     plugin-updater/plugin-process) + `updateAutoCheck` / `updateAutoInstall`
     prefs read by App's delayed launch auto-check (soft-fails while the

@@ -66,6 +66,8 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 
 Push is deliberately on `Mod+P` and pull on `Mod+Shift+P`. The Git shortcuts act only on the currently open repository, and most Navigation/Git/Repository commands need a repository open — `Mod+E` is the exception and lists recents even with nothing open.
 
+Alternative network strategies are palette actions rather than fixed shortcuts: pull with merge, rebase, or fast-forward-only; push annotated tags; push every tag; and force-push with a lease. The current branch also contributes “Manage current branch upstream…” and “Push current branch to…” actions. Force-push always opens a branch-specific confirmation dialog, and plain `--force` is not exposed. Any branch or remote-branch row can open its richer context menu from the keyboard with the Menu key or `Shift+F10`.
+
 A few fixed app-level keys are not rebindable:
 
 | Key | Action |

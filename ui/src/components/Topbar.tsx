@@ -2,17 +2,23 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
+import { ContextMenu, type MenuItem } from './ContextMenu';
 import { RepoTabs } from './RepoTabs';
 import { isTauri } from '../lib/tauri';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { useSettings } from '../stores/settings';
 import { useRepo } from '../stores/repo';
+import type { PullMode, PushMode } from '../lib/types';
 
 interface Props {
   onOpenPalette: () => void;
-  onSync: () => void;
-  onPull: () => void;
-  onPush: () => void;
+  onFetch: () => void;
+  onPull: (mode?: PullMode) => void;
+  onPush: (mode?: PushMode) => void;
+  onPushAllTags: () => void;
+  onForcePush: () => void;
+  pullMode: PullMode;
+  onSetPullMode: (mode: PullMode) => void;
   syncing: boolean;
   pulling: boolean;
   pushing: boolean;
@@ -42,9 +48,13 @@ interface Props {
 
 export function Topbar({
   onOpenPalette,
-  onSync,
+  onFetch,
   onPull,
   onPush,
+  onPushAllTags,
+  onForcePush,
+  pullMode,
+  onSetPullMode,
   syncing,
   pulling,
   pushing,
@@ -70,6 +80,48 @@ export function Topbar({
   const ahead = meta?.ahead ?? 0;
   const behind = meta?.behind ?? 0;
   const repoName = repoFamilyName(meta);
+  const [networkMenu, setNetworkMenu] = useState<{ x: number; y: number } | null>(null);
+  const networkBusy = syncing || pulling || pushing;
+  const pullModeLabel = pullMode === 'default'
+    ? 'Git configuration'
+    : pullMode === 'fast-forward-only'
+      ? 'Fast-forward only'
+      : pullMode[0].toUpperCase() + pullMode.slice(1);
+  const networkItems = useMemo<MenuItem[]>(() => [
+    { label: 'Fetch', icon: 'refresh', disabled: networkBusy, onSelect: onFetch },
+    {
+      label: 'Pull',
+      icon: 'arrow-down',
+      disabled: networkBusy,
+      submenu: [
+        { label: `Repository default (${pullModeLabel})`, icon: 'check', onSelect: () => onPull() },
+        { label: 'Use Git configuration', onSelect: () => onPull('default') },
+        { label: 'Merge (fast-forward if possible)', onSelect: () => onPull('merge') },
+        { label: 'Rebase', onSelect: () => onPull('rebase') },
+        { label: 'Fast-forward only', onSelect: () => onPull('fast-forward-only') },
+        {
+          label: 'Set repository default',
+          submenu: [
+            { label: 'Use Git configuration', icon: pullMode === 'default' ? 'check' : undefined, onSelect: () => onSetPullMode('default') },
+            { label: 'Merge', icon: pullMode === 'merge' ? 'check' : undefined, onSelect: () => onSetPullMode('merge') },
+            { label: 'Rebase', icon: pullMode === 'rebase' ? 'check' : undefined, onSelect: () => onSetPullMode('rebase') },
+            { label: 'Fast-forward only', icon: pullMode === 'fast-forward-only' ? 'check' : undefined, onSelect: () => onSetPullMode('fast-forward-only') },
+          ],
+        },
+      ],
+    },
+    {
+      label: 'Push',
+      icon: 'arrow-up',
+      disabled: networkBusy,
+      submenu: [
+        { label: 'Current branch', onSelect: () => onPush('default') },
+        { label: 'With annotated tags', onSelect: () => onPush('follow-tags') },
+        { label: 'All tags', onSelect: onPushAllTags },
+        { label: 'Force with lease…', icon: 'arrow-up', danger: true, onSelect: onForcePush },
+      ],
+    },
+  ], [networkBusy, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetPullMode, pullMode, pullModeLabel]);
 
   const inTauri = isTauri();
   // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:
@@ -122,7 +174,7 @@ export function Topbar({
         <button
           type="button"
           className="sync-btn"
-          onClick={onSync}
+          onClick={onFetch}
           title="Fetch"
           aria-label="Fetch"
           disabled={!meta}
@@ -138,7 +190,7 @@ export function Topbar({
         <button
           type="button"
           className="sync-btn"
-          onClick={onPull}
+          onClick={() => onPull()}
           title={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
           aria-label={behind > 0 ? `Pull (${behind} behind)` : 'Pull'}
           disabled={!meta}
@@ -155,7 +207,7 @@ export function Topbar({
         <button
           type="button"
           className="sync-btn"
-          onClick={onPush}
+          onClick={() => onPush()}
           title={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
           aria-label={ahead > 0 ? `Push (${ahead} ahead)` : 'Push'}
           disabled={!meta}
@@ -169,7 +221,31 @@ export function Topbar({
           )}
           <span className="count">{ahead}</span>
         </button>
+        <button
+          type="button"
+          className="sync-btn"
+          title="More fetch, pull, and push options"
+          aria-label="More fetch, pull, and push options"
+          aria-haspopup="menu"
+          aria-expanded={networkMenu != null}
+          disabled={!meta}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setNetworkMenu({ x: r.right - 2, y: r.bottom + 4 });
+          }}
+        >
+          <Icon name="chev-down" size={10} />
+        </button>
       </div>
+
+      {networkMenu && (
+        <ContextMenu
+          x={networkMenu.x}
+          y={networkMenu.y}
+          items={networkItems}
+          onClose={() => setNetworkMenu(null)}
+        />
+      )}
 
       <StashButton onToast={onToast} onSaveSnapshot={onSaveSnapshot} onStash={onStash} />
 

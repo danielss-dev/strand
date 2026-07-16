@@ -7,6 +7,7 @@ import type {
   AiGenerationRequest,
   BaseBranch,
   BlameLine,
+  BranchPushRequest,
   CheckoutOutcome,
   CloneOutcome,
   Commit,
@@ -23,6 +24,7 @@ import type {
   MergeMode,
   NetworkOutcome,
   Progress,
+  PullMode,
   PullRequest,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
@@ -32,6 +34,7 @@ import type {
   PullRequestMergeStrategy,
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
+  PushMode,
   RebaseEntry,
   RebaseStep,
   Refs,
@@ -232,22 +235,64 @@ export const tauri = {
       opId,
       onEvent: progressChannel(onProgress),
     }),
-  repoPull: (path: string, rebase: boolean, onProgress?: (p: Progress) => void, opId?: string) =>
+  repoPull: (path: string, mode: PullMode, onProgress?: (p: Progress) => void, opId?: string) =>
     invoke<NetworkOutcome>('repo_pull', {
       path,
-      rebase,
+      mode,
       opId,
       onEvent: progressChannel(onProgress),
     }),
   repoPush: (
     path: string,
-    forceWithLease: boolean,
+    mode: PushMode,
     onProgress?: (p: Progress) => void,
     opId?: string,
   ) =>
     invoke<NetworkOutcome>('repo_push', {
       path,
-      forceWithLease,
+      mode,
+      opId,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoBranchPush: (
+    path: string,
+    request: BranchPushRequest,
+    onProgress?: (p: Progress) => void,
+    opId?: string,
+  ) =>
+    invoke<NetworkOutcome>('repo_branch_push', {
+      path,
+      request,
+      opId,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoBranchFetch: (
+    path: string,
+    remote: string,
+    branch: string,
+    onProgress?: (p: Progress) => void,
+    opId?: string,
+  ) =>
+    invoke<NetworkOutcome>('repo_branch_fetch', {
+      path,
+      remote,
+      branch,
+      opId,
+      onEvent: progressChannel(onProgress),
+    }),
+  repoBranchPull: (
+    path: string,
+    remote: string,
+    branch: string,
+    mode: PullMode,
+    onProgress?: (p: Progress) => void,
+    opId?: string,
+  ) =>
+    invoke<NetworkOutcome>('repo_branch_pull', {
+      path,
+      remote,
+      branch,
+      mode,
       opId,
       onEvent: progressChannel(onProgress),
     }),
@@ -347,6 +392,8 @@ export const tauri = {
     invoke<void>('repo_branch_delete', { path, name, force }),
   repoBranchRename: (path: string, oldName: string, newName: string) =>
     invoke<void>('repo_branch_rename', { path, oldName, newName }),
+  repoBranchSetUpstream: (path: string, branch: string, upstream: string | null) =>
+    invoke<void>('repo_branch_set_upstream', { path, branch, upstream }),
   repoBranchDeleteRemote: (
     path: string,
     remote: string,

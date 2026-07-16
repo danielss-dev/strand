@@ -52,7 +52,7 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * *stays on the file*, `s` stages, `d`-`d` discards, `n`/`p` step change
  * blocks, `c` jumps to the commit form.
  */
-export function Review() {
+export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: string) => void }) {
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const reviewUnstagedDiffs = useRepo((s) => s.reviewUnstagedDiffs);
@@ -368,18 +368,24 @@ export function Review() {
       const n = known.length;
       const suffix = n > 1 ? ` ${n} files` : '';
       const allReviewed = known.every((p) => verdicts.get(p)!.verdict === 'reviewed');
-      const items: TreeMenuItem[] = [
-        {
-          label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
-          icon: 'check',
-          onSelect: () => {
-            for (const p of known) {
-              const v = verdicts.get(p)!;
-              if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
-            }
-          },
+      const items: TreeMenuItem[] = [];
+      if (n === 1) {
+        items.push({
+          label: 'Open in editor',
+          icon: 'external',
+          onSelect: () => onOpenFileInEditor(known[0]),
+        });
+      }
+      items.push({
+        label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
+        icon: 'check',
+        onSelect: () => {
+          for (const p of known) {
+            const v = verdicts.get(p)!;
+            if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
+          }
         },
-      ];
+      });
       const unstagedTargets = known.filter((p) => unstagedSet.has(p));
       if (unstagedTargets.length > 0) {
         const un = unstagedTargets.length;
@@ -414,7 +420,7 @@ export function Review() {
       }
       return items;
     },
-    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool],
+    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor],
   );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
@@ -846,7 +852,6 @@ export function Review() {
     </div>
   );
 }
-
 /** Last path segment — the repo's directory name from its absolute path. */
 function basename(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
@@ -916,4 +921,3 @@ function ReviewToolbar({
     </div>
   );
 }
-

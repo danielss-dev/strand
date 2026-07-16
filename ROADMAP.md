@@ -1081,6 +1081,12 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   measurement)
 - ◐ Signed installers on all three platforms (macOS signed + notarized via
   release CI since v0.5.0; Windows EV cert + Linux signing still open)
+- ◐ Mature-client parity close-out — audited against current Fork, GitKraken,
+  and Tower surfaces in `docs/git-client-1.0-audit.md`. Network strategy + ref
+  context-menu slices shipped 2026-07-16, including upstream management,
+  explicit non-current branch push, selected-remote fetch/pull, and per-repo
+  pull defaults; daily local Git gaps, hosted-review close-out, and
+  stable-release hardening remain.
 
 **File view + submodules (2026-06-06):** First 1.0 vertical — the four-tab file
 view (PRD §6.5) and submodules went from placeholders to wired features.
@@ -1666,6 +1672,38 @@ therefore find Homebrew, local-bin, and version-manager installs of
 `gh`/`az`/`codex`/`claude`, including npm launchers whose `env node` runtime
 also depends on PATH, while executable lookup remains outside the untrusted
 repository working directory.
+
+**Network strategies + richer ref menus (2026-07-16):** First slice of the
+1.0 mature-client parity audit. `network.rs` replaces the two boolean switches
+with typed `PullMode` (Git-config default / merge+FF / rebase / FF-only) and
+`PushMode` (normal / follow annotated tags / force-with-lease); plain
+`--force` stays impossible. The topbar gains a keyboard-operable network
+chevron with those modes plus push-all-tags, every mode is searchable in ⌘K,
+and force push crosses a dedicated branch-naming/lease-warning dialog. The
+current branch exposes the same Pull/Push submenus on right-click. Local and
+remote branches can copy their short name, full/remote ref, and target SHA;
+tags copy name/SHA and create branches/worktrees; stashes copy name/SHA. The
+full parity/gap matrix and recommended waves live in
+`docs/git-client-1.0-audit.md`. Verified with focused network tests, TypeScript,
+and the normal Rust checks.
+
+**Branch tracking + explicit ref network operations (2026-07-16):** The second
+network/ref slice completes upstream set/change/unset for any local branch,
+pushes a chosen local branch to an explicit remote destination without changing
+HEAD, and fetches or pulls a selected remote branch via fully qualified
+refspecs. Pull's primary action and the corrected fetch→pull→push Sync flow now
+honor a per-repository default strategy. `BranchNetworkDialog`, local/remote
+branch context menus, and current-branch palette actions keep every path
+keyboard-reachable; force remains lease-only. Verified by 20 focused Rust
+tests, all 233 frontend tests, Rust/TypeScript checks, production build, and a
+live packaged-app menu/dialog pass.
+
+**File context-menu editor launch (2026-07-16):** Working-tree files in the
+sidebar Files tree, Local Changes, Review, and Workspace Review now expose
+**Open in editor** for a single row. Every surface passes its clicked repository
+and path to the existing safe integration launcher; historical commit files and
+multi-file selections intentionally omit the action. Verified by TypeScript,
+all 233 frontend tests, and the editor-launch safety suite.
 
 ---
 

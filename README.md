@@ -104,9 +104,12 @@ keyboard alone, and the mouse stays first-class.
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box.
 - **Everyday Git** — staging with per-change-block stage / discard / unstage
-  inline in the diff; fetch / pull / push with streaming progress (the first
-  push creates and tracks the branch on `origin`); branches, tags, stashes,
-  remotes, cherry-pick, revert, merge, and a fully
+  inline in the diff; fetch / pull / push with streaming progress and explicit
+  pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,
+  annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
+  any local branch to a chosen remote destination; upstream set/change/unset;
+  selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
+  branches, tags, stashes, remotes, cherry-pick, revert, merge, and a fully
   keyboard-operable interactive rebase (reorder, reword, squash, fixup,
   drop) with conflict-pause Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
@@ -120,6 +123,8 @@ keyboard alone, and the mouse stays first-class.
 - **File view** — highlighted source, `--follow` history, compare any two
   revisions, blame, and rendered previews for markdown and SVG; selecting a
   commit re-roots the Files tree and pins opened content to that revision.
+  Right-click any working-tree file to open that exact path in your configured
+  external editor.
 - **Comfortable to live in** — multiple repositories open at once (as a
   vertical icon rail or horizontal toolbar tabs, your pick in Appearance)
   persisted across launches, saveable as named **workspaces** (the repos behind
@@ -127,7 +132,8 @@ keyboard alone, and the mouse stays first-class.
   to return to your default set; a manage dialog curates each; creating,
   switching, and managing are all in ⌘K, including importing a VS Code
   `.code-workspace`), native macOS
-  menubar, open in your editor or terminal, settings (⌘,) for appearance / diff /
+  menubar, open the repository or a chosen file in your editor, open a terminal,
+  settings (⌘,) for appearance / diff /
   git / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
@@ -149,12 +155,13 @@ keyboard alone, and the mouse stays first-class.
 
 ## Status
 
-Strand is in **alpha**. It opens and works on large real-world repos daily,
-but expect rough edges. The bigger known gaps: the file-tree sidebar,
-full-history content search (`-G`/`-S`), stash-to-branch, and
-interactive-rebase `edit` (pause to amend). Strand is currently dark-only;
-theming arrives with the public beta. See [`ROADMAP.md`](./ROADMAP.md) for
-the milestone view and [`TASKS.md`](./TASKS.md) for the granular list.
+Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
+works on large real-world repositories daily, but expect rough edges. The main
+remaining gaps are hosted-review completion, localization, Windows/Linux
+release signing and validation, line-level staging, stash-to-branch, pull
+autostash/prune preferences, and interactive-rebase `edit` / merge preservation. See the
+[`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
+and [`TASKS.md`](./TASKS.md).
 
 ## Install
 

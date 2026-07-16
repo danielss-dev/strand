@@ -13,13 +13,13 @@
 //! several big repos) could head-of-line-block every other pending command.
 //! Quick writes (stage, branch, tag, …) stay plain sync bodies.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
-    network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress},
+    network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
@@ -591,7 +591,7 @@ pub async fn repo_fetch(
 #[tauri::command(async)]
 pub async fn repo_pull(
     path: String,
-    rebase: bool,
+    mode: PullMode,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -601,7 +601,7 @@ pub async fn repo_pull(
     let result = run_blocking("pull", move || {
         let repo = Repo::discover(&path)?;
         repo.pull(
-            rebase,
+            mode,
             |p| {
                 let _ = on_event.send(p);
             },
@@ -617,7 +617,7 @@ pub async fn repo_pull(
 #[tauri::command(async)]
 pub async fn repo_push(
     path: String,
-    force_with_lease: bool,
+    mode: PushMode,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -627,10 +627,102 @@ pub async fn repo_push(
     let result = run_blocking("push", move || {
         let repo = Repo::discover(&path)?;
         repo.push(
-            force_with_lease,
+            mode,
             |p| {
                 let _ = on_event.send(p);
             },
+            Some(&cancel),
+        )
+        .map_err(CmdError::from)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchPushRequest {
+    branch: String,
+    remote: String,
+    remote_branch: String,
+    mode: PushMode,
+    set_upstream: bool,
+}
+
+#[tauri::command(async)]
+pub async fn repo_branch_push(
+    path: String,
+    request: BranchPushRequest,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("branch push", move || {
+        let repo = Repo::discover(&path)?;
+        repo.push_branch(
+            &request.branch,
+            &request.remote,
+            &request.remote_branch,
+            request.mode,
+            request.set_upstream,
+            |p| { let _ = on_event.send(p); },
+            Some(&cancel),
+        )
+        .map_err(CmdError::from)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_branch_fetch(
+    path: String,
+    remote: String,
+    branch: String,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("branch fetch", move || {
+        let repo = Repo::discover(&path)?;
+        repo.fetch_branch(
+            &remote,
+            &branch,
+            |p| { let _ = on_event.send(p); },
+            Some(&cancel),
+        )
+        .map_err(CmdError::from)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_branch_pull(
+    path: String,
+    remote: String,
+    branch: String,
+    mode: PullMode,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("branch pull", move || {
+        let repo = Repo::discover(&path)?;
+        repo.pull_branch(
+            &remote,
+            &branch,
+            mode,
+            |p| { let _ = on_event.send(p); },
             Some(&cancel),
         )
         .map_err(CmdError::from)
@@ -928,6 +1020,16 @@ pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<
 #[tauri::command(async)]
 pub fn repo_branch_rename(path: String, old_name: String, new_name: String) -> CmdResult<()> {
     Repo::discover(&path)?.rename_branch(&old_name, &new_name)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn repo_branch_set_upstream(
+    path: String,
+    branch: String,
+    upstream: Option<String>,
+) -> CmdResult<()> {
+    Repo::discover(&path)?.set_branch_upstream(&branch, upstream.as_deref())?;
     Ok(())
 }
 
