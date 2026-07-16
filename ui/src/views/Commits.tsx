@@ -1197,7 +1197,6 @@ interface RefChip {
 
 function indexRefs(refs: Refs): Map<string, RefChip[]> {
   const m = new Map<string, RefChip[]>();
-  const currentBranch = refs.branches.find((b) => b.is_head)?.name;
   const push = (oid: string, chip: RefChip) => {
     const arr = m.get(oid);
     if (arr) arr.push(chip);
@@ -1210,7 +1209,7 @@ function indexRefs(refs: Refs): Map<string, RefChip[]> {
       kind: b.is_head ? 'head' : 'local',
       merged: b.merged,
       title: b.merged
-        ? `Merged into ${currentBranch ?? 'the checked-out branch'}; safe to delete`
+        ? `Merged into ${refs.primary_branch ?? 'the primary branch'}; safe to delete`
         : undefined,
     });
   }

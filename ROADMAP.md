@@ -1700,9 +1700,10 @@ tests, all 233 frontend tests, Rust/TypeScript checks, production build, and a
 live packaged-app menu/dialog pass.
 
 **Merged branch indicators (2026-07-16):** Closed DAN-19. Local branch refs now
-carry Git ancestry against the checked-out branch, the sidebar overlays a
-merged check on contained branch icons, and commit-graph ref chips carry the
-same state. The current branch never marks itself.
+carry Git ancestry against the repository's primary branch (remote HEAD first,
+then conventional local defaults), the sidebar overlays a merged check on
+contained branch icons, and commit-graph ref chips carry the same state. The
+primary and current branches never mark themselves.
 
 **File context-menu editor launch (2026-07-16):** Working-tree files in the
 sidebar Files tree, Local Changes, Review, and Workspace Review now expose

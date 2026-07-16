@@ -116,7 +116,8 @@ keyboard alone, and the mouse stays first-class.
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;
   selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
-  merged local branches are marked in the sidebar and commit graph; branches,
+  local branches merged into the primary branch are marked in the sidebar and
+  commit graph; branches,
   tags, stashes, remotes, cherry-pick, revert, merge, and a fully
   keyboard-operable interactive rebase (reorder, reword, squash, fixup,
   drop) with conflict-pause Continue / Abort.

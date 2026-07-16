@@ -1415,17 +1415,20 @@ them to a same-named current file.
 
 ---
 
-## A merged branch mark means containment by the checked-out branch
+## A merged branch mark means containment by the primary branch
 
 **Rule.** `refs::Branch.merged` is true only when the local branch tip is
-reachable from the checked-out branch tip; the checked-out branch itself is
-always false. Sidebar and commit-graph indicators must use this field instead
-of guessing from ahead/behind counts or the loaded log window.
+reachable from the repository's primary branch tip; the primary and checked-out
+branches themselves are always false. Resolve the primary branch from symbolic
+remote HEAD (preferring `origin`), then local `main`, local `master`, and finally
+the checked-out branch. Sidebar and commit-graph indicators must use this field
+instead of guessing from ahead/behind counts or the loaded log window.
 
 **Why.** Upstream drift answers a remote-sync question, not whether deleting a
-local branch would orphan its commits. The graph view is intentionally bounded,
-so client-side ancestry checks would also produce false negatives for older
-merged branches.
+local branch would orphan its commits. Using the checked-out feature as the
+containment target also mislabels its base (`main`) as an already-merged branch.
+The graph view is intentionally bounded, so client-side ancestry checks would
+also produce false negatives for older merged branches.
 
 **How to apply.** Compute the flag while collecting refs with libgit2 commit
 ancestry (`graph_descendant_of`, including equal tips), and refresh it through

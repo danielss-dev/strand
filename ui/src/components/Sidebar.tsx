@@ -929,8 +929,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         title={
           wt
             ? `${b.name} — checked out in worktree ${wt.path}; double-click to open it`
-            : b.merged && currentBranch
-              ? `${b.name} — merged into ${currentBranch}; safe to delete`
+            : b.merged && refs.primary_branch
+              ? `${b.name} — merged into ${refs.primary_branch}; safe to delete`
               : undefined
         }
         active={b.is_head}
