@@ -69,6 +69,9 @@ pub struct HelperStatus {
 struct VersionOutput {
     version: String,
     protocol_version: u32,
+    #[serde(default)]
+    #[serde(rename = "capabilities")]
+    _capabilities: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,10 +96,7 @@ struct HelperAsset {
 pub fn status(app: &AppHandle) -> HelperStatus {
     let config = load_config(app).unwrap_or_default();
     match installed_version(app) {
-        Ok(version)
-            if version.version == env!("CARGO_PKG_VERSION")
-                && version.protocol_version == PROTOCOL_VERSION =>
-        {
+        Ok(version) if version.protocol_version == PROTOCOL_VERSION => {
             HelperStatus {
                 enabled: config.enabled,
                 installed: true,
@@ -113,7 +113,7 @@ pub fn status(app: &AppHandle) -> HelperStatus {
             protocol_version: Some(version.protocol_version),
             profiles: config.profiles,
             error: Some(
-                "The installed strand-azdo helper does not match this Strand release; retry installation"
+                "The installed strand-azdo helper uses an incompatible protocol; retry installation"
                     .into(),
             ),
         },
@@ -254,9 +254,8 @@ fn load_config(app: &AppHandle) -> Result<ProfileConfig> {
 
 fn ensure_installed(app: &AppHandle) -> Result<()> {
     let version = installed_version(app)?;
-    if version.version != env!("CARGO_PKG_VERSION") || version.protocol_version != PROTOCOL_VERSION
-    {
-        return Err("The installed strand-azdo helper does not match this Strand release; reinstall it from Settings → Hosting".into());
+    if version.protocol_version != PROTOCOL_VERSION {
+        return Err("The installed strand-azdo helper uses an incompatible protocol; reinstall it from Settings → Hosting".into());
     }
     Ok(())
 }
@@ -396,10 +395,7 @@ fn helper_binary(app: &AppHandle) -> Result<PathBuf> {
         return fs::canonicalize(path)
             .map_err(|error| format!("Could not resolve STRAND_AZDO_HELPER_PATH: {error}"));
     }
-    Ok(helper_home(app)?
-        .join("bin")
-        .join(env!("CARGO_PKG_VERSION"))
-        .join(binary_name()))
+    Ok(helper_home(app)?.join("bin").join(binary_name()))
 }
 
 fn binary_name() -> &'static str {
@@ -419,11 +415,8 @@ fn release_target() -> Result<&'static str> {
     }
 }
 
-fn install_base_url() -> String {
-    format!(
-        "https://github.com/danielss-dev/strand/releases/download/v{}",
-        env!("CARGO_PKG_VERSION")
-    )
+fn install_base_url() -> &'static str {
+    "https://github.com/danielss-dev/strand/releases/download/strand-azdo-latest"
 }
 
 fn install_client() -> Result<reqwest::blocking::Client> {
@@ -437,11 +430,6 @@ fn install_client() -> Result<reqwest::blocking::Client> {
 }
 
 fn ensure_installed_or_download(app: &AppHandle) -> Result<()> {
-    if installed_version(app).is_ok_and(|value| {
-        value.version == env!("CARGO_PKG_VERSION") && value.protocol_version == PROTOCOL_VERSION
-    }) {
-        return Ok(());
-    }
     download_and_install(app)
 }
 
@@ -470,10 +458,16 @@ fn download_and_install(app: &AppHandle) -> Result<()> {
     let manifest: HelperManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("The helper manifest is invalid: {error}"))?;
     if manifest.schema_version != 1
-        || manifest.strand_version != env!("CARGO_PKG_VERSION")
+        || manifest.strand_version.trim().is_empty()
         || manifest.protocol_version != PROTOCOL_VERSION
     {
-        return Err("The helper manifest does not match this Strand release".into());
+        return Err("The latest helper manifest is not compatible with this Strand version".into());
+    }
+    if installed_version(app).is_ok_and(|version| {
+        version.version == manifest.strand_version
+            && version.protocol_version == manifest.protocol_version
+    }) {
+        return Ok(());
     }
     let target = release_target()?;
     let asset = manifest
@@ -522,7 +516,8 @@ fn download_and_install(app: &AppHandle) -> Result<()> {
     let output = run_json_at(app, &staged, &["version"], None)?;
     let version: VersionOutput = serde_json::from_value(output)
         .map_err(|error| format!("Downloaded strand-azdo version is invalid: {error}"))?;
-    if version.version != env!("CARGO_PKG_VERSION") || version.protocol_version != PROTOCOL_VERSION
+    if version.version != manifest.strand_version
+        || version.protocol_version != manifest.protocol_version
     {
         return Err("The downloaded helper did not report the expected version".into());
     }
@@ -615,6 +610,33 @@ pub fn remove_all(app: &AppHandle) -> Result<()> {
 mod tests {
     use super::*;
     use zip::{write::SimpleFileOptions, ZipWriter};
+
+    #[test]
+    fn helper_version_accepts_the_declared_capabilities_contract() {
+        let version: VersionOutput = serde_json::from_value(serde_json::json!({
+            "version": "0.11.0",
+            "protocol_version": 1,
+            "capabilities": ["pull_requests", "pat"]
+        }))
+        .unwrap();
+        assert_eq!(version.protocol_version, 1);
+        assert_eq!(version._capabilities, ["pull_requests", "pat"]);
+
+        let minimal: VersionOutput = serde_json::from_value(serde_json::json!({
+            "version": "0.11.0",
+            "protocol_version": 1
+        }))
+        .unwrap();
+        assert!(minimal._capabilities.is_empty());
+    }
+
+    #[test]
+    fn helper_download_uses_the_rolling_signed_release() {
+        assert_eq!(
+            install_base_url(),
+            "https://github.com/danielss-dev/strand/releases/download/strand-azdo-latest"
+        );
+    }
 
     #[test]
     fn zip_extraction_accepts_only_the_expected_regular_binary() {

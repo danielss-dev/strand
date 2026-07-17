@@ -88,9 +88,13 @@ keyboard alone, and the mouse stays first-class.
   merge-commit, squash, or rebase through a GitHub-style split control.
   GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
-  release-pinned `strand-azdo` REST helper configured in Settings → Hosting;
+  independently updated, signed `strand-azdo` REST helper configured in Settings → Hosting;
   PATs live only in the native credential vault, and Windows can use integrated
-  Negotiate/NTLM authentication. Provider policies remain enforced. Windows notification monitoring reads the native desktop
+  Negotiate/NTLM authentication. Its collection URL automatically matches HTTPS
+  repository remotes and supplies the project/repository coordinates used by the
+  PR view across HTTPS and SSH clones; extra prefixes are only needed for server
+  aliases. Provider policies
+  remain enforced. Windows notification monitoring reads the native desktop
   permission instead of WebView2's browser permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work

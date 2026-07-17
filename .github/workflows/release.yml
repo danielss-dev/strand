@@ -21,6 +21,10 @@ on:
       tag:
         description: 'Release tag (e.g. v0.1.0). Must match the version in tauri.conf.json.'
         required: true
+      helpers_only:
+        description: 'Backfill signed strand-azdo assets without rebuilding desktop installers.'
+        type: boolean
+        default: false
 
 jobs:
   helper:
@@ -129,6 +133,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.helpers_only }}
     permissions:
       contents: write
     strategy:
@@ -235,6 +240,7 @@ jobs:
 
   helper-release:
     needs: [helper, release]
+    if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only)) }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -271,7 +277,6 @@ jobs:
             helper-dist/strand-azdo-manifest.json \
             helper-dist/strand-azdo-manifest.json.minisig \
             --clobber
-
   helper-smoke:
     needs: helper-release
     permissions:
@@ -358,3 +363,35 @@ jobs:
             "smoke/extracted/${{ matrix.binary }}" \
             "${{ matrix.target }}" \
             smoke/version.json
+
+  helper-promote:
+    needs: helper-smoke
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Download verified exact-tag helper assets
+        run: |
+          mkdir -p helper-dist
+          gh release download "$RELEASE_TAG" --dir helper-dist \
+            --pattern 'strand-azdo-*.zip' \
+            --pattern 'strand-azdo-*.tar.gz' \
+            --pattern strand-azdo-manifest.json \
+            --pattern strand-azdo-manifest.json.minisig
+      - name: Publish the rolling latest compatible helper
+        run: |
+          if ! gh release view strand-azdo-latest >/dev/null 2>&1; then
+            gh release create strand-azdo-latest \
+              --title "strand-azdo latest" \
+              --notes "Rolling signed strand-azdo helper assets. Strand accepts these only when the protocol version is compatible." \
+              --prerelease
+          fi
+          gh release upload strand-azdo-latest \
+            helper-dist/strand-azdo-*.zip \
+            helper-dist/strand-azdo-*.tar.gz \
+            helper-dist/strand-azdo-manifest.json \
+            helper-dist/strand-azdo-manifest.json.minisig \
+            --clobber

@@ -1353,13 +1353,19 @@ tree: watch the agent work, review fast, accept or reject safely.
     refresh, open-on-host, command-palette entry, and actionable CLI/auth errors
     remain available.
   - ☑ Azure DevOps Server 2020+ adapter (`strand-azdo-protocol`,
-    `strand-azdo`, `azdo_helper.rs`, Settings → Hosting): optional
-    release-pinned REST helper covers the existing Azure PR operations through
+    `strand-azdo`, `azdo_helper.rs`, Settings → Hosting): optional signed,
+    independently updated REST helper covers the existing Azure PR operations through
     API 6.0, with native-vault PAT auth on every desktop platform, WinHTTP
-    Negotiate/NTLM on Windows, private-CA PAT profiles, longest-prefix HTTPS/SSH
-    remote matching, strict bounded JSON RPC, and verified exact-tag download.
+    Negotiate/NTLM on Windows, private-CA PAT profiles, automatic HTTPS
+    collection matching with project/repository coordinates derived from each
+    HTTPS/SSH Git remote, optional longest-prefix alias matching, strict bounded
+    JSON RPC, Server 2020-compatible connection probing, and signed rolling
+    download with protocol compatibility gating.
     Azure DevOps Services continues to use the official `az` CLI; Azure inline
     comments, replies/resolution, and review submission remain out of scope.
+  - ☐ Hide provider write controls for terminal pull requests: a merged Azure
+    DevOps Server PR correctly renders read-only history but still shows the
+    **Merge pull request** split button in its detail header.
   - ☑ Persistent followed-PR monitoring (`repo_pull_request_for_branch`,
     `repo_pull_request_activity`, `stores/pullRequests.ts`,
     `PullRequestMonitor`): the active branch's open PR auto-follows without the

@@ -231,8 +231,7 @@ fn read_secret_stdin() -> Result<Zeroizing<String>, ProtocolError> {
 fn version_json() -> Value {
     json!({
         "version": env!("CARGO_PKG_VERSION"),
-        "protocol_version": PROTOCOL_VERSION,
-        "capabilities": ["pull_requests", "pat", "private_ca", "windows_auth"]
+        "protocol_version": PROTOCOL_VERSION
     })
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { pickPemCertificate } from '../../lib/dialog';
+import { inferAzdoServerCollectionUrl } from '../../lib/azdoProfile';
 import { errMessage, isTauri, tauri } from '../../lib/tauri';
 import type { AzdoAuthMode, AzdoHelperStatus, AzdoServerProfile } from '../../lib/types';
 import { useRepo } from '../../stores/repo';
@@ -18,9 +19,9 @@ function newProfile(remote: string | null): AzdoServerProfile {
   return {
     id: crypto.randomUUID(),
     name: '',
-    collection_url: '',
+    collection_url: inferAzdoServerCollectionUrl(remote),
     auth_mode: 'pat',
-    remote_prefixes: remote ? [remote] : [''],
+    remote_prefixes: [],
     ca_certificate: null,
   };
 }
@@ -292,9 +293,10 @@ function ProfileEditor({
         </select>
       </label>
       <label>
-        <span>Remote prefixes (one per line)</span>
+        <span>Additional server aliases (optional, one per line)</span>
         <textarea className="clone-input azdo-prefixes" value={prefixes} onChange={(event) => set('remote_prefixes', event.target.value.split('\n'))} />
       </label>
+      <p className="settings-hint">HTTPS and SSH repositories under the collection URL are matched automatically. Add prefixes only when the same server is reached through another hostname or path.</p>
       {profile.auth_mode === 'pat' && (
         <>
           <label>

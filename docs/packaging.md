@@ -123,12 +123,19 @@ attached — macOS universal `.dmg`, Windows `.msi`, Linux `.deb`/`.rpm`/
 The same workflow also builds the optional `strand-azdo` helper for universal
 macOS, Windows x86_64, and Linux x86_64. It publishes versioned `.zip`/
 `.tar.gz` archives plus `strand-azdo-manifest.json` and its minisign signature
-under the exact app tag. The manifest records Strand/protocol/target agreement,
+under the exact app tag and the rolling `strand-azdo-latest` prerelease. The
+manifest records helper/protocol/target agreement,
 archive and extracted-binary SHA-256 values, size, and asset name. The helper
 uses the existing updater signing key and embedded public key; `latest` is never
-part of the install path. A final platform matrix downloads the draft assets,
+part of the install path; the app downloads the rolling release and rejects a
+different protocol version. A final platform matrix downloads the exact-tag assets,
 verifies the manifest signature and both hashes, runs `strand-azdo version
 --json`, and requires exact version/protocol agreement.
+
+If a published release predates or missed the helper jobs, run **Release**
+manually with that exact tag and **helpers_only** enabled. This rebuilds, signs,
+uploads, and smoke-tests only the `strand-azdo` assets; it does not rebuild or
+replace the desktop installers already attached to the release.
 
 The macOS helper binary is Developer-ID signed before archiving and its archive
 is submitted to Apple notarization. Windows publisher signing remains coupled
