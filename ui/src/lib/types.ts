@@ -203,7 +203,23 @@ export interface AzdoHelperStatus {
   version: string | null;
   protocol_version: number | null;
   profiles: AzdoServerProfile[];
+  authentication: Array<{
+    profile_id: string;
+    configured: boolean;
+  }>;
   error: string | null;
+}
+
+export interface ProviderConnectionStatus {
+  installed: boolean;
+  connected: boolean;
+  account: string | null;
+  detail: string;
+}
+
+export interface HostingConnectionStatus {
+  github: ProviderConnectionStatus;
+  azure_dev_ops: ProviderConnectionStatus;
 }
 
 export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';

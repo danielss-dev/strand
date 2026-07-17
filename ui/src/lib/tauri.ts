@@ -23,6 +23,7 @@ import type {
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
+  HostingConnectionStatus,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -96,6 +97,7 @@ export function errMessage(e: unknown): string {
  */
 export const tauri = {
   azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
+  hostingConnectionStatus: () => invoke<HostingConnectionStatus>('hosting_connection_status'),
   azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
   azdoHelperDisable: () => invoke<AzdoHelperStatus>('azdo_helper_disable'),
   azdoHelperRemove: () => invoke<void>('azdo_helper_remove'),

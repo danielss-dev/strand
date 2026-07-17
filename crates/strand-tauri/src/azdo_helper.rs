@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use strand_azdo_protocol::{
-    resolve_remote, Operation, ProfileConfig, ProtocolError, RepositoryCoordinates,
+    resolve_remote, AuthMode, Operation, ProfileConfig, ProtocolError, RepositoryCoordinates,
     RequestEnvelope, ResponseEnvelope, ServerProfile, MAX_RESPONSE_BYTES, PROTOCOL_VERSION,
 };
 use tauri::{AppHandle, Manager};
@@ -61,7 +61,14 @@ pub struct HelperStatus {
     pub version: Option<String>,
     pub protocol_version: Option<u32>,
     pub profiles: Vec<ServerProfile>,
+    pub authentication: Vec<ProfileAuthenticationStatus>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProfileAuthenticationStatus {
+    pub profile_id: Uuid,
+    pub configured: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,12 +104,22 @@ pub fn status(app: &AppHandle) -> HelperStatus {
     let config = load_config(app).unwrap_or_default();
     match installed_version(app) {
         Ok(version) if version.protocol_version == PROTOCOL_VERSION => {
+            let authentication = config
+                .profiles
+                .iter()
+                .map(|profile| ProfileAuthenticationStatus {
+                    profile_id: profile.id,
+                    configured: profile.auth_mode == AuthMode::Windows
+                        || pat_is_stored(app, profile.id),
+                })
+                .collect();
             HelperStatus {
                 enabled: config.enabled,
                 installed: true,
                 version: Some(version.version),
                 protocol_version: Some(version.protocol_version),
                 profiles: config.profiles,
+                authentication,
                 error: None,
             }
         }
@@ -112,6 +129,7 @@ pub fn status(app: &AppHandle) -> HelperStatus {
             version: Some(version.version),
             protocol_version: Some(version.protocol_version),
             profiles: config.profiles,
+            authentication: Vec::new(),
             error: Some(
                 "The installed strand-azdo helper uses an incompatible protocol; retry installation"
                     .into(),
@@ -123,9 +141,17 @@ pub fn status(app: &AppHandle) -> HelperStatus {
             version: None,
             protocol_version: None,
             profiles: config.profiles,
+            authentication: Vec::new(),
             error: Some(error),
         },
     }
+}
+
+fn pat_is_stored(app: &AppHandle, id: Uuid) -> bool {
+    run_json(app, &["auth", "status", &id.to_string()], None)
+        .ok()
+        .and_then(|value| value.get("stored").and_then(Value::as_bool))
+        .unwrap_or(false)
 }
 
 pub fn enable(app: &AppHandle) -> Result<HelperStatus> {

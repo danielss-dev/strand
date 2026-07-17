@@ -1358,12 +1358,14 @@ tree: watch the agent work, review fast, accept or reject safely.
     API 6.0, with native-vault PAT auth on every desktop platform, WinHTTP
     Negotiate/NTLM on Windows, private-CA PAT profiles, automatic HTTPS
     collection matching with project/repository coordinates derived from each
-    HTTPS/SSH Git remote, a remote-derived collection placeholder that is never
-    saved implicitly, optional longest-prefix alias matching, strict bounded
+    HTTPS/SSH Git remote, an optional collection field that derives and saves
+    the active remote's collection boundary, optional longest-prefix alias matching, strict bounded
     JSON RPC, Server 2020-compatible connection probing, and signed rolling
     download with protocol compatibility gating.
     Settings surfaces an indeterminate download/verification indicator while
-    `strand-azdo` is being installed (`HostingSection`).
+    `strand-azdo` is being installed and a three-provider accordion reports the
+    signed-in `gh` / `az` accounts plus helper/profile authentication readiness
+    (`hosting_connection_status`, `HostingSection`).
     Azure DevOps Services continues to use the official `az` CLI; Azure inline
     comments, replies/resolution, and review submission remain out of scope.
   - ☐ Hide provider write controls for terminal pull requests: a merged Azure

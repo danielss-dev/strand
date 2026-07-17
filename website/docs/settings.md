@@ -46,6 +46,13 @@ Everything else about git — credentials, SSH keys, commit signing — is inher
 
 ## Hosting
 
+Hosting is organized into GitHub, Azure DevOps, and Azure DevOps Server
+accordions. Each summary keeps its connection state visible while the details
+are collapsed. GitHub shows the account returned by `gh`; Azure DevOps shows
+the account returned by `az` and also requires the `azure-devops` extension.
+Refresh reruns these bounded CLI checks. Strand does not read or store either
+CLI's token.
+
 Azure DevOps Server 2020+ support is optional. Turn on **On-premises pull
 requests** to download the latest signed `strand-azdo` helper whose protocol is
 compatible with this Strand version.
@@ -59,8 +66,9 @@ and vault entries.
 
 Each server profile has a display name and an HTTPS collection URL such as
 `https://server/tfs/DefaultCollection`. For a standard on-prem HTTPS clone URL,
-Strand shows the inferred collection boundary from the open repository as an
-input placeholder; enter the URL explicitly before saving. Strand later
+the collection field is optional: leave it blank and Strand derives and saves
+the collection boundary from the active repository's preferred Git remote. If
+no standard Server remote can be identified, Strand asks for the URL. It later
 derives the project and repository from each repository's Git remote. No
 per-repository project setting is required. Additional HTTPS/SSH prefixes are
 optional for server aliases; the longest match wins and
@@ -77,7 +85,10 @@ fails, check its scope and expiry and make sure IIS Basic Authentication is
 disabled, because enabling it prevents Azure DevOps Server PAT authentication.
 On Windows, **Windows identity (Negotiate / NTLM)** uses the current login and
 the Windows trusted-root store instead of a PAT or profile CA. Use **Test** on a
-saved profile before opening its pull requests.
+saved profile before opening its pull requests. The Server accordion is green
+when the verified helper is installed and at least one profile has a stored PAT
+or selects Windows authentication; this is configuration readiness, while
+**Test** performs the actual server connection.
 
 ## Integrations
 

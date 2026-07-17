@@ -33,6 +33,7 @@ use zeroize::Zeroize;
 
 use crate::ai;
 use crate::azdo_helper;
+use crate::hosting;
 use crate::pull_requests::{self, PullRequestList};
 use crate::state::{AppState, OperationCancelHandle};
 
@@ -186,6 +187,11 @@ pub async fn repo_refs(path: String) -> CmdResult<Refs> {
 #[tauri::command(async)]
 pub async fn azdo_helper_status(app: AppHandle) -> CmdResult<azdo_helper::HelperStatus> {
     run_blocking("Azure DevOps Server helper status", move || Ok(azdo_helper::status(&app))).await
+}
+
+#[tauri::command(async)]
+pub async fn hosting_connection_status() -> CmdResult<hosting::HostingConnectionStatus> {
+    run_blocking("hosting connection status", move || Ok(hosting::status())).await
 }
 
 #[tauri::command(async)]

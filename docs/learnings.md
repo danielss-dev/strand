@@ -1521,8 +1521,13 @@ HTTPS collection URL as its default remote boundary and compare host/path
 identity across HTTPS and SSH clone transports. The standard Azure remote shape
 already carries the project immediately before `_git` and the repository after
 it, so do not add per-repository project settings. Additional prefixes are only
-for genuine server aliases. Keep the helper's strict `version` response schema
-in sync with every emitted field, including `capabilities`.
+for genuine server aliases. A blank Settings field may derive this boundary
+from the active repository, but persist the inferred HTTPS origin before an
+authenticated helper request; never let a guessed origin become an implicit
+runtime redirect. Hosting readiness is deliberately configuration-level:
+verified helper plus stored PAT or Windows-auth profile, while **Test** remains
+the explicit network/authentication probe. Keep the helper's strict `version`
+response schema in sync with every emitted field, including `capabilities`.
 
 **Helper manifest signature format (2026-07-17).** Tauri's `signer sign`
 command writes a base64 envelope around the Minisign text. Decode that envelope
