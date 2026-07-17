@@ -270,7 +270,7 @@ jobs:
         run: |
           node scripts/azdo-helper-manifest.mjs helper-dist helper-dist/strand-azdo-manifest.json
           pnpm tauri signer sign helper-dist/strand-azdo-manifest.json
-          mv helper-dist/strand-azdo-manifest.json.sig helper-dist/strand-azdo-manifest.json.minisig
+          node -e "const fs=require('node:fs'); const source='helper-dist/strand-azdo-manifest.json.sig'; fs.writeFileSync('helper-dist/strand-azdo-manifest.json.minisig', Buffer.from(fs.readFileSync(source, 'utf8').trim(), 'base64')); fs.unlinkSync(source)"
       - name: Upload helper assets to the exact release tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -345,9 +345,8 @@ jobs:
       - name: Verify signed manifest
         shell: bash
         run: |
-          node -e "const fs=require('node:fs'); fs.writeFileSync('smoke/strand-azdo-manifest.decoded.minisig', Buffer.from(fs.readFileSync('smoke/strand-azdo-manifest.json.minisig', 'utf8').trim(), 'base64'))"
           minisign -Vm smoke/strand-azdo-manifest.json \
-            -x smoke/strand-azdo-manifest.decoded.minisig \
+            -x smoke/strand-azdo-manifest.json.minisig \
             -P RWRdzoGp0r/8hCXLC+N4EQu9wkpQH7P78mULgVR4V/u6pQyP7hcYmgFy
       - name: Extract and run helper (macOS)
         if: matrix.platform == 'macos-latest'

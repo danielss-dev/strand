@@ -1523,3 +1523,10 @@ already carries the project immediately before `_git` and the repository after
 it, so do not add per-repository project settings. Additional prefixes are only
 for genuine server aliases. Keep the helper's strict `version` response schema
 in sync with every emitted field, including `capabilities`.
+
+**Helper manifest signature format (2026-07-17).** Tauri's `signer sign`
+command writes a base64 envelope around the Minisign text. Decode that envelope
+before publishing `strand-azdo-manifest.json.minisig`; the desktop passes the
+downloaded text directly to `minisign_verify::Signature::decode`. Release smoke
+must verify the published raw file without a compensating decode, or it can hide
+an installer-breaking format mismatch.
