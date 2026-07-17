@@ -1488,3 +1488,28 @@ desktop permission as granted, so Strand otherwise displays a persistent false
 and retain a platform-routing test. Re-evaluate it when upgrading the Tauri
 notification plugin; remove it only after a running Windows webview reports the
 same state through both paths.
+
+---
+
+## Optional provider helpers are exact-release, short-lived trust boundaries
+
+**Rule.** An app-managed provider helper is never resolved from PATH or a
+repository. Download it only from the exact Strand tag, verify a signed
+version/protocol/target manifest plus archive and extracted-binary hashes, and
+execute one bounded JSON-RPC process per operation from its absolute app-config
+path. Keep list payloads shallow and detail/diff/activity lazy exactly as for
+the in-process provider-neutral workspace.
+
+**Why.** A repository-local or unpinned helper would turn opening an untrusted
+checkout into executable-code discovery. A daemon adds lifecycle and credential
+surface without helping the current provider-operation granularity. Reusing the
+PR normalization layer also prevents Azure Server from drifting into a second
+UI model or weakening the one-mounted-diff performance boundary.
+
+**How to apply.** Share only the strict serde protocol crate. Cap stdin,
+stdout, stderr, and runtime; reject unknown fields and mismatched versions.
+Credentials enter over stdin and live only in the native vault. Authenticated
+HTTP never redirects and stays under the configured HTTPS collection origin;
+custom roots apply only to PAT transport, while Windows integrated auth uses
+WinHTTP and the Windows trusted-root store. A helper failure disables only its
+provider adapter, never local Git or another host.

@@ -1068,8 +1068,11 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
   comments plus GitHub thread replies/resolution, permission-gated Ready for
   review, and merge controls now ship;
-  batched review actions and richer Azure parity remain. GitLab and Bitbucket
-  are follow-on provider adapters.
+  batched review actions and richer Azure parity remain. Azure DevOps Server
+  2020+ now uses the optional release-pinned `strand-azdo` REST helper with
+  PAT/private-CA profiles and Windows integrated authentication, while Azure
+  DevOps Services keeps the official `az` path. GitLab and Bitbucket are
+  follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
 - ☐ Localization framework + English baseline
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
@@ -1754,6 +1757,16 @@ now opens a real Contents view instead of trying to read the directory as a
 file. The index reuses the loaded working/revision tree, shows immediate child
 folders and files with the tree's shared file-type icons and descendant/change
 counts, and supports Arrow/Home/End navigation plus Enter/Space activation.
+
+**Azure DevOps Server helper shipped (2026-07-17):** Settings → Hosting can
+download a helper pinned to the exact Strand release, configure Server 2020+
+collection profiles, store PATs only in the native credential vault, import a
+private CA for PAT transport, or use the current Windows identity through
+WinHTTP. The existing provider-neutral PR list/detail/activity/diff/create/
+comment/ready/merge paths select it only after longest-prefix remote matching;
+Azure DevOps Services remains on `az`. Release CI builds all desktop targets,
+signs the helper manifest with Strand's updater key, verifies both archive and
+binary hashes, and runs each exact-tag artifact before a draft is publishable.
 
 ---
 

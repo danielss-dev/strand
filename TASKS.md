@@ -1352,6 +1352,14 @@ tree: watch the agent work, review fast, accept or reject safely.
     arrow or j/k selects and Enter/click opens. Back restores list focus, and
     refresh, open-on-host, command-palette entry, and actionable CLI/auth errors
     remain available.
+  - ☑ Azure DevOps Server 2020+ adapter (`strand-azdo-protocol`,
+    `strand-azdo`, `azdo_helper.rs`, Settings → Hosting): optional
+    release-pinned REST helper covers the existing Azure PR operations through
+    API 6.0, with native-vault PAT auth on every desktop platform, WinHTTP
+    Negotiate/NTLM on Windows, private-CA PAT profiles, longest-prefix HTTPS/SSH
+    remote matching, strict bounded JSON RPC, and verified exact-tag download.
+    Azure DevOps Services continues to use the official `az` CLI; Azure inline
+    comments, replies/resolution, and review submission remain out of scope.
   - ☑ Persistent followed-PR monitoring (`repo_pull_request_for_branch`,
     `repo_pull_request_activity`, `stores/pullRequests.ts`,
     `PullRequestMonitor`): the active branch's open PR auto-follows without the
@@ -1521,6 +1529,12 @@ tree: watch the agent work, review fast, accept or reject safely.
   GitHub Release. Secrets documented in `docs/packaging.md` § "Release CI".
   Validated end-to-end on `v0.5.0`, 2026-06-12: all three platforms green,
   installers + signed `latest.json` published.)
+- ☑ Optional Azure DevOps Server helper release pipeline
+  (`.github/workflows/release.yml`, `scripts/azdo-helper-*.mjs`): builds
+  universal macOS, Windows x86_64, and Linux x86_64 archives under the same
+  exact tag, signs/notarizes macOS, publishes a minisign-authenticated manifest
+  with archive/binary hashes, and re-downloads every draft asset for a
+  signature/hash/version smoke test. Windows CI compiles and tests WinHTTP.
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed

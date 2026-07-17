@@ -1,6 +1,6 @@
 # Settings
 
-Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has eight sections — Appearance, Diff, Keyboard, Git, Integrations, AI, Updates, and Privacy — and every change applies live; there is no Save button (the one exception is the git identity, which has an explicit save).
+Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; git identity and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.
 
@@ -43,6 +43,34 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
 Everything else about git — credentials, SSH keys, commit signing — is inherited from your existing git setup: network operations (push, pull, fetch, clone) go through your system `git`, and when `commit.gpgSign` is on, commits do too — picking up your signing config and running your `pre-commit` / `commit-msg` hooks, just like plain `git commit`. Unsigned commits (the default) are written in-process and do not run commit hooks. There is nothing to configure in Strand for those.
+
+## Hosting
+
+Azure DevOps Server 2020+ support is optional. Turn on **On-premises pull
+requests** to download the `strand-azdo` helper for this exact Strand version.
+The status row shows the installed helper and protocol versions; **Retry
+installation** replaces it only after signature and SHA-256 verification.
+Disabling keeps profiles and credentials. **Remove helper and credentials** is
+confirmed separately and removes the binary, profiles, imported certificates,
+and vault entries.
+
+Each server profile has a display name, an HTTPS collection URL such as
+`https://server/tfs/DefaultCollection`, and one or more HTTPS/SSH clone URL
+prefixes. The open repository's `origin` URL is prefilled when adding a profile.
+Strand selects the longest matching prefix and rejects ambiguous matches.
+Cloud `dev.azure.com` and `visualstudio.com` addresses are not accepted here;
+Azure DevOps Services continues to use `az`.
+
+Choose **Personal access token** on macOS, Windows, or Linux. The PAT needs at
+least Azure **Code: Read & write** scope and is stored only in Keychain,
+Windows Credential Manager, or Linux Secret Service. It is never written to
+Strand settings. A PEM CA certificate can be imported for a private PKI; Strand
+copies and validates it rather than retaining the external path. If PAT login
+fails, check its scope and expiry and make sure IIS Basic Authentication is
+disabled, because enabling it prevents Azure DevOps Server PAT authentication.
+On Windows, **Windows identity (Negotiate / NTLM)** uses the current login and
+the Windows trusted-root store instead of a PAT or profile CA. Use **Test** on a
+saved profile before opening its pull requests.
 
 ## Integrations
 

@@ -5,6 +5,7 @@ import { AiSection } from './settings/AiSection';
 import { AppearanceSection } from './settings/AppearanceSection';
 import { DiffSection } from './settings/DiffSection';
 import { GitSection } from './settings/GitSection';
+import { HostingSection } from './settings/HostingSection';
 import { IntegrationsSection } from './settings/IntegrationsSection';
 import { KeyboardSection } from './settings/KeyboardSection';
 import { PrivacySection } from './settings/PrivacySection';
@@ -25,13 +26,14 @@ import { UpdatesSection } from './settings/UpdatesSection';
  */
 
 export type SettingsSectionId =
-  | 'appearance' | 'diff' | 'keyboard' | 'git' | 'integrations' | 'ai' | 'updates' | 'privacy';
+  | 'appearance' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'updates' | 'privacy';
 
 const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
   { id: 'appearance', label: 'Appearance', icon: 'eye' },
   { id: 'diff', label: 'Diff', icon: 'compare' },
   { id: 'keyboard', label: 'Keyboard', icon: 'command' },
   { id: 'git', label: 'Git', icon: 'branch' },
+  { id: 'hosting', label: 'Hosting', icon: 'remote' },
   { id: 'integrations', label: 'Integrations', icon: 'external' },
   { id: 'ai', label: 'AI', icon: 'sparkle' },
   { id: 'updates', label: 'Updates', icon: 'sync' },
@@ -163,6 +165,7 @@ export function SettingsDialog({
             {section === 'diff' && <DiffSection />}
             {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}
+            {section === 'hosting' && <HostingSection />}
             {section === 'integrations' && <IntegrationsSection />}
             {section === 'ai' && <AiSection />}
             {section === 'updates' && <UpdatesSection />}

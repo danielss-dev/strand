@@ -14,6 +14,7 @@
 //! Quick writes (stage, branch, tag, …) stay plain sync bodies.
 
 use serde::{Deserialize, Serialize};
+use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
@@ -27,9 +28,11 @@ use strand_core::{
     worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats}, Repo,
 };
 use tauri::ipc::Channel;
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, State};
+use zeroize::Zeroize;
 
 use crate::ai;
+use crate::azdo_helper;
 use crate::pull_requests::{self, PullRequestList};
 use crate::state::{AppState, OperationCancelHandle};
 
@@ -180,8 +183,79 @@ pub async fn repo_refs(path: String) -> CmdResult<Refs> {
     run_blocking("refs", move || Ok(Repo::discover(&path)?.refs()?)).await
 }
 
-/// Pull requests for the first supported remote (`origin` wins). Provider CLI
-/// authentication is inherited; Strand never reads or stores access tokens.
+#[tauri::command(async)]
+pub async fn azdo_helper_status(app: AppHandle) -> CmdResult<azdo_helper::HelperStatus> {
+    run_blocking("Azure DevOps Server helper status", move || Ok(azdo_helper::status(&app))).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_helper_enable(app: AppHandle) -> CmdResult<azdo_helper::HelperStatus> {
+    run_blocking("install Azure DevOps Server helper", move || {
+        azdo_helper::install(&app).and_then(|_| azdo_helper::enable(&app))
+            .map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_helper_disable(app: AppHandle) -> CmdResult<azdo_helper::HelperStatus> {
+    run_blocking("disable Azure DevOps Server helper", move || {
+        azdo_helper::disable(&app).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_helper_remove(app: AppHandle) -> CmdResult<()> {
+    run_blocking("remove Azure DevOps Server helper", move || {
+        azdo_helper::remove_all(&app).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_upsert(app: AppHandle, profile: ServerProfile) -> CmdResult<ServerProfile> {
+    run_blocking("save Azure DevOps Server profile", move || {
+        azdo_helper::upsert_profile(&app, &profile).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_import_ca(app: AppHandle, id: uuid::Uuid, path: String) -> CmdResult<ServerProfile> {
+    run_blocking("import Azure DevOps Server CA", move || {
+        azdo_helper::import_ca(&app, id, &path).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_remove(app: AppHandle, id: uuid::Uuid) -> CmdResult<()> {
+    run_blocking("remove Azure DevOps Server profile", move || {
+        azdo_helper::remove_profile(&app, id).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_set_pat(app: AppHandle, id: uuid::Uuid, mut pat: String) -> CmdResult<()> {
+    run_blocking("store Azure DevOps Server PAT", move || {
+        let result = azdo_helper::set_pat(&app, id, &pat).map_err(|message| CmdError { message });
+        pat.zeroize();
+        result
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_clear_pat(app: AppHandle, id: uuid::Uuid) -> CmdResult<()> {
+    run_blocking("clear Azure DevOps Server PAT", move || {
+        azdo_helper::clear_pat(&app, id).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn azdo_profile_test(app: AppHandle, id: uuid::Uuid) -> CmdResult<serde_json::Value> {
+    run_blocking("test Azure DevOps Server profile", move || {
+        azdo_helper::test_profile(&app, id).map_err(|message| CmdError { message })
+    }).await
+}
+
+/// Pull requests for the first supported remote (`origin` wins). Cloud auth is
+/// inherited from provider CLIs; Server PATs remain in the native vault.
 #[tauri::command(async)]
 pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     run_blocking("pull requests", move || {
@@ -261,9 +335,8 @@ pub async fn repo_pull_request_diff(path: String, id: u64) -> CmdResult<String> 
     .await
 }
 
-/// Add a top-level provider discussion comment. Authentication remains in the
-/// signed-in provider CLI; the comment body is sent through stdin/temp input,
-/// never interpolated into a shell command.
+/// Add a top-level provider discussion comment. The comment body is sent
+/// through stdin/temp input, never interpolated into a shell command.
 #[tauri::command(async)]
 pub async fn repo_pull_request_comment(path: String, id: u64, body: String) -> CmdResult<()> {
     run_blocking("pull request comment", move || {

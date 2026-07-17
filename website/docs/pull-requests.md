@@ -7,11 +7,20 @@ exists. Open the same view from the command palette with "Show: Pull Requests".
 
 ## Sign in
 
-Strand delegates authentication to the provider's official CLI and never reads
-or stores its access token:
+GitHub and Azure DevOps Services delegate authentication to the provider's
+official CLI, and Strand never reads or stores those access tokens:
 
 - GitHub requires [GitHub CLI](https://cli.github.com/) and `gh auth login`.
 - Azure DevOps requires Azure CLI, the `azure-devops` extension, and `az login`.
+
+Azure DevOps Server 2020+ uses the optional `strand-azdo` REST helper instead
+of `az`. Enable it and add an HTTPS collection profile under **Settings →
+Hosting**. PAT profiles work on every supported desktop and keep the token only
+in the native credential vault; Windows profiles can use the current Windows
+identity with Negotiate/NTLM. Private-CA PEM import is available for PAT
+profiles. A profile is selected by the longest matching HTTPS/SSH remote prefix,
+with `origin` preferred. Azure DevOps Services URLs are never routed through
+the helper.
 
 Packaged desktop builds import the interactive login-shell `PATH`, including
 Homebrew, local-bin, and version-manager locations that GUI launchers normally
@@ -33,7 +42,8 @@ If the checked-out branch does not exist on the detected repository remote,
 Strand pushes it before asking the provider to create the PR. A branch without
 an upstream starts tracking that remote branch; an existing upstream on another
 remote is preserved. A failed push leaves the dialog open and the PR is not
-created. Authentication continues to use the signed-in `gh` or `az` CLI.
+created. Authentication continues to use the signed-in `gh` or `az` CLI for
+cloud providers, or the matched helper profile for Azure DevOps Server.
 
 “Draft pull request with AI…” in the command palette opens the same dialog,
 resolves its default target, and then starts generation. AI generation itself
@@ -175,14 +185,15 @@ Use **Write** to compose a top-level comment and **Preview** to inspect the
 rendered result before sending. The formatting toolbar supports bold, italic,
 inline or fenced code, quotes, bulleted/numbered/task lists, links, and images.
 Select existing text before choosing a format to wrap or prefix it. Choose
-**Comment** or press `Mod+Enter` to send through the signed-in provider CLI;
-Strand does not receive or store the provider token.
+**Comment** or press `Mod+Enter` to send through the selected provider
+connection. Cloud credentials remain in `gh`/`az`; Azure Server PATs remain in
+the native credential vault.
 
 The image action inserts standard Markdown for a screenshot or image that
 already has an `http(s)` URL. This also works with image Markdown copied from
 the provider website. Direct local-file upload is not currently available
-because the supported GitHub and Azure CLI paths do not share a stable binary
-attachment API. Images in descriptions, previews, and comments stay unloaded
+because the supported GitHub and Azure provider paths do not share a stable
+binary attachment API. Images in descriptions, previews, and comments stay unloaded
 until you explicitly choose **Show image**, preventing a PR from silently
 making a remote tracking request when opened.
 

@@ -14,9 +14,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strand_azdo_protocol::{MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation};
 use strand_core::Repo;
+use uuid::Uuid;
 
 use crate::ai::bin::{base_command, resolve_cli};
+use crate::azdo_helper;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
@@ -292,6 +295,12 @@ enum HostRepo {
         project: String,
         repo: String,
     },
+    AzureServer {
+        profile_id: Uuid,
+        collection_url: String,
+        project: String,
+        repo: String,
+    },
 }
 
 pub fn list(path: &str) -> Result<PullRequestList> {
@@ -303,6 +312,12 @@ pub fn list(path: &str) -> Result<PullRequestList> {
             project,
             repo,
         } => list_azure(path, remote, organization, project, repo),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => list_azure_server(remote, profile_id, collection_url, project, repo),
     }
 }
 
@@ -315,6 +330,12 @@ pub fn for_branch(path: &str, branch: &str) -> Result<Option<PullRequestBranchMa
             project,
             repo,
         } => for_branch_azure(path, remote, organization, project, repo, branch),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => for_branch_azure_server(remote, profile_id, collection_url, project, repo, branch),
     }
 }
 
@@ -347,6 +368,22 @@ pub fn create(
         } => create_azure(
             path,
             &organization,
+            &project,
+            &repo,
+            source_branch,
+            target_branch,
+            title,
+            description,
+            is_draft,
+        ),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => create_azure_server(
+            profile_id,
+            &collection_url,
             &project,
             &repo,
             source_branch,
@@ -399,6 +436,12 @@ pub fn activity(path: &str, id: u64) -> Result<PullRequestActivitySnapshot> {
             project,
             repo,
         } => activity_azure(path, remote, organization, project, repo, id),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => activity_azure_server(remote, profile_id, collection_url, project, repo, id),
     }
 }
 
@@ -411,6 +454,12 @@ pub fn detail(path: &str, id: u64) -> Result<PullRequest> {
             project,
             repo,
         } => detail_azure(path, organization, project, repo, id),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => detail_azure_server(profile_id, collection_url, project, repo, id),
     }
 }
 
@@ -423,6 +472,12 @@ pub fn diff(path: &str, id: u64) -> Result<String> {
             project,
             repo,
         } => diff_azure(path, remote, organization, project, repo, id),
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => diff_azure_server(path, remote, profile_id, project, repo, id),
     }
 }
 
@@ -436,6 +491,12 @@ pub fn add_comment(path: &str, id: u64, body: &str) -> Result<()> {
             project,
             repo,
         } => add_comment_azure(path, organization, project, repo, id, body),
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => add_comment_azure_server(profile_id, project, repo, id, body),
     }
 }
 
@@ -470,7 +531,7 @@ pub fn add_inline_comment(
                 expected_head,
             )
         }
-        HostRepo::Azure { .. } => Err(
+        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
             "Inline Azure DevOps comments need iteration tracking metadata that Strand does not load yet. Open this pull request on Azure DevOps to comment on these lines."
                 .to_string(),
         ),
@@ -483,7 +544,7 @@ pub fn reply_to_thread(path: &str, thread_id: &str, body: &str) -> Result<PullRe
     let (_, host) = host_for_path(path)?;
     match host {
         HostRepo::GitHub { .. } => reply_to_thread_github(path, thread_id, body),
-        HostRepo::Azure { .. } => Err(
+        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
             "Azure DevOps review-thread replies are not available yet. Open this pull request on Azure DevOps to reply."
                 .to_string(),
         ),
@@ -499,7 +560,7 @@ pub fn set_thread_resolved(
     let (_, host) = host_for_path(path)?;
     match host {
         HostRepo::GitHub { .. } => set_thread_resolved_github(path, thread_id, resolved),
-        HostRepo::Azure { .. } => Err(
+        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
             "Azure DevOps review-thread resolution is not available yet. Open this pull request on Azure DevOps to update the thread."
                 .to_string(),
         ),
@@ -531,6 +592,12 @@ pub fn merge(
             strategy,
             expected_head,
         ),
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => merge_azure_server(profile_id, project, repo, id, strategy, expected_head),
     }
 }
 
@@ -539,24 +606,52 @@ pub fn mark_ready(path: &str, id: u64) -> Result<()> {
     match host {
         HostRepo::GitHub { owner, repo } => mark_ready_github(path, &owner, &repo, id),
         HostRepo::Azure { organization, .. } => mark_ready_azure(path, &organization, id),
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => mark_ready_azure_server(profile_id, project, repo, id),
     }
 }
 
 fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let repo = Repo::discover(path).map_err(|error| error.to_string())?;
     let refs = repo.refs().map_err(|error| error.to_string())?;
-    let mut supported = refs
+    let remotes = refs
         .remotes
         .into_iter()
+        .filter_map(|remote| remote.url.map(|url| (remote.name, url)))
+        .collect::<Vec<_>>();
+    let mut supported = remotes
+        .iter()
         .filter_map(|remote| {
-            let coordinates = parse_remote(remote.url.as_deref()?)?;
-            Some((remote.name, coordinates))
+            let coordinates = parse_remote(&remote.1)?;
+            Some((remote.0.clone(), coordinates))
         })
         .collect::<Vec<_>>();
     supported.sort_by_key(|(name, _)| (name != "origin", name.clone()));
 
+    if supported.first().is_some_and(|(name, _)| name == "origin") {
+        return Ok(supported.remove(0));
+    }
+    if let Some(coordinates) =
+        azdo_helper::resolve_for_remotes(azdo_helper::handle()?, remotes.clone())?
+    {
+        let profile = azdo_helper::profile(azdo_helper::handle()?, coordinates.profile_id)?;
+        return Ok((
+            coordinates.remote,
+            HostRepo::AzureServer {
+                profile_id: coordinates.profile_id,
+                collection_url: profile.collection_url,
+                project: coordinates.project,
+                repo: coordinates.repository,
+            },
+        ));
+    }
+
     supported.into_iter().next().ok_or_else(|| {
-        "No supported GitHub or Azure DevOps remote was found for this repository".to_string()
+        "No supported GitHub, Azure DevOps Services, or configured Azure DevOps Server remote was found for this repository".to_string()
     })
 }
 
@@ -712,7 +807,9 @@ fn create_github(
         .rsplit('/')
         .next()
         .and_then(|value| value.parse::<u64>().ok())
-        .ok_or_else(|| "GitHub created the pull request but returned no usable PR URL".to_string())?;
+        .ok_or_else(|| {
+            "GitHub created the pull request but returned no usable PR URL".to_string()
+        })?;
     Ok(PullRequestCreateOutcome { id, url })
 }
 
@@ -788,7 +885,10 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
     let mut pull_request = parse_github_pr(&value, None)
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
     for commit in &mut pull_request.commits {
-        commit.url = Some(format!("https://github.com/{owner}/{repo}/commit/{}", commit.id));
+        commit.url = Some(format!(
+            "https://github.com/{owner}/{repo}/commit/{}",
+            commit.id
+        ));
     }
     pull_request.checks_complete = true;
     let (review_threads, can_mark_ready) = github_review_threads(cwd, &owner, &repo, id)?;
@@ -819,7 +919,9 @@ fn github_review_threads(
     let output = run_command(
         cwd,
         "gh",
-        &["api", "graphql", "-f", &query, "-F", &owner, "-F", &repo, "-F", &number],
+        &[
+            "api", "graphql", "-f", &query, "-F", &owner, "-F", &repo, "-F", &number,
+        ],
         &[("GH_PROMPT_DISABLED", "1")],
     )?;
     let value: Value = serde_json::from_slice(&output)
@@ -873,9 +975,8 @@ fn add_inline_comment_github(
     expected_head: &str,
 ) -> Result<()> {
     let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/comments");
-    let payload = github_inline_comment_payload(
-        body, file_path, start_line, end_line, side, expected_head,
-    );
+    let payload =
+        github_inline_comment_payload(body, file_path, start_line, end_line, side, expected_head);
     let input = serde_json::to_vec(&payload)
         .map_err(|error| format!("Could not encode GitHub inline comment: {error}"))?;
     run_command_input(
@@ -909,11 +1010,8 @@ fn set_thread_resolved_github(
     } else {
         GITHUB_THREAD_UNRESOLVE_MUTATION
     };
-    let value = run_github_graphql_mutation(
-        cwd,
-        mutation,
-        serde_json::json!({ "threadId": thread_id }),
-    )?;
+    let value =
+        run_github_graphql_mutation(cwd, mutation, serde_json::json!({ "threadId": thread_id }))?;
     parse_github_thread_update(&value, resolved).ok_or_else(|| {
         "GitHub accepted the thread update but returned incomplete thread state".to_string()
     })
@@ -977,8 +1075,14 @@ fn merge_github(
         cwd,
         "gh",
         &[
-            "pr", "merge", &id, "--repo", &slug, github_merge_flag(strategy),
-            "--match-head-commit", expected_head,
+            "pr",
+            "merge",
+            &id,
+            "--repo",
+            &slug,
+            github_merge_flag(strategy),
+            "--match-head-commit",
+            expected_head,
         ],
         &[("GH_PROMPT_DISABLED", "1")],
     )?;
@@ -1053,6 +1157,376 @@ fn list_azure(
     })
 }
 
+fn list_azure_server(
+    remote: String,
+    profile_id: Uuid,
+    collection_url: String,
+    project: String,
+    repo: String,
+) -> Result<PullRequestList> {
+    let (values, viewer) = thread::scope(|scope| {
+        let viewer = scope.spawn(|| azure_server_viewer(profile_id));
+        let values = scope.spawn(|| {
+            server_execute(
+                profile_id,
+                AzdoOperation::ListPullRequests {
+                    project: project.clone(),
+                    repository: repo.clone(),
+                    source_branch: None,
+                    status: Some("all".into()),
+                    top: 100,
+                },
+            )
+        });
+        (values.join(), viewer.join())
+    });
+    let values = values.map_err(|_| "Azure DevOps Server list worker failed".to_string())??;
+    let viewer = viewer.ok().and_then(Result::ok);
+    let pull_requests = values
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|value| {
+            parse_azure_pr(value, &collection_url, &project, &repo, viewer.as_deref())
+        })
+        .collect();
+    Ok(PullRequestList {
+        repository: PullRequestRepository {
+            provider: PullRequestProvider::AzureDevOps,
+            remote,
+            label: azure_server_label(&collection_url, &project, &repo),
+            viewer,
+        },
+        pull_requests,
+    })
+}
+
+fn for_branch_azure_server(
+    remote: String,
+    profile_id: Uuid,
+    collection_url: String,
+    project: String,
+    repo: String,
+    branch: &str,
+) -> Result<Option<PullRequestBranchMatch>> {
+    let values = server_execute(
+        profile_id,
+        AzdoOperation::ListPullRequests {
+            project: project.clone(),
+            repository: repo.clone(),
+            source_branch: Some(branch_name(branch.to_string())),
+            status: Some(AZURE_BRANCH_STATUS.into()),
+            top: 1,
+        },
+    )?;
+    Ok(values
+        .as_array()
+        .and_then(|values| values.first())
+        .and_then(|value| {
+            parse_azure_pr(value, &collection_url, &project, &repo, None).map(|pull_request| {
+                PullRequestBranchMatch {
+                    repository: PullRequestRepository {
+                        provider: PullRequestProvider::AzureDevOps,
+                        remote,
+                        label: azure_server_label(&collection_url, &project, &repo),
+                        viewer: None,
+                    },
+                    pull_request,
+                }
+            })
+        }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_azure_server(
+    profile_id: Uuid,
+    collection_url: &str,
+    project: &str,
+    repo: &str,
+    source_branch: &str,
+    target_branch: &str,
+    title: &str,
+    description: &str,
+    is_draft: bool,
+) -> Result<PullRequestCreateOutcome> {
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::CreatePullRequest {
+            project: project.into(),
+            repository: repo.into(),
+            source_branch: branch_name(source_branch.to_string()),
+            target_branch: branch_name(target_branch.to_string()),
+            title: title.into(),
+            description: description.into(),
+            is_draft,
+        },
+    )?;
+    let id = value
+        .get("pullRequestId")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "Azure DevOps Server created the pull request but returned no PR id".to_string()
+        })?;
+    Ok(PullRequestCreateOutcome {
+        id,
+        url: azure_server_pr_url(collection_url, project, repo, id),
+    })
+}
+
+fn detail_azure_server(
+    profile_id: Uuid,
+    collection_url: String,
+    project: String,
+    repo: String,
+    id: u64,
+) -> Result<PullRequest> {
+    let (value, viewer) = thread::scope(|scope| {
+        let value = scope.spawn(|| server_show(profile_id, &project, &repo, id));
+        let viewer = scope.spawn(|| azure_server_viewer(profile_id));
+        (value.join(), viewer.join())
+    });
+    let value =
+        value.map_err(|_| "Azure DevOps Server pull-request worker failed".to_string())??;
+    let viewer = viewer.ok().and_then(Result::ok);
+    let mut pull_request =
+        parse_azure_pr(&value, &collection_url, &project, &repo, viewer.as_deref())
+            .ok_or_else(|| format!("Azure DevOps Server returned no data for PR #{id}"))?;
+    let project_id =
+        text(value.pointer("/repository/project/id")).unwrap_or_else(|| project.clone());
+    let (comments, commits, checks) = thread::scope(|scope| {
+        let comments =
+            scope.spawn(|| azure_server_comments(profile_id, &collection_url, &project, &repo, id));
+        let commits = scope.spawn(|| azure_server_commits(profile_id, &project, &repo, id));
+        let checks = scope.spawn(|| azure_server_policies(profile_id, &project, &project_id, id));
+        (comments.join(), commits.join(), checks.join())
+    });
+    pull_request.comments =
+        comments.map_err(|_| "Azure DevOps Server discussion worker failed".to_string())??;
+    pull_request.comment_count = pull_request.comments.len();
+    pull_request.commits =
+        commits.map_err(|_| "Azure DevOps Server commit worker failed".to_string())??;
+    pull_request.commit_count = pull_request.commits.len();
+    if let Ok(Ok(checks)) = checks {
+        pull_request.checks = checks
+            .iter()
+            .map(|check| PullRequestCheck {
+                name: check.name.clone(),
+                status: check.status.clone(),
+            })
+            .collect();
+        pull_request.checks_complete = true;
+    }
+    Ok(pull_request)
+}
+
+fn activity_azure_server(
+    remote: String,
+    profile_id: Uuid,
+    collection_url: String,
+    project: String,
+    repo: String,
+    id: u64,
+) -> Result<PullRequestActivitySnapshot> {
+    let value = server_show(profile_id, &project, &repo, id)?;
+    let pull_request = parse_azure_pr(&value, &collection_url, &project, &repo, None)
+        .ok_or_else(|| format!("Azure DevOps Server returned no data for PR #{id}"))?;
+    let comments = azure_server_comments(profile_id, &collection_url, &project, &repo, id)?
+        .into_iter()
+        .map(|comment| PullRequestActivityComment {
+            id: comment.id,
+            author: comment.author,
+            kind: if comment.path.is_some() {
+                "thread"
+            } else {
+                "comment"
+            }
+            .into(),
+            is_system: comment.is_system,
+        })
+        .collect();
+    let reviews = array(&value, "reviewers")
+        .iter()
+        .filter_map(parse_azure_activity_review)
+        .collect();
+    let project_id =
+        text(value.pointer("/repository/project/id")).unwrap_or_else(|| project.clone());
+    let checks = azure_server_policies(profile_id, &project, &project_id, id)?;
+    Ok(PullRequestActivitySnapshot {
+        repository: PullRequestRepository {
+            provider: PullRequestProvider::AzureDevOps,
+            remote,
+            label: azure_server_label(&collection_url, &project, &repo),
+            viewer: None,
+        },
+        id: pull_request.id,
+        title: pull_request.title,
+        url: pull_request.url,
+        state: pull_request.state,
+        source_branch: pull_request.source_branch,
+        source_commit: pull_request.source_commit,
+        updated_at: pull_request.updated_at,
+        comments,
+        reviews,
+        checks,
+        checks_complete: true,
+    })
+}
+
+fn server_show(profile_id: Uuid, project: &str, repo: &str, id: u64) -> Result<Value> {
+    server_execute(
+        profile_id,
+        AzdoOperation::ShowPullRequest {
+            project: project.into(),
+            repository: repo.into(),
+            id,
+        },
+    )
+}
+
+fn azure_server_comments(
+    profile_id: Uuid,
+    collection_url: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+) -> Result<Vec<PullRequestComment>> {
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::Threads {
+            project: project.into(),
+            repository: repo.into(),
+            id,
+        },
+    )?;
+    Ok(parse_azure_comments(
+        &value,
+        &azure_server_pr_url(collection_url, project, repo, id),
+    ))
+}
+
+fn azure_server_commits(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    id: u64,
+) -> Result<Vec<PullRequestCommit>> {
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::Commits {
+            project: project.into(),
+            repository: repo.into(),
+            id,
+        },
+    )?;
+    Ok(parse_azure_commits(&value))
+}
+
+fn azure_server_policies(
+    profile_id: Uuid,
+    project: &str,
+    project_id: &str,
+    id: u64,
+) -> Result<Vec<PullRequestActivityCheck>> {
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::Policies {
+            project: project.into(),
+            project_id: project_id.into(),
+            id,
+        },
+    )?;
+    Ok(parse_azure_policies(&value))
+}
+
+fn azure_server_viewer(profile_id: Uuid) -> Result<String> {
+    let value = server_execute(profile_id, AzdoOperation::Viewer)?;
+    text(value.pointer("/authenticatedUser/properties/Account/$value"))
+        .or_else(|| text(value.pointer("/authenticatedUser/providerDisplayName")))
+        .or_else(|| text(value.pointer("/authenticatedUser/displayName")))
+        .ok_or_else(|| "Azure DevOps Server returned no signed-in account".into())
+}
+
+fn add_comment_azure_server(
+    profile_id: Uuid,
+    project: String,
+    repo: String,
+    id: u64,
+    body: &str,
+) -> Result<()> {
+    server_execute(
+        profile_id,
+        AzdoOperation::AddComment {
+            project,
+            repository: repo,
+            id,
+            body: body.into(),
+        },
+    )?;
+    Ok(())
+}
+
+fn merge_azure_server(
+    profile_id: Uuid,
+    project: String,
+    repo: String,
+    id: u64,
+    strategy: PullRequestMergeStrategy,
+    expected_head: &str,
+) -> Result<()> {
+    server_execute(
+        profile_id,
+        AzdoOperation::Complete {
+            project,
+            repository: repo,
+            id,
+            expected_head: expected_head.into(),
+            strategy: match strategy {
+                PullRequestMergeStrategy::MergeCommit => AzdoMergeStrategy::MergeCommit,
+                PullRequestMergeStrategy::Squash => AzdoMergeStrategy::Squash,
+                PullRequestMergeStrategy::Rebase => AzdoMergeStrategy::Rebase,
+            },
+        },
+    )?;
+    Ok(())
+}
+
+fn mark_ready_azure_server(profile_id: Uuid, project: String, repo: String, id: u64) -> Result<()> {
+    server_execute(
+        profile_id,
+        AzdoOperation::MarkReady {
+            project,
+            repository: repo,
+            id,
+        },
+    )?;
+    Ok(())
+}
+
+fn server_execute(profile_id: Uuid, operation: AzdoOperation) -> Result<Value> {
+    azdo_helper::execute(azdo_helper::handle()?, profile_id, operation)
+}
+
+fn azure_server_label(collection_url: &str, project: &str, repo: &str) -> String {
+    let collection = collection_url
+        .trim_start_matches("https://")
+        .trim_end_matches('/');
+    format!("{collection}/{project}/{repo}")
+}
+
+fn azure_server_pr_url(collection_url: &str, project: &str, repo: &str, id: u64) -> String {
+    let mut url = match url::Url::parse(collection_url) {
+        Ok(url) => url,
+        Err(_) => return collection_url.to_string(),
+    };
+    let id = id.to_string();
+    if let Ok(mut segments) = url.path_segments_mut() {
+        segments.pop_if_empty();
+        segments.extend([project, "_git", repo, "pullrequest", &id]);
+    }
+    url.to_string()
+}
+
 fn for_branch_azure(
     cwd: &str,
     remote: String,
@@ -1091,8 +1565,7 @@ fn for_branch_azure(
     let values: Vec<Value> = serde_json::from_slice(&output)
         .map_err(|error| format!("Azure CLI returned invalid JSON: {error}"))?;
     Ok(values.first().and_then(|value| {
-        parse_azure_pr(value, &organization, &project, &repo, None)
-        .map(|pull_request| {
+        parse_azure_pr(value, &organization, &project, &repo, None).map(|pull_request| {
             PullRequestBranchMatch {
                 repository: PullRequestRepository {
                     provider: PullRequestProvider::AzureDevOps,
@@ -1188,9 +1661,7 @@ fn create_azure(
         .ok_or_else(|| "Azure CLI created the pull request but returned no PR id".to_string())?;
     Ok(PullRequestCreateOutcome {
         id,
-        url: format!(
-            "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"
-        ),
+        url: format!("https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"),
     })
 }
 
@@ -1206,28 +1677,22 @@ fn detail_azure(
         let viewer = scope.spawn(|| azure_viewer(cwd));
         (value.join(), viewer.join())
     });
-    let value = value
-        .map_err(|_| "Azure pull-request query worker failed".to_string())??;
+    let value = value.map_err(|_| "Azure pull-request query worker failed".to_string())??;
     let viewer = viewer.ok().and_then(Result::ok);
-    let mut pull_request = parse_azure_pr(
-        &value,
-        &organization,
-        &project,
-        &repo,
-        viewer.as_deref(),
-    )
-        .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
+    let mut pull_request =
+        parse_azure_pr(&value, &organization, &project, &repo, viewer.as_deref())
+            .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
     let (comments, commits, checks) = thread::scope(|scope| {
         let comments = scope.spawn(|| azure_comments(cwd, &organization, &project, &repo, id));
         let commits = scope.spawn(|| azure_commits(cwd, &organization, &project, &repo, id));
         let checks = scope.spawn(|| azure_policies(cwd, &organization, id));
         (comments.join(), commits.join(), checks.join())
     });
-    pull_request.comments = comments
-        .map_err(|_| "Azure discussion query worker failed".to_string())??;
+    pull_request.comments =
+        comments.map_err(|_| "Azure discussion query worker failed".to_string())??;
     pull_request.comment_count = pull_request.comments.len();
-    pull_request.commits = commits
-        .map_err(|_| "Azure commit query worker failed".to_string())??;
+    pull_request.commits =
+        commits.map_err(|_| "Azure commit query worker failed".to_string())??;
     pull_request.commit_count = pull_request.commits.len();
     if let Ok(Ok(checks)) = checks {
         pull_request.checks = checks
@@ -1517,8 +1982,12 @@ fn merge_azure(
         }),
     )
     .map_err(|error| format!("Could not encode Azure merge: {error}"))?;
-    request.flush().map_err(|error| format!("Could not prepare Azure merge: {error}"))?;
-    let request_path = request.path().to_str()
+    request
+        .flush()
+        .map_err(|error| format!("Could not prepare Azure merge: {error}"))?;
+    let request_path = request
+        .path()
+        .to_str()
         .ok_or_else(|| "Azure merge request path is not valid UTF-8".to_string())?;
     let organization_url = format!("https://dev.azure.com/{organization}/");
     let project_arg = format!("project={project}");
@@ -1528,11 +1997,29 @@ fn merge_azure(
         cwd,
         "az",
         &[
-            "devops", "invoke", "--area", "git", "--resource", "pullRequests",
-            "--route-parameters", &project_arg, &repository_arg, &pull_request_arg,
-            "--organization", &organization_url, "--api-version", "7.1",
-            "--http-method", "PATCH", "--in-file", request_path,
-            "--media-type", "application/json", "--output", "json", "--only-show-errors",
+            "devops",
+            "invoke",
+            "--area",
+            "git",
+            "--resource",
+            "pullRequests",
+            "--route-parameters",
+            &project_arg,
+            &repository_arg,
+            &pull_request_arg,
+            "--organization",
+            &organization_url,
+            "--api-version",
+            "7.1",
+            "--http-method",
+            "PATCH",
+            "--in-file",
+            request_path,
+            "--media-type",
+            "application/json",
+            "--output",
+            "json",
+            "--only-show-errors",
         ],
         &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
     )?;
@@ -1573,6 +2060,22 @@ fn diff_azure(
     id: u64,
 ) -> Result<String> {
     let value = azure_pr_value(cwd, &organization, id)?;
+    diff_azure_value(cwd, remote, value)
+}
+
+fn diff_azure_server(
+    cwd: &str,
+    remote: String,
+    profile_id: Uuid,
+    project: String,
+    repo: String,
+    id: u64,
+) -> Result<String> {
+    let value = server_show(profile_id, &project, &repo, id)?;
+    diff_azure_value(cwd, remote, value)
+}
+
+fn diff_azure_value(cwd: &str, remote: String, value: Value) -> Result<String> {
     let source_ref = text(value.get("sourceRefName"))
         .ok_or_else(|| "Azure PR did not report its source branch".to_string())?;
     let target_ref = text(value.get("targetRefName"))
@@ -1807,7 +2310,9 @@ fn validate_create(
 
 fn validate_commit(commit: &str) -> Result<()> {
     if !matches!(commit.len(), 40 | 64) || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("Pull request source commit is missing or invalid; refresh the PR and try again".into());
+        return Err(
+            "Pull request source commit is missing or invalid; refresh the PR and try again".into(),
+        );
     }
     Ok(())
 }
@@ -2085,8 +2590,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         checks_complete: value.get("statusCheckRollup").is_some(),
         comments,
         review_threads: Vec::new(),
-        authored_by_viewer: viewer
-            .is_some_and(|login| login.eq_ignore_ascii_case(&author)),
+        authored_by_viewer: viewer.is_some_and(|login| login.eq_ignore_ascii_case(&author)),
         commits: parse_github_commits(value),
     })
 }
@@ -2106,7 +2610,8 @@ fn parse_github_commits(value: &Value) -> Vec<PullRequestCommit> {
                 .unwrap_or_else(|| "unknown".into());
             Some(PullRequestCommit {
                 id: text(commit.get("oid"))?,
-                title: text(commit.get("messageHeadline")).unwrap_or_else(|| "Untitled commit".into()),
+                title: text(commit.get("messageHeadline"))
+                    .unwrap_or_else(|| "Untitled commit".into()),
                 author,
                 avatar_url: login.as_deref().and_then(github_avatar_url),
                 committed_at: text(commit.get("committedDate"))
@@ -2130,7 +2635,8 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
             let end_line = thread
                 .get("line")
                 .and_then(Value::as_u64)
-                .or_else(|| thread.get("originalLine").and_then(Value::as_u64))? as u32;
+                .or_else(|| thread.get("originalLine").and_then(Value::as_u64))?
+                as u32;
             let start_line = thread
                 .get("startLine")
                 .and_then(Value::as_u64)
@@ -2148,8 +2654,8 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
                 .unwrap_or(&[])
                 .iter()
                 .filter_map(|comment| {
-                    let author = text(comment.pointer("/author/login"))
-                        .unwrap_or_else(|| "unknown".into());
+                    let author =
+                        text(comment.pointer("/author/login")).unwrap_or_else(|| "unknown".into());
                     Some(PullRequestComment {
                         id: text(comment.get("id"))?,
                         avatar_url: text(comment.pointer("/author/avatarUrl"))
@@ -2252,7 +2758,7 @@ fn parse_github_thread_update(
 
 fn parse_azure_pr(
     value: &Value,
-    organization: &str,
+    organization_or_collection: &str,
     project: &str,
     repo: &str,
     viewer: Option<&str>,
@@ -2323,7 +2829,11 @@ fn parse_azure_pr(
         created_at: text(value.get("creationDate")).unwrap_or_default(),
         updated_at: text(value.get("closedDate")).unwrap_or_default(),
         completed_at: text(value.get("closedDate")),
-        url: format!("https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id}"),
+        url: if organization_or_collection.starts_with("https://") {
+            azure_server_pr_url(organization_or_collection, project, repo, id)
+        } else {
+            format!("https://dev.azure.com/{organization_or_collection}/{project}/_git/{repo}/pullrequest/{id}")
+        },
         description: text(value.get("description")).unwrap_or_default(),
         merge_status: text(value.get("mergeStatus")).unwrap_or_default(),
         review_status,
@@ -2435,7 +2945,9 @@ fn text(value: Option<&Value>) -> Option<String> {
 fn github_avatar_url(login: &str) -> Option<String> {
     let valid = !login.is_empty()
         && login.len() <= 39
-        && login.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        && login
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         && !login.starts_with('-')
         && !login.ends_with('-');
     valid.then(|| format!("https://github.com/{login}.png?size=80"))
@@ -2655,12 +3167,9 @@ mod tests {
             published,
             "PR creation must not push again once the remote branch exists"
         );
-        assert!(ensure_source_branch_on_remote(
-            local.to_str().unwrap(),
-            "origin",
-            "different"
-        )
-        .is_err());
+        assert!(
+            ensure_source_branch_on_remote(local.to_str().unwrap(), "origin", "different").is_err()
+        );
 
         let _ = std::fs::remove_dir_all(base);
     }
@@ -2687,7 +3196,10 @@ mod tests {
         let github = parse_github_pr(&github, Some("OCTO")).unwrap();
         assert_eq!(github.id, 42);
         assert_eq!(github.state, "merged");
-        assert_eq!(github.source_commit, "1111111111111111111111111111111111111111");
+        assert_eq!(
+            github.source_commit,
+            "1111111111111111111111111111111111111111"
+        );
         assert_eq!(github.completed_at.as_deref(), Some("2026-07-15T10:00:00Z"));
         assert!(github.authored_by_viewer);
         assert!(!github.can_mark_ready);
@@ -2710,17 +3222,14 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let azure = parse_azure_pr(
-            &azure,
-            "org",
-            "project",
-            "repo",
-            Some("ADA@example.com"),
-        )
-        .unwrap();
+        let azure =
+            parse_azure_pr(&azure, "org", "project", "repo", Some("ADA@example.com")).unwrap();
         assert_eq!(azure.id, 7);
         assert_eq!(azure.source_branch, "topic");
-        assert_eq!(azure.source_commit, "2222222222222222222222222222222222222222");
+        assert_eq!(
+            azure.source_commit,
+            "2222222222222222222222222222222222222222"
+        );
         assert_eq!(azure.completed_at.as_deref(), Some("2026-07-15T12:00:00Z"));
         assert!(azure.authored_by_viewer);
         assert!(azure.can_mark_ready);
@@ -2748,7 +3257,13 @@ mod tests {
 
     #[test]
     fn github_list_query_stays_shallow_and_auth_hints_are_specific() {
-        for field in ["additions", "deletions", "changedFiles", "closedAt", "mergedAt"] {
+        for field in [
+            "additions",
+            "deletions",
+            "changedFiles",
+            "closedAt",
+            "mergedAt",
+        ] {
             assert!(GITHUB_LIST_FIELDS.contains(field));
         }
         for nested in ["comments", "commits", "latestReviews", "statusCheckRollup"] {
@@ -2764,6 +3279,33 @@ mod tests {
         );
         assert!(auth_hint("gh", "authentication required").contains("gh auth login"));
         assert!(auth_hint("az", "Please run az login").contains("az login"));
+    }
+
+    #[test]
+    fn azure_server_urls_use_the_collection_and_escape_names() {
+        assert_eq!(
+            azure_server_pr_url(
+                "https://ado.corp/tfs/DefaultCollection",
+                "Platform Team",
+                "web/api",
+                17,
+            ),
+            "https://ado.corp/tfs/DefaultCollection/Platform%20Team/_git/web%2Fapi/pullrequest/17"
+        );
+        let value = serde_json::json!({
+            "pullRequestId": 17,
+            "title": "Server PR",
+            "status": "active",
+            "createdBy": { "displayName": "Ada" }
+        });
+        let pr = parse_azure_pr(
+            &value,
+            "https://ado.corp/tfs/DefaultCollection",
+            "Platform Team",
+            "web/api",
+            None,
+        ).unwrap();
+        assert_eq!(pr.url, "https://ado.corp/tfs/DefaultCollection/Platform%20Team/_git/web%2Fapi/pullrequest/17");
     }
 
     #[test]
@@ -3117,10 +3659,22 @@ mod tests {
         assert!(validate_commit("0123456789abcdef0123456789abcdef01234567").is_ok());
         assert!(validate_commit("0123456").is_err());
         assert!(validate_commit("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").is_err());
-        assert_eq!(github_merge_flag(PullRequestMergeStrategy::MergeCommit), "--merge");
-        assert_eq!(github_merge_flag(PullRequestMergeStrategy::Squash), "--squash");
-        assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::MergeCommit), "noFastForward");
-        assert_eq!(azure_merge_strategy(PullRequestMergeStrategy::Rebase), "rebase");
+        assert_eq!(
+            github_merge_flag(PullRequestMergeStrategy::MergeCommit),
+            "--merge"
+        );
+        assert_eq!(
+            github_merge_flag(PullRequestMergeStrategy::Squash),
+            "--squash"
+        );
+        assert_eq!(
+            azure_merge_strategy(PullRequestMergeStrategy::MergeCommit),
+            "noFastForward"
+        );
+        assert_eq!(
+            azure_merge_strategy(PullRequestMergeStrategy::Rebase),
+            "rebase"
+        );
     }
 
     #[test]
