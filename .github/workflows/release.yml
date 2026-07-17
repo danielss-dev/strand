@@ -16,6 +16,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'strand-azdo-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -47,6 +48,10 @@ jobs:
       VERSION: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve helper release version
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        shell: bash
+        run: echo "VERSION=${VERSION#strand-azdo-}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -133,7 +138,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.helpers_only }}
+    if: ${{ !startsWith(github.ref_name, 'strand-azdo-v') && (github.event_name != 'workflow_dispatch' || !inputs.helpers_only) }}
     permissions:
       contents: write
     strategy:
@@ -240,7 +245,7 @@ jobs:
 
   helper-release:
     needs: [helper, release]
-    if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only)) }}
+    if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only) || (needs.release.result == 'skipped' && startsWith(github.ref_name, 'strand-azdo-v'))) }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -271,6 +276,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          RELEASE_TAG="${RELEASE_TAG#strand-azdo-}"
           gh release upload "$RELEASE_TAG" \
             helper-dist/strand-azdo-*.zip \
             helper-dist/strand-azdo-*.tar.gz \
@@ -306,6 +312,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Resolve exact release tag
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        shell: bash
+        run: echo "RELEASE_TAG=${RELEASE_TAG#strand-azdo-}" >> "$GITHUB_ENV"
       - name: Install minisign (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install -y minisign
@@ -373,6 +383,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      - name: Resolve exact release tag
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        run: echo "RELEASE_TAG=${RELEASE_TAG#strand-azdo-}" >> "$GITHUB_ENV"
       - name: Download verified exact-tag helper assets
         run: |
           mkdir -p helper-dist

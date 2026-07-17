@@ -135,7 +135,9 @@ verifies the manifest signature and both hashes, runs `strand-azdo version
 If a published release predates or missed the helper jobs, run **Release**
 manually with that exact tag and **helpers_only** enabled. This rebuilds, signs,
 uploads, and smoke-tests only the `strand-azdo` assets; it does not rebuild or
-replace the desktop installers already attached to the release.
+replace the desktop installers already attached to the release. A maintainer
+with Git push access can use the equivalent `strand-azdo-vX.Y.Z` tag trigger;
+the workflow targets the existing `vX.Y.Z` release and skips every desktop job.
 
 The macOS helper binary is Developer-ID signed before archiving and its archive
 is submitted to Apple notarization. Windows publisher signing remains coupled
