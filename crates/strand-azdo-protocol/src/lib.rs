@@ -424,7 +424,7 @@ mod tests {
     fn collection_url_resolves_project_and_repository_without_extra_prefixes() {
         let id = Uuid::new_v4();
         let mut server = profile(id, "https://unused.invalid");
-        server.collection_url = "https://azdops.serviceware.net/sw/Platform".into();
+        server.collection_url = "https://azdo.example.test/tfs/DefaultCollection".into();
         server.remote_prefixes.clear();
         let config = ProfileConfig {
             enabled: true,
@@ -435,23 +435,23 @@ mod tests {
         let found = resolve_remote(
             &config,
             "origin",
-            "https://azdops.serviceware.net/sw/Platform/Portal/_git/Portal_UI_Router",
+            "https://azdo.example.test/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo",
         )
         .unwrap()
         .unwrap();
         assert_eq!(found.profile_id, id);
-        assert_eq!(found.project, "Portal");
-        assert_eq!(found.repository, "Portal_UI_Router");
+        assert_eq!(found.project, "ExampleProject");
+        assert_eq!(found.repository, "ExampleRepo");
 
         let found = resolve_remote(
             &config,
             "origin",
-            "ssh://git@azdops.serviceware.net:22/sw/Platform/Portal/_git/Portal_UI_Router",
+            "ssh://git@azdo.example.test:22/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo",
         )
         .unwrap()
         .unwrap();
-        assert_eq!(found.project, "Portal");
-        assert_eq!(found.repository, "Portal_UI_Router");
+        assert_eq!(found.project, "ExampleProject");
+        assert_eq!(found.repository, "ExampleRepo");
     }
 
     #[test]

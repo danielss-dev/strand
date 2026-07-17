@@ -5,23 +5,23 @@ import { createAzdoServerProfile, inferAzdoServerCollectionUrl } from './azdoPro
 describe('inferAzdoServerCollectionUrl', () => {
   it('keeps an inferred collection URL as a suggestion, not a saved default', () => {
     const suggestion = inferAzdoServerCollectionUrl(
-      'https://azdops.serviceware.net/sw/Platform/Portal/_git/Portal_UI_Router',
+      'https://azdo.example.test/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo',
     );
 
-    expect(suggestion).toBe('https://azdops.serviceware.net/sw/Platform');
+    expect(suggestion).toBe('https://azdo.example.test/tfs/DefaultCollection');
     expect(createAzdoServerProfile().collection_url).toBe('');
   });
 
   it('derives the collection boundary from an on-prem repository remote', () => {
     expect(inferAzdoServerCollectionUrl(
-      'https://azdops.serviceware.net/sw/Platform/Portal/_git/Portal_UI_Router',
-    )).toBe('https://azdops.serviceware.net/sw/Platform');
+      'https://azdo.example.test/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo',
+    )).toBe('https://azdo.example.test/tfs/DefaultCollection');
     expect(inferAzdoServerCollectionUrl(
       'https://ado.corp/tfs/DefaultCollection/My%20Project/_git/web.git',
     )).toBe('https://ado.corp/tfs/DefaultCollection');
     expect(inferAzdoServerCollectionUrl(
-      'ssh://git@azdops.serviceware.net:22/sw/Platform/Portal/_git/Portal_UI_Router',
-    )).toBe('https://azdops.serviceware.net/sw/Platform');
+      'ssh://git@azdo.example.test:22/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo',
+    )).toBe('https://azdo.example.test/tfs/DefaultCollection');
     expect(inferAzdoServerCollectionUrl(
       'git@ado.corp:tfs/DefaultCollection/My%20Project/_git/web.git',
     )).toBe('https://ado.corp/tfs/DefaultCollection');
