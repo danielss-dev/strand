@@ -1544,8 +1544,8 @@ tree: watch the agent work, review fast, accept or reject safely.
   (`.github/workflows/release.yml`, `scripts/azdo-helper-*.mjs`): builds
   universal macOS, Windows x86_64, and Linux x86_64 archives under the same
   exact tag, signs/notarizes macOS, publishes a minisign-authenticated manifest
-  with archive/binary hashes, and re-downloads every draft asset for a
-  signature/hash/version smoke test. Windows CI compiles and tests WinHTTP.
+  with archive/binary hashes, and promotes the same signed workflow artifacts
+  to the rolling helper release. Windows CI compiles and tests WinHTTP.
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed

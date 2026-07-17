@@ -1532,6 +1532,7 @@ response schema in sync with every emitted field, including `capabilities`.
 **Helper manifest signature format (2026-07-17).** Tauri's `signer sign`
 command writes a base64 envelope around the Minisign text. Decode that envelope
 before publishing `strand-azdo-manifest.json.minisig`; the desktop passes the
-downloaded text directly to `minisign_verify::Signature::decode`. Release smoke
-must verify the published raw file without a compensating decode, or it can hide
-an installer-breaking format mismatch.
+downloaded text directly to `minisign_verify::Signature::decode`. Rolling
+promotion reuses the signed workflow artifact after exact-tag upload; there is
+no post-upload release smoke matrix, so the desktop verifier remains the runtime
+enforcement point for signature and hash agreement.

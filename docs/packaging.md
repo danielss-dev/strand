@@ -130,13 +130,13 @@ The manifest records helper/protocol/target agreement,
 archive and extracted-binary SHA-256 values, size, and asset name. The helper
 uses the existing updater signing key and embedded public key; `latest` is never
 part of the install path; the app downloads the rolling release and rejects a
-different protocol version. A final platform matrix downloads the exact-tag assets,
-verifies the manifest signature and both hashes, runs `strand-azdo version
---json`, and requires exact version/protocol agreement.
+different protocol version. After the exact-tag upload succeeds, the same signed
+workflow artifacts are promoted to the rolling release without a post-upload
+smoke-test matrix.
 
 If a published release predates or missed the helper jobs, run **Release**
 manually with that exact tag and **helpers_only** enabled. This rebuilds, signs,
-uploads, and smoke-tests only the `strand-azdo` assets; it does not rebuild or
+uploads, and promotes only the `strand-azdo` assets; it does not rebuild or
 replace the desktop installers already attached to the release. A maintainer
 with Git push access can use the equivalent `strand-azdo-vX.Y.Z` tag trigger;
 the workflow targets the existing `vX.Y.Z` release and skips every desktop job.

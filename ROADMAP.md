@@ -1766,8 +1766,8 @@ WinHTTP. The existing provider-neutral PR list/detail/activity/diff/create/
 comment/ready/merge paths select it only after longest-prefix remote matching;
 Azure DevOps Services remains on `az`. Release CI builds all desktop targets,
 signs the helper manifest with Strand's updater key, verifies both archive and
-binary hashes, and publishes exact-tag plus rolling helper assets only after
-platform smoke tests pass.
+binary hashes while assembling it, and publishes the same signed helper assets
+under the exact tag and rolling release without a post-upload smoke matrix.
 
 **Azure DevOps Server repository auto-resolution shipped (2026-07-17):** A
 profile's HTTPS collection URL now matches repositories below that collection
