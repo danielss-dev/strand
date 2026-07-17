@@ -57,8 +57,23 @@ jobs:
       - name: Test strand-tauri
         run: cargo test -p strand-tauri
 
+      - name: Test Azure DevOps Server helper
+        run: cargo test -p strand-azdo-protocol -p strand-azdo
+
       - name: Clippy (deny warnings)
-        run: cargo clippy -p strand-core -p strand-tauri -- -D warnings
+        run: cargo clippy -p strand-core -p strand-tauri -p strand-azdo-protocol -p strand-azdo -- -D warnings
+
+  windows-helper:
+    name: Azure DevOps Server helper (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-strand-azdo-windows
+      - name: Compile and test WinHTTP authentication transport
+        run: cargo test -p strand-azdo
 
   web:
     name: Frontend (tsc + vitest)

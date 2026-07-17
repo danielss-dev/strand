@@ -1,0 +1,35 @@
+[package]
+name = "strand-azdo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Optional Azure DevOps Server REST helper for Strand."
+
+[[bin]]
+name = "strand-azdo"
+path = "src/main.rs"
+
+[dependencies]
+strand-azdo-protocol = { path = "../strand-azdo-protocol" }
+base64 = "0.22"
+dirs = "6"
+keyring = "4.1"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls", "rustls-native-certs"] }
+rpassword = "7"
+serde.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+zeroize = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinHttp",
+] }
+
+[dev-dependencies]
+rcgen = "0.13"
+tiny_http = { version = "0.12", features = ["ssl-rustls"] }

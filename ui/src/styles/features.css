@@ -4020,6 +4020,38 @@ textarea.clone-input {
   flex: none;
   accent-color: var(--accent);
 }
+.settings-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  cursor: pointer;
+}
+.settings-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.settings-switch.on {
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 0.5px var(--accent) inset;
+}
+.settings-switch.on span {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+.settings-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--accent) inset, 0 0 0 3px var(--accent-glow);
+}
 /* Hairline card of label-left / control-right rows — compact controls live
    here so they span the pane instead of stacking down the left edge. */
 .settings-rows {
@@ -4111,6 +4143,66 @@ textarea.clone-input {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.settings-row-between {
+  justify-content: space-between;
+}
+.azdo-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.azdo-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border-radius: 8px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.azdo-profile-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  color: var(--text);
+}
+.azdo-profile-main span {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.azdo-profile-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  border-radius: 9px;
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.azdo-profile-editor legend {
+  padding: 0 5px;
+  color: var(--text-2);
+  font-size: var(--type-ui);
+  font-weight: 600;
+}
+.azdo-profile-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+.azdo-prefixes {
+  height: 54px;
+  padding-top: 7px;
+  resize: vertical;
 }
 .settings-section-label {
   font-size: 10.5px;

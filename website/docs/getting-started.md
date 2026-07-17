@@ -105,7 +105,7 @@ The in-app updater covers every install method: the macOS app, the Windows MSI i
 
 ## Settings
 
-Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has eight sections — Appearance, Diff, Keyboard, Git, Integrations, AI, Updates, and Privacy — and changes apply live, with one exception: your global Git identity (name and email) is only written when you click "Save identity". See [Settings](settings.md) for the full walkthrough.
+Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; global Git identity and Azure DevOps Server profiles use explicit save actions. See [Settings](settings.md) for the full walkthrough.
 
 ## Where to go next
 

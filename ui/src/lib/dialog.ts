@@ -50,3 +50,14 @@ export async function pickCodeWorkspaceFile(): Promise<string | null> {
   });
   return typeof selected === 'string' ? selected : null;
 }
+
+/** Choose a PEM certificate for an Azure DevOps Server PAT profile. */
+export async function pickPemCertificate(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const selected = await openDialog({
+    multiple: false,
+    title: 'Import CA certificate',
+    filters: [{ name: 'PEM certificate', extensions: ['pem', 'crt', 'cer'] }],
+  });
+  return typeof selected === 'string' ? selected : null;
+}

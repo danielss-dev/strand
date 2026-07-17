@@ -186,6 +186,26 @@ export interface Refs {
   tags: Tag[];
 }
 
+export type AzdoAuthMode = 'pat' | 'windows';
+
+export interface AzdoServerProfile {
+  id: string;
+  name: string;
+  collection_url: string;
+  auth_mode: AzdoAuthMode;
+  remote_prefixes: string[];
+  ca_certificate: string | null;
+}
+
+export interface AzdoHelperStatus {
+  enabled: boolean;
+  installed: boolean;
+  version: string | null;
+  protocol_version: number | null;
+  profiles: AzdoServerProfile[];
+  error: string | null;
+}
+
 export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
 export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
 

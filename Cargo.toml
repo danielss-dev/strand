@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/strand-azdo",
+    "crates/strand-azdo-protocol",
     "crates/strand-core",
     "crates/strand-tauri",
 ]
@@ -27,6 +29,8 @@ thiserror = "1"
 anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs"] }
 tracing = "0.1"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [profile.release]
 codegen-units = 1

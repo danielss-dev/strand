@@ -120,6 +120,22 @@ manual dispatch) and opens a **draft** GitHub Release with the installers
 attached — macOS universal `.dmg`, Windows `.msi`, Linux `.deb`/`.rpm`/
 `.AppImage`. Review and publish the draft by hand.
 
+The same workflow also builds the optional `strand-azdo` helper for universal
+macOS, Windows x86_64, and Linux x86_64. It publishes versioned `.zip`/
+`.tar.gz` archives plus `strand-azdo-manifest.json` and its minisign signature
+under the exact app tag. The manifest records Strand/protocol/target agreement,
+archive and extracted-binary SHA-256 values, size, and asset name. The helper
+uses the existing updater signing key and embedded public key; `latest` is never
+part of the install path. A final platform matrix downloads the draft assets,
+verifies the manifest signature and both hashes, runs `strand-azdo version
+--json`, and requires exact version/protocol agreement.
+
+The macOS helper binary is Developer-ID signed before archiving and its archive
+is submitted to Apple notarization. Windows publisher signing remains coupled
+to the planned Windows certificate work; the signed manifest is mandatory on
+all platforms. Installation extracts only the expected regular file, refuses
+links/traversal, and keeps the previous helper until the replacement verifies.
+
 **Before tagging:** bump `version` in `tauri.conf.json`, the workspace
 `Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
 from the config version, not the tag.
@@ -140,11 +156,12 @@ repo (or org) Actions **secret**.
 | `TAURI_SIGNING_PRIVATE_KEY` | **Every build** | Tauri updater private key (see below) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **Every build** | Password for that key |
 
-Without the `APPLE_*` secrets the macOS job still builds, but the `.dmg` is
-unsigned/un-notarized. The `TAURI_SIGNING_*` pair, however, is now
-**mandatory**: `bundle.createUpdaterArtifacts` is `true` and the updater
-pubkey is set, so any bundle build (CI *or* local) fails without the private
-key. Windows EV signing and Linux signing are not wired yet.
+The `APPLE_*` secrets are mandatory for the release workflow because both the
+app and the universal helper must be signed/notarized. The
+`TAURI_SIGNING_*` pair is also **mandatory**: it signs updater artifacts and
+the helper manifest, and `bundle.createUpdaterArtifacts` is `true`. Any bundle
+build (CI or local) fails without the private key. Windows EV signing and Linux
+publisher signing are not wired yet.
 
 > **Local builds** now need the key too. Point Tauri at the generated file:
 > ```sh

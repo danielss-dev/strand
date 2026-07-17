@@ -23,6 +23,111 @@ on:
         required: true
 
 jobs:
+  helper:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: universal-apple-darwin
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.platform }}
+    env:
+      CARGO_NET_RETRY: 10
+      CARGO_HTTP_MULTIPLEXING: 'false'
+      VERSION: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify release tag matches Strand version
+        run: node scripts/check-release-version.mjs
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: strand-azdo-${{ matrix.target }}
+
+      - name: Import macOS signing certificate
+        if: matrix.platform == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Build universal macOS helper
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          cargo build -p strand-azdo --release --target aarch64-apple-darwin
+          cargo build -p strand-azdo --release --target x86_64-apple-darwin
+          mkdir -p dist
+          lipo -create \
+            target/aarch64-apple-darwin/release/strand-azdo \
+            target/x86_64-apple-darwin/release/strand-azdo \
+            -output dist/strand-azdo
+          codesign --force --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" dist/strand-azdo
+          codesign --verify --strict --verbose=2 dist/strand-azdo
+          ASSET="strand-azdo-${VERSION#v}-${{ matrix.target }}.zip"
+          zip -j "dist/$ASSET" dist/strand-azdo
+          xcrun notarytool submit "dist/$ASSET" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          node scripts/azdo-helper-metadata.mjs \
+            dist/strand-azdo "dist/$ASSET" "${{ matrix.target }}" "$ASSET" \
+            "dist/${{ matrix.target }}.metadata.json"
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build Linux helper
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          cargo build -p strand-azdo --release --target "${{ matrix.target }}"
+          mkdir -p dist
+          ASSET="strand-azdo-${VERSION#v}-${{ matrix.target }}.tar.gz"
+          tar -czf "dist/$ASSET" -C "target/${{ matrix.target }}/release" strand-azdo
+          node scripts/azdo-helper-metadata.mjs \
+            "target/${{ matrix.target }}/release/strand-azdo" "dist/$ASSET" \
+            "${{ matrix.target }}" "$ASSET" "dist/${{ matrix.target }}.metadata.json"
+
+      - name: Build Windows helper
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          cargo build -p strand-azdo --release --target "${{ matrix.target }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $ReleaseVersion = $env:VERSION.TrimStart('v')
+          $Asset = "strand-azdo-$ReleaseVersion-${{ matrix.target }}.zip"
+          Compress-Archive -Path "target/${{ matrix.target }}/release/strand-azdo.exe" -DestinationPath "dist/$Asset"
+          node scripts/azdo-helper-metadata.mjs `
+            "target/${{ matrix.target }}/release/strand-azdo.exe" "dist/$Asset" `
+            "${{ matrix.target }}" "$Asset" "dist/${{ matrix.target }}.metadata.json"
+
+      - name: Upload helper build
+        uses: actions/upload-artifact@v4
+        with:
+          name: strand-azdo-${{ matrix.target }}
+          path: |
+            dist/strand-azdo-*.zip
+            dist/strand-azdo-*.tar.gz
+            dist/*.metadata.json
+          if-no-files-found: error
+
   release:
     permissions:
       contents: write
@@ -127,3 +232,129 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  helper-release:
+    needs: [helper, release]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Download helper builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: strand-azdo-*
+          path: helper-dist
+          merge-multiple: true
+      - name: Build and sign helper manifest
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          node scripts/azdo-helper-manifest.mjs helper-dist helper-dist/strand-azdo-manifest.json
+          pnpm tauri signer sign helper-dist/strand-azdo-manifest.json
+          mv helper-dist/strand-azdo-manifest.json.sig helper-dist/strand-azdo-manifest.json.minisig
+      - name: Upload helper assets to the exact release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            helper-dist/strand-azdo-*.zip \
+            helper-dist/strand-azdo-*.tar.gz \
+            helper-dist/strand-azdo-manifest.json \
+            helper-dist/strand-azdo-manifest.json.minisig \
+            --clobber
+
+  helper-smoke:
+    needs: helper-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: universal-apple-darwin
+            extension: zip
+            binary: strand-azdo
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            extension: tar.gz
+            binary: strand-azdo
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            extension: zip
+            binary: strand-azdo.exe
+    runs-on: ${{ matrix.platform }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install minisign (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Install minisign (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: brew install minisign
+      - name: Install minisign (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: choco install minisign -y
+      - name: Download exact-tag helper release assets
+        shell: bash
+        run: |
+          mkdir -p smoke
+          VERSION="${RELEASE_TAG#v}"
+          ASSET="strand-azdo-$VERSION-${{ matrix.target }}.${{ matrix.extension }}"
+          gh release download "$RELEASE_TAG" --dir smoke \
+            --pattern "$ASSET" \
+            --pattern strand-azdo-manifest.json \
+            --pattern strand-azdo-manifest.json.minisig
+      - name: Verify signed manifest
+        shell: bash
+        run: |
+          minisign -Vm smoke/strand-azdo-manifest.json \
+            -x smoke/strand-azdo-manifest.json.minisig \
+            -P RWRdzoGp0r/8hCXLC+N4EQu9wkpQH7P78mULgVR4V/u6pQyP7hcYmgFy
+      - name: Extract and run helper (macOS)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          ditto -x -k "smoke/strand-azdo-$VERSION-${{ matrix.target }}.zip" smoke/extracted
+          smoke/extracted/strand-azdo version --json > smoke/version.json
+      - name: Extract and run helper (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          mkdir -p smoke/extracted
+          tar -xzf "smoke/strand-azdo-$VERSION-${{ matrix.target }}.tar.gz" -C smoke/extracted
+          smoke/extracted/strand-azdo version --json > smoke/version.json
+      - name: Extract and run helper (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $Version = $env:RELEASE_TAG.TrimStart('v')
+          Expand-Archive "smoke/strand-azdo-$Version-${{ matrix.target }}.zip" smoke/extracted
+          & smoke/extracted/strand-azdo.exe version --json | Out-File -Encoding utf8 smoke/version.json
+      - name: Verify asset and binary hashes and version agreement
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          node scripts/azdo-helper-smoke.mjs \
+            smoke/strand-azdo-manifest.json \
+            "smoke/strand-azdo-$VERSION-${{ matrix.target }}.${{ matrix.extension }}" \
+            "smoke/extracted/${{ matrix.binary }}" \
+            "${{ matrix.target }}" \
+            smoke/version.json

@@ -86,8 +86,11 @@ keyboard alone, and the mouse stays first-class.
   checks, conflicts, merge state, and provider freshness. Permission-backed
   drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control.
-  Authentication stays in the signed-in `gh` / `az` CLI; provider policies
-  remain enforced. Windows notification monitoring reads the native desktop
+  GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
+  `az` CLI. Azure DevOps Server 2020+ is available through an optional,
+  release-pinned `strand-azdo` REST helper configured in Settings → Hosting;
+  PATs live only in the native credential vault, and Windows can use integrated
+  Negotiate/NTLM authentication. Provider policies remain enforced. Windows notification monitoring reads the native desktop
   permission instead of WebView2's browser permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
@@ -146,7 +149,7 @@ keyboard alone, and the mouse stays first-class.
   `.code-workspace`), native macOS
   menubar, open the repository or a chosen file in your editor, open a terminal,
   settings (⌘,) for appearance / diff /
-  git / integrations / AI, in-app updates.
+  git / hosting / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
@@ -204,8 +207,10 @@ calls, so `pnpm dev` is useful for UI work without a Rust build.
 ```
 strand/
 ├── crates/
-│   ├── strand-core/    # Git engine (gix for reads, git2 for writes)
-│   └── strand-tauri/   # Tauri 2 app shell + IPC commands
+│   ├── strand-core/           # Git engine (gix for reads, git2 for writes)
+│   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
+│   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
+│   └── strand-tauri/          # Tauri 2 app shell + IPC commands
 ├── ui/                 # Vite + React + TypeScript frontend
 ├── website/            # strand.danielss.dev: landing page + user guide (website/docs/, no build step)
 ├── docs/               # design notes, perf baseline, packaging

@@ -5,6 +5,8 @@ import type {
   AiProviderStatus,
   AiGenerationOutcome,
   AiGenerationRequest,
+  AzdoHelperStatus,
+  AzdoServerProfile,
   BaseBranch,
   BlameLine,
   BranchPushRequest,
@@ -93,6 +95,19 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
+  azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
+  azdoHelperDisable: () => invoke<AzdoHelperStatus>('azdo_helper_disable'),
+  azdoHelperRemove: () => invoke<void>('azdo_helper_remove'),
+  azdoProfileUpsert: (profile: AzdoServerProfile) =>
+    invoke<AzdoServerProfile>('azdo_profile_upsert', { profile }),
+  azdoProfileImportCa: (id: string, path: string) =>
+    invoke<AzdoServerProfile>('azdo_profile_import_ca', { id, path }),
+  azdoProfileRemove: (id: string) => invoke<void>('azdo_profile_remove', { id }),
+  azdoProfileSetPat: (id: string, pat: string) =>
+    invoke<void>('azdo_profile_set_pat', { id, pat }),
+  azdoProfileClearPat: (id: string) => invoke<void>('azdo_profile_clear_pat', { id }),
+  azdoProfileTest: (id: string) => invoke<unknown>('azdo_profile_test', { id }),
   repoOpen: (path: string) => invoke<RepoMeta>('repo_open', { path }),
   repoMeta: (path: string) => invoke<RepoMeta>('repo_meta', { path }),
   repoStatus: (path: string) => invoke<FileStatus[]>('repo_status', { path }),

@@ -1,6 +1,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod ai;
+mod azdo_helper;
 mod commands;
 mod path_env;
 mod pull_requests;
@@ -83,6 +84,16 @@ fn main() {
             commands::repo_log,
             commands::repo_search_log,
             commands::repo_refs,
+            commands::azdo_helper_status,
+            commands::azdo_helper_enable,
+            commands::azdo_helper_disable,
+            commands::azdo_helper_remove,
+            commands::azdo_profile_upsert,
+            commands::azdo_profile_import_ca,
+            commands::azdo_profile_remove,
+            commands::azdo_profile_set_pat,
+            commands::azdo_profile_clear_pat,
+            commands::azdo_profile_test,
             commands::repo_pull_requests,
             commands::repo_pull_request_for_branch,
             commands::repo_pull_request_create,
@@ -193,6 +204,7 @@ fn main() {
         ])
         .setup(|app| {
             install_crash_log(app);
+            azdo_helper::init(app.handle());
 
             // Heal stale sqlx migration checksums on an existing settings DB
             // *before* the SQL plugin's migrator runs (on the webview's first
