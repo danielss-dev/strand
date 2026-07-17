@@ -398,20 +398,20 @@ jobs:
       - name: Download verified exact-tag helper assets
         run: |
           mkdir -p helper-dist
-          gh release download "$RELEASE_TAG" --dir helper-dist \
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir helper-dist \
             --pattern 'strand-azdo-*.zip' \
             --pattern 'strand-azdo-*.tar.gz' \
             --pattern strand-azdo-manifest.json \
             --pattern strand-azdo-manifest.json.minisig
       - name: Publish the rolling latest compatible helper
         run: |
-          if ! gh release view strand-azdo-latest >/dev/null 2>&1; then
-            gh release create strand-azdo-latest \
+          if ! gh release view strand-azdo-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
               --title "strand-azdo latest" \
               --notes "Rolling signed strand-azdo helper assets. Strand accepts these only when the protocol version is compatible." \
               --prerelease
           fi
-          gh release upload strand-azdo-latest \
+          gh release upload strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
             helper-dist/strand-azdo-*.zip \
             helper-dist/strand-azdo-*.tar.gz \
             helper-dist/strand-azdo-manifest.json \
