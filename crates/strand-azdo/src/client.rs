@@ -57,7 +57,10 @@ impl PatClient {
             let certificate = reqwest::Certificate::from_pem(bytes).map_err(|_| {
                 config::error(ErrorCode::Tls, "The profile CA certificate is invalid")
             })?;
-            builder = builder.add_root_certificate(certificate);
+            // Use the explicitly imported profile CA as the trust boundary.
+            // This avoids platform-verifier differences for private roots and
+            // keeps PAT profiles deterministic across desktop platforms.
+            builder = builder.tls_certs_only([certificate]);
         }
         let client = builder.build().map_err(|_| {
             config::error(ErrorCode::Tls, "Could not initialize secure HTTP transport")

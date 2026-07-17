@@ -226,7 +226,7 @@ pub fn resolve_remote(
             }
         }
     }
-    matches.sort_by(|a, b| b.0.cmp(&a.0));
+    matches.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
     let Some(best) = matches.first() else {
         return Ok(None);
     };
