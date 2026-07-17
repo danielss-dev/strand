@@ -285,6 +285,7 @@ jobs:
             --clobber
   helper-smoke:
     needs: helper-release
+    if: ${{ always() && needs['helper-release'].result == 'success' }}
     permissions:
       contents: read
     strategy:
@@ -376,6 +377,7 @@ jobs:
 
   helper-promote:
     needs: helper-smoke
+    if: ${{ always() && needs['helper-smoke'].result == 'success' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
