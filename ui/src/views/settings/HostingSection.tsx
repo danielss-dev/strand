@@ -30,6 +30,7 @@ export function HostingSection() {
   const [editing, setEditing] = useState<AzdoServerProfile | null>(null);
   const [pat, setPat] = useState('');
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,10 +59,15 @@ export function HostingSection() {
   }
 
   async function enable() {
-    await perform(async () => {
-      setStatus(await tauri.azdoHelperEnable());
-      setMessage('Azure DevOps Server support is enabled.');
-    });
+    setInstalling(true);
+    try {
+      await perform(async () => {
+        setStatus(await tauri.azdoHelperEnable());
+        setMessage('Azure DevOps Server support is enabled.');
+      });
+    } finally {
+      setInstalling(false);
+    }
   }
 
   async function disable() {
@@ -145,7 +151,9 @@ export function HostingSection() {
     });
   }
 
-  const helperLabel = status.installed
+  const helperLabel = installing
+    ? 'Downloading and verifying strand-azdo…'
+    : status.installed
     ? `Installed ${status.version ?? ''} · protocol ${status.protocol_version ?? 'unknown'}`
     : 'Not installed';
 
@@ -157,7 +165,7 @@ export function HostingSection() {
           <div className="settings-frow">
             <div className="settings-frow-text">
               <span className="settings-field-label">On-premises pull requests</span>
-              <span className="settings-frow-hint">{helperLabel}</span>
+              <span className="settings-frow-hint" role="status" aria-live="polite">{helperLabel}</span>
             </div>
             <button
               type="button"
@@ -172,15 +180,22 @@ export function HostingSection() {
             </button>
           </div>
         </div>
-        {status.error && <p className="settings-hint">{status.error}</p>}
+        {status.error && !installing && <p className="settings-hint">{status.error}</p>}
         <div className="settings-row">
           <button type="button" className="btn" disabled={busy || !desktop} onClick={() => void enable()}>
-            {status.installed ? 'Retry installation' : 'Install helper'}
+            {installing && <span className="spinner" aria-hidden="true" />}
+            {installing ? 'Downloading helper…' : status.installed ? 'Retry installation' : 'Install helper'}
           </button>
           <button type="button" className="btn danger" disabled={busy || (!status.installed && status.profiles.length === 0)} onClick={() => void removeEverything()}>
             Remove helper and credentials
           </button>
         </div>
+        {installing && (
+          <progress
+            className="settings-progress"
+            aria-label="Downloading strand-azdo helper"
+          />
+        )}
       </div>
 
       {status.installed && (
