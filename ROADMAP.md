@@ -1780,8 +1780,8 @@ counts, and supports Arrow/Home/End navigation plus Enter/Space activation.
     when nothing is staged (Codex / Claude Code CLIs)
   - ☑ Pull-request title/description suggestions from committed branch diffs
   - ☑ Isolated, cancellable provider execution with sensitive-file confirmation,
-    deterministic bounded context, per-repository writing profiles, coverage,
-    undo, and explicit alternate-provider retry
+    deterministic bounded context, per-repository writing profiles, PR-draft
+    coverage/undo, and explicit alternate-provider retry
 - ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
   foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
 
@@ -1796,19 +1796,26 @@ AI for sign-in; CommitBar sparkle button; palette + ⌘⇧M. Verified:
 temporary directory with repository access and web search disabled; both vendor
 CLIs use bounded output, process-tree cancellation, and a shared untrusted-data
 prompt contract. Commit and PR generation scan conservative sensitive signals
-before launch, require a fingerprinted include/exclude decision, rank bounded
-large-change context deterministically, report coverage/provider identity, and
-support repository-family writing profiles, Cancel, Undo, alternate-provider
-retry, and an AI-first PR palette action. CI now exercises the Tauri suite and
-AI subprocess lifecycle in the normal Linux Rust gate; the dedicated Windows
-job was removed because its full Tauri build took roughly five minutes for a
-one-second platform-specific test suite.
+before launch, require a fingerprinted include/exclude decision, and rank
+bounded large-change context deterministically. PR drafts report
+coverage/provider identity and support Undo; both flows support repository-family
+writing profiles, Cancel, alternate-provider retry, and an AI-first PR palette
+action. CI now exercises the Tauri suite and AI subprocess lifecycle in the
+normal Linux Rust gate; the dedicated Windows job was removed because its full
+Tauri build took roughly five minutes for a one-second platform-specific test
+suite.
 
 **AI provider setup refined (2026-07-15):** Settings → AI now reveals only the
 selected provider's account and CLI controls, remembers a writing-model choice
 for each provider, and routes that model through both commit-message and
 pull-request generation. Last-checked connection state is also retained so a
 saved CLI login remains visibly connected when Settings is reopened.
+
+**Commit description density repaired (2026-07-17):** The Local Changes commit
+body now grows to fit short and wrapped content, with a bounded scrollbar for
+long drafts, instead of reserving a fixed multi-line block after AI generation.
+The applied AI draft now remains directly editable without persistent
+coverage/provider status or an Undo row beneath the description.
 
 ---
 
