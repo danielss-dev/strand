@@ -18,9 +18,11 @@ of `az`. Enable it and add an HTTPS collection profile under **Settings →
 Hosting**. PAT profiles work on every supported desktop and keep the token only
 in the native credential vault; Windows profiles can use the current Windows
 identity with Negotiate/NTLM. Private-CA PEM import is available for PAT
-profiles. A profile is selected by the longest matching HTTPS/SSH remote prefix,
-with `origin` preferred. Azure DevOps Services URLs are never routed through
-the helper.
+profiles. The collection URL automatically matches standard HTTPS and SSH clone URLs,
+so Strand derives the project and repository from each Git remote. Additional
+prefixes are needed only for server aliases; the longest match wins, with
+`origin` preferred. Azure DevOps Services URLs are never routed through the
+helper.
 
 Packaged desktop builds import the interactive login-shell `PATH`, including
 Homebrew, local-bin, and version-manager locations that GUI launchers normally

@@ -16,6 +16,7 @@ use zeroize::Zeroizing;
 use crate::{config, credentials};
 
 const API_VERSION: &str = "6.0";
+const CONNECTION_API_VERSION: &str = "6.0-preview.1";
 const POLICY_API_VERSION: &str = "6.0-preview.1";
 
 pub fn execute(profile: &ServerProfile, operation: Operation) -> Result<Value, ProtocolError> {
@@ -136,7 +137,7 @@ fn request_spec(operation: Operation) -> RequestSpec {
             path: "_apis/connectionData".into(),
             query: vec![
                 ("connectOptions", "1".into()),
-                ("api-version", API_VERSION.into()),
+                ("api-version", CONNECTION_API_VERSION.into()),
             ],
             body: None,
             unwrap_value: false,
@@ -468,6 +469,14 @@ mod tests {
             "refs/heads/feature one".into()
         )));
         assert!(spec.query.contains(&("api-version", "6.0".into())));
+    }
+
+    #[test]
+    fn connection_probe_uses_the_server_preview_api() {
+        let spec = request_spec(Operation::TestConnection);
+        assert!(spec
+            .query
+            .contains(&("api-version", "6.0-preview.1".into())));
     }
 
     #[test]

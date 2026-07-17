@@ -1759,14 +1759,23 @@ folders and files with the tree's shared file-type icons and descendant/change
 counts, and supports Arrow/Home/End navigation plus Enter/Space activation.
 
 **Azure DevOps Server helper shipped (2026-07-17):** Settings → Hosting can
-download a helper pinned to the exact Strand release, configure Server 2020+
+download the latest signed protocol-compatible helper, configure Server 2020+
 collection profiles, store PATs only in the native credential vault, import a
 private CA for PAT transport, or use the current Windows identity through
 WinHTTP. The existing provider-neutral PR list/detail/activity/diff/create/
 comment/ready/merge paths select it only after longest-prefix remote matching;
 Azure DevOps Services remains on `az`. Release CI builds all desktop targets,
 signs the helper manifest with Strand's updater key, verifies both archive and
-binary hashes, and runs each exact-tag artifact before a draft is publishable.
+binary hashes, and publishes exact-tag plus rolling helper assets only after
+platform smoke tests pass.
+
+**Azure DevOps Server repository auto-resolution shipped (2026-07-17):** A
+profile's HTTPS collection URL now matches repositories below that collection
+without per-repository configuration; Strand derives the project and repository
+from the Git remote. New profiles suggest the collection boundary from a
+standard on-prem HTTPS or SSH remote as a placeholder rather than a saved value,
+optional prefixes remain for aliases, and the
+connection probe uses the Server 2020-compatible preview API.
 
 ---
 

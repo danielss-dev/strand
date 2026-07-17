@@ -1494,14 +1494,16 @@ same state through both paths.
 ## Optional provider helpers are exact-release, short-lived trust boundaries
 
 **Rule.** An app-managed provider helper is never resolved from PATH or a
-repository. Download it only from the exact Strand tag, verify a signed
-version/protocol/target manifest plus archive and extracted-binary hashes, and
-execute one bounded JSON-RPC process per operation from its absolute app-config
-path. Keep list payloads shallow and detail/diff/activity lazy exactly as for
-the in-process provider-neutral workspace.
+repository. Download it only from its dedicated rolling GitHub release, verify
+a signed version/protocol/target manifest plus archive and extracted-binary
+hashes, reject incompatible protocol versions, and execute one bounded JSON-RPC
+process per operation from its absolute app-config path. Keep list payloads
+shallow and detail/diff/activity lazy exactly as for the in-process
+provider-neutral workspace.
 
-**Why.** A repository-local or unpinned helper would turn opening an untrusted
-checkout into executable-code discovery. A daemon adds lifecycle and credential
+**Why.** A repository-local or unsigned helper would turn opening an untrusted
+checkout into executable-code discovery. Protocol gating lets helper fixes ship
+independently without weakening the signed trust boundary. A daemon adds lifecycle and credential
 surface without helping the current provider-operation granularity. Reusing the
 PR normalization layer also prevents Azure Server from drifting into a second
 UI model or weakening the one-mounted-diff performance boundary.
@@ -1513,3 +1515,18 @@ HTTP never redirects and stays under the configured HTTPS collection origin;
 custom roots apply only to PAT transport, while Windows integrated auth uses
 WinHTTP and the Windows trusted-root store. A helper failure disables only its
 provider adapter, never local Git or another host.
+
+**Azure DevOps Server coordinate resolution (2026-07-17).** Treat the profile's
+HTTPS collection URL as its default remote boundary and compare host/path
+identity across HTTPS and SSH clone transports. The standard Azure remote shape
+already carries the project immediately before `_git` and the repository after
+it, so do not add per-repository project settings. Additional prefixes are only
+for genuine server aliases. Keep the helper's strict `version` response schema
+in sync with every emitted field, including `capabilities`.
+
+**Helper manifest signature format (2026-07-17).** Tauri's `signer sign`
+command writes a base64 envelope around the Minisign text. Decode that envelope
+before publishing `strand-azdo-manifest.json.minisig`; the desktop passes the
+downloaded text directly to `minisign_verify::Signature::decode`. Release smoke
+must verify the published raw file without a compensating decode, or it can hide
+an installer-breaking format mismatch.

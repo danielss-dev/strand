@@ -213,7 +213,8 @@ pub fn resolve_remote(
     let normalized_remote = normalize_remote(remote_url);
     let mut matches = Vec::new();
     for profile in &config.profiles {
-        for prefix in &profile.remote_prefixes {
+        let mut profile_match = None;
+        for prefix in std::iter::once(&profile.collection_url).chain(&profile.remote_prefixes) {
             let normalized_prefix = normalize_remote(prefix);
             let Some(suffix) = normalized_remote.strip_prefix(&normalized_prefix) else {
                 continue;
@@ -222,8 +223,17 @@ pub fn resolve_remote(
                 continue;
             }
             if let Some((project, repository)) = parse_repo_suffix(suffix) {
-                matches.push((normalized_prefix.len(), profile.id, project, repository));
+                let candidate = (normalized_prefix.len(), profile.id, project, repository);
+                if profile_match
+                    .as_ref()
+                    .is_none_or(|current: &(usize, Uuid, String, String)| candidate.0 > current.0)
+                {
+                    profile_match = Some(candidate);
+                }
             }
+        }
+        if let Some(candidate) = profile_match {
+            matches.push(candidate);
         }
     }
     matches.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
@@ -270,9 +280,6 @@ pub fn validate_profile(profile: &ServerProfile) -> Result<(), ProtocolError> {
     if host == "dev.azure.com" || host.ends_with(".visualstudio.com") {
         return validation("Azure DevOps Services continues to use the official az CLI");
     }
-    if profile.remote_prefixes.is_empty() {
-        return validation("At least one HTTPS or SSH remote prefix is required");
-    }
     if profile
         .remote_prefixes
         .iter()
@@ -310,11 +317,31 @@ fn protocol_validation(message: &str) -> ProtocolError {
 }
 
 fn normalize_remote(value: &str) -> String {
-    value
+    let trimmed = value
         .trim()
         .trim_end_matches('/')
         .trim_end_matches(".git")
-        .replace('\\', "/")
+        .replace('\\', "/");
+    if let Ok(url) = Url::parse(&trimmed) {
+        if matches!(url.scheme(), "https" | "ssh") {
+            if let Some(host) = url.host_str() {
+                return format!(
+                    "{}/{}",
+                    host.to_ascii_lowercase(),
+                    url.path().trim_matches('/')
+                )
+                .trim_end_matches('/')
+                .to_string();
+            }
+        }
+    }
+    if let Some((authority, path)) = trimmed.split_once(':') {
+        if !authority.contains('/') {
+            let host = authority.split('@').next_back().unwrap_or(authority);
+            return format!("{}/{}", host.to_ascii_lowercase(), path.trim_matches('/'));
+        }
+    }
+    trimmed
 }
 
 fn parse_repo_suffix(suffix: &str) -> Option<(String, String)> {
@@ -394,13 +421,49 @@ mod tests {
     }
 
     #[test]
+    fn collection_url_resolves_project_and_repository_without_extra_prefixes() {
+        let id = Uuid::new_v4();
+        let mut server = profile(id, "https://unused.invalid");
+        server.collection_url = "https://azdo.example.test/tfs/DefaultCollection".into();
+        server.remote_prefixes.clear();
+        let config = ProfileConfig {
+            enabled: true,
+            profiles: vec![server],
+            ..ProfileConfig::default()
+        };
+
+        let found = resolve_remote(
+            &config,
+            "origin",
+            "https://azdo.example.test/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.profile_id, id);
+        assert_eq!(found.project, "ExampleProject");
+        assert_eq!(found.repository, "ExampleRepo");
+
+        let found = resolve_remote(
+            &config,
+            "origin",
+            "ssh://git@azdo.example.test:22/tfs/DefaultCollection/ExampleProject/_git/ExampleRepo",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.project, "ExampleProject");
+        assert_eq!(found.repository, "ExampleRepo");
+    }
+
+    #[test]
     fn longest_prefix_wins_and_equal_matches_fail() {
         let broad = Uuid::new_v4();
         let narrow = Uuid::new_v4();
+        let mut broad_profile = profile(broad, "ssh://ado.corp");
+        broad_profile.collection_url = "https://ado.corp".into();
         let config = ProfileConfig {
             enabled: true,
             profiles: vec![
-                profile(broad, "ssh://ado.corp"),
+                broad_profile,
                 profile(narrow, "ssh://ado.corp/tfs/DefaultCollection"),
             ],
             ..ProfileConfig::default()

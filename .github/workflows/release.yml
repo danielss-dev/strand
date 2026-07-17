@@ -16,11 +16,16 @@ on:
   push:
     tags:
       - 'v*'
+      - 'strand-azdo-v*'
   workflow_dispatch:
     inputs:
       tag:
         description: 'Release tag (e.g. v0.1.0). Must match the version in tauri.conf.json.'
         required: true
+      helpers_only:
+        description: 'Backfill signed strand-azdo assets without rebuilding desktop installers.'
+        type: boolean
+        default: false
 
 jobs:
   helper:
@@ -43,6 +48,10 @@ jobs:
       VERSION: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve helper release version
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        shell: bash
+        run: echo "VERSION=${VERSION#strand-azdo-}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -129,6 +138,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: ${{ !startsWith(github.ref_name, 'strand-azdo-v') && (github.event_name != 'workflow_dispatch' || !inputs.helpers_only) }}
     permissions:
       contents: write
     strategy:
@@ -235,6 +245,7 @@ jobs:
 
   helper-release:
     needs: [helper, release]
+    if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only) || (needs.release.result == 'skipped' && startsWith(github.ref_name, 'strand-azdo-v'))) }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -259,21 +270,22 @@ jobs:
         run: |
           node scripts/azdo-helper-manifest.mjs helper-dist helper-dist/strand-azdo-manifest.json
           pnpm tauri signer sign helper-dist/strand-azdo-manifest.json
-          mv helper-dist/strand-azdo-manifest.json.sig helper-dist/strand-azdo-manifest.json.minisig
+          node -e "const fs=require('node:fs'); const source='helper-dist/strand-azdo-manifest.json.sig'; fs.writeFileSync('helper-dist/strand-azdo-manifest.json.minisig', Buffer.from(fs.readFileSync(source, 'utf8').trim(), 'base64')); fs.unlinkSync(source)"
       - name: Upload helper assets to the exact release tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          RELEASE_TAG="${RELEASE_TAG#strand-azdo-}"
           gh release upload "$RELEASE_TAG" \
             helper-dist/strand-azdo-*.zip \
             helper-dist/strand-azdo-*.tar.gz \
             helper-dist/strand-azdo-manifest.json \
             helper-dist/strand-azdo-manifest.json.minisig \
             --clobber
-
   helper-smoke:
     needs: helper-release
+    if: ${{ always() && needs['helper-release'].result == 'success' }}
     permissions:
       contents: read
     strategy:
@@ -301,9 +313,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Resolve exact release tag
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        shell: bash
+        run: echo "RELEASE_TAG=${RELEASE_TAG#strand-azdo-}" >> "$GITHUB_ENV"
       - name: Install minisign (Linux)
         if: matrix.platform == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y minisign
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz \
+            --output minisign.tar.gz
+          echo '9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73  minisign.tar.gz' | sha256sum --check
+          tar -xzf minisign.tar.gz
+          sudo install minisign-linux/x86_64/minisign /usr/local/bin/minisign
       - name: Install minisign (macOS)
         if: matrix.platform == 'macos-latest'
         run: brew install minisign
@@ -358,3 +380,39 @@ jobs:
             "smoke/extracted/${{ matrix.binary }}" \
             "${{ matrix.target }}" \
             smoke/version.json
+
+  helper-promote:
+    needs: helper-smoke
+    if: ${{ always() && needs['helper-smoke'].result == 'success' }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Resolve exact release tag
+        if: startsWith(github.ref_name, 'strand-azdo-v')
+        run: echo "RELEASE_TAG=${RELEASE_TAG#strand-azdo-}" >> "$GITHUB_ENV"
+      - name: Download verified exact-tag helper assets
+        run: |
+          mkdir -p helper-dist
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir helper-dist \
+            --pattern 'strand-azdo-*.zip' \
+            --pattern 'strand-azdo-*.tar.gz' \
+            --pattern strand-azdo-manifest.json \
+            --pattern strand-azdo-manifest.json.minisig
+      - name: Publish the rolling latest compatible helper
+        run: |
+          if ! gh release view strand-azdo-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
+              --title "strand-azdo latest" \
+              --notes "Rolling signed strand-azdo helper assets. Strand accepts these only when the protocol version is compatible." \
+              --prerelease
+          fi
+          gh release upload strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
+            helper-dist/strand-azdo-*.zip \
+            helper-dist/strand-azdo-*.tar.gz \
+            helper-dist/strand-azdo-manifest.json \
+            helper-dist/strand-azdo-manifest.json.minisig \
+            --clobber

@@ -47,17 +47,22 @@ Everything else about git — credentials, SSH keys, commit signing — is inher
 ## Hosting
 
 Azure DevOps Server 2020+ support is optional. Turn on **On-premises pull
-requests** to download the `strand-azdo` helper for this exact Strand version.
+requests** to download the latest signed `strand-azdo` helper whose protocol is
+compatible with this Strand version.
 The status row shows the installed helper and protocol versions; **Retry
 installation** replaces it only after signature and SHA-256 verification.
 Disabling keeps profiles and credentials. **Remove helper and credentials** is
 confirmed separately and removes the binary, profiles, imported certificates,
 and vault entries.
 
-Each server profile has a display name, an HTTPS collection URL such as
-`https://server/tfs/DefaultCollection`, and one or more HTTPS/SSH clone URL
-prefixes. The open repository's `origin` URL is prefilled when adding a profile.
-Strand selects the longest matching prefix and rejects ambiguous matches.
+Each server profile has a display name and an HTTPS collection URL such as
+`https://server/tfs/DefaultCollection`. For a standard on-prem HTTPS clone URL,
+Strand shows the inferred collection boundary from the open repository as an
+input placeholder; enter the URL explicitly before saving. Strand later
+derives the project and repository from each repository's Git remote. No
+per-repository project setting is required. Additional HTTPS/SSH prefixes are
+optional for server aliases; the longest match wins and
+ambiguous matches are rejected.
 Cloud `dev.azure.com` and `visualstudio.com` addresses are not accepted here;
 Azure DevOps Services continues to use `az`.
 
