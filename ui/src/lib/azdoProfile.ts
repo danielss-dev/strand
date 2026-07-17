@@ -1,3 +1,16 @@
+import type { AzdoServerProfile } from './types';
+
+export function createAzdoServerProfile(): AzdoServerProfile {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    collection_url: '',
+    auth_mode: 'pat',
+    remote_prefixes: [],
+    ca_certificate: null,
+  };
+}
+
 export function inferAzdoServerCollectionUrl(remote: string | null): string {
   if (!remote) return '';
   try {

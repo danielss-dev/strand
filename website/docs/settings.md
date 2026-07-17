@@ -57,7 +57,8 @@ and vault entries.
 
 Each server profile has a display name and an HTTPS collection URL such as
 `https://server/tfs/DefaultCollection`. For a standard on-prem HTTPS clone URL,
-Strand prefills that collection boundary from the open repository and later
+Strand shows the inferred collection boundary from the open repository as an
+input placeholder; enter the URL explicitly before saving. Strand later
 derives the project and repository from each repository's Git remote. No
 per-repository project setting is required. Additional HTTPS/SSH prefixes are
 optional for server aliases; the longest match wins and

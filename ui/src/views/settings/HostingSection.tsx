@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { pickPemCertificate } from '../../lib/dialog';
-import { inferAzdoServerCollectionUrl } from '../../lib/azdoProfile';
+import { createAzdoServerProfile, inferAzdoServerCollectionUrl } from '../../lib/azdoProfile';
 import { errMessage, isTauri, tauri } from '../../lib/tauri';
 import type { AzdoAuthMode, AzdoHelperStatus, AzdoServerProfile } from '../../lib/types';
 import { useRepo } from '../../stores/repo';
@@ -15,23 +15,16 @@ const emptyStatus: AzdoHelperStatus = {
   error: null,
 };
 
-function newProfile(remote: string | null): AzdoServerProfile {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    collection_url: inferAzdoServerCollectionUrl(remote),
-    auth_mode: 'pat',
-    remote_prefixes: [],
-    ca_certificate: null,
-  };
-}
-
 export function HostingSection() {
   const desktop = isTauri();
   const remotes = useRepo((state) => state.refs.remotes);
   const preferredRemote = useMemo(
     () => remotes.find((remote) => remote.name === 'origin')?.url ?? remotes[0]?.url ?? null,
     [remotes],
+  );
+  const suggestedCollectionUrl = useMemo(
+    () => inferAzdoServerCollectionUrl(preferredRemote),
+    [preferredRemote],
   );
   const [status, setStatus] = useState(emptyStatus);
   const [editing, setEditing] = useState<AzdoServerProfile | null>(null);
@@ -194,7 +187,7 @@ export function HostingSection() {
         <div className="settings-field">
           <div className="settings-row settings-row-between">
             <span className="settings-section-label">Server profiles</span>
-            <button type="button" className="btn" disabled={busy} onClick={() => { setPat(''); setEditing(newProfile(preferredRemote)); }}>
+            <button type="button" className="btn" disabled={busy} onClick={() => { setPat(''); setEditing(createAzdoServerProfile()); }}>
               Add profile
             </button>
           </div>
@@ -219,6 +212,7 @@ export function HostingSection() {
           profile={editing}
           pat={pat}
           busy={busy}
+          suggestedCollectionUrl={suggestedCollectionUrl}
           onProfile={setEditing}
           onPat={setPat}
           onSave={() => void saveProfile()}
@@ -241,6 +235,7 @@ function ProfileEditor({
   profile,
   pat,
   busy,
+  suggestedCollectionUrl,
   onProfile,
   onPat,
   onSave,
@@ -251,6 +246,7 @@ function ProfileEditor({
   profile: AzdoServerProfile;
   pat: string;
   busy: boolean;
+  suggestedCollectionUrl: string;
   onProfile: (profile: AzdoServerProfile) => void;
   onPat: (pat: string) => void;
   onSave: () => void;
@@ -272,7 +268,7 @@ function ProfileEditor({
       </label>
       <label>
         <span>HTTPS collection URL</span>
-        <input className="clone-input" placeholder="https://server/tfs/DefaultCollection" value={profile.collection_url} onChange={(event) => set('collection_url', event.target.value)} />
+        <input className="clone-input" placeholder={suggestedCollectionUrl || 'https://server/tfs/DefaultCollection'} value={profile.collection_url} onChange={(event) => set('collection_url', event.target.value)} />
       </label>
       <label>
         <span>Authentication</span>

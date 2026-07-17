@@ -1358,7 +1358,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     API 6.0, with native-vault PAT auth on every desktop platform, WinHTTP
     Negotiate/NTLM on Windows, private-CA PAT profiles, automatic HTTPS
     collection matching with project/repository coordinates derived from each
-    HTTPS/SSH Git remote, optional longest-prefix alias matching, strict bounded
+    HTTPS/SSH Git remote, a remote-derived collection placeholder that is never
+    saved implicitly, optional longest-prefix alias matching, strict bounded
     JSON RPC, Server 2020-compatible connection probing, and signed rolling
     download with protocol compatibility gating.
     Azure DevOps Services continues to use the official `az` CLI; Azure inline

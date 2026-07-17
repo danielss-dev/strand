@@ -1772,8 +1772,9 @@ platform smoke tests pass.
 **Azure DevOps Server repository auto-resolution shipped (2026-07-17):** A
 profile's HTTPS collection URL now matches repositories below that collection
 without per-repository configuration; Strand derives the project and repository
-from the Git remote. New profiles prefill the collection boundary from a
-standard on-prem HTTPS or SSH remote, optional prefixes remain for aliases, and the
+from the Git remote. New profiles suggest the collection boundary from a
+standard on-prem HTTPS or SSH remote as a placeholder rather than a saved value,
+optional prefixes remain for aliases, and the
 connection probe uses the Server 2020-compatible preview API.
 
 ---

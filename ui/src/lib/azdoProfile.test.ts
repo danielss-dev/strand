@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferAzdoServerCollectionUrl } from './azdoProfile';
+import { createAzdoServerProfile, inferAzdoServerCollectionUrl } from './azdoProfile';
 
 describe('inferAzdoServerCollectionUrl', () => {
+  it('keeps an inferred collection URL as a suggestion, not a saved default', () => {
+    const suggestion = inferAzdoServerCollectionUrl(
+      'https://azdops.serviceware.net/sw/Platform/Portal/_git/Portal_UI_Router',
+    );
+
+    expect(suggestion).toBe('https://azdops.serviceware.net/sw/Platform');
+    expect(createAzdoServerProfile().collection_url).toBe('');
+  });
+
   it('derives the collection boundary from an on-prem repository remote', () => {
     expect(inferAzdoServerCollectionUrl(
       'https://azdops.serviceware.net/sw/Platform/Portal/_git/Portal_UI_Router',
