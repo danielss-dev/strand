@@ -1887,8 +1887,12 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 - ☑ Deterministic large-change context and writing UX (`AiInputCoverage`,
   200-file/4 KB manifest, ranked 8-patch/12 KB context with 3 KB per-file
   caps, recent HEAD subjects, `common_dir` repository writing profiles,
-  coverage/provider labels, Cancel, one-step undo, cross-provider retry, and
-  “Draft pull request with AI…” palette action)
+  PR-draft coverage/provider labels and one-step undo, shared Cancel,
+  cross-provider retry, and “Draft pull request with AI…” palette action)
+- ☑ Content-sized commit descriptions (DAN-21: `CommitBar` now fits the
+  textarea to short or wrapped content and caps long drafts at 120px)
+- ☑ Compact commit-suggestion result (`CommitBar` applies the editable subject
+  and body without persistent coverage or Undo rows)
 - ☑ AI subprocess lifecycle tests run in the normal Linux Tauri gate; the
   dedicated Linux/Windows matrix was removed after its Windows full-crate build
   added roughly five minutes to exercise a one-second scoped suite

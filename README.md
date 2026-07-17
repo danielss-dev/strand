@@ -156,10 +156,10 @@ keyboard alone, and the mouse stays first-class.
   tools and their runtimes through
   the user's recovered Unix or Windows `PATH`; custom paths remain available.
   Generation is cancellable, scans conservative sensitive-file
-  signals before provider launch, reports partial-context coverage, preserves
-  the replaced draft for one-step undo, and can retry explicitly with the other
-  provider without changing your default. Repository-family writing profiles
-  keep terminology and style consistent across worktrees.
+  signals before provider launch, keeps the generated description content-sized,
+  and can retry explicitly with the other provider without changing your
+  default. Repository-family writing profiles keep terminology and style
+  consistent across worktrees.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

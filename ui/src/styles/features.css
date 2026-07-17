@@ -473,7 +473,7 @@
   margin-left: 2px;
 }
 
-/* Body textarea — compact by default, expands when focused or typed-into */
+/* Body textarea — content-sized, capped so long messages do not crowd the diff. */
 .cb-body {
   width: 100%;
   border: 0;
@@ -486,14 +486,15 @@
   color: var(--text);
   resize: none;
   height: 32px;
+  min-height: 32px;
+  max-height: 120px;
+  overflow-y: hidden;
   outline: none;
   font-family: var(--font-mono);
   line-height: 1.5;
-  transition: height 0.18s cubic-bezier(0.2, 0.7, 0.4, 1);
 }
 .cb-body:focus,
 .cb-body:not(:placeholder-shown) {
-  height: 70px;
   box-shadow:
     0 0 0 0.5px var(--accent) inset,
     0 0 0 3px var(--accent-glow);

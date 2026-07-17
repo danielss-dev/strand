@@ -28,7 +28,11 @@ The staging loop is fully keyboard-driven:
 
 ## Committing
 
-The commit form takes a subject and an optional description body. `Mod+Enter` in the message box commits (the Commit button shows the same chip). An **amend** checkbox rewrites the previous commit instead.
+The commit form takes a subject and an optional description body. The body grows
+with short or wrapped text, then scrolls once a long message reaches its bounded
+height so it does not crowd the diff. `Mod+Enter` in the message box commits
+(the Commit button shows the same chip). An **amend** checkbox rewrites the
+previous commit instead.
 
 **Commit signing honors your existing setup**: if `commit.gpgSign=true` is configured, Strand runs your real `git commit`, so GPG or SSH signing happens automatically and pre-commit/commit-msg hooks fire as they would on the command line. With signing off, commits are made by Strand's own engine and hooks are not run.
 
@@ -37,12 +41,11 @@ The commit form takes a subject and an optional description body. `Mod+Enter` in
 The sparkle button next to the subject field (or `Mod+Shift+M`, or the palette action "Suggest commit message") generates a commit message from your **staged** changes. If nothing is staged, it uses all unstaged changes instead, so it is available as soon as there is work to describe. Suggestions use your own subscription CLIs — the Codex CLI (ChatGPT) or the Claude Code CLI — with no Strand-side API key. Pick the provider and sign in under Settings → AI; see [Settings](settings.md) for setup.
 
 Generation is explicit and cancellable. Strand sends a bounded manifest plus
-the highest-signal patches and shows the resulting coverage beside the draft.
-If conservative path or content checks flag potentially sensitive files, choose
-to exclude them, explicitly include them, or cancel; changed input requires a
-new confirmation. **Undo AI replacement** restores the subject and body that
-were present immediately before generation. A non-authentication failure can
-be retried with the other provider without changing the default in Settings.
+the highest-signal patches. If conservative path or content checks flag
+potentially sensitive files, choose to exclude them, explicitly include them,
+or cancel; changed input requires a new confirmation. The generated subject and
+body remain directly editable. A non-authentication failure can be retried with
+the other provider without changing the default in Settings.
 
 ## Fetch, pull, push
 

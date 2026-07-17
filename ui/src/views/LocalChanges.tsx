@@ -16,7 +16,7 @@ import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { repoAiStyle } from '../lib/db';
-import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
+import { aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { EDITABLE_SELECTOR, eventInside, formatBinding } from '../lib/keys';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
@@ -25,7 +25,7 @@ import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import type { AiInputCoverage, AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
+import type { AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
 import { MergeResolver } from './MergeResolver';
 import { ConflictLanding } from './ConflictLanding';
 
@@ -1321,20 +1321,35 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     fingerprint: string;
     files: AiSensitiveFile[];
   } | null>(null);
-  const [coverage, setCoverage] = useState<AiInputCoverage | null>(null);
-  const [providerUsed, setProviderUsed] = useState<AiProvider | null>(null);
-  const [undoDraft, setUndoDraft] = useState<{ subject: string; body: string } | null>(null);
   const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
 
   const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const requestRef = useRef<{ opId: string; path: string; provider: typeof aiProvider; model: string } | null>(null);
   const suggestingRef = useRef(false);
 
-  function applyMessage(m: { subject: string; body: string }) {
-    setSubject(m.subject);
-    setBody(m.body);
-    subjectRef.current?.focus();
-  }
+  const fitBody = useCallback((node: HTMLTextAreaElement | null) => {
+    if (!node) return;
+    node.style.height = '32px';
+    const height = Math.min(120, Math.max(32, node.scrollHeight));
+    node.style.height = `${height}px`;
+    node.style.overflowY = node.scrollHeight > 120 ? 'auto' : 'hidden';
+  }, []);
+
+  useLayoutEffect(() => fitBody(bodyRef.current), [body, fitBody]);
+
+  useLayoutEffect(() => {
+    const node = bodyRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    let width = node.getBoundingClientRect().width;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry || Math.abs(entry.contentRect.width - width) < 1) return;
+      width = entry.contentRect.width;
+      fitBody(node);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fitBody]);
 
   const cancelSuggestion = useCallback(() => {
     const request = requestRef.current;
@@ -1359,9 +1374,6 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     setSuggesting(true);
     setCommitError(null);
     setSensitivePrompt(null);
-    setCoverage(null);
-    setProviderUsed(null);
-    setUndoDraft(null);
     setRetryProvider(null);
     try {
       const styleInstruction = commonDir ? await repoAiStyle.get(commonDir) : null;
@@ -1383,10 +1395,9 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         return;
       }
       if (outcome.provider !== provider) return;
-      setUndoDraft({ subject, body });
-      applyMessage({ subject: outcome.suggestion.subject, body: outcome.suggestion.body ?? '' });
-      setCoverage(outcome.coverage);
-      setProviderUsed(outcome.provider);
+      setSubject(outcome.suggestion.subject);
+      setBody(outcome.suggestion.body ?? '');
+      subjectRef.current?.focus();
     } catch (e) {
       if (requestRef.current !== request || isCancelled(e)) return;
       const msg = gitErrorHint(e);
@@ -1410,7 +1421,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         setSuggesting(false);
       }
     }
-  }, [activePath, aiProvider, anthropicCli, anthropicModel, body, commonDir, hasChanges, openaiCli, openaiModel, subject]);
+  }, [activePath, aiProvider, anthropicCli, anthropicModel, commonDir, hasChanges, openaiCli, openaiModel]);
 
   useEffect(() => {
     if (!suggestCommitSignal) return;
@@ -1429,9 +1440,6 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
       setSubject('');
       setBody('');
       setAmend(false);
-      setUndoDraft(null);
-      setCoverage(null);
-      setProviderUsed(null);
     } catch (e) {
       console.error('commit failed', e);
       setCommitError(`Commit failed: ${gitErrorHint(e)}`);
@@ -1509,30 +1517,12 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         </button>
       </div>
       <textarea
+        ref={bodyRef}
         className="cb-body"
         placeholder="Description (optional)"
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
-      {coverage && providerUsed && (
-        <div className="settings-hint" role="status">
-          {aiCoverageLabel(coverage, providerUsed)}
-        </div>
-      )}
-      {undoDraft && (
-        <button
-          type="button"
-          className="h-link"
-          onClick={() => {
-            applyMessage(undoDraft);
-            setUndoDraft(null);
-            setCoverage(null);
-            setProviderUsed(null);
-          }}
-        >
-          Undo AI replacement
-        </button>
-      )}
       {sensitivePrompt && (
         <div className="cb-error" role="alert">
           <div>Potentially sensitive files were excluded pending confirmation:</div>
