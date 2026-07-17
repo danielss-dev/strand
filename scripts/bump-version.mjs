@@ -99,7 +99,7 @@ const edits = [
   ['ui/package.json', jsonVersion('ui package')],
   ['crates/strand-tauri/tauri.conf.json', jsonVersion('tauri config')],
   ['Cargo.toml', tomlWorkspaceVersion],
-  ['Cargo.lock', lockfileCrates(['strand-core', 'strand-tauri'])],
+  ['Cargo.lock', lockfileCrates(['strand-azdo', 'strand-azdo-protocol', 'strand-core', 'strand-tauri'])],
 ];
 
 console.log(`Bumping ${current} -> ${next}${dryRun ? '  (dry run, no files written)' : ''}\n`);
