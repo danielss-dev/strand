@@ -3,6 +3,7 @@
 mod ai;
 mod azdo_helper;
 mod commands;
+mod hosting;
 mod path_env;
 mod pull_requests;
 mod state;
@@ -85,6 +86,7 @@ fn main() {
             commands::repo_search_log,
             commands::repo_refs,
             commands::azdo_helper_status,
+            commands::hosting_connection_status,
             commands::azdo_helper_enable,
             commands::azdo_helper_disable,
             commands::azdo_helper_remove,

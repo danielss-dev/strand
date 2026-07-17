@@ -13,13 +13,17 @@ official CLI, and Strand never reads or stores those access tokens:
 - GitHub requires [GitHub CLI](https://cli.github.com/) and `gh auth login`.
 - Azure DevOps requires Azure CLI, the `azure-devops` extension, and `az login`.
 
+Settings → Hosting summarizes both CLI connections and displays the signed-in
+account reported by each provider.
+
 Azure DevOps Server 2020+ uses the optional `strand-azdo` REST helper instead
 of `az`. Enable it and add an HTTPS collection profile under **Settings →
 Hosting**. PAT profiles work on every supported desktop and keep the token only
 in the native credential vault; Windows profiles can use the current Windows
 identity with Negotiate/NTLM. Private-CA PEM import is available for PAT
 profiles. The collection URL automatically matches standard HTTPS and SSH clone URLs,
-so Strand derives the project and repository from each Git remote. Additional
+so Strand derives the project and repository from each Git remote. Leave the
+collection field blank to derive and save it from the active repository. Additional
 prefixes are needed only for server aliases; the longest match wins, with
 `origin` preferred. Azure DevOps Services URLs are never routed through the
 helper.

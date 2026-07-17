@@ -35,3 +35,16 @@ export function inferAzdoServerCollectionUrl(remote: string | null): string {
     return `https://${scp[1].toLowerCase()}/${segments.slice(0, gitIndex - 1).join('/')}`;
   }
 }
+
+export function resolveAzdoServerCollectionUrl(
+  collectionUrl: string,
+  remotes: Array<{ name: string; url: string | null }>,
+): string {
+  const explicit = collectionUrl.trim();
+  if (explicit) return explicit;
+
+  return [...remotes]
+    .sort((left, right) => Number(left.name !== 'origin') - Number(right.name !== 'origin'))
+    .map((remote) => inferAzdoServerCollectionUrl(remote.url))
+    .find(Boolean) ?? '';
+}

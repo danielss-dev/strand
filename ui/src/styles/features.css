@@ -4144,6 +4144,168 @@ textarea.clone-input {
   flex-direction: column;
   gap: 14px;
 }
+.hosting-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hosting-heading .settings-hint {
+  margin-top: 4px;
+}
+.hosting-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.hosting-provider {
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.hosting-provider.open {
+  background: color-mix(in oklch, var(--bg-base) 60%, var(--bg-panel));
+  box-shadow: 0 0 0 0.5px var(--border-strong) inset;
+}
+.hosting-provider-summary {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 12px;
+  color: var(--text);
+  text-align: left;
+}
+.hosting-provider-summary:hover {
+  background: var(--bg-hover);
+}
+.hosting-provider-summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--accent) inset, 0 0 0 3px var(--accent-glow) inset;
+}
+.hosting-provider-status,
+.hosting-profile-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.hosting-provider-status {
+  width: 26px;
+  height: 26px;
+}
+.hosting-provider-status.ready,
+.hosting-profile-status.ready {
+  color: var(--add);
+  background: var(--add-bg);
+  box-shadow: 0 0 0 0.5px color-mix(in oklch, var(--add) 55%, transparent) inset;
+}
+.hosting-provider-status.loading {
+  color: var(--accent);
+}
+.hosting-provider-status.loading svg {
+  animation: spin 0.8s linear infinite;
+}
+.hosting-provider-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hosting-provider-copy strong {
+  font-size: var(--type-ui);
+  font-weight: 600;
+}
+.hosting-provider-copy > span {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hosting-cli-badge {
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.hosting-provider-chevron {
+  color: var(--text-dim);
+  transition: transform 0.12s ease;
+}
+.hosting-provider.open .hosting-provider-chevron {
+  transform: rotate(90deg);
+}
+.hosting-provider-panel {
+  border-top: 0.5px solid var(--border);
+}
+.hosting-provider-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.hosting-cloud-details {
+  gap: 0;
+}
+.hosting-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.hosting-detail-row strong,
+.hosting-detail-row code {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hosting-cloud-details > .settings-hint {
+  margin-top: 10px;
+}
+.hosting-server-profiles {
+  margin-top: 3px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--border);
+}
+.hosting-profile-status {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.hosting-message {
+  padding: 0 2px;
+}
+.azdo-profile-editor label small {
+  margin-left: 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 400;
+}
+.hosting-inference-hint {
+  margin-top: -5px;
+}
+.hosting-inference-hint code {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
 .settings-row-between {
   justify-content: space-between;
 }

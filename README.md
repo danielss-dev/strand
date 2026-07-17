@@ -94,8 +94,9 @@ keyboard alone, and the mouse stays first-class.
   Negotiate/NTLM authentication. Its collection URL automatically matches HTTPS
   repository remotes and supplies the project/repository coordinates used by the
   PR view across HTTPS and SSH clones; extra prefixes are only needed for server
-  aliases. New profiles show the active remote's inferred collection only as a
-  placeholder, so it is never saved implicitly. Provider policies
+  aliases. New profiles can leave the collection URL blank to derive and save it
+  from the active repository. Hosting settings also show connection readiness
+  and the signed-in `gh` / `az` accounts. Provider policies
   remain enforced. Windows notification monitoring reads the native desktop
   permission instead of WebView2's browser permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted

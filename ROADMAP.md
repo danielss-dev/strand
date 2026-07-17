@@ -1773,9 +1773,15 @@ platform smoke tests pass.
 profile's HTTPS collection URL now matches repositories below that collection
 without per-repository configuration; Strand derives the project and repository
 from the Git remote. New profiles suggest the collection boundary from a
-standard on-prem HTTPS or SSH remote as a placeholder rather than a saved value,
-optional prefixes remain for aliases, and the
+standard on-prem HTTPS or SSH remote and save that boundary when the optional
+field is left blank, optional prefixes remain for aliases, and the
 connection probe uses the Server 2020-compatible preview API.
+
+**Hosting connection overview shipped (2026-07-17):** Settings → Hosting now
+groups GitHub, Azure DevOps Services, and Azure DevOps Server into keyboard-
+operable provider accordions. GitHub and Azure report their signed-in `gh` / `az`
+account, while Server readiness reflects the verified helper plus a configured
+vault PAT or Windows-auth profile without exposing credentials.
 
 ---
 
