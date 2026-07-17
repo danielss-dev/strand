@@ -1362,6 +1362,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     saved implicitly, optional longest-prefix alias matching, strict bounded
     JSON RPC, Server 2020-compatible connection probing, and signed rolling
     download with protocol compatibility gating.
+    Settings surfaces an indeterminate download/verification indicator while
+    `strand-azdo` is being installed (`HostingSection`).
     Azure DevOps Services continues to use the official `az` CLI; Azure inline
     comments, replies/resolution, and review submission remain out of scope.
   - ☐ Hide provider write controls for terminal pull requests: a merged Azure

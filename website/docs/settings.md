@@ -49,6 +49,8 @@ Everything else about git — credentials, SSH keys, commit signing — is inher
 Azure DevOps Server 2020+ support is optional. Turn on **On-premises pull
 requests** to download the latest signed `strand-azdo` helper whose protocol is
 compatible with this Strand version.
+While the helper is being fetched and verified, the status row, install button,
+and progress bar show that the download is still running.
 The status row shows the installed helper and protocol versions; **Retry
 installation** replaces it only after signature and SHA-256 verification.
 Disabling keeps profiles and credentials. **Remove helper and credentials** is

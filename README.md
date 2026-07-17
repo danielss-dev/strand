@@ -89,6 +89,7 @@ keyboard alone, and the mouse stays first-class.
   GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
   independently updated, signed `strand-azdo` REST helper configured in Settings → Hosting;
+  installation shows an explicit download and verification indicator;
   PATs live only in the native credential vault, and Windows can use integrated
   Negotiate/NTLM authentication. Its collection URL automatically matches HTTPS
   repository remotes and supplies the project/repository coordinates used by the
