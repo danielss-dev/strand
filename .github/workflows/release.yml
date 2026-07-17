@@ -319,7 +319,13 @@ jobs:
         run: echo "RELEASE_TAG=${RELEASE_TAG#strand-azdo-}" >> "$GITHUB_ENV"
       - name: Install minisign (Linux)
         if: matrix.platform == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y minisign
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz \
+            --output minisign.tar.gz
+          echo '9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73  minisign.tar.gz' | sha256sum --check
+          tar -xzf minisign.tar.gz
+          sudo install minisign-linux/x86_64/minisign /usr/local/bin/minisign
       - name: Install minisign (macOS)
         if: matrix.platform == 'macos-latest'
         run: brew install minisign
@@ -339,8 +345,9 @@ jobs:
       - name: Verify signed manifest
         shell: bash
         run: |
+          node -e "const fs=require('node:fs'); fs.writeFileSync('smoke/strand-azdo-manifest.decoded.minisig', Buffer.from(fs.readFileSync('smoke/strand-azdo-manifest.json.minisig', 'utf8').trim(), 'base64'))"
           minisign -Vm smoke/strand-azdo-manifest.json \
-            -x smoke/strand-azdo-manifest.json.minisig \
+            -x smoke/strand-azdo-manifest.decoded.minisig \
             -P RWRdzoGp0r/8hCXLC+N4EQu9wkpQH7P78mULgVR4V/u6pQyP7hcYmgFy
       - name: Extract and run helper (macOS)
         if: matrix.platform == 'macos-latest'
