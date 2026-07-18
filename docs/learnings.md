@@ -1667,10 +1667,11 @@ diff remains mounted and violates both the filter and one-diff review model.
 (2026-07-18).** Recheck the provider head immediately before any review write;
 do not refresh rich detail or the patch merely to guard submission. GitHub can
 send the decision, summary, and inline comments atomically in one review pinned
-to that commit. Azure vote and summary APIs are separate writes: submit the vote
-first, report partial success explicitly if the summary fails, and preserve the
-local draft so the user can recover the unsent text. Never clear a draft on a
-provider failure; clear it only after the provider confirms the review write.
+to that commit. Azure vote, inline-thread, and summary APIs are separate writes:
+submit the vote first, then tracked inline comments, then the summary; report
+partial success explicitly at every boundary and preserve the local draft so
+the user can reconcile unsent or already-posted text. Never clear a draft on a
+provider failure; clear it only after the provider confirms every review write.
 
 **Existing-review actions are capability-driven and identity-bound
 (2026-07-18).** Keep submitted reviews out of the shallow GitHub list and load
@@ -1681,3 +1682,15 @@ have no editable body: expose reset only when the exact reviewer ID and signed-
 in identity match a current nonzero vote, then re-read the pull request before
 writing. After either provider accepts a write, refresh rich detail instead of
 guessing the next capability state locally.
+
+**Azure inline comments resolve provider coordinates at write time
+(2026-07-18).** A displayed patch path and line number are not sufficient for
+an Azure DevOps review thread. Match the latest iteration's source commit to the
+exact reviewed head, page its cumulative changes against the common commit,
+map both current and `originalPath` names to the provider `changeTrackingId`,
+and recheck the PR head immediately before posting. For that cumulative diff,
+send the same latest iteration as both comparing iterations so Azure interprets
+the left version as the common commit; populate only the left positions for
+deletions or right positions for additions. Keep paging bounded and report
+partial batched-review writes explicitly because Azure has no atomic review
+payload.

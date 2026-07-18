@@ -234,11 +234,11 @@ Use **All**, **Unviewed**, or **Threads** to focus the file tree, `[` / `]` or
 `j` / `k` to move between files, and `n` / `Shift+n` to jump between unresolved
 threads. These filters preserve the one-mounted-diff performance boundary.
 
-On an open GitHub pull request, hover a line number and choose the `+` in its
+On an open GitHub or Azure DevOps pull request, hover a line number and choose the `+` in its
 gutter. Drag the `+` across adjacent lines to comment on a range, or drag across
 line numbers and then use the `+` at the end of the selection. Strand
 highlights the range and opens a compact composer directly beneath that code,
-inside the diff. **Add comment** publishes a GitHub review thread
+inside the diff. **Add comment** publishes a provider review thread
 on that exact old- or new-file range; `Mod+Enter` sends from the composer.
 Before publishing, Strand verifies that
 the pull request head is still the commit used by the displayed patch; if it
@@ -255,9 +255,11 @@ submit review…”. Drafts survive leaving the tab and provider failures, but a
 new source commit makes the old draft visibly stale and blocks submission until
 it is discarded or rewritten against the refreshed patch. GitHub sends the
 summary and pending inline comments as one review pinned to that commit. Azure
-DevOps Services and Server support the decision plus optional summary; pending
-inline comments stay unavailable there until Strand has provider iteration and
-change-tracking coordinates.
+DevOps Services and Server resolve the latest provider iteration and each
+file's change-tracking ID, recheck the exact head, then publish the decision,
+inline comments, and optional summary in that order. Azure review submission is
+several provider writes, so a partial failure names what was already posted and
+preserves the draft for manual reconciliation.
 
 When a new head commit is detected, Strand keeps the existing patch visible
 while the replacement loads and labels it stale. Inline-comment submission is
@@ -289,10 +291,10 @@ immediately. These controls are absent on terminal pull requests.
 
 Azure policy evaluations participate in readiness when their dedicated query
 succeeds. A failed or incomplete policy query remains unknown instead of being
-treated as green. Azure inline
-comments also require provider iteration/change-tracking coordinates that the
-current patch fetch does not include, so Strand disables that action and
-directs you to the host instead of creating a wrongly anchored thread.
+treated as green. Azure inline comments never infer coordinates from the patch:
+Strand resolves the displayed head to the latest iteration, pages that
+iteration's cumulative change list, maps the file to its provider
+`changeTrackingId`, and rechecks the head immediately before publishing.
 Open pull requests can be closed after confirmation, and closed/abandoned pull
 requests can be reopened when the provider grants permission. The PR overflow
 menu also exposes **Open branch in worktree…** for GitHub and Azure. Strand

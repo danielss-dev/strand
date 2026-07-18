@@ -8,7 +8,8 @@ use reqwest::{
 };
 use serde_json::{json, Value};
 use strand_azdo_protocol::{
-    AuthMode, ErrorCode, MergeStrategy, Operation, ProtocolError, ServerProfile, MAX_RESPONSE_BYTES,
+    AuthMode, DiffSide, ErrorCode, MergeStrategy, Operation, ProtocolError, ServerProfile,
+    MAX_RESPONSE_BYTES,
 };
 use url::Url;
 use zeroize::Zeroizing;
@@ -212,6 +213,40 @@ fn request_spec(operation: Operation) -> RequestSpec {
             body: None,
             unwrap_value: false,
         },
+        Operation::PullRequestIterations {
+            project,
+            repository,
+            id,
+        } => RequestSpec {
+            method: Method::GET,
+            path: git_path(&project, &repository, &format!("pullrequests/{id}/iterations")),
+            query: api(),
+            body: None,
+            unwrap_value: false,
+        },
+        Operation::PullRequestIterationChanges {
+            project,
+            repository,
+            id,
+            iteration_id,
+            top,
+            skip,
+        } => RequestSpec {
+            method: Method::GET,
+            path: git_path(
+                &project,
+                &repository,
+                &format!("pullrequests/{id}/iterations/{iteration_id}/changes"),
+            ),
+            query: vec![
+                ("$top", top.min(2000).to_string()),
+                ("$skip", skip.to_string()),
+                ("$compareTo", "0".into()),
+                ("api-version", API_VERSION.into()),
+            ],
+            body: None,
+            unwrap_value: false,
+        },
         Operation::Commits {
             project,
             repository,
@@ -256,6 +291,58 @@ fn request_spec(operation: Operation) -> RequestSpec {
             })),
             unwrap_value: false,
         },
+        Operation::AddInlineComment {
+            project,
+            repository,
+            id,
+            body,
+            file_path,
+            start_line,
+            end_line,
+            side,
+            iteration_id,
+            change_tracking_id,
+        } => {
+            let position = |line| json!({ "line": line, "offset": 1 });
+            let (left_start, left_end, right_start, right_end) = match side {
+                DiffSide::Additions => (
+                    Value::Null,
+                    Value::Null,
+                    position(start_line),
+                    position(end_line),
+                ),
+                DiffSide::Deletions => (
+                    position(start_line),
+                    position(end_line),
+                    Value::Null,
+                    Value::Null,
+                ),
+            };
+            RequestSpec {
+                method: Method::POST,
+                path: git_path(&project, &repository, &format!("pullrequests/{id}/threads")),
+                query: api(),
+                body: Some(json!({
+                    "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
+                    "status": 1,
+                    "threadContext": {
+                        "filePath": format!("/{}", file_path.trim_start_matches('/')),
+                        "leftFileStart": left_start,
+                        "leftFileEnd": left_end,
+                        "rightFileStart": right_start,
+                        "rightFileEnd": right_end
+                    },
+                    "pullRequestThreadContext": {
+                        "changeTrackingId": change_tracking_id,
+                        "iterationContext": {
+                            "firstComparingIteration": iteration_id,
+                            "secondComparingIteration": iteration_id
+                        }
+                    }
+                })),
+                unwrap_value: false,
+            }
+        }
         Operation::MarkReady {
             project,
             repository,
@@ -579,6 +666,48 @@ mod tests {
         });
         assert_eq!(reset_vote.method, Method::PUT);
         assert_eq!(reset_vote.body.unwrap()["vote"], 0);
+
+        let changes = request_spec(Operation::PullRequestIterationChanges {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            iteration_id: 4,
+            top: 5000,
+            skip: 2000,
+        });
+        assert!(changes
+            .path
+            .ends_with("pullrequests/12/iterations/4/changes"));
+        assert!(changes.query.contains(&("$top", "2000".into())));
+        assert!(changes.query.contains(&("$skip", "2000".into())));
+        assert!(changes.query.contains(&("$compareTo", "0".into())));
+
+        let inline = request_spec(Operation::AddInlineComment {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            body: "Please simplify this.".into(),
+            file_path: "src/lib.rs".into(),
+            start_line: 8,
+            end_line: 10,
+            side: DiffSide::Additions,
+            iteration_id: 4,
+            change_tracking_id: 27,
+        });
+        let inline_body = inline.body.unwrap();
+        assert_eq!(inline.method, Method::POST);
+        assert_eq!(inline_body["threadContext"]["filePath"], "/src/lib.rs");
+        assert_eq!(inline_body["threadContext"]["rightFileStart"]["line"], 8);
+        assert!(inline_body["threadContext"]["leftFileStart"].is_null());
+        assert_eq!(
+            inline_body["pullRequestThreadContext"]["iterationContext"]
+                ["firstComparingIteration"],
+            4
+        );
+        assert_eq!(
+            inline_body["pullRequestThreadContext"]["changeTrackingId"],
+            27
+        );
 
         let policy = request_spec(Operation::Policies {
             project: "Project".into(),

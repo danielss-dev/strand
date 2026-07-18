@@ -54,7 +54,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ◐ **Hosted review close-out.** Azure inline review parity remains.
+- ☑ **Hosted review close-out.** Exact-head Azure Services/Server inline
+  comments and batched-review drafts resolve iteration/change-tracking
+  coordinates before writing (`azure_review_coordinates`, Server protocol v5,
+  shared Code composer).
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
@@ -1398,8 +1401,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     `strand-azdo` is being installed and a three-provider accordion reports the
     signed-in `gh` / `az` accounts plus helper/profile authentication readiness
     (`hosting_connection_status`, `HostingSection`).
-    Azure DevOps Services continues to use the official `az` CLI; Azure inline
-    comments, replies/resolution, and review submission remain out of scope.
+    Azure DevOps Services continues to use the official `az` CLI. Both Azure
+    adapters support iteration-tracked inline comments and review submission;
+    replies/resolution on existing Azure threads remain out of scope.
   - ☑ Hide provider write controls for terminal pull requests: merged/completed
     PRs expose read-only Summary, Timeline, Code, and thread cards; closed/
     abandoned PRs keep only their Reopen lifecycle action
@@ -1459,11 +1463,12 @@ tree: watch the agent work, review fast, accept or reject safely.
     immediate replies and Resolve/Reopen writes through provider-capability-
     gated GraphQL mutations, patching Code + Timeline locally without a
     detail/patch reload (`repo_pull_request_thread_reply`,
-    `repo_pull_request_thread_resolve`). Azure iteration-tracked inline writes,
-    direct binary attachment uploads, and suggestions remain.
+    `repo_pull_request_thread_resolve`). Azure replies/resolution on existing
+    threads, direct binary attachment uploads, and suggestions remain.
   - ☑ Submit reviews: comment, approve, and request changes through one
     exact-head review draft (`repo_pull_request_submit_review`, GitHub atomic
-    review payload, Azure Services/Server vote mappings, protocol v4).
+    review payload, Azure Services/Server iteration-tracked inline writes plus
+    vote mappings, protocol v5).
   - ☑ Dismiss/update an existing review where supported
     (`PullRequestReview`, `repo_pull_request_update_review`,
     `repo_pull_request_dismiss_review`, GitHub capability-gated mutations,
@@ -1478,13 +1483,15 @@ tree: watch the agent work, review fast, accept or reject safely.
       (`pullRequestReview`: exact-head + per-file patch fingerprints,
       viewed/changed decorations, All/Unviewed/Threads filters, and `v` / `n`
       keyboard review flow while retaining one mounted diff).
-  - ◐ Inline review workspace: GitHub hover-gutter line/range selection,
+  - ☑ Inline review workspace: GitHub/Azure hover-gutter line/range selection,
     immediate publishing, and fetched review-thread annotations are present
     (`ParsedDiff` controlled selection + native gutter utility + inline
     composer/thread cards); local exact-head/content-hash viewed marks,
     unviewed/thread filters, and keyboard next-thread navigation now ship while
     retaining one mounted Pierre diff. Exact-head pending-comment drafts and
-    batched submission now ship; Azure iteration coordinates remain.
+    batched submission use GitHub's atomic review payload or Azure's bounded
+    latest-iteration/change-tracking resolver (`azure_review_coordinates`,
+    `azure_server_review_coordinates`).
   - ☐ Paginate GitHub review threads and replies beyond the current bounded
     100-thread / 100-comment detail query.
   - ☑ Batched review submission: pending comments plus Comment / Approve /

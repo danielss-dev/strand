@@ -6,6 +6,7 @@
 //! limits and large repositories remain predictable.
 
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     process::Stdio,
     thread,
@@ -15,7 +16,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strand_azdo_protocol::{
-    MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation,
+    DiffSide as AzdoDiffSide, MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation,
     PullRequestStatus as AzdoPullRequestStatus, ReviewVote as AzdoReviewVote,
 };
 use strand_core::Repo;
@@ -31,6 +32,8 @@ const MAX_PR_DESCRIPTION_BYTES: usize = 65_536;
 const MAX_PR_TITLE_BYTES: usize = 512;
 const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
 const MAX_PENDING_REVIEW_COMMENTS: usize = 100;
+const AZURE_ITERATION_CHANGE_PAGE_SIZE: u32 = 2000;
+const MAX_AZURE_ITERATION_CHANGE_PAGES: u32 = 32;
 const GITHUB_BRANCH_STATE: &str = "open";
 const AZURE_BRANCH_STATUS: &str = "active";
 const GITHUB_LIST_FIELDS: &str = concat!(
@@ -168,6 +171,12 @@ pub struct PullRequestPendingComment {
     pub end_line: u32,
     pub side: PullRequestDiffSide,
     pub body: String,
+}
+
+#[derive(Debug)]
+struct AzureReviewCoordinates {
+    iteration_id: u32,
+    change_tracking_ids: HashMap<String, u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -601,10 +610,16 @@ pub fn add_inline_comment(
                 expected_head,
             )
         }
-        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
-            "Inline Azure DevOps comments need iteration tracking metadata that Strand does not load yet. Open this pull request on Azure DevOps to comment on these lines."
-                .to_string(),
+        HostRepo::Azure { organization, project, repo } => add_inline_comment_azure(
+            path, &organization, &project, &repo, id, body, file_path, start_line, end_line,
+            side, expected_head,
         ),
+        HostRepo::AzureServer { profile_id, project, repo, .. } => {
+            add_inline_comment_azure_server(
+                profile_id, &project, &repo, id, body, file_path, start_line, end_line, side,
+                expected_head,
+            )
+        }
     }
 }
 
@@ -1842,28 +1857,169 @@ fn add_comment_azure_server(
     Ok(())
 }
 
+fn azure_server_review_coordinates(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    id: u64,
+    expected_head: &str,
+) -> Result<AzureReviewCoordinates> {
+    let iterations = server_execute(
+        profile_id,
+        AzdoOperation::PullRequestIterations {
+            project: project.into(),
+            repository: repo.into(),
+            id,
+        },
+    )?;
+    let iteration_id = azure_latest_iteration(&iterations, expected_head)?;
+    let mut coordinates = AzureReviewCoordinates {
+        iteration_id,
+        change_tracking_ids: HashMap::new(),
+    };
+    let mut skip = 0;
+    for _ in 0..MAX_AZURE_ITERATION_CHANGE_PAGES {
+        let changes = server_execute(
+            profile_id,
+            AzdoOperation::PullRequestIterationChanges {
+                project: project.into(),
+                repository: repo.into(),
+                id,
+                iteration_id,
+                top: AZURE_ITERATION_CHANGE_PAGE_SIZE,
+                skip,
+            },
+        )?;
+        add_azure_change_tracking_ids(&mut coordinates, &changes)?;
+        let next_skip = changes.get("nextSkip").and_then(Value::as_u64).unwrap_or(0);
+        if next_skip == 0 {
+            return Ok(coordinates);
+        }
+        skip = u32::try_from(next_skip)
+            .map_err(|_| "Azure DevOps returned an invalid iteration-change cursor".to_string())?;
+    }
+    Err("Azure DevOps pull request changes exceed Strand's 64,000-file review limit".into())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_inline_comment_azure_server_with_coordinates(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    coordinates: &AzureReviewCoordinates,
+) -> Result<()> {
+    let change_tracking_id = azure_change_tracking_id(coordinates, file_path)?;
+    server_execute(
+        profile_id,
+        AzdoOperation::AddInlineComment {
+            project: project.into(),
+            repository: repo.into(),
+            id,
+            body: body.into(),
+            file_path: file_path.into(),
+            start_line,
+            end_line,
+            side: match side {
+                PullRequestDiffSide::Additions => AzdoDiffSide::Additions,
+                PullRequestDiffSide::Deletions => AzdoDiffSide::Deletions,
+            },
+            iteration_id: coordinates.iteration_id,
+            change_tracking_id,
+        },
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_inline_comment_azure_server(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    expected_head: &str,
+) -> Result<()> {
+    let current = server_show(profile_id, project, repo, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps Server did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    let coordinates =
+        azure_server_review_coordinates(profile_id, project, repo, id, expected_head)?;
+    let current = server_show(profile_id, project, repo, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps Server did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    add_inline_comment_azure_server_with_coordinates(
+        profile_id,
+        project,
+        repo,
+        id,
+        body,
+        file_path,
+        start_line,
+        end_line,
+        side,
+        &coordinates,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn submit_review_azure_server(
     profile_id: Uuid, project: &str, repo: &str, id: u64,
     event: PullRequestReviewEvent, body: &str, comments: &[PullRequestPendingComment],
     expected_head: &str,
 ) -> Result<()> {
-    if !comments.is_empty() {
-        return Err("Azure DevOps review drafts need iteration coordinates that Strand does not load yet. Submit or remove the pending inline comments before voting.".into());
-    }
     let current = server_show(profile_id, project, repo, id)?;
     let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
         .ok_or_else(|| "Azure DevOps Server did not return the pull request head commit".to_string())?;
     ensure_review_head(&current_head, expected_head)?;
+    let coordinates = if comments.is_empty() {
+        None
+    } else {
+        let coordinates =
+            azure_server_review_coordinates(profile_id, project, repo, id, expected_head)?;
+        let current = server_show(profile_id, project, repo, id)?;
+        let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+            .ok_or_else(|| "Azure DevOps Server did not return the pull request head commit".to_string())?;
+        ensure_review_head(&current_head, expected_head)?;
+        Some(coordinates)
+    };
     if let Some(vote) = azure_review_vote(event) {
         let reviewer_id = azure_server_viewer_id(profile_id)?;
         server_execute(profile_id, AzdoOperation::SetVote {
             project: project.into(), repository: repo.into(), id, reviewer_id, vote,
         })?;
     }
+    if let Some(coordinates) = coordinates.as_ref() {
+        for (index, comment) in comments.iter().enumerate() {
+            add_inline_comment_azure_server_with_coordinates(
+                profile_id,
+                project,
+                repo,
+                id,
+                &comment.body,
+                &comment.path,
+                comment.start_line,
+                comment.end_line,
+                comment.side,
+                &coordinates,
+            )
+            .map_err(|error| azure_review_inline_write_error(event, index, error))?;
+        }
+    }
     if !body.trim().is_empty() {
         add_comment_azure_server(profile_id, project.into(), repo.into(), id, body)
-            .map_err(|error| review_summary_error(event, error))?;
+            .map_err(|error| azure_review_summary_error(event, comments.len(), error))?;
     }
     Ok(())
 }
@@ -2352,6 +2508,211 @@ fn azure_policies(cwd: &str, organization: &str, id: u64) -> Result<Vec<PullRequ
     Ok(parse_azure_policies(&value))
 }
 
+fn azure_invoke_json(
+    cwd: &str,
+    organization: &str,
+    resource: &str,
+    route_parameters: &[String],
+    query_parameters: &[String],
+) -> Result<Value> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let mut args = vec![
+        "devops".to_string(),
+        "invoke".to_string(),
+        "--area".to_string(),
+        "git".to_string(),
+        "--resource".to_string(),
+        resource.to_string(),
+        "--route-parameters".to_string(),
+    ];
+    args.extend_from_slice(route_parameters);
+    if !query_parameters.is_empty() {
+        args.push("--query-parameters".into());
+        args.extend_from_slice(query_parameters);
+    }
+    args.extend([
+        "--organization".into(),
+        organization_url,
+        "--api-version".into(),
+        "7.1".into(),
+        "--output".into(),
+        "json".into(),
+        "--only-show-errors".into(),
+    ]);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let output = run_command(
+        cwd,
+        "az",
+        &arg_refs,
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid {resource} JSON: {error}"))
+}
+
+fn azure_review_coordinates(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+    expected_head: &str,
+) -> Result<AzureReviewCoordinates> {
+    let routes = vec![
+        format!("project={project}"),
+        format!("repositoryId={repo}"),
+        format!("pullRequestId={id}"),
+    ];
+    let iterations = azure_invoke_json(
+        cwd,
+        organization,
+        "pullRequestIterations",
+        &routes,
+        &[],
+    )?;
+    let iteration_id = azure_latest_iteration(&iterations, expected_head)?;
+    let mut coordinates = AzureReviewCoordinates {
+        iteration_id,
+        change_tracking_ids: HashMap::new(),
+    };
+    let mut skip = 0;
+    for _ in 0..MAX_AZURE_ITERATION_CHANGE_PAGES {
+        let mut change_routes = routes.clone();
+        change_routes.push(format!("iterationId={iteration_id}"));
+        let query = vec![
+            format!("$top={AZURE_ITERATION_CHANGE_PAGE_SIZE}"),
+            format!("$skip={skip}"),
+            "$compareTo=0".into(),
+        ];
+        let changes = azure_invoke_json(
+            cwd,
+            organization,
+            "pullRequestIterationChanges",
+            &change_routes,
+            &query,
+        )?;
+        add_azure_change_tracking_ids(&mut coordinates, &changes)?;
+        let next_skip = changes.get("nextSkip").and_then(Value::as_u64).unwrap_or(0);
+        if next_skip == 0 {
+            return Ok(coordinates);
+        }
+        skip = u32::try_from(next_skip)
+            .map_err(|_| "Azure DevOps returned an invalid iteration-change cursor".to_string())?;
+    }
+    Err("Azure DevOps pull request changes exceed Strand's 64,000-file review limit".into())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_inline_comment_azure_with_coordinates(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    coordinates: &AzureReviewCoordinates,
+) -> Result<()> {
+    let change_tracking_id = azure_change_tracking_id(coordinates, file_path)?;
+    let payload = azure_inline_comment_payload(
+        body,
+        file_path,
+        start_line,
+        end_line,
+        side,
+        coordinates.iteration_id,
+        change_tracking_id,
+    );
+    let mut request = tempfile::NamedTempFile::new()
+        .map_err(|error| format!("Could not prepare Azure inline comment: {error}"))?;
+    serde_json::to_writer(&mut request, &payload)
+        .map_err(|error| format!("Could not encode Azure inline comment: {error}"))?;
+    request
+        .flush()
+        .map_err(|error| format!("Could not prepare Azure inline comment: {error}"))?;
+    let request_path = request
+        .path()
+        .to_str()
+        .ok_or_else(|| "Azure inline comment request path is not valid UTF-8".to_string())?;
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let project_arg = format!("project={project}");
+    let repository_arg = format!("repositoryId={repo}");
+    let pull_request_arg = format!("pullRequestId={id}");
+    run_command(
+        cwd,
+        "az",
+        &[
+            "devops",
+            "invoke",
+            "--area",
+            "git",
+            "--resource",
+            "pullRequestThreads",
+            "--route-parameters",
+            &project_arg,
+            &repository_arg,
+            &pull_request_arg,
+            "--organization",
+            &organization_url,
+            "--api-version",
+            "7.1",
+            "--http-method",
+            "POST",
+            "--in-file",
+            request_path,
+            "--media-type",
+            "application/json",
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_inline_comment_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    id: u64,
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    expected_head: &str,
+) -> Result<()> {
+    let current = azure_pr_value(cwd, organization, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    let coordinates =
+        azure_review_coordinates(cwd, organization, project, repo, id, expected_head)?;
+    let current = azure_pr_value(cwd, organization, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    add_inline_comment_azure_with_coordinates(
+        cwd,
+        organization,
+        project,
+        repo,
+        id,
+        body,
+        file_path,
+        start_line,
+        end_line,
+        side,
+        &coordinates,
+    )
+}
+
 fn add_comment_azure(
     cwd: &str,
     organization: String,
@@ -2420,13 +2781,21 @@ fn submit_review_azure(
     event: PullRequestReviewEvent, body: &str, comments: &[PullRequestPendingComment],
     expected_head: &str,
 ) -> Result<()> {
-    if !comments.is_empty() {
-        return Err("Azure DevOps review drafts need iteration coordinates that Strand does not load yet. Submit or remove the pending inline comments before voting.".into());
-    }
     let current = azure_pr_value(cwd, organization, id)?;
     let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
         .ok_or_else(|| "Azure DevOps did not return the pull request head commit".to_string())?;
     ensure_review_head(&current_head, expected_head)?;
+    let coordinates = if comments.is_empty() {
+        None
+    } else {
+        let coordinates =
+            azure_review_coordinates(cwd, organization, project, repo, id, expected_head)?;
+        let current = azure_pr_value(cwd, organization, id)?;
+        let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+            .ok_or_else(|| "Azure DevOps did not return the pull request head commit".to_string())?;
+        ensure_review_head(&current_head, expected_head)?;
+        Some(coordinates)
+    };
     if let Some(vote) = azure_review_vote_label(event) {
         let organization_url = format!("https://dev.azure.com/{organization}/");
         let id_arg = id.to_string();
@@ -2437,10 +2806,28 @@ fn submit_review_azure(
             &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
         )?;
     }
+    if let Some(coordinates) = coordinates.as_ref() {
+        for (index, comment) in comments.iter().enumerate() {
+            add_inline_comment_azure_with_coordinates(
+                cwd,
+                organization,
+                project,
+                repo,
+                id,
+                &comment.body,
+                &comment.path,
+                comment.start_line,
+                comment.end_line,
+                comment.side,
+                coordinates,
+            )
+            .map_err(|error| azure_review_inline_write_error(event, index, error))?;
+        }
+    }
     if !body.trim().is_empty() {
         add_comment_azure(
             cwd, organization.into(), project.into(), repo.into(), id, body,
-        ).map_err(|error| review_summary_error(event, error))?;
+        ).map_err(|error| azure_review_summary_error(event, comments.len(), error))?;
     }
     Ok(())
 }
@@ -2889,6 +3276,51 @@ fn review_summary_error(event: PullRequestReviewEvent, error: String) -> String 
     }
 }
 
+fn azure_review_inline_write_error(
+    event: PullRequestReviewEvent,
+    completed: usize,
+    error: String,
+) -> String {
+    let decision_recorded = !matches!(event, PullRequestReviewEvent::Comment);
+    if completed == 0 && !decision_recorded {
+        error
+    } else {
+        let earlier = match (decision_recorded, completed) {
+            (true, 0) => "the review decision".to_string(),
+            (true, count) => format!(
+                "the review decision and {count} inline comment{}",
+                if count == 1 { "" } else { "s" }
+            ),
+            (false, count) => format!(
+                "{count} inline comment{}",
+                if count == 1 { "" } else { "s" }
+            ),
+        };
+        format!(
+            "Azure DevOps recorded {earlier} before the next inline write failed: {error}. The draft was preserved; remove any already-posted inline comments before retrying."
+        )
+    }
+}
+
+fn azure_review_summary_error(
+    event: PullRequestReviewEvent,
+    inline_comments: usize,
+    error: String,
+) -> String {
+    if inline_comments == 0 {
+        return review_summary_error(event, error);
+    }
+    let decision = if matches!(event, PullRequestReviewEvent::Comment) {
+        ""
+    } else {
+        " and the review decision"
+    };
+    format!(
+        "Azure DevOps recorded {inline_comments} inline comment{}{decision}, but the summary could not be added: {error}. The draft was preserved; remove the already-posted inline comments before retrying the summary.",
+        if inline_comments == 1 { "" } else { "s" }
+    )
+}
+
 fn validate_thread_id(thread_id: &str) -> Result<()> {
     if thread_id.trim().is_empty()
         || thread_id.len() > MAX_THREAD_ID_BYTES
@@ -2988,6 +3420,116 @@ fn azure_review_vote_label(event: PullRequestReviewEvent) -> Option<&'static str
         PullRequestReviewEvent::Approve => Some("approve"),
         PullRequestReviewEvent::RequestChanges => Some("reject"),
     }
+}
+
+fn azure_latest_iteration(value: &Value, expected_head: &str) -> Result<u32> {
+    let iterations = value
+        .get("value")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let latest = iterations
+        .iter()
+        .filter_map(|iteration| Some((iteration.get("id")?.as_u64()?, iteration)))
+        .max_by_key(|(id, _)| *id)
+        .ok_or_else(|| "Azure DevOps returned no pull request iterations".to_string())?;
+    let iteration_id = u32::try_from(latest.0)
+        .map_err(|_| "Azure DevOps returned an invalid pull request iteration".to_string())?;
+    if iteration_id > i16::MAX as u32 {
+        return Err("Azure DevOps returned a pull request iteration outside its comment API range".into());
+    }
+    let iteration_head = text(latest.1.pointer("/sourceRefCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps did not return the latest iteration head commit".to_string())?;
+    ensure_review_head(&iteration_head, expected_head)?;
+    Ok(iteration_id)
+}
+
+fn add_azure_change_tracking_ids(
+    coordinates: &mut AzureReviewCoordinates,
+    value: &Value,
+) -> Result<()> {
+    for change in array(value, "changeEntries") {
+        let Some(raw_id) = change.get("changeTrackingId").and_then(Value::as_u64) else {
+            continue;
+        };
+        let id = u32::try_from(raw_id)
+            .map_err(|_| "Azure DevOps returned an invalid file change-tracking ID".to_string())?;
+        for path in [
+            text(change.pointer("/item/path")),
+            text(change.get("originalPath")),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let normalized = path.trim_start_matches('/').to_string();
+            if let Some(previous) = coordinates.change_tracking_ids.insert(normalized.clone(), id) {
+                if previous != id {
+                    return Err(format!(
+                        "Azure DevOps returned ambiguous change tracking for {normalized}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn azure_change_tracking_id(coordinates: &AzureReviewCoordinates, file_path: &str) -> Result<u32> {
+    let normalized = file_path.trim_start_matches('/');
+    coordinates
+        .change_tracking_ids
+        .get(normalized)
+        .copied()
+        .ok_or_else(|| {
+            format!(
+                "Azure DevOps no longer reports {normalized} in the reviewed iteration. Refresh Code and select the lines again."
+            )
+        })
+}
+
+fn azure_inline_comment_payload(
+    body: &str,
+    file_path: &str,
+    start_line: u32,
+    end_line: u32,
+    side: PullRequestDiffSide,
+    iteration_id: u32,
+    change_tracking_id: u32,
+) -> Value {
+    let position = |line| serde_json::json!({ "line": line, "offset": 1 });
+    let (left_start, left_end, right_start, right_end) = match side {
+        PullRequestDiffSide::Additions => (
+            Value::Null,
+            Value::Null,
+            position(start_line),
+            position(end_line),
+        ),
+        PullRequestDiffSide::Deletions => (
+            position(start_line),
+            position(end_line),
+            Value::Null,
+            Value::Null,
+        ),
+    };
+    serde_json::json!({
+        "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
+        "status": 1,
+        "threadContext": {
+            "filePath": format!("/{}", file_path.trim_start_matches('/')),
+            "leftFileStart": left_start,
+            "leftFileEnd": left_end,
+            "rightFileStart": right_start,
+            "rightFileEnd": right_end
+        },
+        "pullRequestThreadContext": {
+            "changeTrackingId": change_tracking_id,
+            "iterationContext": {
+                "firstComparingIteration": iteration_id,
+                "secondComparingIteration": iteration_id
+            }
+        }
+    })
 }
 
 fn azure_merge_strategy(strategy: PullRequestMergeStrategy) -> &'static str {
@@ -4495,6 +5037,74 @@ mod tests {
         assert_eq!(single["side"], "LEFT");
         assert!(single.get("start_line").is_none());
         assert!(single.get("start_side").is_none());
+    }
+
+    #[test]
+    fn resolves_azure_iteration_coordinates_and_builds_tracked_ranges() {
+        let head = "0123456789abcdef0123456789abcdef01234567";
+        let iterations = serde_json::json!({ "value": [
+            { "id": 1, "sourceRefCommit": { "commitId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+            { "id": 3, "sourceRefCommit": { "commitId": head } }
+        ] });
+        assert_eq!(azure_latest_iteration(&iterations, head).unwrap(), 3);
+        assert!(azure_latest_iteration(
+            &iterations,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        )
+        .is_err());
+
+        let mut coordinates = AzureReviewCoordinates {
+            iteration_id: 3,
+            change_tracking_ids: HashMap::new(),
+        };
+        add_azure_change_tracking_ids(
+            &mut coordinates,
+            &serde_json::json!({ "changeEntries": [{
+                "changeTrackingId": 27,
+                "item": { "path": "/src/new.rs" },
+                "originalPath": "/src/old.rs"
+            }] }),
+        )
+        .unwrap();
+        assert_eq!(azure_change_tracking_id(&coordinates, "src/new.rs").unwrap(), 27);
+        assert_eq!(azure_change_tracking_id(&coordinates, "src/old.rs").unwrap(), 27);
+
+        let added = azure_inline_comment_payload(
+            "Please simplify this.",
+            "src/new.rs",
+            8,
+            10,
+            PullRequestDiffSide::Additions,
+            3,
+            27,
+        );
+        assert_eq!(added["threadContext"]["filePath"], "/src/new.rs");
+        assert_eq!(added["threadContext"]["rightFileStart"]["line"], 8);
+        assert_eq!(added["threadContext"]["rightFileEnd"]["line"], 10);
+        assert!(added["threadContext"]["leftFileStart"].is_null());
+        assert_eq!(
+            added["pullRequestThreadContext"]["iterationContext"]
+                ["firstComparingIteration"],
+            3
+        );
+        assert_eq!(
+            added["pullRequestThreadContext"]["iterationContext"]
+                ["secondComparingIteration"],
+            3
+        );
+        assert_eq!(added["pullRequestThreadContext"]["changeTrackingId"], 27);
+
+        let deleted = azure_inline_comment_payload(
+            "Why remove this?",
+            "src/old.rs",
+            4,
+            4,
+            PullRequestDiffSide::Deletions,
+            3,
+            27,
+        );
+        assert_eq!(deleted["threadContext"]["leftFileStart"]["line"], 4);
+        assert!(deleted["threadContext"]["rightFileStart"].is_null());
     }
 
     #[test]

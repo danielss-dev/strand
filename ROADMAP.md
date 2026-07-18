@@ -1067,9 +1067,10 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   rendered Markdown, color-coded checks, discussions with top-level comment
   creation, current-branch auto-open, and full-width lazy selected-file Pierre
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
-  comments plus GitHub thread replies/resolution, permission-gated Ready for
-  review, and merge controls now ship;
-  batched review actions and richer Azure parity remain. Azure DevOps Server
+  comments, exact-head batched GitHub/Azure inline reviews, GitHub thread
+  replies/resolution, permission-gated Ready for review, and merge controls now
+  ship; Azure existing-thread lifecycle and bounded GitHub detail pagination
+  remain follow-on work. Azure DevOps Server
   2020+ now uses the optional release-pinned `strand-azdo` REST helper with
   PAT/private-CA profiles and Windows integrated authentication, while Azure
   DevOps Services keeps the official `az` path. GitLab and Bitbucket are
@@ -1932,6 +1933,18 @@ refresh detail, terminal PRs stay read-only, and the optional Azure Server
 helper contract advanced to protocol v4. Provider/helper/UI tests and a local-
 mock Computer Use pass verified the complete edit and dismissal flow without a
 hosted write.
+
+**Azure inline review parity shipped (2026-07-18):** The shared Code gutter
+composer and exact-head pending review draft now publish old- or new-file line
+ranges through Azure DevOps Services and Server. Before every write, Strand
+matches the latest provider iteration to the displayed head, pages its
+cumulative changes with a 64,000-file ceiling, resolves the selected current or
+renamed path to `changeTrackingId`, rechecks the PR head, and sends matching
+iteration plus left/right coordinates. Azure review batches keep the provider
+vote first and report partial multi-write failures without discarding the
+recoverable draft. The optional Server helper contract advanced to protocol v5;
+provider, helper, Rust, and UI tests cover the coordinate and payload
+boundaries.
 
 ---
 

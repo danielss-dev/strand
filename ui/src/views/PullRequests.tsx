@@ -1078,7 +1078,7 @@ function PullRequestChanges({
   }, [selectedPath]);
 
   const stalePatch = patch != null && (loading || error != null);
-  const inlineCommentsSupported = provider === 'git_hub' && openForReview && !stalePatch;
+  const inlineCommentsSupported = openForReview && !stalePatch;
   const selectLines = useCallback((range: SelectedLineRange | null) => {
     if (!inlineCommentsSupported || !range) {
       setSelectedLines(null);

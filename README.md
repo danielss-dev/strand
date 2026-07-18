@@ -82,11 +82,13 @@ keyboard alone, and the mouse stays first-class.
   track exact-head viewed/changed progress, filter unviewed files or unresolved
   threads, switch stacked/split layout in place, jump from timeline comments to their
   file/thread, read GitHub review threads with replies directly beneath their code,
-  reply to them, resolve or reopen them, and add stale-head-guarded comments to
-  selected line ranges. Selected ranges can instead be queued in one preserved,
+  reply to them, resolve or reopen them, and add stale-head-guarded GitHub or
+  Azure comments to selected line ranges. Selected ranges can instead be queued in one preserved,
   exact-head review draft with Markdown preview and submitted as Comment,
   Approve, or Request changes; GitHub batches the pending comments atomically,
-  while Azure Services/Server submit the provider vote and optional summary.
+  while Azure Services/Server resolve provider iteration/change-tracking
+  coordinates, submit the provider vote, publish pending inline comments, and
+  add the optional summary with explicit partial-success errors.
   A compact readiness ledger combines review,
   checks, conflicts, merge state, and provider freshness. Permission-backed
   drafts expose **Ready for review** in place of Merge; active PRs merge with

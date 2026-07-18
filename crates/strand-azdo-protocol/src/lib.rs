@@ -7,7 +7,7 @@ use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
 pub const MAX_REQUEST_BYTES: usize = 128 * 1024;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -101,6 +101,19 @@ pub enum Operation {
         repository: String,
         id: u64,
     },
+    PullRequestIterations {
+        project: String,
+        repository: String,
+        id: u64,
+    },
+    PullRequestIterationChanges {
+        project: String,
+        repository: String,
+        id: u64,
+        iteration_id: u32,
+        top: u32,
+        skip: u32,
+    },
     Commits {
         project: String,
         repository: String,
@@ -116,6 +129,18 @@ pub enum Operation {
         repository: String,
         id: u64,
         body: String,
+    },
+    AddInlineComment {
+        project: String,
+        repository: String,
+        id: u64,
+        body: String,
+        file_path: String,
+        start_line: u32,
+        end_line: u32,
+        side: DiffSide,
+        iteration_id: u32,
+        change_tracking_id: u32,
     },
     MarkReady {
         project: String,
@@ -157,6 +182,13 @@ pub enum ReviewVote {
     Approve,
     RequestChanges,
     Reset,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffSide {
+    Additions,
+    Deletions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
