@@ -5811,7 +5811,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strand-azdo"
-version = "0.13.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -5833,7 +5833,7 @@ dependencies = [
 
 [[package]]
 name = "strand-azdo-protocol"
-version = "0.13.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5843,7 +5843,7 @@ dependencies = [
 
 [[package]]
 name = "strand-core"
-version = "0.13.0"
+version = "1.0.0"
 dependencies = [
  "git2",
  "gix",
@@ -5856,7 +5856,7 @@ dependencies = [
 
 [[package]]
 name = "strand-tauri"
-version = "0.13.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
