@@ -2038,6 +2038,14 @@ an accelerator ownership boundary: only AppKit preempts webview keydown;
 Windows/Linux keep the proven JS shortcut path while the native menu displays
 the same resolved bindings.
 
+**Windows integration presets verified (2026-07-18):** Computer Use drove the
+exact production-protocol build through Settings → Integrations. The Visual
+Studio Code preset launched `Code.exe -g` with the active repository and the
+Windows Terminal preset launched a new terminal process through `wt -d`; both
+reported `Launched.` in Strand. The original unconfigured editor preference
+was restored after the pass. Linux presets remain part of the real GNOME/KDE
+candidate matrix.
+
 ---
 
 ## 1.1+ — Post-1.0

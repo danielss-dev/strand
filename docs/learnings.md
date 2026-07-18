@@ -779,8 +779,10 @@ injection.
 `build_argv` + `spawn_detached`; never `format!` a command string. Presets
 live in `ui/src/lib/integrations.ts` per OS — macOS editor presets use CLI
 shims (`code`, `zed`…) because `open -a` can't pass file:line; Windows names
-`code.cmd` explicitly (std `Command` doesn't apply PATHEXT). Windows/Linux
-presets are untested on real machines (tracked ☐ in TASKS).
+`code.cmd` explicitly (std `Command` doesn't apply PATHEXT). The Windows VS
+Code and Windows Terminal presets were verified from the exact built app on
+2026-07-18. Linux presets still require real GNOME/KDE candidates (tracked ☐
+in TASKS).
 
 ---
 

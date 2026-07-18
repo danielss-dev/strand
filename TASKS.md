@@ -1184,9 +1184,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     plugin-updater/plugin-process) + `updateAutoCheck` / `updateAutoInstall`
     prefs read by App's delayed launch auto-check (soft-fails while the
     endpoint is offline)
-- ☐ Verify editor/terminal presets launch correctly on Windows and Linux
-  (`code.cmd` PATHEXT shim, `wt -d`, gnome-terminal/konsole/alacritty/kitty —
-  written blind on macOS)
+- ☑ Verify editor/terminal presets on Windows (`code.cmd -g` and `wt -d`
+  launched from the exact production-protocol build under Computer Use on
+  2026-07-18; Strand reported both launches and the resulting VS Code and
+  Windows Terminal processes were observed)
+- ☐ Verify editor/terminal presets on Linux
+  (gnome-terminal/konsole/alacritty/kitty on the real GNOME/KDE candidates)
 - ☑ **Theme management**
   - ☑ Define theme contract (`light` / `dark` / `system`) as CSS-variable sets
     (`[data-theme]` token blocks in `tokens.css`; `system` resolves to one of

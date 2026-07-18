@@ -54,9 +54,13 @@ deliberate maintainer action.
 The Windows production-protocol workspace executable has current Computer Use
 evidence for restored window state, persisted repositories, CSP/capabilities,
 native window menu + keyboard traversal, command palette, Settings, clone
-warning, status feedback, and accessibility structure. macOS and Linux runtime
-rows still require their actual platforms;
-cross-compilation is not equivalent evidence.
+warning, status feedback, accessibility structure, and external integration
+launches. The 2026-07-18 integration pass observed Strand launching VS Code
+with `code.cmd -g <active-repository>` and a new Windows Terminal process from
+the `wt -d <active-repository>` preset. This closes the Windows preset slice,
+not the clean-install, publisher-signature, updater, or uninstall rows. macOS
+and Linux runtime rows still require their actual platforms; cross-compilation
+is not equivalent evidence.
 
 ## Desktop smoke pass
 
