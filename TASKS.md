@@ -36,10 +36,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   selected remote branch, and persist a per-repo default pull strategy
   (`Repo::{set_branch_upstream,push_branch,fetch_branch,pull_branch}`,
   `BranchNetworkDialog`, `repoPullMode`).
-- ◐ **Daily local Git close-out.** Initialize repository, line-level staging,
+- ☑ **Daily local Git close-out.** Initialize repository, line-level staging,
   stash-to-branch, ordered multi-commit cherry-pick, merge-mainline
-  cherry-pick/revert, and commit/ref comparison are shipped; interactive-rebase
-  edit and merge-preserving rebase remain.
+  cherry-pick/revert, commit/ref comparison, interactive-rebase edit, and
+  merge-preserving rebase are shipped.
 - ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
   submission, update/check-out/close/reopen lifecycle actions, and Azure inline
   review parity.
@@ -220,7 +220,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   "$STRAND_REBASE_PLAN" >`, `GIT_EDITOR=true` keeps squash on git's default
   combined message, and `reword` is `pick` + `exec git commit --amend -F <msg>`
   so a new message maps to the right commit. UI = `views/RebaseEditor.tsx`
-  (keyboard-operable reorder/pick/reword/squash/fixup/drop), launched from the
+  (keyboard-operable reorder/pick/reword/edit/squash/fixup/drop), launched from the
   commit context menu + `CommitDetail` ("Rebase from here…"), the current-branch
   sidebar menu, and ⌘K "Interactive rebase…". Conflicts route to Local Changes
   → resolve → Continue. (Std-only round-trip + conflict/continue tests in
@@ -233,10 +233,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   oid-prefix target resolution, stacked prefixes stripped, unmatched stay
   `pick`) seeds `RebaseEditor.tsx`, which shows an "Autosquash: N fixup
   commits moved…" notice; the seeded plan stays fully editable.
-- ☐ Interactive rebase: `edit` (pause-to-amend) action — needs an amend-during-
-  rebase flow on top of the continue path
-- ☐ Interactive rebase: preserve merges (`--rebase-merges`) — v1 flattens; the
-  editor warns when the range contains a merge
+- ☑ Interactive rebase: `edit` (pause-to-amend) action (`RebaseAction::Edit`
+  leaves Git's rebase markers active; Local Changes amend + OpBanner Continue
+  completes the plan, with later reword files persisted across the pause)
+- ☑ Interactive rebase: preserve merges (`--rebase-merges`) — enabled by
+  default for merge ranges; Strand's sequence editor retains Git's generated
+  label/reset/merge topology while applying pick/reword/edit/drop actions
 - ☑ Cherry-pick / revert a merge commit (validated `-m` support in
   `Repo::{cherry_pick,revert}` + keyboard-operable `MainlineDialog`)
 - ☑ Submodule init / update / sync (`Repo::submodule_update` — `git submodule

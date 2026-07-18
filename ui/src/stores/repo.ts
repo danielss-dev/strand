@@ -464,13 +464,11 @@ export interface RepoState {
   reset(target: string, mode: ResetMode): Promise<ResetOutcome>;
 
   /**
-   * History ops — all shell out to `git`. Each resolves to `true` when it
-   * stopped on **conflicts** (an expected outcome: the repo is left
-   * mid-operation and the view switches to Local Changes for resolution) and
-   * `false` when it completed cleanly; the promise rejects only on a real
-   * failure (dirty tree, bad ref). {@link RepoState.abortOperation} backs out,
-   * and `meta.operation` reports the in-progress state. Callers toast based on
-   * the returned flag.
+   * History ops — all shell out to `git`. Each resolves to `true` when Git
+   * remains paused (a conflict or interactive-rebase `edit`) and the view
+   * switches to Local Changes; `false` means completion. The promise rejects
+   * only on a real failure (dirty tree, bad ref). `meta.operation` reports the
+   * in-progress state.
    */
   cherryPick(commits: string[], mainline?: number): Promise<boolean>;
   revert(commits: string[], mainline?: number): Promise<boolean>;
@@ -483,17 +481,19 @@ export interface RepoState {
    */
   loadRebaseTodo(base: string | null): Promise<RebaseEntry[]>;
   /**
-   * Run an interactive rebase from a `steps` plan the editor built (reorder /
-   * drop / squash / fixup / reword). Same conflict contract as the other
-   * history ops.
+   * Run an interactive rebase from a `steps` plan the editor built. When
+   * `preserveMerges` is true, the plan keeps Git's generated merge topology.
    */
-  interactiveRebase(base: string | null, steps: RebaseStep[]): Promise<boolean>;
+  interactiveRebase(
+    base: string | null,
+    steps: RebaseStep[],
+    preserveMerges: boolean,
+  ): Promise<boolean>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
   /**
-   * Resume the paused merge/rebase/cherry-pick/revert after conflicts were
-   * resolved in Local Changes (`git … --continue`, not a commit). `true` when
-   * it paused again on a fresh conflict.
+   * Resume a paused merge/rebase/cherry-pick/revert. `true` means Git paused
+   * again on another conflict or `edit` step.
    */
   continueOperation(): Promise<boolean>;
   /**
@@ -1788,11 +1788,11 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path) throw new Error('no repo open');
     return tauri.repoRebaseTodo(path, base);
   },
-  async interactiveRebase(base, steps) {
+  async interactiveRebase(base, steps, preserveMerges) {
     return runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoInteractiveRebase(path, base, steps);
+      return tauri.repoInteractiveRebase(path, base, steps, preserveMerges);
     });
   },
   async abortOperation() {

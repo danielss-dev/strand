@@ -55,8 +55,8 @@ export interface ResetOutcome {
   snapshot_oid: string | null;
 }
 
-/** A git interactive-rebase verb the sequence editor exposes (no `edit` in v1). */
-export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop';
+/** A git interactive-rebase verb the sequence editor exposes. */
+export type RebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 
 /** One planned step against a commit; `message` is read only for `reword`. */
 export interface RebaseStep {

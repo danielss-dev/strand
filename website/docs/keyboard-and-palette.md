@@ -151,8 +151,8 @@ dialogs use the native radio-group arrow keys to choose the mainline parent.
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` | Move focus between rows |
-| `Alt+↑` / `Alt+↓` | Reorder the focused row |
-| `p` / `r` / `s` / `f` / `d` | Set the verb: Pick / Reword / Squash / Fixup / Drop |
+| `Alt+↑` / `Alt+↓` | Reorder the focused row (disabled while preserving merges) |
+| `p` / `r` / `e` / `s` / `f` / `d` | Set the verb: Pick / Reword / Edit / Squash / Fixup / Drop |
 | `Backspace` / `Delete` | Drop the row |
 | `Escape` | Close the editor |
 

@@ -1302,8 +1302,13 @@ pub fn repo_interactive_rebase(
     path: String,
     base: Option<String>,
     steps: Vec<RebaseStep>,
+    preserve_merges: bool,
 ) -> CmdResult<bool> {
-    Ok(Repo::discover(&path)?.interactive_rebase(base.as_deref(), &steps)?)
+    Ok(Repo::discover(&path)?.interactive_rebase(
+        base.as_deref(),
+        &steps,
+        preserve_merges,
+    )?)
 }
 
 #[tauri::command(async)]

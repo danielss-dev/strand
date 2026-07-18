@@ -134,7 +134,8 @@ keyboard alone, and the mouse stays first-class.
   selection; branches, tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
-  squash, fixup, drop) with conflict-pause Continue / Abort.
+  edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
+  pause/conflict Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
   resizable commit detail panel, in-graph search by message / author / hash, a
   multi-selection toolbar for ordered cherry-pick and two-commit comparison, a

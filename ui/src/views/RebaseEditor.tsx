@@ -21,6 +21,7 @@ interface Row {
 const ACTIONS: { value: RebaseAction; label: string }[] = [
   { value: 'pick', label: 'Pick' },
   { value: 'reword', label: 'Reword' },
+  { value: 'edit', label: 'Edit' },
   { value: 'squash', label: 'Squash' },
   { value: 'fixup', label: 'Fixup' },
   { value: 'drop', label: 'Drop' },
@@ -28,6 +29,7 @@ const ACTIONS: { value: RebaseAction; label: string }[] = [
 const KEY_TO_ACTION: Record<string, RebaseAction> = {
   p: 'pick',
   r: 'reword',
+  e: 'edit',
   s: 'squash',
   f: 'fixup',
   d: 'drop',
@@ -36,7 +38,7 @@ const KEY_TO_ACTION: Record<string, RebaseAction> = {
 /**
  * Interactive-rebase sequence editor. Lists the commits in `base..HEAD`
  * (oldest→newest, as git's todo shows them) and lets the user reorder them and
- * set a per-commit verb (pick / reword / squash / fixup / drop). On submit the
+ * set a per-commit verb (pick / reword / edit / squash / fixup / drop). On submit the
  * plan is handed to `interactiveRebase`, which drives `git rebase -i` with no
  * editor (see `strand-core::history`). A conflict is an expected outcome —
  * close, and the store routes to Local Changes (resolve, then Continue on the
@@ -44,7 +46,7 @@ const KEY_TO_ACTION: Record<string, RebaseAction> = {
  * (focus trap, focus restore, Esc-close, busy flag, mounted-guard, error slot).
  *
  * Keyboard model: the list is a `role=listbox` driven by `aria-activedescendant`
- * — ↑/↓ move the focused row, ⌥↑/⌥↓ reorder it, `p`/`r`/`s`/`f`/`d` (or
+ * — ↑/↓ move the focused row, ⌥↑/⌥↓ reorder it, `p`/`r`/`e`/`s`/`f`/`d` (or
  * Backspace = drop) set its verb. The per-row `<select>` and reword `<input>`
  * stay directly Tab-reachable for pointer/AT users.
  */
@@ -68,6 +70,7 @@ export function RebaseEditor({
   // How many fixup!/squash! commits autosquash moved under their targets
   // (0 = none, no notice). The seeded plan stays fully editable.
   const [autosquashed, setAutosquashed] = useState(0);
+  const [preserveMerges, setPreserveMerges] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -112,7 +115,11 @@ export function RebaseEditor({
         // Seed the plan like `git rebase --autosquash`: fixup!/squash! commits
         // move under their targets with the matching verb. Still just a seed —
         // every row stays editable, and isNoop correctly sees a non-noop plan.
-        const plan = autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
+        const hasMergeEntries = entries.some((entry) => entry.is_merge);
+        setPreserveMerges(hasMergeEntries);
+        const plan = hasMergeEntries
+          ? null
+          : autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
         if (plan) {
           const byOid = new Map(next.map((r) => [r.oid, r]));
           next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
@@ -167,10 +174,23 @@ export function RebaseEditor({
   }
 
   const setAction = (i: number, action: RebaseAction) =>
-    setRows((rs) => rs && rs.map((r, j) => (j === i ? { ...r, action } : r)));
+    setRows((rs) =>
+      rs &&
+      rs.map((r, j) => {
+        if (j !== i) return r;
+        if (
+          preserveMerges &&
+          (action === 'squash' || action === 'fixup' || (r.isMerge && action === 'drop'))
+        ) {
+          return r;
+        }
+        return { ...r, action };
+      }),
+    );
   const setMessage = (i: number, message: string) =>
     setRows((rs) => rs && rs.map((r, j) => (j === i ? { ...r, message } : r)));
   const move = (i: number, dir: -1 | 1) => {
+    if (preserveMerges) return;
     let moved = false;
     setRows((rs) => {
       if (!rs) return rs;
@@ -223,6 +243,24 @@ export function RebaseEditor({
     );
   }, [rows]);
 
+  const setPreserveMode = (enabled: boolean) => {
+    setPreserveMerges(enabled);
+    if (!enabled) return;
+    setRows((current) => {
+      if (!current) return current;
+      const byOid = new Map(current.map((row) => [row.oid, row]));
+      return origOrderRef.current.map((oid) => {
+        const row = byOid.get(oid)!;
+        const incompatible =
+          row.action === 'squash' ||
+          row.action === 'fixup' ||
+          (row.isMerge && row.action === 'drop');
+        return incompatible ? { ...row, action: 'pick' as const } : row;
+      });
+    });
+    setFocused(0);
+  };
+
   const canSubmit =
     !!rows && rows.length > 0 && !busy && !allDropped && !firstKeptCombines && !isNoop;
 
@@ -236,10 +274,10 @@ export function RebaseEditor({
       message: r.action === 'reword' ? r.message : null,
     }));
     try {
-      const conflicted = await interactiveRebase(base, steps);
+      const paused = await interactiveRebase(base, steps, preserveMerges && hasMerges);
       onToast(
-        conflicted
-          ? 'Rebase paused on conflicts — resolve them in Local Changes, then Continue'
+        paused
+          ? 'Rebase paused — amend the commit or resolve conflicts, then Continue'
           : 'Interactive rebase complete',
       );
       // A conflict is an expected outcome — close and let the resolver open
@@ -291,7 +329,7 @@ export function RebaseEditor({
               <p className="stash-blurb">
                 Rebasing {keptCount} of {rows.length} commit{rows.length === 1 ? '' : 's'} after{' '}
                 <code>{label}</code>. Reorder with ⌥↑/⌥↓; set each verb with the menu or{' '}
-                <kbd>p</kbd>/<kbd>r</kbd>/<kbd>s</kbd>/<kbd>f</kbd>/<kbd>d</kbd>.
+                <kbd>p</kbd>/<kbd>r</kbd>/<kbd>e</kbd>/<kbd>s</kbd>/<kbd>f</kbd>/<kbd>d</kbd>.
               </p>
 
               {autosquashed > 0 ? (
@@ -302,9 +340,25 @@ export function RebaseEditor({
                 </div>
               ) : null}
               {hasMerges ? (
+                <label className="rebase-preserve">
+                  <input
+                    type="checkbox"
+                    checked={preserveMerges}
+                    disabled={busy}
+                    onChange={(event) => setPreserveMode(event.target.checked)}
+                  />
+                  <span>Preserve merge commits</span>
+                </label>
+              ) : null}
+              {hasMerges && preserveMerges ? (
                 <div className="rebase-warn" role="note">
-                  This range contains a merge commit — interactive rebase flattens merges into a
-                  linear history.
+                  Merge topology will be preserved. Reordering, squash, and fixup are disabled;
+                  merge commits themselves can't be dropped.
+                </div>
+              ) : hasMerges ? (
+                <div className="rebase-warn" role="note">
+                  This range contains a merge commit — this plan will flatten merges into a linear
+                  history.
                 </div>
               ) : null}
               {firstKeptCombines ? (
@@ -349,7 +403,7 @@ export function RebaseEditor({
                       <button
                         type="button"
                         aria-label="Move up"
-                        disabled={i === 0}
+                        disabled={preserveMerges || i === 0}
                         onClick={(e) => {
                           e.stopPropagation();
                           move(i, -1);
@@ -360,7 +414,7 @@ export function RebaseEditor({
                       <button
                         type="button"
                         aria-label="Move down"
-                        disabled={i === rows.length - 1}
+                        disabled={preserveMerges || i === rows.length - 1}
                         onClick={(e) => {
                           e.stopPropagation();
                           move(i, 1);
@@ -377,12 +431,22 @@ export function RebaseEditor({
                       onChange={(e) => setAction(i, e.target.value as RebaseAction)}
                     >
                       {ACTIONS.map((a) => (
-                        <option key={a.value} value={a.value}>
+                        <option
+                          key={a.value}
+                          value={a.value}
+                          disabled={
+                            preserveMerges &&
+                            (a.value === 'squash' ||
+                              a.value === 'fixup' ||
+                              (r.isMerge && a.value === 'drop'))
+                          }
+                        >
                           {a.label}
                         </option>
                       ))}
                     </select>
                     <code className="rb-sha">{r.short}</code>
+                    {r.isMerge ? <span className="rb-merge-chip">merge</span> : null}
                     {r.action === 'reword' ? (
                       <input
                         className="rb-reword"

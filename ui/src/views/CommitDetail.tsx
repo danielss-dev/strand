@@ -286,7 +286,7 @@ export function CommitDetail({
                 onClick={() =>
                   onInteractiveRebase(commit.parents.length ? `${hash}^` : null, commit.short_hash)
                 }
-                title="Reorder, squash, reword, or drop this commit and everything newer"
+                title="Reorder, edit, squash, reword, or drop this commit and everything newer"
               >
                 <Icon name="rebase" size={12} />
                 Rebase from here…

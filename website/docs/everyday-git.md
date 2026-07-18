@@ -127,18 +127,31 @@ The rebase editor is a keyboard-operable list of the commits in the plan:
 | Key | Action |
 |---|---|
 | `↑` / `↓` | Move the focused row |
-| `Alt+↑` / `Alt+↓` | Reorder the focused commit |
-| `p` / `r` / `s` / `f` / `d` | Set the verb: Pick / Reword / Squash / Fixup / Drop |
+| `Alt+↑` / `Alt+↓` | Reorder the focused commit (disabled while preserving merges) |
+| `p` / `r` / `e` / `s` / `f` / `d` | Set the verb: Pick / Reword / Edit / Squash / Fixup / Drop |
 | `Backspace` / `Delete` | Drop |
 | `Escape` | Close the editor |
 
 **Autosquash**: the graph context menu's "Create fixup! commit" commits your staged changes as `fixup! <subject>` of the chosen commit. When you next open the rebase editor, fixup! commits are automatically arranged next to their targets (like `git rebase --autosquash`), with a notice telling you how many moved — and the plan stays fully editable before you run it.
 
+**Edit** pauses the rebase immediately after the chosen commit. Strand opens
+Local Changes: change and stage files, enable **Amend**, commit the amendment,
+then use the operation banner's **Continue** button. You can also continue
+without amending.
+
+When the range contains a merge, **Preserve merge commits** is enabled by
+default. Strand keeps Git's branch topology and disables reorder,
+squash/fixup, and dropping a merge commit while that mode is active. Turn it
+off explicitly if you intend to flatten the range into linear history.
+
 Interactive rebase shells out to your system git, so hooks and commit signing apply to rewritten commits.
 
 ## Paused operations and conflicts
 
-Whenever a merge, rebase, cherry-pick, or revert pauses on conflicts, a banner appears above the main view naming the operation, with **Continue** (disabled until all conflicts are resolved) and **Abort** buttons. "Abort <operation>" is also in the palette.
+Whenever a merge, rebase, cherry-pick, or revert pauses, a banner appears above
+the main view with **Continue** and **Abort**. Conflicts disable Continue until
+they are resolved; an interactive-rebase Edit stop lets you amend the current
+commit first. "Abort <operation>" is also in the palette.
 
 Conflicted files show in a conflict bar in Local Changes. Selecting one opens a landing panel that explains the conflict and offers whole-file resolutions — take incoming, take current, or take both — plus **Open merge editor** and **External tool** (which runs your configured `git mergetool`).
 

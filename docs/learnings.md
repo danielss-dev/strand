@@ -1554,3 +1554,12 @@ or arbitrary revision expressions must call `peel_to_commit()` before reading
 the commit/tree; passing `revparse_single(...).id()` to `find_commit` rejects
 valid annotated tags. Keep a focused annotated-tag test on every shared
 commit-ish boundary.
+
+**Merge-preserving rebase owns the generated topology (2026-07-18).** With
+`git rebase --rebase-merges`, never replace Git's generated todo with a flat
+list: its `label`, `reset`, and `merge` commands are the topology. Transform
+only matching pick/merge actions, reject reorder/squash/fixup and merge-drop
+plans that would cross those boundaries, and keep the generated plan/message
+artifacts inside the worktree git dir until the operation completes or aborts.
+An `edit`/`break` stop can exit successfully while rebase markers remain, so
+paused state is determined from those markers, not the process exit code alone.

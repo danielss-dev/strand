@@ -55,8 +55,7 @@ impl MergeMode {
 }
 
 /// What to do with one commit in an interactive-rebase plan. Mirrors the git
-/// todo verbs the sequence editor exposes; `edit` (pause-to-amend) and
-/// `--rebase-merges` are intentionally out of v1.
+/// todo verbs the sequence editor exposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RebaseAction {
@@ -64,6 +63,8 @@ pub enum RebaseAction {
     Pick,
     /// Keep the commit but replace its message with [`RebaseStep::message`].
     Reword,
+    /// Pause after applying the commit so the user can amend it, then continue.
+    Edit,
     /// Combine into the previous kept commit, keeping both messages (git's
     /// default combined message — we never open an editor).
     Squash,
@@ -91,8 +92,7 @@ pub struct RebaseEntry {
     pub short: String,
     pub subject: String,
     pub author: String,
-    /// A merge commit in range — git's interactive rebase flattens these by
-    /// default, so the UI warns when any are present.
+    /// A merge commit in range — the UI defaults to preserving its topology.
     pub is_merge: bool,
 }
 
@@ -212,14 +212,24 @@ impl Repo {
     }
 
     /// Run an interactive rebase over `base..HEAD` from a `steps` plan the UI
-    /// built (reorder / drop / squash / fixup / reword). We never open an
+    /// built (reorder / drop / squash / fixup / reword / edit). We never open an
     /// editor: a generated todo is fed via `GIT_SEQUENCE_EDITOR`, `GIT_EDITOR`
     /// is forced to `true` (so `squash` keeps git's default combined message
     /// and nothing blocks), and a `reword` is applied as `pick` + an
     /// `exec git commit --amend -F <msg>` so its new message maps to the right
     /// commit deterministically. `Ok(true)` when the rebase paused on a
     /// conflict (resolve, then [`continue_operation`](Repo::continue_operation)).
-    pub fn interactive_rebase(&self, base: Option<&str>, steps: &[RebaseStep]) -> Result<bool> {
+    pub fn interactive_rebase(
+        &self,
+        base: Option<&str>,
+        steps: &[RebaseStep],
+        preserve_merges: bool,
+    ) -> Result<bool> {
+        if let Some(operation) = self.operation_in_progress() {
+            return Err(Error::Other(format!(
+                "cannot start an interactive rebase while {operation} is in progress"
+            )));
+        }
         for s in steps {
             validate_ref(&s.oid)?;
         }
@@ -230,36 +240,78 @@ impl Repo {
             return Err(Error::Other("interactive rebase: the plan keeps no commits".into()));
         }
 
-        // Stage the todo + any reword message files in a private temp dir.
-        let work = temp_rebase_dir()?;
+        if preserve_merges {
+            let original = self.rebase_todo(base)?;
+            if original.len() != steps.len()
+                || original.iter().zip(steps).any(|(entry, step)| entry.oid != step.oid)
+            {
+                return Err(Error::Other(
+                    "preserving merges requires the complete plan in its original order".into(),
+                ));
+            }
+            for (entry, step) in original.iter().zip(steps) {
+                if matches!(step.action, RebaseAction::Squash | RebaseAction::Fixup) {
+                    return Err(Error::Other(
+                        "squash and fixup are unavailable while preserving merges".into(),
+                    ));
+                }
+                if entry.is_merge && step.action == RebaseAction::Drop {
+                    return Err(Error::Other(
+                        "dropping a merge commit requires flattening the rebase".into(),
+                    ));
+                }
+            }
+        }
+
+        // Keep the todo + reword message files beside this worktree's git dir:
+        // an edit/conflict pause can outlive this command, and later `exec`
+        // lines still need their message files when the user continues.
+        let work = rebase_work_dir(self)?;
         let mut todo = String::new();
+        let mut mapping = String::new();
         let safe = crate::GIT_SAFE_CONFIG.join(" ");
         for (i, s) in steps.iter().enumerate() {
+            let mut message_path = String::new();
+            if s.action == RebaseAction::Reword {
+                let path = work.join(format!("msg-{i}"));
+                std::fs::write(&path, s.message.as_deref().unwrap_or(""))
+                    .map_err(|e| Error::Other(format!("write reword message: {e}")))?;
+                message_path = sh_path(&path);
+            }
+            if preserve_merges {
+                mapping.push_str(&format!(
+                    "{}\t{}\t{}\n",
+                    s.oid,
+                    rebase_action_name(s.action),
+                    message_path
+                ));
+                continue;
+            }
             match s.action {
                 // A missing line drops the commit; emit nothing.
                 RebaseAction::Drop => {}
                 RebaseAction::Pick => todo.push_str(&format!("pick {}\n", s.oid)),
+                RebaseAction::Edit => todo.push_str(&format!("edit {}\n", s.oid)),
                 RebaseAction::Squash => todo.push_str(&format!("squash {}\n", s.oid)),
                 RebaseAction::Fixup => todo.push_str(&format!("fixup {}\n", s.oid)),
                 RebaseAction::Reword => {
-                    let msg_path = work.join(format!("msg-{i}"));
-                    std::fs::write(&msg_path, s.message.as_deref().unwrap_or(""))
-                        .map_err(|e| Error::Other(format!("write reword message: {e}")))?;
                     // `exec` runs via the shell; a forward-slashed, single-quoted
                     // path is safe on every platform git supports.
-                    let p = sh_path(&msg_path);
                     todo.push_str(&format!("pick {}\n", s.oid));
                     todo.push_str(&format!(
-                        "exec git {safe} commit --amend --no-edit -F '{p}'\n"
+                        "exec git {safe} commit --amend --no-edit -F '{message_path}'\n"
                     ));
                 }
             }
         }
         let todo_path = work.join("todo");
-        std::fs::write(&todo_path, &todo)
+        std::fs::write(&todo_path, if preserve_merges { &mapping } else { &todo })
             .map_err(|e| Error::Other(format!("write rebase todo: {e}")))?;
 
         let mut args: Vec<&str> = vec!["rebase", "-i"];
+        if preserve_merges {
+            args.push("--rebase-merges");
+        }
         match base {
             Some(b) => {
                 args.push("--");
@@ -272,15 +324,33 @@ impl Repo {
         // appended todo path forms a redirect — no helper script, no path
         // quoting (the plan path travels in an env var sh expands).
         let plan = sh_path(&todo_path);
-        let result = self.run_sequencer_env(
-            &args,
-            &[
-                ("GIT_SEQUENCE_EDITOR", "cat \"$STRAND_REBASE_PLAN\" >"),
-                ("GIT_EDITOR", "true"),
-                ("STRAND_REBASE_PLAN", &plan),
-            ],
-        );
-        let _ = std::fs::remove_dir_all(&work);
+        let result = if preserve_merges {
+            let (editor, awk) = write_preserve_merge_editor(&work, &safe)?;
+            let editor = sh_path(&editor);
+            let awk = sh_path(&awk);
+            self.run_sequencer_env(
+                &args,
+                &[
+                    ("GIT_SEQUENCE_EDITOR", "sh \"$STRAND_REBASE_EDITOR\""),
+                    ("GIT_EDITOR", "true"),
+                    ("STRAND_REBASE_EDITOR", &editor),
+                    ("STRAND_REBASE_AWK", &awk),
+                    ("STRAND_REBASE_PLAN", &plan),
+                ],
+            )
+        } else {
+            self.run_sequencer_env(
+                &args,
+                &[
+                    ("GIT_SEQUENCE_EDITOR", "cat \"$STRAND_REBASE_PLAN\" >"),
+                    ("GIT_EDITOR", "true"),
+                    ("STRAND_REBASE_PLAN", &plan),
+                ],
+            )
+        };
+        if self.operation_in_progress().is_none() {
+            let _ = std::fs::remove_dir_all(&work);
+        }
         result
     }
 
@@ -289,9 +359,9 @@ impl Repo {
     /// Detects the live op from the same on-disk markers as
     /// [`abort_operation`](Repo::abort_operation) and runs the matching
     /// `--continue` with `GIT_EDITOR=true` so it can't block on a message
-    /// editor. `Ok(true)` when it paused again on a fresh conflict (or the
-    /// current conflicts are still unresolved), `Ok(false)` when the op
-    /// finished. Errors when nothing is in progress.
+    /// editor. `Ok(true)` when it paused again on a fresh conflict or `edit`
+    /// step, `Ok(false)` when the op finished. Errors when nothing is in
+    /// progress.
     ///
     /// Note this is *not* `git commit`: a paused rebase only advances via
     /// `--continue`, which is why resolving-and-committing never finished one.
@@ -306,26 +376,30 @@ impl Repo {
             "merge" => "merge",
             other => return Err(Error::Other(format!("cannot continue `{other}`"))),
         };
-        self.run_sequencer_env(&[cmd, "--continue"], &[("GIT_EDITOR", "true")])
+        let result = self.run_sequencer_env(&[cmd, "--continue"], &[("GIT_EDITOR", "true")]);
+        if self.operation_in_progress().is_none() {
+            let _ = std::fs::remove_dir_all(self.git_dir().join("strand-rebase-plan"));
+        }
+        result
     }
 
     /// Run a sequencer op (`merge`/`cherry-pick`/`revert`/`rebase`) and map its
-    /// exit to a conflict-aware result. A conflict makes git exit non-zero but
-    /// is an *expected* outcome — the op ran and left unmerged entries — so we
-    /// return `Ok(true)` instead of an error when the index has conflicts.
-    /// Only a genuine failure (no conflicts left behind) is an `Err`.
+    /// exit to a pause-aware result. Conflicts usually exit non-zero while an
+    /// interactive `edit`/`break` can exit successfully; either returns
+    /// `Ok(true)` whenever Git's operation markers remain. Only a genuine
+    /// failure with no paused operation is an `Err`.
     fn run_sequencer(&self, args: &[&str]) -> Result<bool> {
         self.run_sequencer_env(args, &[])
     }
 
     /// [`run_sequencer`](Repo::run_sequencer) with extra environment variables
     /// (the interactive-rebase editor overrides, the `--continue` editor
-    /// suppression). Same conflict-aware mapping.
+    /// suppression). Same pause-aware mapping.
     fn run_sequencer_env(&self, args: &[&str], envs: &[(&str, &str)]) -> Result<bool> {
         match run_git_env(&self.path, args, envs) {
-            Ok(_) => Ok(false),
+            Ok(_) => Ok(self.operation_in_progress().is_some()),
             Err(e) => {
-                if self.has_conflicts().unwrap_or(false) {
+                if self.has_conflicts().unwrap_or(false) || self.operation_in_progress().is_some() {
                     Ok(true)
                 } else {
                     Err(e)
@@ -356,6 +430,7 @@ impl Repo {
             other => return Err(Error::Other(format!("cannot abort `{other}`"))),
         };
         run_git(&self.path, &[cmd, "--abort"])?;
+        let _ = std::fs::remove_dir_all(self.git_dir().join("strand-rebase-plan"));
         Ok(())
     }
 }
@@ -463,18 +538,83 @@ fn is_ancestor(cwd: &Path, maybe_ancestor: &str) -> Result<bool> {
     Ok(status.success())
 }
 
-/// A private temp dir to stage the rebase todo + reword message files. Keyed by
-/// pid + thread so concurrent rebases (different repos) don't collide; the
-/// caller removes it when the rebase returns.
-fn temp_rebase_dir() -> Result<PathBuf> {
-    let dir = std::env::temp_dir().join(format!(
-        "strand-irebase-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+fn rebase_action_name(action: RebaseAction) -> &'static str {
+    match action {
+        RebaseAction::Pick => "pick",
+        RebaseAction::Reword => "reword",
+        RebaseAction::Edit => "edit",
+        RebaseAction::Squash => "squash",
+        RebaseAction::Fixup => "fixup",
+        RebaseAction::Drop => "drop",
+    }
+}
+
+/// Rebase plans must survive an edit/conflict pause because later todo `exec`
+/// lines can still reference their message files. Keep them inside this
+/// worktree's git dir and remove them on completion/abort.
+fn rebase_work_dir(repo: &Repo) -> Result<PathBuf> {
+    let dir = repo.git_dir().join("strand-rebase-plan");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| Error::Other(format!("create temp dir: {e}")))?;
     Ok(dir)
+}
+
+/// Git builds the topology-aware todo for `--rebase-merges`. This editor keeps
+/// its `label`/`reset`/`merge` commands intact and changes only the commit
+/// actions Strand planned. Reordering and squash/fixup are rejected before we
+/// get here because they can cross topology boundaries.
+fn write_preserve_merge_editor(work: &Path, safe: &str) -> Result<(PathBuf, PathBuf)> {
+    let awk_path = work.join("preserve.awk");
+    let awk = r#"BEGIN { FS = "\t" }
+NR == FNR { action[$1] = $2; message[$1] = $3; next }
+function find_key(abbrev, key) {
+  for (key in action) if (index(key, abbrev) == 1) return key
+  return ""
+}
+function amend(key) {
+  return "exec git __SAFE__ commit --amend --no-edit -F \047" message[key] "\047"
+}
+{
+  split($0, field, /[[:space:]]+/)
+  verb = field[1]
+  if (verb == "p") verb = "pick"
+  else if (verb == "m") verb = "merge"
+  oid = ""
+  if (verb == "pick") oid = field[2]
+  else if (verb == "merge" && (field[2] == "-C" || field[2] == "-c")) oid = field[3]
+  key = oid == "" ? "" : find_key(oid)
+  if (key == "") { print; next }
+  planned = action[key]
+  if (verb == "pick") {
+    if (planned == "drop") next
+    if (planned == "edit") {
+      if ($0 ~ /^p /) sub(/^p /, "edit ")
+      else sub(/^pick /, "edit ")
+    }
+    print
+    if (planned == "reword") print amend(key)
+    next
+  }
+  print
+  if (planned == "reword") print amend(key)
+  else if (planned == "edit") print "break"
+}
+"#
+    .replace("__SAFE__", safe);
+    std::fs::write(&awk_path, awk)
+        .map_err(|e| Error::Other(format!("write merge-preserving editor: {e}")))?;
+
+    let editor_path = work.join("preserve.sh");
+    let editor = r#"#!/bin/sh
+set -eu
+todo=$1
+tmp="${todo}.strand"
+awk -f "$STRAND_REBASE_AWK" "$STRAND_REBASE_PLAN" "$todo" > "$tmp"
+mv "$tmp" "$todo"
+"#;
+    std::fs::write(&editor_path, editor)
+        .map_err(|e| Error::Other(format!("write merge-preserving editor: {e}")))?;
+    Ok((editor_path, awk_path))
 }
 
 /// Render a path for a shell command line git runs (the `exec` reword line and
@@ -666,6 +806,7 @@ mod tests {
                     step(RebaseAction::Pick, &c1),
                     step(RebaseAction::Drop, &c3),
                 ],
+                false,
             )
             .unwrap();
         assert!(!conflicted, "independent files don't conflict");
@@ -688,6 +829,7 @@ mod tests {
                 step(RebaseAction::Fixup, &c2),
                 step(RebaseAction::Pick, &c3),
             ],
+            false,
         )
         .unwrap();
         assert_eq!(subjects(&dir, &format!("{base}..HEAD")), ["c1", "c3"]);
@@ -701,6 +843,7 @@ mod tests {
         repo.interactive_rebase(
             Some(&base),
             &[step(RebaseAction::Pick, &c1), step(RebaseAction::Squash, &c2)],
+            false,
         )
         .unwrap();
         let head_msg = git(&dir, &["log", "-1", "--format=%B", "HEAD"]);
@@ -724,11 +867,96 @@ mod tests {
                 },
                 step(RebaseAction::Pick, &c3),
             ],
+            false,
         )
         .unwrap();
         assert_eq!(subjects(&dir, &format!("{base}..HEAD")), ["c1", "c2 reworded", "c3"]);
         // Tree is untouched — reword only changes the message.
         assert!(dir.join("c.txt").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn interactive_edit_pauses_for_amend_then_continues() {
+        let (repo, dir, base) = three_commits();
+        let t = repo.rebase_todo(Some(&base)).unwrap();
+        let paused = repo
+            .interactive_rebase(
+                Some(&base),
+                &[
+                    step(RebaseAction::Pick, &t[0].oid),
+                    step(RebaseAction::Edit, &t[1].oid),
+                    RebaseStep {
+                        action: RebaseAction::Reword,
+                        oid: t[2].oid.clone(),
+                        message: Some("c3 after pause".into()),
+                    },
+                ],
+                false,
+            )
+            .unwrap();
+        assert!(paused, "edit leaves the rebase deliberately paused");
+        assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
+
+        std::fs::write(dir.join("amended.txt"), "amended\n").unwrap();
+        repo.stage_paths(&["amended.txt".into()]).unwrap();
+        repo.commit("c2 amended", None, true).unwrap();
+        assert!(!repo.continue_operation().unwrap());
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert!(dir.join("amended.txt").exists());
+        assert_eq!(
+            subjects(&dir, &format!("{base}..HEAD")),
+            ["c1", "c2 amended", "c3 after pause"]
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn interactive_rebase_preserves_merge_topology() {
+        let (repo, dir) = scratch_repo();
+        let base = write_commit(&dir, "base.txt", "base\n", "base");
+        write_commit(&dir, "main.txt", "main\n", "main work");
+        git(&dir, &["checkout", "-q", "-b", "side", &base]);
+        write_commit(&dir, "side.txt", "side\n", "side work");
+        git(&dir, &["checkout", "-q", "main"]);
+        repo.merge("side", MergeMode::NoFastForward).unwrap();
+        write_commit(&dir, "post.txt", "post\n", "post merge");
+
+        let entries = repo.rebase_todo(Some(&base)).unwrap();
+        assert!(entries.iter().any(|entry| entry.is_merge));
+        let post = entries
+            .iter()
+            .find(|entry| entry.subject == "post merge")
+            .unwrap()
+            .oid
+            .clone();
+        let merge = entries.iter().find(|entry| entry.is_merge).unwrap().oid.clone();
+        let steps: Vec<RebaseStep> = entries
+            .iter()
+            .map(|entry| {
+                if entry.oid == post {
+                    RebaseStep {
+                        action: RebaseAction::Reword,
+                        oid: entry.oid.clone(),
+                        message: Some("post merge reworded".into()),
+                    }
+                } else if entry.oid == merge {
+                    step(RebaseAction::Edit, &entry.oid)
+                } else {
+                    step(RebaseAction::Pick, &entry.oid)
+                }
+            })
+            .collect();
+
+        git(&dir, &["config", "rebase.abbreviateCommands", "true"]);
+        assert!(repo.interactive_rebase(Some(&base), &steps, true).unwrap());
+        assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
+        assert!(!repo.continue_operation().unwrap());
+        assert_eq!(git(&dir, &["rev-list", "--count", "--min-parents=2", "HEAD"]), "1");
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s"]), "post merge reworded");
+        assert!(dir.join("main.txt").exists() && dir.join("side.txt").exists());
+
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -746,6 +974,7 @@ mod tests {
             .interactive_rebase(
                 Some(&base),
                 &[step(RebaseAction::Pick, &c2), step(RebaseAction::Pick, &c1)],
+                false,
             )
             .unwrap();
         assert!(conflicted, "reordered same-line edits conflict");

@@ -4994,6 +4994,18 @@ textarea.clone-input {
   font-size: 11.5px;
   line-height: 1.4;
 }
+.rebase-preserve {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rebase-preserve input {
+  accent-color: var(--accent);
+}
 .rebase-list {
   display: flex;
   flex-direction: column;
@@ -5067,6 +5079,17 @@ textarea.clone-input {
   width: 64px;
   font: 11.5px var(--font-mono, monospace);
   color: var(--text-dim);
+}
+.rb-merge-chip {
+  flex: none;
+  padding: 1px 5px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .rb-subject {
   flex: 1;

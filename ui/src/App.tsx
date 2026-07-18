@@ -2044,11 +2044,11 @@ const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
 
 /**
  * Banner shown above the main view whenever a merge/rebase/cherry-pick/revert
- * is paused (typically on a conflict). Offers **Continue** (resume once the
- * conflicts are resolved in Local Changes — `git … --continue`, which is the
- * only way a paused rebase advances; committing doesn't) and **Abort** (restore
- * the pre-op state). Continue is disabled while any conflict remains. The op
- * clears `operation` on the next refresh, which hides the banner.
+ * is paused (on a conflict or an interactive-rebase `edit`). Offers
+ * **Continue** once conflicts are resolved or the edited commit is amended,
+ * and **Abort** to restore the pre-op state. Continue is disabled while any
+ * conflict remains. The op clears `operation` on the next refresh, which hides
+ * the banner.
  */
 function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
   const operation = useRepo((s) => s.meta?.operation ?? null);
@@ -2078,10 +2078,10 @@ function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'erro
     if (busy) return;
     setBusy('continue');
     try {
-      const stillConflicted = await continueOperation();
+      const stillPaused = await continueOperation();
       onToast(
-        stillConflicted
-          ? 'Paused again on conflicts — resolve them in Local Changes'
+        stillPaused
+          ? 'Rebase paused again — amend the commit or resolve conflicts, then Continue'
           : `${OP_LABEL[operation].replace(' in progress', '')} complete`,
       );
     } catch (e) {
@@ -2098,7 +2098,9 @@ function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'erro
       <span className="op-hint">
         {hasConflicts
           ? 'Resolve the conflicts in Local Changes, then'
-          : 'Conflicts resolved —'}
+          : operation === 'rebase'
+            ? 'Amend this commit if needed, then'
+            : 'Ready to continue —'}
       </span>
       <button
         type="button"

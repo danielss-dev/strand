@@ -239,7 +239,8 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Tags (lightweight + annotated) — create / delete / checkout, plus push /
   delete on a remote
 - ☑ Cherry-pick, revert, merge (ff / no-ff / squash), rebase + **interactive
-  rebase** (reorder / pick / reword / squash / fixup / drop)
+  rebase** (reorder / pick / reword / edit / squash / fixup / drop, with
+  merge-topology preservation)
 - ☑ Conflict resolution UI (three-way view) — Pierre `<UnresolvedFile>` resolver
   with accept current/incoming/both; in-progress banner + Abort + Continue.
   (External mergetool fallback still ☐ in TASKS.)
@@ -613,9 +614,9 @@ editor in the loop**: the todo plan is fed via `GIT_SEQUENCE_EDITOR=cat
 `>` plus the appended todo path forms a redirect — no helper script, no path
 quoting), `GIT_EDITOR=true` keeps `squash` on git's default combined message, and a
 `reword` is applied as `pick` + `exec git commit --amend -F <msg>` so the new message
-maps to the right commit deterministically. v1 covers reorder / pick / reword / squash
-/ fixup / drop (no `edit`; merges are flattened with a warning). The editor is
-keyboard-operable (listbox + ⌥↑/⌥↓ reorder + `p`/`r`/`s`/`f`/`d`), launched from the
+maps to the right commit deterministically. The editor covers reorder / pick /
+reword / edit / squash / fixup / drop and defaults to preserving merge topology;
+its keyboard model is listbox + ⌥↑/⌥↓ reorder + `p`/`r`/`e`/`s`/`f`/`d`, launched from the
 commit context menu + `CommitDetail` ("Rebase from here…"), the current-branch sidebar
 menu, and ⌘K. A necessary companion landed too: **`Repo::continue_operation`** + an
 `OpBanner` **Continue** button — a paused rebase only advances via `git rebase
@@ -1811,6 +1812,15 @@ cover ordered history operations and annotated-tag peeling; focused Vitest,
 TypeScript, Rust checks, and a Computer Use pass on a disposable graph verified
 selection, comparison, merge-parent keyboard flow, and the resulting Git
 history.
+
+**Interactive-rebase close-out shipped (2026-07-18):** The editor adds `edit`
+for deliberate pause-to-amend and enables merge preservation by default when a
+range contains merges. The backend reports a successful Git stop as paused,
+keeps reword plans alive across Continue/Abort, and transforms Git's generated
+`--rebase-merges` todo without replacing its label/reset/merge topology.
+Topology mode constrains reorder, squash/fixup, and merge-drop operations rather
+than pretending they are safe. Focused core tests cover edit → amend → later
+reword and merge edit → continue with the merge still present.
 
 ---
 

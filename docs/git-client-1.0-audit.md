@@ -80,7 +80,7 @@ current official product material for:
 | Fine-grained staging | Individual-line stage, unstage, recoverable discard, pointer range selection, and keyboard line picker shipped 2026-07-18 | Complete for 1.0 daily use |
 | Stashes | Branch from stash shipped 2026-07-18; inspect/reveal a stash from the sidebar without applying it remains | Daily-driver |
 | Multi-commit actions | Ordered multi-commit cherry-pick, two-commit comparison, and merge-mainline cherry-pick/revert shipped 2026-07-18 | Complete for 1.0 daily use |
-| Rebase | `edit` / pause-to-amend and `--rebase-merges` preservation | Daily-driver |
+| Rebase | `edit` / pause-to-amend and topology-safe `--rebase-merges` preservation shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
 | Remote management | Prune one remote; edit fetch and push URLs separately; change the default remote; inspect refspecs | Daily-driver |
 | Repository maintenance | `git maintenance` / `gc`, integrity check, and an activity log with exact commands and output | Daily-driver |
@@ -132,7 +132,7 @@ disabled with a reason, and the primary action stays first.
 
 1. **Network and ref ergonomics** — both 2026-07-16 slices above are shipped;
    follow-ups are pull autostash, prune/no-prune, and separate fetch/push URLs.
-2. **Daily local Git close-out** — initialize repository, line staging,
+2. **Daily local Git close-out** — shipped: initialize repository, line staging,
    stash-to-branch, multi-commit operations, branch comparison, and rebase
    `edit` / merge preservation.
 3. **Hosted review close-out** — viewed/thread ledger, batched reviews,
@@ -143,6 +143,6 @@ disabled with a reason, and the primary action stays first.
    checkout, and custom actions, taking only the items that fit the 1.0 date.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
-initialization, stash-to-branch, line-level staging, multi-commit actions, and
-branch/ref comparison are now shipped foundations. The next bounded
-implementation slice is interactive-rebase edit and merge preservation.
+initialization, stash-to-branch, line-level staging, multi-commit actions,
+branch/ref comparison, and rebase close-out are now shipped foundations. The
+next bounded implementation slice is network preferences and stash inspection.
