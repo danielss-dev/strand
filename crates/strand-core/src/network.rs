@@ -505,13 +505,19 @@ pub(crate) fn validate_remote_arg(arg: &str, what: &str) -> Result<()> {
 }
 
 fn validate_read_ref(reference: &str) -> Result<()> {
-    if !reference.starts_with("refs/heads/")
+    let github_pull_head = reference
+        .strip_prefix("refs/pull/")
+        .and_then(|tail| tail.strip_suffix("/head"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        });
+    if !(reference.starts_with("refs/heads/") || github_pull_head)
         || reference.contains(':')
         || reference.contains("..")
         || reference.contains(['\n', '\r'])
     {
         return Err(Error::Other(format!(
-            "unsupported branch ref for hosted comparison: {reference}"
+            "unsupported ref for hosted comparison: {reference}"
         )));
     }
     Ok(())
@@ -796,9 +802,12 @@ mod tests {
     }
 
     #[test]
-    fn hosted_comparison_accepts_only_full_branch_refs() {
+    fn hosted_comparison_accepts_only_full_branch_or_github_pull_refs() {
         assert!(validate_read_ref("refs/heads/main").is_ok());
         assert!(validate_read_ref("refs/heads/feature/nested").is_ok());
+        assert!(validate_read_ref("refs/pull/42/head").is_ok());
+        assert!(validate_read_ref("refs/pull/nope/head").is_err());
+        assert!(validate_read_ref("refs/pull/42/merge").is_err());
         assert!(validate_read_ref("main").is_err());
         assert!(validate_read_ref("refs/tags/v1").is_err());
         assert!(validate_read_ref("refs/heads/../../oops").is_err());

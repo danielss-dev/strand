@@ -368,6 +368,11 @@ export interface PullRequestCreateOutcome {
   url: string;
 }
 
+export interface PullRequestCheckoutPreparation {
+  branch: string;
+  start_point: string;
+}
+
 export interface PullRequestSuggestion {
   title: string;
   description: string;

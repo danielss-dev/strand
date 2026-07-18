@@ -5,6 +5,8 @@ import { errMessage, tauri } from '../lib/tauri';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 
+export type WorktreeDialogStart = { ref: string; label: string; branch?: string };
+
 /**
  * Modal for creating a worktree. Checks out a branch into a separate directory
  * on disk; the new worktree can optionally open as its own tab.
@@ -30,7 +32,7 @@ export function WorktreeDialog({
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   /** Pre-picked start point (branch/tag/commit) from "New worktree from here". */
-  initialStart?: { ref: string; label: string } | null;
+  initialStart?: WorktreeDialogStart | null;
 }) {
   const meta = useRepo((s) => s.meta);
   const refs = useRepo((s) => s.refs);
@@ -39,10 +41,21 @@ export function WorktreeDialog({
 
   const localBranches = useMemo(() => refs.branches.map((b) => b.name), [refs]);
   const headBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
+  const requestedBranch = initialStart?.branch?.trim() ?? '';
+  const requestedLocal = refs.branches.find((candidate) => candidate.name === requestedBranch);
+  const suggestedExisting = requestedLocal?.target === initialStart?.ref;
+  const suggestedBranch = useMemo(() => {
+    if (!requestedLocal || suggestedExisting) return requestedBranch;
+    for (let suffix = 2; suffix < 100; suffix += 1) {
+      const candidate = `${requestedBranch}-${suffix}`;
+      if (!localBranches.includes(candidate)) return candidate;
+    }
+    return `${requestedBranch}-${Date.now()}`;
+  }, [localBranches, requestedBranch, requestedLocal, suggestedExisting]);
 
-  const [newBranch, setNewBranch] = useState(true);
-  const [branch, setBranch] = useState('');
-  const [existing, setExisting] = useState(localBranches[0] ?? '');
+  const [newBranch, setNewBranch] = useState(!suggestedExisting);
+  const [branch, setBranch] = useState(suggestedBranch);
+  const [existing, setExisting] = useState(suggestedExisting ? suggestedBranch : localBranches[0] ?? '');
   // Start point for the new branch; '' = HEAD.
   const [start, setStart] = useState(initialStart?.ref ?? '');
   const [fetchFirst, setFetchFirst] = useState(false);

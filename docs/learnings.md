@@ -1268,6 +1268,29 @@ successful request because queued completion may leave it active temporarily.
 
 ---
 
+## Hosted PR worktrees start from immutable provider heads
+
+**Rule.** Prepare a PR worktree from the exact source OID returned by the
+provider, never from a same-named local branch or a mutable remote-tracking ref.
+Fetch the object without creating refs or updating `FETCH_HEAD`, and reuse an
+existing local branch only when it already resolves to that exact OID. Hosted
+branch-update requests must carry the same expected-head guard.
+
+**Why.** A local branch can lag, diverge, or belong to another fork while the
+PR branch advances independently. Opening it silently gives a reviewer code
+that does not match the hosted diff. Temporary PR refs and `FETCH_HEAD` also
+pollute repository state for a read-oriented preparation step.
+
+**How to apply.** GitHub preparation fetches the documented
+`refs/pull/<number>/head`; Azure fetches the provider source ref, including the
+fork remote when supplied. Pass the resulting commit directly to the shared
+worktree dialog and suffix a conflicting branch name. Detect the hosted
+provider from the raw configured remote URL before Git's `url.*.insteadOf`
+transport rewrite so corporate mirrors remain recognizable, while the actual
+fetch still uses Git's effective rewritten transport.
+
+---
+
 ## Hosted PR lifecycle controls fail closed on viewer capability
 
 **Rule.** A provider lifecycle action appears only when activated PR detail can

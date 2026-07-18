@@ -1090,8 +1090,8 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   and Tower surfaces in `docs/git-client-1.0-audit.md`. Network strategy + ref
   context-menu slices shipped 2026-07-16, including upstream management,
   explicit non-current branch push, selected-remote fetch/pull, and per-repo
-  pull defaults; daily local Git gaps, hosted-review close-out, and
-  stable-release hardening remain.
+  pull defaults; daily local Git gaps are closed, while hosted-review
+  completion and stable-release hardening remain.
 
 **File view + submodules (2026-06-06):** First 1.0 vertical — the four-tab file
 view (PRD §6.5) and submodules went from placeholders to wired features.
@@ -1910,6 +1910,18 @@ iteration/change-tracking coordinates land. Provider failures preserve the
 draft, stale heads are refused, and the Azure Server helper contract is now
 protocol v3. Focused provider/UI tests and a write-free Computer Use pass
 verified preview, persistence, decision guards, and the command-palette entry.
+
+**Hosted PR branch handoff shipped (2026-07-18):** Every GitHub and Azure PR
+can now prepare its exact provider head for the existing worktree dialog without
+creating refs or touching `FETCH_HEAD`; same-named local branches are reused
+only at the exact OID and otherwise receive a safe suffix. Open GitHub PRs also
+expose an expected-head-guarded provider update from the target branch. Both
+actions live in the keyboard-operable overflow menu and command palette only
+while the PR is active. Provider detection reads the configured remote URL
+before transport rewrites so mirrored GitHub/Azure remotes keep working.
+Automated provider/core/UI gates and a write-free Computer Use pass against a
+local mirrored fixture verified the exact commit, derived task branch, command
+scoping, and zero repository-ref side effects.
 
 ---
 

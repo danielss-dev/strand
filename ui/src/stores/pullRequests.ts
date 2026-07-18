@@ -52,7 +52,7 @@ interface ActivePullRequest {
   key: string;
   repoPath: string;
   repository: PullRequestRepository;
-  pr: Pick<PullRequest, 'id' | 'title' | 'url' | 'source_branch'>;
+  pr: Pick<PullRequest, 'id' | 'title' | 'url' | 'source_branch' | 'state'>;
 }
 
 type NotificationPermission = 'unknown' | 'granted' | 'denied';
@@ -81,7 +81,7 @@ interface PullRequestMonitorState {
   setActive(
     repoPath: string,
     repository: PullRequestRepository,
-    pr: Pick<PullRequest, 'id' | 'title' | 'url' | 'source_branch'>,
+    pr: Pick<PullRequest, 'id' | 'title' | 'url' | 'source_branch' | 'state'>,
   ): void;
   clearActive(key: string): void;
   toggleActive(): Promise<void>;

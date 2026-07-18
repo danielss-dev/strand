@@ -1653,6 +1653,7 @@ function PullRequestDetails({
   followed,
   notificationPermission,
   onToggleFollow,
+  onCreateWorktree,
 }: {
   path: string;
   provider: PullRequestList['repository']['provider'];
@@ -1664,6 +1665,7 @@ function PullRequestDetails({
   followed: boolean;
   notificationPermission: 'unknown' | 'granted' | 'denied';
   onToggleFollow: () => void;
+  onCreateWorktree: (start: { ref: string; label: string; branch: string }) => void;
 }) {
   const [commentDraft, setCommentDraft] = useState('');
   const [changesTarget, setChangesTarget] = useState<PullRequestChangesTarget | null>(null);
@@ -1672,7 +1674,7 @@ function PullRequestDetails({
     y: number;
     items: MenuItem[];
   } | null>(null);
-  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [prActionBusy, setPrActionBusy] = useState(false);
   const changesRequest = useRef(0);
   const open = () => { if (pr.url) void shellOpen(pr.url); };
   const readiness = pullRequestReadiness(pr, provider);
@@ -1711,8 +1713,8 @@ function PullRequestDetails({
     return () => window.removeEventListener('strand:pull-request-review', openReview);
   }, [onTabChange, onToast, pr]);
   const setLifecycle = async (action: 'close' | 'reopen') => {
-    if (lifecycleBusy) return;
-    setLifecycleBusy(true);
+    if (prActionBusy) return;
+    setPrActionBusy(true);
     try {
       await tauri.repoPullRequestLifecycle(path, pr.id, action);
       let next: PullRequest;
@@ -1730,22 +1732,90 @@ function PullRequestDetails({
     } catch (caught) {
       onToast(`Could not ${action} PR #${pr.id}: ${errMessage(caught)}`, 'error');
     } finally {
-      setLifecycleBusy(false);
+      setPrActionBusy(false);
     }
   };
+  const openBranchInWorktree = useCallback(async () => {
+    if (prActionBusy) return;
+    if (!pr.source_commit) {
+      onToast('Refresh this pull request before opening its branch.', 'error');
+      return;
+    }
+    setPrActionBusy(true);
+    try {
+      const prepared = await tauri.repoPullRequestPrepareCheckout(path, pr.id, pr.source_commit);
+      onCreateWorktree({
+        ref: prepared.start_point,
+        label: `PR #${pr.id} · ${prepared.branch}`,
+        branch: `pr-${pr.id}-${prepared.branch.replace(/\//g, '-')}`,
+      });
+    } catch (caught) {
+      onToast(`Could not prepare PR #${pr.id} for a worktree: ${errMessage(caught)}`, 'error');
+    } finally {
+      setPrActionBusy(false);
+    }
+  }, [onCreateWorktree, onToast, path, pr.id, pr.source_commit, prActionBusy]);
+  const updatePrBranch = useCallback(async () => {
+    if (prActionBusy) return;
+    if (provider !== 'git_hub' || !isOpenPullRequest(pr)) {
+      onToast('Provider branch updates are available for open GitHub pull requests.', 'error');
+      return;
+    }
+    if (!pr.source_commit) {
+      onToast('Refresh this pull request before updating its branch.', 'error');
+      return;
+    }
+    setPrActionBusy(true);
+    try {
+      await tauri.repoPullRequestUpdateBranch(path, pr.id, pr.source_commit);
+      onToast(`GitHub started updating PR #${pr.id}; refresh after the new head is ready.`);
+    } catch (caught) {
+      onToast(`Could not update PR #${pr.id}: ${errMessage(caught)}`, 'error');
+    } finally {
+      setPrActionBusy(false);
+    }
+  }, [onToast, path, pr, prActionBusy, provider]);
+  useEffect(() => {
+    const openWorktree = () => { void openBranchInWorktree(); };
+    const updateBranch = () => { void updatePrBranch(); };
+    window.addEventListener('strand:pull-request-open-worktree', openWorktree);
+    window.addEventListener('strand:pull-request-update-branch', updateBranch);
+    return () => {
+      window.removeEventListener('strand:pull-request-open-worktree', openWorktree);
+      window.removeEventListener('strand:pull-request-update-branch', updateBranch);
+    };
+  }, [openBranchInWorktree, updatePrBranch]);
   const openLifecycleMenu = (button: HTMLButtonElement) => {
-    if (!lifecycleAction || lifecycleBusy) return;
+    if (prActionBusy) return;
     const rect = button.getBoundingClientRect();
-    setLifecycleMenu({
-      x: rect.right,
-      y: rect.bottom,
-      items: [{
+    const items: MenuItem[] = [{
+      label: 'Open branch in worktree…',
+      icon: 'worktree',
+      disabled: !pr.source_commit,
+      onSelect: () => { void openBranchInWorktree(); },
+    }];
+    if (provider === 'git_hub' && isOpenPullRequest(pr)) {
+      items.push({
+        label: 'Update branch from target',
+        icon: 'refresh',
+        confirm: true,
+        disabled: !pr.source_commit,
+        onSelect: () => { void updatePrBranch(); },
+      });
+    }
+    if (lifecycleAction) {
+      items.push({
         label: lifecycleAction === 'close' ? 'Close pull request' : 'Reopen pull request',
         icon: lifecycleAction === 'close' ? 'x' : 'refresh',
         danger: lifecycleAction === 'close',
         confirm: lifecycleAction === 'close',
         onSelect: () => { void setLifecycle(lifecycleAction); },
-      }],
+      });
+    }
+    setLifecycleMenu({
+      x: rect.right,
+      y: rect.bottom,
+      items,
     });
   };
   const viewCommentInCode = (comment: PullRequestComment) => {
@@ -1791,20 +1861,18 @@ function PullRequestDetails({
               onToast={onToast}
             />
           )}
-          {lifecycleAction && (
-            <button
-              type="button"
-              className="btn icon-btn"
-              aria-label="Pull request actions"
-              aria-haspopup="menu"
-              aria-expanded={lifecycleMenu != null}
-              disabled={lifecycleBusy}
-              title={lifecycleBusy ? 'Updating pull request…' : 'Pull request actions'}
-              onClick={(event) => openLifecycleMenu(event.currentTarget)}
-            >
-              <Icon name={lifecycleBusy ? 'refresh' : 'more'} size={13} className={lifecycleBusy ? 'spin' : undefined} />
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn icon-btn"
+            aria-label="Pull request actions"
+            aria-haspopup="menu"
+            aria-expanded={lifecycleMenu != null}
+            disabled={prActionBusy}
+            title={prActionBusy ? 'Updating pull request…' : 'Pull request actions'}
+            onClick={(event) => openLifecycleMenu(event.currentTarget)}
+          >
+            <Icon name={prActionBusy ? 'refresh' : 'more'} size={13} className={prActionBusy ? 'spin' : undefined} />
+          </button>
           <button type="button" className="btn" onClick={open} disabled={!pr.url}>
             <Icon name="external" size={13} /> Open on host
           </button>
@@ -1894,8 +1962,10 @@ function PullRequestDetails({
 
 export function PullRequests({
   onToast,
+  onCreateWorktree,
 }: {
   onToast: (message: string, kind?: 'success' | 'error') => void;
+  onCreateWorktree: (start: { ref: string; label: string; branch: string }) => void;
 }) {
   const path = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
@@ -2447,6 +2517,7 @@ export function PullRequests({
               followed={Boolean(openedFollowed)}
               notificationPermission={notificationPermission}
               onToggleFollow={toggleFollow}
+              onCreateWorktree={onCreateWorktree}
             />
           ) : detailLoading ? (
             <div className="pr-empty pr-detail-empty" aria-live="polite">

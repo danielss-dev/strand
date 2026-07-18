@@ -28,6 +28,15 @@ fn require_plain_name(name: &str) -> Result<()> {
 }
 
 impl Repo {
+    /// Return the URL exactly as configured for a remote, before Git applies
+    /// any `url.*.insteadOf` rewrite. Hosted-provider detection must use the
+    /// declared host even when transport is routed through a local mirror.
+    pub fn configured_remote_url(&self, name: &str) -> Result<Option<String>> {
+        require(name, "remote name")?;
+        let key = format!("remote.{name}.url");
+        Ok(self.git2()?.config()?.get_string(&key).ok())
+    }
+
     /// Add a remote (`git remote add <name> <url>`).
     pub fn add_remote(&self, name: &str, url: &str, push_url: Option<&str>) -> Result<()> {
         require(name, "remote name")?;
@@ -254,6 +263,29 @@ mod tests {
                 .unwrap()
                 .get_string("remote.pushDefault")
                 .is_err()
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn configured_remote_url_precedes_transport_rewrites() {
+        let (repo, dir) = scratch_repo();
+        let declared = "https://github.com/example/project.git";
+        repo.add_remote("origin", declared, None).unwrap();
+        {
+            let g = git2::Repository::open(&dir).unwrap();
+            g.config()
+                .unwrap()
+                .set_str("url.file:///local/mirror.git.insteadOf", declared)
+                .unwrap();
+        }
+
+        assert_eq!(repo.configured_remote_url("origin").unwrap().as_deref(), Some(declared));
+        assert_ne!(
+            repo.refs().unwrap().remotes[0].url.as_deref(),
+            Some(declared),
+            "libgit2 exposes the effective transport URL after insteadOf"
         );
 
         let _ = std::fs::remove_dir_all(dir);

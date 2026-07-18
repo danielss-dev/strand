@@ -268,6 +268,12 @@ pub struct PullRequestCreateOutcome {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PullRequestCheckoutPreparation {
+    pub branch: String,
+    pub start_point: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PullRequestActivityComment {
     pub id: String,
     pub author: String,
@@ -685,13 +691,62 @@ pub fn set_lifecycle(path: &str, id: u64, action: PullRequestLifecycleAction) ->
     }
 }
 
+pub fn update_branch(path: &str, id: u64, expected_head: &str) -> Result<()> {
+    validate_commit(expected_head)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => {
+            update_branch_github(path, &owner, &repo, id, expected_head)
+        }
+        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
+            "Azure DevOps does not expose a safe update-source-branch pull-request operation. Open the branch in a worktree and update it locally."
+                .into(),
+        ),
+    }
+}
+
+pub fn prepare_checkout(
+    path: &str,
+    id: u64,
+    expected_head: &str,
+) -> Result<PullRequestCheckoutPreparation> {
+    validate_commit(expected_head)?;
+    let (remote, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => {
+            prepare_checkout_github(path, &remote, &owner, &repo, id, expected_head)
+        }
+        HostRepo::Azure { organization, .. } => {
+            let value = azure_pr_value(path, &organization, id)?;
+            prepare_checkout_azure_value(path, &remote, value, expected_head)
+        }
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => {
+            let value = server_show(profile_id, &project, &repo, id)?;
+            prepare_checkout_azure_value(path, &remote, value, expected_head)
+        }
+    }
+}
+
 fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let repo = Repo::discover(path).map_err(|error| error.to_string())?;
     let refs = repo.refs().map_err(|error| error.to_string())?;
     let remotes = refs
         .remotes
         .into_iter()
-        .filter_map(|remote| remote.url.map(|url| (remote.name, url)))
+        .filter_map(|remote| {
+            let effective_url = remote.url?;
+            let url = repo
+                .configured_remote_url(&remote.name)
+                .ok()
+                .flatten()
+                .unwrap_or(effective_url);
+            Some((remote.name, url))
+        })
         .collect::<Vec<_>>();
     let mut supported = remotes
         .iter()
@@ -1087,6 +1142,78 @@ fn github_current_head(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<St
         .map_err(|error| format!("GitHub CLI returned invalid head JSON: {error}"))?;
     text(value.get("headRefOid"))
         .ok_or_else(|| "GitHub did not return the pull request head commit".to_string())
+}
+
+fn update_branch_github(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    id: u64,
+    expected_head: &str,
+) -> Result<()> {
+    let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/update-branch");
+    let input = serde_json::to_vec(&github_update_branch_payload(expected_head))
+        .map_err(|error| format!("Could not encode GitHub branch update: {error}"))?;
+    run_command_input(
+        cwd,
+        "gh",
+        &["api", "--method", "PUT", &endpoint, "--input", "-"],
+        &[("GH_PROMPT_DISABLED", "1")],
+        Some(&input),
+    )?;
+    Ok(())
+}
+
+fn prepare_checkout_github(
+    cwd: &str,
+    remote: &str,
+    owner: &str,
+    repo: &str,
+    id: u64,
+    expected_head: &str,
+) -> Result<PullRequestCheckoutPreparation> {
+    let slug = format!("{owner}/{repo}");
+    let number = id.to_string();
+    let output = run_command(
+        cwd,
+        "gh",
+        &[
+            "pr",
+            "view",
+            &number,
+            "--repo",
+            &slug,
+            "--json",
+            "headRefName,headRefOid",
+        ],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid checkout JSON: {error}"))?;
+    let current_head = text(value.get("headRefOid"))
+        .ok_or_else(|| "GitHub did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    let branch = text(value.get("headRefName"))
+        .map(branch_name)
+        .filter(|branch| !branch.is_empty())
+        .ok_or_else(|| "GitHub did not return the pull request source branch".to_string())?;
+    let pull_ref = github_pull_head_ref(id);
+    Repo::discover(cwd)
+        .map_err(|error| error.to_string())?
+        .fetch_refs_for_read(remote, &[&pull_ref])
+        .map_err(|error| format!("Could not fetch GitHub PR #{id} for a worktree: {error}"))?;
+    Ok(PullRequestCheckoutPreparation {
+        branch,
+        start_point: expected_head.into(),
+    })
+}
+
+fn github_update_branch_payload(expected_head: &str) -> Value {
+    serde_json::json!({ "expected_head_sha": expected_head })
+}
+
+fn github_pull_head_ref(id: u64) -> String {
+    format!("refs/pull/{id}/head")
 }
 
 fn reply_to_thread_github(cwd: &str, thread_id: &str, body: &str) -> Result<PullRequestComment> {
@@ -2340,6 +2467,33 @@ fn diff_azure_server(
 ) -> Result<String> {
     let value = server_show(profile_id, &project, &repo, id)?;
     diff_azure_value(cwd, remote, value)
+}
+
+fn prepare_checkout_azure_value(
+    cwd: &str,
+    remote: &str,
+    value: Value,
+    expected_head: &str,
+) -> Result<PullRequestCheckoutPreparation> {
+    let source_ref = text(value.get("sourceRefName"))
+        .ok_or_else(|| "Azure PR did not report its source branch".to_string())?;
+    let current_head = text(value.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure PR did not report its source commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    let source_remote = text(value.pointer("/forkSource/repository/remoteUrl"));
+    let fetch_remote = source_remote.as_deref().unwrap_or(remote);
+    Repo::discover(cwd)
+        .map_err(|error| error.to_string())?
+        .fetch_refs_for_read(fetch_remote, &[&source_ref])
+        .map_err(|error| format!("Could not fetch the Azure PR source for a worktree: {error}"))?;
+    let branch = branch_name(source_ref);
+    if branch.is_empty() {
+        return Err("Azure PR returned an invalid source branch".into());
+    }
+    Ok(PullRequestCheckoutPreparation {
+        branch,
+        start_point: expected_head.into(),
+    })
 }
 
 fn diff_azure_value(cwd: &str, remote: String, value: Value) -> Result<String> {
@@ -4116,5 +4270,12 @@ mod tests {
         assert!(ensure_review_head("b", "a").is_err());
         assert_eq!(azure_review_vote(PullRequestReviewEvent::Approve), Some(AzdoReviewVote::Approve));
         assert_eq!(azure_review_vote_label(PullRequestReviewEvent::RequestChanges), Some("reject"));
+    }
+
+    #[test]
+    fn pins_branch_updates_and_worktree_fetches_to_the_reviewed_head() {
+        let head = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(github_update_branch_payload(head)["expected_head_sha"], head);
+        assert_eq!(github_pull_head_ref(42), "refs/pull/42/head");
     }
 }

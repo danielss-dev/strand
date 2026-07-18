@@ -285,7 +285,22 @@ comments also require provider iteration/change-tracking coordinates that the
 current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
 Open pull requests can be closed after confirmation, and closed/abandoned pull
-requests can be reopened when the provider grants permission. Suggestions,
-existing-review update/dismiss actions, richer Azure policy details, and branch
-updates are planned but are not presented as available yet. GitLab and Bitbucket
-adapters will use the same workspace in a later slice.
+requests can be reopened when the provider grants permission. The PR overflow
+menu also exposes **Open branch in worktree…** for GitHub and Azure. Strand
+verifies the provider's current source commit, fetches that exact object without
+creating a PR ref or writing `FETCH_HEAD`, and opens the normal New worktree
+dialog with a derived `pr-<number>-<source>` task branch. An existing local
+branch is reused only when it already points to that exact commit; otherwise
+Strand proposes a suffixed branch instead of opening stale code.
+
+Open GitHub pull requests additionally expose **Update branch from target**.
+The provider request includes the source commit displayed by Strand,
+so a head change fails closed instead of updating code that was not reviewed.
+Azure DevOps does not expose the same safe source-branch update operation;
+use the exact-head local worktree action there. The worktree command is
+available while any PR is active, and the update command appears only for an
+open GitHub PR; both contextual commands disappear on the inbox.
+
+Suggestions, existing-review update/dismiss actions, and richer Azure policy
+details are planned but are not presented as available yet. GitLab and
+Bitbucket adapters will use the same workspace in a later slice.

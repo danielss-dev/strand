@@ -35,6 +35,7 @@ import type {
   PullRequest,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
+  PullRequestCheckoutPreparation,
   PullRequestComment,
   PullRequestCreateOutcome,
   PullRequestList,
@@ -218,6 +219,12 @@ export const tauri = {
     invoke<void>('repo_pull_request_ready', { path, id }),
   repoPullRequestLifecycle: (path: string, id: number, action: PullRequestLifecycleAction) =>
     invoke<void>('repo_pull_request_lifecycle', { path, id, action }),
+  repoPullRequestUpdateBranch: (path: string, id: number, expectedHead: string) =>
+    invoke<void>('repo_pull_request_update_branch', { path, id, expectedHead }),
+  repoPullRequestPrepareCheckout: (path: string, id: number, expectedHead: string) =>
+    invoke<PullRequestCheckoutPreparation>('repo_pull_request_prepare_checkout', {
+      path, id, expectedHead,
+    }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>

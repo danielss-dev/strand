@@ -511,6 +511,36 @@ pub async fn repo_pull_request_lifecycle(
     .await
 }
 
+/// Ask the host to merge the target branch into the exact PR head Strand has
+/// displayed. GitHub provides this as a guarded provider operation.
+#[tauri::command(async)]
+pub async fn repo_pull_request_update_branch(
+    path: String,
+    id: u64,
+    expected_head: String,
+) -> CmdResult<()> {
+    run_blocking("update pull request branch", move || {
+        pull_requests::update_branch(&path, id, &expected_head)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Fetch the exact provider head without moving local refs, then return the
+/// immutable commit and suggested local branch for WorktreeDialog.
+#[tauri::command(async)]
+pub async fn repo_pull_request_prepare_checkout(
+    path: String,
+    id: u64,
+    expected_head: String,
+) -> CmdResult<pull_requests::PullRequestCheckoutPreparation> {
+    run_blocking("prepare pull request worktree", move || {
+        pull_requests::prepare_checkout(&path, id, &expected_head)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

@@ -91,7 +91,10 @@ keyboard alone, and the mouse stays first-class.
   checks, conflicts, merge state, and provider freshness. Permission-backed
   drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control and can
-  be closed from a confirmed overflow action. Closed PRs can be reopened;
+  update their source from the target on GitHub with an expected-head guard.
+  Every GitHub or Azure PR can open its exact provider head in a new worktree
+  without changing local refs or `FETCH_HEAD`. Active PRs can be closed from a
+  confirmed overflow action. Closed PRs can be reopened;
   merged PRs and every terminal discussion/thread surface remain read-only.
   GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
@@ -108,8 +111,7 @@ keyboard alone, and the mouse stays first-class.
   permission instead of WebView2's browser permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
-  without a custom path. Azure inline comments still need iteration tracking;
-  branch update/checkout actions are still in progress.
+  without a custom path. Azure inline comments still need iteration tracking.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the

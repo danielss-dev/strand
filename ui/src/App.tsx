@@ -69,7 +69,7 @@ import { Review } from './views/Review';
 import { PullRequests } from './views/PullRequests';
 import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
-import { WorktreeDialog } from './views/WorktreeDialog';
+import { WorktreeDialog, type WorktreeDialogStart } from './views/WorktreeDialog';
 import { WorktreeMergeDialog } from './views/WorktreeMergeDialog';
 import { ForcePushDialog } from './views/ForcePushDialog';
 import { BranchNetworkDialog, type BranchNetworkDialogMode } from './views/BranchNetworkDialog';
@@ -240,6 +240,9 @@ export function App() {
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
   const activePullRequestFollowed = usePullRequests((s) =>
     activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
+  const activePullRequestCanUpdateBranch = usePullRequests((s) =>
+    s.active?.repository.provider === 'git_hub'
+      && ['open', 'active'].includes(s.active.pr.state.toLowerCase()));
   const toggleActivePullRequest = usePullRequests((s) => s.toggleActive);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -281,7 +284,7 @@ export function App() {
   // null = closed; `start` pre-picks the new branch's start point when opened
   // from a branch/commit "New worktree from here" context menu.
   const [worktreeDialog, setWorktreeDialog] = useState<
-    { start: { ref: string; label: string } | null } | null
+    { start: WorktreeDialogStart | null } | null
   >(null);
   // "Merge & clean up" opened from a rail/tab-strip worktree context menu —
   // the same on-demand fetch the sidebar's worktree menu does.
@@ -1346,7 +1349,7 @@ export function App() {
             keywords: 'pr inbox find filter authored completed',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-search')),
           } satisfies PaletteAction,
-          {
+          ...(activePullRequestKey ? [{
             id: 'pull-request-merge',
             label: 'Pull Requests: merge or mark ready…',
             group: 'Actions',
@@ -1360,7 +1363,21 @@ export function App() {
             keywords: 'pr github azure devops comment approve request changes pending review',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review')),
           } satisfies PaletteAction,
-          ...(activePullRequestKey ? [{
+          {
+            id: 'pull-request-open-worktree',
+            label: 'Pull Requests: open branch in worktree…',
+            group: 'Actions',
+            keywords: 'pr github azure devops checkout branch worktree isolated',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-open-worktree')),
+          } satisfies PaletteAction,
+          ...(activePullRequestCanUpdateBranch ? [{
+            id: 'pull-request-update-branch',
+            label: 'Pull Requests: update branch…',
+            group: 'Actions',
+            keywords: 'pr github update branch target base behind merge',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-update-branch')),
+          } satisfies PaletteAction] : []),
+          {
             id: 'pull-request-follow',
             label: activePullRequestFollowed
               ? 'Pull Requests: unfollow open pull request'
@@ -1603,7 +1620,8 @@ export function App() {
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
-      activePullRequestKey, activePullRequestFollowed, toggleActivePullRequest]);
+      activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
+      toggleActivePullRequest]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1708,7 +1726,12 @@ export function App() {
                   <OpBanner onToast={showToast} />
                   {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
                   {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
-                  {view === 'pull-requests' && <PullRequests onToast={showToast} />}
+                  {view === 'pull-requests' && (
+                    <PullRequests
+                      onToast={showToast}
+                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
+                    />
+                  )}
                   {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
                   {view === 'reflog' && (
                     <Reflog

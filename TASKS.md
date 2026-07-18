@@ -54,9 +54,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ◐ **Hosted review close-out.** Update/check-out lifecycle actions,
-  existing-review update/dismiss actions where supported, and Azure inline
-  review parity.
+- ◐ **Hosted review close-out.** Existing-review update/dismiss actions
+  where supported and Azure inline review parity remain.
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
@@ -1501,9 +1500,13 @@ tree: watch the agent work, review fast, accept or reject safely.
     fetches normalized GitHub/Azure commits; Timeline combines commits,
     flattened comments, and opened/merged/closed lifecycle markers with stable
     ordering, while Summary keeps checks collapsible and readiness persistent.
-  - ☐ Review evolution + local action: reliable “since my last review” compare
-    where the provider exposes a boundary, safe Open in worktree / Update branch,
-    suggestions, and unresolved-feedback export for external agents.
+  - ◐ Review evolution + local action: safe exact-head **Open branch in
+    worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
+    from target** are shipped (`repo_pull_request_prepare_checkout`,
+    `repo_pull_request_update_branch`, `PullRequestDetails.openBranchInWorktree`).
+    Reliable “since my last review” compare where the provider exposes a
+    boundary, suggestions, and unresolved-feedback export for external agents
+    remain.
   - ◐ Checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
@@ -1515,7 +1518,9 @@ tree: watch the agent work, review fast, accept or reject safely.
       capability + Azure author match, and the substituted header action).
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
       stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
-    - ☐ Update/check out the PR branch.
+    - ☑ Update/check out the PR branch (`repo_pull_request_update_branch`,
+      `repo_pull_request_prepare_checkout`, exact-head `WorktreeDialog`
+      handoff, and contextual overflow/command-palette actions).
     - ☑ Close/reopen the PR (`repo_pull_request_lifecycle`; GitHub `gh pr`,
       Azure Services `az repos pr update`, and Azure Server helper protocol v2
       `Operation::SetStatus`; keyboard-operable confirmed overflow action).
