@@ -691,10 +691,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   revalidates — at most once per repo per session, since our own push/delete
   keep the cache fresh (optimistic `setRemoteTags`). Section header `+` opens
   the New-tag dialog. Tag network ops toast success/failure; ⌘K "Push all tags".
-- ☑ Stashes list — flat list under the Git tab. Click a row to apply;
-  right-click menu = Apply / Pop (apply & remove) / Drop (confirm). Respects
-  the sidebar filter (matches message + branch). Section header `+` action
-  (`SideSection`'s optional `action` prop) opens the Save-snapshot dialog.
+- ☑ Stashes list — flat list under the Git tab. Click inspects and reveals the
+  stash in All Commits without changing the worktree; double-click / Enter
+  applies it. Right-click menu = Inspect changes / Apply / Pop (apply & remove)
+  / Create branch / copy / Drop (confirm). Respects the sidebar filter (matches
+  message + branch). Section header `+` action (`SideSection`'s optional
+  `action` prop) opens the Save-snapshot dialog.
 - ☑ Save-snapshot dialog (`views/StashDialog.tsx`, reuses the `.clone-dialog`
   shell): message field + selectable file checklist (pre-filled from Local
   Changes multi-select / active row / folder / show-all via

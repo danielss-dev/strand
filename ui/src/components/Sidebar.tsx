@@ -818,7 +818,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return items;
   };
 
+  const inspectStash = (s: Stash) => {
+    revealInGraph(s.oid);
+  };
+
   const stashMenu = (s: Stash): MenuItem[] => [
+    { label: 'Inspect changes', icon: 'search', onSelect: () => inspectStash(s) },
     { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(() => stashApply(s.index)) },
     { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
     { label: 'Create branch from stash…', icon: 'branch', onSelect: () => onBranchFromStash(s.index) },
@@ -1183,7 +1188,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 icon="stash"
                 label={stashLabel(s)}
                 meta={s.branch ?? undefined}
-                title={`${stashLabel(s)} — double-click to apply`}
+                title={`${stashLabel(s)} — click to inspect; double-click to apply`}
+                onSelect={() => inspectStash(s)}
                 onActivate={() => void runBranchOp(() => stashApply(s.index))}
                 onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
               />

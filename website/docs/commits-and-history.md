@@ -9,7 +9,7 @@ The All Commits view renders the full commit graph as a virtualized table: an SV
 Rows are decorated with chips:
 
 - **Branch, remote, and tag chips** — every ref pointing at a commit shows inline, with the current `HEAD` branch styled distinctly.
-- **Stash nodes** — stashes appear as synthetic rows in the graph, right above their base commit, labeled `stash@{n}`. Clicking one shows its changes in the detail panel; right-click offers Apply, Pop, Drop, and Copy SHA (stashes are also managed from the sidebar's Stashes section — see [Everyday Git](everyday-git.md)).
+- **Stash nodes** — stashes appear as synthetic rows in the graph, right above their base commit, labeled `stash@{n}`. Clicking one shows its changes in the detail panel; clicking the matching sidebar stash reveals the same node and detail without applying it. Right-click offers Apply, Pop, Drop, and Copy SHA (see [Everyday Git](everyday-git.md)).
 - **`ai` chip** — commits co-authored by an AI coding agent (detected from `Co-Authored-By:` trailers left by Claude Code, Copilot, Cursor, Aider, and similar, or bot-flavored authors) get an `ai` chip. Useful for spotting an agent's session at a glance; to review one, see [Reviewing agent changes](reviewing-agent-changes.md).
 
 ### Commit detail panel

@@ -1822,6 +1822,15 @@ Topology mode constrains reorder, squash/fixup, and merge-drop operations rather
 than pretending they are safe. Focused core tests cover edit → amend → later
 reword and merge edit → continue with the merge still present.
 
+**Non-mutating stash inspection shipped (2026-07-18):** A sidebar stash click
+now switches to All Commits, reveals the synthetic stash node, and opens its
+base-to-stash diff without applying changes; double-click / Enter retains the
+fast Apply action. The stash menu leads with **Inspect changes**. The graph
+reveal effect owns detail selection after mount so initial commit focus cannot
+close the requested stash. TypeScript and a Computer Use pass on a clean
+disposable repository verified the detail diff, one retained stash, and zero
+working-tree changes.
+
 ---
 
 ## 1.1+ — Post-1.0

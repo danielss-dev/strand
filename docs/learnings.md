@@ -1563,3 +1563,10 @@ plans that would cross those boundaries, and keep the generated plan/message
 artifacts inside the worktree git dir until the operation completes or aborts.
 An `edit`/`break` stop can exit successfully while rebase markers remain, so
 paused state is determined from those markers, not the process exit code alone.
+
+**Cross-view reveal effects own post-mount selection (2026-07-18).** A sidebar
+action that switches views cannot rely on selecting detail before the target
+view mounts: that view's initial-focus effect may clear it. Carry the requested
+object through the store's reveal signal, then focus, scroll, and open any
+detail from the target view's reveal effect after its first render. Keep the
+source-side action declarative so there is one navigation path and no race.

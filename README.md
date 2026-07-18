@@ -123,8 +123,9 @@ keyboard alone, and the mouse stays first-class.
 - **Everyday Git** — stage, unstage, or recoverably discard whole change
   blocks or individually selected lines inline in the diff; initialize a
   repository with an initial branch, optional
-  `.gitignore`, and optional first commit; create and check out a branch from a
-  stash; fetch / pull / push with streaming progress and explicit
+  `.gitignore`, and optional first commit; inspect a stash from the sidebar
+  without applying it, or create and check out a branch from it; fetch / pull /
+  push with streaming progress and explicit
   pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;
@@ -136,7 +137,8 @@ keyboard alone, and the mouse stays first-class.
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
   pause/conflict Continue / Abort.
-- **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
+- **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
+  nodes with non-mutating diff inspection, a
   resizable commit detail panel, in-graph search by message / author / hash, a
   multi-selection toolbar for ordered cherry-pick and two-commit comparison, a
   vertical activity-timeline rail (commit-density histogram you can scrub to

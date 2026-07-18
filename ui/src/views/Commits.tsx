@@ -670,20 +670,27 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     }
   }, [commits, focusedCommit, currentCommit]);
 
-  // A single-click on a sidebar branch/remote/tag row asks the graph to scroll
-  // to and highlight that ref's tip commit. Focusing the row drives the
-  // scrollIntoView effect below. Wait for the log to load before consuming so a
+  // A single-click on a sidebar ref or stash asks the graph to scroll to and
+  // highlight that row. Stash inspection also opens its detail panel; a stash
+  // whose base is outside the loaded window can still be inspected even though
+  // it has no visible graph row. Wait for the log to load before consuming so a
   // view switch (which renders an empty graph for a beat) doesn't drop it.
   useEffect(() => {
     if (!revealCommit || commits.length === 0) return;
-    if (commits.some((c) => c.hash === revealCommit)) {
+    const visible = rows.some((c) => c.hash === revealCommit);
+    if (visible) {
       setFocusedCommit(revealCommit);
-      setMulti(new Set([revealCommit]));
-      anchorRef.current = revealCommit;
+      if (commits.some((c) => c.hash === revealCommit)) {
+        setMulti(new Set([revealCommit]));
+        anchorRef.current = revealCommit;
+      }
       graphMainRef.current?.focus();
     }
+    if (stashes.some((stash) => stash.oid === revealCommit)) {
+      void selectCommit(revealCommit);
+    }
     clearReveal();
-  }, [revealCommit, commits, clearReveal]);
+  }, [revealCommit, commits, rows, stashes, selectCommit, clearReveal]);
 
   useEffect(() => {
     // With virtualization the focused row may not be mounted; fall back to
