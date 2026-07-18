@@ -7,9 +7,7 @@ Static site for `strand.danielss.dev`. No build step.
 `serve . -l $PORT`; `npm run build` is a no-op that exists only because the
 Railway image build wants a build command). Test URL:
 <https://strand-landing-production.up.railway.app>. The custom domain
-`strand.danielss.dev` is registered on the service and needs the Porkbun CNAME
-for `strand` to point at `flzah3oz.up.railway.app` (it currently points at
-Porkbun parking).
+`strand.danielss.dev` is live through the Railway service.
 
 Preview locally with `pnpm site` from the repo root (serves on
 <http://localhost:4321> via [`serve`](https://github.com/vercel/serve)).
@@ -40,19 +38,20 @@ Preview locally with `pnpm site` from the repo root (serves on
   there drives the sidebar and prev/next pager). Cross-page links are plain
   relative `foo.md` links — the viewer rewrites them (and they render on
   GitHub too). Keep the guide in sync with app releases: every claim in it
-  was fact-checked against `ui/src` on 2026-07-08 (v0.10.0).
+  was fact-checked against `ui/src` on 2026-07-18 for the 1.0 release candidate.
 
 ## Before launch
 
-- [ ] Flip the Porkbun DNS record: CNAME `strand` → `flzah3oz.up.railway.app`
-      (Railway then issues the cert automatically).
-- [ ] Point the download CTAs at real release assets (currently
-      `github.com/danielss-dev/strand/releases`).
+- [x] Custom-domain DNS and TLS are live at `strand.danielss.dev`.
+- [x] Download CTAs resolve the latest platform assets through the GitHub
+      Releases API, with the release page as the failure fallback.
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow
       once that exists (currently links to the repo).
-- [ ] Add an `og:image` (1200×630) for link unfurls.
+- [x] Open Graph and Twitter previews use `og-image.png` (1200×630), rendered
+      from the checked-in `og-image.svg` source.
 - [x] Tauri updater manifest (`latest.json`) is served from GitHub Releases
       (`releases/latest/download/latest.json`), which `tauri-action` publishes
       automatically — `tauri.conf.json` points the updater there. No custom
       `/updates` route on `strand.danielss.dev` is needed.
-- [ ] Keep the perf numbers in §02 in sync with `docs/perf-baseline.md`.
+- [x] The performance figures in §02 match `docs/perf-baseline.md` as of the
+      2026-07-18 1.0 content pass.

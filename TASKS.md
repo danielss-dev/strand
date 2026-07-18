@@ -1902,8 +1902,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   to 0.9.x: Linux download button live, installer sizes corrected, worktree
   Compare / Merge & clean up + Workspaces + AI commit messages cards, Docs
   link in nav/footer/⌘K.)
-- ☐ Keep `website/docs/` in sync with app releases — re-check the guide (and
-  landing claims) whenever a release adds or changes user-visible behavior.
+- ☑ Keep `website/docs/` in sync with app releases — 1.0 truth pass completed
+  2026-07-18 across all nine guide pages, native-menu language, privacy/status
+  copy, landing release labels, website maintainer notes, and
+  `docs/changelog/2026-07-18-strand-1.0.0.md`.
 
 ---
 

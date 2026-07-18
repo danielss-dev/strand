@@ -22,7 +22,7 @@ Strand is open source (AGPL-3.0) and free for individuals. Companies can buy a o
 
 ## First launch
 
-Strand is a local-first desktop app: there are no accounts to create and no telemetry by default. On first launch you land in an empty window with an open-repository prompt; once you have opened repositories, the same empty state lists your recent ones.
+Strand is a local-first desktop app: there are no accounts to create and no product telemetry. Crash details stay in a local log; the optional report flow only opens a pre-filled GitHub issue for you to review and submit. On first launch you land in an empty window with an open-repository prompt; once you have opened repositories, the same empty state lists your recent ones.
 
 Strand talks to your repositories directly. Network operations (fetch, pull, push, clone) shell out to your system `git`, so your existing SSH keys, credential helpers, commit signing, and hooks just work — no separate credential setup.
 
@@ -36,7 +36,7 @@ There are several ways to get a repository open:
 - **Command palette (`Mod+K`)** — "Initialize repository…", "Open repository…", "Clone repository…", and a Recent group of previously opened repositories.
 - **Repo quick-switcher (`Mod+E`)** — a fuzzy overlay over your open repositories and recents; works even with no repository open.
 
-To clone, use the Clone dialog (topbar `+` menu, palette, or the File menu on macOS): paste a URL, pick a destination, and Strand shows streamed clone progress and opens the result when done. Where the pickers start is configurable via Settings → Git → "Default clone & open folder".
+To clone, use the Clone dialog (topbar `+` menu, palette, or the native File menu): paste a URL, pick a destination, and Strand shows streamed clone progress and opens the result when done. Where the pickers start is configurable via Settings → Git → "Default clone & open folder".
 
 To start locally, choose **Initialize repository…** from the `+` menu or palette. Pick or type the folder, choose the initial branch, optionally enter `.gitignore` patterns, and decide whether Strand should create the first commit. Strand never overwrites an existing `.gitignore`.
 

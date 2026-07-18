@@ -89,6 +89,8 @@ On every platform, use a disposable repository and cover:
    publication approval.
 3. Review the draft release assets, hashes, platform signatures, Sigstore
    bundle, updater `latest.json`, release notes, and website/download claims.
+   The checked-in release-note source is
+   `docs/changelog/2026-07-18-strand-1.0.0.md`.
 4. Publish the GitHub release, then verify the stable updater and downloads
    from a clean machine. Redeploy `website/` if its release claims changed.
 5. Announce only after the published artifacts pass the platform matrix.

@@ -200,12 +200,11 @@ keyboard alone, and the mouse stays first-class.
 
 ## Status
 
-Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
-works on large real-world repositories daily, but expect rough edges. The main
-remaining gaps are Windows publisher signing and cross-platform release-
-candidate validation. Linux AppImages are now keyless-
-signed with Sigstore; Windows publisher signing and real GNOME/KDE/macOS
-candidate runs remain. See the
+Strand's **1.0 release candidate is feature-complete** and works on large
+real-world repositories daily. Publication remains fail-closed on the release
+checklist: Windows publisher signing, the real macOS/GNOME/KDE candidate runs,
+and the signed updater promotion must pass before the `v1.0.0` tag is pushed.
+Linux AppImages are keyless-signed with Sigstore. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

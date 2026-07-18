@@ -15,7 +15,7 @@ While a repository opens, an indeterminate progress popup with elapsed time appe
 
 ## Cloning a repository
 
-Clone from the `+` menu, the command palette, or the File menu (macOS). The clone dialog takes a URL and a destination chosen with a native picker; the folder name is derived from the URL.
+Clone from the `+` menu, the command palette, or the native File menu. The clone dialog takes a URL and a destination chosen with a native picker; the folder name is derived from the URL.
 
 The dialog warns before URL entry that cloning can run hooks installed by your
 Git template or system configuration. Clone only repositories and URLs you

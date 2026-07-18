@@ -2052,6 +2052,14 @@ has complete Open Graph and Twitter large-image metadata backed by a checked-in
 and review UI language so the asset remains reproducible instead of becoming an
 opaque design export.
 
+**1.0 documentation synchronized (2026-07-18):** The README, landing page, all
+nine user-guide pages, and website maintainer notes now describe the audited
+1.0 surface: cross-platform native menus, completed interactive-rebase and
+hosted-review slices, the no-product-telemetry boundary, and fail-closed release
+status. Publish-ready release notes live at
+`docs/changelog/2026-07-18-strand-1.0.0.md` and are explicitly gated by the
+release checklist.
+
 ---
 
 ## 1.1+ — Post-1.0

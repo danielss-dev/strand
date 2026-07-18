@@ -16,7 +16,7 @@ Strand is keyboard-first but never keyboard-only — the mouse stays first-class
 
 ## Status
 
-Strand is in **alpha**, currently at **v0.13.x**. It is used daily on large real-world repositories, but some gaps remain (for example the interactive-rebase `edit` action and hosted-review close-out). Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager).
+This guide describes **Strand 1.0**. Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager). Stable publication is fail-closed on platform signing and release-candidate validation, so a source checkout can reach `1.0.0` before the public release appears.
 
 Strand is open source under AGPL-3.0, free for individuals forever, with an honor-system commercial license for companies — no license keys, feature gating, or telemetry.
 
@@ -37,7 +37,7 @@ Installers are small — roughly 15 MB for the Windows MSI and Linux `.deb`/`.rp
 | [Getting started](getting-started.md) | Installing Strand, opening your first repository, the app layout, and the `Mod` key notation used throughout this guide. |
 | [Repositories and workspaces](repositories-and-workspaces.md) | Opening, cloning, and switching between repositories; tabs and the icon rail; workspaces for multi-repo products. |
 | [Reviewing agent changes](reviewing-agent-changes.md) | The Review view: baselines, the review queue, notes, feedback export, and cross-repo Workspace Review. |
-| [Pull requests](pull-requests.md) | Browse GitHub and Azure DevOps pull-request metadata for the active repository. |
+| [Pull requests](pull-requests.md) | Browse, review, and manage GitHub and Azure DevOps pull requests for the active repository. |
 | [Worktrees](worktrees.md) | The worktrees dashboard: creating isolated checkouts per agent task, comparing attempts, Merge & clean up, and archived snapshots. |
 | [Everyday Git](everyday-git.md) | Staging and committing, branches, merging, fetch/pull/push, stashes, tags, submodules, and conflict resolution. |
 | [Commits and history](commits-and-history.md) | The commit graph, commit search, the detail panel, interactive rebase, reset, reflog, and file history/blame. |
