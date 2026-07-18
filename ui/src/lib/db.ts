@@ -186,6 +186,18 @@ export const repoPullMode = {
   },
 };
 
+/** Local viewed-file state for a hosted pull request. Each stored value is a
+ * head-SHA + file-patch fingerprint, so a provider update invalidates only
+ * the files whose review evidence is stale. */
+export const pullRequestReview = {
+  getViewed(reviewKey: string): Promise<Record<string, string> | null> {
+    return settings.get<Record<string, string>>(`pull-request-reviewed:${reviewKey}`);
+  },
+  setViewed(reviewKey: string, viewed: Record<string, string>): Promise<void> {
+    return settings.set(`pull-request-reviewed:${reviewKey}`, viewed);
+  },
+};
+
 /** Explicit defaults for the active repository's Fetch and Pull actions. */
 export const repoNetworkPreferences = {
   get(repoPath: string): Promise<NetworkPreferences | null> {

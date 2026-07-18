@@ -226,6 +226,14 @@ and split diffs; the choice is saved per repository. Only one file diff is
 mounted at a time to keep large PRs responsive. Provider patches larger than
 16 MB are not rendered.
 
+Code also tracks review progress locally for the exact pull-request head and
+each file's rendered patch. Choose **Mark viewed** or press `v`; if that file or
+the PR head later changes, its check becomes **changed** instead of silently
+remaining reviewed. The header shows viewed-file and unresolved-thread totals.
+Use **All**, **Unviewed**, or **Threads** to focus the file tree, `[` / `]` or
+`j` / `k` to move between files, and `n` / `Shift+n` to jump between unresolved
+threads. These filters preserve the one-mounted-diff performance boundary.
+
 On an open GitHub pull request, hover a line number and choose the `+` in its
 gutter. Drag the `+` across adjacent lines to comment on a range, or drag across
 line numbers and then use the `+` at the end of the selection. Strand
@@ -262,7 +270,8 @@ treated as green. Azure inline
 comments also require provider iteration/change-tracking coordinates that the
 current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
-Suggestions, approve/request-changes actions, richer Azure policy details,
-branch updates, and close/reopen controls are planned but are not presented as
-available yet. GitLab and Bitbucket adapters will use the same workspace in a
-later slice.
+Open pull requests can be closed after confirmation, and closed/abandoned pull
+requests can be reopened when the provider grants permission. Suggestions,
+approve/request-changes actions, richer Azure policy details, and branch
+updates are planned but are not presented as available yet. GitLab and
+Bitbucket adapters will use the same workspace in a later slice.

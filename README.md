@@ -79,7 +79,8 @@ keyboard alone, and the mouse stays first-class.
   top-level comments from Summary or Timeline with one preserved draft, and inspect
   lazily loaded code in the Local Changes-style Pierre file tree with aggregate
   and selected-file addition/deletion totals,
-  switch stacked/split layout in place, jump from timeline comments to their
+  track exact-head viewed/changed progress, filter unviewed files or unresolved
+  threads, switch stacked/split layout in place, jump from timeline comments to their
   file/thread, read GitHub review threads with replies directly beneath their code,
   reply to them, resolve or reopen them, and add stale-head-guarded comments to
   selected line ranges. A compact readiness ledger combines review,

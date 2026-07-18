@@ -1631,3 +1631,11 @@ requests may expose only Reopen; merged/completed requests are immutable
 history. When adding a new Azure DevOps Server write operation, bump the helper
 protocol so an already-installed older helper is upgraded rather than selected
 by a matching but incomplete capability contract.
+
+**Hosted viewed marks fingerprint the rendered file, not the provider patch
+(2026-07-18).** A provider/Pierre cache key can identify the whole PR patch, so
+using it for one file makes every unrelated push invalidate all review
+progress. Persist the exact head SHA plus a hash of only that file's rendered
+metadata/content. When a filtered file queue becomes empty, reconcile selection
+against the filtered paths—not the unfiltered file map—or the hidden previous
+diff remains mounted and violates both the filter and one-diff review model.

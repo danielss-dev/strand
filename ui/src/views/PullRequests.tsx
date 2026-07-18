@@ -9,6 +9,7 @@ import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon, type IconName } from '../components/Icon';
 import { PierreTree } from '../components/PierreTree';
 import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
+import { pullRequestReview } from '../lib/db';
 import { renderMarkdown } from '../lib/markdown';
 import {
   buildPullRequestTimeline,
@@ -28,6 +29,17 @@ import {
   withPullRequestThreadReply,
   withPullRequestThreadUpdate,
 } from '../lib/pullRequests';
+import {
+  filterPullRequestReviewPaths,
+  nextUnresolvedThreadTarget,
+  pullRequestFileVerdict,
+  pullRequestFilePatchHash,
+  pullRequestReviewMark,
+  unresolvedThreadCounts,
+  unresolvedThreadTargets,
+  type PullRequestFileVerdict,
+  type PullRequestReviewFilter,
+} from '../lib/pullRequestReview';
 import { pullRequestActivityChanged, pullRequestFollowKey } from '../lib/pullRequestActivity';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -676,12 +688,42 @@ function PullRequestChanges({
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [threadWrites, setThreadWrites] = useState<Record<string, 'reply' | 'resolve'>>({});
   const [threadMessages, setThreadMessages] = useState<Record<string, { tone: 'ok' | 'error'; text: string }>>({});
+  const [reviewFilter, setReviewFilter] = useState<PullRequestReviewFilter>('all');
+  const [viewed, setViewed] = useState<Record<string, string>>({});
+  const [viewedLoaded, setViewedLoaded] = useState(false);
+  const [keyboardThreadId, setKeyboardThreadId] = useState<string | null>(null);
   const generation = useRef(0);
+  const viewedGeneration = useRef(0);
+  const viewedWrite = useRef<Promise<void>>(Promise.resolve());
   const currentPr = useRef(pr);
+  const reviewKey = useMemo(
+    () => `${provider}:${encodeURIComponent(pr.url || path)}:${pr.id}`,
+    [path, pr.id, pr.url, provider],
+  );
 
   useEffect(() => {
     currentPr.current = pr;
   }, [pr]);
+
+  useEffect(() => {
+    const current = ++viewedGeneration.current;
+    setViewed({});
+    setViewedLoaded(false);
+    void pullRequestReview.getViewed(reviewKey).then(
+      (stored) => {
+        if (viewedGeneration.current === current) {
+          setViewed(stored ?? {});
+          setViewedLoaded(true);
+        }
+      },
+      (caught) => {
+        if (viewedGeneration.current === current) {
+          setCommentMessage({ tone: 'error', text: `Could not load review progress: ${errMessage(caught)}` });
+        }
+      },
+    );
+    return () => { viewedGeneration.current += 1; };
+  }, [reviewKey]);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -713,10 +755,36 @@ function PullRequestChanges({
   }, [patch]);
   const files = parsed.files;
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.name, file])), [files]);
-  const treePaths = useMemo(() => treeFileOrder(files.map((file) => file.name)), [files]);
+  const allTreePaths = useMemo(() => treeFileOrder(files.map((file) => file.name)), [files]);
+  const unresolvedByPath = useMemo(
+    () => unresolvedThreadCounts(pr.review_threads ?? []),
+    [pr.review_threads],
+  );
+  const unresolvedCount = useMemo(
+    () => [...unresolvedByPath.values()].reduce((total, count) => total + count, 0),
+    [unresolvedByPath],
+  );
+  const verdicts = useMemo(() => {
+    const next = new Map<string, PullRequestFileVerdict>();
+    for (const file of files) {
+      next.set(
+        file.name,
+        pullRequestFileVerdict(viewed[file.name], pr.source_commit, pullRequestFilePatchHash(file)),
+      );
+    }
+    return next;
+  }, [files, pr.source_commit, viewed]);
+  const viewedCount = useMemo(
+    () => [...verdicts.values()].filter((verdict) => verdict === 'viewed').length,
+    [verdicts],
+  );
+  const treePaths = useMemo(
+    () => filterPullRequestReviewPaths(allTreePaths, reviewFilter, verdicts, unresolvedByPath),
+    [allTreePaths, reviewFilter, unresolvedByPath, verdicts],
+  );
   const treeStatus = useMemo<GitStatusEntry[]>(
-    () => files.map((file) => ({ path: file.name, status: fileGitStatus(file) })),
-    [files],
+    () => treePaths.map((filePath) => ({ path: filePath, status: fileGitStatus(filesByPath.get(filePath)!) })),
+    [filesByPath, treePaths],
   );
   const fileStats = useMemo(
     () => new Map(files.map((file) => [file.name, diffStats(file)])),
@@ -735,11 +803,21 @@ function PullRequestChanges({
     () => selectedFile ? (pr.review_threads ?? []).filter((thread) => thread.path === selectedFile.name) : [],
     [pr.review_threads, selectedFile],
   );
+  const threadTargets = useMemo(
+    () => unresolvedThreadTargets(allTreePaths, pr.review_threads ?? []),
+    [allTreePaths, pr.review_threads],
+  );
+
+  useEffect(() => {
+    if (navigationTarget && filesByPath.has(navigationTarget.path) && !treePaths.includes(navigationTarget.path)) {
+      setReviewFilter('all');
+    }
+  }, [filesByPath, navigationTarget, treePaths]);
 
   useEffect(() => {
     setSelectedPath((current) => {
       if (navigationTarget && filesByPath.has(navigationTarget.path)) return navigationTarget.path;
-      return current && filesByPath.has(current) ? current : treePaths[0] ?? null;
+      return current && treePaths.includes(current) ? current : treePaths[0] ?? null;
     });
   }, [filesByPath, navigationTarget, treePaths]);
 
@@ -756,6 +834,19 @@ function PullRequestChanges({
     });
     return () => cancelAnimationFrame(frame);
   }, [navigationTarget, onNavigationComplete, pr.id, selectedPath]);
+
+  useEffect(() => {
+    if (!keyboardThreadId) return;
+    const thread = (pr.review_threads ?? []).find((candidate) => candidate.id === keyboardThreadId);
+    if (!thread || thread.path !== selectedPath) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`pr-review-thread-${keyboardThreadId}`);
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+      setKeyboardThreadId(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [keyboardThreadId, pr.review_threads, selectedPath]);
 
   useEffect(() => {
     setCollapsed(false);
@@ -941,6 +1032,44 @@ function PullRequestChanges({
     }
   };
 
+  const persistViewed = useCallback((next: Record<string, string>) => {
+    viewedWrite.current = viewedWrite.current
+      .catch(() => undefined)
+      .then(() => pullRequestReview.setViewed(reviewKey, next))
+      .catch((caught) => {
+        setCommentMessage({ tone: 'error', text: `Could not save review progress: ${errMessage(caught)}` });
+      });
+  }, [reviewKey]);
+
+  const toggleViewed = useCallback((filePath: string | null = selectedPath) => {
+    if (!filePath || !viewedLoaded) return;
+    const file = filesByPath.get(filePath);
+    if (!file) return;
+    const next = { ...viewed };
+    if (verdicts.get(filePath) === 'viewed') delete next[filePath];
+    else next[filePath] = pullRequestReviewMark(pr.source_commit, pullRequestFilePatchHash(file));
+    setViewed(next);
+    persistViewed(next);
+  }, [filesByPath, persistViewed, pr.source_commit, selectedPath, verdicts, viewed, viewedLoaded]);
+
+  const moveThread = useCallback((direction: 1 | -1) => {
+    const activeThread = document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest<HTMLElement>('[id^="pr-review-thread-"]')
+      : null;
+    const target = nextUnresolvedThreadTarget(
+      threadTargets,
+      allTreePaths,
+      selectedPath,
+      activeThread?.id.slice('pr-review-thread-'.length) ?? null,
+      direction,
+    );
+    if (!target) return;
+    if (!treePaths.includes(target.path)) setReviewFilter('all');
+    setSelectedPath(target.path);
+    setCollapsed(false);
+    setKeyboardThreadId(target.threadId);
+  }, [allTreePaths, selectedPath, threadTargets, treePaths]);
+
   const move = (delta: number) => {
     if (!treePaths.length) return;
     const current = selectedPath ? treePaths.indexOf(selectedPath) : -1;
@@ -966,7 +1095,30 @@ function PullRequestChanges({
   }
 
   return (
-    <div className="pr-changes">
+    <div
+      className="pr-changes"
+      onKeyDown={(event) => {
+        const target = event.target;
+        if (
+          event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey ||
+          target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)
+        ) return;
+        if (event.key === 'j' || event.key === ']') {
+          event.preventDefault();
+          move(1);
+        } else if (event.key === 'k' || event.key === '[') {
+          event.preventDefault();
+          move(-1);
+        } else if (event.key.toLowerCase() === 'n') {
+          event.preventDefault();
+          moveThread(event.shiftKey ? -1 : 1);
+        } else if (event.key.toLowerCase() === 'v' && selectedPath) {
+          event.preventDefault();
+          toggleViewed();
+        }
+      }}
+    >
       {stalePatch && (
         <div className={`pr-inline-refresh${error ? ' error' : ''}`} role={error ? 'alert' : 'status'}>
           <Icon name={error ? 'x' : 'refresh'} size={12} className={loading ? 'spin' : undefined} />
@@ -977,7 +1129,8 @@ function PullRequestChanges({
       <div className="pr-code-overview" aria-label="Code change summary">
         <span><Icon name="branch" size={12} /><code>{pr.source_branch}</code><Icon name="chev-right" size={10} /><code>{pr.target_branch}</code></span>
         <span>{pr.commit_count || pr.commits.length} {pr.commit_count === 1 || pr.commits.length === 1 ? 'commit' : 'commits'}</span>
-        <span>{files.length} changed {files.length === 1 ? 'file' : 'files'}</span>
+        <span>{viewedCount}/{files.length} viewed</span>
+        <span>{unresolvedCount} unresolved {unresolvedCount === 1 ? 'thread' : 'threads'}</span>
         <span className="stat-add">+{pr.additions ?? parsedTotals.additions}</span>
         <span className="stat-del">−{pr.deletions ?? parsedTotals.deletions}</span>
       </div>
@@ -987,12 +1140,22 @@ function PullRequestChanges({
           <div
             className="pr-file-tree"
             aria-label="Changed files"
-            onKeyDown={(event) => {
-              if (event.key === 'j') { event.preventDefault(); move(1); }
-              else if (event.key === 'k') { event.preventDefault(); move(-1); }
-            }}
           >
-            <div className="pr-file-count">{files.length} changed {files.length === 1 ? 'file' : 'files'}</div>
+            <div className="pr-file-count">
+              <span>{viewedCount}/{files.length} viewed · {unresolvedCount} unresolved</span>
+              <div className="pr-review-filters" role="group" aria-label="Changed file filter">
+                {(['all', 'unviewed', 'threads'] as const).map((filter) => (
+                  <button
+                    type="button"
+                    key={filter}
+                    aria-pressed={reviewFilter === filter}
+                    onClick={() => setReviewFilter(filter)}
+                  >
+                    {filter === 'all' ? 'All' : filter === 'unviewed' ? 'Unviewed' : 'Threads'}
+                  </button>
+                ))}
+              </div>
+            </div>
             <PierreTree
               paths={treePaths}
               gitStatus={treeStatus}
@@ -1002,7 +1165,33 @@ function PullRequestChanges({
                 if (!next) setSelectedPath(null);
                 else if (filesByPath.has(next)) setSelectedPath(next);
               }}
-              emptyLabel="No changed files."
+              onActivate={(paths) => {
+                if (paths.length === 1) toggleViewed(paths[0]);
+              }}
+              menuItems={(paths, context) => context.kind === 'file' && paths.length === 1 ? [{
+                label: verdicts.get(paths[0]) === 'viewed' ? 'Mark unviewed' : 'Mark viewed',
+                onSelect: () => toggleViewed(paths[0]),
+                disabled: !viewedLoaded,
+              }] : []}
+              rowDecoration={(filePath, kind) => {
+                if (kind !== 'file') return null;
+                const verdict = verdicts.get(filePath);
+                const threads = unresolvedByPath.get(filePath) ?? 0;
+                const text = [
+                  verdict === 'viewed' ? '✓' : verdict === 'changed' ? 'changed' : '',
+                  threads > 0 ? `${threads}` : '',
+                ].filter(Boolean).join(' · ');
+                if (!text) return null;
+                return {
+                  text,
+                  title: [
+                    verdict === 'viewed' ? 'Viewed' : verdict === 'changed' ? 'Changed since viewed' : '',
+                    threads > 0 ? `${threads} unresolved ${threads === 1 ? 'thread' : 'threads'}` : '',
+                  ].filter(Boolean).join(' · '),
+                };
+              }}
+              rowDecorationKey={`${pr.source_commit}:${Object.entries(viewed).sort().join('|')}:${[...unresolvedByPath].join('|')}`}
+              emptyLabel={reviewFilter === 'all' ? 'No changed files.' : `No ${reviewFilter === 'unviewed' ? 'unviewed files' : 'files with unresolved threads'}.`}
             />
           </div>
         </Panel>
@@ -1026,6 +1215,17 @@ function PullRequestChanges({
                     <span className="stat-add">+{selectedStats?.additions ?? 0}</span>
                   </button>
                   <div className="pr-diff-tools" aria-label="Diff view controls">
+                    <button
+                      type="button"
+                      className={`pr-viewed-toggle${verdicts.get(selectedFile.name) === 'viewed' ? ' on' : ''}`}
+                      onClick={() => toggleViewed(selectedFile.name)}
+                      disabled={!viewedLoaded}
+                      aria-pressed={verdicts.get(selectedFile.name) === 'viewed'}
+                      title="Toggle viewed (V)"
+                    >
+                      <Icon name="check" size={12} />
+                      {verdicts.get(selectedFile.name) === 'viewed' ? 'Viewed' : verdicts.get(selectedFile.name) === 'changed' ? 'Changed' : 'Mark viewed'}
+                    </button>
                     <button
                       type="button"
                       className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}

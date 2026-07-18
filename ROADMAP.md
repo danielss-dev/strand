@@ -1890,6 +1890,16 @@ helper upgrade instead of silently invoking an older capability set. Focused
 provider/UI tests and a Computer Use pass against a real merged GitHub PR
 verified the terminal surface without performing a hosted write.
 
+**Hosted PR review ledger shipped (2026-07-18):** Code now persists viewed
+files against the exact reviewed head plus a per-file rendered-patch
+fingerprint, so later edits become visibly changed without unrelated files
+invalidating progress. The header and file tree expose viewed and unresolved
+thread counts, All/Unviewed/Threads filters, viewed/changed decorations, and
+keyboard `v` plus next/previous-thread navigation while still mounting one
+Pierre diff. Focused unit tests cover fingerprints, invalidation, filtering,
+and thread ordering; a Computer Use pass on a real GitHub PR verified marking,
+filtering, shortcut flow, persistence, and the empty-filter selection boundary.
+
 ---
 
 ## 1.1+ — Post-1.0

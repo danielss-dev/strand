@@ -54,9 +54,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ◐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
-  submission, update/check-out/close/reopen lifecycle actions, and Azure inline
-  review parity.
+- ◐ **Hosted review close-out.** Batched review submission,
+  update/check-out lifecycle actions, and Azure inline review parity.
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
@@ -1470,16 +1469,17 @@ tree: watch the agent work, review fast, accept or reject safely.
       combines state, required reviews, checks, conflicts, provider freshness,
       and expandable blocker evidence; missing Azure policy/check fields remain
       explicitly incomplete instead of appearing ready.
-    - ☐ Add viewed-file progress and unresolved-thread counts when those review
-      state models land.
+    - ☑ Add viewed-file progress and unresolved-thread counts
+      (`pullRequestReview`: exact-head + per-file patch fingerprints,
+      viewed/changed decorations, All/Unviewed/Threads filters, and `v` / `n`
+      keyboard review flow while retaining one mounted diff).
   - ◐ Inline review workspace: GitHub hover-gutter line/range selection,
     immediate publishing, and fetched review-thread annotations are present
     (`ParsedDiff` controlled selection + native gutter utility + inline
-    composer/thread cards); Azure iteration coordinates, reply/resolution
-    writes, local
-    content-hash-keyed viewed files, unviewed/thread filters, batched drafts,
-    and keyboard next-thread navigation remain while retaining one mounted
-    Pierre diff.
+    composer/thread cards); local exact-head/content-hash viewed marks,
+    unviewed/thread filters, and keyboard next-thread navigation now ship while
+    retaining one mounted Pierre diff. Azure iteration coordinates and batched
+    drafts remain.
   - ☐ Paginate GitHub review threads and replies beyond the current bounded
     100-thread / 100-comment detail query.
   - ☐ Batched review submission: pending comments plus Comment / Approve /
