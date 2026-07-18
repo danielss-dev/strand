@@ -475,10 +475,10 @@ export const tauri = {
     invoke<string[]>('repo_remote_tags', { path, remote }),
   // Return `true` when the op stopped on conflicts (left in progress), `false`
   // when it completed cleanly; reject only on a real failure.
-  repoCherryPick: (path: string, commits: string[]) =>
-    invoke<boolean>('repo_cherry_pick', { path, commits }),
-  repoRevert: (path: string, commits: string[]) =>
-    invoke<boolean>('repo_revert', { path, commits }),
+  repoCherryPick: (path: string, commits: string[], mainline?: number) =>
+    invoke<boolean>('repo_cherry_pick', { path, commits, mainline: mainline ?? null }),
+  repoRevert: (path: string, commits: string[], mainline?: number) =>
+    invoke<boolean>('repo_revert', { path, commits, mainline: mainline ?? null }),
   repoMerge: (path: string, refname: string, mode: MergeMode) =>
     invoke<boolean>('repo_merge', { path, refname, mode }),
   repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),

@@ -142,6 +142,10 @@ Opened with `Mod+F` in Local Changes, Review, or Workspace Review.
 
 In the search field: `Enter` steps loaded matches (`Shift+Enter` backwards); `Mod+Enter` — or plain `Enter` in Content mode — runs the full-history search; `↑`/`↓` navigate the results dropdown and `Enter` opens a hit; `Escape` clears the query, then blurs. See [Commits and history](commits-and-history.md).
 
+In commit/ref comparison dialogs, `↑` / `↓`, `Home`, and `End` navigate
+the changed-file list; `Escape` closes the dialog. Merge cherry-pick/revert
+dialogs use the native radio-group arrow keys to choose the mainline parent.
+
 ### Interactive rebase editor
 
 | Key | Action |

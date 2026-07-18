@@ -1802,6 +1802,16 @@ existing patch/undo pipeline. Twelve focused patch tests and a Computer Use
 keyboard pass proved a single deletion moving into and back out of the index
 without moving the other three lines in its change block.
 
+**Multi-commit and ref comparison shipped (2026-07-18):** All Commits now
+orders selected commits oldest-to-newest for one bulk cherry-pick, compares any
+two selected commits, and exposes the same full changed-file/diff comparison
+from local, remote, and tag menus. Merge cherry-pick and revert choose an
+explicit mainline parent before passing validated `-m` input to Git. Core tests
+cover ordered history operations and annotated-tag peeling; focused Vitest,
+TypeScript, Rust checks, and a Computer Use pass on a disposable graph verified
+selection, comparison, merge-parent keyboard flow, and the resulting Git
+history.
+
 ---
 
 ## 1.1+ — Post-1.0

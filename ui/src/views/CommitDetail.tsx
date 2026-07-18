@@ -8,6 +8,7 @@ import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type { Commit, DiffStatus, FileDiff, Stash } from '../lib/types';
+import { MainlineDialog, type MainlineOperation } from './MainlineDialog';
 
 /**
  * Right-side panel shown when a commit is selected in the All Commits
@@ -84,6 +85,7 @@ export function CommitDetail({
   // and hooks after a conditional return would change in count and crash React.
   const [historyBusy, setHistoryBusy] = useState(false);
   const [stashBusy, setStashBusy] = useState(false);
+  const [mainlineAction, setMainlineAction] = useState<MainlineOperation | null>(null);
 
   if (!commit) return null;
 
@@ -105,6 +107,10 @@ export function CommitDetail({
   // git's message via a toast rather than the inline (single-line) slot.
   async function onCherryPick() {
     if (historyBusy) return;
+    if (commit!.parents.length > 1) {
+      setMainlineAction('cherry-pick');
+      return;
+    }
     setHistoryBusy(true);
     try {
       const conflicted = await cherryPick([hash]);
@@ -121,6 +127,10 @@ export function CommitDetail({
   }
   async function onRevert() {
     if (historyBusy) return;
+    if (commit!.parents.length > 1) {
+      setMainlineAction('revert');
+      return;
+    }
     setHistoryBusy(true);
     try {
       const conflicted = await revert([hash]);
@@ -159,8 +169,9 @@ export function CommitDetail({
   const focused = diffs.find((d) => d.path === selectedFile) ?? null;
 
   return (
-    <aside className="commit-detail">
-      <div className="cd-head">
+    <>
+      <aside className="commit-detail">
+        <div className="cd-head">
         <div className="cd-head-row">
           <div className="msg-subj">{commit.subject}</div>
           <button
@@ -256,7 +267,7 @@ export function CommitDetail({
                 title="Apply this commit's changes onto the current branch"
               >
                 <Icon name="arrow-down" size={12} />
-                Cherry-pick
+                {commit.parents.length > 1 ? 'Cherry-pick…' : 'Cherry-pick'}
               </button>
               <button
                 type="button"
@@ -266,7 +277,7 @@ export function CommitDetail({
                 title="Create a commit that undoes this commit"
               >
                 <Icon name="history" size={12} />
-                Revert
+                {commit.parents.length > 1 ? 'Revert…' : 'Revert'}
               </button>
               <button
                 type="button"
@@ -329,8 +340,17 @@ export function CommitDetail({
         ) : (
           <div className="cd-empty">Select a file to see its diff.</div>
         )}
-      </div>
-    </aside>
+        </div>
+      </aside>
+      {mainlineAction && (
+        <MainlineDialog
+          commit={commit}
+          operation={mainlineAction}
+          onClose={() => setMainlineAction(null)}
+          onToast={onToast}
+        />
+      )}
+    </>
   );
 }
 

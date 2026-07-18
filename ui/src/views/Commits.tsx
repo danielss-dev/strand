@@ -4,6 +4,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { selectedCommitsOldestFirst } from '../lib/historySelection';
 import { errMessage } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -14,6 +15,8 @@ import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
 import { CommitTimeline } from './CommitTimeline';
+import { CompareRefsDialog } from './CompareRefsDialog';
+import { MainlineDialog, type MainlineOperation } from './MainlineDialog';
 
 /**
  * Row heights per density — must match `.graph-table tbody tr` in
@@ -100,6 +103,12 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [mainlineAction, setMainlineAction] = useState<{
+    commit: Commit;
+    operation: MainlineOperation;
+  } | null>(null);
+  const [compareCommits, setCompareCommits] = useState<Commit[] | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const openCommitMenu = useCallback(
     (c: Commit, x: number, y: number) => {
       const fail = (verb: string, e: unknown) =>
@@ -114,9 +123,13 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
         },
         { label: 'Tag…', icon: 'tag', onSelect: () => onCreateTag(c.hash, c.short_hash) },
         {
-          label: 'Cherry-pick',
+          label: c.parents.length > 1 ? 'Cherry-pick merge…' : 'Cherry-pick',
           icon: 'arrow-down',
           onSelect: () => void (async () => {
+            if (c.parents.length > 1) {
+              setMainlineAction({ commit: c, operation: 'cherry-pick' });
+              return;
+            }
             try {
               const conflicted = await cherryPick([c.hash]);
               onToast(conflicted
@@ -126,9 +139,13 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           })(),
         },
         {
-          label: 'Revert',
+          label: c.parents.length > 1 ? 'Revert merge…' : 'Revert',
           icon: 'history',
           onSelect: () => void (async () => {
+            if (c.parents.length > 1) {
+              setMainlineAction({ commit: c, operation: 'revert' });
+              return;
+            }
             try {
               const conflicted = await revert([c.hash]);
               onToast(conflicted
@@ -549,6 +566,38 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     anchorRef.current = keep;
   }, [focusedCommit]);
 
+  // The graph is newest→oldest; Git must receive a selected series in the
+  // opposite direction so dependent commits are applied oldest→newest.
+  const bulkSelection = useMemo(
+    () => selectedCommitsOldestFirst(commits, multi),
+    [commits, multi],
+  );
+
+  const runBulkCherryPick = useCallback(async () => {
+    if (bulkBusy || bulkSelection.length < 2) return;
+    const merge = bulkSelection.find((candidate) => candidate.parents.length > 1);
+    if (merge) {
+      onToast(
+        `Selection includes merge ${merge.short_hash} — apply merge commits individually so you can choose a mainline parent`,
+        'error',
+      );
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const conflicted = await cherryPick(bulkSelection.map((candidate) => candidate.hash));
+      onToast(
+        conflicted
+          ? `Cherry-pick of ${bulkSelection.length} commits has conflicts — resolve in Local Changes`
+          : `Cherry-picked ${bulkSelection.length} commits in oldest-to-newest order`,
+      );
+    } catch (caught) {
+      onToast(`Cherry-pick failed: ${errMessage(caught)}`, 'error');
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [bulkBusy, bulkSelection, cherryPick, onToast]);
+
   const onGraphKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -735,11 +784,33 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           </button>
         )}
         {multi.size > 1 && (
-          <div className="graph-sel-count" role="status">
-            <span>{multi.size} selected</span>
-            <button type="button" className="clear" onClick={clearMulti} title="Clear selection">
-              Clear
+          <div className="graph-bulk-actions">
+            <button
+              type="button"
+              className="since-baseline-btn"
+              disabled={bulkBusy}
+              onClick={() => void runBulkCherryPick()}
+              title="Cherry-pick selected commits onto the current branch, oldest first"
+            >
+              <Icon name="arrow-down" size={12} />
+              <span>{bulkBusy ? 'Cherry-picking…' : 'Cherry-pick selected'}</span>
             </button>
+            <button
+              type="button"
+              className="since-baseline-btn"
+              disabled={multi.size !== 2 || bulkBusy}
+              onClick={() => setCompareCommits(bulkSelection)}
+              title={multi.size === 2 ? 'Compare the two selected commits' : 'Select exactly two commits to compare'}
+            >
+              <Icon name="compare" size={12} />
+              <span>Compare</span>
+            </button>
+            <div className="graph-sel-count" role="status">
+              <span>{multi.size} selected</span>
+              <button type="button" className="clear" onClick={clearMulti} title="Clear selection">
+                Clear
+              </button>
+            </div>
           </div>
         )}
         <button
@@ -1048,6 +1119,27 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
+      {mainlineAction && (
+        <MainlineDialog
+          commit={mainlineAction.commit}
+          operation={mainlineAction.operation}
+          onClose={() => setMainlineAction(null)}
+          onToast={onToast}
+        />
+      )}
+      {compareCommits && meta && compareCommits.length === 2 && (
+        <CompareRefsDialog
+          repoPath={meta.path}
+          title="Compare selected commits"
+          choices={compareCommits.map((candidate) => ({
+            value: candidate.hash,
+            label: `${candidate.short_hash} · ${candidate.subject}`,
+          }))}
+          initialFrom={compareCommits[0].hash}
+          initialTo={compareCommits[1].hash}
+          onClose={() => setCompareCommits(null)}
+        />
       )}
     </div>
   );

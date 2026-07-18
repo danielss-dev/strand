@@ -131,11 +131,13 @@ keyboard alone, and the mouse stays first-class.
   selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
   local branches merged into the primary branch are marked in the sidebar and
   commit graph and can be cleared in bulk with independent local/remote
-  selection; branches, tags, stashes, remotes, cherry-pick, revert, merge, and
-  a fully keyboard-operable interactive rebase (reorder, reword, squash,
-  fixup, drop) with conflict-pause Continue / Abort.
+  selection; branches, tags, stashes, remotes, ordered multi-commit
+  cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
+  merge, and a fully keyboard-operable interactive rebase (reorder, reword,
+  squash, fixup, drop) with conflict-pause Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, inline stash nodes, a
   resizable commit detail panel, in-graph search by message / author / hash, a
+  multi-selection toolbar for ordered cherry-pick and two-commit comparison, a
   vertical activity-timeline rail (commit-density histogram you can scrub to
   seek by date), and a reflog browser for recovering commits orphaned by a
   reset or rebase.

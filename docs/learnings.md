@@ -1546,3 +1546,11 @@ downloaded text directly to `minisign_verify::Signature::decode`. Rolling
 promotion reuses the signed workflow artifact after exact-tag upload; there is
 no post-upload release smoke matrix, so the desktop verifier remains the runtime
 enforcement point for signature and hash agreement.
+
+**Peel commit-ish inputs before commit lookup (2026-07-18).** A revparse result
+can be an annotated-tag object rather than a commit even when the user-visible
+input names a commit. Any history/diff operation that accepts branches, tags,
+or arbitrary revision expressions must call `peel_to_commit()` before reading
+the commit/tree; passing `revparse_single(...).id()` to `find_commit` rejects
+valid annotated tags. Keep a focused annotated-tag test on every shared
+commit-ish boundary.

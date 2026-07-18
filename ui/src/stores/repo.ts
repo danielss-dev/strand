@@ -472,8 +472,8 @@ export interface RepoState {
    * and `meta.operation` reports the in-progress state. Callers toast based on
    * the returned flag.
    */
-  cherryPick(commits: string[]): Promise<boolean>;
-  revert(commits: string[]): Promise<boolean>;
+  cherryPick(commits: string[], mainline?: number): Promise<boolean>;
+  revert(commits: string[], mainline?: number): Promise<boolean>;
   merge(refname: string, mode: MergeMode): Promise<boolean>;
   rebase(onto: string): Promise<boolean>;
   /**
@@ -1755,18 +1755,18 @@ export const useRepo = create<RepoState>((set, get) => ({
   // four afterward (in `finally`, so a real failure still re-syncs). On a
   // conflict the op resolves `true`: jump to Local Changes and clear the
   // selection so the conflict bar opens the first conflicted file.
-  async cherryPick(commits) {
+  async cherryPick(commits, mainline) {
     return runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoCherryPick(path, commits);
+      return tauri.repoCherryPick(path, commits, mainline);
     });
   },
-  async revert(commits) {
+  async revert(commits, mainline) {
     return runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoRevert(path, commits);
+      return tauri.repoRevert(path, commits, mainline);
     });
   },
   async merge(refname, mode) {

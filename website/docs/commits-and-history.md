@@ -28,13 +28,21 @@ Selecting a commit (click or `Enter`) opens a detail panel on the right with the
 | `Shift+F10` / Menu key | Open the context menu for the focused row |
 | `/` | Focus the search field |
 
+Selecting two commits adds **Compare** to the graph toolbar. The dialog orders
+them from older to newer, lists the changed files, and renders the selected
+text or image diff. Any multi-selection also adds **Cherry-pick selected**;
+Strand applies the commits oldest-to-newest so dependent commits keep their
+original order. Selections containing a merge commit must be applied
+individually so you can choose its mainline parent.
+
 ### Context menu
 
 Right-click a commit (or use `Shift+F10`) for:
 
 - **Checkout** — detached checkout of the commit.
 - **Tag…** — create a tag here.
-- **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution.
+- **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution;
+  merge commits first ask which parent is the mainline.
 - **Create fixup! commit** — commits the currently staged changes as `fixup!` of this commit (enabled only when something is staged); fold it in later with an interactive rebase.
 - **Rebase from here…** — open the interactive rebase editor over this commit and everything newer.
 - **Reset \<branch\> to here…** — opens the Reset dialog.

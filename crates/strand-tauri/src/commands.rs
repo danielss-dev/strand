@@ -1249,13 +1249,21 @@ pub async fn repo_tag_push_all(
 // resolution) and `false` when it completed cleanly; `Err` is a real failure.
 
 #[tauri::command(async)]
-pub fn repo_cherry_pick(path: String, commits: Vec<String>) -> CmdResult<bool> {
-    Ok(Repo::discover(&path)?.cherry_pick(&commits)?)
+pub fn repo_cherry_pick(
+    path: String,
+    commits: Vec<String>,
+    mainline: Option<u32>,
+) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.cherry_pick(&commits, mainline)?)
 }
 
 #[tauri::command(async)]
-pub fn repo_revert(path: String, commits: Vec<String>) -> CmdResult<bool> {
-    Ok(Repo::discover(&path)?.revert(&commits)?)
+pub fn repo_revert(
+    path: String,
+    commits: Vec<String>,
+    mainline: Option<u32>,
+) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.revert(&commits, mainline)?)
 }
 
 #[tauri::command(async)]

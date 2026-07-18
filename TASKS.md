@@ -36,9 +36,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   selected remote branch, and persist a per-repo default pull strategy
   (`Repo::{set_branch_upstream,push_branch,fetch_branch,pull_branch}`,
   `BranchNetworkDialog`, `repoPullMode`).
-- ☐ **Daily local Git close-out.** Initialize repository, line-level staging,
-  stash-to-branch, multi-commit cherry-pick/revert/compare, branch comparison,
-  interactive-rebase edit, and merge-preserving rebase.
+- ◐ **Daily local Git close-out.** Initialize repository, line-level staging,
+  stash-to-branch, ordered multi-commit cherry-pick, merge-mainline
+  cherry-pick/revert, and commit/ref comparison are shipped; interactive-rebase
+  edit and merge-preserving rebase remain.
 - ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
   submission, update/check-out/close/reopen lifecycle actions, and Azure inline
   review parity.
@@ -194,11 +195,13 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   index merges like real git instead of git2's blanket "uncommitted changes in
   the index" refusal. `Repo::stash_branch` shells out to `git stash branch`,
   exposed in the sidebar and command palette through `BranchDialog`.)
-- ◐ Cherry-pick (single + multi) — `Repo::cherry_pick(&[oid])` shells out to
-  `git cherry-pick` (accepts a list); the commit-detail panel wires single-commit
-  cherry-pick. Bulk cherry-pick from the graph multi-selection still ☐.
-- ☑ Revert (`Repo::revert(&[oid])` — `git revert --no-edit`; commit-detail
-  "Revert" button. Reverting a merge commit needs `-m`, not yet exposed.)
+- ☑ Cherry-pick (single + multi) — `Repo::cherry_pick(&[oid], mainline)` shells
+  out to `git cherry-pick`; the detail/context actions handle single commits and
+  merge-parent selection, while the graph toolbar orders a multi-selection
+  oldest-to-newest via `selectedCommitsOldestFirst` before applying it.
+- ☑ Revert (`Repo::revert(&[oid], mainline)` — `git revert --no-edit`;
+  commit-detail/context actions include merge-parent selection via
+  `MainlineDialog`.)
 - ☑ Merge (ff / no-ff / squash) (`Repo::merge(refname, MergeMode)` — `git merge`
   `[--no-ff|--squash] --no-edit`; sidebar branch menu "Merge into <current>" →
   `MergeDialog` with the three strategies. Squash leaves the result staged.)
@@ -234,7 +237,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   rebase flow on top of the continue path
 - ☐ Interactive rebase: preserve merges (`--rebase-merges`) — v1 flattens; the
   editor warns when the range contains a merge
-- ☐ Cherry-pick / revert a merge commit (mainline `-m` selection UI)
+- ☑ Cherry-pick / revert a merge commit (validated `-m` support in
+  `Repo::{cherry_pick,revert}` + keyboard-operable `MainlineDialog`)
 - ☑ Submodule init / update / sync (`Repo::submodule_update` — `git submodule
   update [--init] [--recursive] [-- paths]`, shelled out + streamed like the
   other network ops)
@@ -838,14 +842,15 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ◐ Branch / tag / HEAD chips inline in the message cell (`indexRefs` in `Commits.tsx` + `.ref-chip` CSS; right-side chip column still open)
 - ☑ Selectable rows (single-select drives the detail panel via
   `useRepo.selectCommit`; multi-select via ⌘/Ctrl-click toggle, Shift-click
-  range, Shift+↑/↓ extend, ⌘/Ctrl+A select-all, with a count pill + Clear —
-  ready for cherry-pick/compare bulk ops in 0.5)
+  range, Shift+↑/↓ extend, ⌘/Ctrl+A select-all, with a count pill + Clear;
+  exactly two expose Compare, and any selection exposes ordered bulk
+  cherry-pick)
 - ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
 - ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
   row focus; Enter opens details; Esc closes details)
 - ☑ Commit-detail actions: Checkout (detached) + "Tag…" (opens the New-tag
   dialog targeting that commit) + Cherry-pick + Revert (single commit onto HEAD;
-  conflict/success surfaced via toast)
+  merge commits choose a mainline parent; conflict/success surfaced via toast)
 - ☑ Right-click a graph row → `ContextMenu` with the same actions (Checkout /
   Tag… / Cherry-pick / Revert / Copy SHA); keyboard-operable via Menu key /
   Shift+F10 on the focused row (opens at the row corner)

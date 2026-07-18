@@ -98,9 +98,19 @@ Submodules list with status badges (uninitialized, out of date, modified). Doubl
 
 ## Cherry-pick, revert, merge
 
-- **Cherry-pick** and **Revert** act on a single commit, from the commit detail panel or the graph row's context menu.
+- **Cherry-pick** and **Revert** act on a single commit from the commit detail
+  panel or graph row menu. For a merge commit, choose the parent Git should
+  treat as the mainline.
+- Multi-select commits in All Commits to **Cherry-pick selected** in
+  oldest-to-newest order. Exactly two selected commits can also be compared in
+  a changed-file and full-diff dialog.
 - **Merge** ("Merge into <current>" on a branch) opens a dialog with three modes: fast-forward when possible, always create a merge commit (no-FF), or squash — a squash merge leaves the result staged so you write the commit yourself.
 - A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu, behind a confirm step.
+
+Local branches, remote branches, and tags also offer **Compare … with this…**
+in their sidebar menus. The comparison dialog lets you swap or change either
+ref, navigate the changed-file list with the arrow keys, and inspect text and
+image diffs without checking anything out.
 
 If any of these operations hit conflicts, they pause rather than fail — see [Paused operations and conflicts](#paused-operations-and-conflicts) below.
 

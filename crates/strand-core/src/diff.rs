@@ -56,10 +56,8 @@ impl Repo {
     /// and the file view's Compare tab.
     pub fn diff_between(&self, from: &str, to: &str) -> Result<Vec<FileDiff>> {
         let repo = self.git2()?;
-        let from_oid = repo.revparse_single(from)?.id();
-        let to_oid = repo.revparse_single(to)?.id();
-        let from_tree = repo.find_commit(from_oid)?.tree()?;
-        let to_tree = repo.find_commit(to_oid)?.tree()?;
+        let from_tree = repo.revparse_single(from)?.peel_to_commit()?.tree()?;
+        let to_tree = repo.revparse_single(to)?.peel_to_commit()?.tree()?;
         let mut opts = diff_options();
         let diff = repo.diff_tree_to_tree(Some(&from_tree), Some(&to_tree), Some(&mut opts))?;
         collect(diff)
@@ -356,6 +354,31 @@ mod tests {
         assert!(a.patch.contains(" line 1\n"), "patch starts at the top: {}", a.patch);
         assert!(a.patch.contains(" line 20\n"), "patch runs to the bottom: {}", a.patch);
         assert!(a.patch.contains("+LINE 10"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn diff_between_accepts_annotated_tags_and_branches() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("one", None, false).unwrap();
+        {
+            let git = repo.git2().unwrap();
+            let head = git.head().unwrap().peel_to_commit().unwrap();
+            let sig = git.signature().unwrap();
+            git.tag("v1", head.as_object(), &sig, "version one", false).unwrap();
+        }
+
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        repo.stage_paths(&["a.txt".into()]).unwrap();
+        repo.commit("two", None, false).unwrap();
+
+        let diffs = repo.diff_between("refs/tags/v1", "HEAD").unwrap();
+        assert_eq!(diffs.len(), 1);
+        assert!(diffs[0].patch.contains("-one"));
+        assert!(diffs[0].patch.contains("+two"));
 
         let _ = std::fs::remove_dir_all(dir);
     }

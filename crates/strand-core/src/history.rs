@@ -104,11 +104,15 @@ impl Repo {
     /// left in progress with unmerged files to resolve — an expected outcome,
     /// not a failure), `Ok(false)` when it applied cleanly, and `Err` only for
     /// a real failure (e.g. picking a merge commit without `-m`).
-    pub fn cherry_pick(&self, commits: &[String]) -> Result<bool> {
+    pub fn cherry_pick(&self, commits: &[String], mainline: Option<u32>) -> Result<bool> {
         if commits.is_empty() {
             return Err(Error::Other("cherry-pick: no commits given".into()));
         }
         let mut args = vec!["cherry-pick"];
+        let mainline_arg = push_mainline(&mut args, commits, mainline)?;
+        if let Some(value) = mainline_arg.as_deref() {
+            args.push(value);
+        }
         push_revs(&mut args, commits)?;
         self.run_sequencer(&args)
     }
@@ -116,11 +120,15 @@ impl Repo {
     /// Revert one or more commits, recording the inverse as new commits
     /// (`git revert --no-edit <oid>…`). `--no-edit` keeps git from opening an
     /// editor. `Ok(true)` on conflict, like [`cherry_pick`](Repo::cherry_pick).
-    pub fn revert(&self, commits: &[String]) -> Result<bool> {
+    pub fn revert(&self, commits: &[String], mainline: Option<u32>) -> Result<bool> {
         if commits.is_empty() {
             return Err(Error::Other("revert: no commits given".into()));
         }
         let mut args = vec!["revert", "--no-edit"];
+        let mainline_arg = push_mainline(&mut args, commits, mainline)?;
+        if let Some(value) = mainline_arg.as_deref() {
+            args.push(value);
+        }
         push_revs(&mut args, commits)?;
         self.run_sequencer(&args)
     }
@@ -364,6 +372,27 @@ fn push_revs<'a>(args: &mut Vec<&'a str>, commits: &'a [String]) -> Result<()> {
     Ok(())
 }
 
+/// Add `-m <parent-number>` for a single merge commit. Git does not accept one
+/// mainline choice for a list because each merge can have a different parent;
+/// the UI therefore keeps merge commits as deliberate one-at-a-time actions.
+fn push_mainline(
+    args: &mut Vec<&str>,
+    commits: &[String],
+    mainline: Option<u32>,
+) -> Result<Option<String>> {
+    let Some(mainline) = mainline else { return Ok(None); };
+    if mainline == 0 {
+        return Err(Error::Other("mainline parent must be at least 1".into()));
+    }
+    if commits.len() != 1 {
+        return Err(Error::Other(
+            "mainline selection requires exactly one merge commit".into(),
+        ));
+    }
+    args.push("-m");
+    Ok(Some(mainline.to_string()))
+}
+
 /// Reject a revspec git would mis-read as an option. The call sites also pass
 /// `--` so this is belt-and-suspenders, but it gives a clearer error than git's.
 fn validate_ref(rev: &str) -> Result<()> {
@@ -517,7 +546,7 @@ mod tests {
         assert_ne!(head, main_c);
 
         // Revert the file-adding commit on main and confirm it's gone.
-        repo.revert(&[main_c.clone()]).unwrap();
+        repo.revert(&[main_c.clone()], None).unwrap();
         assert!(!dir.join("main.txt").exists(), "revert removed main.txt");
 
         let _ = std::fs::remove_dir_all(dir);
@@ -532,8 +561,34 @@ mod tests {
         git(&dir, &["checkout", "-q", "main"]);
 
         assert!(!dir.join("only-feature.txt").exists());
-        repo.cherry_pick(&[pick]).unwrap();
+        repo.cherry_pick(&[pick], None).unwrap();
         assert!(dir.join("only-feature.txt").exists(), "cherry-picked file present on main");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn merge_commit_mainline_supports_cherry_pick_and_revert() {
+        let (repo, dir) = scratch_repo();
+        let base = write_commit(&dir, "base.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        write_commit(&dir, "feature.txt", "feature\n", "feature");
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "main.txt", "main\n", "main");
+        repo.merge("feature", MergeMode::NoFastForward).unwrap();
+        let merge = git(&dir, &["rev-parse", "HEAD"]);
+
+        // Relative to parent 1 (the old main tip), the merge introduces the
+        // feature side. Reverting removes it while retaining main's own work.
+        repo.revert(&[merge.clone()], Some(1)).unwrap();
+        assert!(!dir.join("feature.txt").exists());
+        assert!(dir.join("main.txt").exists());
+
+        // Apply that same merge delta to a branch cut at the common base.
+        git(&dir, &["checkout", "-q", "-b", "target", &base]);
+        repo.cherry_pick(&[merge], Some(1)).unwrap();
+        assert!(dir.join("feature.txt").exists());
+        assert!(!dir.join("main.txt").exists());
 
         let _ = std::fs::remove_dir_all(dir);
     }

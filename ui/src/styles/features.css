@@ -3014,6 +3014,113 @@ button {
   padding: 3px 7px;
 }
 
+/* ─── Commit / branch comparison ───────────────────────────────────────── */
+.compare-refs-dialog {
+  width: min(1120px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+.compare-refs-summary {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.compare-refs-dialog .cd-close {
+  margin-left: 4px;
+}
+.compare-refs-pickers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--border);
+}
+.compare-refs-pickers label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+.compare-refs-pickers select {
+  min-width: 0;
+  height: 30px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  padding: 0 8px;
+}
+.compare-swap {
+  height: 30px;
+  min-width: 34px;
+  padding: 0;
+}
+.compare-refs-message:empty {
+  display: none;
+}
+.compare-refs-error {
+  margin: 8px 12px 0;
+}
+.compare-refs-body {
+  display: grid;
+  grid-template-columns: minmax(210px, 28%) minmax(0, 1fr);
+  min-height: 0;
+}
+.compare-refs-files {
+  overflow: auto;
+  border-right: 0.5px solid var(--border);
+  padding: 4px;
+}
+.compare-refs-file {
+  width: 100%;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 4px 6px;
+}
+.compare-refs-file:hover,
+.compare-refs-file:focus-visible {
+  background: var(--bg-hover);
+}
+.compare-refs-file.active {
+  background: var(--bg-active);
+}
+.compare-refs-file .path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compare-refs-file .counts {
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.compare-refs-diff {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.compare-refs-empty {
+  padding: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.mainline-dialog .mm-hint {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Resizable panel handles ──────────────────────────────────────────────
  * `react-resizable-panels` renders a div with `[data-panel-resize-handle-id]`
  * for each handle. We give it a 1px visible line on a wider hit area, with
@@ -3095,6 +3202,16 @@ button {
 .since-baseline-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+.since-baseline-btn:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+.graph-bulk-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .graph-sel-count {
   display: flex;

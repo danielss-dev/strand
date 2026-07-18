@@ -79,9 +79,9 @@ current official product material for:
 | Network preferences | Per-repo default pull strategy shipped; optional pull autostash, explicit prune/no-prune, and separate fetch/push URLs remain | Daily-driver |
 | Fine-grained staging | Individual-line stage, unstage, recoverable discard, pointer range selection, and keyboard line picker shipped 2026-07-18 | Complete for 1.0 daily use |
 | Stashes | Branch from stash shipped 2026-07-18; inspect/reveal a stash from the sidebar without applying it remains | Daily-driver |
-| Multi-commit actions | Cherry-pick selected commits in graph order; revert merge commits with a mainline choice; compare selected commits/branches | Daily-driver |
+| Multi-commit actions | Ordered multi-commit cherry-pick, two-commit comparison, and merge-mainline cherry-pick/revert shipped 2026-07-18 | Complete for 1.0 daily use |
 | Rebase | `edit` / pause-to-amend and `--rebase-merges` preservation | Daily-driver |
-| Branch comparison | First-class branch-to-branch changed-file/diff view, not only “Review current vs this” | Daily-driver |
+| Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
 | Remote management | Prune one remote; edit fetch and push URLs separately; change the default remote; inspect refspecs | Daily-driver |
 | Repository maintenance | `git maintenance` / `gc`, integrity check, and an activity log with exact commands and output | Daily-driver |
 | File actions | Open/reveal externally, copy relative or absolute path, jump directly to history/blame, delete, and create file/folder where allowed | Daily-driver |
@@ -143,6 +143,6 @@ disabled with a reason, and the primary action stays first.
    checkout, and custom actions, taking only the items that fit the 1.0 date.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
-initialization, stash-to-branch, and line-level staging are now shipped
-foundations. The next bounded implementation slice is multi-commit actions and
-branch comparison.
+initialization, stash-to-branch, line-level staging, multi-commit actions, and
+branch/ref comparison are now shipped foundations. The next bounded
+implementation slice is interactive-rebase edit and merge preservation.

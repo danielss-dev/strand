@@ -24,6 +24,7 @@ import type { RemoteDialogMode } from '../views/RemoteDialog';
 import type { BranchNetworkDialogMode } from '../views/BranchNetworkDialog';
 import { RenameFileDialog } from '../views/RenameFileDialog';
 import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
+import { CompareRefsDialog, type CompareChoice } from '../views/CompareRefsDialog';
 
 type SideTab = 'git' | 'files';
 
@@ -218,6 +219,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const rebase = useRepo((s) => s.rebase);
   const setBaseline = useRepo((s) => s.setBaseline);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
+  const compareChoices = useMemo<CompareChoice[]>(
+    () => [
+      ...refs.branches.map((branch) => ({ value: branch.name, label: `Local · ${branch.name}` })),
+      ...refs.remote_branches.map((branch) => ({ value: branch.name, label: `Remote · ${branch.name}` })),
+      ...refs.tags.map((tag) => ({ value: tag.full_name, label: `Tag · ${tag.name}` })),
+    ],
+    [refs],
+  );
+  const [refCompare, setRefCompare] = useState<{ from: string; to: string } | null>(null);
   // Branches that are HEAD of another worktree — checkout here is guaranteed
   // to fail, so their rows badge the fact and open that worktree instead.
   const worktreeByBranch = useMemo(
@@ -566,6 +576,14 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     })();
   };
 
+  const compareAgainst = (target: string) => {
+    if (!currentBranch) {
+      onToast('Check out a local branch before comparing refs', 'error');
+      return;
+    }
+    setRefCompare({ from: target, to: currentBranch });
+  };
+
   const branchMenu = (b: Branch): MenuItem[] => {
     const newBranchItem: MenuItem = {
       label: 'New branch from here…',
@@ -621,6 +639,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
               ? onInteractiveRebase(up, up)
               : onToast('No upstream configured — use “Rebase from here” on a commit'),
         },
+        {
+          label: 'Compare branch…',
+          icon: 'compare',
+          disabled: compareChoices.length < 2,
+          onSelect: () => {
+            const other = compareChoices.find((choice) => choice.value !== b.name);
+            if (other) setRefCompare({ from: other.value, to: b.name });
+          },
+        },
         { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
         { label: 'Copy full ref', icon: 'file', onSelect: () => { void copyToClipboard(b.full_name); onToast('Branch ref copied'); } },
         { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
@@ -640,6 +667,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       renameItem,
     ];
     if (currentBranch) {
+      items.push({ label: `Compare ${currentBranch} with this…`, icon: 'compare', onSelect: () => compareAgainst(b.name) });
       items.push({ label: `Review ${currentBranch} vs this`, icon: 'eye', onSelect: () => reviewAgainst(b.name) });
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
       items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
@@ -658,6 +686,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     const items: MenuItem[] = [];
     items.push({ label: 'Fetch this branch', icon: 'arrow-down', onSelect: () => onFetchBranch(rb) });
     if (currentBranch) {
+      items.push({
+        label: `Compare ${currentBranch} with this…`,
+        icon: 'compare',
+        onSelect: () => compareAgainst(rb.name),
+      });
       items.push({
         label: `Pull into ${currentBranch}`,
         icon: 'arrow-down',
@@ -760,6 +793,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
     ];
+    if (currentBranch) {
+      items.push({ label: `Compare ${currentBranch} with this tag…`, icon: 'compare', onSelect: () => compareAgainst(tg.full_name) });
+    }
     if (tagRemote) {
       items.push({ label: `Push to ${tagRemote}`, icon: 'arrow-up', onSelect: () => runTagPush(tg.name) });
       // Gray out remote-delete when we know the remote doesn't have this tag.
@@ -1005,6 +1041,16 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           dirty={wtMerge.dirty}
           onClose={() => setWtMerge(null)}
           onToast={onToast}
+        />
+      )}
+      {refCompare && meta && (
+        <CompareRefsDialog
+          repoPath={meta.path}
+          choices={compareChoices}
+          initialFrom={refCompare.from}
+          initialTo={refCompare.to}
+          title="Compare branches and refs"
+          onClose={() => setRefCompare(null)}
         />
       )}
       <div className="side-primary">
