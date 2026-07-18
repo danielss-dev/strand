@@ -1978,6 +1978,13 @@ diagnostics verbatim inside translated Strand context and intentionally withhold
 a locale picker until another complete catalog exists. TypeScript and 275 UI
 tests, including focused catalog/formatting coverage, are green.
 
+**Desktop window state restored (2026-07-18):** The cross-platform Tauri
+window-state plugin now saves and restores the main window's size, position, and
+maximized state around the existing hidden-window startup, so restoration does
+not flash a default frame. An exact production-protocol Windows build was driven
+with Computer Use through maximize, close, and relaunch; the custom titlebar
+returned with Restore active and the prior session intact.
+
 ---
 
 ## 1.1+ — Post-1.0

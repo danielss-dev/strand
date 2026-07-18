@@ -67,7 +67,11 @@ All of these are rebindable in Settings → Keyboard; "Next repository" and "Pre
 
 ## Persistence
 
-Strand restores your session across launches: open tabs, the active repository, pane sizes, per-repo diff layout, and workspaces all come back as you left them. A recents list is kept automatically and surfaces in the empty state, the `+` menu, the quick switcher, and the palette.
+Strand restores your session across launches: window size, position, and
+maximized state; open tabs and the active repository; pane sizes; per-repo diff
+layout; and workspaces all come back as you left them. A recents list is kept
+automatically and surfaces in the empty state, the `+` menu, the quick switcher,
+and the palette.
 
 The active repository also stays fresh on its own: Strand refreshes on window focus and a file watcher live-refreshes the open tab while files change — useful when an AI agent is editing in the background. `Mod+R` forces a refresh.
 

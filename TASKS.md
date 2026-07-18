@@ -406,7 +406,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Open in Editor/Terminal; repo-scoped items disable when no repo is open and
   the menu reinstalls when that flips; App's keydown handler skips menu-owned
   accelerators via `appMenuInstalled()`). In-window Win/Linux menubar still ☐.
-- ☐ Window state persistence (size, position, maximized)
+- ☑ Window state persistence: cross-platform Tauri window-state plugin restores
+  size, position, and maximized state without startup flash; exact production-
+  protocol binary verified maximize → close → relaunch with Computer Use
+  (`tauri-plugin-window-state`, 2026-07-18).
 - ☐ Multi-window for "open file detached" if needed
 - ☑ Drag-and-drop folder onto window → opens repo
 - ☐ Deep-link handler (`strand://open?path=…`) for CLI companion

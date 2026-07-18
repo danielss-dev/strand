@@ -1714,3 +1714,10 @@ plural and browser-locale formatting helpers for counts, dates, numbers, and
 percentages. Keep Git/provider diagnostics verbatim and translate only Strand's
 context around them. Do not expose a locale picker until another catalog is
 complete enough to avoid a partially translated application.
+
+**Window-state verification must cross a real process boundary (2026-07-18).**
+Keep the main Tauri window hidden in config so `tauri-plugin-window-state` can
+restore geometry before the frame appears; the existing setup may then apply
+Windows decorations/shadow and show it. Verify persistence by changing state,
+closing the process through the UI, and launching the exact workspace binary.
+A same-process hide/show or app-identity launch does not prove disk restore.
