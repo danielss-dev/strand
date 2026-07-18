@@ -171,6 +171,7 @@ jobs:
     env:
       CARGO_NET_RETRY: 10
       CARGO_HTTP_MULTIPLEXING: 'false'
+      VERSION: ${{ github.event.inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -220,6 +221,9 @@ jobs:
       - name: Verify release security policy
         run: pnpm release:check-security
 
+      - name: Verify release tag matches Strand version
+        run: node scripts/check-release-version.mjs
+
       - name: Install Cosign
         if: matrix.platform == 'ubuntu-22.04'
         uses: sigstore/cosign-installer@v4.1.2
@@ -241,10 +245,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-          # --- Tauri auto-updater signing (optional) ---
-          # Only used once bundle.createUpdaterArtifacts is enabled and the
-          # updater pubkey placeholder in tauri.conf.json is replaced. Harmless
-          # to leave set/empty otherwise.
+          # --- Tauri auto-updater signing (required) ---
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -256,6 +257,9 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Verify updater signature identity
+        run: pnpm release:check-updater-signatures
 
       - name: Sign and verify Linux AppImage with Sigstore
         if: matrix.platform == 'ubuntu-22.04'
@@ -310,6 +314,7 @@ jobs:
         run: |
           node scripts/azdo-helper-manifest.mjs helper-dist helper-dist/strand-azdo-manifest.json
           pnpm tauri signer sign helper-dist/strand-azdo-manifest.json
+          node scripts/check-updater-signatures.mjs helper-dist/strand-azdo-manifest.json.sig
           node -e "const fs=require('node:fs'); const source='helper-dist/strand-azdo-manifest.json.sig'; fs.writeFileSync('helper-dist/strand-azdo-manifest.json.minisig', Buffer.from(fs.readFileSync(source, 'utf8').trim(), 'base64')); fs.unlinkSync(source)"
       - name: Upload helper assets to the exact release tag
         env:

@@ -1858,8 +1858,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☑ Hook execution warning on fresh clones (`CloneDialog` trust notice, placed
   before URL entry and verified in the built app with Computer Use, 2026-07-18)
 - ☑ Signed update manifest enforcement (`check-release-security.mjs` locks
-  `createUpdaterArtifacts`, the HTTPS stable channel, and updater key ID;
-  required by CI and every release job)
+  `createUpdaterArtifacts`, the HTTPS stable channel, updater key ID, and
+  generated-signature gate; `check-updater-signatures.mjs` rejects desktop and
+  helper artifacts whose signing key differs from the embedded public key,
+  including helpers-only releases; required by CI/release workflows)
 - ☑ Shell-out config hardening — `GIT_SAFE_CONFIG` (`-c core.fsmonitor=` /
   `core.pager=cat`) prepended on network/history/stash; conflict read/write path
   now canonicalizes to block symlink escape (`crates/strand-core`).

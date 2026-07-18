@@ -83,6 +83,10 @@ const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';
 if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {
   fail('release jobs do not all check out the requested tag');
 }
+const versionCheck = 'run: node scripts/check-release-version.mjs';
+if (releaseWorkflow.split(versionCheck).length - 1 < 2) {
+  fail('desktop and helper release jobs do not both verify the requested version');
+}
 for (const fragment of [
   'id-token: write',
   'uses: sigstore/cosign-installer@v4.1.2',
@@ -90,9 +94,11 @@ for (const fragment of [
   'cosign verify-blob',
   '--certificate-identity "$IDENTITY"',
   "--certificate-oidc-issuer 'https://token.actions.githubusercontent.com'",
+  'pnpm release:check-updater-signatures',
+  'node scripts/check-updater-signatures.mjs helper-dist/strand-azdo-manifest.json.sig',
 ]) {
   if (!releaseWorkflow.includes(fragment)) {
-    fail(`Linux Sigstore release policy is missing: ${fragment}`);
+    fail(`release workflow policy is missing: ${fragment}`);
   }
 }
 

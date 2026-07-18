@@ -14,6 +14,7 @@ pnpm --filter ./ui exec tsc --noEmit
 pnpm --filter ./ui exec vitest run
 cargo check -p strand-core -p strand-tauri
 cargo test -p strand-core -p strand-tauri
+cargo clippy -p strand-core -p strand-tauri -- -D warnings
 pnpm build
 ```
 
@@ -26,10 +27,11 @@ deliberate maintainer action.
 
 - [x] macOS Developer ID signing and notarization are wired and previously
   validated on the universal build.
-- [x] Tauri updater artifacts and manifests are authenticated by the embedded
-  minisign public key; the stable updater endpoint is HTTPS and pinned by
-  `scripts/check-release-security.mjs`. Strand 1.0 intentionally exposes only
-  this stable channel; selectable beta updates are post-1.0.
+- [x] The embedded minisign public key and HTTPS stable endpoint are pinned by
+  `scripts/check-release-security.mjs`; generated desktop/helper signatures
+  hard-fail on another key through `scripts/check-updater-signatures.mjs`.
+  Strand 1.0 intentionally exposes only this stable channel; selectable beta
+  updates are post-1.0.
 - [x] Linux AppImages receive a keyless Sigstore bundle in release CI. The same
   job immediately verifies the artifact against the exact Strand release
   workflow identity and GitHub Actions OIDC issuer before upload.
@@ -37,6 +39,10 @@ deliberate maintainer action.
   signing profile, then verify both the app executable and MSI with
   `Get-AuthenticodeSignature`. This requires a purchased external identity and
   cannot be manufactured from repository code.
+- [ ] Build the exact candidate with updater key `84FCBFD2A981CE5D` and pass
+  `pnpm release:check-updater-signatures`. The 2026-07-18 local MSI correctly
+  failed this gate because the machine-wide environment supplied key
+  `5B0DEABB5904DD1F`; no key was rotated or disclosed.
 - [ ] Run the updater end to end from the last public version to the 1.0 draft
   promoted through a disposable test endpoint, then confirm the normal stable
   endpoint only sees the published release.
@@ -61,6 +67,17 @@ the `wt -d <active-repository>` preset. This closes the Windows preset slice,
 not the clean-install, publisher-signature, updater, or uninstall rows. macOS
 and Linux runtime rows still require their actual platforms; cross-compilation
 is not equivalent evidence.
+
+The exact optimized 1.0.0 executable was also launched by absolute path with
+Computer Use on 2026-07-18. Restored repositories, Local Changes, Worktrees,
+the command palette, all nine Settings sections, Privacy disclosure, and the
+Updates page reporting `Strand 1.0.0` rendered and operated normally. The
+candidate executable is 26,828,800 bytes with SHA-256
+`159C61298A5B4C14F52909B9119556F3443CCB64016788ED8305C14C508F5B47`.
+The MSI builds at 17,088,512 bytes with SHA-256
+`F1FA01179037B12E3D607EF6A44135060D963AEBF0DDE99FB618B125AF061C37`.
+Both remain intentionally unpromoted: Authenticode reports `NotSigned`, and
+the MSI updater signature has the mismatched key recorded above.
 
 ## Desktop smoke pass
 

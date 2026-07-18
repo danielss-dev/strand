@@ -12,6 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "release:check-security": "node scripts/check-release-security.mjs",
+    "release:check-updater-signatures": "node scripts/check-updater-signatures.mjs",
     "version:set": "node scripts/bump-version.mjs"
   },
   "devDependencies": {

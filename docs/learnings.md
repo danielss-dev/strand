@@ -1750,3 +1750,12 @@ Server helper PAT uses `keyring` for Keychain, Windows Credential Manager, and
 Linux Secret Service. Stable 1.0 has no product telemetry and only the
 user-reviewed crash-report flow; adding telemetry or another updater channel is
 a new post-1.0 trust decision, not release polish.
+
+**Tauri's updater key-mismatch warning is a release failure (2026-07-18).**
+The bundler can successfully emit installers and updater `.sig` files even
+when `TAURI_SIGNING_PRIVATE_KEY` does not match the public key embedded in the
+app. Always run `scripts/check-updater-signatures.mjs` on generated desktop and
+helper signatures and compare packet key IDs, including helpers-only release
+paths. Do not rotate the embedded key to accommodate an unexpected machine or
+CI secret: select the established release key, keep the draft unpromoted, and
+then run the end-to-end updater rehearsal.

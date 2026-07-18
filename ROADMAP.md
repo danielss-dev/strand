@@ -2066,6 +2066,17 @@ passes `cargo clippy -p strand-core -p strand-tauri -- -D warnings` on Rust
 signature, native `div_ceil`, and a needless-borrow removal; the Tauri suite
 remains green.
 
+**Optimized 1.0 Windows candidate audited (2026-07-18):** The exact 1.0.0
+release executable passes the complete local TypeScript, Vitest (275), Rust
+(224), clippy, security, and frontend-build gates and was driven by absolute
+path with Computer Use through restored repositories, Worktrees, the command
+palette, Settings, Privacy, and Updates. The optimized executable is 26.8 MB;
+the MSI is 17.1 MB. Promotion remains fail-closed: both lack the external
+Windows publisher signature, and the local machine-wide updater key produced
+ID `5B0DEABB5904DD1F` instead of embedded ID `84FCBFD2A981CE5D`. A new release
+workflow gate rejects that mismatch for desktop and helper artifacts; no key
+was rotated and no draft/tag was published.
+
 ---
 
 ## 1.1+ — Post-1.0

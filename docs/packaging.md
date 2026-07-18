@@ -172,6 +172,14 @@ checkout, and Linux Sigstore identity flow. Any capability, channel, or signing
 change must be reviewed and updated in the checker in the same commit; a silent
 broadening or signing removal fails CI.
 
+After packaging, run `pnpm release:check-updater-signatures` (or pass exact
+`.sig` paths to `scripts/check-updater-signatures.mjs`). It reads every Tauri
+updater signature envelope and requires its minisign key ID to match the public
+key embedded in the app. The release workflow runs this after every desktop
+build and before helper promotion, including the helpers-only path. Tauri can
+finish a bundle while only warning about a private/public key mismatch; that
+warning is a failed release, never an artifact to promote.
+
 **Before tagging:** bump `version` in `tauri.conf.json`, the workspace
 `Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
 from the config version, not the tag.
@@ -210,8 +218,10 @@ The macOS updater artifact (`Strand.app.tar.gz` + `.sig`) comes from the
 **`app`** bundle target, not `dmg` — so `bundle.targets` must keep `"app"`
 alongside `"dmg"`, or the Mac build only warns ("no updater-enabled targets
 were built") and ships no update. Windows (`msi`) and Linux (`appimage`) are
-updater-enabled on their own. Verified 2026-06-01: the generated `.sig` key ID
-matches the configured pubkey (`84FCBFD2A981CE5D`).
+updater-enabled on their own. Verified 2026-06-01: the release key's generated
+`.sig` key ID matches the configured pubkey (`84FCBFD2A981CE5D`). A 2026-07-18
+local candidate exposed a different machine-wide key (`5B0DEABB5904DD1F`); the
+artifact gate rejected it without changing or disclosing that external secret.
 
 ### Producing the macOS cert secret
 
