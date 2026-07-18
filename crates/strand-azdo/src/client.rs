@@ -305,6 +305,7 @@ fn request_spec(operation: Operation) -> RequestSpec {
                 "vote": match vote {
                     strand_azdo_protocol::ReviewVote::Approve => 10,
                     strand_azdo_protocol::ReviewVote::RequestChanges => -10,
+                    strand_azdo_protocol::ReviewVote::Reset => 0,
                 }
             })),
             unwrap_value: false,
@@ -568,6 +569,16 @@ mod tests {
             .path
             .ends_with("pullrequests/12/reviewers/reviewer%2Fid"));
         assert_eq!(vote.body.unwrap()["vote"], -10);
+
+        let reset_vote = request_spec(Operation::SetVote {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            reviewer_id: "reviewer/id".into(),
+            vote: strand_azdo_protocol::ReviewVote::Reset,
+        });
+        assert_eq!(reset_vote.method, Method::PUT);
+        assert_eq!(reset_vote.body.unwrap()["vote"], 0);
 
         let policy = request_spec(Operation::Policies {
             project: "Project".into(),

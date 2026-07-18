@@ -67,6 +67,18 @@ const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: Strin
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       viewerCanUpdate
+      reviews(last: 100) {
+        nodes {
+          id
+          body
+          state
+          submittedAt
+          url
+          viewerCanUpdate
+          viewerDidAuthor
+          author { login avatarUrl }
+        }
+      }
       reviewThreads(first: 100) {
         nodes {
           id
@@ -87,6 +99,16 @@ const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: Strin
         }
       }
     }
+  }
+}"#;
+const GITHUB_REVIEW_UPDATE_MUTATION: &str = r#"mutation($reviewId: ID!, $body: String!) {
+  updatePullRequestReview(input: { pullRequestReviewId: $reviewId, body: $body }) {
+    pullRequestReview { id }
+  }
+}"#;
+const GITHUB_REVIEW_DISMISS_MUTATION: &str = r#"mutation($reviewId: ID!, $message: String!) {
+  dismissPullRequestReview(input: { pullRequestReviewId: $reviewId, message: $message }) {
+    pullRequestReview { id }
   }
 }"#;
 const GITHUB_THREAD_REPLY_MUTATION: &str = r#"mutation($threadId: ID!, $body: String!) {
@@ -161,6 +183,19 @@ pub struct PullRequestReviewer {
     pub name: String,
     pub status: String,
     pub required: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PullRequestReview {
+    pub id: String,
+    pub author: String,
+    pub avatar_url: Option<String>,
+    pub state: String,
+    pub body: String,
+    pub submitted_at: String,
+    pub url: String,
+    pub can_update: bool,
+    pub can_dismiss: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -241,6 +276,7 @@ pub struct PullRequest {
     pub changed_files: Option<u64>,
     pub labels: Vec<String>,
     pub reviewers: Vec<PullRequestReviewer>,
+    pub reviews: Vec<PullRequestReview>,
     pub checks: Vec<PullRequestCheck>,
     pub checks_complete: bool,
     pub comments: Vec<PullRequestComment>,
@@ -622,6 +658,44 @@ pub fn submit_review(
         HostRepo::AzureServer { profile_id, project, repo, .. } => submit_review_azure_server(
             profile_id, &project, &repo, id, event, body, comments, expected_head,
         ),
+    }
+}
+
+pub fn update_review(path: &str, _id: u64, review_id: &str, body: &str) -> Result<()> {
+    validate_review_id(review_id)?;
+    validate_comment(body)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { .. } => update_review_github(path, review_id, body),
+        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
+            "Azure DevOps votes do not have an editable review summary. Submit a new summary comment or change the vote instead."
+                .into(),
+        ),
+    }
+}
+
+pub fn dismiss_review(
+    path: &str,
+    id: u64,
+    review_id: &str,
+    message: &str,
+) -> Result<()> {
+    validate_review_id(review_id)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { .. } => {
+            validate_comment(message)?;
+            dismiss_review_github(path, review_id, message)
+        }
+        HostRepo::Azure { organization, .. } => {
+            reset_review_azure(path, &organization, id, review_id)
+        }
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => reset_review_azure_server(profile_id, &project, &repo, id, review_id),
     }
 }
 
@@ -1016,8 +1090,10 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         ));
     }
     pull_request.checks_complete = true;
-    let (review_threads, can_mark_ready) = github_review_threads(cwd, &owner, &repo, id)?;
+    let (review_threads, reviews, can_mark_ready) =
+        github_review_threads(cwd, &owner, &repo, id)?;
     pull_request.can_mark_ready = pull_request.is_draft && can_mark_ready;
+    pull_request.reviews = reviews;
     pull_request.comments.extend(
         review_threads
             .iter()
@@ -1036,7 +1112,7 @@ fn github_review_threads(
     owner: &str,
     repo: &str,
     id: u64,
-) -> Result<(Vec<PullRequestReviewThread>, bool)> {
+) -> Result<(Vec<PullRequestReviewThread>, Vec<PullRequestReview>, bool)> {
     let query = format!("query={GITHUB_REVIEW_THREADS_QUERY}");
     let owner = format!("owner={owner}");
     let repo = format!("repo={repo}");
@@ -1053,6 +1129,7 @@ fn github_review_threads(
         .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))?;
     Ok((
         parse_github_review_threads(&value),
+        parse_github_reviews(&value),
         parse_github_can_mark_ready(&value),
     ))
 }
@@ -1244,13 +1321,31 @@ fn set_thread_resolved_github(
     })
 }
 
+fn update_review_github(cwd: &str, review_id: &str, body: &str) -> Result<()> {
+    run_github_graphql_mutation(
+        cwd,
+        GITHUB_REVIEW_UPDATE_MUTATION,
+        serde_json::json!({ "reviewId": review_id, "body": body }),
+    )?;
+    Ok(())
+}
+
+fn dismiss_review_github(cwd: &str, review_id: &str, message: &str) -> Result<()> {
+    run_github_graphql_mutation(
+        cwd,
+        GITHUB_REVIEW_DISMISS_MUTATION,
+        serde_json::json!({ "reviewId": review_id, "message": message }),
+    )?;
+    Ok(())
+}
+
 fn github_graphql_payload(query: &str, variables: Value) -> Value {
     serde_json::json!({ "query": query, "variables": variables })
 }
 
 fn run_github_graphql_mutation(cwd: &str, query: &str, variables: Value) -> Result<Value> {
     let input = serde_json::to_vec(&github_graphql_payload(query, variables))
-        .map_err(|error| format!("Could not encode GitHub review-thread request: {error}"))?;
+        .map_err(|error| format!("Could not encode GitHub review request: {error}"))?;
     let output = run_command_input(
         cwd,
         "gh",
@@ -1259,7 +1354,7 @@ fn run_github_graphql_mutation(cwd: &str, query: &str, variables: Value) -> Resu
         Some(&input),
     )?;
     serde_json::from_slice(&output)
-        .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))
+        .map_err(|error| format!("GitHub CLI returned invalid review JSON: {error}"))
 }
 
 fn github_inline_comment_payload(
@@ -1770,6 +1865,35 @@ fn submit_review_azure_server(
         add_comment_azure_server(profile_id, project.into(), repo.into(), id, body)
             .map_err(|error| review_summary_error(event, error))?;
     }
+    Ok(())
+}
+
+fn reset_review_azure_server(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    id: u64,
+    review_id: &str,
+) -> Result<()> {
+    let viewer_id = azure_server_viewer_id(profile_id)?;
+    if viewer_id != review_id {
+        return Err("Azure DevOps only lets Strand reset the signed-in reviewer's vote".into());
+    }
+    let current = server_show(profile_id, project, repo, id)?;
+    let has_vote = array(&current, "reviewers").iter().any(|reviewer| {
+        text(reviewer.get("id")).as_deref() == Some(review_id)
+            && reviewer.get("vote").and_then(Value::as_i64).unwrap_or(0) != 0
+    });
+    if !has_vote {
+        return Err("The signed-in Azure DevOps review no longer has a vote to reset".into());
+    }
+    server_execute(profile_id, AzdoOperation::SetVote {
+        project: project.into(),
+        repository: repo.into(),
+        id,
+        reviewer_id: viewer_id,
+        vote: AzdoReviewVote::Reset,
+    })?;
     Ok(())
 }
 
@@ -2321,6 +2445,29 @@ fn submit_review_azure(
     Ok(())
 }
 
+fn reset_review_azure(cwd: &str, organization: &str, id: u64, review_id: &str) -> Result<()> {
+    let viewer = azure_viewer(cwd)?;
+    let current = azure_pr_value(cwd, organization, id)?;
+    let owns_vote = array(&current, "reviewers").iter().any(|reviewer| {
+        text(reviewer.get("id")).as_deref() == Some(review_id)
+            && text(reviewer.get("uniqueName"))
+                .is_some_and(|identity| identity.eq_ignore_ascii_case(&viewer))
+            && reviewer.get("vote").and_then(Value::as_i64).unwrap_or(0) != 0
+    });
+    if !owns_vote {
+        return Err("Azure DevOps only lets Strand reset the signed-in reviewer's current vote".into());
+    }
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id_arg = id.to_string();
+    run_command(
+        cwd, "az",
+        &["repos", "pr", "set-vote", "--id", &id_arg, "--vote", "reset",
+          "--organization", &organization_url, "--output", "json", "--only-show-errors"],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
 fn merge_azure(
     cwd: &str,
     organization: &str,
@@ -2754,6 +2901,18 @@ fn validate_thread_id(thread_id: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_review_id(review_id: &str) -> Result<()> {
+    if review_id.trim().is_empty()
+        || review_id.len() > MAX_THREAD_ID_BYTES
+        || review_id.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return Err(
+            "Review is missing or invalid; refresh the pull request and try again".into(),
+        );
+    }
+    Ok(())
+}
+
 fn validate_create(
     source_branch: &str,
     target_branch: &str,
@@ -3092,6 +3251,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
             .filter_map(|label| text(label.get("name")))
             .collect(),
         reviewers,
+        reviews: Vec::new(),
         checks,
         checks_complete: value.get("statusCheckRollup").is_some(),
         comments,
@@ -3124,6 +3284,39 @@ fn parse_github_commits(value: &Value) -> Vec<PullRequestCommit> {
                     .or_else(|| text(commit.get("authoredDate")))
                     .unwrap_or_default(),
                 url: None,
+            })
+        })
+        .collect()
+}
+
+fn parse_github_reviews(value: &Value) -> Vec<PullRequestReview> {
+    let can_manage = value
+        .pointer("/data/repository/pullRequest/viewerCanUpdate")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    value
+        .pointer("/data/repository/pullRequest/reviews/nodes")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|review| {
+            let state = text(review.get("state")).unwrap_or_else(|| "unknown".into());
+            Some(PullRequestReview {
+                id: text(review.get("id"))?,
+                author: text(review.pointer("/author/login"))
+                    .unwrap_or_else(|| "unknown".into()),
+                avatar_url: text(review.pointer("/author/avatarUrl")),
+                body: text(review.get("body")).unwrap_or_default(),
+                submitted_at: text(review.get("submittedAt")).unwrap_or_default(),
+                url: text(review.get("url")).unwrap_or_default(),
+                can_update: review
+                    .get("viewerCanUpdate")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                can_dismiss: can_manage
+                    && matches!(state.as_str(), "APPROVED" | "CHANGES_REQUESTED"),
+                state,
             })
         })
         .collect()
@@ -3298,6 +3491,38 @@ fn parse_azure_pr(
             })
         })
         .collect::<Vec<_>>();
+    let reviews = array(value, "reviewers")
+        .iter()
+        .filter_map(|reviewer| {
+            let vote = reviewer.get("vote").and_then(Value::as_i64).unwrap_or(0);
+            if vote == 0 {
+                return None;
+            }
+            let state = match vote {
+                10 => "approved",
+                5 => "approved with suggestions",
+                -5 => "waiting for author",
+                -10 => "changes requested",
+                _ => "reviewed",
+            };
+            let reviewer_identity = text(reviewer.get("uniqueName"));
+            Some(PullRequestReview {
+                id: text(reviewer.get("id"))?,
+                author: text(reviewer.get("displayName")).unwrap_or_else(|| "unknown".into()),
+                avatar_url: text(reviewer.get("imageUrl")),
+                state: state.into(),
+                body: String::new(),
+                submitted_at: String::new(),
+                url: String::new(),
+                can_update: false,
+                can_dismiss: viewer.is_some_and(|identity| {
+                    reviewer_identity
+                        .as_deref()
+                        .is_some_and(|reviewer| reviewer.eq_ignore_ascii_case(identity))
+                }),
+            })
+        })
+        .collect::<Vec<_>>();
     let review_status = if reviewers.is_empty() {
         String::new()
     } else if reviewers
@@ -3353,6 +3578,7 @@ fn parse_azure_pr(
             .filter_map(|label| text(label.get("name")))
             .collect(),
         reviewers,
+        reviews,
         checks: Vec::new(),
         checks_complete: false,
         comments: Vec::new(),
@@ -3724,7 +3950,10 @@ mod tests {
               "targetRefName": "refs/heads/main",
               "closedDate": "2026-07-15T12:00:00Z",
               "lastMergeSourceCommit": {"commitId": "2222222222222222222222222222222222222222"},
-              "reviewers": [{"displayName": "Grace", "vote": 10, "isRequired": true}]
+              "reviewers": [
+                {"id": "grace-id", "displayName": "Grace", "uniqueName": "grace@example.com", "vote": 10, "isRequired": true},
+                {"id": "ada-id", "displayName": "Ada", "uniqueName": "ada@example.com", "vote": -5, "isRequired": false}
+              ]
             }"#,
         )
         .unwrap();
@@ -3741,6 +3970,11 @@ mod tests {
         assert!(azure.can_mark_ready);
         assert_eq!(azure.review_status, "approved");
         assert!(azure.reviewers[0].required);
+        assert_eq!(azure.reviews.len(), 2);
+        assert!(!azure.reviews[0].can_dismiss);
+        assert!(azure.reviews[1].can_dismiss);
+        assert_eq!(azure.reviews[1].state, "waiting for author");
+        assert!(azure.reviews[1].url.is_empty());
 
         let commits = parse_azure_commits(&serde_json::json!({ "value": [{
             "commitId": "3333333333333333333333333333333333333333",
@@ -3987,7 +4221,18 @@ mod tests {
     #[test]
     fn normalizes_github_review_threads_with_replies_and_ranges() {
         let value = serde_json::json!({
-            "data": { "repository": { "pullRequest": { "viewerCanUpdate": true, "reviewThreads": { "nodes": [{
+            "data": { "repository": { "pullRequest": { "viewerCanUpdate": true,
+              "reviews": { "nodes": [{
+                "id": "PRR_1", "body": "Looks good.", "state": "APPROVED",
+                "submittedAt": "2026-07-13T11:00:00Z", "url": "https://github.com/acme/repo/pull/42#pullrequestreview-1",
+                "viewerCanUpdate": true, "viewerDidAuthor": true,
+                "author": { "login": "ada", "avatarUrl": "https://avatars.example/ada" }
+              }, {
+                "id": "PRR_2", "body": "Pending note.", "state": "COMMENTED",
+                "viewerCanUpdate": false, "viewerDidAuthor": false,
+                "author": { "login": "octo" }
+              }] },
+              "reviewThreads": { "nodes": [{
                 "id": "PRRT_1", "isResolved": false, "isOutdated": false,
                 "viewerCanReply": true, "viewerCanResolve": true, "viewerCanUnresolve": false,
                 "path": "src/lib.rs", "line": 29, "startLine": 27,
@@ -4004,6 +4249,7 @@ mod tests {
         });
 
         let threads = parse_github_review_threads(&value);
+        let reviews = parse_github_reviews(&value);
         assert!(parse_github_can_mark_ready(&value));
         assert_eq!(threads.len(), 1);
         assert_eq!(threads[0].path, "src/lib.rs");
@@ -4016,6 +4262,11 @@ mod tests {
         assert_eq!(threads[0].comments.len(), 2);
         assert_eq!(threads[0].comments[1].author, "ada");
         assert_eq!(threads[0].comments[0].path.as_deref(), Some("src/lib.rs"));
+        assert_eq!(reviews.len(), 2);
+        assert!(reviews[0].can_update);
+        assert!(reviews[0].can_dismiss);
+        assert!(!reviews[1].can_update);
+        assert!(!reviews[1].can_dismiss);
     }
 
     #[test]
@@ -4055,6 +4306,19 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("addPullRequestReviewThreadReply"));
+
+        let update = github_graphql_payload(
+            GITHUB_REVIEW_UPDATE_MUTATION,
+            serde_json::json!({ "reviewId": "PRR_1", "body": "Updated." }),
+        );
+        assert_eq!(update["variables"]["reviewId"], "PRR_1");
+        assert!(update["query"].as_str().unwrap().contains("updatePullRequestReview"));
+        let dismiss = github_graphql_payload(
+            GITHUB_REVIEW_DISMISS_MUTATION,
+            serde_json::json!({ "reviewId": "PRR_1", "message": "Superseded." }),
+        );
+        assert_eq!(dismiss["variables"]["message"], "Superseded.");
+        assert!(dismiss["query"].as_str().unwrap().contains("dismissPullRequestReview"));
 
         let reply = parse_github_thread_reply(&serde_json::json!({
             "data": { "addPullRequestReviewThreadReply": { "comment": {

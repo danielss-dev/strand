@@ -107,8 +107,11 @@ keyboard alone, and the mouse stays first-class.
   aliases. New profiles can leave the collection URL blank to derive and save it
   from the active repository. Hosting settings also show connection readiness
   and the signed-in `gh` / `az` accounts. Provider policies
-  remain enforced. Windows notification monitoring reads the native desktop
-  permission instead of WebView2's browser permission shim. Packaged desktop
+  remain enforced. Submitted reviews appear in Summary; GitHub exposes
+  provider-authorized summary editing and reasoned dismissal, while Azure lets
+  only the signed-in reviewer reset their current vote. Windows notification
+  monitoring reads the native desktop permission instead of WebView2's browser
+  permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure inline comments still need iteration tracking.

@@ -440,6 +440,38 @@ pub async fn repo_pull_request_submit_review(
     .await
 }
 
+/// Update the body of an existing provider review when the signed-in viewer
+/// owns it and the provider reports that it remains editable.
+#[tauri::command(async)]
+pub async fn repo_pull_request_update_review(
+    path: String,
+    id: u64,
+    review_id: String,
+    body: String,
+) -> CmdResult<()> {
+    run_blocking("update pull request review", move || {
+        pull_requests::update_review(&path, id, &review_id, &body)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+/// Dismiss an existing GitHub review, or reset the signed-in viewer's Azure
+/// DevOps vote, after the provider confirms the operation is allowed.
+#[tauri::command(async)]
+pub async fn repo_pull_request_dismiss_review(
+    path: String,
+    id: u64,
+    review_id: String,
+    message: String,
+) -> CmdResult<()> {
+    run_blocking("dismiss pull request review", move || {
+        pull_requests::dismiss_review(&path, id, &review_id, &message)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Reply to an existing provider review thread. The provider thread ID is a
 /// stable target, so this write does not depend on diff coordinates or head SHA.
 #[tauri::command(async)]

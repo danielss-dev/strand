@@ -319,6 +319,20 @@ export interface PullRequestReviewThreadUpdate {
   can_unresolve: boolean;
 }
 
+export interface PullRequestReview {
+  id: string;
+  author: string;
+  avatar_url: string | null;
+  state: string;
+  body: string;
+  submitted_at: string;
+  url: string;
+  /** Provider-confirmed capability for editing this review's summary. */
+  can_update: boolean;
+  /** Provider-confirmed capability for dismissal, or resetting an Azure vote. */
+  can_dismiss: boolean;
+}
+
 export interface PullRequest {
   id: number;
   title: string;
@@ -349,6 +363,7 @@ export interface PullRequest {
   checks_complete: boolean;
   comments: PullRequestComment[];
   review_threads: PullRequestReviewThread[];
+  reviews: PullRequestReview[];
   authored_by_viewer: boolean;
   commits: PullRequestCommit[];
 }

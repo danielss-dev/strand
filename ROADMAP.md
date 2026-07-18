@@ -1923,6 +1923,16 @@ Automated provider/core/UI gates and a write-free Computer Use pass against a
 local mirrored fixture verified the exact commit, derived task branch, command
 scoping, and zero repository-ref side effects.
 
+**Hosted PR review maintenance shipped (2026-07-18):** Rich PR detail now
+includes submitted reviews and provider-authoritative write capabilities.
+Eligible GitHub reviews can edit their Markdown summary or be dismissed with a
+required reason; Azure DevOps Services and Server expose the provider-supported
+equivalent by resetting only the signed-in reviewer's current vote. Writes
+refresh detail, terminal PRs stay read-only, and the optional Azure Server
+helper contract advanced to protocol v4. Provider/helper/UI tests and a local-
+mock Computer Use pass verified the complete edit and dismissal flow without a
+hosted write.
+
 ---
 
 ## 1.1+ — Post-1.0

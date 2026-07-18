@@ -203,6 +203,10 @@ export const tauri = {
   ) => invoke<void>('repo_pull_request_submit_review', {
     path, id, event, body, comments, expectedHead,
   }),
+  repoPullRequestUpdateReview: (path: string, id: number, reviewId: string, body: string) =>
+    invoke<void>('repo_pull_request_update_review', { path, id, reviewId, body }),
+  repoPullRequestDismissReview: (path: string, id: number, reviewId: string, message: string) =>
+    invoke<void>('repo_pull_request_dismiss_review', { path, id, reviewId, message }),
   repoPullRequestThreadReply: (path: string, threadId: string, body: string) =>
     invoke<PullRequestComment>('repo_pull_request_thread_reply', { path, threadId, body }),
   repoPullRequestThreadResolve: (path: string, threadId: string, resolved: boolean) =>

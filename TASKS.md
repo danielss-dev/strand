@@ -54,8 +54,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ◐ **Hosted review close-out.** Existing-review update/dismiss actions
-  where supported and Azure inline review parity remain.
+- ◐ **Hosted review close-out.** Azure inline review parity remains.
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
@@ -1464,8 +1463,11 @@ tree: watch the agent work, review fast, accept or reject safely.
     direct binary attachment uploads, and suggestions remain.
   - ☑ Submit reviews: comment, approve, and request changes through one
     exact-head review draft (`repo_pull_request_submit_review`, GitHub atomic
-    review payload, Azure Services/Server vote mappings, protocol v3).
-  - ☐ Dismiss/update an existing review where supported.
+    review payload, Azure Services/Server vote mappings, protocol v4).
+  - ☑ Dismiss/update an existing review where supported
+    (`PullRequestReview`, `repo_pull_request_update_review`,
+    `repo_pull_request_dismiss_review`, GitHub capability-gated mutations,
+    Azure signed-in vote reset).
   - ◐ PR review ledger + merge-readiness model (see
     `docs/pull-request-improvements.md`).
     - ☑ Header readiness strip (`pullRequestReadiness`, `.pr-readiness`):

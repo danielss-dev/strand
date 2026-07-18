@@ -51,6 +51,7 @@ import type {
   PullRequestCreateOutcome,
   PullRequestList,
   PullRequestPendingComment,
+  PullRequestReview,
   PullRequestReviewDraft,
   PullRequestReviewEvent,
   PullRequestReviewThread,
@@ -377,16 +378,20 @@ function PullRequestCommentCard({
 
 function PullRequestSummary({
   path,
+  provider,
   pr,
   draft,
   onDraft,
   onUpdated,
+  onToast,
 }: {
   path: string;
+  provider: PullRequestList['repository']['provider'];
   pr: PullRequest;
   draft: string;
   onDraft: (draft: string) => void;
   onUpdated: (next: PullRequest) => void;
+  onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
   const reviewers = pr.reviewers.length
     ? pr.reviewers.map((reviewer) => reviewer.name).join(', ')
@@ -427,6 +432,23 @@ function PullRequestSummary({
         </div>
       </details>
 
+      <details className="pr-summary-section" open>
+        <summary>Reviews <span>{(pr.reviews ?? []).length}</span></summary>
+        <div className="pr-summary-section-body pr-existing-reviews">
+          {(pr.reviews ?? []).length > 0 ? (pr.reviews ?? []).map((review) => (
+            <PullRequestReviewCard
+              key={review.id}
+              path={path}
+              provider={provider}
+              pr={pr}
+              review={review}
+              onUpdated={onUpdated}
+              onToast={onToast}
+            />
+          )) : <p className="pr-muted">No submitted reviews.</p>}
+        </div>
+      </details>
+
       <section className="pr-summary-comments">
         <h3>Comments <span>{pr.comments.length}</span></h3>
         {isOpenPullRequest(pr) ? (
@@ -436,6 +458,152 @@ function PullRequestSummary({
         )}
       </section>
     </div>
+  );
+}
+
+function PullRequestReviewCard({
+  path,
+  provider,
+  pr,
+  review,
+  onUpdated,
+  onToast,
+}: {
+  path: string;
+  provider: PullRequestList['repository']['provider'];
+  pr: PullRequest;
+  review: PullRequestReview;
+  onUpdated: (next: PullRequest) => void;
+  onToast: (message: string, kind?: 'success' | 'error') => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(review.body);
+  const [dismissing, setDismissing] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState<'update' | 'dismiss' | null>(null);
+  const reviewUrl = markdownUrl(review.url, pr.url);
+  const canWrite = isOpenPullRequest(pr);
+  const stateLabel = review.state.replaceAll('_', ' ').toLowerCase();
+
+  useEffect(() => {
+    if (!editing) setBody(review.body);
+  }, [editing, review.body]);
+
+  const refreshAfterWrite = async (success: string) => {
+    try {
+      onUpdated(await tauri.repoPullRequest(path, pr.id));
+      onToast(success);
+    } catch (caught) {
+      onToast(`${success}, but PR #${pr.id} could not refresh: ${errMessage(caught)}`, 'error');
+    }
+  };
+
+  const updateReview = async () => {
+    const nextBody = body.trim();
+    if (!nextBody || busy) return;
+    setBusy('update');
+    try {
+      await tauri.repoPullRequestUpdateReview(path, pr.id, review.id, nextBody);
+      setEditing(false);
+      await refreshAfterWrite('Updated review summary');
+    } catch (caught) {
+      onToast(`Could not update review: ${errMessage(caught)}`, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dismissReview = async () => {
+    const message = reason.trim();
+    if (busy || (provider === 'git_hub' && !message)) return;
+    setBusy('dismiss');
+    try {
+      await tauri.repoPullRequestDismissReview(path, pr.id, review.id, message);
+      setDismissing(false);
+      setReason('');
+      await refreshAfterWrite(provider === 'git_hub' ? 'Dismissed review' : 'Reset your Azure DevOps vote');
+    } catch (caught) {
+      onToast(`${provider === 'git_hub' ? 'Could not dismiss review' : 'Could not reset vote'}: ${errMessage(caught)}`, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <article className="pr-existing-review">
+      <header>
+        <div>
+          <strong>{review.author}</strong>
+          <span className={`pr-review-state ${review.state.toLowerCase()}`}>{stateLabel}</span>
+        </div>
+        <div className="pr-existing-review-meta">
+          {review.submitted_at && <time dateTime={review.submitted_at}>{dateLabel(review.submitted_at)}</time>}
+          {reviewUrl && (
+            <button type="button" className="h-link" onClick={() => void shellOpen(reviewUrl)} title="Open this review on host">
+              <Icon name="external" size={10} />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {editing ? (
+        <form className="pr-existing-review-form" onSubmit={(event) => { event.preventDefault(); void updateReview(); }}>
+          <label htmlFor={`pr-review-body-${review.id}`}>Review summary</label>
+          <textarea
+            id={`pr-review-body-${review.id}`}
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            rows={4}
+            maxLength={65_536}
+            disabled={busy != null}
+            autoFocus
+          />
+          <div className="pr-existing-review-actions">
+            <button type="button" className="btn" disabled={busy != null} onClick={() => { setEditing(false); setBody(review.body); }}>Cancel</button>
+            <button type="submit" className="btn primary" disabled={!body.trim() || busy != null}>{busy === 'update' ? 'Saving…' : 'Save summary'}</button>
+          </div>
+        </form>
+      ) : (
+        <div className="pr-existing-review-body">
+          {review.body ? <ProviderMarkdown source={review.body} baseUrl={reviewUrl || pr.url} /> : <p className="pr-muted">No review summary.</p>}
+        </div>
+      )}
+
+      {canWrite && !editing && (review.can_update || review.can_dismiss) && (
+        <div className="pr-existing-review-actions">
+          {review.can_update && <button type="button" className="btn" disabled={busy != null} onClick={() => setEditing(true)}>Edit summary</button>}
+          {review.can_dismiss && provider === 'git_hub' && (
+            <button type="button" className="btn danger" disabled={busy != null} aria-expanded={dismissing} onClick={() => setDismissing((value) => !value)}>
+              {dismissing ? 'Cancel dismissal' : 'Dismiss review…'}
+            </button>
+          )}
+          {review.can_dismiss && provider === 'azure_dev_ops' && (
+            <button type="button" className="btn danger" disabled={busy != null} onClick={() => void dismissReview()}>
+              {busy === 'dismiss' ? 'Resetting…' : 'Reset my vote'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {canWrite && review.can_dismiss && provider === 'git_hub' && dismissing && (
+        <form className="pr-existing-review-form" onSubmit={(event) => { event.preventDefault(); void dismissReview(); }}>
+          <label htmlFor={`pr-review-dismiss-${review.id}`}>Reason for dismissal</label>
+          <textarea
+            id={`pr-review-dismiss-${review.id}`}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            rows={3}
+            maxLength={65_536}
+            disabled={busy != null}
+            autoFocus
+          />
+          <div className="pr-existing-review-actions">
+            <button type="button" className="btn" disabled={busy != null} onClick={() => { setDismissing(false); setReason(''); }}>Cancel</button>
+            <button type="submit" className="btn danger" disabled={!reason.trim() || busy != null}>{busy === 'dismiss' ? 'Dismissing…' : 'Confirm dismissal'}</button>
+          </div>
+        </form>
+      )}
+    </article>
   );
 }
 
@@ -1929,10 +2097,12 @@ function PullRequestDetails({
         {tab === 'summary' && (
           <PullRequestSummary
             path={path}
+            provider={provider}
             pr={pr}
             draft={commentDraft}
             onDraft={setCommentDraft}
             onUpdated={onUpdated}
+            onToast={onToast}
           />
         )}
         {tab === 'timeline' && (

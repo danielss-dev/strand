@@ -62,6 +62,7 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     checks_complete: true,
     comments: [],
     review_threads: [],
+    reviews: [],
     authored_by_viewer: true,
     commits: [],
     ...overrides,

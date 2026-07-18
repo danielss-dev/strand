@@ -108,6 +108,8 @@ fn main() {
             commands::repo_pull_request_comment,
             commands::repo_pull_request_inline_comment,
             commands::repo_pull_request_submit_review,
+            commands::repo_pull_request_update_review,
+            commands::repo_pull_request_dismiss_review,
             commands::repo_pull_request_thread_reply,
             commands::repo_pull_request_thread_resolve,
             commands::repo_pull_request_merge,

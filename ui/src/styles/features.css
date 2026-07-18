@@ -6023,6 +6023,24 @@ textarea.clone-input {
 .pr-summary-comments h3 span { color: var(--text-muted); font-size: 10px; font-weight: 500; }
 .pr-summary-section > summary:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
 .pr-summary-section-body { padding: 10px 0 20px; }
+.pr-existing-reviews { display: flex; flex-direction: column; gap: 10px; }
+.pr-existing-review { overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); }
+.pr-existing-review > header { min-height: 38px; padding: 8px 11px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); background: var(--bg-base); }
+.pr-existing-review > header > div { display: flex; align-items: center; gap: 7px; }
+.pr-existing-review > header strong { color: var(--text); font-size: 10px; }
+.pr-review-state { padding: 2px 6px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font-size: 8px; font-weight: 650; text-transform: capitalize; }
+.pr-review-state.approved { border-color: color-mix(in srgb, var(--add) 45%, var(--border)); color: var(--add); }
+.pr-review-state.changes_requested { border-color: color-mix(in srgb, var(--del) 45%, var(--border)); color: var(--del); }
+.pr-existing-review-meta { color: var(--text-muted); font-size: 9px; }
+.pr-existing-review-meta .h-link { min-width: 24px; min-height: 24px; padding: 4px; justify-content: center; }
+.pr-existing-review-body { padding: 12px; }
+.pr-existing-review-form { padding: 11px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pr-existing-review-form + .pr-existing-review-form { border-top: 1px solid var(--border); }
+.pr-existing-review-form label { color: var(--text); font-size: 10px; font-weight: 650; }
+.pr-existing-review-form textarea { width: 100%; min-height: 72px; resize: vertical; padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--r-sm); outline: none; background: var(--bg); color: var(--text); font: 11px/1.5 var(--font-ui); }
+.pr-existing-review-form textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pr-existing-review-actions { padding: 0 12px 12px; display: flex; justify-content: flex-end; gap: 7px; }
+.pr-existing-review-form .pr-existing-review-actions { padding: 0; }
 .pr-summary-comments { margin-top: 22px; }
 .pr-summary-comments h3 { margin: 0 0 10px; display: flex; align-items: baseline; gap: 8px; color: var(--text); font-size: 12px; }
 

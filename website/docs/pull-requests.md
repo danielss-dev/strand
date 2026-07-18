@@ -278,6 +278,15 @@ reloading the patch or moving your current file and scroll position. These
 actions target the existing provider thread rather than a line coordinate, so
 they remain valid when GitHub permits them on a resolved or outdated thread.
 
+Submitted reviews appear in the Summary tab. When GitHub reports that your
+account may update a review, **Edit summary** changes its Markdown body. When
+the pull request and review are eligible for dismissal, **Dismiss review…**
+requires a reason before the provider write is enabled. Azure DevOps votes do
+not have an editable review body; Strand instead offers **Reset my vote** only
+on the signed-in reviewer's current nonzero vote. Every successful action
+refreshes rich detail so revoked capabilities and provider state take effect
+immediately. These controls are absent on terminal pull requests.
+
 Azure policy evaluations participate in readiness when their dedicated query
 succeeds. A failed or incomplete policy query remains unknown instead of being
 treated as green. Azure inline
@@ -301,6 +310,6 @@ use the exact-head local worktree action there. The worktree command is
 available while any PR is active, and the update command appears only for an
 open GitHub PR; both contextual commands disappear on the inbox.
 
-Suggestions, existing-review update/dismiss actions, and richer Azure policy
-details are planned but are not presented as available yet. GitLab and
+Suggestions and richer Azure policy details are planned but are not presented
+as available yet. GitLab and
 Bitbucket adapters will use the same workspace in a later slice.
