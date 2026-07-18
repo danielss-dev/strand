@@ -46,11 +46,12 @@ deliberate maintainer action.
   `Get-AuthenticodeSignature`. This requires a purchased external identity and
   cannot be manufactured from repository code. The published v0.13.0 MSI was
   also inspected on 2026-07-18 and reports `NotSigned` with no signer.
-- [ ] Build the exact candidate with updater key `84FCBFD2A981CE5D` and pass
-  `pnpm release:check-updater-signatures`. The 2026-07-18 local MSI correctly
-  failed this gate because the machine-wide environment supplied key
-  `5B0DEABB5904DD1F`; no key was rotated or disclosed. This mismatch is isolated
-  to the workstation—the published evidence above proves the hosted secret.
+- [x] Build the exact candidate with updater key `84FCBFD2A981CE5D` and pass
+  `pnpm release:check-updater-signatures`. Release run `29657871779` produced
+  five desktop updater `.sig` artifacts for `v1.0.0`; a fresh download verified
+  all five against embedded key `84FCBFD2A981CE5D`. The local machine-wide key
+  remains mismatched at `5B0DEABB5904DD1F`, but it was not used by the hosted
+  candidate and no key was rotated or disclosed.
 - [ ] Run the updater end to end from the last public version to the 1.0 draft
   promoted through a disposable test endpoint, then confirm the normal stable
   endpoint only sees the published release.
@@ -94,8 +95,21 @@ candidate executable is 26,828,800 bytes with SHA-256
 `159C61298A5B4C14F52909B9119556F3443CCB64016788ED8305C14C508F5B47`.
 The MSI builds at 17,088,512 bytes with SHA-256
 `F1FA01179037B12E3D607EF6A44135060D963AEBF0DDE99FB618B125AF061C37`.
-Both remain intentionally unpromoted: Authenticode reports `NotSigned`, and
-the MSI updater signature has the mismatched key recorded above.
+Both local artifacts remain intentionally unpromoted: Authenticode reports
+`NotSigned`, and the local MSI updater signature has the mismatched key
+recorded above. The hosted `v1.0.0` draft supersedes the local updater artifact:
+its MSI is also Authenticode `NotSigned`, but its updater signature uses the
+correct embedded key.
+
+The owner explicitly authorized pushing the annotated `v1.0.0` tag at commit
+`698158b` on 2026-07-18 before the remaining gates closed. Release run
+`29657871779` completed all jobs and populated an 18-asset draft. The universal
+macOS candidate received notarization status `Accepted` (request
+`588511bd-9b0c-4454-a988-ec6484dc0789`) and was stapled; Linux carries the
+verified Sigstore bundle. The Git tag is not cryptographically signed because
+no tag-signing identity was configured in this checkout. Re-signing it later
+would require replacing the published tag; this override is evidence of the
+push, not closure of the remaining publisher, legal, or runtime rows.
 
 ## Desktop smoke pass
 

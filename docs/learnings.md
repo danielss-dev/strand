@@ -1767,3 +1767,11 @@ exist. `STRAND` has active class-9 registrations in the US and EU for Signify's
 lighting-control software/equipment and other related software marks exist.
 Only the owner with qualified counsel can decide coexistence, territory scope,
 or renaming; an agent must not convert a database result into legal approval.
+
+**Configure Git tag signing before release promotion (2026-07-18).** An
+annotated tag is not a signed tag, and a pushed tag cannot gain a cryptographic
+signature later without replacing the tag object and force-updating the remote
+reference. Check `user.signingKey`, signing format/program, and a noninteractive
+test signature before the promotion window. If an owner explicitly overrides
+the gate, record the exact peeled commit and the unsigned status rather than
+describing the tag as signed.

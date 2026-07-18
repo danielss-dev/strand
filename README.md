@@ -201,10 +201,11 @@ keyboard alone, and the mouse stays first-class.
 ## Status
 
 Strand's **1.0 release candidate is feature-complete** and works on large
-real-world repositories daily. Publication remains fail-closed on the release
-checklist: Windows publisher signing, the real macOS/GNOME/KDE candidate runs,
-and the signed updater promotion must pass before the `v1.0.0` tag is pushed.
-Linux AppImages are keyless-signed with Sigstore. See the
+real-world repositories daily. The annotated `v1.0.0` tag and draft release
+artifacts now exist; the updater-signature gates passed, macOS was notarized,
+and Linux AppImages are keyless-signed with Sigstore. Public release remains
+held for Windows publisher signing and the real macOS/GNOME/KDE candidate
+runs. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

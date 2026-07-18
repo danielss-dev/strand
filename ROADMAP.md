@@ -2075,7 +2075,7 @@ the MSI is 17.1 MB. Promotion remains fail-closed: both lack the external
 Windows publisher signature, and the local machine-wide updater key produced
 ID `5B0DEABB5904DD1F` instead of embedded ID `84FCBFD2A981CE5D`. A new release
 workflow gate rejects that mismatch for desktop and helper artifacts; no key
-was rotated and no draft/tag was published.
+was rotated and, at the time of this audit, no draft/tag had been published.
 
 **External 1.0 readiness audited (2026-07-18):** The live GitHub repository has
 all Apple and updater secret names configured. Every published v0.13.0 desktop
@@ -2088,6 +2088,16 @@ registrations make name clearance an explicit owner/counsel decision rather
 than a checkbox an engineering release can silently close. The README now
 pauses outside code pull requests until contributor-assignment terms and a CLA
 signing provider receive owner/legal approval.
+
+**1.0 tag and draft artifacts pushed by owner override (2026-07-18):** The
+annotated `v1.0.0` tag now points at verified commit `698158b`. Release run
+`29657871779` completed every macOS, Windows, Linux, and helper job; its
+18-asset draft passed the embedded updater-key gate, the universal macOS app
+was notarized `Accepted` and stapled, and the AppImage has a verified Sigstore
+bundle. The remote Windows MSI is deliberately still `NotSigned`, and the Git
+tag itself is annotated but not cryptographically signed because this checkout
+has no tag-signing identity. This owner-authorized push does not close the
+Windows publisher, trademark, real-platform smoke, or public-release gates.
 
 ---
 
