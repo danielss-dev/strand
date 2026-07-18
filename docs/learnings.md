@@ -1599,3 +1599,14 @@ output. Record the exact safety-prefixed command, result, duration, and combined
 output in Strand's per-repository app storage—never in the checkout. Cap both
 entry count and transcript size; integrity failures can otherwise make the
 settings database a new hot-path liability.
+
+**Working-tree actions keep exact row identity and Git-shaped enumeration
+(2026-07-18).** Pierre resolves a folder selection to its descendant files for
+batch actions, but row-specific operations must also receive the exact invoked
+path and whether it is a file or directory; otherwise Open/Rename/Delete can
+silently target the first descendant. Keep the Files tree index-plus-untracked
+rather than adding a filesystem walk merely to display empty directories—an
+empty folder can open directly and appears once populated. Every file mutation
+must pass through `safe_workdir_path`, reject traversal and `.git` components,
+validate the whole target set before its first deletion, avoid following
+directory symlinks, and emit native separators at OS integration boundaries.

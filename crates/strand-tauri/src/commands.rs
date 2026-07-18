@@ -577,6 +577,33 @@ pub async fn repo_blame(path: String, file: String) -> CmdResult<Vec<BlameLine>>
 }
 
 #[tauri::command(async)]
+pub fn repo_file_create(path: String, file: String, directory: bool) -> CmdResult<()> {
+    Repo::discover(&path)?.create_worktree_entry(&file, directory)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn repo_file_delete(path: String, files: Vec<String>) -> CmdResult<()> {
+    run_blocking("delete working-tree entries", move || {
+        Repo::discover(&path)?
+            .delete_worktree_entries(&files)
+            .map_err(CmdError::from)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub fn repo_file_absolute_paths(path: String, files: Vec<String>) -> CmdResult<Vec<String>> {
+    Ok(Repo::discover(&path)?.absolute_worktree_paths(&files)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_file_reveal(path: String, file: String) -> CmdResult<()> {
+    Repo::discover(&path)?.reveal_in_file_manager(&file)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub async fn repo_reflog(
     path: String,
     selector: Option<String>,

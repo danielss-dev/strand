@@ -55,6 +55,7 @@ import { MergeDialog } from './views/MergeDialog';
 import { RebaseEditor } from './views/RebaseEditor';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { MaintenanceDialog } from './views/MaintenanceDialog';
+import { FileEntryDialog } from './views/FileEntryDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
@@ -262,6 +263,7 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
   const [branchNetworkDialog, setBranchNetworkDialog] = useState<BranchNetworkDialogMode | null>(null);
@@ -1440,6 +1442,8 @@ export function App() {
           : []),
         { id: 'open-editor', label: 'Open in editor', group: 'Actions', shortcut: keyHint('open-editor'), keywords: 'external code reveal vscode editor', run: openInEditor },
         { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', shortcut: keyHint('open-terminal'), keywords: 'shell console cwd iterm terminal', run: openInTerminal },
+        { id: 'file-new', label: 'New file…', group: 'Actions', keywords: 'create empty file working tree', run: () => setFileEntryDialog({ dir: '', directory: false }) },
+        { id: 'folder-new', label: 'New folder…', group: 'Actions', keywords: 'create directory working tree', run: () => setFileEntryDialog({ dir: '', directory: true }) },
         { id: 'snapshot', label: 'Save snapshot…',  group: 'Actions', run: () => setStashDialog({ snapshot: true, keepIndex: false }) },
         { id: 'stash',    label: 'Stash changes…',  group: 'Actions', run: () => setStashDialog({ snapshot: false, keepIndex: false }) },
         { id: 'branch-new', label: 'Create branch…', group: 'Actions', keywords: 'new branch from head', run: () => setBranchDialog({ start: null, label: 'HEAD' }) },
@@ -1683,6 +1687,7 @@ export function App() {
                 onFetchBranch={onFetchBranch}
                 onPullBranch={onPullBranch}
                 onOpenFileInEditor={openActiveFileInEditor}
+                onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
                 onToast={showToast}
               />
             </Panel>
@@ -1851,6 +1856,16 @@ export function App() {
 
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
+      )}
+
+      {fileEntryDialog && meta && (
+        <FileEntryDialog
+          repoPath={meta.path}
+          dir={fileEntryDialog.dir}
+          directory={fileEntryDialog.directory}
+          onClose={() => setFileEntryDialog(null)}
+          onToast={showToast}
+        />
       )}
 
       {renameBranchDialog && (

@@ -7135,6 +7135,36 @@ textarea.clone-input {
   display: flex;
   flex-direction: column;
 }
+.side-files-tools {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 7px 8px;
+  border-bottom: 0.5px solid var(--border);
+}
+.side-files-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-2);
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  font: inherit;
+  font-size: var(--type-ui-sm);
+  cursor: pointer;
+}
+.side-files-tools button:hover,
+.side-files-tools button:focus-visible {
+  color: var(--text);
+  background: var(--bg-hover);
+  outline: 1px solid var(--accent);
+}
 .side-files-revision {
   flex: 0 0 auto;
   padding: 6px 10px;

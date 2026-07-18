@@ -44,6 +44,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   incremental-maintenance, and guarded garbage-collection runs retain bounded
   per-repository command/output transcripts (`Repo::run_maintenance`,
   `repo_maintenance`, `MaintenanceDialog`, `repoActivity`).
+- ☑ **Working-tree file actions.** Create file/folder, exact folder targeting,
+  external editor/reveal, relative/absolute path copy, direct history/blame,
+  rename, and confirmed deletion are available from the Files tree and Quick
+  Launch (`Repo::{create_worktree_entry,delete_worktree_entries,reveal_in_file_manager}`,
+  `FileEntryDialog`, `Sidebar.fileMenu`).
 - ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
   submission, update/check-out/close/reopen lifecycle actions, and Azure inline
   review parity.

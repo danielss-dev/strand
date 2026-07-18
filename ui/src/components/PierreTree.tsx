@@ -57,6 +57,11 @@ export function copyToClipboard(text: string): void {
 /** Right-click menu item — the same shape the app's ContextMenu consumes. */
 export type TreeMenuItem = MenuItem;
 
+export interface TreeMenuContext {
+  path: string;
+  kind: 'file' | 'directory';
+}
+
 /** Per-row text badge rendered in Pierre's decoration lane (before the git
  * status lane). */
 export interface TreeRowDecoration {
@@ -100,8 +105,9 @@ interface PierreTreeProps {
    * activated, every file under a folder, or just the one file.
    */
   onActivate?: (paths: string[]) => void;
-  /** Right-click menu items for the resolved target file set. Omit to disable. */
-  menuItems?: (paths: string[]) => MenuItem[];
+  /** Right-click menu items for the resolved target file set plus the exact
+   * row invoked (folder rows otherwise collapse to their descendant files). */
+  menuItems?: (paths: string[], context: TreeMenuContext) => MenuItem[];
   /**
    * Discard the resolved target file set — bound to the Delete / Backspace
    * keys while a file row is focused. Resolves the same way the context menu
@@ -632,7 +638,15 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       // clamps itself into the viewport either way.
       const x = e.clientX || row.getBoundingClientRect().left + 16;
       const y = e.clientY || row.getBoundingClientRect().bottom;
-      setMenu({ x, y, items: menuItems(targets) });
+      const path = row.dataset.itemPath!.replace(/\/+$/, '');
+      setMenu({
+        x,
+        y,
+        items: menuItems(targets, {
+          path,
+          kind: fileSetRef.current.has(path) ? 'file' : 'directory',
+        }),
+      });
     },
     [menuItems, resolveTargets],
   );

@@ -84,7 +84,7 @@ current official product material for:
 | Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
 | Remote management | Scoped prune, native default-remote selection, fetch/push refspec inspection, and separate fetch/push URL editing shipped 2026-07-18 | Complete for 1.0 daily use |
 | Repository maintenance | Cancellable `git maintenance run`, guarded `git gc`, `git fsck --full`, and a bounded per-repository activity log with exact commands/captured output shipped 2026-07-18 | Complete for 1.0 daily use |
-| File actions | Open/reveal externally, copy relative or absolute path, jump directly to history/blame, delete, and create file/folder where allowed | Daily-driver |
+| File actions | Create file/folder, exact folder targeting, external editor/reveal, relative/absolute path copy, direct history/blame, rename, and confirmed deletion shipped 2026-07-18 | Complete for 1.0 daily use |
 | Commit metadata | GPG/SSH signature status, copy subject/body, export patch, and richer multi-selection actions | Daily-driver |
 
 ### Power-feature parity
@@ -144,6 +144,6 @@ disabled with a reason, and the primary action stays first.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
-multi-commit actions, branch/ref comparison, rebase close-out, and repository
-maintenance are now shipped foundations. The next bounded implementation slice
-is the remaining file actions.
+multi-commit actions, branch/ref comparison, rebase close-out, repository
+maintenance, and working-tree file actions are now shipped foundations. The
+next bounded implementation slice is commit metadata.

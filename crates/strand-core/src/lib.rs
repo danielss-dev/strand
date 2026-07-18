@@ -39,6 +39,7 @@ pub mod submodule;
 pub mod worktree;
 pub mod blame;
 pub mod file;
+pub mod file_actions;
 pub mod reflog;
 pub mod rename;
 pub mod reset;

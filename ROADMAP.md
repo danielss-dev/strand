@@ -1859,6 +1859,16 @@ commands; a Computer Use pass verified keyboard discovery, integrity output,
 cross-dialog persistence, the GC confirmation boundary, and an unchanged dirty
 worktree/ref fixture.
 
+**Working-tree file actions shipped (2026-07-18):** The Files sidebar now
+creates empty files and folders, preserves the exact invoked folder for all
+row actions, opens entries in the configured editor or native file manager,
+copies relative or native absolute paths, jumps directly to file history or
+blame, renames, and deletes behind a second confirmation click. Quick Launch
+also exposes root-level create actions. Core path-guard tests and a Computer
+Use pass verified nested creation, Windows Explorer selection, direct
+history/blame, exact folder deletion, and preservation of the disposable
+repository's dirty file and unrelated remote refs.
+
 ---
 
 ## 1.1+ — Post-1.0

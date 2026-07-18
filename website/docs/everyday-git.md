@@ -30,6 +30,33 @@ Inside **Lines…**, `Tab` moves through each changed-line checkbox and action,
 `Space` toggles the focused line, and `Escape` closes the picker. **All** and
 **Clear** make large blocks quick to adjust before Stage, Unstage, or Discard.
 
+## Working-tree files
+
+Switch the sidebar from **Git** to **Files** to browse tracked and untracked
+working-tree entries. The toolbar creates an empty file or folder at the
+repository root; **New file…** and **New folder…** are also searchable in Quick
+Launch. A file path may include existing parent folders. Existing entries are
+never overwritten, and Strand rejects paths that escape the checkout or enter
+`.git`.
+
+Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
+
+- **Open** previews a file or opens a folder's contents in Strand.
+- **Open in editor** and **Reveal in file manager** target the exact file or
+  folder row.
+- A file can jump directly to **Open file history** or **Open blame**.
+- **New file here…**, **New folder here…**, and **Rename / move…** act relative
+  to the selected row.
+- Copy one or several relative paths, or native absolute paths suitable for
+  the current operating system.
+- **Delete file/folder** requires a second confirmation click. Tracked entries
+  become ordinary working-tree deletions; the index is not changed.
+
+Like Git itself, the Files tree is assembled from tracked and untracked files,
+so an empty folder does not appear as a tree row until it contains a file. The
+new-folder action still opens that folder immediately, and a nested new-file
+path can populate it without leaving Strand.
+
 ## Committing
 
 The commit form takes a subject and an optional description body. The body grows

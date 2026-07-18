@@ -229,6 +229,14 @@ export const tauri = {
   repoFileHistory: (path: string, file: string, limit?: number) =>
     invoke<FileHistoryEntry[]>('repo_file_history', { path, file, limit }),
   repoBlame: (path: string, file: string) => invoke<BlameLine[]>('repo_blame', { path, file }),
+  repoFileCreate: (path: string, file: string, directory: boolean) =>
+    invoke<void>('repo_file_create', { path, file, directory }),
+  repoFileDelete: (path: string, files: string[]) =>
+    invoke<void>('repo_file_delete', { path, files }),
+  repoFileAbsolutePaths: (path: string, files: string[]) =>
+    invoke<string[]>('repo_file_absolute_paths', { path, files }),
+  repoFileReveal: (path: string, file: string) =>
+    invoke<void>('repo_file_reveal', { path, file }),
   repoReflog: (path: string, selector?: string, limit?: number) =>
     invoke<ReflogEntry[]>('repo_reflog', { path, selector, limit }),
   repoStage: (path: string, file: string) => invoke<void>('repo_stage', { path, file }),
