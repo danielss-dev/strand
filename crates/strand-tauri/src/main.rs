@@ -85,6 +85,8 @@ fn main() {
             commands::repo_detect_base_branch,
             commands::repo_log,
             commands::repo_search_log,
+            commands::repo_commit_signature,
+            commands::repo_commit_export_patch,
             commands::repo_refs,
             commands::azdo_helper_status,
             commands::hosting_connection_status,

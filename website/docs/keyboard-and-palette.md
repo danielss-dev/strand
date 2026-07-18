@@ -157,6 +157,12 @@ Opened with `Mod+F` in Local Changes, Review, or Workspace Review.
 
 In the search field: `Enter` steps loaded matches (`Shift+Enter` backwards); `Mod+Enter` — or plain `Enter` in Content mode — runs the full-history search; `↑`/`↓` navigate the results dropdown and `Enter` opens a hit; `Escape` clears the query, then blurs. See [Commits and history](commits-and-history.md).
 
+With several commits selected, the toolbar exposes ordered cherry-pick,
+two-commit comparison, and patch-series export. Press the Menu key or
+`Shift+F10` on any selected row for the same operations plus copy actions for
+ordered full SHAs, subjects, and complete messages. A single commit's menu and
+detail panel expose subject/body copy and native-dialog patch export.
+
 In commit/ref comparison dialogs, `↑` / `↓`, `Home`, and `End` navigate
 the changed-file list; `Escape` closes the dialog. Merge cherry-pick/revert
 dialogs use the native radio-group arrow keys to choose the mainline parent.

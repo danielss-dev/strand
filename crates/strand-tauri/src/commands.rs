@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
+    commit_metadata::CommitSignature,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
     init::{init_repository, InitOutcome},
@@ -177,6 +178,27 @@ pub async fn repo_search_log(
 ) -> CmdResult<Vec<Commit>> {
     run_blocking("search", move || {
         Ok(Repo::discover(&path)?.search_log(&query, mode, limit.unwrap_or(200))?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_commit_signature(path: String, oid: String) -> CmdResult<CommitSignature> {
+    run_blocking("commit signature", move || {
+        Ok(Repo::discover(&path)?.commit_signature(&oid)?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn repo_commit_export_patch(
+    path: String,
+    oids: Vec<String>,
+    destination: String,
+) -> CmdResult<u64> {
+    run_blocking("export commit patch", move || {
+        Ok(Repo::discover(&path)?
+            .export_commit_patches(&oids, std::path::Path::new(&destination))?)
     })
     .await
 }

@@ -94,6 +94,29 @@ export interface Commit {
   parents: string[];
 }
 
+export type CommitSignatureKind = 'gpg' | 'ssh' | 'x509' | 'unknown';
+export type CommitSignatureStatus =
+  | 'unsigned'
+  | 'verified'
+  | 'good_untrusted'
+  | 'bad'
+  | 'expired_signature'
+  | 'expired_key'
+  | 'revoked_key'
+  | 'cannot_verify'
+  | 'unknown';
+
+/** Lazily verified signature metadata for one immutable commit. */
+export interface CommitSignature {
+  kind: CommitSignatureKind | null;
+  status: CommitSignatureStatus;
+  signer: string | null;
+  key: string | null;
+  fingerprint: string | null;
+  primary_fingerprint: string | null;
+  trust: string | null;
+}
+
 /**
  * Field a full-history commit search matches against (the Rust `SearchMode`).
  * `content` is the pickaxe (`git log -G`) — commits whose diff added or removed

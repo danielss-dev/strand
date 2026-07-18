@@ -14,7 +14,9 @@ Rows are decorated with chips:
 
 ### Commit detail panel
 
-Selecting a commit (click or `Enter`) opens a detail panel on the right with the full message, a metadata grid, the list of changed files, and the diff of the focused file. It also re-roots the sidebar's **Files** tab to that commit; the short hash above the tree makes the historical context explicit. Historical trees are read-only, and opening a file keeps Content and Preview pinned to that revision. Image changes render as before/after previews. Drag the divider to resize the panel; the split is remembered. Press `Escape` to close it and return Files to the working tree.
+Selecting a commit (click or `Enter`) opens a detail panel on the right with the full message, a metadata grid, the list of changed files, and the diff of the focused file. The metadata includes a lazy GPG, SSH, or X.509 signature check: verified signatures show the signer, while bad, expired, revoked, untrusted, unavailable, and unsigned states stay distinct. Hover the signature for key, fingerprint, and trust details. Verification runs only for the opened immutable commit, never across the paged graph.
+
+The panel can copy the subject or body separately and export the exact commit as an mbox-compatible `.patch`. It also re-roots the sidebar's **Files** tab to that commit; the short hash above the tree makes the historical context explicit. Historical trees are read-only, and opening a file keeps Content and Preview pinned to that revision. Image changes render as before/after previews. Drag the divider to resize the panel; the split is remembered. Press `Escape` to close it and return Files to the working tree.
 
 ### Keyboard
 
@@ -30,10 +32,13 @@ Selecting a commit (click or `Enter`) opens a detail panel on the right with the
 
 Selecting two commits adds **Compare** to the graph toolbar. The dialog orders
 them from older to newer, lists the changed files, and renders the selected
-text or image diff. Any multi-selection also adds **Cherry-pick selected**;
-Strand applies the commits oldest-to-newest so dependent commits keep their
-original order. Selections containing a merge commit must be applied
-individually so you can choose its mainline parent.
+text or image diff. Any multi-selection also adds **Cherry-pick selected** and
+**Export patches…**; Strand applies or exports the commits oldest-to-newest so
+dependent commits keep their original order. The keyboard-openable row menu
+for a selected set can copy full SHAs, subjects, or complete messages. Patch
+export writes one mbox-compatible series through the native save dialog.
+Selections containing a merge commit must be cherry-picked individually so
+you can choose its mainline parent; copy and patch export still work for them.
 
 ### Context menu
 
@@ -48,7 +53,9 @@ Right-click a commit (or use `Shift+F10`) for:
 - **Reset \<branch\> to here…** — opens the Reset dialog.
 - **New worktree from here…** — cut a task branch at this exact commit; see [Worktrees](worktrees.md).
 - **Review changes since this** — pin the review baseline here and jump to the Review view.
-- **Copy SHA**
+- **Copy SHA**, **Copy subject**, and **Copy body**
+- **Export patch…** — choose a `.patch` / `.mbox` destination with the native
+  save dialog; existing files are replaced only after Git formats successfully
 
 ### Searching the graph (`/`)
 

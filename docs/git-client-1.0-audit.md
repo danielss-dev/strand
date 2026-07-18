@@ -85,7 +85,7 @@ current official product material for:
 | Remote management | Scoped prune, native default-remote selection, fetch/push refspec inspection, and separate fetch/push URL editing shipped 2026-07-18 | Complete for 1.0 daily use |
 | Repository maintenance | Cancellable `git maintenance run`, guarded `git gc`, `git fsck --full`, and a bounded per-repository activity log with exact commands/captured output shipped 2026-07-18 | Complete for 1.0 daily use |
 | File actions | Create file/folder, exact folder targeting, external editor/reveal, relative/absolute path copy, direct history/blame, rename, and confirmed deletion shipped 2026-07-18 | Complete for 1.0 daily use |
-| Commit metadata | GPG/SSH signature status, copy subject/body, export patch, and richer multi-selection actions | Daily-driver |
+| Commit metadata | Lazy GPG/SSH/X.509 verification, subject/body copy, exact patch export, and ordered multi-selection copy/export actions shipped 2026-07-18 | Complete for 1.0 daily use |
 
 ### Power-feature parity
 
@@ -146,4 +146,5 @@ The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
 multi-commit actions, branch/ref comparison, rebase close-out, repository
 maintenance, and working-tree file actions are now shipped foundations. The
-next bounded implementation slice is commit metadata.
+daily local Git close-out is complete; the next bounded implementation slice
+is hosted review close-out.

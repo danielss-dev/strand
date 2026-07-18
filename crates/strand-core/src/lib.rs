@@ -22,6 +22,7 @@ pub mod diff;
 pub mod stage;
 pub mod apply;
 pub mod commit;
+pub mod commit_metadata;
 pub mod network;
 pub mod refs;
 pub mod branch;

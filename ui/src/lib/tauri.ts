@@ -13,6 +13,7 @@ import type {
   CheckoutOutcome,
   CloneOutcome,
   Commit,
+  CommitSignature,
   CommitMessageSuggestion,
   CommitSearchMode,
   CommitOutcome,
@@ -134,6 +135,10 @@ export const tauri = {
   // the client-side loaded-window highlight can't cover.
   repoSearchLog: (path: string, query: string, mode: CommitSearchMode, limit?: number) =>
     invoke<Commit[]>('repo_search_log', { path, query, mode, limit }),
+  repoCommitSignature: (path: string, oid: string) =>
+    invoke<CommitSignature>('repo_commit_signature', { path, oid }),
+  repoCommitExportPatch: (path: string, oids: string[], destination: string) =>
+    invoke<number>('repo_commit_export_patch', { path, oids, destination }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
   repoPullRequestForBranch: (path: string, branch: string) =>

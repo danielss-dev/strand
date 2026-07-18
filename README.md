@@ -139,8 +139,10 @@ keyboard alone, and the mouse stays first-class.
   pause/conflict Continue / Abort.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
-  resizable commit detail panel, in-graph search by message / author / hash, a
-  multi-selection toolbar for ordered cherry-pick and two-commit comparison, a
+  resizable commit detail panel with lazy GPG/SSH/X.509 verification,
+  subject/body copy, and exact patch export; in-graph search by message /
+  author / hash; a multi-selection toolbar/menu for ordered cherry-pick,
+  two-commit comparison, metadata copy, and patch-series export; a
   vertical activity-timeline rail (commit-density histogram you can scrub to
   seek by date), and a reflog browser for recovering commits orphaned by a
   reset or rebase.
@@ -188,8 +190,7 @@ keyboard alone, and the mouse stays first-class.
 Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
 works on large real-world repositories daily, but expect rough edges. The main
 remaining gaps are hosted-review completion, localization, Windows/Linux
-release signing and validation, and the remaining commit-metadata daily-driver
-actions. See the
+release signing and validation, and final cross-platform release hardening. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 and [`TASKS.md`](./TASKS.md).
 

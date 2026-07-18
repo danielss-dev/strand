@@ -3,12 +3,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
+import { copyToClipboard } from '../components/PierreTree';
 import { isImagePath } from '../lib/image';
-import { errMessage } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
-import type { Commit, DiffStatus, FileDiff, Stash } from '../lib/types';
+import type { Commit, CommitSignature, DiffStatus, FileDiff, Stash } from '../lib/types';
 import { MainlineDialog, type MainlineOperation } from './MainlineDialog';
+
+const signatureCache = new Map<string, CommitSignature>();
+const SIGNATURE_CACHE_LIMIT = 256;
+
+function rememberSignature(key: string, value: CommitSignature) {
+  signatureCache.delete(key);
+  signatureCache.set(key, value);
+  if (signatureCache.size > SIGNATURE_CACHE_LIMIT) {
+    const oldest = signatureCache.keys().next().value;
+    if (oldest) signatureCache.delete(oldest);
+  }
+}
 
 /**
  * Right-side panel shown when a commit is selected in the All Commits
@@ -22,16 +35,20 @@ import { MainlineDialog, type MainlineOperation } from './MainlineDialog';
 export function CommitDetail({
   onCreateTag,
   onInteractiveRebase,
+  onExportPatch,
   onToast,
 }: {
   /** Open the New-tag dialog targeting this commit (revspec + label). */
   onCreateTag: (target: string, label: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
+  /** Export this exact commit as an mbox-compatible patch. */
+  onExportPatch: (commit: Commit) => void;
   /** Surface cherry-pick / revert success or git's conflict message. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const selectedCommit = useRepo((s) => s.selectedCommit);
+  const meta = useRepo((s) => s.meta);
   const diffs = useRepo((s) => s.selectedCommitDiffs);
   const loading = useRepo((s) => s.selectedCommitDiffsLoading);
   const commits = useRepo((s) => s.commits);
@@ -86,6 +103,46 @@ export function CommitDetail({
   const [historyBusy, setHistoryBusy] = useState(false);
   const [stashBusy, setStashBusy] = useState(false);
   const [mainlineAction, setMainlineAction] = useState<MainlineOperation | null>(null);
+  const [signature, setSignature] = useState<CommitSignature | null>(null);
+  const [signatureLoading, setSignatureLoading] = useState(false);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = commit?.hash;
+    const path = meta?.path;
+    if (!hash || !path || stash) {
+      setSignature(null);
+      setSignatureLoading(false);
+      setSignatureError(null);
+      return;
+    }
+    const key = `${path}\0${hash}`;
+    const cached = signatureCache.get(key);
+    if (cached) {
+      setSignature(cached);
+      setSignatureLoading(false);
+      setSignatureError(null);
+      return;
+    }
+    let active = true;
+    setSignature(null);
+    setSignatureLoading(true);
+    setSignatureError(null);
+    void tauri.repoCommitSignature(path, hash).then(
+      (value) => {
+        if (!active) return;
+        rememberSignature(key, value);
+        setSignature(value);
+        setSignatureLoading(false);
+      },
+      (cause) => {
+        if (!active) return;
+        setSignatureError(errMessage(cause));
+        setSignatureLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, [commit?.hash, meta?.path, stash]);
 
   if (!commit) return null;
 
@@ -213,6 +270,22 @@ export function CommitDetail({
               </span>
             </>
           ) : null}
+          {!stash ? (
+            <>
+              <span className="k">signature</span>
+              <span className="v">
+                {signatureLoading ? (
+                  <span className="commit-signature checking">Checking…</span>
+                ) : signature ? (
+                  <SignatureSummary value={signature} />
+                ) : (
+                  <span className="commit-signature warning" title={signatureError ?? undefined}>
+                    Verification unavailable
+                  </span>
+                )}
+              </span>
+            </>
+          ) : null}
         </div>
         <div className="cd-actions">
           {stash ? (
@@ -291,6 +364,40 @@ export function CommitDetail({
                 <Icon name="rebase" size={12} />
                 Rebase from here…
               </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                onClick={() => {
+                  copyToClipboard(commit.subject);
+                  onToast('Copied commit subject');
+                }}
+                title="Copy only this commit's subject line"
+              >
+                <Icon name="file" size={12} />
+                Copy subject
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                disabled={!commit.body}
+                onClick={() => {
+                  copyToClipboard(commit.body);
+                  onToast('Copied commit body');
+                }}
+                title={commit.body ? "Copy this commit's message body" : 'This commit has no message body'}
+              >
+                <Icon name="file" size={12} />
+                Copy body
+              </button>
+              <button
+                type="button"
+                className="btn ghost cd-action-btn"
+                onClick={() => onExportPatch(commit)}
+                title="Export this commit as an mbox-compatible patch"
+              >
+                <Icon name="external" size={12} />
+                Export patch…
+              </button>
             </>
           )}
         </div>
@@ -351,6 +458,45 @@ export function CommitDetail({
         />
       )}
     </>
+  );
+}
+
+function SignatureSummary({ value }: { value: CommitSignature }) {
+  const kind = value.kind === 'gpg'
+    ? 'GPG'
+    : value.kind === 'ssh'
+      ? 'SSH'
+      : value.kind === 'x509'
+        ? 'X.509'
+        : 'commit';
+  const [tone, label] = (() => {
+    switch (value.status) {
+      case 'unsigned': return ['muted', 'Unsigned'] as const;
+      case 'verified': return ['success', `Verified ${kind} signature`] as const;
+      case 'good_untrusted': return ['warning', `Good ${kind} signature (untrusted)`] as const;
+      case 'bad': return ['danger', `Bad ${kind} signature`] as const;
+      case 'expired_signature': return ['warning', `Expired ${kind} signature`] as const;
+      case 'expired_key': return ['warning', `${kind} signing key expired`] as const;
+      case 'revoked_key': return ['danger', `${kind} signing key revoked`] as const;
+      case 'cannot_verify': return ['warning', `Could not verify ${kind} signature`] as const;
+      case 'unknown': return ['warning', `Unknown ${kind} signature status`] as const;
+    }
+  })();
+  const details = [
+    value.signer ? `Signer: ${value.signer}` : null,
+    value.key ? `Key: ${value.key}` : null,
+    value.fingerprint ? `Fingerprint: ${value.fingerprint}` : null,
+    value.primary_fingerprint && value.primary_fingerprint !== value.fingerprint
+      ? `Primary fingerprint: ${value.primary_fingerprint}`
+      : null,
+    value.trust ? `Trust: ${value.trust}` : null,
+  ].filter(Boolean).join('\n');
+  return (
+    <span className={`commit-signature ${tone}`} title={details || label}>
+      <Icon name={value.kind === 'ssh' ? 'lock' : 'gpg'} size={12} />
+      <span>{label}</span>
+      {value.signer ? <span className="commit-signature-signer">· {value.signer}</span> : null}
+    </span>
   );
 }
 

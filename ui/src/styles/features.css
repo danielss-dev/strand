@@ -1344,6 +1344,25 @@
   font-family: var(--font-mono);
   font-size: 11px;
 }
+.commit-signature {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+}
+.commit-signature.success { color: var(--add); }
+.commit-signature.warning { color: var(--warn); }
+.commit-signature.danger { color: var(--del); }
+.commit-signature.checking,
+.commit-signature.muted { color: var(--text-muted); }
+.commit-signature-signer {
+  min-width: 0;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cd-meta .v .avatar {
   display: inline-block;
   width: 16px;

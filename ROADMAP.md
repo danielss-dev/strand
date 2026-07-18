@@ -1869,6 +1869,17 @@ Use pass verified nested creation, Windows Explorer selection, direct
 history/blame, exact folder deletion, and preservation of the disposable
 repository's dirty file and unrelated remote refs.
 
+**Commit metadata close-out shipped (2026-07-18):** Commit detail now verifies
+GPG, SSH, and X.509 signatures lazily, keeping cryptographic subprocesses off
+the paged-log hot path, and exposes signer/key/fingerprint/trust evidence. The
+detail panel and row menu copy subject/body and export an exact commit; a graph
+multi-selection copies ordered SHAs/subjects/full messages or exports the
+oldest-to-newest selection as one mbox-compatible patch series. Export streams
+through a sibling temporary file, rejects `.git` and symlink destinations, and
+does not truncate an existing file when Git fails. Focused core tests and a
+Computer Use pass verified unsigned and trusted SSH states, clipboard payloads,
+keyboard multi-selection, the native save dialog, and emitted patch order.
+
 ---
 
 ## 1.1+ — Post-1.0

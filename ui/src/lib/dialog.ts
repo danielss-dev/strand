@@ -1,4 +1,4 @@
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 import { useSettings } from '../stores/settings';
 import { isTauri } from './tauri';
@@ -58,6 +58,21 @@ export async function pickPemCertificate(): Promise<string | null> {
     multiple: false,
     title: 'Import CA certificate',
     filters: [{ name: 'PEM certificate', extensions: ['pem', 'crt', 'cer'] }],
+  });
+  return typeof selected === 'string' ? selected : null;
+}
+
+/** Choose a destination for an mbox-compatible commit patch export. */
+export async function pickCommitPatchDestination(
+  repoPath: string,
+  fileName: string,
+): Promise<string | null> {
+  if (!isTauri()) return null;
+  const separator = repoPath.includes('\\') ? '\\' : '/';
+  const selected = await saveDialog({
+    title: 'Export commit patch',
+    defaultPath: `${repoPath.replace(/[\\/]+$/, '')}${separator}${fileName}`,
+    filters: [{ name: 'Git patch', extensions: ['patch', 'mbox'] }],
   });
   return typeof selected === 'string' ? selected : null;
 }

@@ -3,9 +3,10 @@ import type { KeyboardEvent, ReactNode } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { computeGraph } from '../lib/graph';
+import { pickCommitPatchDestination } from '../lib/dialog';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { selectedCommitsOldestFirst } from '../lib/historySelection';
-import { errMessage } from '../lib/tauri';
+import { errMessage, tauri } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -100,6 +101,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   const commitSearchResults = useRepo((s) => s.commitSearchResults);
   const searchLog = useRepo((s) => s.searchLog);
 
+  const graphMainRef = useRef<HTMLDivElement>(null);
+  const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const didInitialFocus = useRef(false);
+  const [focusedCommit, setFocusedCommit] = useState<string | null>(null);
+  // Multi-selection stays distinct from the detail-panel selection. The
+  // anchor is the fixed end of a Shift range.
+  const [multi, setMulti] = useState<Set<string>>(() => new Set());
+  const anchorRef = useRef<string | null>(null);
+
   // Right-click (or Menu / Shift+F10) on a commit row opens this — the same
   // actions as the detail panel, reachable straight from the graph.
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -109,10 +119,128 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   } | null>(null);
   const [compareCommits, setCompareCommits] = useState<Commit[] | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  // The graph is newest→oldest; Git must receive a selected series in the
+  // opposite direction so exported/cherry-picked commits retain dependency order.
+  const bulkSelection = useMemo(
+    () => selectedCommitsOldestFirst(commits, multi),
+    [commits, multi],
+  );
+
+  const exportCommits = useCallback(
+    async (selection: Commit[]) => {
+      if (!meta || selection.length === 0 || bulkBusy) return;
+      const destination = await pickCommitPatchDestination(
+        meta.path,
+        patchFileName(selection),
+      );
+      if (!destination) return;
+      setBulkBusy(true);
+      try {
+        await tauri.repoCommitExportPatch(
+          meta.path,
+          selection.map((candidate) => candidate.hash),
+          destination,
+        );
+        onToast(
+          selection.length === 1
+            ? `Exported patch for ${selection[0].short_hash}`
+            : `Exported ${selection.length} commits as one patch series`,
+        );
+      } catch (caught) {
+        onToast(`Patch export failed: ${errMessage(caught)}`, 'error');
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [bulkBusy, meta, onToast],
+  );
+
+  const runBulkCherryPick = useCallback(
+    async (selection: Commit[] = bulkSelection) => {
+      if (bulkBusy || selection.length < 2) return;
+      const merge = selection.find((candidate) => candidate.parents.length > 1);
+      if (merge) {
+        onToast(
+          `Selection includes merge ${merge.short_hash} — apply merge commits individually so you can choose a mainline parent`,
+          'error',
+        );
+        return;
+      }
+      setBulkBusy(true);
+      try {
+        const conflicted = await cherryPick(selection.map((candidate) => candidate.hash));
+        onToast(
+          conflicted
+            ? `Cherry-pick of ${selection.length} commits has conflicts — resolve in Local Changes`
+            : `Cherry-picked ${selection.length} commits in oldest-to-newest order`,
+        );
+      } catch (caught) {
+        onToast(`Cherry-pick failed: ${errMessage(caught)}`, 'error');
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [bulkBusy, bulkSelection, cherryPick, onToast],
+  );
+
   const openCommitMenu = useCallback(
     (c: Commit, x: number, y: number) => {
       const fail = (verb: string, e: unknown) =>
         onToast(`${verb} failed: ${errMessage(e)}`, 'error');
+      const contextSelection = multi.has(c.hash) ? bulkSelection : [c];
+      if (contextSelection.length > 1) {
+        const count = contextSelection.length;
+        const items: MenuItem[] = [
+          {
+            label: `Cherry-pick ${count} selected commits`,
+            icon: 'arrow-down',
+            disabled: bulkBusy,
+            onSelect: () => void runBulkCherryPick(contextSelection),
+          },
+          {
+            label: 'Compare selected commits',
+            icon: 'compare',
+            disabled: count !== 2 || bulkBusy,
+            onSelect: () => setCompareCommits(contextSelection),
+          },
+          {
+            label: `Export ${count} commits as patch…`,
+            icon: 'external',
+            disabled: bulkBusy,
+            onSelect: () => void exportCommits(contextSelection),
+          },
+          {
+            label: 'Copy selected commit metadata',
+            icon: 'file',
+            submenu: [
+              {
+                label: 'Copy SHAs',
+                onSelect: () => {
+                  copyToClipboard(contextSelection.map((candidate) => candidate.hash).join('\n'));
+                  onToast(`Copied ${count} commit hashes`);
+                },
+              },
+              {
+                label: 'Copy subjects',
+                onSelect: () => {
+                  copyToClipboard(contextSelection.map((candidate) => candidate.subject).join('\n'));
+                  onToast(`Copied ${count} commit subjects`);
+                },
+              },
+              {
+                label: 'Copy full messages',
+                onSelect: () => {
+                  copyToClipboard(contextSelection.map(commitMessage).join('\n\n---\n\n'));
+                  onToast(`Copied ${count} commit messages`);
+                },
+              },
+            ],
+          },
+        ];
+        setMenu({ x, y, items });
+        return;
+      }
       const items: MenuItem[] = [
         {
           label: 'Checkout',
@@ -202,13 +330,31 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
         {
           label: 'Copy SHA',
           icon: 'file',
-          onSelect: () => { void copyToClipboard(c.hash); onToast('Copied commit hash'); },
+          onSelect: () => { copyToClipboard(c.hash); onToast('Copied commit hash'); },
+        },
+        {
+          label: 'Copy subject',
+          icon: 'file',
+          onSelect: () => { copyToClipboard(c.subject); onToast('Copied commit subject'); },
+        },
+        {
+          label: 'Copy body',
+          icon: 'file',
+          disabled: !c.body,
+          onSelect: () => { copyToClipboard(c.body); onToast('Copied commit body'); },
+        },
+        {
+          label: 'Export patch…',
+          icon: 'external',
+          disabled: bulkBusy,
+          onSelect: () => void exportCommits([c]),
         },
       ];
       setMenu({ x, y, items });
     },
-    [checkoutCommit, cherryPick, revert, hasStaged, commit, onCreateTag,
-      onInteractiveRebase, onResetTo, onCreateWorktree, meta, onToast, setBaseline, setView, selectFile],
+    [bulkBusy, bulkSelection, cherryPick, checkoutCommit, commit, exportCommits,
+      hasStaged, meta, multi, onCreateTag, onCreateWorktree, onInteractiveRebase,
+      onResetTo, onToast, revert, runBulkCherryPick, selectFile, setBaseline, setView],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail
@@ -255,18 +401,6 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     },
     [stashApply, stashPop, stashDrop, onToast, selectedCommit, selectCommit],
   );
-  const graphMainRef = useRef<HTMLDivElement>(null);
-  const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
-  const didInitialFocus = useRef(false);
-  const [focusedCommit, setFocusedCommit] = useState<string | null>(null);
-
-  // Multi-selection (for future bulk ops: cherry-pick, compare, …). Distinct
-  // from `selectedCommit`, which drives the single-commit detail panel.
-  // `anchor` is the fixed end of a shift-range; it moves on plain
-  // click/arrow and stays put while extending.
-  const [multi, setMulti] = useState<Set<string>>(() => new Set());
-  const anchorRef = useRef<string | null>(null);
-
   // Commit search. We highlight matches in place and step through them with
   // ‹/› rather than filtering the list — filtering would break the graph's
   // lane continuity (every parent must stay present; see lib/graph.ts). Search
@@ -566,38 +700,6 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     anchorRef.current = keep;
   }, [focusedCommit]);
 
-  // The graph is newest→oldest; Git must receive a selected series in the
-  // opposite direction so dependent commits are applied oldest→newest.
-  const bulkSelection = useMemo(
-    () => selectedCommitsOldestFirst(commits, multi),
-    [commits, multi],
-  );
-
-  const runBulkCherryPick = useCallback(async () => {
-    if (bulkBusy || bulkSelection.length < 2) return;
-    const merge = bulkSelection.find((candidate) => candidate.parents.length > 1);
-    if (merge) {
-      onToast(
-        `Selection includes merge ${merge.short_hash} — apply merge commits individually so you can choose a mainline parent`,
-        'error',
-      );
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      const conflicted = await cherryPick(bulkSelection.map((candidate) => candidate.hash));
-      onToast(
-        conflicted
-          ? `Cherry-pick of ${bulkSelection.length} commits has conflicts — resolve in Local Changes`
-          : `Cherry-picked ${bulkSelection.length} commits in oldest-to-newest order`,
-      );
-    } catch (caught) {
-      onToast(`Cherry-pick failed: ${errMessage(caught)}`, 'error');
-    } finally {
-      setBulkBusy(false);
-    }
-  }, [bulkBusy, bulkSelection, cherryPick, onToast]);
-
   const onGraphKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -811,6 +913,16 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
             >
               <Icon name="compare" size={12} />
               <span>Compare</span>
+            </button>
+            <button
+              type="button"
+              className="since-baseline-btn"
+              disabled={bulkBusy}
+              onClick={() => void exportCommits(bulkSelection)}
+              title="Export selected commits as one mbox-compatible patch series"
+            >
+              <Icon name="external" size={12} />
+              <span>Export patches…</span>
             </button>
             <div className="graph-sel-count" role="status">
               <span>{multi.size} selected</span>
@@ -1116,6 +1228,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                 <CommitDetail
                   onCreateTag={onCreateTag}
                   onInteractiveRebase={onInteractiveRebase}
+                  onExportPatch={(candidate) => void exportCommits([candidate])}
                   onToast={onToast}
                 />
               </Panel>
@@ -1150,6 +1263,23 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
       )}
     </div>
   );
+}
+
+function commitMessage(commit: Commit): string {
+  return commit.body ? `${commit.subject}\n\n${commit.body}` : commit.subject;
+}
+
+function patchFileName(selection: Commit[]): string {
+  if (selection.length > 1) {
+    return `${selection.length}-commits-${selection[0].short_hash}-${selection[selection.length - 1].short_hash}.patch`;
+  }
+  const commit = selection[0];
+  const slug = commit.subject
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `${commit.short_hash}${slug ? `-${slug}` : ''}.patch`;
 }
 
 /**

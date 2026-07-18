@@ -1610,3 +1610,15 @@ empty folder can open directly and appears once populated. Every file mutation
 must pass through `safe_workdir_path`, reject traversal and `.git` components,
 validate the whole target set before its first deletion, avoid following
 directory symlinks, and emit native separators at OS integration boundaries.
+
+**Signature verification is lazy; patch export is staged outside `.git`
+(2026-07-18).** Git's `%G?` placeholders can invoke GPG/SSH verification for
+every formatted row, so they never belong in `Repo::log` or another paged hot
+path. Detect whether the opened immutable commit carries a signature, verify
+only that commit through system Git, and keep a bounded UI cache keyed by
+repository path plus OID. Exact multi-commit export uses resolved full OIDs and
+`format-patch --no-walk=unsorted`; Git consumes those revision arguments in
+reverse insertion order, so reverse the argv to preserve the UI's oldest-to-
+newest selection. Stream into a create-new sibling temporary file first, reject
+symlink and `.git` destinations, and copy to the user-selected file only after
+Git succeeds so a formatting failure cannot truncate an existing export.
