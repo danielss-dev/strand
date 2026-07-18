@@ -186,6 +186,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const deleteRemoteBranch = useRepo((s) => s.deleteRemoteBranch);
   const removeRemote = useRepo((s) => s.removeRemote);
   const fetchRemote = useRepo((s) => s.fetchRemote);
+  const setDefaultRemote = useRepo((s) => s.setDefaultRemote);
   const deleteTag = useRepo((s) => s.deleteTag);
   const pushTag = useRepo((s) => s.pushTag);
   const deleteRemoteTag = useRepo((s) => s.deleteRemoteTag);
@@ -774,12 +775,43 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           ),
       },
       {
+        label: 'Prune stale branches',
+        icon: 'sync',
+        onSelect: () =>
+          void fetchRemote(name, true).then(
+            () => onToast(`Pruned ${name}`),
+            (e) => onToast(`Prune failed: ${errMessage(e)}`, 'error'),
+          ),
+      },
+      {
         label: 'Edit URLs…',
         icon: 'edit',
         onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '', pushUrl: pushUrl ?? '' }),
       },
+      {
+        label: 'Inspect refspecs…',
+        icon: 'search',
+        onSelect: () => onManageRemote({
+          kind: 'refspecs',
+          name,
+          fetchRefspecs: remote?.fetch_refspecs ?? [],
+          pushRefspecs: remote?.push_refspecs ?? [],
+        }),
+      },
       { label: 'Rename…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'rename', name }) },
     ];
+    if (remote?.is_default) {
+      items.push({ label: 'Default remote', icon: 'check', disabled: true });
+    } else {
+      items.push({
+        label: 'Set as default remote',
+        icon: 'check',
+        onSelect: () => void setDefaultRemote(name).then(
+          () => onToast(`Default remote: ${name}`),
+          (e) => onToast(`Set default failed: ${errMessage(e)}`, 'error'),
+        ),
+      });
+    }
     if (url) {
       items.push({ label: 'Copy fetch URL', icon: 'file', onSelect: () => { void copyToClipboard(url); onToast('Fetch URL copied'); } });
     }

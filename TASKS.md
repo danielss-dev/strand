@@ -140,13 +140,15 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `rename`, no force; upstream config moves with the rename and HEAD follows a
   current-branch rename for free. Sidebar branch menu "Rename branch…" + palette
   "Rename current branch…" → `RenameBranchDialog`.)
-- ☑ Remote add / remove / rename / set-url (`remote.rs` via git2 — blank-input
+- ☑ Remote add / remove / rename / separate URLs / default / prune / refspec
+  inspection (`remote.rs` via git2 — blank-input
   validation, URL/name safety gates (no `ext::`/`fd::`, no leading `-`),
   duplicate name mapped to "remote X already exists", rename "problems"
-  returned for a warning toast (the rename has already happened by then).
-  Sidebar Remotes `+` + the remote folder row's
-  context menu — Edit URL… / Rename… / Copy URL / Remove remote (confirm) —
-  → `RemoteDialog` (add | rename | url modes); palette "Add remote…".)
+  returned for a warning toast (the rename has already happened by then),
+  native `remote.pushDefault` follows rename/remove, and `Remote` exposes
+  fetch/push refspecs. Sidebar/palette actions cover scoped prune, default
+  selection, read-only refspec inspection, Edit URLs, Rename, copy URLs, and
+  confirmed Remove via `RemoteDialog`.)
 - ☑ Reset soft / mixed / hard (`Repo::reset` in `reset.rs` — `ResetMode` /
   `ResetOutcome`; refuses while a merge/rebase/cherry-pick/revert is paused; a
   hard reset of a tracked-dirty tree first stashes a safety snapshot ("Safety:
@@ -320,7 +322,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `repo_commit`, `repo_checkout`, `repo_checkout_commit`, `repo_branch_create`,
   `repo_branch_delete`, `repo_branch_delete_remote`, `repo_branch_rename`,
   `repo_remote_add`,
-  `repo_remote_remove`, `repo_remote_rename`, `repo_remote_set_url`,
+  `repo_remote_remove`, `repo_remote_rename`, `repo_remote_set_urls`,
+  `repo_remote_set_default`,
   `repo_reset`, `repo_gitignore_add`, `repo_move_path`,
   `repo_tag_create`, `repo_tag_delete`,
   `repo_cherry_pick`, `repo_revert`, `repo_merge`, `repo_rebase`,

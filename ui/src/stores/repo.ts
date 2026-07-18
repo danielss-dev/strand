@@ -458,12 +458,14 @@ export interface RepoState {
   renameRemote(oldName: string, newName: string): Promise<string[]>;
   /** Change a remote's fetch URL and optional push-only URL. */
   setRemoteUrls(name: string, url: string, pushUrl: string | null): Promise<void>;
+  /** Set Git's repository-local `remote.pushDefault`. */
+  setDefaultRemote(name: string): Promise<void>;
   /**
    * Fetch a specific remote by name (the sidebar remote-row action — how a
    * just-added remote gets its first refs). The topbar Fetch with its progress
    * pill stays App-owned; this is the lightweight no-progress path.
    */
-  fetchRemote(name: string): Promise<void>;
+  fetchRemote(name: string, prune?: boolean): Promise<void>;
   /**
    * Reset HEAD (the current branch, or HEAD itself when detached) to `target`.
    * A hard reset of a dirty tree stashes a safety snapshot first — returned in
@@ -671,12 +673,6 @@ const EMPTY_REFS: Refs = {
 };
 
 /**
- * The remote tag pushes target by default: the current branch's upstream
- * remote, else `origin`, else the only/first configured remote, else null
- * (no remote — callers surface that to the user). Tags have no per-tag
- * upstream of their own, so this mirrors what `git push <remote> <tag>` needs.
- */
-/**
  * Whether two filesystem paths point at the same directory, tolerating
  * separator (`\` vs `/`), trailing-slash, and Windows verbatim-prefix
  * differences (see {@link pathKey}). Git-sourced paths (worktree porcelain,
@@ -688,7 +684,15 @@ function samePath(a: string, b: string): boolean {
   return pathKey(a) === pathKey(b);
 }
 
+/**
+ * The remote tag pushes target by default: `remote.pushDefault`, the current
+ * branch's upstream remote, `origin`, or the first configured remote. Tags
+ * have no per-tag upstream of their own, so this mirrors the repository's
+ * normal push destination.
+ */
 export function defaultRemote(refs: Refs): string | null {
+  const configured = refs.remotes.find((remote) => remote.is_default);
+  if (configured) return configured.name;
   const head = refs.branches.find((b) => b.is_head);
   if (head?.upstream?.remote) return head.upstream.remote;
   if (refs.remotes.some((r) => r.name === 'origin')) return 'origin';
@@ -1782,10 +1786,16 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoRemoteSetUrls(path, name, url, pushUrl);
     await get().refreshLocalChanges();
   },
-  async fetchRemote(name) {
+  async setDefaultRemote(name) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoFetch(path, name, get().fetchPrune);
+    await tauri.repoRemoteSetDefault(path, name);
+    await get().refreshLocalChanges();
+  },
+  async fetchRemote(name, prune) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoFetch(path, name, prune ?? get().fetchPrune);
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
   async reset(target, mode) {

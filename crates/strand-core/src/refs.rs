@@ -59,6 +59,12 @@ pub struct Remote {
     pub url: Option<String>,
     /// Explicit push-only URL. `None` means pushes use `url`.
     pub push_url: Option<String>,
+    /// Explicit fetch refspecs from `remote.<name>.fetch`.
+    pub fetch_refspecs: Vec<String>,
+    /// Explicit push refspecs from `remote.<name>.push`.
+    pub push_refspecs: Vec<String>,
+    /// Whether `remote.pushDefault` names this remote.
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,15 +385,31 @@ fn collect_remotes(repo: &git2::Repository) -> Vec<Remote> {
         Err(_) => return Vec::new(),
     };
 
+    let default_remote = repo.config().ok().and_then(|config| {
+        config.get_string("remote.pushDefault").ok()
+    });
     let mut out = Vec::new();
     for name in names.iter().flatten() {
         let remote = repo.find_remote(name).ok();
         let url = remote.as_ref().and_then(|r| r.url().map(str::to_string));
         let push_url = remote.as_ref().and_then(|r| r.pushurl().map(str::to_string));
+        let fetch_refspecs = remote
+            .as_ref()
+            .and_then(|r| r.fetch_refspecs().ok())
+            .map(|specs| specs.iter().flatten().map(str::to_string).collect())
+            .unwrap_or_default();
+        let push_refspecs = remote
+            .as_ref()
+            .and_then(|r| r.push_refspecs().ok())
+            .map(|specs| specs.iter().flatten().map(str::to_string).collect())
+            .unwrap_or_default();
         out.push(Remote {
             name: name.to_string(),
             url,
             push_url,
+            fetch_refspecs,
+            push_refspecs,
+            is_default: default_remote.as_deref() == Some(name),
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));

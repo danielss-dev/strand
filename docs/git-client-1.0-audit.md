@@ -82,7 +82,7 @@ current official product material for:
 | Multi-commit actions | Ordered multi-commit cherry-pick, two-commit comparison, and merge-mainline cherry-pick/revert shipped 2026-07-18 | Complete for 1.0 daily use |
 | Rebase | `edit` / pause-to-amend and topology-safe `--rebase-merges` preservation shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
-| Remote management | Prune one remote; change the default remote; inspect refspecs (separate fetch/push URL editing shipped 2026-07-18) | Daily-driver |
+| Remote management | Scoped prune, native default-remote selection, fetch/push refspec inspection, and separate fetch/push URL editing shipped 2026-07-18 | Complete for 1.0 daily use |
 | Repository maintenance | `git maintenance` / `gc`, integrity check, and an activity log with exact commands and output | Daily-driver |
 | File actions | Open/reveal externally, copy relative or absolute path, jump directly to history/blame, delete, and create file/folder where allowed | Daily-driver |
 | Commit metadata | GPG/SSH signature status, copy subject/body, export patch, and richer multi-selection actions | Daily-driver |
@@ -130,9 +130,8 @@ disabled with a reason, and the primary action stays first.
 
 ## Recommended implementation waves
 
-1. **Network and ref ergonomics** — branch tracking/ref operations and network
-   preferences are shipped; the remaining remote-management slice is per-remote
-   prune, default-remote selection, and refspec inspection.
+1. **Network and ref ergonomics** — branch tracking/ref operations, network
+   preferences, and remote-management close-out are shipped.
 2. **Daily local Git close-out** — shipped: initialize repository, line staging,
    stash-to-branch, multi-commit operations, branch comparison, and rebase
    `edit` / merge preservation.
@@ -146,5 +145,5 @@ disabled with a reason, and the primary action stays first.
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
 multi-commit actions, branch/ref comparison, and rebase close-out are now
-shipped foundations. The next bounded implementation slice is the remaining
-remote-management gap.
+shipped foundations. The next bounded implementation slice is repository
+maintenance and its inspectable activity log.

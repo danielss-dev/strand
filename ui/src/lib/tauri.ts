@@ -447,6 +447,8 @@ export const tauri = {
     invoke<string[]>('repo_remote_rename', { path, oldName, newName }),
   repoRemoteSetUrls: (path: string, name: string, url: string, pushUrl: string | null) =>
     invoke<void>('repo_remote_set_urls', { path, name, url, pushUrl }),
+  repoRemoteSetDefault: (path: string, name: string) =>
+    invoke<void>('repo_remote_set_default', { path, name }),
   repoTagCreate: (
     path: string,
     name: string,

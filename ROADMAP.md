@@ -1841,6 +1841,15 @@ tests and a Computer Use pass verified prune retention/removal, dirty-change
 autostash restoration, cross-tab preference persistence, and separate remote
 URLs in both Strand and Git.
 
+**Remote-management close-out shipped (2026-07-18):** Each remote can now be
+pruned independently, selected as Git's native repository default, and opened
+in a read-only fetch/push refspec inspector. `remote.pushDefault` follows a
+remote rename and clears on removal; refspecs and default state come directly
+from Git config. The folder menu and per-remote palette actions keep all three
+flows keyboard-reachable. Core tests and a Computer Use pass verified exact
+refspec rendering, default selection, and an origin-only prune that preserved
+another remote's stale ref plus the dirty worktree.
+
 ---
 
 ## 1.1+ — Post-1.0

@@ -4093,6 +4093,20 @@ textarea.clone-input {
   font-size: 11px;
   color: var(--text-2);
 }
+.remote-refspec-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.remote-refspec {
+  padding: 7px 9px;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  user-select: text;
+}
 
 /* Settings dialog — Appearance / theme picker (reuses the clone-dialog shell). */
 .settings-dialog {

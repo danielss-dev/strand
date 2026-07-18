@@ -82,7 +82,7 @@ The topbar branch dropdown also checks out local branches, tracks remote ones, a
 
 ### Remotes
 
-Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu has **Edit URLs…**, Rename, copy fetch URL, copy a distinct push URL when configured, and Remove remote. Adding or editing a remote accepts a required fetch URL and an optional push URL; both are stored in native Git configuration. The section `+` (or the palette's "Add remote…") adds a remote.
+Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu can fetch, prune stale branches from only that remote, inspect its fetch/push refspecs, set Git's repository-local default remote, edit URLs, rename, copy URLs, or remove it. Adding or editing a remote accepts a required fetch URL and an optional push URL; remote URLs, refspecs, and `remote.pushDefault` stay in native Git configuration so command-line Git sees the same setup. Scoped prune, refspec inspection, and default selection are also searchable per remote in the command palette. The section `+` (or the palette's "Add remote…") adds a remote.
 
 ### Tags
 

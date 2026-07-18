@@ -8,13 +8,14 @@ import { useRepo } from '../stores/repo';
 export type RemoteDialogMode =
   | { kind: 'add' }
   | { kind: 'rename'; name: string }
-  | { kind: 'url'; name: string; url: string; pushUrl: string };
+  | { kind: 'url'; name: string; url: string; pushUrl: string }
+  | { kind: 'refspecs'; name: string; fetchRefspecs: string[]; pushRefspecs: string[] };
 
 /**
  * Modal for managing remotes — add a new one (Name + URL), rename an existing
- * one, or edit its URL. Opened from the Remotes section `+`, a remote folder
- * row's context menu, and the command palette ("Add remote…"). Submits to the
- * matching store action; success surfaces via `onToast`.
+ * one, edit its URLs, or inspect its refspecs. Opened from the Remotes section
+ * `+`, a remote folder row's context menu, and the command palette. Mutating
+ * modes submit to the matching store action; success surfaces via `onToast`.
  */
 export function RemoteDialog({
   mode,
@@ -78,13 +79,14 @@ export function RemoteDialog({
 
   const title = mode.kind === 'add' ? 'Add remote'
     : mode.kind === 'rename' ? 'Rename remote'
+    : mode.kind === 'refspecs' ? 'Remote refspecs'
     : 'Edit remote URLs';
   const submitLabel = mode.kind === 'add' ? 'Add remote'
     : mode.kind === 'rename' ? 'Rename'
     : 'Save URLs';
 
   async function submit() {
-    if (busy) return;
+    if (busy || mode.kind === 'refspecs') return;
     const remoteName = name.trim();
     const remoteUrl = url.trim();
     if (mode.kind !== 'url' && !remoteName) {
@@ -146,14 +148,14 @@ export function RemoteDialog({
         </div>
 
         <div className="clone-body">
-          {mode.kind !== 'add' && (
+          {mode.kind !== 'add' && mode.kind !== 'refspecs' && (
             <p className="stash-blurb">
               {mode.kind === 'rename' ? 'Rename remote ' : 'Change the fetch and push URLs of '}
               <code>{mode.name}</code>.
             </p>
           )}
 
-          {mode.kind !== 'url' && (
+          {mode.kind !== 'url' && mode.kind !== 'refspecs' && (
             <label className="clone-field">
               <span className="lbl">Name</span>
               <input
@@ -172,7 +174,7 @@ export function RemoteDialog({
             </label>
           )}
 
-          {mode.kind !== 'rename' && (
+          {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
             <label className="clone-field">
               <span className="lbl">Fetch URL</span>
               <input
@@ -189,7 +191,7 @@ export function RemoteDialog({
             </label>
           )}
 
-          {mode.kind !== 'rename' && (
+          {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
             <label className="clone-field">
               <span className="lbl">Push URL <span className="muted">(optional)</span></span>
               <input
@@ -205,16 +207,46 @@ export function RemoteDialog({
             </label>
           )}
 
+          {mode.kind === 'refspecs' && (
+            <>
+              <p className="stash-blurb">
+                Git ref mappings configured for <code>{mode.name}</code>.
+              </p>
+              <div className="remote-refspec-group">
+                <span className="lbl">Fetch refspecs</span>
+                {mode.fetchRefspecs.length > 0
+                  ? mode.fetchRefspecs.map((refspec) => (
+                    <code key={refspec} className="remote-refspec">{refspec}</code>
+                  ))
+                  : <span className="muted">None configured</span>}
+              </div>
+              <div className="remote-refspec-group">
+                <span className="lbl">Push refspecs</span>
+                {mode.pushRefspecs.length > 0
+                  ? mode.pushRefspecs.map((refspec) => (
+                    <code key={refspec} className="remote-refspec">{refspec}</code>
+                  ))
+                  : <span className="muted">None configured — Git's push rules apply</span>}
+              </div>
+            </>
+          )}
+
           {error ? <div className="clone-error">{error}</div> : null}
         </div>
 
         <div className="clone-foot">
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn primary" disabled={busy} onClick={() => void submit()}>
-            {busy ? 'Working…' : submitLabel}
-          </button>
+          {mode.kind === 'refspecs' ? (
+            <button type="button" autoFocus className="btn primary" onClick={onClose}>Close</button>
+          ) : (
+            <>
+              <button type="button" className="btn" disabled={busy} onClick={onClose}>
+                Cancel
+              </button>
+              <button type="button" className="btn primary" disabled={busy} onClick={() => void submit()}>
+                {busy ? 'Working…' : submitLabel}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

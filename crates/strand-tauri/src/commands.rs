@@ -1202,6 +1202,12 @@ pub fn repo_remote_set_urls(
 }
 
 #[tauri::command(async)]
+pub fn repo_remote_set_default(path: String, name: String) -> CmdResult<()> {
+    Repo::discover(&path)?.set_default_remote(&name)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub fn repo_tag_create(
     path: String,
     name: String,

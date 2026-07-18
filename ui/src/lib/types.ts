@@ -170,6 +170,10 @@ export interface Remote {
   url: string | null;
   /** Explicit push-only URL; null means pushes use `url`. */
   push_url: string | null;
+  fetch_refspecs: string[];
+  push_refspecs: string[];
+  /** Mirrors Git's repository-local `remote.pushDefault`. */
+  is_default: boolean;
 }
 
 export interface Tag {

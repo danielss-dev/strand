@@ -1457,6 +1457,32 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        ...refs.remotes.flatMap((remote) => [
+          { id: `remote-${remote.name}-prune`, label: `Prune remote: ${remote.name}`, group: 'Actions', keywords: 'remote fetch prune stale tracking refs', run: () => {
+            void useRepo.getState().fetchRemote(remote.name, true).then(
+              () => showToast(`Pruned ${remote.name}`),
+              (e) => showToast(`Prune failed: ${errMessage(e)}`, 'error'),
+            );
+          } } satisfies PaletteAction,
+          { id: `remote-${remote.name}-refspecs`, label: `Inspect remote refspecs: ${remote.name}`, group: 'Actions', keywords: 'remote fetch push refspec mapping inspect', run: () => setRemoteDialog({
+            kind: 'refspecs',
+            name: remote.name,
+            fetchRefspecs: remote.fetch_refspecs,
+            pushRefspecs: remote.push_refspecs,
+          }) } satisfies PaletteAction,
+          ...(!remote.is_default ? [{
+            id: `remote-${remote.name}-default`,
+            label: `Set default remote: ${remote.name}`,
+            group: 'Actions',
+            keywords: 'remote push default origin configure',
+            run: () => {
+              void useRepo.getState().setDefaultRemote(remote.name).then(
+                () => showToast(`Default remote: ${remote.name}`),
+                (e) => showToast(`Set default failed: ${errMessage(e)}`, 'error'),
+              );
+            },
+          } satisfies PaletteAction] : []),
+        ]),
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
         { id: 'push-tags', label: 'Push all tags', group: 'Actions', keywords: 'push upload publish tags remote', run: onPushAllTags },
         { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onFetch },

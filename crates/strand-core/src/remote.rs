@@ -60,7 +60,17 @@ impl Repo {
     /// refs and config section.
     pub fn remove_remote(&self, name: &str) -> Result<()> {
         require(name, "remote name")?;
-        self.git2()?.remote_delete(name)?;
+        let repo = self.git2()?;
+        let was_default = repo
+            .config()?
+            .get_string("remote.pushDefault")
+            .ok()
+            .as_deref()
+            == Some(name);
+        repo.remote_delete(name)?;
+        if was_default {
+            repo.config()?.remove("remote.pushDefault")?;
+        }
         Ok(())
     }
 
@@ -74,7 +84,17 @@ impl Repo {
         require(old, "remote name")?;
         require(new, "remote name")?;
         require_plain_name(new)?;
-        let problems = self.git2()?.remote_rename(old, new)?;
+        let repo = self.git2()?;
+        let was_default = repo
+            .config()?
+            .get_string("remote.pushDefault")
+            .ok()
+            .as_deref()
+            == Some(old);
+        let problems = repo.remote_rename(old, new)?;
+        if was_default {
+            repo.config()?.set_str("remote.pushDefault", new)?;
+        }
         Ok(problems.iter().flatten().map(str::to_string).collect())
     }
 
@@ -91,6 +111,16 @@ impl Repo {
         let repo = self.git2()?;
         repo.remote_set_url(name, url)?;
         repo.remote_set_pushurl(name, push_url)?;
+        Ok(())
+    }
+
+    /// Set the repository's native default push remote. Other clients and
+    /// `git push` see the same `remote.pushDefault` value immediately.
+    pub fn set_default_remote(&self, name: &str) -> Result<()> {
+        require(name, "remote name")?;
+        let repo = self.git2()?;
+        repo.find_remote(name)?;
+        repo.config()?.set_str("remote.pushDefault", name)?;
         Ok(())
     }
 }
@@ -189,6 +219,47 @@ mod tests {
     }
 
     #[test]
+    fn default_remote_and_refspecs_follow_native_git_config() {
+        let (repo, dir) = scratch_repo();
+        repo.add_remote("origin", "https://example.com/a.git", None).unwrap();
+        repo.set_default_remote("origin").unwrap();
+        {
+            let g = git2::Repository::open(&dir).unwrap();
+            g.config()
+                .unwrap()
+                .set_str("remote.origin.push", "refs/heads/main:refs/heads/release")
+                .unwrap();
+        }
+
+        let remote = repo.refs().unwrap().remotes.remove(0);
+        assert!(remote.is_default);
+        assert_eq!(
+            remote.fetch_refspecs,
+            ["+refs/heads/*:refs/remotes/origin/*"]
+        );
+        assert_eq!(
+            remote.push_refspecs,
+            ["refs/heads/main:refs/heads/release"]
+        );
+
+        repo.rename_remote("origin", "upstream").unwrap();
+        let g = git2::Repository::open(&dir).unwrap();
+        assert_eq!(
+            g.config().unwrap().get_string("remote.pushDefault").unwrap(),
+            "upstream"
+        );
+        repo.remove_remote("upstream").unwrap();
+        assert!(
+            g.config()
+                .unwrap()
+                .get_string("remote.pushDefault")
+                .is_err()
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn rename_with_custom_refspec_succeeds_and_reports_problems() {
         let (repo, dir) = scratch_repo();
         repo.add_remote("origin", "https://example.com/a.git", None).unwrap();
@@ -240,6 +311,7 @@ mod tests {
             .unwrap_err();
         assert!(err.to_string().contains("may not start with '-'"), "{err}");
         assert!(repo.rename_remote("origin", "-evil").is_err());
+        assert!(repo.set_default_remote("missing").is_err());
         let g = git2::Repository::open(&dir).unwrap();
         assert!(g.find_remote("origin").is_ok(), "rejected rename left the remote alone");
 

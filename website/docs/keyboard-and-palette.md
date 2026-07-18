@@ -68,6 +68,10 @@ Push is deliberately on `Mod+P` and pull on `Mod+Shift+P`. The Git shortcuts act
 
 Alternative network strategies are palette actions rather than fixed shortcuts: fetch with or without pruning; pull with merge, rebase, or fast-forward-only, with or without autostash; push annotated tags; push every tag; and force-push with a lease. The current branch also contributes “Manage current branch upstream…” and “Push current branch to…” actions. Force-push always opens a branch-specific confirmation dialog, and plain `--force` is not exposed. Any branch or remote-branch row can open its richer context menu from the keyboard with the Menu key or `Shift+F10`.
 
+Each configured remote contributes palette actions to prune only that remote,
+inspect its fetch/push refspecs, and make it the repository's default push
+remote. The same actions are in the keyboard-openable remote-folder menu.
+
 A few fixed app-level keys are not rebindable:
 
 | Key | Action |

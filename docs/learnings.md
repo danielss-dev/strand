@@ -1420,7 +1420,9 @@ the command line and every other Git client immediately see the same remotes.
 
 **How to apply.** Route network preferences through the active-repository
 loader and App-owned callbacks. Extend the remote model and native Git config
-mutation together when adding remote identity fields.
+mutation together when adding remote identity fields. Repository-wide remote
+choices use native keys such as `remote.pushDefault`; rename and remove must
+update or clear those keys in the same operation.
 
 ---
 
