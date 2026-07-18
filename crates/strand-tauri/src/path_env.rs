@@ -98,7 +98,7 @@ fn windows_registry_path(
         return None;
     }
 
-    let mut buffer = vec![0u16; (bytes as usize + 1) / 2];
+    let mut buffer = vec![0u16; (bytes as usize).div_ceil(2)];
     // SAFETY: `buffer` owns at least the byte count returned by the size
     // query, and RegGetValueW receives that capacity through `bytes`.
     if unsafe {

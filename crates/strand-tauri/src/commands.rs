@@ -962,6 +962,7 @@ pub async fn repo_branch_fetch(
 }
 
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)] // Tauri IPC parameters intentionally stay flat and named.
 pub async fn repo_branch_pull(
     path: String,
     remote: String,

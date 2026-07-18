@@ -2060,6 +2060,12 @@ status. Publish-ready release notes live at
 `docs/changelog/2026-07-18-strand-1.0.0.md` and are explicitly gated by the
 release checklist.
 
+**Rust CI lint gate closed (2026-07-18):** The versioned 1.0 candidate now
+passes `cargo clippy -p strand-core -p strand-tauri -- -D warnings` on Rust
+1.92. The only edits are a documented allowance for one flat Tauri IPC command
+signature, native `div_ceil`, and a needless-borrow removal; the Tauri suite
+remains green.
+
 ---
 
 ## 1.1+ — Post-1.0

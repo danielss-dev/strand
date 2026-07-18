@@ -2012,7 +2012,7 @@ fn submit_review_azure_server(
                 comment.start_line,
                 comment.end_line,
                 comment.side,
-                &coordinates,
+                coordinates,
             )
             .map_err(|error| azure_review_inline_write_error(event, index, error))?;
         }

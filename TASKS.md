@@ -62,7 +62,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   desktop capability allowlist, signed stable-update policy enforcement, and
   the fresh-clone hook warning, and the typed English localization baseline are
   shipped. Linux AppImages are keyless-signed with Sigstore and the full
-  keyboard/accessibility pass is closed. Windows publisher signing, real
+  keyboard/accessibility pass is closed. The Rust 1.92 CI lint gate is clean
+  at `1.0.0` (`repo_branch_pull` IPC-shape allowance plus `div_ceil`/borrow
+  cleanups). Windows publisher signing, real
   macOS/GNOME/KDE candidate validation and the
   release-quality checklist remain (`docs/release-checklist.md`).
 - ☑ **Power parity selection.** Keep the already-shipped signature verification
