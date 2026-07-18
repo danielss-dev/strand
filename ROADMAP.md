@@ -654,9 +654,10 @@ palette but never actually bound — Pull, Push, Open in Editor/Terminal), and
 Window. Items call the same callbacks as the in-app UI through a ref, so the
 menu only reinstalls when repo-scoped items flip enabled/disabled (repo
 open/close). AppKit dispatches menu accelerators before the webview sees the
-keydown; App's key handler also skips menu-owned combos (`appMenuInstalled()`)
-so handling is single-fire either way. macOS only — the Win/Linux in-window
-menubar stays tracked in TASKS. The status-bar settings button also swapped
+keydown; App's key handler skips those combos through the current
+`nativeMenuPreemptsKeydown()` boundary so handling is single-fire. This first
+slice was macOS-only; the 2026-07-18 1.0 close-out below expanded the shared
+menu to Windows/Linux. The status-bar settings button also swapped
 its sun glyph for a proper gear (Feather `settings`, 24-grid with compensated
 stroke).
 
@@ -1063,14 +1064,15 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   stay pinned to that revision — shipped 2026-07-15
 - ☑ Crash reporting (opt-in, off by default) — user-mediated GitHub-issue
   flow, shipped 2026-07-06 (see changelog entry below)
-- ◐ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
+- ☑ Hosted pull-request workspace — GitHub + Azure DevOps list/detail,
   rendered Markdown, color-coded checks, discussions with top-level comment
   creation, current-branch auto-open, and full-width lazy selected-file Pierre
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
   comments, exact-head batched GitHub/Azure inline reviews, GitHub thread
-  replies/resolution, permission-gated Ready for review, and merge controls now
-  ship; Azure existing-thread lifecycle and bounded GitHub detail pagination
-  remain follow-on work. Azure DevOps Server
+  replies/resolution, permission-gated Ready for review, merge controls,
+  close/reopen, PR worktrees, and GitHub branch update now ship. The accepted
+  1.0 review bar is closed; Azure existing-thread lifecycle and pagination
+  beyond the bounded GitHub detail query are 1.1 work. Azure DevOps Server
   2020+ now uses the optional release-pinned `strand-azdo` REST helper with
   PAT/private-CA profiles and Windows integrated authentication, while Azure
   DevOps Services keeps the official `az` path. GitLab and Bitbucket are
@@ -1089,13 +1091,14 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   virtualization, stable snapshot slices — are all ☑ or declined by
   measurement)
 - ◐ Signed installers on all three platforms (macOS signed + notarized via
-  release CI since v0.5.0; Windows EV cert + Linux signing still open)
-- ◐ Mature-client parity close-out — audited against current Fork, GitKraken,
+  release CI since v0.5.0; Linux AppImages keyless-signed with Sigstore;
+  Windows publisher certificate remains the external gate)
+- ☑ Mature-client parity close-out — audited against current Fork, GitKraken,
   and Tower surfaces in `docs/git-client-1.0-audit.md`. Network strategy + ref
   context-menu slices shipped 2026-07-16, including upstream management,
   explicit non-current branch push, selected-remote fetch/pull, and per-repo
-  pull defaults; daily local Git gaps are closed, while hosted-review
-  completion and stable-release hardening remain.
+  pull defaults. Daily local Git and hosted-review gaps are closed; the
+  unshipped power-feature set is explicitly 1.1 scope.
 
 **File view + submodules (2026-06-06):** First 1.0 vertical — the four-tab file
 view (PRD §6.5) and submodules went from placeholders to wired features.
@@ -2071,8 +2074,9 @@ the same resolved bindings.
   - ☑ Isolated, cancellable provider execution with sensitive-file confirmation,
     deterministic bounded context, per-repository writing profiles, PR-draft
     coverage/undo, and explicit alternate-provider retry
-- ◐ Built-in PR review surface — moved into 1.0 with the GitHub/Azure read-only
-  foundation; GitLab/Bitbucket adapters and review/merge parity continue here.
+- ◐ Hosted-review expansion — GitLab/Bitbucket adapters, Azure existing-thread
+  lifecycle, deeper pagination, merge queue/auto-complete, and review-evolution
+  comparisons build on the completed GitHub/Azure 1.0 workspace.
 
 **AI commit messages (2026-07-01):** Subscription-first suggestions prefer the
 staged diff, and fall back to all unstaged changes when no staged diff exists —

@@ -164,7 +164,7 @@ Priority levels: **P0** = required for first public release, **P1** = required b
 | Add existing local repo                           | P0       | Drag-and-drop folder onto the app.       |
 | Open recent repository quickly                    | P0       | In sidebar dropdown and command palette. |
 | Multi-repo via tabs                               | P0       | Up to ~20 open.                          |
-| Create remote repo on GitHub / GitLab / Bitbucket | P1       | OAuth device flow.                       |
+| Create remote repo on GitHub / GitLab / Bitbucket | 1.1      | Provider-specific account ownership is post-1.0. |
 | Delete remote repo                                | P2       | With strong confirmation.                |
 
 ### 6.2 Basic git operations
@@ -251,8 +251,8 @@ Tab state persists per-file across the session so jumping back to a file restore
 | PR diff, commits, discussion, checks, and policies | P0 | Normalize common concepts while retaining provider-specific status. |
 | Comment, review, approve/request changes | P1 | Keyboard-operable and reflected on the provider immediately. |
 | Update branch, close/reopen, and merge | P1 | Respect provider branch protections and merge policies; destructive actions require confirmation. |
-| GitLab merge requests | P1 | Provider adapter; no GitHub-specific assumptions in the UI model. |
-| Bitbucket pull requests | P1 | Provider adapter; cloud first, server support separately scoped. |
+| GitLab merge requests | 1.1 | Provider adapter; no GitHub-specific assumptions in the UI model. |
+| Bitbucket pull requests | 1.1 | Provider adapter; cloud first, server support separately scoped. |
 
 ### 6.8 Cross-cutting
 
@@ -263,8 +263,8 @@ Tab state persists per-file across the session so jumping back to a file restore
 | Full keyboard operability         | P0       | Almost every action keyboard-reachable; "keyboard-first, never keyboard-only" (§2). Inherently drag-only affordances are the rare exception. |
 | Light / dark / system theme       | P0       | Via Shiki Pierre theme pack.                 |
 | Auto-update                       | P0       | Tauri signed updates.                        |
-| Crash reporting (opt-in)          | P0       | Sentry or similar, off by default.           |
-| Telemetry (opt-in only)           | P0       | Off by default; clearly disclosed.           |
+| Crash reporting (opt-in)          | P0       | User-reviewed GitHub issue; never auto-uploaded. |
+| Product telemetry                 | 1.1 decision | None in 1.0; add only with a concrete disclosed need. |
 | Localization framework            | P1       | English at launch; structure ready for more. |
 
 ---
@@ -280,8 +280,8 @@ Tab state persists per-file across the session so jumping back to a file restore
 | Notifications       | Native                                             | Native                                        | libnotify                                          |
 | Code signing        | Apple Developer ID + notarization                  | EV cert                                       | Optional sigstore for AppImage                     |
 | Installer           | `.dmg` (universal: x86_64 + aarch64)               | `.msi` and `.exe` (x86_64; aarch64 P1)        | `.deb`, `.rpm`, `.AppImage` (x86_64; aarch64 P1)   |
-| Auto-update channel | Stable + beta                                      | Stable + beta                                 | Stable + beta                                      |
-| Credential storage  | Keychain                                           | Windows Credential Manager                    | libsecret / kwallet                                |
+| Auto-update channel | Stable in 1.0; beta post-1.0                        | Stable in 1.0; beta post-1.0                   | Stable in 1.0; beta post-1.0                       |
+| Credential storage  | Azure Server PAT in Keychain; Git delegates        | Azure Server PAT in Credential Manager; Git delegates | Azure Server PAT in Secret Service; Git delegates |
 
 All three platforms are first-class. No "Windows port" feel — visual parity, performance parity, feature parity.
 
@@ -346,7 +346,11 @@ All P0 features. All three platforms. Auto-update. Light & dark themes. Performa
 
 ### 1.0 — Stable (≈ 20 weeks)
 
-All P1 features. Performance targets met for 100k-commit repos. Signed installers on all three platforms. Localization framework in place.
+The audited 1.0 scope is complete across daily local Git, GitHub/Azure hosted
+review, accessibility, privacy, and localization. Performance targets are met
+for 100k-commit repositories, and signed installers ship on all three
+platforms. Provider expansion and power features explicitly assigned to 1.1 do
+not block stable.
 
 ### 1.1+
 

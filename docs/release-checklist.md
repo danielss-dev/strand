@@ -53,8 +53,9 @@ deliberate maintainer action.
 
 The Windows production-protocol workspace executable has current Computer Use
 evidence for restored window state, persisted repositories, CSP/capabilities,
-command palette, Settings, clone warning, status feedback, and accessibility
-structure. macOS and Linux runtime rows still require their actual platforms;
+native window menu + keyboard traversal, command palette, Settings, clone
+warning, status feedback, and accessibility structure. macOS and Linux runtime
+rows still require their actual platforms;
 cross-compilation is not equivalent evidence.
 
 ## Desktop smoke pass

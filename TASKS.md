@@ -1401,7 +1401,7 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 ## Hosted pull requests (started 2026-07-13)
 
-- ◐ Provider-neutral Pull Requests workspace for the active repository.
+- ☑ 1.0 provider-neutral Pull Requests workspace for the active repository.
   - ☑ GitHub + Azure DevOps list/detail overview (`pull_requests.rs`,
     `repo_pull_requests` + lazy `repo_pull_request`, `views/PullRequests.tsx`):
     detects the provider from `origin`/supported remotes, loads a shallow latest
@@ -1471,7 +1471,7 @@ tree: watch the agent work, review fast, accept or reject safely.
     every tree row. The file header exposes the same
     persisted stacked/split controls in context. Azure comparisons
     fetch source/target objects without updating repository refs or FETCH_HEAD.
-  - ◐ Discussion threads and comment creation: Timeline reads GitHub
+  - ☑ 1.0 discussion threads and comment creation: Timeline reads GitHub
     issue comments, GitHub review-thread comments, and Azure thread comments
     (including inline file context) as safe
     Markdown and creates top-level Markdown comments through the signed-in
@@ -1490,7 +1490,7 @@ tree: watch the agent work, review fast, accept or reject safely.
     gated GraphQL mutations, patching Code + Timeline locally without a
     detail/patch reload (`repo_pull_request_thread_reply`,
     `repo_pull_request_thread_resolve`). Azure replies/resolution on existing
-    threads, direct binary attachment uploads, and suggestions remain.
+    threads, direct binary attachment uploads, and suggestions are 1.1 scope.
   - ☑ Submit reviews: comment, approve, and request changes through one
     exact-head review draft (`repo_pull_request_submit_review`, GitHub atomic
     review payload, Azure Services/Server iteration-tracked inline writes plus
@@ -1499,7 +1499,7 @@ tree: watch the agent work, review fast, accept or reject safely.
     (`PullRequestReview`, `repo_pull_request_update_review`,
     `repo_pull_request_dismiss_review`, GitHub capability-gated mutations,
     Azure signed-in vote reset).
-  - ◐ PR review ledger + merge-readiness model (see
+  - ☑ PR review ledger + merge-readiness model (see
     `docs/pull-request-improvements.md`).
     - ☑ Header readiness strip (`pullRequestReadiness`, `.pr-readiness`):
       combines state, required reviews, checks, conflicts, provider freshness,
@@ -1518,8 +1518,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     batched submission use GitHub's atomic review payload or Azure's bounded
     latest-iteration/change-tracking resolver (`azure_review_coordinates`,
     `azure_server_review_coordinates`).
-  - ☐ Paginate GitHub review threads and replies beyond the current bounded
-    100-thread / 100-comment detail query.
+  - ☐ 1.1: Paginate GitHub review threads and replies beyond the current
+    bounded 100-thread / 100-comment detail query.
   - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails (`pullRequestReview` drafts,
@@ -1535,19 +1535,19 @@ tree: watch the agent work, review fast, accept or reject safely.
     fetches normalized GitHub/Azure commits; Timeline combines commits,
     flattened comments, and opened/merged/closed lifecycle markers with stable
     ordering, while Summary keeps checks collapsible and readiness persistent.
-  - ◐ Review evolution + local action: safe exact-head **Open branch in
+  - ☑ 1.0 review evolution + local action: safe exact-head **Open branch in
     worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
     from target** are shipped (`repo_pull_request_prepare_checkout`,
     `repo_pull_request_update_branch`, `PullRequestDetails.openBranchInWorktree`).
     Reliable “since my last review” compare where the provider exposes a
     boundary, suggestions, and unresolved-feedback export for external agents
-    remain.
-  - ◐ Checks render provider states as green success, yellow running, red
+    remain 1.1 work.
+  - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
     remain neutral. Merge queue/auto-complete and richer required-review detail
-    remain.
-  - ◐ Hosted PR lifecycle actions.
+    remain 1.1 work.
+  - ☑ Hosted PR lifecycle actions.
     - ☑ Mark permission-backed drafts ready for review
       (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer
       capability + Azure author match, and the substituted header action).
@@ -1559,22 +1559,22 @@ tree: watch the agent work, review fast, accept or reject safely.
     - ☑ Close/reopen the PR (`repo_pull_request_lifecycle`; GitHub `gh pr`,
       Azure Services `az repos pr update`, and Azure Server helper protocol v2
       `Operation::SetStatus`; keyboard-operable confirmed overflow action).
-  - ☐ GitLab merge-request adapter.
-  - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
-  - ☐ Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
+  - ☐ 1.1: GitLab merge-request adapter.
+  - ☐ 1.1: Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
+  - ☐ 1.1: Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
     to provider CLIs (blocked on Platform → per-platform credential storage).
 
 ---
 
 ## Conflict resolution
 
-- ◐ In-progress op surfaced + abort/continue: `RepoMeta.operation` (rebase /
+- ☑ Conflict-operation and resolution flow: `RepoMeta.operation` (rebase /
   cherry-pick / revert / merge, read from `.git/` markers) drives an `OpBanner`
   above the main view with **Continue** + **Abort** buttons (⌘K "Abort <op>").
   Continue (`Repo::continue_operation`) is gated until no `CONFLICTED` files
-  remain — the correct way to advance a paused rebase, which a commit can't do.
-  The three-way *resolution* UI below is still the open work; today conflicts are
-  resolved in Local Changes (conflicted files show via the `CONFLICTED` status).
+  remain. Local Changes routes conflicted files through `ConflictLanding` into
+  the completed `MergeResolver`, with whole-file quick choices and mergetool
+  fallback.
 - ☑ Detect conflicted files from `status` (`status.rs` now emits every
   `is_conflicted()` entry as a single `CONFLICTED` row — a pure unmerged entry
   has no wt/index bit and was otherwise dropped; the Local Changes **conflict
