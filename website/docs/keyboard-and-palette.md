@@ -2,6 +2,11 @@
 
 Strand is keyboard-first: nearly every action has a command-palette entry, a global shortcut, or a surface-local key. This page covers the command palette, the full list of global (rebindable) shortcuts, and the fixed per-view keys.
 
+The same repository and view commands are discoverable in Strand's native
+desktop menu: the system menubar on macOS and a window menu on Windows/Linux.
+Press `F10` on Windows/Linux to focus it without a pointer. Menu shortcut labels
+follow your bindings from **Settings → Keyboard**.
+
 ## The command palette
 
 Open the palette with `Mod+K`. It is a single fuzzy-matched search over commands and repository data — the placeholder says it all: "Type a command, branch, file, or commit…".

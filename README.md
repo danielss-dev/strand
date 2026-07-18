@@ -176,9 +176,9 @@ keyboard alone, and the mouse stays first-class.
   one product — open a workspace to focus the rail on just those repos, close it
   to return to your default set; a manage dialog curates each; creating,
   switching, and managing are all in ⌘K, including importing a VS Code
-  `.code-workspace`), native macOS
-  menubar, open the repository or a chosen file in your editor, open a terminal,
-  settings (⌘,) for appearance / diff /
+  `.code-workspace`), native desktop menus (global on macOS, in-window on
+  Windows/Linux), open the repository or a chosen file in your editor, open a
+  terminal, settings (⌘,) for appearance / diff /
   git / hosting / integrations / AI, in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via

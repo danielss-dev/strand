@@ -401,13 +401,14 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   **not** match this pubkey — Tauri warns the locally-built `.sig` won't validate
   at runtime; CI builds sign with the matching secret. Reconcile the local
   key/config before relying on locally-built Windows auto-updates.)
-- ◐ Native menus (PRD §7): **macOS menubar done** (`ui/src/lib/menu.ts`, built
-  via `@tauri-apps/api/menu` + `setAsAppMenu`; Strand/File/Edit/View/Repository/
-  Window menus wired to the same callbacks as the in-app UI — Settings ⌘,,
-  Open ⌘O, Clone, palette ⌘K, views ⌘1–5, theme ⌘⇧T, Sync ⌘⇧S, Pull/Push,
-  Open in Editor/Terminal; repo-scoped items disable when no repo is open and
-  the menu reinstalls when that flips; App's keydown handler skips menu-owned
-  accelerators via `appMenuInstalled()`). In-window Win/Linux menubar still ☐.
+- ☑ Native menus (PRD §7): `ui/src/lib/menu.ts` installs the shared
+  Strand/File/Edit/View/Repository/Window menu with `setAsAppMenu` as a global
+  menubar on macOS and a window menu on Windows/Linux; repo state and remapped
+  shortcuts stay synchronized. AppKit-preempted shortcuts use
+  `nativeMenuPreemptsKeydown`, while Windows/Linux retain the webview keydown
+  path. Exact Windows production-protocol build verified with Computer Use:
+  accessible menu bar, F10/arrow activation, Ctrl+K palette, and Ctrl+, Settings
+  (2026-07-18).
 - ☑ Window state persistence: cross-platform Tauri window-state plugin restores
   size, position, and maximized state without startup flash; exact production-
   protocol binary verified maximize → close → relaunch with Computer Use

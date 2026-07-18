@@ -784,30 +784,33 @@ presets are untested on real machines (tracked ☐ in TASKS).
 
 ---
 
-## Keyboard shortcuts on macOS belong to the native menu, not the keydown handler
+## Native-menu accelerator ownership is platform-specific
 
-**Rule.** Any global shortcut that exists as a native-menu accelerator
-(`ui/src/lib/menu.ts`) must be skipped by App's window keydown handler when
-`appMenuInstalled()` is true. Adding a new global shortcut means deciding its
-owner: put it in the menu (gets discoverability + the gate) or in the JS
-handler (works on Win/Linux + browser dev), and if both, gate the JS side.
+**Rule.** Install the shared native menu on every desktop target, but skip a
+menu-owned global shortcut in App's window keydown handler only when
+`nativeMenuPreemptsKeydown()` is true. That is macOS/AppKit. Windows/Linux must
+keep the webview keydown path even though their native window menu displays the
+same accelerator and invokes the same callback when selected.
 
 **Why.** AppKit dispatches menu key equivalents through
 `performKeyEquivalent` *before* the webview receives the keydown — the menu
 action fires and the JS handler usually never sees the key. "Usually" is the
 trap: relying on that ordering invites double-fire bugs if dispatch changes
 (or the menu fails to install), and a dead shortcut if you remove the JS
-path entirely. The explicit `appMenuInstalled()` gate makes handling
-single-fire deterministically, and shortcuts keep working in browser mode
-and on Win/Linux where no native menu is installed.
+path entirely. The explicit `nativeMenuPreemptsKeydown()` gate makes handling
+single-fire deterministically. A 2026-07-18 Computer pass proved why the gate
+cannot mean merely "menu installed": Windows rendered the menu and its Ctrl
+labels but needed the webview path for Ctrl+K/Ctrl+, to fire.
 
 **How to apply.** Menu accelerators use muda syntax (`Cmd+Comma`, `Cmd+1`,
-`Cmd+Shift+S` — `,` and `1` aliases also parse). Menu permissions need no
+`CmdOrControl+Shift+S` — `Comma` and digits also parse). Menu permissions need no
 capability change: `core:default` already includes `core:menu:default`,
 which allows all menu commands including `set-as-app-menu`. Repo-scoped
 items take `enabled: hasRepo`; App reinstalls the menu when that flips
 (menu handlers read the latest callbacks through a ref, so no rebuild per
-render).
+render). Keep macOS-only predefined items (Services/Hide/Hide Others/Show All)
+conditional; the same `Menu` becomes a global menubar on macOS and a window
+menu on Windows/Linux.
 
 **Update (2026-06-15): accelerators come from the keybinding registry, not
 literals.** Global shortcuts now live in a single registry — `lib/keys.ts`,
@@ -819,7 +822,7 @@ user remaps in Settings → Keyboard updates the menu too — App's menu effect 
 deps on `keyMap` and reinstalls on change. The window keydown handler is also
 registry-driven: it computes `eventToBinding(e)`, looks up the command, and still
 defers to the native menu for menu-owned, representable combos
-(`appMenuInstalled() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)`).
+(`nativeMenuPreemptsKeydown() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)`).
 See the keybinding-registry learning below.
 
 ---
@@ -984,7 +987,7 @@ keys that depend on what's focused — commit `Mod+Enter` (LocalChanges), in-dif
 search `Mod+F` (LocalChanges), commit search `/` (Commits), Review `j`/`k` — stay in
 their own components and are documented (not rebindable) in the Keyboard section's
 "Context shortcuts" card. To add a global command: add a `COMMANDS` row, a handler in
-App's `commandHandlers`, and (if it should sit on the macOS menu) a `cmd:` on the
+App's `commandHandlers`, and (if it should sit on the native menu) a `cmd:` on the
 menu item + `menu: true`. Plain (modifier-less) bindings are suppressed while a text
 field/combobox is focused (`isPlainKey`); repo-scoped commands no-op without a repo
 (`REPO_COMMANDS`). `Mod+R` refresh calls `preventDefault`, so it doesn't reload the

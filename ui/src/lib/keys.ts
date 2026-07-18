@@ -16,7 +16,7 @@
  *
  * User overrides live in `settings.keybindings` ({@link resolveBindings}
  * overlays them on the defaults here); `formatBinding` renders a binding for
- * display and `toMudaAccelerator` converts one for the macOS menu.
+ * display and `toMudaAccelerator` converts one for the native desktop menu.
  */
 
 /** A global command id. The owning handlers live in `App.tsx`. */

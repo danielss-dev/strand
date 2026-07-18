@@ -31,7 +31,7 @@ import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { t } from './lib/i18n';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
-import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
+import { installAppMenu, nativeMenuPreemptsKeydown, type MenuHandlers } from './lib/menu';
 import {
   EDITABLE_SELECTOR,
   eventInside,
@@ -907,7 +907,7 @@ export function App() {
     })();
   }, [refreshRecents, restoreSession]);
 
-  // Native macOS menubar. Menu item actions read the latest callbacks
+  // Native desktop menu. Menu item actions read the latest callbacks
   // through this ref, so the menu itself only rebuilds when the repo-scoped
   // items' enabled state flips (repo opened/closed) — not on every render.
   const menuHandlersRef = useRef<MenuHandlers>(null!);
@@ -933,12 +933,12 @@ export function App() {
   };
   const hasRepo = Boolean(meta);
   useEffect(() => {
-    if (!isTauri() || osType() !== 'macos') return;
+    if (!isTauri()) return;
     // Accelerators track the resolved bindings, so a remap in Settings updates
     // the menu too (this effect re-runs when `keyMap` changes).
     const accel = (id: CommandId) =>
       toMudaAccelerator(keyMap.byCommand.get(id) ?? null) ?? undefined;
-    installAppMenu(() => menuHandlersRef.current, hasRepo, accel)
+    installAppMenu(() => menuHandlersRef.current, hasRepo, accel, osType())
       .catch((e) => console.warn('app menu install failed', e));
   }, [hasRepo, keyMap]);
 
@@ -1127,10 +1127,10 @@ export function App() {
       if (!binding) return;
       const cmd = keyMapRef.current.byBinding.get(binding);
       if (!cmd) return;
-      // On macOS the native menu owns its accelerators — AppKit fires the menu
-      // action before the webview sees the key — so defer to it for menu-owned,
-      // representable combos (no menu installed elsewhere ⇒ JS handles them).
-      if (appMenuInstalled() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)) return;
+      // AppKit fires native menu accelerators before the webview sees the key,
+      // so defer to it on macOS. Windows/Linux keep this proven keydown path;
+      // their window menus display the same accelerator and share the action.
+      if (nativeMenuPreemptsKeydown() && MENU_COMMANDS.has(cmd) && toMudaAccelerator(binding)) return;
       // Only Mod-combos may act while a text field is focused — a plain,
       // Shift-, or Alt-modified key is typing (a capital letter arrives as
       // Shift+letter). `eventInside` sees through shadow DOM, where `e.target`

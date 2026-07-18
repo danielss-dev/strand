@@ -2025,6 +2025,16 @@ by the platform Keychain, Windows Credential Manager, or Linux Secret Service
 through `keyring`. A selectable beta updater channel is 1.1 work; 1.0 stays on
 the fail-closed signed stable endpoint.
 
+**Cross-platform native menus shipped (2026-07-18):** The existing
+Strand/File/Edit/View/Repository/Window Tauri menu now installs on every desktop
+target: global menubar on macOS, window menu on Windows/Linux. Platform-only
+macOS items remain conditional. Computer verification against the exact Windows
+production-protocol binary confirmed the accessible menu structure, F10/arrow
+selection, Ctrl+K palette, and Ctrl+, Settings. That pass also caught and fixed
+an accelerator ownership boundary: only AppKit preempts webview keydown;
+Windows/Linux keep the proven JS shortcut path while the native menu displays
+the same resolved bindings.
+
 ---
 
 ## 1.1+ — Post-1.0

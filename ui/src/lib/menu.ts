@@ -9,15 +9,15 @@ import {
 import type { CommandId } from './keys';
 
 /**
- * Native macOS menubar, wired to the same callbacks the in-app UI uses.
- * macOS only — Windows/Linux get an in-window menubar later (PRD §7,
- * tracked in TASKS).
+ * Native desktop menu, wired to the same callbacks the in-app UI uses. Tauri
+ * renders it in the global menubar on macOS and inside the window on Windows
+ * and Linux.
  *
  * On macOS, menu accelerators are NSMenuItem key equivalents: AppKit
  * dispatches them through the menu *before* the webview sees the keydown,
- * so the menu action — not App's global key handler — runs. App's handler
- * additionally skips menu-owned combos while `appMenuInstalled()` is true,
- * so behavior is single-fire regardless of dispatch order.
+ * so the menu action — not App's global key handler — runs. Windows and Linux
+ * keep the webview keydown path; their window menus still display the resolved
+ * accelerator and invoke the same action when selected.
  *
  * Repo-scoped items (views, sync, editor/terminal) are disabled with no
  * repo open; App reinstalls the menu when that flips.
@@ -47,21 +47,22 @@ export interface MenuHandlers {
   openInTerminal(): void;
 }
 
-let installed = false;
+let preemptsKeydown = false;
 
-/** True once the native menu owns its accelerators (App's keydown handler
- * uses this to skip menu-owned combos). */
-export function appMenuInstalled(): boolean {
-  return installed;
+/** True when the platform menu dispatches accelerators before webview keydown. */
+export function nativeMenuPreemptsKeydown(): boolean {
+  return preemptsKeydown;
 }
 
 /** Resolve a command's muda accelerator string (or `undefined`). */
 export type AccelResolver = (id: CommandId) => string | undefined;
+export type MenuPlatform = 'macos' | 'windows' | 'linux';
 
 export async function installAppMenu(
   handlers: () => MenuHandlers,
   hasRepo: boolean,
   accel: AccelResolver,
+  platform: MenuPlatform,
 ): Promise<void> {
   const sep = () => PredefinedMenuItem.new({ item: 'Separator' });
   // muda rejects `accelerator: undefined`? It accepts an omitted key, so only
@@ -72,32 +73,36 @@ export async function installAppMenu(
     return MenuItem.new(a ? { ...rest, accelerator: a } : rest);
   };
 
-  const appMenu = await Submenu.new({
-    text: 'Strand',
-    items: [
-      await PredefinedMenuItem.new({ item: { About: { name: 'Strand' } }, text: 'About Strand' }),
-      await sep(),
-      await item({
-        id: 'settings',
-        text: 'Settings…',
-        cmd: 'settings',
-        action: () => handlers().openSettings(),
-      }),
-      await item({
-        id: 'check-updates',
-        text: 'Check for Updates…',
-        action: () => handlers().checkUpdates(),
-      }),
+  const appItems = [
+    await PredefinedMenuItem.new({ item: { About: { name: 'Strand' } }, text: 'About Strand' }),
+    await sep(),
+    await item({
+      id: 'settings',
+      text: 'Settings…',
+      cmd: 'settings',
+      action: () => handlers().openSettings(),
+    }),
+    await item({
+      id: 'check-updates',
+      text: 'Check for Updates…',
+      action: () => handlers().checkUpdates(),
+    }),
+  ];
+  if (platform === 'macos') {
+    appItems.push(
       await sep(),
       await PredefinedMenuItem.new({ item: 'Services' }),
       await sep(),
       await PredefinedMenuItem.new({ item: 'Hide', text: 'Hide Strand' }),
       await PredefinedMenuItem.new({ item: 'HideOthers' }),
       await PredefinedMenuItem.new({ item: 'ShowAll' }),
-      await sep(),
-      await PredefinedMenuItem.new({ item: 'Quit', text: 'Quit Strand' }),
-    ],
-  });
+    );
+  }
+  appItems.push(
+    await sep(),
+    await PredefinedMenuItem.new({ item: 'Quit', text: 'Quit Strand' }),
+  );
+  const appMenu = await Submenu.new({ text: 'Strand', items: appItems });
 
   const fileMenu = await Submenu.new({
     text: 'File',
@@ -212,5 +217,5 @@ export async function installAppMenu(
     items: [appMenu, fileMenu, editMenu, viewMenu, repoMenu, windowMenu],
   });
   await menu.setAsAppMenu();
-  installed = true;
+  preemptsKeydown = platform === 'macos';
 }
