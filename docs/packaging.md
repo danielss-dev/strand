@@ -3,8 +3,9 @@
 Status (2026-07-18): release CI builds all three platforms, signs and notarizes
 the universal macOS app, produces minisign-verified updater artifacts, and
 keyless-signs Linux AppImages with Sigstore. The remaining 1.0 distribution
-gates are the Windows publisher certificate, stable/beta channel policy, and
-release-candidate validation on Windows, macOS, GNOME, and KDE.
+gates are the Windows publisher certificate and release-candidate validation
+on Windows, macOS, GNOME, and KDE. The 1.0 updater is stable-only; a selectable
+beta channel is explicitly post-1.0.
 
 ---
 

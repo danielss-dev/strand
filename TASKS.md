@@ -63,7 +63,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   the fresh-clone hook warning, and the typed English localization baseline are
   shipped. Linux AppImages are keyless-signed with Sigstore and the full
   keyboard/accessibility pass is closed. Windows publisher signing, real
-  macOS/GNOME/KDE candidate validation, update-channel promotion, and the
+  macOS/GNOME/KDE candidate validation and the
   release-quality checklist remain (`docs/release-checklist.md`).
 - ☑ **Power parity selection.** Keep the already-shipped signature verification
   and exact patch/series export in 1.0; defer guided bisect, LFS management,
@@ -1639,7 +1639,10 @@ tree: watch the agent work, review fast, accept or reject safely.
   — lanes/merges/invariants; `lib/conflictParse.test.ts` — parse + resolution
   assembly; `lib/fuzzy.test.ts` — palette scoring, extracted to `lib/fuzzy.ts`.
   `pnpm --filter ./ui test`.)
-- ☐ Auto-update beta channel + stable channel
+- ☑ Stable auto-update channel is signed and fail-closed; GitHub's stable
+  `releases/latest` endpoint excludes prereleases. A user-selectable beta
+  channel is explicitly 1.1 scope so 1.0 cannot silently change trust channels
+  (`tauri.conf.json`, `check-release-security.mjs`, 2026-07-18).
 - ☑ Windows 11 platform pass — Rust compiles clean and the MSI builds on a
   Windows 11 box (2026-06-07: `Strand_0.0.1_x64_en-US.msi`, 10.5 MB, via
   `pnpm tauri build --bundles msi`). **Runtime validated 2026-06-07:** launched the
@@ -1648,10 +1651,11 @@ tree: watch the agent work, review fast, accept or reject safely.
   window frame / controls (titlebar, min/max/close, maximize-restore) all work.
   Chrome is correct on Windows.
 - ☐ Linux platform pass on GNOME + KDE
-- ☐ Per-platform credential storage:
-  - macOS Keychain
-  - Windows Credential Manager
-  - libsecret / kwallet
+- ☑ Credential-storage boundary: the optional Azure DevOps Server PAT uses
+  `keyring` 4.1 (macOS Keychain, Windows Credential Manager, Linux Secret
+  Service). Git/provider CLI authentication remains in each system's existing
+  credential helper; direct OAuth/keychain ownership is a 1.1 follow-on
+  (`strand-azdo::credentials`, 2026-07-18).
 
 ---
 
@@ -1838,9 +1842,13 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   log is empty), and the disclosure line with the log path. There is
   deliberately no automatic-upload backend — the project has none, and the
   user-reviewed issue keeps PRD §10 honest.
-- ☐ Opt-in telemetry (off by default, clearly disclosed at first launch)
-- ☐ SSH passphrase prompts via OS-native dialogs
-- ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)
+- ☑ 1.0 privacy decision: no product telemetry. The opt-in crash-report flow is
+  user-reviewed and opens a browser; no automatic-upload backend exists.
+- ☑ SSH passphrases stay with the system SSH agent and configured
+  `SSH_ASKPASS`/`GIT_ASKPASS` provider inherited by system Git; Strand never
+  reads or caches private keys (`network::run_git_streaming`).
+- ☑ GPG passphrases delegate to `gpg-agent`/pinentry on the system-Git commit
+  path with no in-app caching (`Repo::commit`, `commit.gpgSign=true`).
 - ☑ Hook execution warning on fresh clones (`CloneDialog` trust notice, placed
   before URL entry and verified in the built app with Computer Use, 2026-07-18)
 - ☑ Signed update manifest enforcement (`check-release-security.mjs` locks

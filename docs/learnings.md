@@ -1735,3 +1735,13 @@ button containing clickable spans. Stop child key events from activating the
 row. Repository tabs keep a single tab stop and expose Close on Delete/
 Backspace; arrow keys plus Home/End implement the tablist focus model. Any
 pointer double-click action needs an explicit keyboard equivalent.
+
+**Authentication ownership follows the system-Git boundary (2026-07-18).**
+Network operations inherit the user's credential helper, SSH agent, and
+`GIT_ASKPASS`/`SSH_ASKPASS`; signed commits inherit gpg-agent/pinentry. Do not
+add duplicate in-app passphrase storage or prompts while that delegation is in
+place. A secret Strand itself owns must use the native platform vault—the Azure
+Server helper PAT uses `keyring` for Keychain, Windows Credential Manager, and
+Linux Secret Service. Stable 1.0 has no product telemetry and only the
+user-reviewed crash-report flow; adding telemetry or another updater channel is
+a new post-1.0 trust decision, not release polish.

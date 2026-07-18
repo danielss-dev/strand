@@ -160,7 +160,7 @@ Priority levels: **P0** = required for first public release, **P1** = required b
 | Feature                                           | Priority | Notes                                    |
 | ------------------------------------------------- | -------- | ---------------------------------------- |
 | Create new local repo                             | P0       | With `.gitignore` template picker.       |
-| Clone existing repo (HTTPS / SSH)                 | P0       | Streaming progress; credential prompts.  |
+| Clone existing repo (HTTPS / SSH)                 | P0       | Streaming progress; system Git credential helper / askpass. |
 | Add existing local repo                           | P0       | Drag-and-drop folder onto the app.       |
 | Open recent repository quickly                    | P0       | In sidebar dropdown and command palette. |
 | Multi-repo via tabs                               | P0       | Up to ~20 open.                          |
@@ -325,8 +325,8 @@ Achieving these is the entire reason for choosing Rust + `gix` + Tauri over the 
 ## 10. Security, privacy, and trust
 
 - **Local-first.** No data leaves the device by default.
-- **Telemetry & crash reports:** opt-in at first launch, clearly explained, fully disabled by default.
-- **Credentials:** stored only in the OS keychain. SSH keys are never read into memory longer than needed; passphrase prompts use OS-native dialogs.
+- **Telemetry:** none in 1.0. Crash reports are opt-in, user-reviewed GitHub issues and are never uploaded automatically.
+- **Credentials:** Git authentication stays with system Git, its credential helper, SSH agent, and askpass provider. The optional Azure Server PAT is the only Strand-owned secret and is stored in the OS credential vault. Strand never reads SSH private keys.
 - **GPG / signing:** never store passphrases. Delegate to the user's `gpg-agent` / SSH agent.
 - **Code execution:** hooks run as `git` always has — Strand doesn't sandbox them but warns clearly when a fresh clone has them.
 - **Auto-update:** signed update manifests; refusal to apply unsigned updates.

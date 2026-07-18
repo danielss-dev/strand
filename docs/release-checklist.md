@@ -28,7 +28,8 @@ deliberate maintainer action.
   validated on the universal build.
 - [x] Tauri updater artifacts and manifests are authenticated by the embedded
   minisign public key; the stable updater endpoint is HTTPS and pinned by
-  `scripts/check-release-security.mjs`.
+  `scripts/check-release-security.mjs`. Strand 1.0 intentionally exposes only
+  this stable channel; selectable beta updates are post-1.0.
 - [x] Linux AppImages receive a keyless Sigstore bundle in release CI. The same
   job immediately verifies the artifact against the exact Strand release
   workflow identity and GitHub Actions OIDC issuer before upload.
@@ -86,4 +87,3 @@ On every platform, use a disposable repository and cover:
 4. Publish the GitHub release, then verify the stable updater and downloads
    from a clean machine. Redeploy `website/` if its release claims changed.
 5. Announce only after the published artifacts pass the platform matrix.
-

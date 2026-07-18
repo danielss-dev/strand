@@ -1075,7 +1075,8 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   PAT/private-CA profiles and Windows integrated authentication, while Azure
   DevOps Services keeps the official `az` path. GitLab and Bitbucket are
   follow-on provider adapters.
-- ☐ Telemetry (opt-in, clearly disclosed)
+- ☑ Privacy boundary: no product telemetry in 1.0; the shipped opt-in crash
+  report is a user-reviewed GitHub issue and never uploads automatically
 - ☑ Localization framework + English baseline (`lib/i18n.ts` typed catalog,
   interpolation/plurals, locale-aware formatters, and migrated navigation,
   settings shell, clone, and updater surfaces; 2026-07-18)
@@ -2014,6 +2015,16 @@ new fail-closed `docs/release-checklist.md` separates automated gates from the
 remaining external Windows publisher identity and real-platform candidate
 passes.
 
+**1.0 privacy and credential boundary closed (2026-07-18):** Stable Strand
+ships with no product telemetry. Crash reporting remains the explicit,
+user-reviewed GitHub-issue flow. Git HTTPS/SSH credentials and signing
+passphrases stay with system Git, its configured credential helper, SSH
+agent/askpass, and gpg-agent; Strand does not duplicate or cache them. The one
+Strand-owned credential, an optional Azure DevOps Server PAT, is already kept
+by the platform Keychain, Windows Credential Manager, or Linux Secret Service
+through `keyring`. A selectable beta updater channel is 1.1 work; 1.0 stays on
+the fail-closed signed stable endpoint.
+
 ---
 
 ## 1.1+ — Post-1.0
@@ -2027,6 +2038,10 @@ passes.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
 - Git LFS (status badges + progress)
 - GPG / SSH commit signing UI
+- Selectable beta updater channel (1.0 remains pinned to the signed stable
+  GitHub Releases channel)
+- Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
+  retention policy, and backend justify adding it
 - Guided Git bisect
 - Sparse checkout (cone mode first)
 - Patch import/mailbox and Git bundle workflows
