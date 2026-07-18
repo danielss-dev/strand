@@ -120,8 +120,9 @@ keyboard alone, and the mouse stays first-class.
   (fetch-first for remote bases) and copies gitignored setup files listed in
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box.
-- **Everyday Git** — staging with per-change-block stage / discard / unstage
-  inline in the diff; initialize a repository with an initial branch, optional
+- **Everyday Git** — stage, unstage, or recoverably discard whole change
+  blocks or individually selected lines inline in the diff; initialize a
+  repository with an initial branch, optional
   `.gitignore`, and optional first commit; create and check out a branch from a
   stash; fetch / pull / push with streaming progress and explicit
   pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,
@@ -182,7 +183,7 @@ keyboard alone, and the mouse stays first-class.
 Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
 works on large real-world repositories daily, but expect rough edges. The main
 remaining gaps are hosted-review completion, localization, Windows/Linux
-release signing and validation, line-level staging, pull
+release signing and validation, pull
 autostash/prune preferences, and interactive-rebase `edit` / merge preservation. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 and [`TASKS.md`](./TASKS.md).

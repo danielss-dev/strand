@@ -77,7 +77,7 @@ current official product material for:
 | Repository setup | Initialize a new repository, choose an initial branch, and optionally create `.gitignore` / first commit shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch tracking | Upstream management, explicit non-current branch push, destination naming, and selected-branch fetch/pull shipped 2026-07-16 | Complete for 1.0 daily use |
 | Network preferences | Per-repo default pull strategy shipped; optional pull autostash, explicit prune/no-prune, and separate fetch/push URLs remain | Daily-driver |
-| Fine-grained staging | Select individual lines inside a change block for stage, unstage, and discard | Daily-driver |
+| Fine-grained staging | Individual-line stage, unstage, recoverable discard, pointer range selection, and keyboard line picker shipped 2026-07-18 | Complete for 1.0 daily use |
 | Stashes | Branch from stash shipped 2026-07-18; inspect/reveal a stash from the sidebar without applying it remains | Daily-driver |
 | Multi-commit actions | Cherry-pick selected commits in graph order; revert merge commits with a mainline choice; compare selected commits/branches | Daily-driver |
 | Rebase | `edit` / pause-to-amend and `--rebase-merges` preservation | Daily-driver |
@@ -143,6 +143,6 @@ disabled with a reason, and the primary action stays first.
    checkout, and custom actions, taking only the items that fit the 1.0 date.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
-initialization, and stash-to-branch are now shipped foundations. The next
-bounded implementation slice is line-level staging, followed by multi-commit
-actions and branch comparison.
+initialization, stash-to-branch, and line-level staging are now shipped
+foundations. The next bounded implementation slice is multi-commit actions and
+branch comparison.

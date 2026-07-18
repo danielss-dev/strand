@@ -112,15 +112,17 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `sliceChangeBlock` carves a synthetic single-hunk patch matching
   Pierre's `DiffAcceptRejectHunkConfig.changeIndex` semantics, so each
   click acts on one `ChangeContent` group.)
-- ☐ Stage / unstage line (sub-block; currently a whole change block is
-  the smallest unit. Would need character/line-range selection UI.)
+- ☑ Stage / unstage line (`sliceSelectedLines` rewrites unselected change
+  lines to apply-side context; `HunkAnnotatedDiff` supports Pierre drag
+  selection plus a keyboard-operable `LinePicker` with exact line checkboxes.)
 - ☑ Discard working-tree changes (path) — file-level
-- ◐ Discard hunk / line + single-undo handle (per-block Discard:
+- ☑ Discard hunk / line + single-undo handle (per-block / selected-line Discard:
   `Repo::apply_patch(ApplyTarget::WorkdirReverse)` reverse-applies the
   sliced patch to the working tree. Single-undo shipped: `ApplyTarget::Workdir`
   forward-applies the same slice back, surfaced as an Undo toast for 6s via
-  `discardPatch` / `undoDiscard` + `lastDiscard` handle. Line-level discard
-  still pending.)
+  `discardPatch` / `undoDiscard` + `lastDiscard` handle. Partial new/deleted
+  files normalize to modification headers so one-line operations cannot be
+  mistaken for whole-file creation/deletion.)
 - ☑ Commit (subject + body + amend). **Signing works** (`commit.rs` rewrite):
   when `commit.gpgSign=true` in the merged config (`signing_enabled`), the
   commit shells out via `commit_via_git` — the user's real `git commit -F
@@ -788,11 +790,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   messages made no sense next to AI suggestions). The `commit_messages`
   table stays (migration v2 is applied and append-only) but is no longer
   read or written.
-- ☑ Hunk / change-block stage + unstage UI (`HunkAnnotatedDiff` renders
+- ☑ Hunk / change-block / line stage + unstage UI (`HunkAnnotatedDiff` renders
   one `<PierreFileDiff/>` per file with `lineAnnotations` driving an
   inline Stage / Discard pair on each change block — Unstage on the
   staged side. `sliceChangeBlock` carves the synthetic single-hunk patch
-  routed through `useRepo.applyPatch`.)
+  routed through `useRepo.applyPatch`; line-number drag selection and the
+  keyboard-operable `LinePicker` route through `sliceSelectedLines`.)
 - ☑ Copy diff as patch / Markdown (`concatPatches` / `patchesToMarkdown` in
   `lib/patchExport.ts` — raw multi-file patch with trailing-newline
   normalization, or `### path` + ```` ```diff ```` fences with CommonMark
@@ -824,8 +827,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   dims + byte size, single pane for added/deleted. Wired in Local Changes
   (unstaged HEAD→worktree, staged HEAD→index), Review (inbox + session), and
   CommitDetail (`hash^`→`hash`); `isImagePath`/`imageMime` in `lib/image.ts`.)
-- ☐ Line-level (sub-change-block) stage / unstage — current smallest
-  unit is the change block. Would require a line/char selection UI.
+- ☑ Line-level (sub-change-block) stage / unstage / discard
+  (`sliceSelectedLines`, Pierre line-range selection, and accessible
+  `LinePicker`; focused patch tests cover forward/reverse plus partial
+  creation/deletion headers, with Computer Use stage/unstage verification.)
 
 ### Commits view
 - ☑ Table from `repo_log`

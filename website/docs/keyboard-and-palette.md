@@ -97,6 +97,11 @@ Each view has its own small set of fixed (non-rebindable) keys. Settings → Key
 | `Mod+Enter` | Commit (from the message box) |
 | `Mod+F` | Search within the current file or diff |
 
+Each inline change-block action includes **Lines…**. Its checklist is fully
+keyboard-operable: `Tab` moves through changed lines and actions, `Space`
+toggles a line, and `Escape` closes it. Pointer users can also drag across
+changed line numbers directly in the diff.
+
 ### Review queue (Review and Workspace Review)
 
 | Key | Action |

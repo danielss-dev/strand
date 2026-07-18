@@ -397,6 +397,16 @@ Discard/Unstage path) is still done on the Rust side by `reverse_patch`
 in `crates/strand-core/src/apply.rs` — `git2`'s `ApplyOptions` has no
 reverse flag, so we swap `+`/`-` and `@@ -A,B +C,D @@` ourselves.
 
+**Line-selection ownership.** Pierre's native interaction manager can see a
+pointer event on an absolutely positioned React overlay before React's bubble-
+phase `stopPropagation`, and controlled `selectedLines` changes may re-emit the
+previous range through `onLineSelected`. Overlay controls must stop pointer
+events in capture phase. A separate checkbox picker must explicitly clear the
+inherited range when it opens and ignore Pierre selection callbacks while the
+picker owns selection, or cleared lines can silently re-check on the next Tab.
+`HunkAnnotatedDiff` uses `linePickerOpenRef` for this boundary; keep the options
+callback stable so the diff is not re-virtualized during selection.
+
 ---
 
 ## `@pierre/trees` couples row-click to select **and** expand

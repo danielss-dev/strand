@@ -27,18 +27,18 @@ system ported verbatim. No real feature surface yet.
   - ☑ Clone (HTTPS / SSH) with streaming progress (shell-out `git clone
     --progress`; `CloneDialog` with URL + destination picker + live progress
     bar; opens the cloned repo on success)
-- ◐ **Local Changes — real staging UI**
+- ☑ **Local Changes — real staging UI**
   - ☑ Unstaged + staged file lists (folder tree, status badges, hover Stage/Unstage)
   - ☑ Pierre `<PatchDiff>` integration themed to app tokens
   - ☑ Commit form: subject + body + amend; ⌘↵ shortcut; spinner state
   - ☑ File-level stage / unstage / discard via `git2`
-  - ☑ Hunk + sub-hunk change-block stage / unstage (Pierre
+  - ☑ Hunk + sub-hunk change-block + selected-line stage / unstage (Pierre
     `<FileDiff/>` with `lineAnnotations` driving inline Stage / Discard
     / Unstage on each `ChangeContent`; `sliceChangeBlock` carves the
-    synthetic per-block patch fed to `Repo::apply_patch`.) Line-level
-    still pending.
-  - ☑ Discard with single-undo handle (per-change-block; undo toast
-    forward-applies the discarded slice back)
+    synthetic per-block patch fed to `Repo::apply_patch`; `sliceSelectedLines`
+    handles drag/checklist line ranges.)
+  - ☑ Discard with single-undo handle (per-change-block or selected lines;
+    undo toast forward-applies the discarded slice back)
   - ✗ Recent commit messages dropdown — removed 2026-07-02 on user feedback
     (stale old messages made no sense next to AI suggestions; the SQLite
     table stays, unused)
@@ -161,7 +161,8 @@ forward-applies it. `LocalChanges.tsx` routes only the Discard button
 through `discardPatch` (stage/unstage are non-destructive). A self-contained
 `UndoToast` in `App.tsx` surfaces an Undo button for 6s per discard
 ("Undo send" model) — single-undo only ever recovers the most recent
-discard. Line-level discard + a persistent undo stack are still future work.
+discard. Selected-line discard joined the same single-undo pipeline on
+2026-07-18; a persistent multi-entry undo stack remains future work.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-
@@ -242,10 +243,9 @@ also pending (only `aarch64-apple-darwin` is installed).
 - ☑ Conflict resolution UI (three-way view) — Pierre `<UnresolvedFile>` resolver
   with accept current/incoming/both; in-progress banner + Abort + Continue.
   (External mergetool fallback still ☐ in TASKS.)
-- ☑ Discard changes (hunk / file) with single-undo — file-level + per-change-block
-  Discard, both with the 6s Undo toast; per-row Discard in the file-tree right-click
-  menu. (Line-level sub-block discard needs a line-selection UI — deferred, tracked
-  ◐ in TASKS.)
+- ☑ Discard changes (hunk / file / selected lines) with single-undo — file-level,
+  per-change-block, and line selection use the 6s Undo toast; per-row Discard is
+  also in the file-tree right-click menu.
 - ☑ Stacked + split diff layouts (persisted per-repo)
 - ☑ **Theme management**
   - Light + dark themes with system-preference follow
@@ -1792,6 +1792,15 @@ wraps Git's conflict-safe `stash branch` behavior; sidebar and palette actions
 reuse `BranchDialog` to name the new branch. Focused Rust tests, Tauri/Rust
 checks, TypeScript, and a Computer Use pass on the running Windows app verified
 repository creation and a full stash-to-branch round trip.
+
+**Line-level staging shipped (2026-07-18):** `sliceSelectedLines` now builds
+independently applicable patches for any selected deletion/addition lines,
+including safe partial new/deleted-file headers. `HunkAnnotatedDiff` supports
+Pierre line-range selection and an accessible **Lines…** checklist for exact
+non-contiguous selection; Stage, Unstage, and recoverable Discard share the
+existing patch/undo pipeline. Twelve focused patch tests and a Computer Use
+keyboard pass proved a single deletion moving into and back out of the index
+without moving the other three lines in its change block.
 
 ---
 

@@ -2944,6 +2944,75 @@ button {
 .lc-block-actions .hbtn.reject:hover {
   color: var(--del);
 }
+.lc-line-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: min(460px, calc(100vw - 80px));
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  overflow: hidden;
+}
+.lc-line-picker-head,
+.lc-line-picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+}
+.lc-line-picker-head {
+  border-bottom: 0.5px solid var(--border);
+  font-size: 11px;
+}
+.lc-line-picker-head strong {
+  font-weight: 600;
+}
+.lc-line-picker-head span {
+  color: var(--text-dim);
+  margin-right: auto;
+}
+.lc-line-picker-list {
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px 0;
+}
+.lc-line-picker-row {
+  display: grid;
+  grid-template-columns: 18px 46px minmax(0, 1fr);
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.lc-line-picker-row:hover,
+.lc-line-picker-row:focus-within {
+  background: var(--bg-hover);
+}
+.lc-line-picker-row .del {
+  color: var(--del);
+}
+.lc-line-picker-row .add {
+  color: var(--add);
+}
+.lc-line-picker-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  color: var(--text-muted);
+}
+.lc-line-picker-foot {
+  border-top: 0.5px solid var(--border);
+}
+.lc-line-picker-foot .spacer {
+  flex: 1;
+}
+.lc-line-picker .hbtn {
+  font-size: 10.5px;
+  padding: 3px 7px;
+}
 
 /* ─── Resizable panel handles ──────────────────────────────────────────────
  * `react-resizable-panels` renders a div with `[data-panel-resize-handle-id]`

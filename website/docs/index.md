@@ -10,13 +10,13 @@ Strand is a native desktop app that treats agent-driven development as a first-c
 - A **Worktrees** dashboard treats parallel agent attempts as first-class: per-worktree activity, dirty, and ahead/behind stats, side-by-side comparison of attempts, and a single "Merge & clean up" motion with full snapshot archiving so removals are always recoverable.
 - **Workspaces** group the repositories behind one product and let you review changes across all of them in a single merged queue.
 
-It is also a full everyday client: staging down to individual change blocks, a commit graph with inline stashes and full-history search, interactive rebase without an editor ever popping up, branches, remotes, tags, stashes, submodules, a three-way merge editor, and a command palette (`Mod+K`) that reaches nearly everything.
+It is also a full everyday client: staging down to individually selected lines, a commit graph with inline stashes and full-history search, interactive rebase without an editor ever popping up, branches, remotes, tags, stashes, submodules, a three-way merge editor, and a command palette (`Mod+K`) that reaches nearly everything.
 
 Strand is keyboard-first but never keyboard-only — the mouse stays first-class throughout. Network operations (fetch, pull, push, clone) and commit signing shell out to your system git, so SSH keys, credential helpers, hooks, and GPG/SSH signing work exactly as they do on the command line.
 
 ## Status
 
-Strand is in **alpha**, currently at **v0.10.x**. It is used daily on large real-world repositories, but some gaps remain (for example line-level staging below the change-block level, and the interactive-rebase `edit` action). Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager).
+Strand is in **alpha**, currently at **v0.13.x**. It is used daily on large real-world repositories, but some gaps remain (for example the interactive-rebase `edit` action and hosted-review close-out). Releases are published on [GitHub Releases](https://github.com/danielss-dev/strand/releases/latest); the in-app updater keeps installs current on macOS, Windows, and the Linux AppImage (`.deb`/`.rpm` installs update through your package manager).
 
 Strand is open source under AGPL-3.0, free for individuals forever, with an honor-system commercial license for companies — no license keys, feature gating, or telemetry.
 

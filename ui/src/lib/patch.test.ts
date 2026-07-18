@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { hashPatch, sliceChangeBlock } from './patch';
+import { hashPatch, sliceChangeBlock, sliceSelectedLines } from './patch';
 
 /**
  * `sliceChangeBlock` writes patches that `git apply` consumes against the
@@ -102,6 +102,101 @@ describe('sliceChangeBlock', () => {
     expect(() => sliceChangeBlock(TWO_BLOCKS, 5, 0, 'forward')).toThrow(/hunkIndex/);
     expect(() => sliceChangeBlock(TWO_BLOCKS, 0, 0, 'forward')).toThrow(/context group/);
     expect(() => sliceChangeBlock('', 0, 0, 'forward')).toThrow(/empty patch/);
+  });
+});
+
+describe('sliceSelectedLines', () => {
+  it('stages one deletion while leaving the replacement and other block unstaged', () => {
+    const out = sliceSelectedLines(TWO_BLOCKS, 0, 1, 'forward', {
+      deletions: [2],
+      additions: [],
+    });
+    const lines = out.trimEnd().split('\n');
+    expect(lines).toContain('-old1');
+    expect(lines).not.toContain('+new1');
+    expect(lines).toContain(' old2');
+    expect(lines).toContain('@@ -1,4 +1,3 @@');
+  });
+
+  it('stages one addition while retaining the old and neighbouring lines as context', () => {
+    const out = sliceSelectedLines(TWO_BLOCKS, 0, 1, 'forward', {
+      deletions: [],
+      additions: [2],
+    });
+    const lines = out.trimEnd().split('\n');
+    expect(lines).toContain(' old1');
+    expect(lines).toContain('+new1');
+    expect(lines).toContain(' old2');
+    expect(lines).toContain('@@ -1,4 +1,5 @@');
+  });
+
+  it('uses post-change context when reversing one selected line', () => {
+    const out = sliceSelectedLines(TWO_BLOCKS, 0, 3, 'reverse', {
+      deletions: [],
+      additions: [4],
+    });
+    const lines = out.trimEnd().split('\n');
+    expect(lines).toContain(' new1');
+    expect(lines).not.toContain('-old2');
+    expect(lines).toContain('+new2');
+    expect(lines).toContain('@@ -1,3 +1,4 @@');
+  });
+
+  it('rejects empty and out-of-block selections', () => {
+    expect(() =>
+      sliceSelectedLines(TWO_BLOCKS, 0, 1, 'forward', { deletions: [], additions: [] }),
+    ).toThrow(/empty selection/);
+    expect(() =>
+      sliceSelectedLines(TWO_BLOCKS, 0, 1, 'forward', { deletions: [99], additions: [] }),
+    ).toThrow(/does not contain changed lines/);
+  });
+
+  it('turns a partial reverse of a new file into a regular modification', () => {
+    const patch = [
+      'diff --git a/fresh.txt b/fresh.txt',
+      'new file mode 100644',
+      'index 0000000..1111111',
+      '--- /dev/null',
+      '+++ b/fresh.txt',
+      '@@ -0,0 +1,3 @@',
+      '+one',
+      '+two',
+      '+three',
+      '',
+    ].join('\n');
+    const out = sliceSelectedLines(patch, 0, 0, 'reverse', {
+      deletions: [],
+      additions: [2],
+    });
+    expect(out).not.toContain('new file mode');
+    expect(out).not.toContain('/dev/null');
+    expect(out).toContain('--- a/fresh.txt\n+++ b/fresh.txt');
+    expect(out).toContain('@@ -1,2 +1,3 @@');
+    expect(out).toContain(' one\n+two\n three');
+  });
+
+  it('turns a partial forward deletion into a regular modification', () => {
+    const patch = [
+      'diff --git a/gone.txt b/gone.txt',
+      'deleted file mode 100644',
+      'index 1111111..0000000',
+      '--- a/gone.txt',
+      '+++ /dev/null',
+      '@@ -1,3 +0,0 @@',
+      '-one',
+      '-two',
+      '-three',
+      '',
+    ].join('\n');
+    const out = sliceSelectedLines(patch, 0, 0, 'forward', {
+      deletions: [2],
+      additions: [],
+    });
+    expect(out).not.toContain('deleted file mode');
+    expect(out).not.toContain('/dev/null');
+    expect(out).toContain('--- a/gone.txt\n+++ b/gone.txt');
+    expect(out).toContain('@@ -1,3 +1,2 @@');
+    expect(out).toContain(' one\n-two\n three');
   });
 });
 

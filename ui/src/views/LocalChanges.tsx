@@ -20,7 +20,13 @@ import { aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { EDITABLE_SELECTOR, eventInside, formatBinding } from '../lib/keys';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
-import { hashFileDiff, sliceChangeBlock, type SliceDirection } from '../lib/patch';
+import {
+  hashFileDiff,
+  sliceChangeBlock,
+  sliceSelectedLines,
+  type ChangeLineSelection,
+  type SliceDirection,
+} from '../lib/patch';
 import { treeFileOrder } from '../lib/treeOrder';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
@@ -853,10 +859,32 @@ interface BlockMeta {
   delRange?: LineRange;
   /** Inclusive line range on the additions side (undefined for pure-del blocks). */
   addRange?: LineRange;
+  /** Changed lines shown by the keyboard-operable line picker. */
+  lines: { side: 'deletions' | 'additions'; number: number; text: string }[];
+}
+
+interface ActiveLineSelection {
+  blockId: string;
+  range: SelectedLineRange | null;
+  lines: ChangeLineSelection;
+  count: number;
 }
 
 const blockKey = (m: { hunkIndex: number; contentIndex: number }): string =>
   `${m.hunkIndex}:${m.contentIndex}`;
+
+function changedLinesFromRange(meta: BlockMeta, range: SelectedLineRange): ChangeLineSelection | null {
+  const startSide = range.side ?? 'additions';
+  const endSide = range.endSide ?? startSide;
+  const start = meta.lines.findIndex((line) => line.side === startSide && line.number === range.start);
+  const end = meta.lines.findIndex((line) => line.side === endSide && line.number === range.end);
+  if (start === -1 || end === -1) return null;
+  const selected = meta.lines.slice(Math.min(start, end), Math.max(start, end) + 1);
+  return {
+    deletions: selected.filter((line) => line.side === 'deletions').map((line) => line.number),
+    additions: selected.filter((line) => line.side === 'additions').map((line) => line.number),
+  };
+}
 
 /**
  * Renders a file's diff as one `<PierreFileDiff/>` with all action UI
@@ -903,6 +931,10 @@ export function HunkAnnotatedDiff({
   const discardPatch = useRepo((s) => s.discardPatch);
   const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const [pending, setPending] = useState<string | null>(null);
+  const [lineSelection, setLineSelection] = useState<ActiveLineSelection | null>(null);
+  const [linePicker, setLinePicker] = useState<string | null>(null);
+  const linePickerOpenRef = useRef(false);
+  linePickerOpenRef.current = linePicker != null;
   // Hunk-level apply failures render inline above the diff (this component
   // is shared with the Review view, so it carries its own error surface).
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -989,7 +1021,26 @@ export function HunkAnnotatedDiff({
         // doesn't matter visually.
         const annSide: 'deletions' | 'additions' = delRange ? 'deletions' : 'additions';
         const annLine = delRange ? delRange.start : addRange!.start;
-        const meta: BlockMeta = { hunkIndex: h, contentIndex: c, range, delRange, addRange };
+        const lines: BlockMeta['lines'] = [];
+        if (delRange) {
+          for (let offset = 0; offset < item.deletions; offset++) {
+            lines.push({
+              side: 'deletions',
+              number: delRange.start + offset,
+              text: fileDiff.deletionLines[item.deletionLineIndex + offset] ?? '',
+            });
+          }
+        }
+        if (addRange) {
+          for (let offset = 0; offset < item.additions; offset++) {
+            lines.push({
+              side: 'additions',
+              number: addRange.start + offset,
+              text: fileDiff.additionLines[item.additionLineIndex + offset] ?? '',
+            });
+          }
+        }
+        const meta: BlockMeta = { hunkIndex: h, contentIndex: c, range, delRange, addRange, lines };
         const id = blockKey(meta);
         list.push({ side: annSide, lineNumber: annLine, metadata: meta });
         byId.set(id, meta);
@@ -1005,6 +1056,32 @@ export function HunkAnnotatedDiff({
     }
     return { annotations: list, metaById: byId, lineToId: lineMap };
   }, [fileDiff]);
+
+  const onLineSelected = useCallback(
+    (range: SelectedLineRange | null) => {
+      // The picker owns selection while it is open. Pierre may emit the last
+      // drag range when controlled `selectedLines` changes to null; accepting
+      // that callback would silently re-check lines the user just cleared.
+      if (linePickerOpenRef.current) return;
+      if (!range) {
+        setLineSelection(null);
+        return;
+      }
+      const startSide = range.side ?? 'additions';
+      const endSide = range.endSide ?? startSide;
+      const startId = lineToId[startSide].get(range.start);
+      const endId = lineToId[endSide].get(range.end);
+      if (!startId || startId !== endId) {
+        setLineSelection(null);
+        return;
+      }
+      const meta = metaById.get(startId);
+      const lines = meta ? changedLinesFromRange(meta, range) : null;
+      const count = (lines?.deletions.length ?? 0) + (lines?.additions.length ?? 0);
+      setLineSelection(lines && count > 0 ? { blockId: startId, range, lines, count } : null);
+    },
+    [lineToId, metaById],
+  );
 
   // After Pierre renders (and on scroll / resize / annotation change),
   // measure each marker's Y so the overlay can position buttons there.
@@ -1060,9 +1137,11 @@ export function HunkAnnotatedDiff({
     };
   }, [annotations]);
 
-  const selectedLines: SelectedLineRange | null = hovered
-    ? (metaById.get(hovered)?.range ?? null)
-    : null;
+  const selectedLines: SelectedLineRange | null = lineSelection
+    ? lineSelection.range
+    : hovered
+      ? (metaById.get(hovered)?.range ?? null)
+      : null;
 
   // Stabilize the callbacks Pierre stores in `options`. `useFileDiffInstance`
   // runs `setOptions` on every render and uses shallow equality
@@ -1102,8 +1181,10 @@ export function HunkAnnotatedDiff({
       disableFileHeader: true,
       ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
       onLineEnter,
+      enableLineSelection: true,
+      onLineSelected,
     }),
-    [layout, pierreTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter],
+    [layout, pierreTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {
@@ -1112,7 +1193,16 @@ export function HunkAnnotatedDiff({
     setPending(key);
     setApplyError(null);
     try {
-      const slice = sliceChangeBlock(diff.patch, meta.hunkIndex, meta.contentIndex, direction);
+      const selected = lineSelection?.blockId === blockKey(meta) ? lineSelection : null;
+      const slice = selected
+        ? sliceSelectedLines(
+            diff.patch,
+            meta.hunkIndex,
+            meta.contentIndex,
+            direction,
+            selected.lines,
+          )
+        : sliceChangeBlock(diff.patch, meta.hunkIndex, meta.contentIndex, direction);
       if (onApplyBlock) {
         await onApplyBlock(slice, target);
       } else if (target === 'workdir_reverse') {
@@ -1123,12 +1213,37 @@ export function HunkAnnotatedDiff({
       } else {
         await applyPatch(slice, target);
       }
+      setLineSelection(null);
+      setLinePicker(null);
     } catch (e) {
       console.error('apply patch failed', e);
       setApplyError(gitErrorHint(e));
     } finally {
       setPending(null);
     }
+  }
+
+  function setPickedLines(meta: BlockMeta, lines: BlockMeta['lines']) {
+    const deletions = lines.filter((line) => line.side === 'deletions').map((line) => line.number);
+    const additions = lines.filter((line) => line.side === 'additions').map((line) => line.number);
+    const count = deletions.length + additions.length;
+    setLineSelection(
+      count > 0
+        ? { blockId: blockKey(meta), range: null, lines: { deletions, additions }, count }
+        : null,
+    );
+  }
+
+  function togglePickedLine(meta: BlockMeta, side: 'deletions' | 'additions', number: number) {
+    const active = lineSelection?.blockId === blockKey(meta) ? lineSelection.lines : null;
+    const selected = new Set([
+      ...(active?.deletions.map((line) => `deletions:${line}`) ?? []),
+      ...(active?.additions.map((line) => `additions:${line}`) ?? []),
+    ]);
+    const key = `${side}:${number}`;
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    setPickedLines(meta, meta.lines.filter((line) => selected.has(`${line.side}:${line.number}`)));
   }
 
   // Patches we can't structurally parse (mode-only, binary stubs that
@@ -1178,14 +1293,35 @@ export function HunkAnnotatedDiff({
                 onBlur={() =>
                   setSlotHovered((cur) => (cur === id ? null : cur))
                 }
+                onPointerDownCapture={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
               >
                 <BlockActions
                   meta={a.metadata}
                   side={side}
                   pending={pending}
+                  selectionCount={lineSelection?.blockId === id ? lineSelection.count : 0}
                   onRun={(d, t) => void run(a.metadata, d, t)}
                   onNote={onNoteBlock && (() => onNoteBlock(a.metadata))}
+                  onChooseLines={() => {
+                    setLineSelection(null);
+                    setLinePicker((current) => (current === id ? null : id));
+                  }}
                 />
+                {linePicker === id && (
+                  <LinePicker
+                    meta={a.metadata}
+                    side={side}
+                    selected={lineSelection?.blockId === id ? lineSelection.lines : null}
+                    pending={pending != null}
+                    onToggle={(lineSide, number) => togglePickedLine(a.metadata, lineSide, number)}
+                    onSelectAll={() => setPickedLines(a.metadata, a.metadata.lines)}
+                    onClear={() => setPickedLines(a.metadata, [])}
+                    onApply={(direction, target) => void run(a.metadata, direction, target)}
+                    onClose={() => setLinePicker(null)}
+                  />
+                )}
               </div>
             ))}
         </div>
@@ -1233,14 +1369,18 @@ function BlockActions({
   meta,
   side,
   pending,
+  selectionCount,
   onRun,
   onNote,
+  onChooseLines,
 }: {
   meta: BlockMeta;
   side: 'unstaged' | 'staged';
   pending: string | null;
+  selectionCount: number;
   onRun(direction: SliceDirection, target: ApplyTarget): void;
   onNote?: () => void;
+  onChooseLines: () => void;
 }) {
   const busy = pending != null;
   const myKey = (target: ApplyTarget) => `${blockKey(meta)}:${target}`;
@@ -1253,9 +1393,12 @@ function BlockActions({
           className="hbtn accept"
           disabled={busy}
           onClick={() => onRun('reverse', 'index_reverse')}
-          title="Unstage this change"
+          title={selectionCount > 0 ? 'Unstage selected lines' : 'Unstage this change'}
         >
-          {isMe ? 'Unstaging…' : 'Unstage'}
+          {isMe ? 'Unstaging…' : selectionCount > 0 ? `Unstage ${selectionCount}` : 'Unstage'}
+        </button>
+        <button type="button" className="hbtn" disabled={busy} onClick={onChooseLines} title="Choose individual lines">
+          Lines…
         </button>
       </div>
     );
@@ -1269,18 +1412,21 @@ function BlockActions({
         className="hbtn accept"
         disabled={busy}
         onClick={() => onRun('forward', 'index')}
-        title="Stage this change"
+        title={selectionCount > 0 ? 'Stage selected lines' : 'Stage this change'}
       >
-        {stagingMe ? 'Staging…' : 'Stage'}
+        {stagingMe ? 'Staging…' : selectionCount > 0 ? `Stage ${selectionCount}` : 'Stage'}
       </button>
       <button
         type="button"
         className="hbtn reject"
         disabled={busy}
         onClick={() => onRun('reverse', 'workdir_reverse')}
-        title="Discard this change from the working tree"
+        title={selectionCount > 0 ? 'Discard selected lines from the working tree' : 'Discard this change from the working tree'}
       >
-        {discardingMe ? 'Discarding…' : 'Discard'}
+        {discardingMe ? 'Discarding…' : selectionCount > 0 ? `Discard ${selectionCount}` : 'Discard'}
+      </button>
+      <button type="button" className="hbtn" disabled={busy} onClick={onChooseLines} title="Choose individual lines">
+        Lines…
       </button>
       {onNote && (
         <button
@@ -1293,6 +1439,104 @@ function BlockActions({
           Note
         </button>
       )}
+    </div>
+  );
+}
+
+function LinePicker({
+  meta,
+  side,
+  selected,
+  pending,
+  onToggle,
+  onSelectAll,
+  onClear,
+  onApply,
+  onClose,
+}: {
+  meta: BlockMeta;
+  side: 'unstaged' | 'staged';
+  selected: ChangeLineSelection | null;
+  pending: boolean;
+  onToggle: (side: 'deletions' | 'additions', number: number) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onApply: (direction: SliceDirection, target: ApplyTarget) => void;
+  onClose: () => void;
+}) {
+  const selectedKeys = new Set([
+    ...(selected?.deletions.map((line) => `deletions:${line}`) ?? []),
+    ...(selected?.additions.map((line) => `additions:${line}`) ?? []),
+  ]);
+  const count = selectedKeys.size;
+  return (
+    <div
+      className="lc-line-picker"
+      role="group"
+      aria-label="Choose changed lines"
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === 'Escape') onClose();
+      }}
+    >
+      <div className="lc-line-picker-head">
+        <strong>Choose lines</strong>
+        <span>{count} selected</span>
+        <button type="button" className="cd-close" aria-label="Close line picker" onClick={onClose}>×</button>
+      </div>
+      <div className="lc-line-picker-list">
+        {meta.lines.map((line, index) => {
+          const key = `${line.side}:${line.number}`;
+          const deletion = line.side === 'deletions';
+          return (
+            <label className="lc-line-picker-row" key={key}>
+              <input
+                autoFocus={index === 0}
+                type="checkbox"
+                checked={selectedKeys.has(key)}
+                disabled={pending}
+                onChange={() => onToggle(line.side, line.number)}
+              />
+              <span className={deletion ? 'del' : 'add'}>{deletion ? '−' : '+'}{line.number}</span>
+              <code title={line.text}>{line.text || ' '}</code>
+            </label>
+          );
+        })}
+      </div>
+      <div className="lc-line-picker-foot">
+        <button type="button" className="hbtn" disabled={pending} onClick={onSelectAll}>All</button>
+        <button type="button" className="hbtn" disabled={pending || count === 0} onClick={onClear}>Clear</button>
+        <span className="spacer" />
+        {side === 'staged' ? (
+          <button
+            type="button"
+            className="hbtn accept"
+            disabled={pending || count === 0}
+            onClick={() => onApply('reverse', 'index_reverse')}
+          >
+            Unstage selected
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="hbtn accept"
+              disabled={pending || count === 0}
+              onClick={() => onApply('forward', 'index')}
+            >
+              Stage selected
+            </button>
+            <button
+              type="button"
+              className="hbtn reject"
+              disabled={pending || count === 0}
+              onClick={() => onApply('reverse', 'workdir_reverse')}
+            >
+              Discard selected
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

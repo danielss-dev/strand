@@ -10,8 +10,8 @@ Right-click a single file in Local Changes or Review and choose **Open in editor
 
 - The view opens with a "show all" stacked diff of every changed file. Clicking the Unstaged or Staged column title re-selects that side's full changeset, and selecting a folder row aggregates the diffs beneath it.
 - Stage or unstage a whole file from its row, or use **Stage all** / **Unstage all** for the whole side.
-- **Change-block staging**: each change block in the diff has inline **Stage** and **Discard** buttons (**Unstage** on the staged side), so you can commit part of a file. The change block is the smallest unit — there is no single-line staging.
-- **Discarding a change block is recoverable**: it shows an Undo toast for a few seconds. Whole-file and bulk discards are immediate and permanent — there is no Undo toast and no automatic safety stash — so stash first if you might want the changes back.
+- **Block and line staging**: each change block in the diff has inline **Stage** and **Discard** buttons (**Unstage** on the staged side). Drag across changed line numbers to act on a contiguous range, or choose **Lines…** for a keyboard-operable checklist that can select any combination of deleted and added lines. The action labels show the selected-line count.
+- **Discarding a change block or selected lines is recoverable**: it shows an Undo toast for a few seconds. Whole-file and bulk discards are immediate and permanent — there is no Undo toast and no automatic safety stash — so stash first if you might want the changes back.
 - Toggle between stacked and split diff layout with the header buttons; the choice is remembered per repository. `Mod+F` opens in-diff text search.
 
 The staging loop is fully keyboard-driven:
@@ -25,6 +25,10 @@ The staging loop is fully keyboard-driven:
 | `c` | Jump to the commit subject field |
 | `Shift+J` / `Shift+K` | Scroll the diff pane |
 | `Mod+F` | Search within the diff |
+
+Inside **Lines…**, `Tab` moves through each changed-line checkbox and action,
+`Space` toggles the focused line, and `Escape` closes the picker. **All** and
+**Clear** make large blocks quick to adjust before Stage, Unstage, or Discard.
 
 ## Committing
 

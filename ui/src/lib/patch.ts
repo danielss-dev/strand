@@ -41,6 +41,13 @@ export function hashFileDiff(d: { patch: string }): string {
  */
 export type SliceDirection = 'forward' | 'reverse';
 
+export interface ChangeLineSelection {
+  /** Old-file line numbers selected from the deletion side. */
+  deletions: readonly number[];
+  /** New-file line numbers selected from the addition side. */
+  additions: readonly number[];
+}
+
 /**
  * Carve a synthetic single-hunk patch that targets exactly one change block
  * inside `hunkIndex`, leaving the rest of the hunks (and the other change
@@ -70,6 +77,33 @@ export function sliceChangeBlock(
   hunkIndex: number,
   contentIndex: number,
   direction: SliceDirection,
+): string {
+  return slicePatch(patch, hunkIndex, contentIndex, direction, null);
+}
+
+/** Carve a patch for only selected changed lines inside one change block. */
+export function sliceSelectedLines(
+  patch: string,
+  hunkIndex: number,
+  contentIndex: number,
+  direction: SliceDirection,
+  selection: ChangeLineSelection,
+): string {
+  if (selection.deletions.length === 0 && selection.additions.length === 0) {
+    throw new Error('sliceSelectedLines: empty selection');
+  }
+  return slicePatch(patch, hunkIndex, contentIndex, direction, {
+    deletions: new Set(selection.deletions),
+    additions: new Set(selection.additions),
+  });
+}
+
+function slicePatch(
+  patch: string,
+  hunkIndex: number,
+  contentIndex: number,
+  direction: SliceDirection,
+  selection: { deletions: Set<number>; additions: Set<number> } | null,
 ): string {
   if (!patch) throw new Error('sliceChangeBlock: empty patch');
   // Normalize the trailing newline up front so split('\n') doesn't produce a
@@ -146,20 +180,60 @@ export function sliceChangeBlock(
     );
   }
 
+  // Pierre reports selections in old/new file line numbers, not offsets into
+  // the patch body. Map both coordinates once while walking the hunk.
+  const deletionLineByIndex = new Map<number, number>();
+  const additionLineByIndex = new Map<number, number>();
+  let deletionLine = parsed.aStart;
+  let additionLine = parsed.cStart;
+  for (let i = 0; i < bodyLines.length; i++) {
+    const c = bodyLines[i][0];
+    if (c === ' ') {
+      deletionLineByIndex.set(i, deletionLine++);
+      additionLineByIndex.set(i, additionLine++);
+    } else if (c === '-') {
+      deletionLineByIndex.set(i, deletionLine++);
+    } else if (c === '+') {
+      additionLineByIndex.set(i, additionLine++);
+    }
+  }
+
   const newBody: string[] = [];
+  let selectedChangedLines = 0;
+  let targetChangedLines = 0;
   for (let g = 0; g < groups.length; g++) {
     const grp = groups[g];
-    if (grp.type === 'context' || g === contentIndex) {
+    if (g === contentIndex) {
+      for (let j = grp.start; j <= grp.end; j++) {
+        if (bodyLines[j][0] === '+' || bodyLines[j][0] === '-') targetChangedLines++;
+      }
+    }
+    if (grp.type === 'context' || (g === contentIndex && selection == null)) {
       for (let j = grp.start; j <= grp.end; j++) newBody.push(bodyLines[j]);
       continue;
     }
-    // Other change group — rewrite per direction.
+    // Other change groups, plus unselected lines in the target group, are
+    // rewritten to the source side. Selected target lines stay changes.
     let lastKeptRealLine = false;
     for (let j = grp.start; j <= grp.end; j++) {
       const l = bodyLines[j];
       const c = l[0];
       if (c === '\\') {
         if (lastKeptRealLine) newBody.push(l);
+        continue;
+      }
+      const isSelected =
+        g === contentIndex &&
+        selection != null &&
+        (c === '-'
+          ? selection.deletions.has(deletionLineByIndex.get(j)!)
+          : c === '+'
+            ? selection.additions.has(additionLineByIndex.get(j)!)
+            : false);
+      if (isSelected) {
+        newBody.push(l);
+        selectedChangedLines++;
+        lastKeptRealLine = true;
         continue;
       }
       if (direction === 'forward') {
@@ -182,6 +256,10 @@ export function sliceChangeBlock(
     }
   }
 
+  if (selection && selectedChangedLines === 0) {
+    throw new Error('sliceSelectedLines: selection does not contain changed lines in this block');
+  }
+
   // Recount sides. Context lines (' ') count toward both; '-' counts toward
   // source, '+' counts toward target. '\' markers don't count.
   let bCount = 0;
@@ -198,12 +276,60 @@ export function sliceChangeBlock(
     }
   }
 
-  const newHeader = formatHunkHeader(parsed.aStart, bCount, parsed.cStart, dCount, parsed.trailing);
+  let outputHeader = header;
+  let leftStart = parsed.aStart;
+  let rightStart = parsed.cStart;
+  const partialSelection = selection != null && selectedChangedLines < targetChangedLines;
+  if (partialSelection && direction === 'reverse' && header.includes('--- /dev/null')) {
+    // A partial reverse of a creation removes selected lines but leaves the
+    // file present, so it is a modification rather than a file deletion.
+    outputHeader = creationOrDeletionAsModification(header, 'creation');
+    leftStart = parsed.cStart;
+    rightStart = parsed.cStart;
+  } else if (partialSelection && direction === 'forward' && header.includes('+++ /dev/null')) {
+    // A partial forward apply of a deletion keeps unselected lines, so it is
+    // likewise a modification rather than a whole-file deletion.
+    outputHeader = creationOrDeletionAsModification(header, 'deletion');
+    leftStart = parsed.aStart;
+    rightStart = parsed.aStart;
+  }
 
-  const parts = [...header, newHeader, ...newBody];
+  const newHeader = formatHunkHeader(leftStart, bCount, rightStart, dCount, parsed.trailing);
+
+  const parts = [...outputHeader, newHeader, ...newBody];
   let out = parts.join('\n');
   if (!out.endsWith('\n')) out += '\n';
   return out;
+}
+
+function creationOrDeletionAsModification(
+  header: string[],
+  kind: 'creation' | 'deletion',
+): string[] {
+  const oldPath = header.find((line) => line.startsWith('--- '))?.slice(4);
+  const newPath = header.find((line) => line.startsWith('+++ '))?.slice(4);
+  return header
+    .filter(
+      (line) =>
+        !line.startsWith('new file mode ') &&
+        !line.startsWith('deleted file mode ') &&
+        !line.startsWith('index '),
+    )
+    .map((line) => {
+      if (kind === 'creation' && line === '--- /dev/null' && newPath) {
+        return `--- ${swapPatchPathPrefix(newPath, 'b/', 'a/')}`;
+      }
+      if (kind === 'deletion' && line === '+++ /dev/null' && oldPath) {
+        return `+++ ${swapPatchPathPrefix(oldPath, 'a/', 'b/')}`;
+      }
+      return line;
+    });
+}
+
+function swapPatchPathPrefix(path: string, from: string, to: string): string {
+  if (path.startsWith(from)) return to + path.slice(from.length);
+  if (path.startsWith(`"${from}`)) return `"${to}${path.slice(from.length + 1)}`;
+  return path;
 }
 
 interface ParsedHunkHeader {
