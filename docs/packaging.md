@@ -1,10 +1,10 @@
 # Packaging & signing runbook
 
 Status (2026-07-18): release CI builds all three platforms, signs and notarizes
-the universal macOS app, and produces minisign-verified updater artifacts. The
-remaining 1.0 distribution gates are the Windows publisher certificate, Linux
-publisher signing, stable/beta channel policy, and release-candidate validation
-on Windows, macOS, GNOME, and KDE.
+the universal macOS app, produces minisign-verified updater artifacts, and
+keyless-signs Linux AppImages with Sigstore. The remaining 1.0 distribution
+gates are the Windows publisher certificate, stable/beta channel policy, and
+release-candidate validation on Windows, macOS, GNOME, and KDE.
 
 ---
 
@@ -103,9 +103,9 @@ locally instead:
 ## Cross-platform note
 
 Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
-`bundle.targets` and build without an Apple account; Windows EV signing and
-Linux sigstore signing are tracked under §0.5 "platform / packaging", not
-0.1.
+`bundle.targets` and build without an Apple account. Release CI gives each
+AppImage a keyless Sigstore bundle; the Windows publisher identity remains an
+external 1.0 gate.
 
 ---
 
@@ -116,6 +116,23 @@ platforms via [`tauri-apps/tauri-action`]. It runs on a `v*` tag push (or
 manual dispatch) and opens a **draft** GitHub Release with the installers
 attached — macOS universal `.dmg`, Windows `.msi`, Linux `.deb`/`.rpm`/
 `.AppImage`. Review and publish the draft by hand.
+
+Manual dispatch checks out the requested tag before building; it never labels
+the current branch snapshot as that tag. On Linux, the release job requests a
+short-lived GitHub Actions OIDC identity, signs every AppImage with Cosign,
+immediately verifies the artifact and bundle against
+`https://github.com/${GITHUB_WORKFLOW_REF}` plus the GitHub Actions issuer, and
+uploads `<AppImage>.sigstore.json` beside the installer. No long-lived Linux
+signing secret exists. To verify a downloaded tagged release, substitute the
+real artifact and tag:
+
+```sh
+cosign verify-blob Strand_1.0.0_amd64.AppImage \
+  --bundle Strand_1.0.0_amd64.AppImage.sigstore.json \
+  --certificate-identity \
+    https://github.com/danielss-dev/strand/.github/workflows/release.yml@refs/tags/v1.0.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
 
 The same workflow also builds the optional `strand-azdo` helper for universal
 macOS, Windows x86_64, and Linux x86_64. It publishes versioned `.zip`/
@@ -149,9 +166,10 @@ links/traversal, and keeps the previous helper until the replacement verifies.
 Run `pnpm release:check-security` before packaging. PR CI and every release job
 run the same fail-closed check. It pins the reviewed production CSP, the exact
 local desktop capability allowlist, `createUpdaterArtifacts: true`, the single
-HTTPS stable endpoint, and minisign public-key ID `84FCBFD2A981CE5D`. Any
-capability or channel change must be reviewed and updated in the checker in the
-same commit; a silent broadening fails CI.
+HTTPS stable endpoint, minisign public-key ID `84FCBFD2A981CE5D`, exact-tag
+checkout, and Linux Sigstore identity flow. Any capability, channel, or signing
+change must be reviewed and updated in the checker in the same commit; a silent
+broadening or signing removal fails CI.
 
 **Before tagging:** bump `version` in `tauri.conf.json`, the workspace
 `Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
@@ -177,8 +195,9 @@ The `APPLE_*` secrets are mandatory for the release workflow because both the
 app and the universal helper must be signed/notarized. The
 `TAURI_SIGNING_*` pair is also **mandatory**: it signs updater artifacts and
 the helper manifest, and `bundle.createUpdaterArtifacts` is `true`. Any bundle
-build (CI or local) fails without the private key. Windows EV signing and Linux
-publisher signing are not wired yet.
+build (CI or local) fails without the private key. Windows publisher signing is
+not wired until the external certificate or cloud-signing identity is chosen;
+Linux AppImage publisher identity is keyless and needs no repository secret.
 
 > **Local builds** now need the key too. Point Tauri at the generated file:
 > ```sh

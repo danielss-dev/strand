@@ -4,6 +4,7 @@ const config = JSON.parse(readFileSync('crates/strand-tauri/tauri.conf.json', 'u
 const capability = JSON.parse(
   readFileSync('crates/strand-tauri/capabilities/default.json', 'utf8'),
 );
+const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8');
 
 function fail(message) {
   throw new Error(`release security check failed: ${message}`);
@@ -78,4 +79,21 @@ if (!publicKey.includes('minisign public key: 84FCBFD2A981CE5D')) {
   fail('updater public key is missing or unexpected');
 }
 
-console.log('Release CSP, capabilities, and signed stable updater policy are valid.');
+const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';
+if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {
+  fail('release jobs do not all check out the requested tag');
+}
+for (const fragment of [
+  'id-token: write',
+  'uses: sigstore/cosign-installer@v4.1.2',
+  'cosign sign-blob --yes --bundle',
+  'cosign verify-blob',
+  '--certificate-identity "$IDENTITY"',
+  "--certificate-oidc-issuer 'https://token.actions.githubusercontent.com'",
+]) {
+  if (!releaseWorkflow.includes(fragment)) {
+    fail(`Linux Sigstore release policy is missing: ${fragment}`);
+  }
+}
+
+console.log('Release CSP, capabilities, signed updater, tag checkout, and Linux Sigstore policies are valid.');

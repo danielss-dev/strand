@@ -2005,6 +2005,15 @@ all 275 UI tests pass, and the exact production-protocol Windows build was
 verified with Computer Use for startup, tablist accessibility structure,
 Ctrl+K command routing, and the Settings dialog.
 
+**Linux release identity shipped (2026-07-18):** Release CI now gives every
+AppImage a keyless Sigstore bundle using GitHub Actions OIDC, verifies it in the
+same job against the exact Strand release-workflow identity and issuer, and
+uploads the bundle beside the installer. Manual releases also check out the
+requested tag before any build, closing a branch-snapshot relabeling gap. The
+new fail-closed `docs/release-checklist.md` separates automated gates from the
+remaining external Windows publisher identity and real-platform candidate
+passes.
+
 ---
 
 ## 1.1+ — Post-1.0

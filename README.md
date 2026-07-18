@@ -202,10 +202,12 @@ keyboard alone, and the mouse stays first-class.
 
 Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
 works on large real-world repositories daily, but expect rough edges. The main
-remaining gaps are Windows/Linux release signing and validation plus the final
-cross-platform keyboard, accessibility, and release-quality pass. See the
+remaining gaps are Windows publisher signing and cross-platform release-
+candidate validation. Linux AppImages are now keyless-
+signed with Sigstore; Windows publisher signing and real GNOME/KDE/macOS
+candidate runs remain. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
-and [`TASKS.md`](./TASKS.md).
+[`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 
 ## Install
 

@@ -61,8 +61,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ◐ **Stable-release hardening.** Production CSP, the exact least-privilege
   desktop capability allowlist, signed stable-update policy enforcement, and
   the fresh-clone hook warning, and the typed English localization baseline are
-  shipped. Trusted Windows/Linux installers, Linux GNOME+KDE validation, and
-  the full keyboard/accessibility/release-quality pass remain.
+  shipped. Linux AppImages are keyless-signed with Sigstore and the full
+  keyboard/accessibility pass is closed. Windows publisher signing, real
+  macOS/GNOME/KDE candidate validation, update-channel promotion, and the
+  release-quality checklist remain (`docs/release-checklist.md`).
 - ☑ **Power parity selection.** Keep the already-shipped signature verification
   and exact patch/series export in 1.0; defer guided bisect, LFS management,
   signing controls/key selection, Git-flow, sparse checkout, patch import/
@@ -1612,7 +1614,9 @@ tree: watch the agent work, review fast, accept or reject safely.
   universal build (`Strand_0.5.0_universal.dmg` on the v0.5.0 GitHub Release,
   2026-06-12).
 - ☐ Windows EV cert (~$300/yr — budget per PRD §12)
-- ☐ Linux sigstore signing for AppImage
+- ☑ Linux Sigstore signing for AppImage: release CI creates and immediately
+  identity-verifies a keyless Cosign bundle, then uploads it beside the
+  AppImage (`.github/workflows/release.yml`, `docs/packaging.md`, 2026-07-18).
 - ☑ CI: GitHub Actions matrix for mac/win/linux × x86_64/aarch64
   (`.github/workflows/release.yml` — tag-driven `tauri-action` matrix:
   macOS universal, Windows `.msi`, Linux `.deb`/`.rpm`/`.AppImage` → draft

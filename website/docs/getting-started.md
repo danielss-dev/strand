@@ -14,7 +14,7 @@ Download the latest release from [GitHub Releases](https://github.com/danielss-d
 |---|---|---|
 | macOS | `.dmg` | Universal binary (Apple Silicon + Intel), Developer ID–signed and notarized |
 | Windows | `.msi` | Windows 11; the installer is not yet code-signed |
-| Linux | `.deb`, `.rpm`, `.AppImage` | Built on Ubuntu 22.04 |
+| Linux | `.deb`, `.rpm`, `.AppImage` | Built on Ubuntu 22.04; AppImage includes a keyless Sigstore verification bundle |
 
 You can also build from source with Rust stable, Node.js 20+, pnpm 9+, and the Tauri 2 platform dependencies.
 

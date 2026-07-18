@@ -48,6 +48,8 @@ jobs:
       VERSION: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Resolve helper release version
         if: startsWith(github.ref_name, 'strand-azdo-v')
         shell: bash
@@ -143,6 +145,7 @@ jobs:
     if: ${{ !startsWith(github.ref_name, 'strand-azdo-v') && (github.event_name != 'workflow_dispatch' || !inputs.helpers_only) }}
     permissions:
       contents: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -171,6 +174,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -215,6 +220,10 @@ jobs:
       - name: Verify release security policy
         run: pnpm release:check-security
 
+      - name: Install Cosign
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: sigstore/cosign-installer@v4.1.2
+
       - name: Build, sign, and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -248,6 +257,30 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Sign and verify Linux AppImage with Sigstore
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          mapfile -d '' APPIMAGES < <(find target -type f -path '*/release/bundle/appimage/*.AppImage' -print0)
+          if [ "${#APPIMAGES[@]}" -eq 0 ]; then
+            echo "No release AppImage found to sign" >&2
+            exit 1
+          fi
+
+          IDENTITY="https://github.com/${GITHUB_WORKFLOW_REF}"
+          for ARTIFACT in "${APPIMAGES[@]}"; do
+            BUNDLE="${ARTIFACT}.sigstore.json"
+            cosign sign-blob --yes --bundle "$BUNDLE" "$ARTIFACT"
+            cosign verify-blob "$ARTIFACT" \
+              --bundle "$BUNDLE" \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+            gh release upload "$RELEASE_TAG" "$BUNDLE" --clobber
+          done
+
   helper-release:
     needs: [helper, release]
     if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only) || (needs.release.result == 'skipped' && startsWith(github.ref_name, 'strand-azdo-v'))) }}
@@ -256,6 +289,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
