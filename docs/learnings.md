@@ -1727,3 +1727,11 @@ Keep visible success/error/network pills `aria-hidden` and mirror the active
 message through the always-mounted assertive live region in `ToastViewport`;
 screen readers can miss announcements on nodes that enter/leave with
 `Presence`. Interactive progress (Cancel) remains reachable on the visual pill.
+
+**Composite rows must not hide pointer-only controls inside buttons
+(2026-07-18).** A recent/workspace row with secondary Remove, Rename, or Delete
+actions is a focusable menu-item container with real child buttons, never a
+button containing clickable spans. Stop child key events from activating the
+row. Repository tabs keep a single tab stop and expose Close on Delete/
+Backspace; arrow keys plus Home/End implement the tablist focus model. Any
+pointer double-click action needs an explicit keyboard equivalent.

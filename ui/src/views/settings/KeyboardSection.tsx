@@ -11,6 +11,7 @@ import {
   type CommandCategory,
   type CommandId,
 } from '../../lib/keys';
+import { t } from '../../lib/i18n';
 import { useSettings } from '../../stores/settings';
 
 /**
@@ -40,6 +41,7 @@ const CONTEXT_SHORTCUTS: { keys: string; plain?: boolean; label: string }[] = [
   { keys: 'j / k', plain: true, label: 'Next / previous file (Review queue · Local Changes)' },
   { keys: 'n / p', plain: true, label: 'Next / previous change block in the diff' },
   { keys: 'Shift+J / Shift+K', plain: true, label: 'Scroll the diff pane down / up' },
+  { keys: '← → · Home/End · Delete', plain: true, label: t('settings.context.repoTabs') },
   { keys: '↑ ↓ · ↵ · ⇥ · Esc', plain: true, label: 'Palette: navigate · run · change scope · close' },
   { keys: 'Ctrl/⌘ +  −  0', plain: true, label: 'Zoom UI in · out · reset to 100%' },
 ];

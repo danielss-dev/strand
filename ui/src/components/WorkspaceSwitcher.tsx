@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { useOutsideClose } from '../lib/useOutsideClose';
 import { workspaceMemberSet } from '../lib/repoIdentity';
+import { t } from '../lib/i18n';
 import { useRepo } from '../stores/repo';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 
@@ -128,14 +129,20 @@ export function WorkspaceSwitcher({ placement, onManage }: { placement: 'rail' |
                 const isActive = w.id === activeId;
                 const count = w.repoPaths.length;
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={w.id}
                     className="repo-menu-item"
                     role="menuitemradio"
+                    tabIndex={0}
                     aria-checked={isActive}
                     title={`${w.name} · ${count} repositor${count === 1 ? 'y' : 'ies'}`}
                     onClick={() => { close(); void openWorkspace(w.id); }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      e.preventDefault();
+                      close();
+                      void openWorkspace(w.id);
+                    }}
                   >
                     <span className="ico">
                       {isActive
@@ -143,24 +150,28 @@ export function WorkspaceSwitcher({ placement, onManage }: { placement: 'rail' |
                         : <Icon name="workspace" size={12} />}
                     </span>
                     <span className="label">{w.name}</span>
-                    <span
+                    <button
+                      type="button"
                       className="x"
-                      role="button"
-                      title="Rename workspace"
+                      aria-label={t('workspace.rename')}
+                      title={t('workspace.rename')}
                       onClick={(e) => { e.stopPropagation(); setMode({ kind: 'rename', id: w.id }); }}
+                      onKeyDown={(e) => e.stopPropagation()}
                     >
                       <Icon name="edit" size={11} />
-                    </span>
-                    <span
+                    </button>
+                    <button
+                      type="button"
                       className="x"
-                      role="button"
-                      title="Delete workspace"
+                      aria-label={t('workspace.delete')}
+                      title={t('workspace.delete')}
                       onClick={(e) => { e.stopPropagation(); void remove(w.id); }}
+                      onKeyDown={(e) => e.stopPropagation()}
                     >
                       <Icon name="trash" size={11} />
-                    </span>
+                    </button>
                     <span className="meta">{count}</span>
-                  </button>
+                  </div>
                 );
               })}
 

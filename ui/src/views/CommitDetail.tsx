@@ -511,7 +511,18 @@ function CdFileRow({
 }) {
   const letter = statusLetter(diff.status);
   return (
-    <div className={`cd-file${active ? ' active' : ''}`} onClick={onClick}>
+    <div
+      className={`cd-file${active ? ' active' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onClick();
+      }}
+    >
       <span className={`stat ${letter}`}>{letter}</span>
       <span />
       <span className="fpath" title={diff.path}>

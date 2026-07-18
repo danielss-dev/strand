@@ -3,6 +3,7 @@ export const en = {
   'common.cancel': 'Cancel',
   'common.choose': 'Choose…',
   'common.close': 'Close',
+  'common.removeRecent': 'Remove from recents',
   'common.fileCount.one': '{count} file',
   'common.fileCount.other': '{count} files',
   'nav.localChanges': 'Local Changes',
@@ -58,6 +59,7 @@ export const en = {
   'settings.ai': 'AI',
   'settings.updates': 'Updates',
   'settings.privacy': 'Privacy',
+  'settings.context.repoTabs': 'Repository tabs: move · first/last · close',
   'status.noRepository': 'No repository',
   'status.upToDate': 'Up to date',
   'status.ahead': '{count} ahead',
@@ -66,6 +68,10 @@ export const en = {
   'status.conflicts': 'Conflicts need resolution',
   'status.changes': '{modified} modified · {staged} staged',
   'toast.cancelNetwork': 'Cancel network operation',
+  'repo.close': 'Close repository',
+  'repo.closeWorktree': 'Close worktree',
+  'workspace.rename': 'Rename workspace',
+  'workspace.delete': 'Delete workspace',
 } as const;
 
 export type MessageKey = keyof typeof en;

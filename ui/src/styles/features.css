@@ -2639,6 +2639,9 @@ button {
   max-width: 140px;
 }
 .repo-menu-item .x {
+  border: 0;
+  padding: 0;
+  background: transparent;
   width: 18px;
   height: 18px;
   display: flex;
@@ -2649,7 +2652,8 @@ button {
   opacity: 0;
   transition: opacity 0.12s;
 }
-.repo-menu-item:hover .x {
+.repo-menu-item:hover .x,
+.repo-menu-item .x:focus-visible {
   opacity: 1;
 }
 .repo-menu-item .x:hover {

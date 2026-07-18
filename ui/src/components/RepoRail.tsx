@@ -7,6 +7,7 @@ import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useOutsideClose } from '../lib/useOutsideClose';
+import { t } from '../lib/i18n';
 import { groupTabs, repoTabLabel, tileGlyph, workspaceMemberSet } from '../lib/repoIdentity';
 import type { RepoTab } from '../stores/repo';
 
@@ -314,25 +315,34 @@ function RailAddButton({
             <>
               <div className="repo-menu-sect">Recent</div>
               {recents.map((r) => (
-                <button
-                  type="button"
+                <div
                   key={r.path}
                   className="repo-menu-item"
                   role="menuitem"
+                  tabIndex={0}
                   title={r.path}
                   onClick={() => { setOpen(false); onOpenRecent(r.path); }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setOpen(false);
+                    onOpenRecent(r.path);
+                  }}
                 >
                   <span className="ico"><Icon name="folder" size={13} /></span>
                   <span className="label">{r.name}</span>
                   <span className="meta">{r.path}</span>
-                  <span
+                  <button
+                    type="button"
                     className="x"
-                    title="Remove from recents"
+                    aria-label={t('common.removeRecent')}
+                    title={t('common.removeRecent')}
                     onClick={(e) => { e.stopPropagation(); void forgetRecent(r.path); }}
+                    onKeyDown={(e) => e.stopPropagation()}
                   >
                     <Icon name="x" size={9} stroke={2} />
-                  </span>
-                </button>
+                  </button>
+                </div>
               ))}
             </>
           )}

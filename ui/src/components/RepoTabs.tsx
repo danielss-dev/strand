@@ -8,6 +8,7 @@ import { useRepoIcons } from '../stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useOutsideClose } from '../lib/useOutsideClose';
 import { groupColor, groupTabs, repoTabLabel, workspaceMemberSet } from '../lib/repoIdentity';
+import { t as translate } from '../lib/i18n';
 import type { RepoTab } from '../stores/repo';
 
 interface Props {
@@ -156,6 +157,7 @@ export function RepoTabs({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCust
               key={t.path}
               type="button"
               role="tab"
+              tabIndex={active ? 0 : -1}
               aria-selected={active}
               className={
                 'repo-tab' +
@@ -166,6 +168,23 @@ export function RepoTabs({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCust
               title={label.title}
               aria-label={label.ariaLabel}
               onClick={() => { void setActiveTab(t.path); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.preventDefault();
+                  void closeRepo(t.path);
+                  return;
+                }
+                let next = i;
+                if (e.key === 'ArrowLeft') next = (i - 1 + ordered.length) % ordered.length;
+                else if (e.key === 'ArrowRight') next = (i + 1) % ordered.length;
+                else if (e.key === 'Home') next = 0;
+                else if (e.key === 'End') next = ordered.length - 1;
+                else return;
+                e.preventDefault();
+                const nextTab = e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next];
+                nextTab?.focus();
+                void setActiveTab(ordered[next].path);
+              }}
               onContextMenu={(e) => openMenu(e, t)}
             >
               <span className="repo-dot" style={{ background: colorFor(t) }} />
@@ -176,9 +195,8 @@ export function RepoTabs({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCust
               </span>
               <span
                 className="repo-x"
-                role="button"
-                aria-label={linked ? 'Close worktree' : 'Close repository'}
-                title={linked ? 'Close worktree' : 'Close repository'}
+                aria-hidden="true"
+                title={translate(linked ? 'repo.closeWorktree' : 'repo.close')}
                 onClick={(e) => { e.stopPropagation(); void closeRepo(t.path); }}
               >
                 <Icon name="x" size={9} stroke={2} />
@@ -449,26 +467,34 @@ function RepoSwitcherButton({
             <>
               <div className="repo-menu-sect">Recent</div>
               {recents.map((r) => (
-                <button
-                  type="button"
+                <div
                   key={r.path}
                   className="repo-menu-item"
                   role="menuitem"
                   tabIndex={0}
                   title={r.path}
                   onClick={() => { setOpen(false); onOpenRecent(r.path); }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setOpen(false);
+                    onOpenRecent(r.path);
+                  }}
                 >
                   <span className="ico"><Icon name="folder" size={13} /></span>
                   <span className="label">{r.name}</span>
                   <span className="meta">{r.path}</span>
-                  <span
+                  <button
+                    type="button"
                     className="x"
-                    title="Remove from recents"
+                    aria-label={translate('common.removeRecent')}
+                    title={translate('common.removeRecent')}
                     onClick={(e) => { e.stopPropagation(); void forgetRecent(r.path); }}
+                    onKeyDown={(e) => e.stopPropagation()}
                   >
                     <Icon name="x" size={9} stroke={2} />
-                  </span>
-                </button>
+                  </button>
+                </div>
               ))}
             </>
           )}

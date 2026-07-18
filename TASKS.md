@@ -1233,10 +1233,13 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   - ☑ Extension point for future custom themes — `THEME_OPTIONS` registry +
     `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
     + add-an-entry, no other code changes.
-- ◐ **Keyboard operability pass.** Almost every action reachable from the
+- ☑ **Keyboard operability pass.** Almost every action reachable from the
   keyboard, not just the palette (PRD §6.8, `docs/learnings.md`). Per-surface
-  focus models + palette entries; audit for mouse-only actions. Drag-and-drop
-  (folder open, tab / file reorder) may stay pointer-only.
+  focus models + palette entries; the final audit added file-history and
+  commit-file activation, tablist arrow/Home/End/Delete handling, and separate
+  focusable recent/workspace secondary actions. Drag-and-drop (folder open,
+  tab / file reorder) may stay pointer-only (`RepoTabs`, `FileHistoryTab`,
+  `CdFileRow`, verified in the exact production-protocol app 2026-07-18).
   - ☑ Configurable global-shortcut registry (`ui/src/lib/keys.ts` `COMMANDS` +
     `resolveBindings`/`eventToBinding`/`formatBinding`/`toMudaAccelerator`,
     tested in `keys.test.ts`). Window keydown (`App.tsx`), native menu

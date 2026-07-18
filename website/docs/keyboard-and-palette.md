@@ -98,6 +98,20 @@ Zoom works even while a text field is focused, shows a "Zoom N%" toast, and pers
 
 Each view has its own small set of fixed (non-rebindable) keys. Settings → Keyboard lists the most common of them under "Context shortcuts" for reference; this page is the complete list.
 
+### Repository tabs
+
+When repository navigation uses the horizontal tab strip, focus a tab to use:
+
+| Key | Action |
+| --- | --- |
+| `←` / `→` | Focus and open the previous / next repository tab |
+| `Home` / `End` | Focus and open the first / last repository tab |
+| `Delete` / `Backspace` | Close the focused repository or worktree tab |
+
+Recent-repository and workspace menus expose their Open, Remove, Rename, and
+Delete controls as separate tab stops. `Enter` / `Space` activates the focused
+row or control.
+
 ### Local Changes (staging)
 
 | Key | Action |
@@ -166,6 +180,11 @@ detail panel expose subject/body copy and native-dialog patch export.
 In commit/ref comparison dialogs, `↑` / `↓`, `Home`, and `End` navigate
 the changed-file list; `Escape` closes the dialog. Merge cherry-pick/revert
 dialogs use the native radio-group arrow keys to choose the mainline parent.
+
+In commit detail, each changed-file row is focusable; `Enter` / `Space` opens
+its diff. In a file's History tab, `Space` selects a revision for comparison.
+`Enter` selects an unselected revision, then opens that selected revision in
+the commit graph when pressed again.
 
 ### Interactive rebase editor
 

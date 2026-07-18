@@ -1994,6 +1994,17 @@ behind, diverged, conflict, or current state from live repository data. The
 empty-state audit found 44 contextual surfaces and no remaining "no data"
 labels. TypeScript and all 275 UI tests pass.
 
+**Keyboard-accessibility audit closed (2026-07-18):** File-history revisions
+and commit-detail file rows now expose button semantics plus Enter/Space
+activation. Horizontal repository tabs use a roving tab stop with Left/Right,
+Home/End, and Delete/Backspace close behavior. Recent-repository and workspace
+menus no longer bury pointer-only Remove/Rename/Delete spans inside a button;
+each secondary action is an independently named focus target. The complete
+fixed-key contract is reflected in Settings and the user guide. TypeScript and
+all 275 UI tests pass, and the exact production-protocol Windows build was
+verified with Computer Use for startup, tablist accessibility structure,
+Ctrl+K command routing, and the Settings dialog.
+
 ---
 
 ## 1.1+ — Post-1.0

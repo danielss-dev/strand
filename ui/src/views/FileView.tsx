@@ -837,7 +837,15 @@ function HistoryTab({
         {hasLocal && (
           <div
             className={'hist-row working' + (selected === WORKING ? ' active' : '')}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selected === WORKING}
             onClick={() => setSelected(WORKING)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              setSelected(WORKING);
+            }}
             title="Uncommitted changes in your working tree"
           >
             <div className="gnode"><span className="dot" /></div>
@@ -855,8 +863,21 @@ function HistoryTab({
           <div
             key={e.hash}
             className={'hist-row' + (selected === e.hash ? ' active' : '')}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selected === e.hash}
             onClick={() => setSelected(e.hash)}
             onDoubleClick={() => onJump(e.hash)}
+            onKeyDown={(event) => {
+              if (event.key === ' ') {
+                event.preventDefault();
+                setSelected(e.hash);
+              } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (selected === e.hash) onJump(e.hash);
+                else setSelected(e.hash);
+              }
+            }}
             title="Click to view the change, double-click to open in the graph"
           >
             <div className="gnode"><span className="dot" /></div>

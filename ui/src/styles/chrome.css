@@ -267,7 +267,8 @@
     opacity: 0;
     margin-right: -4px;
 }
-.repo-tab:hover .repo-x {
+.repo-tab:hover .repo-x,
+.repo-tab:focus-visible .repo-x {
     opacity: 1;
 }
 .repo-tab .repo-x:hover {
