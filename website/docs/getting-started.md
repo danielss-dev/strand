@@ -93,7 +93,10 @@ sidebar or the palette action "Show: Pull Requests". See [Pull Requests](pull-re
 
 ### Status bar
 
-The bottom status bar shows the current branch with ahead/behind counts and sync state on the left, and modified/staged counts plus a gear button that opens Settings on the right.
+The bottom status bar shows the current branch with ahead/behind counts and a
+derived sync state — up to date, ahead, behind, diverged, or conflicts needing
+resolution — on the left. Modified/staged counts and the Settings gear are on
+the right.
 
 ### Command palette
 

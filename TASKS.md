@@ -914,7 +914,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `settings.showTimeline`. Pointer-only/`aria-hidden` — a redundant nav aid over
   arrow-key list navigation.)
 - ☐ Graph style preset switching (classic / bold / subtle)
-- ☐ GPG sign status indicator in commit-detail meta
+- ☑ Commit signature status in detail metadata (`CommitDetail.SignatureSummary`:
+  lazy GPG/SSH/X.509 verification with valid/invalid/unverifiable/unsigned state)
 
 ### Reflog view
 - ☑ Reflog browser (`views/Reflog.tsx` — reached via a `[Graph | Reflog]`
@@ -1245,11 +1246,20 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   - ☑ Settings → Keyboard section: rebind (record-a-combo) / unassign / reset /
     restore-all, shared-binding warnings, context-shortcut reference
     (`views/settings/KeyboardSection.tsx`). Persisted as `settings.keybindings`.
-  - ☐ Make surface-local keys (commit, in-diff search, commit search, Review
-    j/k) rebindable too — currently fixed + documented in the Keyboard section.
-- ☐ Status-bar: real GPG / LFS / sync state
-- ☐ Toast system → proper notification component
-- ☐ Empty-state copy for every panel (PRD §9: "no 'no data' labels")
+  - ☑ Binding scope closed for 1.0: global commands are rebindable; standard
+    surface-local editing/navigation keys remain fixed and are fully listed in
+    Settings → Keyboard plus the user guide. They are keyboard access, not
+    hidden commands requiring a second binding registry.
+- ☑ Status-bar truth pass: branch/ahead/behind plus real derived sync state
+  (up to date, ahead, behind, diverged, or conflicts) and modified/staged
+  counts. Commit signing belongs to `SignatureSummary`; LFS/auth remain system-
+  Git concerns rather than fake global indicators (`StatusBar`, 2026-07-18).
+- ☑ Proper notification viewport (`ToastViewport`): timed success/error pills,
+  cancellable network progress, one stable assertive live region, and animated
+  mount/unmount through `Presence`; error duration remains longer than success.
+- ☑ Empty-state copy audit: every primary panel and dialog has contextual,
+  instructive empty/loading/error copy (44 explicit empty-state surfaces; no
+  "no data" labels remain in `ui/src`, audited 2026-07-18).
 - ☑ Localization framework, English at launch (`lib/i18n.ts`: typed catalog,
   fail-fast interpolation, English plurals, browser-locale date/number/percent
   helpers; app navigation/settings shell and clone/update flows migrated;

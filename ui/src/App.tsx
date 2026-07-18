@@ -16,6 +16,7 @@ import { RepoRail } from './components/RepoRail';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
+import { ToastViewport, type ToastMessage } from './components/ToastViewport';
 import { FONTS, useSettings } from './stores/settings';
 import { usePullRequests } from './stores/pullRequests';
 import { useRepo } from './stores/repo';
@@ -362,7 +363,7 @@ export function App() {
   const [syncDone, setSyncDone] = useState(false);
   const [pullDone, setPullDone] = useState(false);
   const [pushDone, setPushDone] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; kind: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   // Unacknowledged crash from a previous run (Settings → Privacy, opt-in).
   // Non-null renders the persistent CrashToast until reported or dismissed.
   const [crashReport, setCrashReport] = useState<CrashCheck | null>(null);
@@ -1761,43 +1762,12 @@ export function App() {
 
         <StatusBar onOpenSettings={() => openSettingsAt('appearance')} />
 
-        {/* Persistent live region: the visible pills below mount/unmount, which
-            is unreliable for screen readers, so announce the active message
-            from an always-present node. assertive because the toast is the
-            sole channel for network-op failures. */}
-        <div className="sr-only" role="status" aria-live="assertive" aria-atomic="true">
-          {toast?.msg ?? netProgress ?? ''}
-        </div>
-
-        <Presence value={netProgress}>
-          {(msg, exiting) => (
-            <div className={`toast progress${exiting ? ' exiting' : ''}`} aria-hidden={netOpId && !exiting ? undefined : 'true'}>
-              <span aria-hidden="true" className="icon-spin"><Icon name="refresh" size={13} /></span>
-              <span aria-hidden="true">{msg}</span>
-              {netOpId && !exiting && (
-                <button
-                  type="button"
-                  className="toast-action"
-                  aria-label="Cancel network operation"
-                  onClick={() => { void tauri.repoCancelOp(netOpId); }}
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          )}
-        </Presence>
-
-        <Presence value={toast}>
-          {(t, exiting) => (
-            <div className={`toast${exiting ? ' exiting' : ''}`} aria-hidden="true">
-              <span style={{ color: t.kind === 'error' ? 'var(--del)' : 'var(--add)' }}>
-                <Icon name={t.kind === 'error' ? 'x' : 'check'} size={13} stroke={2.2} />
-              </span>
-              <span>{t.msg}</span>
-            </div>
-          )}
-        </Presence>
+        <ToastViewport
+          networkMessage={netProgress}
+          networkOperationId={netOpId}
+          toast={toast}
+          onCancelNetwork={(operationId) => { void tauri.repoCancelOp(operationId); }}
+        />
 
         <Presence value={opProgress}>
           {(op, exiting) => (

@@ -1985,6 +1985,15 @@ not flash a default frame. An exact production-protocol Windows build was driven
 with Computer Use through maximize, close, and relaunch; the custom titlebar
 returned with Restore active and the prior session intact.
 
+**Release feedback surfaces closed (2026-07-18):** Notifications now live in a
+dedicated `ToastViewport` with timed success/error pills, cancellable network
+progress, `Presence` transitions, and one stable assertive live region instead
+of accessibility announcements tied to mounting animation. The bottom status
+bar no longer calls every open repository "Up to date": it derives ahead,
+behind, diverged, conflict, or current state from live repository data. The
+empty-state audit found 44 contextual surfaces and no remaining "no data"
+labels. TypeScript and all 275 UI tests pass.
+
 ---
 
 ## 1.1+ — Post-1.0

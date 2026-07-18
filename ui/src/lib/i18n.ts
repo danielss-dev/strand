@@ -58,6 +58,14 @@ export const en = {
   'settings.ai': 'AI',
   'settings.updates': 'Updates',
   'settings.privacy': 'Privacy',
+  'status.noRepository': 'No repository',
+  'status.upToDate': 'Up to date',
+  'status.ahead': '{count} ahead',
+  'status.behind': '{count} behind',
+  'status.diverged': 'Branches diverged',
+  'status.conflicts': 'Conflicts need resolution',
+  'status.changes': '{modified} modified · {staged} staged',
+  'toast.cancelNetwork': 'Cancel network operation',
 } as const;
 
 export type MessageKey = keyof typeof en;

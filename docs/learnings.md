@@ -1721,3 +1721,9 @@ restore geometry before the frame appears; the existing setup may then apply
 Windows decorations/shadow and show it. Verify persistence by changing state,
 closing the process through the UI, and launching the exact workspace binary.
 A same-process hide/show or app-identity launch does not prove disk restore.
+
+**Animated notifications need one stable accessibility channel (2026-07-18).**
+Keep visible success/error/network pills `aria-hidden` and mirror the active
+message through the always-mounted assertive live region in `ToastViewport`;
+screen readers can miss announcements on nodes that enter/leave with
+`Presence`. Interactive progress (Cancel) remains reachable on the visual pill.

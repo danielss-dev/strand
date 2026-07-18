@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { t } from '../lib/i18n';
 import { useRepo } from '../stores/repo';
 
 export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -7,6 +8,17 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   const modified = status.filter((s) => !s.staged).length;
   const staged = status.filter((s) => s.staged).length;
+  const syncLabel = !meta
+    ? t('status.noRepository')
+    : status.some((entry) => entry.kind === 'CONFLICTED')
+      ? t('status.conflicts')
+      : meta.ahead > 0 && meta.behind > 0
+        ? t('status.diverged')
+        : meta.ahead > 0
+          ? t('status.ahead', { count: meta.ahead })
+          : meta.behind > 0
+            ? t('status.behind', { count: meta.behind })
+            : t('status.upToDate');
 
   return (
     <div className="statusbar">
@@ -25,19 +37,19 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       )}
       <div className="sb-item">
         <Icon name="sync" size={11} />
-        <span>{meta ? 'Up to date' : 'No repo'}</span>
+        <span>{syncLabel}</span>
       </div>
 
       <div className="right">
-        <div className="sb-item">{modified} modified · {staged} staged</div>
+        <div className="sb-item">{t('status.changes', { modified, staged })}</div>
         <span className="sep">·</span>
         <div className="sb-item">UTF-8 · LF</div>
         <button
           type="button"
           className="sb-item sb-gear"
           onClick={onOpenSettings}
-          title="Settings (⌘,)"
-          aria-label="Settings"
+          title={`${t('settings.title')} (⌘,)`}
+          aria-label={t('settings.title')}
         >
           <Icon name="settings" size={12} />
         </button>
