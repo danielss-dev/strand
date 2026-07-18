@@ -245,6 +245,20 @@ the pull request head is still the commit used by the displayed patch; if it
 changed, the draft stays in place and Code asks you to refresh and reselect.
 Closed and merged pull requests stay read-only.
 
+Choose **Add to review** in that inline composer to queue the selected range
+instead of publishing it immediately. **Review** in the Code header opens the
+exact-head review draft, where pending comments can be removed and a Markdown
+summary can be written or previewed. Submit the whole draft as **Comment**,
+**Approve**, or **Request changes**; requesting changes requires a summary. The
+same composer is reachable from the command palette with “Pull Requests:
+submit review…”. Drafts survive leaving the tab and provider failures, but a
+new source commit makes the old draft visibly stale and blocks submission until
+it is discarded or rewritten against the refreshed patch. GitHub sends the
+summary and pending inline comments as one review pinned to that commit. Azure
+DevOps Services and Server support the decision plus optional summary; pending
+inline comments stay unavailable there until Strand has provider iteration and
+change-tracking coordinates.
+
 When a new head commit is detected, Strand keeps the existing patch visible
 while the replacement loads and labels it stale. Inline-comment submission is
 disabled until the new patch succeeds, so comments cannot be anchored to old
@@ -272,6 +286,6 @@ current patch fetch does not include, so Strand disables that action and
 directs you to the host instead of creating a wrongly anchored thread.
 Open pull requests can be closed after confirmation, and closed/abandoned pull
 requests can be reopened when the provider grants permission. Suggestions,
-approve/request-changes actions, richer Azure policy details, and branch
-updates are planned but are not presented as available yet. GitLab and
-Bitbucket adapters will use the same workspace in a later slice.
+existing-review update/dismiss actions, richer Azure policy details, and branch
+updates are planned but are not presented as available yet. GitLab and Bitbucket
+adapters will use the same workspace in a later slice.

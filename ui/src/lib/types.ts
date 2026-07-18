@@ -254,6 +254,7 @@ export interface HostingConnectionStatus {
 export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
 export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
 export type PullRequestLifecycleAction = 'close' | 'reopen';
+export type PullRequestReviewEvent = 'comment' | 'approve' | 'request_changes';
 
 export interface PullRequestRepository {
   provider: PullRequestProvider;
@@ -414,6 +415,20 @@ export interface BaseBranch {
 
 export interface CheckoutOutcome {
   branch: string;
+}
+
+export interface PullRequestPendingComment {
+  path: string;
+  start_line: number;
+  end_line: number;
+  side: 'deletions' | 'additions';
+  body: string;
+}
+
+export interface PullRequestReviewDraft {
+  head_sha: string;
+  body: string;
+  comments: PullRequestPendingComment[];
 }
 
 export interface InitOutcome {

@@ -83,7 +83,11 @@ keyboard alone, and the mouse stays first-class.
   threads, switch stacked/split layout in place, jump from timeline comments to their
   file/thread, read GitHub review threads with replies directly beneath their code,
   reply to them, resolve or reopen them, and add stale-head-guarded comments to
-  selected line ranges. A compact readiness ledger combines review,
+  selected line ranges. Selected ranges can instead be queued in one preserved,
+  exact-head review draft with Markdown preview and submitted as Comment,
+  Approve, or Request changes; GitHub batches the pending comments atomically,
+  while Azure Services/Server submit the provider vote and optional summary.
+  A compact readiness ledger combines review,
   checks, conflicts, merge state, and provider freshness. Permission-backed
   drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control and can
@@ -104,9 +108,8 @@ keyboard alone, and the mouse stays first-class.
   permission instead of WebView2's browser permission shim. Packaged desktop
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
-  without a custom path. Azure
-  inline comments need iteration tracking; submit-review and branch update/
-  checkout actions are still in progress.
+  without a custom path. Azure inline comments still need iteration tracking;
+  branch update/checkout actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the

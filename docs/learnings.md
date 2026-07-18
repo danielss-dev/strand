@@ -1639,3 +1639,12 @@ progress. Persist the exact head SHA plus a hash of only that file's rendered
 metadata/content. When a filtered file queue becomes empty, reconcile selection
 against the filtered paths—not the unfiltered file map—or the hidden previous
 diff remains mounted and violates both the filter and one-diff review model.
+
+**Hosted review submission validates the exact head with a lean read
+(2026-07-18).** Recheck the provider head immediately before any review write;
+do not refresh rich detail or the patch merely to guard submission. GitHub can
+send the decision, summary, and inline comments atomically in one review pinned
+to that commit. Azure vote and summary APIs are separate writes: submit the vote
+first, report partial success explicitly if the summary fails, and preserve the
+local draft so the user can recover the unsent text. Never clear a draft on a
+provider failure; clear it only after the provider confirms the review write.

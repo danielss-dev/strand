@@ -284,6 +284,31 @@ fn request_spec(operation: Operation) -> RequestSpec {
             })),
             unwrap_value: false,
         },
+        Operation::SetVote {
+            project,
+            repository,
+            id,
+            reviewer_id,
+            vote,
+        } => RequestSpec {
+            method: Method::PUT,
+            path: git_path(
+                &project,
+                &repository,
+                &format!(
+                    "pullrequests/{id}/reviewers/{}",
+                    encode_segment(&reviewer_id)
+                ),
+            ),
+            query: api(),
+            body: Some(json!({
+                "vote": match vote {
+                    strand_azdo_protocol::ReviewVote::Approve => 10,
+                    strand_azdo_protocol::ReviewVote::RequestChanges => -10,
+                }
+            })),
+            unwrap_value: false,
+        },
         Operation::Complete {
             project,
             repository,
@@ -530,6 +555,19 @@ mod tests {
         });
         assert_eq!(close.method, Method::PATCH);
         assert_eq!(close.body.unwrap()["status"], "abandoned");
+
+        let vote = request_spec(Operation::SetVote {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            reviewer_id: "reviewer/id".into(),
+            vote: strand_azdo_protocol::ReviewVote::RequestChanges,
+        });
+        assert_eq!(vote.method, Method::PUT);
+        assert!(vote
+            .path
+            .ends_with("pullrequests/12/reviewers/reviewer%2Fid"));
+        assert_eq!(vote.body.unwrap()["vote"], -10);
 
         let policy = request_spec(Operation::Policies {
             project: "Project".into(),

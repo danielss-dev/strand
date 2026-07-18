@@ -1353,6 +1353,13 @@ export function App() {
             keywords: 'pr github azure devops complete squash rebase draft review ready',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-merge')),
           } satisfies PaletteAction,
+          {
+            id: 'pull-request-submit-review',
+            label: 'Pull Requests: submit review…',
+            group: 'Actions',
+            keywords: 'pr github azure devops comment approve request changes pending review',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review')),
+          } satisfies PaletteAction,
           ...(activePullRequestKey ? [{
             id: 'pull-request-follow',
             label: activePullRequestFollowed

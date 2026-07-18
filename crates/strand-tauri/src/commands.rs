@@ -423,6 +423,23 @@ pub async fn repo_pull_request_inline_comment(
     .await
 }
 
+/// Submit one exact-head review, including any pending inline comments.
+#[tauri::command(async)]
+pub async fn repo_pull_request_submit_review(
+    path: String,
+    id: u64,
+    event: pull_requests::PullRequestReviewEvent,
+    body: String,
+    comments: Vec<pull_requests::PullRequestPendingComment>,
+    expected_head: String,
+) -> CmdResult<()> {
+    run_blocking("submit pull request review", move || {
+        pull_requests::submit_review(&path, id, event, &body, &comments, &expected_head)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 /// Reply to an existing provider review thread. The provider thread ID is a
 /// stable target, so this write does not depend on diff coordinates or head SHA.
 #[tauri::command(async)]

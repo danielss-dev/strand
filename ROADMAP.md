@@ -1900,6 +1900,17 @@ Pierre diff. Focused unit tests cover fingerprints, invalidation, filtering,
 and thread ordering; a Computer Use pass on a real GitHub PR verified marking,
 filtering, shortcut flow, persistence, and the empty-filter selection boundary.
 
+**Hosted PR batched reviews shipped (2026-07-18):** Code now keeps an
+exact-head local review draft with a Markdown summary plus pending inline
+comments, Write/Preview modes, and Comment, Approve, or Request changes
+decisions. GitHub submits the draft as one atomic review pinned to the displayed
+commit. Azure DevOps Services and Server map decisions to provider votes and
+optionally follow with the summary; inline drafts remain disabled there until
+iteration/change-tracking coordinates land. Provider failures preserve the
+draft, stale heads are refused, and the Azure Server helper contract is now
+protocol v3. Focused provider/UI tests and a write-free Computer Use pass
+verified preview, persistence, decision guards, and the command-palette entry.
+
 ---
 
 ## 1.1+ — Post-1.0

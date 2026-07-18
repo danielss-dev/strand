@@ -43,7 +43,18 @@ import {
 import { pullRequestActivityChanged, pullRequestFollowKey } from '../lib/pullRequestActivity';
 import { errMessage, tauri } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
-import type { PullRequest, PullRequestActivitySnapshot, PullRequestCheck, PullRequestComment, PullRequestCreateOutcome, PullRequestList, PullRequestReviewThread } from '../lib/types';
+import type {
+  PullRequest,
+  PullRequestActivitySnapshot,
+  PullRequestCheck,
+  PullRequestComment,
+  PullRequestCreateOutcome,
+  PullRequestList,
+  PullRequestPendingComment,
+  PullRequestReviewDraft,
+  PullRequestReviewEvent,
+  PullRequestReviewThread,
+} from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
@@ -648,6 +659,7 @@ function PullRequestInlineThread({
 
 type InlineCommentAnnotation =
   | { kind: 'composer'; range: SelectedLineRange }
+  | { kind: 'draft'; comment: PullRequestPendingComment; index: number }
   | { kind: 'thread'; thread: PullRequestReviewThread };
 
 type PullRequestChangesTarget = {
@@ -692,9 +704,20 @@ function PullRequestChanges({
   const [viewed, setViewed] = useState<Record<string, string>>({});
   const [viewedLoaded, setViewedLoaded] = useState(false);
   const [keyboardThreadId, setKeyboardThreadId] = useState<string | null>(null);
+  const [reviewDraft, setReviewDraft] = useState<PullRequestReviewDraft>({
+    head_sha: pr.source_commit,
+    body: '',
+    comments: [],
+  });
+  const [reviewDraftLoaded, setReviewDraftLoaded] = useState(false);
+  const [reviewSubmitOpen, setReviewSubmitOpen] = useState(false);
+  const [reviewSubmitMode, setReviewSubmitMode] = useState<'write' | 'preview'>('write');
+  const [submittingReview, setSubmittingReview] = useState(false);
   const generation = useRef(0);
   const viewedGeneration = useRef(0);
+  const reviewDraftGeneration = useRef(0);
   const viewedWrite = useRef<Promise<void>>(Promise.resolve());
+  const reviewDraftWrite = useRef<Promise<void>>(Promise.resolve());
   const currentPr = useRef(pr);
   const reviewKey = useMemo(
     () => `${provider}:${encodeURIComponent(pr.url || path)}:${pr.id}`,
@@ -724,6 +747,26 @@ function PullRequestChanges({
     );
     return () => { viewedGeneration.current += 1; };
   }, [reviewKey]);
+
+  useEffect(() => {
+    const current = ++reviewDraftGeneration.current;
+    setReviewDraft({ head_sha: pr.source_commit, body: '', comments: [] });
+    setReviewDraftLoaded(false);
+    void pullRequestReview.getDraft(reviewKey).then(
+      (stored) => {
+        if (reviewDraftGeneration.current === current) {
+          setReviewDraft(stored ?? { head_sha: pr.source_commit, body: '', comments: [] });
+          setReviewDraftLoaded(true);
+        }
+      },
+      (caught) => {
+        if (reviewDraftGeneration.current === current) {
+          setCommentMessage({ tone: 'error', text: `Could not load pending review: ${errMessage(caught)}` });
+        }
+      },
+    );
+    return () => { reviewDraftGeneration.current += 1; };
+  }, [pr.source_commit, reviewKey]);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -807,6 +850,7 @@ function PullRequestChanges({
     () => unresolvedThreadTargets(allTreePaths, pr.review_threads ?? []),
     [allTreePaths, pr.review_threads],
   );
+  const openForReview = pr.state === 'open' || pr.state === 'active';
 
   useEffect(() => {
     if (navigationTarget && filesByPath.has(navigationTarget.path) && !treePaths.includes(navigationTarget.path)) {
@@ -849,6 +893,16 @@ function PullRequestChanges({
   }, [keyboardThreadId, pr.review_threads, selectedPath]);
 
   useEffect(() => {
+    const openReview = () => {
+      if (!openForReview) return;
+      setReviewSubmitOpen(true);
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('.pr-review-submit textarea')?.focus());
+    };
+    window.addEventListener('strand:pull-request-review-open', openReview);
+    return () => window.removeEventListener('strand:pull-request-review-open', openReview);
+  }, [openForReview]);
+
+  useEffect(() => {
     setCollapsed(false);
     setSelectedLines(null);
     setCommentDraft('');
@@ -856,7 +910,6 @@ function PullRequestChanges({
   }, [selectedPath]);
 
   const stalePatch = patch != null && (loading || error != null);
-  const openForReview = pr.state === 'open' || pr.state === 'active';
   const inlineCommentsSupported = provider === 'git_hub' && openForReview && !stalePatch;
   const selectLines = useCallback((range: SelectedLineRange | null) => {
     if (!inlineCommentsSupported || !range) {
@@ -889,6 +942,15 @@ function PullRequestChanges({
       lineNumber: thread.end_line,
       metadata: { kind: 'thread' as const, thread },
     }));
+    reviewDraft.comments.forEach((comment, index) => {
+      if (comment.path === selectedFile?.name) {
+        annotations.push({
+          side: comment.side,
+          lineNumber: comment.end_line,
+          metadata: { kind: 'draft', comment, index },
+        });
+      }
+    });
     if (selectedLines) {
       const side = selectedLines.endSide ?? selectedLines.side ?? 'additions';
       annotations.push({
@@ -898,7 +960,105 @@ function PullRequestChanges({
       });
     }
     return annotations;
-  }, [selectedLines, selectedThreads]);
+  }, [reviewDraft.comments, selectedFile?.name, selectedLines, selectedThreads]);
+
+  const persistReviewDraft = useCallback((next: PullRequestReviewDraft) => {
+    reviewDraftWrite.current = reviewDraftWrite.current
+      .catch(() => undefined)
+      .then(() => pullRequestReview.setDraft(reviewKey, next))
+      .catch((caught) => {
+        setCommentMessage({ tone: 'error', text: `Could not save pending review: ${errMessage(caught)}` });
+      });
+  }, [reviewKey]);
+
+  const updateReviewDraft = useCallback((next: PullRequestReviewDraft, persist = true) => {
+    setReviewDraft(next);
+    if (persist) persistReviewDraft(next);
+  }, [persistReviewDraft]);
+
+  const addPendingComment = () => {
+    if (!selectedFile || !selectedLines || !reviewDraftLoaded || stalePatch) return;
+    const body = commentDraft.trim();
+    if (!body) return;
+    if (reviewDraft.head_sha !== pr.source_commit && (reviewDraft.body.trim() || reviewDraft.comments.length > 0)) {
+      setCommentMessage({ tone: 'error', text: 'The pending review belongs to an older head. Submit or discard it before adding comments from this patch.' });
+      setReviewSubmitOpen(true);
+      return;
+    }
+    if (reviewDraft.comments.length >= 100) {
+      setCommentMessage({ tone: 'error', text: 'A review can contain at most 100 pending comments.' });
+      return;
+    }
+    const side = selectedLines.side ?? 'additions';
+    updateReviewDraft({
+      head_sha: pr.source_commit,
+      body: reviewDraft.body,
+      comments: [...reviewDraft.comments, {
+        path: selectedFile.name,
+        start_line: selectedLines.start,
+        end_line: selectedLines.end,
+        side,
+        body,
+      }],
+    });
+    setCommentDraft('');
+    setSelectedLines(null);
+    setCommentMessage({ tone: 'ok', text: 'Comment added to the pending review.' });
+  };
+
+  const removePendingComment = (index: number) => {
+    const next = {
+      ...reviewDraft,
+      comments: reviewDraft.comments.filter((_, candidate) => candidate !== index),
+    };
+    updateReviewDraft(next);
+  };
+
+  const submitReview = async (event: PullRequestReviewEvent) => {
+    if (submittingReview || !reviewDraftLoaded || !openForReview) return;
+    const body = reviewDraft.body.trim();
+    if (reviewDraft.head_sha !== pr.source_commit) {
+      setCommentMessage({ tone: 'error', text: 'This pending review belongs to an older head. Refresh and discard or rewrite it before submitting.' });
+      return;
+    }
+    if (event === 'comment' && !body && reviewDraft.comments.length === 0) {
+      setCommentMessage({ tone: 'error', text: 'Add a summary or pending comment before submitting a comment review.' });
+      return;
+    }
+    if (event === 'request_changes' && !body) {
+      setCommentMessage({ tone: 'error', text: 'Request changes needs a review summary.' });
+      return;
+    }
+    setSubmittingReview(true);
+    setCommentMessage(null);
+    let submitted = false;
+    try {
+      await tauri.repoPullRequestSubmitReview(
+        path,
+        pr.id,
+        event,
+        body,
+        reviewDraft.comments,
+        reviewDraft.head_sha,
+      );
+      submitted = true;
+      const empty = { head_sha: pr.source_commit, body: '', comments: [] };
+      updateReviewDraft(empty);
+      setReviewSubmitOpen(false);
+      const next = await tauri.repoPullRequest(path, pr.id);
+      onUpdated(next);
+      setCommentMessage({ tone: 'ok', text: event === 'approve' ? 'Review approved.' : event === 'request_changes' ? 'Changes requested.' : 'Review submitted.' });
+    } catch (caught) {
+      setCommentMessage({
+        tone: 'error',
+        text: submitted
+          ? `Review was submitted, but the pull request could not refresh: ${errMessage(caught)}`
+          : errMessage(caught),
+      });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const submitInlineComment = async () => {
     if (!selectedFile || !selectedLines || postingComment || stalePatch) return;
@@ -1076,6 +1236,9 @@ function PullRequestChanges({
     const next = Math.min(treePaths.length - 1, Math.max(0, current + delta));
     setSelectedPath(treePaths[next]);
   };
+  const reviewDraftStale = reviewDraft.head_sha !== pr.source_commit && (
+    reviewDraft.body.trim().length > 0 || reviewDraft.comments.length > 0
+  );
 
   if (loading && patch == null) {
     return <div className="pr-empty pr-tab-empty" aria-live="polite"><Icon name="refresh" size={24} className="spin" /><strong>Loading code changes…</strong></div>;
@@ -1133,7 +1296,73 @@ function PullRequestChanges({
         <span>{unresolvedCount} unresolved {unresolvedCount === 1 ? 'thread' : 'threads'}</span>
         <span className="stat-add">+{pr.additions ?? parsedTotals.additions}</span>
         <span className="stat-del">−{pr.deletions ?? parsedTotals.deletions}</span>
+        {openForReview && (
+          <button
+            type="button"
+            className="h-link pr-submit-review-toggle"
+            aria-expanded={reviewSubmitOpen}
+            onClick={() => setReviewSubmitOpen((value) => !value)}
+          >
+            <Icon name="changes" size={11} /> Review{reviewDraft.comments.length > 0 ? ` (${reviewDraft.comments.length})` : ''}
+          </button>
+        )}
       </div>
+      {reviewSubmitOpen && openForReview && (
+        <section className="pr-review-submit" aria-label="Submit review">
+          <div className="pr-review-submit-head">
+            <div>
+              <strong>Submit review</strong>
+              <span>{reviewDraft.comments.length} pending inline {reviewDraft.comments.length === 1 ? 'comment' : 'comments'}</span>
+            </div>
+            <div className="pr-review-submit-tabs" role="tablist" aria-label="Review summary mode">
+              {(['write', 'preview'] as const).map((mode) => (
+                <button
+                  type="button"
+                  role="tab"
+                  key={mode}
+                  aria-selected={reviewSubmitMode === mode}
+                  onClick={() => setReviewSubmitMode(mode)}
+                >
+                  {mode === 'write' ? 'Write' : 'Preview'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {reviewDraftStale && (
+            <div className="pr-review-stale" role="alert">
+              This draft targets an older pull-request head and cannot be submitted.
+              <button
+                type="button"
+                className="h-link"
+                onClick={() => updateReviewDraft({ head_sha: pr.source_commit, body: '', comments: [] })}
+              >
+                Discard stale draft
+              </button>
+            </div>
+          )}
+          {reviewSubmitMode === 'write' ? (
+            <textarea
+              value={reviewDraft.body}
+              onChange={(event) => updateReviewDraft({ ...reviewDraft, body: event.target.value }, false)}
+              onBlur={() => persistReviewDraft(reviewDraft)}
+              placeholder="Review summary (required when requesting changes)…"
+              rows={4}
+              maxLength={65_536}
+              disabled={!reviewDraftLoaded || submittingReview}
+            />
+          ) : (
+            <div className="pr-review-submit-preview">
+              {reviewDraft.body.trim() ? renderMarkdown(reviewDraft.body) : <p className="pr-muted">Nothing to preview yet.</p>}
+            </div>
+          )}
+          <div className="pr-review-submit-actions">
+            <span>{reviewDraft.body.length.toLocaleString()} / 65,536</span>
+            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('comment')}>Comment</button>
+            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('approve')}>Approve</button>
+            <button type="button" className="btn danger" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || !reviewDraft.body.trim()} onClick={() => void submitReview('request_changes')}>Request changes</button>
+          </div>
+        </section>
+      )}
       <div className="pr-changes-body">
       <PanelGroup direction="horizontal" autoSaveId="strand:pull-request-changes-v2">
         <Panel defaultSize={22} minSize={14} maxSize={36}>
@@ -1284,6 +1513,21 @@ function PullRequestChanges({
                           />
                         );
                       }
+                      if (annotation.metadata.kind === 'draft') {
+                        const { comment, index } = annotation.metadata;
+                        return (
+                          <article className="pr-inline-thread pending" tabIndex={0} aria-label={`Pending review comment on ${comment.path} line ${comment.end_line}`}>
+                            <header>
+                              <div>
+                                <strong>Pending review</strong>
+                                <span>{comment.side === 'deletions' ? 'old' : 'new'} line{comment.start_line === comment.end_line ? '' : 's'} {comment.start_line === comment.end_line ? comment.end_line : `${comment.start_line}–${comment.end_line}`}</span>
+                              </div>
+                              <button type="button" className="h-link danger" onClick={() => removePendingComment(index)}>Remove</button>
+                            </header>
+                            <div className="pr-inline-thread-body">{renderMarkdown(comment.body)}</div>
+                          </article>
+                        );
+                      }
                       return selectedLines ? (
                       <form
                         className="pr-inline-composer"
@@ -1318,6 +1562,9 @@ function PullRequestChanges({
                         />
                         <div className="pr-inline-actions">
                           <span>{commentDraft.length.toLocaleString()} / 65,536 · {platform === 'mac' ? '⌘' : 'Ctrl'}+Enter</span>
+                          <button type="button" className="btn" disabled={!commentDraft.trim() || postingComment || !reviewDraftLoaded} onClick={addPendingComment}>
+                            Add to review
+                          </button>
                           <button type="submit" className="btn primary" disabled={!commentDraft.trim() || postingComment}>
                             {postingComment ? 'Adding…' : 'Add comment'}
                           </button>
@@ -1451,6 +1698,18 @@ function PullRequestDetails({
     : isReopenablePullRequest(pr)
       ? 'reopen'
       : null;
+  useEffect(() => {
+    const openReview = () => {
+      if (!isOpenPullRequest(pr)) {
+        onToast('Only an open pull request can be reviewed.', 'error');
+        return;
+      }
+      onTabChange('code');
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('strand:pull-request-review-open')), 50);
+    };
+    window.addEventListener('strand:pull-request-review', openReview);
+    return () => window.removeEventListener('strand:pull-request-review', openReview);
+  }, [onTabChange, onToast, pr]);
   const setLifecycle = async (action: 'close' | 'reopen') => {
     if (lifecycleBusy) return;
     setLifecycleBusy(true);

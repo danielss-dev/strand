@@ -4,6 +4,7 @@ import type { DiffMode } from '../stores/settings';
 import type {
   NetworkPreferences,
   PullMode,
+  PullRequestReviewDraft,
   RecentRepo,
   RepoActivityEntry,
   RepoIcon,
@@ -195,6 +196,12 @@ export const pullRequestReview = {
   },
   setViewed(reviewKey: string, viewed: Record<string, string>): Promise<void> {
     return settings.set(`pull-request-reviewed:${reviewKey}`, viewed);
+  },
+  getDraft(reviewKey: string): Promise<PullRequestReviewDraft | null> {
+    return settings.get<PullRequestReviewDraft>(`pull-request-draft:${reviewKey}`);
+  },
+  setDraft(reviewKey: string, draft: PullRequestReviewDraft): Promise<void> {
+    return settings.set(`pull-request-draft:${reviewKey}`, draft);
   },
 };
 

@@ -6359,6 +6359,54 @@ textarea.clone-input {
 .pr-code-overview code { max-width: 260px; overflow: hidden; color: var(--text-2); font: 9px var(--font-mono); text-overflow: ellipsis; }
 .pr-code-overview .stat-add { margin-left: auto; color: var(--add); font-family: var(--font-mono); }
 .pr-code-overview .stat-del { color: var(--del); font-family: var(--font-mono); }
+.pr-submit-review-toggle { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.pr-review-submit {
+  flex: none;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.pr-review-submit-head,
+.pr-review-submit-actions,
+.pr-review-submit-tabs { display: flex; align-items: center; gap: 6px; }
+.pr-review-submit-head { justify-content: space-between; }
+.pr-review-submit-head > div:first-child { display: flex; align-items: baseline; gap: 8px; }
+.pr-review-submit-head strong { color: var(--text); font-size: 11px; }
+.pr-review-submit-head span,
+.pr-review-submit-actions > span { color: var(--text-muted); font-size: 9px; }
+.pr-review-submit-tabs { padding: 2px; border-radius: var(--r-sm); background: var(--bg-base); }
+.pr-review-submit-tabs button {
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 9px var(--font-ui);
+}
+.pr-review-submit-tabs button[aria-selected="true"] { background: var(--bg-elev); color: var(--text); }
+.pr-review-submit-tabs button:focus-visible { outline: 1px solid var(--accent); }
+.pr-review-submit textarea,
+.pr-review-submit-preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 9px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--text);
+  font: 11px/1.45 var(--font-ui);
+}
+.pr-review-submit textarea { resize: vertical; outline: none; }
+.pr-review-submit textarea:focus { border-color: var(--accent); }
+.pr-review-submit-preview > .markdown { font-size: 11px; }
+.pr-review-submit-actions { justify-content: flex-end; }
+.pr-review-submit-actions > span { margin-right: auto; }
+.pr-review-stale { display: flex; align-items: center; gap: 7px; color: var(--del); font-size: 10px; }
 .pr-changes-body { flex: 1; min-height: 0; height: 100%; }
 .pr-inline-refresh {
   position: absolute;
@@ -6517,6 +6565,7 @@ textarea.clone-input {
 }
 .pr-inline-thread.resolved { border-left-color: var(--add); }
 .pr-inline-thread.outdated { border-left-color: var(--text-dim); opacity: .82; }
+.pr-inline-thread.pending { border-left-color: var(--warn); }
 .pr-inline-thread:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 .pr-inline-thread > header {
   min-height: 30px;
@@ -6529,6 +6578,11 @@ textarea.clone-input {
   background: color-mix(in oklch, var(--bg-panel), transparent 25%);
 }
 .pr-inline-thread > header strong { color: var(--text); font: 500 10px var(--font-mono); }
+.pr-inline-thread.pending > header > div { display: flex; align-items: baseline; gap: 7px; }
+.pr-inline-thread.pending > header span { color: var(--text-muted); font-size: 9px; }
+.pr-inline-thread.pending > header .danger { color: var(--del); }
+.pr-inline-thread-body { padding: 10px 11px; }
+.pr-inline-thread-body > .markdown { font-size: 11px; }
 .pr-inline-thread-head-actions,
 .pr-inline-thread-labels { display: flex; align-items: center; gap: 5px; }
 .pr-inline-thread-head-actions { flex-wrap: wrap; justify-content: flex-end; }

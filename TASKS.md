@@ -54,8 +54,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ◐ **Hosted review close-out.** Batched review submission,
-  update/check-out lifecycle actions, and Azure inline review parity.
+- ◐ **Hosted review close-out.** Update/check-out lifecycle actions,
+  existing-review update/dismiss actions where supported, and Azure inline
+  review parity.
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
@@ -1462,7 +1463,10 @@ tree: watch the agent work, review fast, accept or reject safely.
     detail/patch reload (`repo_pull_request_thread_reply`,
     `repo_pull_request_thread_resolve`). Azure iteration-tracked inline writes,
     direct binary attachment uploads, and suggestions remain.
-  - ☐ Submit reviews: approve, request changes, dismiss/update a review where supported.
+  - ☑ Submit reviews: comment, approve, and request changes through one
+    exact-head review draft (`repo_pull_request_submit_review`, GitHub atomic
+    review payload, Azure Services/Server vote mappings, protocol v3).
+  - ☐ Dismiss/update an existing review where supported.
   - ◐ PR review ledger + merge-readiness model (see
     `docs/pull-request-improvements.md`).
     - ☑ Header readiness strip (`pullRequestReadiness`, `.pr-readiness`):
@@ -1478,13 +1482,14 @@ tree: watch the agent work, review fast, accept or reject safely.
     (`ParsedDiff` controlled selection + native gutter utility + inline
     composer/thread cards); local exact-head/content-hash viewed marks,
     unviewed/thread filters, and keyboard next-thread navigation now ship while
-    retaining one mounted Pierre diff. Azure iteration coordinates and batched
-    drafts remain.
+    retaining one mounted Pierre diff. Exact-head pending-comment drafts and
+    batched submission now ship; Azure iteration coordinates remain.
   - ☐ Paginate GitHub review threads and replies beyond the current bounded
     100-thread / 100-comment detail query.
-  - ☐ Batched review submission: pending comments plus Comment / Approve /
+  - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
-    preservation when a provider write fails.
+    preservation when a provider write fails (`pullRequestReview` drafts,
+    `PullRequestChanges` review composer, `repo_pull_request_submit_review`).
   - ☑ Searchable repository PR inbox (`filterPullRequests`, `.pr-inbox-*`):
     All, Authored, and Completed filter the shallow latest-100 list locally;
     search covers number/title/author/source/target branches; provider-account

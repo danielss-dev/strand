@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strand_azdo_protocol::{
     MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation,
-    PullRequestStatus as AzdoPullRequestStatus,
+    PullRequestStatus as AzdoPullRequestStatus, ReviewVote as AzdoReviewVote,
 };
 use strand_core::Repo;
 use uuid::Uuid;
@@ -30,6 +30,7 @@ const MAX_THREAD_ID_BYTES: usize = 512;
 const MAX_PR_DESCRIPTION_BYTES: usize = 65_536;
 const MAX_PR_TITLE_BYTES: usize = 512;
 const MAX_DIFF_BYTES: usize = 16 * 1024 * 1024;
+const MAX_PENDING_REVIEW_COMMENTS: usize = 100;
 const GITHUB_BRANCH_STATE: &str = "open";
 const AZURE_BRANCH_STATUS: &str = "active";
 const GITHUB_LIST_FIELDS: &str = concat!(
@@ -128,6 +129,23 @@ pub enum PullRequestMergeStrategy {
 pub enum PullRequestLifecycleAction {
     Close,
     Reopen,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestReviewEvent {
+    Comment,
+    Approve,
+    RequestChanges,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PullRequestPendingComment {
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub side: PullRequestDiffSide,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -577,6 +595,30 @@ pub fn set_thread_resolved(
     }
 }
 
+pub fn submit_review(
+    path: &str,
+    id: u64,
+    event: PullRequestReviewEvent,
+    body: &str,
+    comments: &[PullRequestPendingComment],
+    expected_head: &str,
+) -> Result<()> {
+    validate_review(event, body, comments)?;
+    validate_commit(expected_head)?;
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => submit_review_github(
+            path, &owner, &repo, id, event, body, comments, expected_head,
+        ),
+        HostRepo::Azure { organization, project, repo } => submit_review_azure(
+            path, &organization, &project, &repo, id, event, body, comments, expected_head,
+        ),
+        HostRepo::AzureServer { profile_id, project, repo, .. } => submit_review_azure_server(
+            profile_id, &project, &repo, id, event, body, comments, expected_head,
+        ),
+    }
+}
+
 pub fn merge(
     path: &str,
     id: u64,
@@ -1017,6 +1059,36 @@ fn add_inline_comment_github(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn submit_review_github(
+    cwd: &str, owner: &str, repo: &str, id: u64, event: PullRequestReviewEvent,
+    body: &str, comments: &[PullRequestPendingComment], expected_head: &str,
+) -> Result<()> {
+    let current = github_current_head(cwd, owner, repo, id)?;
+    ensure_review_head(&current, expected_head)?;
+    let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/reviews");
+    let input = serde_json::to_vec(&github_review_payload(event, body, comments, expected_head))
+        .map_err(|error| format!("Could not encode GitHub review: {error}"))?;
+    run_command_input(
+        cwd, "gh", &["api", "--method", "POST", &endpoint, "--input", "-"],
+        &[("GH_PROMPT_DISABLED", "1")], Some(&input),
+    )?;
+    Ok(())
+}
+
+fn github_current_head(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<String> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    let output = run_command(
+        cwd, "gh", &["pr", "view", &id, "--repo", &slug, "--json", "headRefOid"],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    let value: Value = serde_json::from_slice(&output)
+        .map_err(|error| format!("GitHub CLI returned invalid head JSON: {error}"))?;
+    text(value.get("headRefOid"))
+        .ok_or_else(|| "GitHub did not return the pull request head commit".to_string())
+}
+
 fn reply_to_thread_github(cwd: &str, thread_id: &str, body: &str) -> Result<PullRequestComment> {
     let value = run_github_graphql_mutation(
         cwd,
@@ -1087,6 +1159,41 @@ fn github_inline_comment_payload(
         payload["start_side"] = side.into();
     }
     payload
+}
+
+fn github_review_payload(
+    event: PullRequestReviewEvent,
+    body: &str,
+    comments: &[PullRequestPendingComment],
+    expected_head: &str,
+) -> Value {
+    let event = match event {
+        PullRequestReviewEvent::Comment => "COMMENT",
+        PullRequestReviewEvent::Approve => "APPROVE",
+        PullRequestReviewEvent::RequestChanges => "REQUEST_CHANGES",
+    };
+    serde_json::json!({
+        "commit_id": expected_head,
+        "body": body,
+        "event": event,
+        "comments": comments.iter().map(|comment| {
+            let side = match comment.side {
+                PullRequestDiffSide::Deletions => "LEFT",
+                PullRequestDiffSide::Additions => "RIGHT",
+            };
+            let mut value = serde_json::json!({
+                "path": comment.path,
+                "line": comment.end_line,
+                "side": side,
+                "body": comment.body,
+            });
+            if comment.start_line != comment.end_line {
+                value["start_line"] = comment.start_line.into();
+                value["start_side"] = side.into();
+            }
+            value
+        }).collect::<Vec<_>>(),
+    })
 }
 
 fn merge_github(
@@ -1511,6 +1618,38 @@ fn add_comment_azure_server(
         },
     )?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn submit_review_azure_server(
+    profile_id: Uuid, project: &str, repo: &str, id: u64,
+    event: PullRequestReviewEvent, body: &str, comments: &[PullRequestPendingComment],
+    expected_head: &str,
+) -> Result<()> {
+    if !comments.is_empty() {
+        return Err("Azure DevOps review drafts need iteration coordinates that Strand does not load yet. Submit or remove the pending inline comments before voting.".into());
+    }
+    let current = server_show(profile_id, project, repo, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps Server did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    if let Some(vote) = azure_review_vote(event) {
+        let reviewer_id = azure_server_viewer_id(profile_id)?;
+        server_execute(profile_id, AzdoOperation::SetVote {
+            project: project.into(), repository: repo.into(), id, reviewer_id, vote,
+        })?;
+    }
+    if !body.trim().is_empty() {
+        add_comment_azure_server(profile_id, project.into(), repo.into(), id, body)
+            .map_err(|error| review_summary_error(event, error))?;
+    }
+    Ok(())
+}
+
+fn azure_server_viewer_id(profile_id: Uuid) -> Result<String> {
+    let value = server_execute(profile_id, AzdoOperation::Viewer)?;
+    text(value.pointer("/authenticatedUser/id"))
+        .ok_or_else(|| "Azure DevOps Server returned no signed-in reviewer id".into())
 }
 
 fn merge_azure_server(
@@ -2024,6 +2163,37 @@ fn add_comment_azure(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn submit_review_azure(
+    cwd: &str, organization: &str, project: &str, repo: &str, id: u64,
+    event: PullRequestReviewEvent, body: &str, comments: &[PullRequestPendingComment],
+    expected_head: &str,
+) -> Result<()> {
+    if !comments.is_empty() {
+        return Err("Azure DevOps review drafts need iteration coordinates that Strand does not load yet. Submit or remove the pending inline comments before voting.".into());
+    }
+    let current = azure_pr_value(cwd, organization, id)?;
+    let current_head = text(current.pointer("/lastMergeSourceCommit/commitId"))
+        .ok_or_else(|| "Azure DevOps did not return the pull request head commit".to_string())?;
+    ensure_review_head(&current_head, expected_head)?;
+    if let Some(vote) = azure_review_vote_label(event) {
+        let organization_url = format!("https://dev.azure.com/{organization}/");
+        let id_arg = id.to_string();
+        run_command(
+            cwd, "az",
+            &["repos", "pr", "set-vote", "--id", &id_arg, "--vote", vote,
+              "--organization", &organization_url, "--output", "json", "--only-show-errors"],
+            &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+        )?;
+    }
+    if !body.trim().is_empty() {
+        add_comment_azure(
+            cwd, organization.into(), project.into(), repo.into(), id, body,
+        ).map_err(|error| review_summary_error(event, error))?;
+    }
+    Ok(())
+}
+
 fn merge_azure(
     cwd: &str,
     organization: &str,
@@ -2370,6 +2540,54 @@ fn validate_comment(body: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_review(
+    event: PullRequestReviewEvent,
+    body: &str,
+    comments: &[PullRequestPendingComment],
+) -> Result<()> {
+    if comments.len() > MAX_PENDING_REVIEW_COMMENTS {
+        return Err("A review can contain at most 100 pending comments".into());
+    }
+    if body.len() > MAX_COMMENT_BYTES {
+        return Err("Review summary exceeds Strand's 64 KB limit".into());
+    }
+    if matches!(event, PullRequestReviewEvent::Comment)
+        && body.trim().is_empty()
+        && comments.is_empty()
+    {
+        return Err("A comment review needs a summary or pending comment".into());
+    }
+    if matches!(event, PullRequestReviewEvent::RequestChanges) && body.trim().is_empty() {
+        return Err("Request changes needs a review summary".into());
+    }
+    for comment in comments {
+        validate_comment(&comment.body)?;
+        if comment.path.trim().is_empty() || comment.path.contains(['\r', '\n', '\0']) {
+            return Err("A pending review comment has an invalid file path".into());
+        }
+        if comment.start_line == 0 || comment.end_line < comment.start_line {
+            return Err("A pending review comment has an invalid line range".into());
+        }
+    }
+    Ok(())
+}
+
+fn ensure_review_head(current: &str, expected: &str) -> Result<()> {
+    if current == expected {
+        Ok(())
+    } else {
+        Err("The pull request changed while this review was being written. Refresh Code and review the new head before submitting.".into())
+    }
+}
+
+fn review_summary_error(event: PullRequestReviewEvent, error: String) -> String {
+    if matches!(event, PullRequestReviewEvent::Comment) {
+        error
+    } else {
+        format!("The review decision was recorded, but its summary could not be added: {error}. The draft was preserved so you can retry the summary.")
+    }
+}
+
 fn validate_thread_id(thread_id: &str) -> Result<()> {
     if thread_id.trim().is_empty()
         || thread_id.len() > MAX_THREAD_ID_BYTES
@@ -2440,6 +2658,22 @@ fn azure_lifecycle_status_label(action: PullRequestLifecycleAction) -> &'static 
     match azure_lifecycle_status(action) {
         AzdoPullRequestStatus::Active => "active",
         AzdoPullRequestStatus::Abandoned => "abandoned",
+    }
+}
+
+fn azure_review_vote(event: PullRequestReviewEvent) -> Option<AzdoReviewVote> {
+    match event {
+        PullRequestReviewEvent::Comment => None,
+        PullRequestReviewEvent::Approve => Some(AzdoReviewVote::Approve),
+        PullRequestReviewEvent::RequestChanges => Some(AzdoReviewVote::RequestChanges),
+    }
+}
+
+fn azure_review_vote_label(event: PullRequestReviewEvent) -> Option<&'static str> {
+    match event {
+        PullRequestReviewEvent::Comment => None,
+        PullRequestReviewEvent::Approve => Some("approve"),
+        PullRequestReviewEvent::RequestChanges => Some("reject"),
     }
 }
 
@@ -3843,5 +4077,44 @@ mod tests {
         assert_eq!(single["side"], "LEFT");
         assert!(single.get("start_line").is_none());
         assert!(single.get("start_side").is_none());
+    }
+
+    #[test]
+    fn builds_exact_head_batched_github_reviews() {
+        let head = "0123456789abcdef0123456789abcdef01234567";
+        let comments = vec![
+            PullRequestPendingComment {
+                path: "src/lib.rs".into(), start_line: 10, end_line: 12,
+                side: PullRequestDiffSide::Additions, body: "Please simplify this.".into(),
+            },
+            PullRequestPendingComment {
+                path: "old.rs".into(), start_line: 7, end_line: 7,
+                side: PullRequestDiffSide::Deletions, body: "Keep this branch.".into(),
+            },
+        ];
+        let payload = github_review_payload(
+            PullRequestReviewEvent::RequestChanges, "Two blocking points.", &comments, head,
+        );
+        assert_eq!(payload["commit_id"], head);
+        assert_eq!(payload["event"], "REQUEST_CHANGES");
+        assert_eq!(payload["comments"][0]["start_line"], 10);
+        assert_eq!(payload["comments"][0]["start_side"], "RIGHT");
+        assert_eq!(payload["comments"][1]["side"], "LEFT");
+        assert!(payload["comments"][1].get("start_line").is_none());
+    }
+
+    #[test]
+    fn validates_review_drafts_and_provider_decisions() {
+        let comment = PullRequestPendingComment {
+            path: "src/lib.rs".into(), start_line: 4, end_line: 4,
+            side: PullRequestDiffSide::Additions, body: "Question".into(),
+        };
+        assert!(validate_review(PullRequestReviewEvent::Comment, "", &[comment]).is_ok());
+        assert!(validate_review(PullRequestReviewEvent::Comment, "", &[]).is_err());
+        assert!(validate_review(PullRequestReviewEvent::RequestChanges, "", &[]).is_err());
+        assert!(ensure_review_head("a", "a").is_ok());
+        assert!(ensure_review_head("b", "a").is_err());
+        assert_eq!(azure_review_vote(PullRequestReviewEvent::Approve), Some(AzdoReviewVote::Approve));
+        assert_eq!(azure_review_vote_label(PullRequestReviewEvent::RequestChanges), Some("reject"));
     }
 }

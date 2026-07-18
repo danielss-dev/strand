@@ -40,6 +40,8 @@ import type {
   PullRequestList,
   PullRequestLifecycleAction,
   PullRequestMergeStrategy,
+  PullRequestPendingComment,
+  PullRequestReviewEvent,
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
   PushMode,
@@ -189,6 +191,16 @@ export const tauri = {
     expectedHead: string,
   ) => invoke<void>('repo_pull_request_inline_comment', {
     path, id, body, filePath, startLine, endLine, side, expectedHead,
+  }),
+  repoPullRequestSubmitReview: (
+    path: string,
+    id: number,
+    event: PullRequestReviewEvent,
+    body: string,
+    comments: PullRequestPendingComment[],
+    expectedHead: string,
+  ) => invoke<void>('repo_pull_request_submit_review', {
+    path, id, event, body, comments, expectedHead,
   }),
   repoPullRequestThreadReply: (path: string, threadId: string, body: string) =>
     invoke<PullRequestComment>('repo_pull_request_thread_reply', { path, threadId, body }),
