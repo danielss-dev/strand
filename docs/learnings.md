@@ -1694,3 +1694,15 @@ the left version as the common commit; populate only the left positions for
 deletions or right positions for additions. Keep paging bounded and report
 partial batched-review writes explicitly because Azure has no atomic review
 payload.
+
+**Release security policy is an exact, fail-closed allowlist (2026-07-18).**
+Keep production CSP, main-window capabilities, signed updater artifacts, the
+HTTPS stable endpoint, and updater key ID mirrored in
+`scripts/check-release-security.mjs`; PR and release CI must reject silent
+broadening or disabling. Tauri production assets need its IPC and asset
+protocols, self-hosted scripts/fonts, inline styles for React/Pierre, and HTTPS
+images for provider avatars/Markdown attachments. The desktop frontend uses no
+OS-info commands even though the OS plugin injects platform internals, so do
+not restore `os:default`. Verify changes against an exact workspace executable
+path: launching by app identity on Windows may resolve to the installed
+`C:\Program Files\Strand\strand.exe` and produce false release evidence.

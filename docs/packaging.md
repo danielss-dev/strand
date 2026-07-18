@@ -1,13 +1,10 @@
 # Packaging & signing runbook
 
-Status (2026-06-01): a **signed macOS DMG now builds** on a Mac with the
-Developer-ID cert in the login Keychain — see "Done so far" below. What
-remains for the §0.1 alpha is **notarization + stapling** (needs Apple
-credentials) and **shipping the first DMG** to the alpha group. This file is
-the runbook for both the part that works and the part that's left.
-
-Everything else in 0.1 (clone, streaming progress, detached checkout, file
-tree, recent messages, multi-select) is code-complete and verified.
+Status (2026-07-18): release CI builds all three platforms, signs and notarizes
+the universal macOS app, and produces minisign-verified updater artifacts. The
+remaining 1.0 distribution gates are the Windows publisher certificate, Linux
+publisher signing, stable/beta channel policy, and release-candidate validation
+on Windows, macOS, GNOME, and KDE.
 
 ---
 
@@ -146,6 +143,15 @@ is submitted to Apple notarization. Windows publisher signing remains coupled
 to the planned Windows certificate work; the signed manifest is mandatory on
 all platforms. Installation extracts only the expected regular file, refuses
 links/traversal, and keeps the previous helper until the replacement verifies.
+
+### Release security policy gate
+
+Run `pnpm release:check-security` before packaging. PR CI and every release job
+run the same fail-closed check. It pins the reviewed production CSP, the exact
+local desktop capability allowlist, `createUpdaterArtifacts: true`, the single
+HTTPS stable endpoint, and minisign public-key ID `84FCBFD2A981CE5D`. Any
+capability or channel change must be reviewed and updated in the checker in the
+same commit; a silent broadening fails CI.
 
 **Before tagging:** bump `version` in `tauri.conf.json`, the workspace
 `Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts

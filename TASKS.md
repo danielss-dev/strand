@@ -58,9 +58,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   comments and batched-review drafts resolve iteration/change-tracking
   coordinates before writing (`azure_review_coordinates`, Server protocol v5,
   shared Code composer).
-- ☐ **Stable-release hardening.** Localization, production CSP/capability
-  audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
-  full keyboard/accessibility/release-quality pass.
+- ◐ **Stable-release hardening.** Production CSP, the exact least-privilege
+  desktop capability allowlist, signed stable-update policy enforcement, and
+  the fresh-clone hook warning are shipped. Localization, trusted Windows/Linux
+  installers, Linux GNOME+KDE validation, and the full keyboard/accessibility/
+  release-quality pass remain.
 - ☐ **Power parity selection.** Decide which of bisect, LFS/signing UI,
   Git-flow, sparse checkout, patch workflows, and custom actions fit the 1.0
   date; the rest move explicitly to 1.1.
@@ -1814,18 +1816,23 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Opt-in telemetry (off by default, clearly disclosed at first launch)
 - ☐ SSH passphrase prompts via OS-native dialogs
 - ☐ GPG passphrase delegation to `gpg-agent` (no in-app caching)
-- ☐ Hook execution warning on fresh clones
-- ☐ Signed update manifest enforcement
+- ☑ Hook execution warning on fresh clones (`CloneDialog` trust notice, placed
+  before URL entry and verified in the built app with Computer Use, 2026-07-18)
+- ☑ Signed update manifest enforcement (`check-release-security.mjs` locks
+  `createUpdaterArtifacts`, the HTTPS stable channel, and updater key ID;
+  required by CI and every release job)
 - ☑ Shell-out config hardening — `GIT_SAFE_CONFIG` (`-c core.fsmonitor=` /
   `core.pager=cat`) prepended on network/history/stash; conflict read/write path
   now canonicalizes to block symlink escape (`crates/strand-core`).
-- ☑ Dropped unused `shell:allow-open` capability (least privilege).
-- ☐ Set a production CSP (`tauri.conf.json` `csp` is `null`). Needs a SHA hash
-  for the inline theme-bootstrap script in `index.html` (or move it into the
-  bundle), `style-src 'unsafe-inline'` for React/Pierre, `connect-src` for IPC;
-  smoke-test the built app before merge.
-- ☐ Narrow `os:default` capability to the specific perms used (re-verify the
-  mac/win platform toggle after).
+- ☑ Narrowed `shell:default` to `shell:allow-open`: external links remain
+  available, while command execution is not granted (least privilege).
+- ☑ Set and verify the production CSP (`tauri.conf.json` exact allowlist;
+  self-hosted scripts/fonts, Tauri IPC/asset protocols, HTTPS images, and only
+  the inline styles required by React/Pierre; built custom-protocol app smoke-
+  tested with Computer Use, 2026-07-18).
+- ☑ Replace broad default capabilities, including `os:default`, with the exact
+  commands used by the desktop UI (`capabilities/default.json`, local desktop
+  windows only; enforced by `check-release-security.mjs`, 2026-07-18).
 - ◐ License decided (AGPL-3.0 + dual-license commercial). Still need:
   - ☑ `LICENSE` file (AGPL-3.0 text) at repo root (added 2026-06-12)
   - ☑ `COMMERCIAL.md` describing the commercial-license offer (added

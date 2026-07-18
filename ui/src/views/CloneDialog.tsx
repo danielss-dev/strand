@@ -112,6 +112,13 @@ export function CloneDialog({
         </div>
 
         <div className="clone-body">
+          <div className="clone-security-note" role="note">
+            <Icon name="warning" size={14} />
+            <span>
+              Clone may run hooks installed by your Git template or system configuration. Only clone repositories and URLs you trust.
+            </span>
+          </div>
+
           <label className="clone-field">
             <span className="lbl">Repository URL</span>
             <input

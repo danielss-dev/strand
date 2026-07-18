@@ -1946,6 +1946,19 @@ recoverable draft. The optional Server helper contract advanced to protocol v5;
 provider, helper, Rust, and UI tests cover the coordinate and payload
 boundaries.
 
+**Release security policy hardened (2026-07-18):** Production builds now ship
+with a reviewed CSP that permits only bundled scripts/fonts, Tauri's local IPC
+and asset protocols, required inline styles, and HTTPS review images. The main
+desktop capability dropped every broad plugin/default grant in favor of the
+exact window, menu, dialog, notification, updater, restart, SQLite, and external-
+link commands the UI calls; it is local and desktop-only. A fail-closed release
+check locks both allowlists plus signed updater artifacts, the HTTPS stable
+channel, and minisign key ID, and runs in PR CI and every release job. Clone now
+warns before URL entry that trusted Git templates may execute hooks. The exact
+custom-protocol workspace binary was built and verified with Computer Use for
+CSP/session/SQLite startup, window controls, command-palette navigation, and the
+visible/accessibility clone warning.
+
 ---
 
 ## 1.1+ — Post-1.0

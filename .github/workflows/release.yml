@@ -55,6 +55,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Verify release security policy
+        run: node scripts/check-release-security.mjs
       - name: Verify release tag matches Strand version
         run: node scripts/check-release-version.mjs
       - name: Setup Rust
@@ -209,6 +211,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify release security policy
+        run: pnpm release:check-security
 
       - name: Build, sign, and release
         uses: tauri-apps/tauri-action@v0

@@ -6,7 +6,7 @@ export type IconName =
   | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
   | 'chev-down' | 'chev-right' | 'chev-up' | 'chev-left' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye' | 'sparkle'
-  | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'settings'
+  | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'warning' | 'settings'
   | 'trash' | 'workspace'
   | 'bell'
   | 'win-min' | 'win-max' | 'win-restore' | 'win-close';
@@ -84,6 +84,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'lock':        return <svg {...p}><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 1 1 6 0v2"/></svg>;
     case 'star':        return <svg {...p}><path d="M8 2l1.8 3.8 4.2.6-3 2.9.7 4.1L8 11.5 4.3 13.4 5 9.3 2 6.4l4.2-.6L8 2Z"/></svg>;
     case 'gpg':         return <svg {...p}><path d="M3 7V5a5 5 0 0 1 10 0v2"/><rect x="2.5" y="7" width="11" height="6.5" rx="1"/><circle cx="8" cy="10" r="1"/></svg>;
+    case 'warning':     return <svg {...p}><path d="M8 2 14 13H2L8 2Z"/><path d="M8 5.5v3.5M8 11.5h.01"/></svg>;
     // Gear (Feather "settings"). Drawn in its native 24-grid — the tooth
     // outline doesn't survive a hand-scale to 16 — with the stroke widened
     // 1.5× so the rendered weight matches the 16-grid icons exactly.

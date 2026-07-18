@@ -17,6 +17,10 @@ While a repository opens, an indeterminate progress popup with elapsed time appe
 
 Clone from the `+` menu, the command palette, or the File menu (macOS). The clone dialog takes a URL and a destination chosen with a native picker; the folder name is derived from the URL.
 
+The dialog warns before URL entry that cloning can run hooks installed by your
+Git template or system configuration. Clone only repositories and URLs you
+trust.
+
 - Cloning shows a persistent bottom-center progress popup with a determinate bar and per-phase ETA. On success it switches to "Opening" and opens the clone as a new tab.
 - Clones are **cancellable** from the progress popup.
 - Failures become a persistent, dismissible error state with the reason — they never silently vanish.

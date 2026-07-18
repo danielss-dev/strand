@@ -3392,6 +3392,23 @@ textarea.clone-input {
   font-family: var(--font-mono);
   color: var(--text-2);
 }
+.clone-security-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 0.5px solid color-mix(in oklch, var(--warn) 45%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--warn) 10%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: var(--type-ui-sm);
+  line-height: 1.4;
+}
+.clone-security-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--warn);
+}
 /* Indeterminate sweep, shared by the operation progress popup's bar. */
 @keyframes cloneIndeterminate {
   0% { margin-left: 0; }

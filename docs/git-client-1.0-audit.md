@@ -66,7 +66,7 @@ current official product material for:
 | Hosted review completion | GitHub/Azure list, detail, threads, comments, readiness, follow, create, merge, close/reopen, and terminal read-only gating exist | Submit approve/request-changes reviews; viewed-file and unresolved-thread progress; update/check out branch; preserve drafts on provider failure |
 | Localization | English strings are embedded throughout the UI | Translation framework, English catalog, locale-safe dates/numbers, and no user-visible string trapped in backend-only errors |
 | Signed platform distribution | macOS signed/notarized; Windows EV and Linux signing open | Trusted installer/update path on macOS, Windows, and Linux; stable and beta update channels |
-| Security hardening | Local-first boundaries are strong; production CSP and capability narrowing remain | Production CSP verified in a built app; signed-update enforcement tested; least-privilege capabilities; hook warning on fresh clones |
+| Security hardening | Complete 2026-07-18: production CSP, exact local desktop capability allowlist, signed stable-updater policy gate, and pre-URL clone-hook warning | Keep `pnpm release:check-security` green in PR and release CI; repeat the production-protocol smoke test for release candidates |
 | Platform validation | Windows runtime pass exists; Linux and several integration presets remain unverified | GNOME + KDE pass, Windows/Linux editor-terminal presets, credential prompts, file dialogs, shortcuts, and updater smoke-tested |
 | Release quality | Core and UI tests exist; some open empty-state/a11y work remains | Full keyboard audit, release checklist, crash recovery, no misleading no-op controls, and every destructive action documented |
 
