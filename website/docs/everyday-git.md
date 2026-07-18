@@ -53,7 +53,7 @@ the other provider without changing the default in Settings.
 
 ## Fetch, pull, push
 
-The topbar Fetch / Pull / Push buttons show real ahead/behind counts. The adjacent chevron opens the full network menu: pull using Git's configured behavior, an explicit merge, rebase, or fast-forward-only; save one of those choices as this repository's default; push the current branch, follow annotated tags, push every tag, or force-push with a lease. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure. Sync runs fetch, then the repository's default pull, then push, and stops at the first failed stage.
+The topbar Fetch / Pull / Push buttons show real ahead/behind counts. The adjacent chevron opens the full network menu: fetch with or without pruning stale remote-tracking branches; pull using Git's configured behavior, an explicit merge, rebase, or fast-forward-only, with or without autostash; and push the current branch, follow annotated tags, push every tag, or force-push with a lease. Fetch-prune, pull-strategy, and pull-autostash choices can each be saved as this repository's default. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure. Sync runs fetch, then the repository's default pull, then push, and stops at the first failed stage.
 
 Force-push is deliberately guarded: Strand only exposes `--force-with-lease`, names the branch and upstream in a confirmation dialog, and refuses the update if the remote branch moved since the last fetch. Plain `--force` is not available. The same strategy actions are keyboard-reachable from the command palette; the current branch's context menu also exposes the pull and push variants.
 
@@ -82,7 +82,7 @@ The topbar branch dropdown also checks out local branches, tracks remote ones, a
 
 ### Remotes
 
-Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu has Edit URL…, Rename…, Copy URL, and Remove remote. The section `+` (or the palette's "Add remote…") adds a remote.
+Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu has **Edit URLs…**, Rename, copy fetch URL, copy a distinct push URL when configured, and Remove remote. Adding or editing a remote accepts a required fetch URL and an optional push URL; both are stored in native Git configuration. The section `+` (or the palette's "Add remote…") adds a remote.
 
 ### Tags
 

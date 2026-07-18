@@ -1406,6 +1406,24 @@ another.
 
 ---
 
+## Network action policy and remote identity have different sources of truth
+
+**Rule.** Persist per-repository operation defaults such as fetch pruning,
+pull strategy, and pull autostash in Strand's settings database, and pass an
+explicit positive or negative flag for every invocation. Read and write remote
+fetch/push URLs through native Git configuration; never mirror remote identity
+in app storage.
+
+**Why.** Explicit flags make a one-operation override deterministic regardless
+of the user's global Git config, while keeping URLs in `.git/config` ensures
+the command line and every other Git client immediately see the same remotes.
+
+**How to apply.** Route network preferences through the active-repository
+loader and App-owned callbacks. Extend the remote model and native Git config
+mutation together when adding remote identity fields.
+
+---
+
 ## Row context actions use their target, not ambient selection
 
 **Rule.** A row context-menu action must receive the row's repository and item

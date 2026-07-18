@@ -675,6 +675,7 @@ pub fn repo_commit(
 pub async fn repo_fetch(
     path: String,
     remote: Option<String>,
+    prune: bool,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -685,6 +686,7 @@ pub async fn repo_fetch(
         let repo = Repo::discover(&path)?;
         repo.fetch(
             remote.as_deref(),
+            prune,
             |p| {
                 let _ = on_event.send(p);
             },
@@ -701,6 +703,7 @@ pub async fn repo_fetch(
 pub async fn repo_pull(
     path: String,
     mode: PullMode,
+    autostash: bool,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -711,6 +714,7 @@ pub async fn repo_pull(
         let repo = Repo::discover(&path)?;
         repo.pull(
             mode,
+            autostash,
             |p| {
                 let _ = on_event.send(p);
             },
@@ -819,6 +823,7 @@ pub async fn repo_branch_pull(
     remote: String,
     branch: String,
     mode: PullMode,
+    autostash: bool,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -831,6 +836,7 @@ pub async fn repo_branch_pull(
             &remote,
             &branch,
             mode,
+            autostash,
             |p| { let _ = on_event.send(p); },
             Some(&cancel),
         )
@@ -1160,8 +1166,13 @@ pub async fn repo_branch_delete_remote(
 }
 
 #[tauri::command(async)]
-pub fn repo_remote_add(path: String, name: String, url: String) -> CmdResult<()> {
-    Repo::discover(&path)?.add_remote(&name, &url)?;
+pub fn repo_remote_add(
+    path: String,
+    name: String,
+    url: String,
+    push_url: Option<String>,
+) -> CmdResult<()> {
+    Repo::discover(&path)?.add_remote(&name, &url, push_url.as_deref())?;
     Ok(())
 }
 
@@ -1180,8 +1191,13 @@ pub fn repo_remote_rename(path: String, old_name: String, new_name: String) -> C
 }
 
 #[tauri::command(async)]
-pub fn repo_remote_set_url(path: String, name: String, url: String) -> CmdResult<()> {
-    Repo::discover(&path)?.set_remote_url(&name, &url)?;
+pub fn repo_remote_set_urls(
+    path: String,
+    name: String,
+    url: String,
+    push_url: Option<String>,
+) -> CmdResult<()> {
+    Repo::discover(&path)?.set_remote_urls(&name, &url, push_url.as_deref())?;
     Ok(())
 }
 

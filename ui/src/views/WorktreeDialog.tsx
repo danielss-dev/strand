@@ -143,7 +143,7 @@ export function WorktreeDialog({
       const d = dest.trim();
       // Cut from origin's tip, not a stale local snapshot of it.
       if (newBranch && fetchFirst && remoteStart) {
-        await tauri.repoFetch(meta.path, remoteStart.remote);
+        await tauri.repoFetch(meta.path, remoteStart.remote, true);
       }
       await addWorktree(
         d,

@@ -12,13 +12,17 @@ import type { PullMode, PushMode } from '../lib/types';
 
 interface Props {
   onOpenPalette: () => void;
-  onFetch: () => void;
-  onPull: (mode?: PullMode) => void;
+  onFetch: (prune?: boolean) => void;
+  onPull: (mode?: PullMode, autostash?: boolean) => void;
   onPush: (mode?: PushMode) => void;
   onPushAllTags: () => void;
   onForcePush: () => void;
   pullMode: PullMode;
+  fetchPrune: boolean;
+  pullAutostash: boolean;
   onSetPullMode: (mode: PullMode) => void;
+  onSetFetchPrune: (prune: boolean) => void;
+  onSetPullAutostash: (autostash: boolean) => void;
   syncing: boolean;
   pulling: boolean;
   pushing: boolean;
@@ -56,7 +60,11 @@ export function Topbar({
   onPushAllTags,
   onForcePush,
   pullMode,
+  fetchPrune,
+  pullAutostash,
   onSetPullMode,
+  onSetFetchPrune,
+  onSetPullAutostash,
   syncing,
   pulling,
   pushing,
@@ -91,7 +99,27 @@ export function Topbar({
       ? 'Fast-forward only'
       : pullMode[0].toUpperCase() + pullMode.slice(1);
   const networkItems = useMemo<MenuItem[]>(() => [
-    { label: 'Fetch', icon: 'refresh', disabled: networkBusy, onSelect: onFetch },
+    {
+      label: 'Fetch',
+      icon: 'refresh',
+      disabled: networkBusy,
+      submenu: [
+        {
+          label: `Repository default (${fetchPrune ? 'prune stale branches' : 'keep stale branches'})`,
+          icon: 'check',
+          onSelect: () => onFetch(),
+        },
+        { label: 'Fetch and prune', onSelect: () => onFetch(true) },
+        { label: 'Fetch without pruning', onSelect: () => onFetch(false) },
+        {
+          label: 'Set repository default',
+          submenu: [
+            { label: 'Prune stale branches', icon: fetchPrune ? 'check' : undefined, onSelect: () => onSetFetchPrune(true) },
+            { label: 'Keep stale branches', icon: !fetchPrune ? 'check' : undefined, onSelect: () => onSetFetchPrune(false) },
+          ],
+        },
+      ],
+    },
     {
       label: 'Pull',
       icon: 'arrow-down',
@@ -102,13 +130,22 @@ export function Topbar({
         { label: 'Merge (fast-forward if possible)', onSelect: () => onPull('merge') },
         { label: 'Rebase', onSelect: () => onPull('rebase') },
         { label: 'Fast-forward only', onSelect: () => onPull('fast-forward-only') },
+        { label: 'With autostash', onSelect: () => onPull(undefined, true) },
+        { label: 'Without autostash', onSelect: () => onPull(undefined, false) },
         {
-          label: 'Set repository default',
+          label: 'Set default strategy',
           submenu: [
             { label: 'Use Git configuration', icon: pullMode === 'default' ? 'check' : undefined, onSelect: () => onSetPullMode('default') },
             { label: 'Merge', icon: pullMode === 'merge' ? 'check' : undefined, onSelect: () => onSetPullMode('merge') },
             { label: 'Rebase', icon: pullMode === 'rebase' ? 'check' : undefined, onSelect: () => onSetPullMode('rebase') },
             { label: 'Fast-forward only', icon: pullMode === 'fast-forward-only' ? 'check' : undefined, onSelect: () => onSetPullMode('fast-forward-only') },
+          ],
+        },
+        {
+          label: 'Set default autostash',
+          submenu: [
+            { label: 'Autostash local changes', icon: pullAutostash ? 'check' : undefined, onSelect: () => onSetPullAutostash(true) },
+            { label: 'Do not autostash', icon: !pullAutostash ? 'check' : undefined, onSelect: () => onSetPullAutostash(false) },
           ],
         },
       ],
@@ -124,7 +161,7 @@ export function Topbar({
         { label: 'Force with lease…', icon: 'arrow-up', danger: true, onSelect: onForcePush },
       ],
     },
-  ], [networkBusy, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetPullMode, pullMode, pullModeLabel]);
+  ], [fetchPrune, networkBusy, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetFetchPrune, onSetPullAutostash, onSetPullMode, pullAutostash, pullMode, pullModeLabel]);
 
   const inTauri = isTauri();
   // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:
@@ -178,7 +215,7 @@ export function Topbar({
         <button
           type="button"
           className="sync-btn"
-          onClick={onFetch}
+          onClick={() => onFetch()}
           title="Fetch"
           aria-label="Fetch"
           disabled={!meta}

@@ -76,13 +76,13 @@ current official product material for:
 | --- | --- | --- |
 | Repository setup | Initialize a new repository, choose an initial branch, and optionally create `.gitignore` / first commit shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch tracking | Upstream management, explicit non-current branch push, destination naming, and selected-branch fetch/pull shipped 2026-07-16 | Complete for 1.0 daily use |
-| Network preferences | Per-repo default pull strategy shipped; optional pull autostash, explicit prune/no-prune, and separate fetch/push URLs remain | Daily-driver |
+| Network preferences | Per-repo pull strategy, pull autostash, and fetch-prune defaults; explicit one-operation overrides; separate fetch/push URLs shipped 2026-07-18 | Complete for 1.0 daily use |
 | Fine-grained staging | Individual-line stage, unstage, recoverable discard, pointer range selection, and keyboard line picker shipped 2026-07-18 | Complete for 1.0 daily use |
 | Stashes | Branch from stash plus non-mutating sidebar inspect/reveal shipped 2026-07-18 | Complete for 1.0 daily use |
 | Multi-commit actions | Ordered multi-commit cherry-pick, two-commit comparison, and merge-mainline cherry-pick/revert shipped 2026-07-18 | Complete for 1.0 daily use |
 | Rebase | `edit` / pause-to-amend and topology-safe `--rebase-merges` preservation shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
-| Remote management | Prune one remote; edit fetch and push URLs separately; change the default remote; inspect refspecs | Daily-driver |
+| Remote management | Prune one remote; change the default remote; inspect refspecs (separate fetch/push URL editing shipped 2026-07-18) | Daily-driver |
 | Repository maintenance | `git maintenance` / `gc`, integrity check, and an activity log with exact commands and output | Daily-driver |
 | File actions | Open/reveal externally, copy relative or absolute path, jump directly to history/blame, delete, and create file/folder where allowed | Daily-driver |
 | Commit metadata | GPG/SSH signature status, copy subject/body, export patch, and richer multi-selection actions | Daily-driver |
@@ -130,8 +130,9 @@ disabled with a reason, and the primary action stays first.
 
 ## Recommended implementation waves
 
-1. **Network and ref ergonomics** — both 2026-07-16 slices above are shipped;
-   follow-ups are pull autostash, prune/no-prune, and separate fetch/push URLs.
+1. **Network and ref ergonomics** — branch tracking/ref operations and network
+   preferences are shipped; the remaining remote-management slice is per-remote
+   prune, default-remote selection, and refspec inspection.
 2. **Daily local Git close-out** — shipped: initialize repository, line staging,
    stash-to-branch, multi-commit operations, branch comparison, and rebase
    `edit` / merge preservation.
@@ -145,5 +146,5 @@ disabled with a reason, and the primary action stays first.
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
 multi-commit actions, branch/ref comparison, and rebase close-out are now
-shipped foundations. The next bounded implementation slice is network
-preferences.
+shipped foundations. The next bounded implementation slice is the remaining
+remote-management gap.

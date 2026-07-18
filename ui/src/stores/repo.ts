@@ -4,6 +4,7 @@ import {
   recents as recentsDb,
   remoteTagsCache,
   repoDiffMode,
+  repoNetworkPreferences,
   repoPullMode,
   reviewSession,
   settings as settingsDb,
@@ -414,12 +415,19 @@ export interface RepoState {
   pullMode: PullMode;
   setPullMode(mode: PullMode): void;
   loadRepoPullMode(): Promise<void>;
+  /** Whether normal Fetch prunes stale remote-tracking refs. */
+  fetchPrune: boolean;
+  /** Whether normal Pull safely stashes and restores local changes. */
+  pullAutostash: boolean;
+  setFetchPrune(prune: boolean): void;
+  setPullAutostash(autostash: boolean): void;
+  loadRepoNetworkPreferences(): Promise<void>;
   /** `opId` (when given) registers the op as cancellable via `repoCancelOp`. */
-  fetch(onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
-  pull(mode?: PullMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  fetch(prune?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pull(mode?: PullMode, autostash?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
   push(mode?: PushMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
   fetchBranch(remote: string, branch: string, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
-  pullBranch(remote: string, branch: string, mode?: PullMode, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
+  pullBranch(remote: string, branch: string, mode?: PullMode, autostash?: boolean, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
   pushBranch(request: BranchPushRequest, onProgress?: (p: Progress) => void, opId?: string): Promise<string>;
 
   checkout(branch: string): Promise<void>;
@@ -439,7 +447,7 @@ export interface RepoState {
   setBranchUpstream(branch: string, upstream: string | null): Promise<void>;
 
   /** Add a remote (`git remote add`). */
-  addRemote(name: string, url: string): Promise<void>;
+  addRemote(name: string, url: string, pushUrl: string | null): Promise<void>;
   /** Remove a remote and its remote-tracking refs. */
   removeRemote(name: string): Promise<void>;
   /**
@@ -448,8 +456,8 @@ export interface RepoState {
    * has already happened by then; empty means a clean rename.
    */
   renameRemote(oldName: string, newName: string): Promise<string[]>;
-  /** Change a remote's fetch URL (`git remote set-url`). */
-  setRemoteUrl(name: string, url: string): Promise<void>;
+  /** Change a remote's fetch URL and optional push-only URL. */
+  setRemoteUrls(name: string, url: string, pushUrl: string | null): Promise<void>;
   /**
    * Fetch a specific remote by name (the sidebar remote-row action — how a
    * just-added remote gets its first refs). The topbar Fetch with its progress
@@ -758,6 +766,8 @@ const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
   pullMode: 'default' as PullMode,
+  fetchPrune: true,
+  pullAutostash: false,
   status: [] as FileStatus[],
   commits: [] as Commit[],
   commitSearchResults: [] as Commit[],
@@ -920,6 +930,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     void persistSession(get());
     void get().loadRepoDiffMode();
     void get().loadRepoPullMode();
+    void get().loadRepoNetworkPreferences();
     // Start the working-tree watcher so agent/CLI writes refresh the view
     // without waiting for window focus. Best-effort — a watcher failure
     // (e.g. exotic filesystem) degrades to focus-refresh, not an error.
@@ -980,6 +991,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     void persistSession(get());
     if (neighbor) {
       void get().loadRepoPullMode();
+      void get().loadRepoNetworkPreferences();
       void Promise.all([
         get().refreshLocalChanges(),
         get().refreshLog(),
@@ -1000,6 +1012,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     void persistSession(get());
     void get().loadRepoDiffMode();
     void get().loadRepoPullMode();
+    void get().loadRepoNetworkPreferences();
     await Promise.all([
       get().refreshLocalChanges(),
       get().refreshLog(),
@@ -1612,17 +1625,49 @@ export const useRepo = create<RepoState>((set, get) => ({
       : 'default';
     set({ pullMode: mode });
   },
-  async fetch(onProgress, opId) {
+  setFetchPrune(prune) {
+    set({ fetchPrune: prune });
+    const path = get().activePath;
+    if (path) void repoNetworkPreferences.set(path, {
+      fetchPrune: prune,
+      pullAutostash: get().pullAutostash,
+    });
+  },
+  setPullAutostash(autostash) {
+    set({ pullAutostash: autostash });
+    const path = get().activePath;
+    if (path) void repoNetworkPreferences.set(path, {
+      fetchPrune: get().fetchPrune,
+      pullAutostash: autostash,
+    });
+  },
+  async loadRepoNetworkPreferences() {
+    const path = get().activePath;
+    if (!path) return;
+    const saved = await repoNetworkPreferences.get(path);
+    if (get().activePath !== path) return;
+    set({
+      fetchPrune: typeof saved?.fetchPrune === 'boolean' ? saved.fetchPrune : true,
+      pullAutostash: typeof saved?.pullAutostash === 'boolean' ? saved.pullAutostash : false,
+    });
+  },
+  async fetch(prune, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoFetch(path, null, onProgress, opId);
+    const res = await tauri.repoFetch(path, null, prune ?? get().fetchPrune, onProgress, opId);
     await get().refreshSnapshot();
     return res.output;
   },
-  async pull(mode, onProgress, opId) {
+  async pull(mode, autostash, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoPull(path, mode ?? get().pullMode, onProgress, opId);
+    const res = await tauri.repoPull(
+      path,
+      mode ?? get().pullMode,
+      autostash ?? get().pullAutostash,
+      onProgress,
+      opId,
+    );
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
@@ -1640,10 +1685,18 @@ export const useRepo = create<RepoState>((set, get) => ({
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
-  async pullBranch(remote, branch, mode, onProgress, opId) {
+  async pullBranch(remote, branch, mode, autostash, onProgress, opId) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    const res = await tauri.repoBranchPull(path, remote, branch, mode ?? get().pullMode, onProgress, opId);
+    const res = await tauri.repoBranchPull(
+      path,
+      remote,
+      branch,
+      mode ?? get().pullMode,
+      autostash ?? get().pullAutostash,
+      onProgress,
+      opId,
+    );
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
     return res.output;
   },
@@ -1704,10 +1757,10 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoBranchSetUpstream(path, branch, upstream);
     await get().refreshLocalChanges();
   },
-  async addRemote(name, url) {
+  async addRemote(name, url, pushUrl) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoRemoteAdd(path, name, url);
+    await tauri.repoRemoteAdd(path, name, url, pushUrl);
     await get().refreshLocalChanges();
   },
   async removeRemote(name) {
@@ -1723,16 +1776,16 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshLocalChanges();
     return problems;
   },
-  async setRemoteUrl(name, url) {
+  async setRemoteUrls(name, url, pushUrl) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoRemoteSetUrl(path, name, url);
+    await tauri.repoRemoteSetUrls(path, name, url, pushUrl);
     await get().refreshLocalChanges();
   },
   async fetchRemote(name) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoFetch(path, name);
+    await tauri.repoFetch(path, name, get().fetchPrune);
     await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
   },
   async reset(target, mode) {

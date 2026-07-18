@@ -29,15 +29,24 @@ fn require_plain_name(name: &str) -> Result<()> {
 
 impl Repo {
     /// Add a remote (`git remote add <name> <url>`).
-    pub fn add_remote(&self, name: &str, url: &str) -> Result<()> {
+    pub fn add_remote(&self, name: &str, url: &str, push_url: Option<&str>) -> Result<()> {
         require(name, "remote name")?;
         require(url, "remote URL")?;
         require_plain_name(name)?;
         // Same gate as the clone path: a stored `ext::`/`fd::` URL would run
         // arbitrary commands on the next fetch.
         validate_remote_arg(url, "remote URL")?;
+        if let Some(push_url) = push_url {
+            require(push_url, "remote push URL")?;
+            validate_remote_arg(push_url, "remote push URL")?;
+        }
         match self.git2()?.remote(name, url) {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                if let Some(push_url) = push_url {
+                    self.git2()?.remote_set_pushurl(name, Some(push_url))?;
+                }
+                Ok(())
+            }
             // git2's duplicate error reads "remote 'x' already exists" wrapped
             // in config noise — surface the short, actionable form.
             Err(e) if e.code() == git2::ErrorCode::Exists => {
@@ -69,12 +78,19 @@ impl Repo {
         Ok(problems.iter().flatten().map(str::to_string).collect())
     }
 
-    /// Change a remote's fetch URL (`git remote set-url`).
-    pub fn set_remote_url(&self, name: &str, url: &str) -> Result<()> {
+    /// Change a remote's fetch URL and optional push-only URL. When
+    /// `push_url` is absent, pushes inherit the fetch URL exactly as Git does.
+    pub fn set_remote_urls(&self, name: &str, url: &str, push_url: Option<&str>) -> Result<()> {
         require(name, "remote name")?;
         require(url, "remote URL")?;
         validate_remote_arg(url, "remote URL")?;
-        self.git2()?.remote_set_url(name, url)?;
+        if let Some(push_url) = push_url {
+            require(push_url, "remote push URL")?;
+            validate_remote_arg(push_url, "remote push URL")?;
+        }
+        let repo = self.git2()?;
+        repo.remote_set_url(name, url)?;
+        repo.remote_set_pushurl(name, push_url)?;
         Ok(())
     }
 }
@@ -112,26 +128,49 @@ mod tests {
     fn add_set_url_rename_remove_round_trip() {
         let (repo, dir) = scratch_repo();
 
-        repo.add_remote("origin", "https://example.com/a.git").unwrap();
+        repo.add_remote("origin", "https://example.com/a.git", None).unwrap();
         let remotes = repo.refs().unwrap().remotes;
         assert_eq!(remotes.len(), 1);
         assert_eq!(remotes[0].name, "origin");
         assert_eq!(remotes[0].url.as_deref(), Some("https://example.com/a.git"));
 
         // Duplicate name maps to the clear message, not raw config noise.
-        let err = repo.add_remote("origin", "https://example.com/b.git").unwrap_err();
+        let err = repo
+            .add_remote("origin", "https://example.com/b.git", None)
+            .unwrap_err();
         assert!(err.to_string().contains("already exists"), "{err}");
 
         // Blank name / URL are rejected before touching git config.
-        assert!(repo.add_remote("  ", "https://example.com/c.git").is_err());
-        assert!(repo.add_remote("upstream", "").is_err());
-        assert!(repo.set_remote_url("origin", " ").is_err());
+        assert!(repo
+            .add_remote("  ", "https://example.com/c.git", None)
+            .is_err());
+        assert!(repo.add_remote("upstream", "", None).is_err());
+        assert!(repo.set_remote_urls("origin", " ", None).is_err());
 
-        repo.set_remote_url("origin", "https://example.com/b.git").unwrap();
+        repo.set_remote_urls(
+            "origin",
+            "https://example.com/b.git",
+            Some("ssh://git@example.com/b.git"),
+        )
+        .unwrap();
         let g = git2::Repository::open(&dir).unwrap();
         assert_eq!(
             g.find_remote("origin").unwrap().url(),
             Some("https://example.com/b.git")
+        );
+        assert_eq!(
+            g.find_remote("origin").unwrap().pushurl(),
+            Some("ssh://git@example.com/b.git")
+        );
+        repo.set_remote_urls("origin", "https://example.com/b.git", None)
+            .unwrap();
+        assert_eq!(
+            git2::Repository::open(&dir)
+                .unwrap()
+                .find_remote("origin")
+                .unwrap()
+                .pushurl(),
+            None
         );
 
         let problems = repo.rename_remote("origin", "upstream").unwrap();
@@ -152,7 +191,7 @@ mod tests {
     #[test]
     fn rename_with_custom_refspec_succeeds_and_reports_problems() {
         let (repo, dir) = scratch_repo();
-        repo.add_remote("origin", "https://example.com/a.git").unwrap();
+        repo.add_remote("origin", "https://example.com/a.git", None).unwrap();
         // A non-default fetch refspec (single-branch clone style) — git2 can't
         // rewrite it on rename and reports it as a "problem", but the rename
         // itself has already landed by then.
@@ -182,14 +221,23 @@ mod tests {
 
         // `ext::` transports run arbitrary commands on the next fetch — the
         // clone-path gate applies to stored remotes too, on add and set-url.
-        let err = repo.add_remote("evil", "ext::sh -c 'touch /tmp/x'").unwrap_err();
+        let err = repo
+            .add_remote("evil", "ext::sh -c 'touch /tmp/x'", None)
+            .unwrap_err();
         assert!(err.to_string().contains("unsupported transport"), "{err}");
-        repo.add_remote("origin", "https://example.com/a.git").unwrap();
-        assert!(repo.set_remote_url("origin", "ext::sh -c 'touch /tmp/x'").is_err());
+        repo.add_remote("origin", "https://example.com/a.git", None).unwrap();
+        assert!(repo
+            .set_remote_urls("origin", "ext::sh -c 'touch /tmp/x'", None)
+            .is_err());
+        assert!(repo
+            .set_remote_urls("origin", "https://example.com/a.git", Some("ext::sh -c x"))
+            .is_err());
 
         // Option-like names later land in `git fetch` argv positions — reject
         // at creation, on add and rename.
-        let err = repo.add_remote("-evil", "https://example.com/a.git").unwrap_err();
+        let err = repo
+            .add_remote("-evil", "https://example.com/a.git", None)
+            .unwrap_err();
         assert!(err.to_string().contains("may not start with '-'"), "{err}");
         assert!(repo.rename_remote("origin", "-evil").is_err());
         let g = git2::Repository::open(&dir).unwrap();

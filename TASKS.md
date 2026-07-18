@@ -263,9 +263,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Pull/fetch a chosen remote branch from its context menu, with the same
   strategy and progress/cancellation model as the current-branch toolbar
   (`Repo::{pull_branch,fetch_branch}`, remote-branch context menu).
-- ◐ Persist a default pull strategy per repository and offer pull autostash as
-  an explicit one-operation/default preference (per-repo `repoPullMode` ships;
-  autostash remains).
+- ☑ Persist fetch-prune, pull-strategy, and pull-autostash defaults per
+  repository, with explicit one-operation overrides (`repoNetworkPreferences`,
+  `Repo::{fetch,pull,pull_branch}` explicit flags, topbar/palette actions).
+- ☑ Edit a remote's fetch and push URLs independently (`RemoteDialog`,
+  `repo_remote_set_urls`, native Git remote config).
 - ☑ Credentials: inherit user's `git` config (helper, SSH agent) via
   shell-out + `GIT_TERMINAL_PROMPT=0`. Native `auth-git2` integration
   with OS keychain is a future polish.

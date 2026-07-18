@@ -57,6 +57,8 @@ pub struct RemoteBranch {
 pub struct Remote {
     pub name: String,
     pub url: Option<String>,
+    /// Explicit push-only URL. `None` means pushes use `url`.
+    pub push_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,10 +381,13 @@ fn collect_remotes(repo: &git2::Repository) -> Vec<Remote> {
 
     let mut out = Vec::new();
     for name in names.iter().flatten() {
-        let url = repo.find_remote(name).ok().and_then(|r| r.url().map(|s| s.to_string()));
+        let remote = repo.find_remote(name).ok();
+        let url = remote.as_ref().and_then(|r| r.url().map(str::to_string));
+        let push_url = remote.as_ref().and_then(|r| r.pushurl().map(str::to_string));
         out.push(Remote {
             name: name.to_string(),
             url,
+            push_url,
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));

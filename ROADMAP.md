@@ -1831,6 +1831,16 @@ close the requested stash. TypeScript and a Computer Use pass on a clean
 disposable repository verified the detail diff, one retained stash, and zero
 working-tree changes.
 
+**Per-repository network preferences shipped (2026-07-18):** Fetch pruning and
+pull autostash now join pull strategy as persisted repository defaults, with
+explicit with/without overrides in the keyboard-operable topbar and command
+palette. Core operations always pass a positive or negative Git flag, keeping
+one-off choices deterministic. Remote add/edit now stores independent fetch
+and optional push URLs in native Git config and exposes both copy actions. Core
+tests and a Computer Use pass verified prune retention/removal, dirty-change
+autostash restoration, cross-tab preference persistence, and separate remote
+URLs in both Strand and Git.
+
 ---
 
 ## 1.1+ — Post-1.0

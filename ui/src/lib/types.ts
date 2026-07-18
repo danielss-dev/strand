@@ -168,6 +168,8 @@ export interface RemoteBranch {
 export interface Remote {
   name: string;
   url: string | null;
+  /** Explicit push-only URL; null means pushes use `url`. */
+  push_url: string | null;
 }
 
 export interface Tag {
@@ -430,6 +432,12 @@ export interface Progress {
 
 /** One-off integration strategy for a pull. `default` honors git config. */
 export type PullMode = 'default' | 'merge' | 'rebase' | 'fast-forward-only';
+
+/** Per-repository defaults for primary network actions and Sync. */
+export interface NetworkPreferences {
+  fetchPrune: boolean;
+  pullAutostash: boolean;
+}
 
 /** Push variants exposed by Strand. Unsafe plain force is intentionally absent. */
 export type PushMode = 'default' | 'follow-tags' | 'force-with-lease';

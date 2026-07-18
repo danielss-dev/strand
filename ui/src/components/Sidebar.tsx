@@ -760,7 +760,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   // Menu for a remotes-tree top-level folder — the remote itself (`origin`),
   // not one of its branches.
   const remoteFolderMenu = (name: string): MenuItem[] => {
-    const url = refs.remotes.find((r) => r.name === name)?.url ?? null;
+    const remote = refs.remotes.find((r) => r.name === name);
+    const url = remote?.url ?? null;
+    const pushUrl = remote?.push_url ?? null;
     const items: MenuItem[] = [
       {
         label: 'Fetch',
@@ -771,11 +773,18 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             (e) => onToast(`Fetch failed: ${errMessage(e)}`, 'error'),
           ),
       },
-      { label: 'Edit URL…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '' }) },
+      {
+        label: 'Edit URLs…',
+        icon: 'edit',
+        onSelect: () => onManageRemote({ kind: 'url', name, url: url ?? '', pushUrl: pushUrl ?? '' }),
+      },
       { label: 'Rename…', icon: 'edit', onSelect: () => onManageRemote({ kind: 'rename', name }) },
     ];
     if (url) {
-      items.push({ label: 'Copy URL', icon: 'file', onSelect: () => { void copyToClipboard(url); onToast('Copied'); } });
+      items.push({ label: 'Copy fetch URL', icon: 'file', onSelect: () => { void copyToClipboard(url); onToast('Fetch URL copied'); } });
+    }
+    if (pushUrl) {
+      items.push({ label: 'Copy push URL', icon: 'file', onSelect: () => { void copyToClipboard(pushUrl); onToast('Push URL copied'); } });
     }
     items.push({
       label: 'Remove remote',

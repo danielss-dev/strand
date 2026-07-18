@@ -203,6 +203,10 @@ export function App() {
   const pushBranch = useRepo((s) => s.pushBranch);
   const pullMode = useRepo((s) => s.pullMode);
   const setPullMode = useRepo((s) => s.setPullMode);
+  const fetchPrune = useRepo((s) => s.fetchPrune);
+  const setFetchPrune = useRepo((s) => s.setFetchPrune);
+  const pullAutostash = useRepo((s) => s.pullAutostash);
+  const setPullAutostash = useRepo((s) => s.setPullAutostash);
   const pushAllTags = useRepo((s) => s.pushAllTags);
   const abortOperation = useRepo((s) => s.abortOperation);
   const stashes = useRepo((s) => s.stashes);
@@ -626,7 +630,7 @@ export function App() {
     void setActiveTab(next.path);
   }, []);
 
-  const onFetch = useCallback(async () => {
+  const onFetch = useCallback(async (prune?: boolean) => {
     if (syncing || pulling || pushing) return;
     setSyncing(true);
     setNetProgress('Fetching…');
@@ -634,7 +638,7 @@ export function App() {
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await fetchRepo(undefined, opId);
+      await fetchRepo(prune, undefined, opId);
       flashDone(setSyncDone);
     } catch (e) {
       if (isCancelled(e)) showToast('Fetch cancelled');
@@ -646,9 +650,10 @@ export function App() {
     }
   }, [fetchRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
-  const onPull = useCallback(async (mode?: PullMode) => {
+  const onPull = useCallback(async (mode?: PullMode, autostash?: boolean) => {
     if (syncing || pulling || pushing) return;
     const effectiveMode = mode ?? pullMode;
+    const effectiveAutostash = autostash ?? pullAutostash;
     const label = effectiveMode === 'rebase'
       ? 'Pull with rebase'
       : effectiveMode === 'fast-forward-only'
@@ -657,12 +662,12 @@ export function App() {
           ? 'Pull with merge'
           : 'Pull';
     setPulling(true);
-    setNetProgress(`${label}…`);
+    setNetProgress(`${label}${effectiveAutostash ? ' with autostash' : ''}…`);
     const opId = nextOpId();
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pullRepo(effectiveMode, undefined, opId);
+      await pullRepo(effectiveMode, effectiveAutostash, undefined, opId);
       flashDone(setPullDone);
     } catch (e) {
       if (isCancelled(e)) showToast(`${label} cancelled`);
@@ -672,7 +677,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [pullRepo, showToast, flashDone, syncing, pulling, pushing, pullMode, nextOpId]);
+  }, [pullRepo, showToast, flashDone, syncing, pulling, pushing, pullAutostash, pullMode, nextOpId]);
 
   const onPush = useCallback(async (mode: PushMode = 'default') => {
     if (syncing || pulling || pushing) return;
@@ -745,7 +750,14 @@ export function App() {
     setNetOpId(opId);
     await waitForPaint();
     try {
-      await pullBranch(remoteBranch.remote, remoteBranch.branch, effectiveMode, undefined, opId);
+      await pullBranch(
+        remoteBranch.remote,
+        remoteBranch.branch,
+        effectiveMode,
+        pullAutostash,
+        undefined,
+        opId,
+      );
       flashDone(setPullDone);
       showToast(`Pulled ${remoteBranch.name} into the current branch`);
     } catch (caught) {
@@ -756,7 +768,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [flashDone, nextOpId, pullBranch, pullMode, pulling, pushing, showToast, syncing]);
+  }, [flashDone, nextOpId, pullAutostash, pullBranch, pullMode, pulling, pushing, showToast, syncing]);
 
   const onPushBranch = useCallback(async (request: BranchPushRequest) => {
     if (syncing || pulling || pushing) return;
@@ -788,10 +800,10 @@ export function App() {
     try {
       setNetProgress('Sync: fetching…');
       await waitForPaint();
-      await fetchRepo(undefined, opId);
+      await fetchRepo(fetchPrune, undefined, opId);
       phase = 'Pull';
       setNetProgress('Sync: pulling…');
-      await pullRepo(pullMode, undefined, opId);
+      await pullRepo(pullMode, pullAutostash, undefined, opId);
       phase = 'Push';
       setNetProgress('Sync: pushing…');
       await pushRepo('default', undefined, opId);
@@ -805,7 +817,7 @@ export function App() {
       setNetProgress(null);
       setNetOpId(null);
     }
-  }, [fetchRepo, flashDone, nextOpId, pullMode, pullRepo, pulling, pushRepo, pushing, showToast, syncing]);
+  }, [fetchPrune, fetchRepo, flashDone, nextOpId, pullAutostash, pullMode, pullRepo, pulling, pushRepo, pushing, showToast, syncing]);
 
   // Keyboard refresh — same snapshot-based refresh the header button runs
   // (meta/refs/tree/submodules ride along with status), guarded on an open repo.
@@ -1448,7 +1460,11 @@ export function App() {
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
         { id: 'push-tags', label: 'Push all tags', group: 'Actions', keywords: 'push upload publish tags remote', run: onPushAllTags },
         { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onFetch },
+        { id: 'fetch-prune', label: 'Fetch and prune stale branches', group: 'Actions', keywords: 'fetch prune delete stale remote tracking refs', run: () => { void onFetch(true); } },
+        { id: 'fetch-no-prune', label: 'Fetch without pruning', group: 'Actions', keywords: 'fetch keep stale remote tracking refs', run: () => { void onFetch(false); } },
         { id: 'pull',    label: 'Pull', group: 'Actions', shortcut: keyHint('pull'), keywords: 'pull merge remote download integrate', run: onPull },
+        { id: 'pull-autostash', label: 'Pull with autostash', group: 'Actions', keywords: 'pull dirty changes stash restore', run: () => { void onPull(undefined, true); } },
+        { id: 'pull-no-autostash', label: 'Pull without autostash', group: 'Actions', keywords: 'pull dirty changes no stash', run: () => { void onPull(undefined, false); } },
         { id: 'pull-merge', label: 'Pull: merge (fast-forward if possible)', group: 'Actions', keywords: 'pull merge fetch integrate ff', run: () => { void onPull('merge'); } },
         { id: 'pull-rebase', label: 'Pull: rebase', group: 'Actions', keywords: 'pull rebase fetch linear autostash', run: () => { void onPull('rebase'); } },
         { id: 'pull-ff-only', label: 'Pull: fast-forward only', group: 'Actions', keywords: 'pull fetch ff-only safe refuse diverged', run: () => { void onPull('fast-forward-only'); } },
@@ -1564,9 +1580,19 @@ export function App() {
           onPushAllTags={onPushAllTags}
           onForcePush={() => setForcePushOpen(true)}
           pullMode={pullMode}
+          fetchPrune={fetchPrune}
+          pullAutostash={pullAutostash}
           onSetPullMode={(mode) => {
             setPullMode(mode);
             showToast(`Repository pull default: ${mode === 'default' ? 'Git configuration' : mode}`);
+          }}
+          onSetFetchPrune={(prune) => {
+            setFetchPrune(prune);
+            showToast(`Repository fetch default: ${prune ? 'prune stale branches' : 'keep stale branches'}`);
+          }}
+          onSetPullAutostash={(autostash) => {
+            setPullAutostash(autostash);
+            showToast(`Repository pull autostash: ${autostash ? 'on' : 'off'}`);
           }}
           syncing={syncing}
           pulling={pulling}

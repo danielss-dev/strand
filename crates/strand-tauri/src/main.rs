@@ -168,7 +168,7 @@ fn main() {
             commands::repo_remote_add,
             commands::repo_remote_remove,
             commands::repo_remote_rename,
-            commands::repo_remote_set_url,
+            commands::repo_remote_set_urls,
             commands::repo_tag_create,
             commands::repo_tag_delete,
             commands::repo_tag_push,

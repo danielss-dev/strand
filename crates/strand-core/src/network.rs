@@ -143,10 +143,15 @@ impl Repo {
     pub fn fetch(
         &self,
         remote: Option<&str>,
+        prune: bool,
         on_progress: impl FnMut(Progress),
         cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
-        let mut args = vec!["fetch", "--prune", "--progress"];
+        let mut args = vec![
+            "fetch",
+            if prune { "--prune" } else { "--no-prune" },
+            "--progress",
+        ];
         if let Some(r) = remote {
             validate_remote_arg(r, "remote")?;
             // End-of-options before the (caller-supplied) remote so it can't
@@ -160,10 +165,11 @@ impl Repo {
     pub fn pull(
         &self,
         mode: PullMode,
+        autostash: bool,
         on_progress: impl FnMut(Progress),
         cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
-        let args = pull_args(mode);
+        let args = pull_args(mode, autostash);
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
 
@@ -176,6 +182,7 @@ impl Repo {
         remote: &str,
         branch: &str,
         mode: PullMode,
+        autostash: bool,
         on_progress: impl FnMut(Progress),
         cancel: Option<&CancelHandle>,
     ) -> Result<NetworkOutcome> {
@@ -183,7 +190,7 @@ impl Repo {
         let source = validate_branch_ref(branch, "remote branch")?;
         let destination = validate_tracking_ref(remote, branch)?;
         let refspec = format!("+{source}:{destination}");
-        let mut args = pull_args(mode);
+        let mut args = pull_args(mode, autostash);
         args.extend(["--", remote, refspec.as_str()]);
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
@@ -397,8 +404,12 @@ impl Repo {
     }
 }
 
-fn pull_args(mode: PullMode) -> Vec<&'static str> {
-    let mut args = vec!["pull", "--progress"];
+fn pull_args(mode: PullMode, autostash: bool) -> Vec<&'static str> {
+    let mut args = vec![
+        "pull",
+        "--progress",
+        if autostash { "--autostash" } else { "--no-autostash" },
+    ];
     match mode {
         PullMode::Default => {}
         PullMode::Merge => args.extend(["--no-rebase", "--ff"]),
@@ -680,6 +691,17 @@ mod tests {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
+    fn git_succeeds(dir: &Path, args: &[&str]) -> bool {
+        Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    }
+
     fn push_fixture() -> (Repo, PathBuf, PathBuf) {
         let base = std::env::temp_dir().join(format!(
             "strand-push-test-{}-{:?}",
@@ -940,7 +962,14 @@ mod tests {
         );
 
         consumer
-            .pull_branch("origin", "topic", PullMode::FastForwardOnly, |_| {}, None)
+            .pull_branch(
+                "origin",
+                "topic",
+                PullMode::FastForwardOnly,
+                false,
+                |_| {},
+                None,
+            )
             .unwrap();
         assert_eq!(git(&consumer_path, &["rev-parse", "HEAD"]), second);
         assert_eq!(git(&consumer_path, &["branch", "--show-current"]), "topic");
@@ -952,10 +981,108 @@ mod tests {
 
     #[test]
     fn explicit_pull_modes_override_git_config() {
-        assert_eq!(pull_args(PullMode::Default), ["pull", "--progress"]);
-        assert_eq!(pull_args(PullMode::Merge), ["pull", "--progress", "--no-rebase", "--ff"]);
-        assert_eq!(pull_args(PullMode::Rebase), ["pull", "--progress", "--rebase"]);
-        assert_eq!(pull_args(PullMode::FastForwardOnly), ["pull", "--progress", "--ff-only"]);
+        assert_eq!(
+            pull_args(PullMode::Default, false),
+            ["pull", "--progress", "--no-autostash"]
+        );
+        assert_eq!(
+            pull_args(PullMode::Merge, false),
+            ["pull", "--progress", "--no-autostash", "--no-rebase", "--ff"]
+        );
+        assert_eq!(
+            pull_args(PullMode::Rebase, true),
+            ["pull", "--progress", "--autostash", "--rebase"]
+        );
+        assert_eq!(
+            pull_args(PullMode::FastForwardOnly, true),
+            ["pull", "--progress", "--autostash", "--ff-only"]
+        );
+    }
+
+    #[test]
+    fn fetch_prune_is_an_explicit_per_operation_choice() {
+        let (publisher, publisher_path, base) = push_fixture();
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+        git(&publisher_path, &["branch", "stale"]);
+        git(&publisher_path, &["push", "-q", "origin", "stale"]);
+
+        let remote = base.join("remote.git");
+        let consumer_path = base.join("consumer");
+        git(
+            &base,
+            &["clone", "-q", remote.to_str().unwrap(), consumer_path.to_str().unwrap()],
+        );
+        let consumer = Repo::discover(&consumer_path).unwrap();
+        assert!(git_succeeds(
+            &consumer_path,
+            &["show-ref", "--verify", "refs/remotes/origin/stale"]
+        ));
+
+        git(&publisher_path, &["push", "-q", "origin", "--delete", "stale"]);
+        consumer.fetch(Some("origin"), false, |_| {}, None).unwrap();
+        assert!(git_succeeds(
+            &consumer_path,
+            &["show-ref", "--verify", "refs/remotes/origin/stale"]
+        ));
+        consumer.fetch(Some("origin"), true, |_| {}, None).unwrap();
+        assert!(!git_succeeds(
+            &consumer_path,
+            &["show-ref", "--verify", "refs/remotes/origin/stale"]
+        ));
+
+        drop(consumer);
+        drop(publisher);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pull_autostash_restores_dirty_tracked_changes() {
+        let (publisher, publisher_path, base) = push_fixture();
+        let original = (1..=20).map(|n| format!("line {n}\n")).collect::<String>();
+        std::fs::write(publisher_path.join("b.txt"), &original).unwrap();
+        git(&publisher_path, &["add", "b.txt"]);
+        git(&publisher_path, &["commit", "-q", "-m", "add b"]);
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+
+        let remote = base.join("remote.git");
+        git(&remote, &["symbolic-ref", "HEAD", "refs/heads/topic"]);
+        let consumer_path = base.join("consumer");
+        git(
+            &base,
+            &["clone", "-q", remote.to_str().unwrap(), consumer_path.to_str().unwrap()],
+        );
+        git(&consumer_path, &["config", "pull.ff", "only"]);
+
+        let upstream = original.replace("line 20\n", "upstream line 20\n");
+        std::fs::write(publisher_path.join("b.txt"), upstream).unwrap();
+        git(&publisher_path, &["commit", "-qam", "upstream edit"]);
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+
+        let local = original.replace("line 1\n", "local line 1\n");
+        std::fs::write(consumer_path.join("b.txt"), local).unwrap();
+        let consumer = Repo::discover(&consumer_path).unwrap();
+        assert!(consumer
+            .pull(PullMode::FastForwardOnly, false, |_| {}, None)
+            .is_err());
+        consumer
+            .pull(PullMode::FastForwardOnly, true, |_| {}, None)
+            .unwrap();
+
+        let restored = std::fs::read_to_string(consumer_path.join("b.txt")).unwrap();
+        assert!(restored.contains("local line 1"));
+        assert!(restored.contains("upstream line 20"));
+        assert!(git_succeeds(
+            &consumer_path,
+            &["diff", "--quiet", "--", "a.txt"]
+        ));
+        assert!(!git_succeeds(
+            &consumer_path,
+            &["diff", "--quiet", "--", "b.txt"]
+        ));
+
+        drop(consumer);
+        drop(publisher);
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]

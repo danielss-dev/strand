@@ -32,7 +32,7 @@ function refs(branches: Branch[], remoteBranches: RemoteBranch[] = []): Refs {
   return {
     branches,
     primary_branch: 'main',
-    remotes: [{ name: 'origin', url: null }],
+    remotes: [{ name: 'origin', url: null, push_url: null }],
     remote_branches: remoteBranches,
     tags: [],
   };

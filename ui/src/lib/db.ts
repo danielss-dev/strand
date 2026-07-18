@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { PullMode, RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
+import type { NetworkPreferences, PullMode, RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -175,6 +175,16 @@ export const repoPullMode = {
   },
   set(repoPath: string, mode: PullMode): Promise<void> {
     return settings.set(`pull-mode:${repoPath}`, mode);
+  },
+};
+
+/** Explicit defaults for the active repository's Fetch and Pull actions. */
+export const repoNetworkPreferences = {
+  get(repoPath: string): Promise<NetworkPreferences | null> {
+    return settings.get<NetworkPreferences>(`network-preferences:${repoPath}`);
+  },
+  set(repoPath: string, preferences: NetworkPreferences): Promise<void> {
+    return settings.set(`network-preferences:${repoPath}`, preferences);
   },
 };
 

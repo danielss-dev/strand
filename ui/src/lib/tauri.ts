@@ -252,19 +252,22 @@ export const tauri = {
   repoFetch: (
     path: string,
     remote: string | null,
+    prune: boolean,
     onProgress?: (p: Progress) => void,
     opId?: string,
   ) =>
     invoke<NetworkOutcome>('repo_fetch', {
       path,
       remote,
+      prune,
       opId,
       onEvent: progressChannel(onProgress),
     }),
-  repoPull: (path: string, mode: PullMode, onProgress?: (p: Progress) => void, opId?: string) =>
+  repoPull: (path: string, mode: PullMode, autostash: boolean, onProgress?: (p: Progress) => void, opId?: string) =>
     invoke<NetworkOutcome>('repo_pull', {
       path,
       mode,
+      autostash,
       opId,
       onEvent: progressChannel(onProgress),
     }),
@@ -311,6 +314,7 @@ export const tauri = {
     remote: string,
     branch: string,
     mode: PullMode,
+    autostash: boolean,
     onProgress?: (p: Progress) => void,
     opId?: string,
   ) =>
@@ -319,6 +323,7 @@ export const tauri = {
       remote,
       branch,
       mode,
+      autostash,
       opId,
       onEvent: progressChannel(onProgress),
     }),
@@ -432,16 +437,16 @@ export const tauri = {
       branch,
       onEvent: progressChannel(onProgress),
     }),
-  repoRemoteAdd: (path: string, name: string, url: string) =>
-    invoke<void>('repo_remote_add', { path, name, url }),
+  repoRemoteAdd: (path: string, name: string, url: string, pushUrl: string | null) =>
+    invoke<void>('repo_remote_add', { path, name, url, pushUrl }),
   repoRemoteRemove: (path: string, name: string) =>
     invoke<void>('repo_remote_remove', { path, name }),
   // Resolves to the refspecs git could not rewrite ("problems") — the rename
   // has already happened by then; empty means a clean rename.
   repoRemoteRename: (path: string, oldName: string, newName: string) =>
     invoke<string[]>('repo_remote_rename', { path, oldName, newName }),
-  repoRemoteSetUrl: (path: string, name: string, url: string) =>
-    invoke<void>('repo_remote_set_url', { path, name, url }),
+  repoRemoteSetUrls: (path: string, name: string, url: string, pushUrl: string | null) =>
+    invoke<void>('repo_remote_set_urls', { path, name, url, pushUrl }),
   repoTagCreate: (
     path: string,
     name: string,

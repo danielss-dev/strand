@@ -8,7 +8,7 @@ import { useRepo } from '../stores/repo';
 export type RemoteDialogMode =
   | { kind: 'add' }
   | { kind: 'rename'; name: string }
-  | { kind: 'url'; name: string; url: string };
+  | { kind: 'url'; name: string; url: string; pushUrl: string };
 
 /**
  * Modal for managing remotes — add a new one (Name + URL), rename an existing
@@ -27,10 +27,11 @@ export function RemoteDialog({
 }) {
   const addRemote = useRepo((s) => s.addRemote);
   const renameRemote = useRepo((s) => s.renameRemote);
-  const setRemoteUrl = useRepo((s) => s.setRemoteUrl);
+  const setRemoteUrls = useRepo((s) => s.setRemoteUrls);
 
   const [name, setName] = useState(mode.kind === 'rename' ? mode.name : '');
   const [url, setUrl] = useState(mode.kind === 'url' ? mode.url : '');
+  const [pushUrl, setPushUrl] = useState(mode.kind === 'url' ? mode.pushUrl : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -77,10 +78,10 @@ export function RemoteDialog({
 
   const title = mode.kind === 'add' ? 'Add remote'
     : mode.kind === 'rename' ? 'Rename remote'
-    : 'Edit remote URL';
+    : 'Edit remote URLs';
   const submitLabel = mode.kind === 'add' ? 'Add remote'
     : mode.kind === 'rename' ? 'Rename'
-    : 'Save URL';
+    : 'Save URLs';
 
   async function submit() {
     if (busy) return;
@@ -98,7 +99,7 @@ export function RemoteDialog({
     setError(null);
     try {
       if (mode.kind === 'add') {
-        await addRemote(remoteName, remoteUrl);
+        await addRemote(remoteName, remoteUrl, pushUrl.trim() || null);
         onToast(`Remote ${remoteName} added`);
       } else if (mode.kind === 'rename') {
         const problems = await renameRemote(mode.name, remoteName);
@@ -110,8 +111,8 @@ export function RemoteDialog({
             : `Remote ${mode.name} renamed to ${remoteName}`,
         );
       } else {
-        await setRemoteUrl(mode.name, remoteUrl);
-        onToast(`Remote ${mode.name} URL updated`);
+        await setRemoteUrls(mode.name, remoteUrl, pushUrl.trim() || null);
+        onToast(`Remote ${mode.name} URLs updated`);
       }
       onClose();
     } catch (e) {
@@ -147,7 +148,7 @@ export function RemoteDialog({
         <div className="clone-body">
           {mode.kind !== 'add' && (
             <p className="stash-blurb">
-              {mode.kind === 'rename' ? 'Rename remote ' : 'Change the URL of '}
+              {mode.kind === 'rename' ? 'Rename remote ' : 'Change the fetch and push URLs of '}
               <code>{mode.name}</code>.
             </p>
           )}
@@ -173,7 +174,7 @@ export function RemoteDialog({
 
           {mode.kind !== 'rename' && (
             <label className="clone-field">
-              <span className="lbl">URL</span>
+              <span className="lbl">Fetch URL</span>
               <input
                 autoFocus={mode.kind === 'url'}
                 className="clone-input"
@@ -181,6 +182,22 @@ export function RemoteDialog({
                 value={url}
                 disabled={busy}
                 onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submit();
+                }}
+              />
+            </label>
+          )}
+
+          {mode.kind !== 'rename' && (
+            <label className="clone-field">
+              <span className="lbl">Push URL <span className="muted">(optional)</span></span>
+              <input
+                className="clone-input"
+                placeholder="Uses the fetch URL when blank"
+                value={pushUrl}
+                disabled={busy}
+                onChange={(e) => setPushUrl(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void submit();
                 }}
