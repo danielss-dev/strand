@@ -25,6 +25,8 @@ import type {
   GlobalIdentity,
   HostingConnectionStatus,
   InitOutcome,
+  MaintenanceOutcome,
+  MaintenanceTask,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -449,6 +451,8 @@ export const tauri = {
     invoke<void>('repo_remote_set_urls', { path, name, url, pushUrl }),
   repoRemoteSetDefault: (path: string, name: string) =>
     invoke<void>('repo_remote_set_default', { path, name }),
+  repoMaintenance: (path: string, task: MaintenanceTask, opId?: string) =>
+    invoke<MaintenanceOutcome>('repo_maintenance', { path, task, opId }),
   repoTagCreate: (
     path: string,
     name: string,

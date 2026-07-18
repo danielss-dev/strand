@@ -96,6 +96,25 @@ Single-clicking a stash switches to All Commits, reveals its graph node, and ope
 
 Submodules list with status badges (uninitialized, out of date, modified). Double-click opens the submodule as its own repository tab; the menu offers Open, Update (or Init & update), and Copy path. The section header action runs "Update all" (`--init --recursive`) with streamed progress.
 
+## Repository maintenance
+
+Run **Repository maintenance…** from the command palette to use Git's own
+housekeeping tools without leaving Strand:
+
+- **Verify integrity** runs `git fsck --full` without changing the repository.
+- **Run maintenance** runs the repository's configured `git maintenance run`
+  tasks.
+- **Garbage collect** runs `git gc` only after a second confirmation click and
+  uses Git's normal grace periods.
+
+Every run is cancellable. Strand records its exact safety-prefixed command,
+success or failure, duration, and captured Git output in a per-repository
+activity list outside the repository. The list survives relaunch, retains the
+latest 50 runs, and bounds unusually large transcripts so maintenance history
+cannot grow the app database indefinitely. Expand a row to inspect the command
+and output; a successful integrity check may still report ordinary dangling
+objects.
+
 ## Cherry-pick, revert, merge
 
 - **Cherry-pick** and **Revert** act on a single commit from the commit detail
@@ -171,6 +190,8 @@ Strand reads repositories with its own fast engine, but the operations where you
 - **Committing when `commit.gpgSign` is on** — GPG/SSH signing keys and pre-commit/commit-msg hooks (with signing off, commits are in-process and hooks don't run).
 - **Network operations** (clone, fetch, pull, push) — credential helpers, SSH agents and keys, remote-related hooks, and content filters such as Git LFS.
 - **Interactive rebase** — hooks and signing on rewritten commits.
+- **Repository maintenance and integrity checks** — Git's configured
+  maintenance tasks and object validation.
 - **External merge tool** — your configured `git mergetool`.
 
 If it works in your terminal, it works in Strand.

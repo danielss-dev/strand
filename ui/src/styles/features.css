@@ -4107,6 +4107,120 @@ textarea.clone-input {
   box-shadow: 0 0 0 0.5px var(--border) inset;
   user-select: text;
 }
+.maintenance-dialog {
+  width: 680px;
+  max-height: calc(100vh - 64px);
+}
+.maintenance-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.maintenance-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.maintenance-action {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 0;
+  border-radius: 7px;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  cursor: pointer;
+}
+.maintenance-action:hover,
+.maintenance-action:focus-visible {
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 0.5px var(--accent) inset;
+  outline: none;
+}
+.maintenance-action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.maintenance-action.danger span {
+  color: var(--del);
+}
+.maintenance-action span {
+  font-size: var(--type-ui);
+  font-weight: 600;
+}
+.maintenance-action small {
+  color: var(--text-dim);
+  font-size: var(--type-ui-sm);
+  line-height: 1.35;
+}
+.maintenance-log-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: var(--type-ui-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.maintenance-log {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.maintenance-empty {
+  padding: 18px;
+  border-radius: 7px;
+  text-align: center;
+  color: var(--text-dim);
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.maintenance-entry {
+  border-radius: 7px;
+  background: var(--bg-base);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+  overflow: hidden;
+}
+.maintenance-entry.failed {
+  box-shadow: 0 0 0 0.5px var(--del) inset;
+}
+.maintenance-entry summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: var(--type-ui-sm);
+}
+.maintenance-entry summary span:last-child {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: right;
+}
+.maintenance-command {
+  display: block;
+  margin: 0 10px 8px;
+  padding: 7px 8px;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  background: var(--bg-elevated);
+  user-select: text;
+}
+.maintenance-entry pre {
+  max-height: 180px;
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--text-2);
+  font: 10.5px/1.45 var(--font-mono);
+  user-select: text;
+}
 
 /* Settings dialog — Appearance / theme picker (reuses the clone-dialog shell). */
 .settings-dialog {

@@ -40,6 +40,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   stash-to-branch, ordered multi-commit cherry-pick, merge-mainline
   cherry-pick/revert, commit/ref comparison, interactive-rebase edit, and
   merge-preserving rebase are shipped.
+- ☑ **Repository maintenance + activity history.** Cancellable integrity,
+  incremental-maintenance, and guarded garbage-collection runs retain bounded
+  per-repository command/output transcripts (`Repo::run_maintenance`,
+  `repo_maintenance`, `MaintenanceDialog`, `repoActivity`).
 - ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
   submission, update/check-out/close/reopen lifecycle actions, and Azure inline
   review parity.
@@ -47,8 +51,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   audit, trusted installers/update channels, Linux GNOME+KDE validation, and a
   full keyboard/accessibility/release-quality pass.
 - ☐ **Power parity selection.** Decide which of bisect, LFS/signing UI,
-  repository maintenance, Git-flow, sparse checkout, patch workflows, and
-  custom actions fit the 1.0 date; the rest move explicitly to 1.1.
+  Git-flow, sparse checkout, patch workflows, and custom actions fit the 1.0
+  date; the rest move explicitly to 1.1.
 
 ---
 

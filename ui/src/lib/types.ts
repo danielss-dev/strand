@@ -424,6 +424,21 @@ export interface NetworkOutcome {
   output: string;
 }
 
+export type MaintenanceTask = 'maintenance' | 'garbage-collect' | 'integrity-check';
+
+export interface MaintenanceOutcome {
+  command: string;
+  output: string;
+  success: boolean;
+  duration_ms: number;
+}
+
+export interface RepoActivityEntry extends MaintenanceOutcome {
+  id: string;
+  task: MaintenanceTask;
+  started_at: number;
+}
+
 /** Streamed progress fragment from a network op (clone/fetch/pull/push). */
 export interface Progress {
   /** Phase label, e.g. "Receiving objects"; empty for plain status lines. */

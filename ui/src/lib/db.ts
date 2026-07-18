@@ -1,7 +1,15 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import type { DiffMode } from '../stores/settings';
-import type { NetworkPreferences, PullMode, RecentRepo, RepoIcon, ReviewNote, Workspace } from './types';
+import type {
+  NetworkPreferences,
+  PullMode,
+  RecentRepo,
+  RepoActivityEntry,
+  RepoIcon,
+  ReviewNote,
+  Workspace,
+} from './types';
 import { isTauri } from './tauri';
 
 const DB_URL = 'sqlite:strand.db';
@@ -185,6 +193,24 @@ export const repoNetworkPreferences = {
   },
   set(repoPath: string, preferences: NetworkPreferences): Promise<void> {
     return settings.set(`network-preferences:${repoPath}`, preferences);
+  },
+};
+
+/** Durable, bounded transcript of explicit repository housekeeping runs. */
+export const repoActivity = {
+  async list(repoPath: string): Promise<RepoActivityEntry[]> {
+    return (await settings.get<RepoActivityEntry[]>(`repo-activity:${repoPath}`)) ?? [];
+  },
+  async append(repoPath: string, entry: RepoActivityEntry): Promise<RepoActivityEntry[]> {
+    const existing = (await settings.get<RepoActivityEntry[]>(`repo-activity:${repoPath}`)) ?? [];
+    // A pathological fsck can print megabytes. Preserve a useful transcript
+    // without letting repeated checks bloat the settings database forever.
+    const bounded = entry.output.length > 50_000
+      ? { ...entry, output: `${entry.output.slice(0, 50_000)}\n\n[output truncated at 50,000 characters]` }
+      : entry;
+    const entries = [bounded, ...existing].slice(0, 50);
+    await settings.set(`repo-activity:${repoPath}`, entries);
+    return entries;
   },
 };
 

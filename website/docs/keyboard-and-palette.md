@@ -72,6 +72,11 @@ Each configured remote contributes palette actions to prune only that remote,
 inspect its fetch/push refspecs, and make it the repository's default push
 remote. The same actions are in the keyboard-openable remote-folder menu.
 
+**Repository maintenance…** opens a keyboard-operable activity dialog for an
+integrity check, incremental Git maintenance, or guarded garbage collection.
+Use `Tab` to move between actions and activity entries, `Enter` to run or
+expand one, and `Escape` to close when no operation is running.
+
 A few fixed app-level keys are not rebindable:
 
 | Key | Action |

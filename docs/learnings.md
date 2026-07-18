@@ -1590,3 +1590,12 @@ view mounts: that view's initial-focus effect may clear it. Carry the requested
 object through the store's reveal signal, then focus, scroll, and open any
 detail from the target view's reveal effect after its first render. Keep the
 source-side action declarative so there is one navigation path and no race.
+
+**Repository housekeeping retains bounded transcripts outside Git
+(2026-07-18).** Long `maintenance`, `gc`, and `fsck` runs use the shared
+cancellable system-Git runner, but a non-zero exit is returned as a transcript
+outcome rather than collapsed into an error so the UI can retain the diagnostic
+output. Record the exact safety-prefixed command, result, duration, and combined
+output in Strand's per-repository app storage—never in the checkout. Cap both
+entry count and transcript size; integrity failures can otherwise make the
+settings database a new hot-path liability.

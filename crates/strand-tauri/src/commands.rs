@@ -20,6 +20,7 @@ use strand_core::{
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
     init::{init_repository, InitOutcome},
+    maintenance::{MaintenanceOutcome, MaintenanceTask},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
@@ -1205,6 +1206,25 @@ pub fn repo_remote_set_urls(
 pub fn repo_remote_set_default(path: String, name: String) -> CmdResult<()> {
     Repo::discover(&path)?.set_default_remote(&name)?;
     Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn repo_maintenance(
+    path: String,
+    task: MaintenanceTask,
+    op_id: Option<String>,
+    state: State<'_, AppState>,
+) -> CmdResult<MaintenanceOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("repository maintenance", move || {
+        Repo::discover(&path)?
+            .run_maintenance(task, Some(&cancel))
+            .map_err(CmdError::from)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 #[tauri::command(async)]

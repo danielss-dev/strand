@@ -60,6 +60,14 @@ pub struct NetworkOutcome {
     pub output: String,
 }
 
+/// Full subprocess transcript used by callers that need to retain both
+/// successful and failed Git output instead of mapping a non-zero exit to an
+/// error immediately.
+pub(crate) struct GitRunTranscript {
+    pub output: String,
+    pub success: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloneOutcome {
     /// Absolute path of the freshly-cloned working tree, so the caller can
@@ -523,9 +531,24 @@ fn validate_read_ref(reference: &str) -> Result<()> {
 pub(crate) fn run_git_streaming(
     cwd: &Path,
     args: &[&str],
-    mut on_progress: impl FnMut(Progress),
+    on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<NetworkOutcome> {
+    let transcript = run_git_streaming_transcript(cwd, args, on_progress, cancel)?;
+    if !transcript.success {
+        return Err(Error::Other(error_summary(&transcript.output, args)));
+    }
+    Ok(NetworkOutcome {
+        output: transcript.output,
+    })
+}
+
+pub(crate) fn run_git_streaming_transcript(
+    cwd: &Path,
+    args: &[&str],
+    mut on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<GitRunTranscript> {
     let mut child = crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -594,10 +617,10 @@ pub(crate) fn run_git_streaming(
     }
 
     let combined = format!("{stdout_str}{collected}").trim().to_string();
-    if !status.success() {
-        return Err(Error::Other(error_summary(&combined, args)));
-    }
-    Ok(NetworkOutcome { output: combined })
+    Ok(GitRunTranscript {
+        output: combined,
+        success: status.success(),
+    })
 }
 
 /// Pull the meaningful failure out of a git transcript. git streams progress to

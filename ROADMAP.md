@@ -1850,6 +1850,15 @@ flows keyboard-reachable. Core tests and a Computer Use pass verified exact
 refspec rendering, default selection, and an origin-only prune that preserved
 another remote's stale ref plus the dirty worktree.
 
+**Repository maintenance + activity history shipped (2026-07-18):** Quick
+Launch now opens cancellable `git maintenance run`, guarded `git gc`, and
+non-mutating `git fsck --full` actions. Each result retains the exact
+safety-prefixed command, duration, status, and bounded Git transcript in
+Strand's per-repository app database. Focused core tests exercised all three
+commands; a Computer Use pass verified keyboard discovery, integrity output,
+cross-dialog persistence, the GC confirmation boundary, and an unchanged dirty
+worktree/ref fixture.
+
 ---
 
 ## 1.1+ — Post-1.0

@@ -1,6 +1,6 @@
 # Git-client 1.0 parity audit
 
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-18
 
 ## Goal and bar
 
@@ -83,7 +83,7 @@ current official product material for:
 | Rebase | `edit` / pause-to-amend and topology-safe `--rebase-merges` preservation shipped 2026-07-18 | Complete for 1.0 daily use |
 | Branch comparison | First-class local/remote/tag changed-file and full diff comparison shipped 2026-07-18 | Complete for 1.0 daily use |
 | Remote management | Scoped prune, native default-remote selection, fetch/push refspec inspection, and separate fetch/push URL editing shipped 2026-07-18 | Complete for 1.0 daily use |
-| Repository maintenance | `git maintenance` / `gc`, integrity check, and an activity log with exact commands and output | Daily-driver |
+| Repository maintenance | Cancellable `git maintenance run`, guarded `git gc`, `git fsck --full`, and a bounded per-repository activity log with exact commands/captured output shipped 2026-07-18 | Complete for 1.0 daily use |
 | File actions | Open/reveal externally, copy relative or absolute path, jump directly to history/blame, delete, and create file/folder where allowed | Daily-driver |
 | Commit metadata | GPG/SSH signature status, copy subject/body, export patch, and richer multi-selection actions | Daily-driver |
 
@@ -139,11 +139,11 @@ disabled with a reason, and the primary action stays first.
    lifecycle actions, and safe PR worktrees.
 4. **Stable-release hardening** — localization, CSP/capabilities, signed
    installers and update channels, Linux validation, full keyboard/a11y pass.
-5. **Power parity** — bisect, LFS/signing UI, maintenance, Git-flow, sparse
+5. **Power parity** — bisect, LFS/signing UI, Git-flow, sparse
    checkout, and custom actions, taking only the items that fit the 1.0 date.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
-multi-commit actions, branch/ref comparison, and rebase close-out are now
-shipped foundations. The next bounded implementation slice is repository
-maintenance and its inspectable activity log.
+multi-commit actions, branch/ref comparison, rebase close-out, and repository
+maintenance are now shipped foundations. The next bounded implementation slice
+is the remaining file actions.

@@ -54,6 +54,7 @@ import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
 import { RebaseEditor } from './views/RebaseEditor';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
+import { MaintenanceDialog } from './views/MaintenanceDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
@@ -260,6 +261,7 @@ export function App() {
   const [branchCleanupOpen, setBranchCleanupOpen] = useState(false);
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
   const [branchNetworkDialog, setBranchNetworkDialog] = useState<BranchNetworkDialogMode | null>(null);
@@ -1457,6 +1459,10 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
+          setPaletteOpen(false);
+          setMaintenanceOpen(true);
+        } },
         ...refs.remotes.flatMap((remote) => [
           { id: `remote-${remote.name}-prune`, label: `Prune remote: ${remote.name}`, group: 'Actions', keywords: 'remote fetch prune stale tracking refs', run: () => {
             void useRepo.getState().fetchRemote(remote.name, true).then(
@@ -1841,6 +1847,10 @@ export function App() {
 
       {remoteDialog && (
         <RemoteDialog mode={remoteDialog} onClose={() => setRemoteDialog(null)} onToast={showToast} />
+      )}
+
+      {maintenanceOpen && meta && (
+        <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
 
       {renameBranchDialog && (

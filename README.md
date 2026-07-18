@@ -188,8 +188,8 @@ keyboard alone, and the mouse stays first-class.
 Strand is in **alpha** and actively closing its 1.0 milestone. It opens and
 works on large real-world repositories daily, but expect rough edges. The main
 remaining gaps are hosted-review completion, localization, Windows/Linux
-release signing and validation, repository maintenance, and the remaining
-file/commit-metadata daily-driver actions. See the
+release signing and validation, and the remaining file/commit-metadata
+daily-driver actions. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 and [`TASKS.md`](./TASKS.md).
 

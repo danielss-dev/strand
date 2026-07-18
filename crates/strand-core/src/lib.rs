@@ -26,6 +26,7 @@ pub mod network;
 pub mod refs;
 pub mod branch;
 pub mod remote;
+pub mod maintenance;
 pub mod conflict;
 pub mod external;
 pub mod gitconfig;

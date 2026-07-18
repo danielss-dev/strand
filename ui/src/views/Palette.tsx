@@ -208,6 +208,7 @@ export function CommandPalette({ actions, onClose }: Props) {
                 e.preventDefault();
                 cycleScope(e.shiftKey ? -1 : 1);
               } else if (e.key === 'Enter') {
+                e.preventDefault();
                 const item = items[sel];
                 if (item) {
                   item.a.run();
