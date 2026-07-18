@@ -14,6 +14,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod error;
+pub mod init;
 pub mod repo;
 pub mod status;
 pub mod log;

@@ -32,6 +32,8 @@ interface Props {
   onStash: (opts?: { snapshot?: boolean; keepIndex?: boolean }) => void;
   /** Open a repository via the directory picker (tabs-mode `+` menu). */
   onOpenRepo: () => void;
+  /** Open the initialize-local-repository dialog. */
+  onInitRepo: () => void;
   /** Open a recent / dropped repository by path (tabs-mode `+` menu). */
   onOpenRecent: (path: string) => void;
   /** Open the clone dialog (tabs-mode `+` menu). */
@@ -65,6 +67,7 @@ export function Topbar({
   onSaveSnapshot,
   onStash,
   onOpenRepo,
+  onInitRepo,
   onOpenRecent,
   onClone,
   onCustomize,
@@ -153,6 +156,7 @@ export function Topbar({
       {repoNav === 'tabs' ? (
         <RepoTabs
           onOpenRepo={onOpenRepo}
+          onInitRepo={onInitRepo}
           onOpenRecent={onOpenRecent}
           onClone={onClone}
           onCustomize={onCustomize}

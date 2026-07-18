@@ -71,6 +71,7 @@ fn main() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::repo_open,
+            commands::repo_init,
             commands::repo_meta,
             commands::repo_status,
             commands::repo_snapshot,
@@ -196,6 +197,7 @@ fn main() {
             commands::repo_stash_push_paths,
             commands::repo_stash_apply,
             commands::repo_stash_pop,
+            commands::repo_stash_branch,
             commands::repo_stash_drop,
             commands::ai_provider_status,
             commands::ai_provider_login,

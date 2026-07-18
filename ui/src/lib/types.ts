@@ -386,6 +386,12 @@ export interface CheckoutOutcome {
   branch: string;
 }
 
+export interface InitOutcome {
+  path: string;
+  initial_branch: string;
+  initial_commit: string | null;
+}
+
 export interface Stash {
   /** Stash index; 0 is the most recent (git's `stash@{0}`). */
   index: number;

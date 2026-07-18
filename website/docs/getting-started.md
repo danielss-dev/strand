@@ -32,11 +32,13 @@ There are several ways to get a repository open:
 
 - **`Mod+O`** — opens the native folder picker. The picker is multi-select: pick several folders and each opens as its own tab.
 - **Drag and drop** — drop one or more repository folders onto the Strand window.
-- **Topbar `+` menu** — Open, Clone, and a list of recent repositories.
-- **Command palette (`Mod+K`)** — "Open repository…", "Clone repository…", and a Recent group of previously opened repositories.
+- **Topbar `+` menu** — Initialize, Open, Clone, and a list of recent repositories.
+- **Command palette (`Mod+K`)** — "Initialize repository…", "Open repository…", "Clone repository…", and a Recent group of previously opened repositories.
 - **Repo quick-switcher (`Mod+E`)** — a fuzzy overlay over your open repositories and recents; works even with no repository open.
 
 To clone, use the Clone dialog (topbar `+` menu, palette, or the File menu on macOS): paste a URL, pick a destination, and Strand shows streamed clone progress and opens the result when done. Where the pickers start is configurable via Settings → Git → "Default clone & open folder".
+
+To start locally, choose **Initialize repository…** from the `+` menu or palette. Pick or type the folder, choose the initial branch, optionally enter `.gitignore` patterns, and decide whether Strand should create the first commit. Strand never overwrites an existing `.gitignore`.
 
 Open repositories become tabs that are restored the next time you launch Strand. Cycle between them with `Mod+Tab` and `Mod+Shift+Tab`. For grouping several repositories into one working set, see [Repositories and workspaces](repositories-and-workspaces.md).
 

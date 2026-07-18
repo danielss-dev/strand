@@ -182,7 +182,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   --tags`; both shell out via `run_git_streaming` like the other network ops.
   Default remote resolves to HEAD's upstream remote → `origin` → first remote.
   Branch push now exposes `--follow-tags` through `PushMode::FollowTags`.)
-- ◐ Stash create / snapshot / apply / pop / drop (`stash_save` via `stash_save2`
+- ☑ Stash create / snapshot / apply / pop / drop / branch-from (`stash_save` via `stash_save2`
   with `INCLUDE_UNTRACKED` / `KEEP_INDEX` flags — a clean tree returns
   `StashOutcome { oid: None }` instead of erroring; `stash_snapshot` keeps the
   changes in place via `git stash create` + `store` (or `push -u` + `apply
@@ -190,8 +190,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `git stash push -- <pathspec…>` (+ snapshot re-apply); `stash_drop` by index).
   `stash_apply` / `stash_pop` shell out to `git` (`run_git` helper) so a dirty
   index merges like real git instead of git2's blanket "uncommitted changes in
-  the index" refusal. **branch-from still pending** — no direct git2 API; needs
-  branch-at-stash-base + checkout + apply/drop.)
+  the index" refusal. `Repo::stash_branch` shells out to `git stash branch`,
+  exposed in the sidebar and command palette through `BranchDialog`.)
 - ◐ Cherry-pick (single + multi) — `Repo::cherry_pick(&[oid])` shells out to
   `git cherry-pick` (accepts a list); the commit-detail panel wires single-commit
   cherry-pick. Bulk cherry-pick from the graph multi-selection still ☐.
@@ -384,8 +384,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 ## Frontend — components & wiring
 
 ### Repo opening
-- ☐ Create a new local repository (initial branch + optional `.gitignore` /
-  first commit), as required by PRD §6.1 P0.
+- ☑ Create a new local repository (initial branch + optional `.gitignore` /
+  first commit), as required by PRD §6.1 P0 (`init_repository`, `repo_init`,
+  `InitRepoDialog`, topbar/rail menus + command palette).
 - ☑ "Open repository" command (palette + ⌘O + topbar `+` dropdown) using `plugin-dialog`.
   The picker is **multi-select** (`pickRepoDirectories`, `multiple: true`) — pick
   several folders at once and each opens as its own tab via `App.openMany`

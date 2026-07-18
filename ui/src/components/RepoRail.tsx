@@ -12,6 +12,7 @@ import type { RepoTab } from '../stores/repo';
 
 interface Props {
   onOpenRepo: () => void;
+  onInitRepo: () => void;
   onOpenRecent: (path: string) => void;
   onClone: () => void;
   /** Open the icon-customization dialog for a repo tab. */
@@ -39,7 +40,7 @@ interface MenuState {
  * of the same repo nest as smaller sub-tiles beneath their parent. Scales to
  * many repos by scrolling vertically instead of clipping like the tab strip.
  */
-export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces, onWorktreeReview, onWorktreeMerge }: Props) {
+export function RepoRail({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCustomize, onManageWorkspaces, onWorktreeReview, onWorktreeMerge }: Props) {
   const tabs = useRepo((s) => s.tabs);
   const activeTabPath = useRepo((s) => s.activeTabPath);
   const setActiveTab = useRepo((s) => s.setActiveTab);
@@ -146,7 +147,7 @@ export function RepoRail({ onOpenRepo, onOpenRecent, onClone, onCustomize, onMan
         {ordered.map(renderTile)}
       </div>
 
-      <RailAddButton onOpenRepo={onOpenRepo} onOpenRecent={onOpenRecent} onClone={onClone} />
+      <RailAddButton onOpenRepo={onOpenRepo} onInitRepo={onInitRepo} onOpenRecent={onOpenRecent} onClone={onClone} />
 
       {menu && createPortal(
         <RailContextMenu
@@ -233,10 +234,12 @@ function RailContextMenu({
  */
 function RailAddButton({
   onOpenRepo,
+  onInitRepo,
   onOpenRecent,
   onClone,
 }: {
   onOpenRepo: () => void;
+  onInitRepo: () => void;
   onOpenRecent: (path: string) => void;
   onClone: () => void;
 }) {
@@ -283,6 +286,15 @@ function RailAddButton({
             <span className="ico"><Icon name="folder-open" size={13} /></span>
             <span className="label">Open repository…</span>
             <span className="meta">⌘O</span>
+          </button>
+          <button
+            type="button"
+            className="repo-menu-item"
+            role="menuitem"
+            onClick={() => { setOpen(false); onInitRepo(); }}
+          >
+            <span className="ico"><Icon name="branch" size={13} /></span>
+            <span className="label">Initialize repository…</span>
           </button>
           <button
             type="button"

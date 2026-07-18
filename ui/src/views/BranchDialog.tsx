@@ -18,13 +18,17 @@ import { useRepo } from '../stores/repo';
 export function BranchDialog({
   start,
   startLabel,
+  stashIndex,
   onClose,
 }: {
   start: string | null;
   startLabel: string;
+  /** When set, run `git stash branch` instead of ordinary branch creation. */
+  stashIndex?: number;
   onClose: () => void;
 }) {
   const createBranch = useRepo((s) => s.createBranch);
+  const createFromStash = useRepo((s) => s.stashBranch);
 
   const [name, setName] = useState('');
   const [checkout, setCheckout] = useState(true);
@@ -82,7 +86,8 @@ export function BranchDialog({
     setBusy(true);
     setError(null);
     try {
-      await createBranch(branchName, start, checkout);
+      if (stashIndex == null) await createBranch(branchName, start, checkout);
+      else await createFromStash(stashIndex, branchName);
       onClose();
     } catch (e) {
       if (mountedRef.current) setError(errMessage(e));
@@ -102,13 +107,13 @@ export function BranchDialog({
         className="clone-dialog stash-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="New branch"
+        aria-label={stashIndex == null ? 'New branch' : 'Branch from stash'}
         ref={dialogRef}
         onKeyDown={onTrapKeyDown}
       >
         <div className="clone-head">
           <Icon name="branch" size={15} />
-          <span className="title">New branch</span>
+          <span className="title">{stashIndex == null ? 'New branch' : 'Branch from stash'}</span>
           <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={onClose}>
             ×
           </button>
@@ -116,7 +121,8 @@ export function BranchDialog({
 
         <div className="clone-body">
           <p className="stash-blurb">
-            Branch from <code>{startLabel}</code>.
+            {stashIndex == null ? 'Branch from ' : 'Create and check out a branch from '}
+            <code>{startLabel}</code>{stashIndex == null ? '.' : '. The stash is removed after a clean apply.'}
           </p>
 
           <label className="clone-field">
@@ -136,15 +142,17 @@ export function BranchDialog({
             />
           </label>
 
-          <label className="stash-check">
-            <input
-              type="checkbox"
-              checked={checkout}
-              disabled={busy}
-              onChange={(e) => setCheckout(e.target.checked)}
-            />
-            <span>Check out after creating</span>
-          </label>
+          {stashIndex == null && (
+            <label className="stash-check">
+              <input
+                type="checkbox"
+                checked={checkout}
+                disabled={busy}
+                onChange={(e) => setCheckout(e.target.checked)}
+              />
+              <span>Check out after creating</span>
+            </label>
+          )}
 
           {error ? <div className="clone-error">{error}</div> : null}
         </div>
@@ -154,7 +162,7 @@ export function BranchDialog({
             Cancel
           </button>
           <button type="button" className="btn primary" disabled={busy} onClick={() => void submit()}>
-            {busy ? 'Creating…' : 'Create branch'}
+            {busy ? 'Creating…' : stashIndex == null ? 'Create branch' : 'Create from stash'}
           </button>
         </div>
       </div>

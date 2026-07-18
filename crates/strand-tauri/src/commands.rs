@@ -19,6 +19,7 @@ use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity},
+    init::{init_repository, InitOutcome},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
@@ -187,6 +188,24 @@ pub async fn repo_refs(path: String) -> CmdResult<Refs> {
 #[tauri::command(async)]
 pub async fn azdo_helper_status(app: AppHandle) -> CmdResult<azdo_helper::HelperStatus> {
     run_blocking("Azure DevOps Server helper status", move || Ok(azdo_helper::status(&app))).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_init(
+    path: String,
+    initial_branch: String,
+    gitignore: Option<String>,
+    create_initial_commit: bool,
+) -> CmdResult<InitOutcome> {
+    run_blocking("initialize repository", move || {
+        Ok(init_repository(
+            &path,
+            &initial_branch,
+            gitignore.as_deref(),
+            create_initial_commit,
+        )?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
@@ -1459,6 +1478,12 @@ pub fn repo_stash_apply(path: String, index: usize) -> CmdResult<()> {
 #[tauri::command(async)]
 pub fn repo_stash_pop(path: String, index: usize) -> CmdResult<()> {
     Repo::discover(&path)?.stash_pop(index)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn repo_stash_branch(path: String, index: usize, branch: String) -> CmdResult<()> {
+    Repo::discover(&path)?.stash_branch(index, &branch)?;
     Ok(())
 }
 

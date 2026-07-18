@@ -81,6 +81,8 @@ interface SidebarProps {
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
   onCreateBranch: (start: string | null, label: string) => void;
+  /** Open the branch-from-stash dialog for `stash@{index}`. */
+  onBranchFromStash: (index: number) => void;
   /** Open the New-worktree dialog, optionally pre-picking a start point
    * (`ref` = branch/tag/commit for the new task branch). */
   onCreateWorktree: (start?: { ref: string; label: string }) => void;
@@ -163,7 +165,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onToast }: SidebarProps) {
+export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -783,6 +785,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const stashMenu = (s: Stash): MenuItem[] => [
     { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(() => stashApply(s.index)) },
     { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
+    { label: 'Create branch from stash…', icon: 'branch', onSelect: () => onBranchFromStash(s.index) },
     { label: 'Copy stash name', icon: 'file', onSelect: () => { void copyToClipboard(`stash@{${s.index}}`); onToast('Stash name copied'); } },
     { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(s.oid); onToast('Commit SHA copied'); } },
     { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => stashDrop(s.index)) },

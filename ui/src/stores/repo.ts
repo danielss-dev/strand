@@ -554,6 +554,8 @@ export interface RepoState {
   stashApply(index: number): Promise<void>;
   /** Apply a stash by index and drop it on success. */
   stashPop(index: number): Promise<void>;
+  /** Create and check out a branch from a stash, dropping it on clean apply. */
+  stashBranch(index: number, branch: string): Promise<void>;
   /** Drop a stash by index without applying it. Destructive. */
   stashDrop(index: number): Promise<void>;
 
@@ -1961,6 +1963,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoStashPop(path, index);
+    await Promise.all([get().refreshStashes(), get().refreshLocalChanges(), get().refreshLog()]);
+  },
+  async stashBranch(index, branch) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoStashBranch(path, index, branch);
     await Promise.all([get().refreshStashes(), get().refreshLocalChanges(), get().refreshLog()]);
   },
   async stashDrop(index) {

@@ -188,6 +188,26 @@ impl Repo {
         Ok(())
     }
 
+    /// Create and check out `branch` at a stash's base, apply the stash, and
+    /// drop it only after a clean apply (`git stash branch`). Conflicts leave
+    /// the branch checked out and the stash intact, matching Git.
+    pub fn stash_branch(&self, index: usize, branch: &str) -> Result<()> {
+        let branch = branch.trim();
+        if branch.is_empty()
+            || branch.starts_with('-')
+            || !git2::Reference::is_valid_name(&format!("refs/heads/{branch}"))
+        {
+            return Err(Error::Other(format!("invalid branch name: {branch}")));
+        }
+        self.run_git(&[
+            "stash",
+            "branch",
+            branch,
+            &format!("stash@{{{index}}}"),
+        ])?;
+        Ok(())
+    }
+
     /// Run a blocking `git` subcommand in the repo's working directory and
     /// return trimmed stdout, mapping a non-zero exit to its stderr. Mirrors
     /// the `git`-subprocess approach in [`network`](crate::network);
@@ -364,6 +384,29 @@ mod tests {
 
         let stashes = repo.stash_list().unwrap();
         assert_eq!(stashes.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stash_branch_checks_out_base_and_drops_stash() {
+        let dir = std::env::temp_dir().join(format!("strand-stash-branch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "base"]);
+        std::fs::write(dir.join("a.txt"), "two\n").unwrap();
+        git(&dir, &["stash", "push", "-q", "-m", "branch me"]);
+
+        let repo = Repo::discover(&dir).unwrap();
+        repo.stash_branch(0, "from-stash").unwrap();
+        assert_eq!(git(&dir, &["branch", "--show-current"]), "from-stash");
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap().trim(), "two");
+        assert!(repo.stash_list().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

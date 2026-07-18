@@ -45,6 +45,7 @@ import {
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import { CloneDialog } from './views/CloneDialog';
+import { InitRepoDialog, type InitRepoRequest } from './views/InitRepoDialog';
 import { SettingsDialog, type SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { BranchDialog } from './views/BranchDialog';
@@ -240,13 +241,18 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [initRepoOpen, setInitRepoOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean; keepIndex: boolean } | null>(null);
   const stashDialogRequest = useRepo((s) => s.stashDialogRequest);
   const clearStashDialogRequest = useRepo((s) => s.clearStashDialogRequest);
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
-  const [branchDialog, setBranchDialog] = useState<{ start: string | null; label: string } | null>(null);
+  const [branchDialog, setBranchDialog] = useState<{
+    start: string | null;
+    label: string;
+    stashIndex?: number;
+  } | null>(null);
   const [branchCleanupOpen, setBranchCleanupOpen] = useState(false);
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
@@ -548,6 +554,17 @@ export function App() {
       setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));
     }
   }, [showToast, nextOpId]);
+
+  const runInitRepo = useCallback(async (request: InitRepoRequest) => {
+    const outcome = await tauri.repoInit(
+      request.path,
+      request.initialBranch,
+      request.gitignore,
+      request.createInitialCommit,
+    );
+    await useWorkspaces.getState().openRepoInActive(outcome.path);
+    showToast(`Initialized ${basename(outcome.path)} on ${outcome.initial_branch}`);
+  }, [showToast]);
 
   // Open a batch of repos as tabs, one after another. Sequential (not
   // parallel) so the shared active-tab state and the progress popup don't race
@@ -1227,6 +1244,18 @@ export function App() {
           void stashPop(st.index).catch((e) => showToast(`Pop failed: ${errMessage(e)}`, 'error'));
         },
       });
+      out.push({
+        id: `stash-branch:${st.oid}`,
+        label: `Create branch from stash: ${st.message}`,
+        group: 'Stashes',
+        keywords: `stash branch checkout ${st.branch ?? ''}`,
+        meta: `stash@{${st.index}}`,
+        run: () => setBranchDialog({
+          start: `stash@{${st.index}}`,
+          label: `stash@{${st.index}}`,
+          stashIndex: st.index,
+        }),
+      });
     }
 
     // Submodules — recursive init + update, same as the sidebar action.
@@ -1253,6 +1282,7 @@ export function App() {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
+      { id: 'init',    label: 'Initialize repository…', group: 'Actions', keywords: 'new create git init local repository', run: () => setInitRepoOpen(true) },
       { id: 'clone',   label: 'Clone repository…', group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
       { id: 'workspace-new', label: 'New workspace…', group: 'Actions', keywords: 'workspace create group repositories multi repo', run: () => setWorkspaceManagerOpen('create') },
@@ -1548,6 +1578,7 @@ export function App() {
           onSaveSnapshot={() => setStashDialog({ snapshot: true, keepIndex: false })}
           onStash={(opts) => setStashDialog({ snapshot: opts?.snapshot ?? false, keepIndex: opts?.keepIndex ?? false })}
           onOpenRepo={openViaDialog}
+          onInitRepo={() => setInitRepoOpen(true)}
           onOpenRecent={openByPath}
           onClone={() => setCloneOpen(true)}
           onCustomize={openIconDialog}
@@ -1560,6 +1591,7 @@ export function App() {
           {repoNav === 'rail' && (
             <RepoRail
               onOpenRepo={openViaDialog}
+              onInitRepo={() => setInitRepoOpen(true)}
               onOpenRecent={openByPath}
               onClone={() => setCloneOpen(true)}
               onCustomize={openIconDialog}
@@ -1576,6 +1608,11 @@ export function App() {
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
+                onBranchFromStash={(index) => setBranchDialog({
+                  start: `stash@{${index}}`,
+                  label: `stash@{${index}}`,
+                  stashIndex: index,
+                })}
                 onCreateWorktree={(start) => setWorktreeDialog({ start: start ?? null })}
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
@@ -1714,6 +1751,10 @@ export function App() {
         <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
       )}
 
+      {initRepoOpen && (
+        <InitRepoDialog onClose={() => setInitRepoOpen(false)} onInit={runInitRepo} />
+      )}
+
       {stashDialog && (
         <StashDialog
           snapshot={stashDialog.snapshot}
@@ -1734,6 +1775,7 @@ export function App() {
         <BranchDialog
           start={branchDialog.start}
           startLabel={branchDialog.label}
+          stashIndex={branchDialog.stashIndex}
           onClose={() => setBranchDialog(null)}
         />
       )}

@@ -1783,6 +1783,16 @@ operable provider accordions. GitHub and Azure report their signed-in `gh` / `az
 account, while Server readiness reflects the verified helper plus a configured
 vault PAT or Windows-auth profile without exposing credentials.
 
+**Repository setup + stash-to-branch shipped (2026-07-18):** The first daily-
+local-Git close-out slice adds `init_repository` / `repo_init` and a keyboard-
+operable Initialize repository dialog for an initial branch, optional
+`.gitignore`, and optional first commit. The action is available from both
+repository navigation menus and the command palette. `Repo::stash_branch`
+wraps Git's conflict-safe `stash branch` behavior; sidebar and palette actions
+reuse `BranchDialog` to name the new branch. Focused Rust tests, Tauri/Rust
+checks, TypeScript, and a Computer Use pass on the running Windows app verified
+repository creation and a full stash-to-branch round trip.
+
 ---
 
 ## 1.1+ — Post-1.0

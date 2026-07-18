@@ -24,6 +24,7 @@ import type {
   FileStatus,
   GlobalIdentity,
   HostingConnectionStatus,
+  InitOutcome,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -96,6 +97,12 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoInit: (
+    path: string,
+    initialBranch: string,
+    gitignore: string | null,
+    createInitialCommit: boolean,
+  ) => invoke<InitOutcome>('repo_init', { path, initialBranch, gitignore, createInitialCommit }),
   azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
   hostingConnectionStatus: () => invoke<HostingConnectionStatus>('hosting_connection_status'),
   azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
@@ -538,6 +545,8 @@ export const tauri = {
   repoStashApply: (path: string, index: number) =>
     invoke<void>('repo_stash_apply', { path, index }),
   repoStashPop: (path: string, index: number) => invoke<void>('repo_stash_pop', { path, index }),
+  repoStashBranch: (path: string, index: number, branch: string) =>
+    invoke<void>('repo_stash_branch', { path, index, branch }),
   repoStashDrop: (path: string, index: number) => invoke<void>('repo_stash_drop', { path, index }),
 
   aiProviderStatus: (

@@ -27,6 +27,10 @@ Network operations shell out to your system git, so SSH keys, credential helpers
 
 In [Settings](settings.md) → Git, **Default clone & open folder** sets where the clone dialog and the open-repository picker start. Use Choose… to set it and Clear to remove it.
 
+## Initializing a repository
+
+Choose **Initialize repository…** from the repository `+` menu or the command palette. The dialog accepts a local folder and initial branch plus optional `.gitignore` patterns and an optional first commit. The first commit contains only the new `.gitignore`, or is empty when no patterns are entered. Strand refuses to overwrite an existing `.gitignore` and opens the initialized repository as a tab when complete.
+
 ## Rail or tabs
 
 Open repositories show in one of two layouts, chosen in [Settings](settings.md) → Appearance → **Open repositories**:

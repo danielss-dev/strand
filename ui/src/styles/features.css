@@ -4144,6 +4144,10 @@ textarea.clone-input {
   flex-direction: column;
   gap: 14px;
 }
+.init-repo-path .clone-input {
+  flex: 1;
+  min-width: 0;
+}
 .hosting-heading {
   display: flex;
   align-items: flex-start;
