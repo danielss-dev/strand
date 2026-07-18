@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Icon, type IconName } from '../components/Icon';
+import { t, type MessageKey } from '../lib/i18n';
 import { AiSection } from './settings/AiSection';
 import { AppearanceSection } from './settings/AppearanceSection';
 import { DiffSection } from './settings/DiffSection';
@@ -28,16 +29,16 @@ import { UpdatesSection } from './settings/UpdatesSection';
 export type SettingsSectionId =
   | 'appearance' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'updates' | 'privacy';
 
-const SECTIONS: { id: SettingsSectionId; label: string; icon: IconName }[] = [
-  { id: 'appearance', label: 'Appearance', icon: 'eye' },
-  { id: 'diff', label: 'Diff', icon: 'compare' },
-  { id: 'keyboard', label: 'Keyboard', icon: 'command' },
-  { id: 'git', label: 'Git', icon: 'branch' },
-  { id: 'hosting', label: 'Hosting', icon: 'remote' },
-  { id: 'integrations', label: 'Integrations', icon: 'external' },
-  { id: 'ai', label: 'AI', icon: 'sparkle' },
-  { id: 'updates', label: 'Updates', icon: 'sync' },
-  { id: 'privacy', label: 'Privacy', icon: 'lock' },
+const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] = [
+  { id: 'appearance', label: 'settings.appearance', icon: 'eye' },
+  { id: 'diff', label: 'settings.diff', icon: 'compare' },
+  { id: 'keyboard', label: 'settings.keyboard', icon: 'command' },
+  { id: 'git', label: 'settings.git', icon: 'branch' },
+  { id: 'hosting', label: 'settings.hosting', icon: 'remote' },
+  { id: 'integrations', label: 'settings.integrations', icon: 'external' },
+  { id: 'ai', label: 'settings.ai', icon: 'sparkle' },
+  { id: 'updates', label: 'settings.updates', icon: 'sync' },
+  { id: 'privacy', label: 'settings.privacy', icon: 'lock' },
 ];
 
 export function SettingsDialog({
@@ -115,14 +116,14 @@ export function SettingsDialog({
         className="clone-dialog settings-dialog settings-dialog-lg"
         role="dialog"
         aria-modal="true"
-        aria-label="Settings"
+        aria-label={t('settings.title')}
         ref={dialogRef}
         onKeyDown={onTrapKeyDown}
       >
         <div className="clone-head">
           <Icon name="settings" size={15} />
-          <span className="title">Settings</span>
-          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>
+          <span className="title">{t('settings.title')}</span>
+          <button type="button" className="cd-close" aria-label={t('common.close')} onClick={onClose}>
             ×
           </button>
         </div>
@@ -132,7 +133,7 @@ export function SettingsDialog({
             className="settings-nav"
             role="tablist"
             aria-orientation="vertical"
-            aria-label="Settings sections"
+            aria-label={t('settings.sections')}
             ref={navRef}
             onKeyDown={onNavKeyDown}
           >
@@ -150,7 +151,7 @@ export function SettingsDialog({
                 onClick={() => setSection(s.id)}
               >
                 <Icon name={s.icon} size={13} />
-                {s.label}
+                {t(s.label)}
               </button>
             ))}
           </div>
@@ -175,7 +176,7 @@ export function SettingsDialog({
 
         <div className="clone-foot">
           <button type="button" className="btn primary" onClick={onClose}>
-            Done
+            {t('settings.done')}
           </button>
         </div>
       </div>

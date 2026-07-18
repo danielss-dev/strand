@@ -60,9 +60,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   shared Code composer).
 - ◐ **Stable-release hardening.** Production CSP, the exact least-privilege
   desktop capability allowlist, signed stable-update policy enforcement, and
-  the fresh-clone hook warning are shipped. Localization, trusted Windows/Linux
-  installers, Linux GNOME+KDE validation, and the full keyboard/accessibility/
-  release-quality pass remain.
+  the fresh-clone hook warning, and the typed English localization baseline are
+  shipped. Trusted Windows/Linux installers, Linux GNOME+KDE validation, and
+  the full keyboard/accessibility/release-quality pass remain.
 - ☑ **Power parity selection.** Keep the already-shipped signature verification
   and exact patch/series export in 1.0; defer guided bisect, LFS management,
   signing controls/key selection, Git-flow, sparse checkout, patch import/
@@ -1247,7 +1247,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ Status-bar: real GPG / LFS / sync state
 - ☐ Toast system → proper notification component
 - ☐ Empty-state copy for every panel (PRD §9: "no 'no data' labels")
-- ☐ Localization framework (English at launch)
+- ☑ Localization framework, English at launch (`lib/i18n.ts`: typed catalog,
+  fail-fast interpolation, English plurals, browser-locale date/number/percent
+  helpers; app navigation/settings shell and clone/update flows migrated;
+  contract in `docs/localization.md`, 2026-07-18)
 
 ---
 

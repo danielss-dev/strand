@@ -2,6 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useEffect, useState } from 'react';
 
 import { isTauri } from '../../lib/tauri';
+import { formatNumber, formatPercent, t } from '../../lib/i18n';
 import { useSettings } from '../../stores/settings';
 import { useUpdates } from '../../stores/updates';
 import { CheckRow } from './shared';
@@ -30,30 +31,34 @@ export function UpdatesSection() {
 
   const inTauri = isTauri();
   const statusLine =
-    status === 'checking' ? 'Checking…'
-    : status === 'upToDate' ? 'You’re on the latest version.'
-    : status === 'available' ? `Version ${version} is available.`
+    status === 'checking' ? t('updates.checking')
+    : status === 'upToDate' ? t('updates.current')
+    : status === 'available' ? t('updates.available', { version: version ?? '' })
     : status === 'downloading'
-      ? `Downloading… ${total ? `${Math.round((received / total) * 100)}%` : `${Math.round(received / 1024 / 1024)} MB`}`
-    : status === 'ready' ? 'Update installed — restart to finish.'
-    : status === 'error' ? `Couldn’t reach the update server${error ? ` (${error})` : ''}.`
+      ? t('updates.downloading', {
+          progress: total
+            ? formatPercent(received / total)
+            : `${formatNumber(received / 1024 / 1024, { maximumFractionDigits: 0 })} MB`,
+        })
+    : status === 'ready' ? t('updates.ready')
+    : status === 'error' ? error ? t('updates.errorReason', { reason: error }) : t('updates.error')
     : null;
 
   return (
-    <section className="settings-section" aria-label="Updates">
+    <section className="settings-section" aria-label={t('updates.section')}>
       <div className="settings-field">
-        <span className="settings-field-label">Version</span>
+        <span className="settings-field-label">{t('updates.version')}</span>
         <div className="settings-row">
           <span className="settings-path">
-            {inTauri ? `Strand ${current ?? '…'}` : 'Strand (browser preview)'}
+            {inTauri ? `Strand ${current ?? '…'}` : t('updates.browserPreview')}
           </span>
           {status === 'available' ? (
             <button type="button" className="btn primary" onClick={() => void downloadAndInstall()}>
-              Download &amp; install
+              {t('updates.downloadInstall')}
             </button>
           ) : status === 'ready' ? (
             <button type="button" className="btn primary" onClick={() => void restart()}>
-              Restart now
+              {t('updates.restart')}
             </button>
           ) : (
             <button
@@ -62,7 +67,7 @@ export function UpdatesSection() {
               disabled={!inTauri || status === 'checking' || status === 'downloading'}
               onClick={() => void checkNow()}
             >
-              Check for updates
+              {t('updates.check')}
             </button>
           )}
         </div>
@@ -71,7 +76,7 @@ export function UpdatesSection() {
             className="settings-progress"
             value={total ? received : undefined}
             max={total ?? undefined}
-            aria-label="Download progress"
+            aria-label={t('updates.downloadProgress')}
           />
         )}
         {statusLine && (
@@ -83,16 +88,16 @@ export function UpdatesSection() {
       </div>
 
       <div className="settings-field">
-        <span className="settings-field-label">Automatic updates</span>
+        <span className="settings-field-label">{t('updates.automatic')}</span>
         <div className="settings-rows">
           <CheckRow
-            label="Check for updates on launch"
+            label={t('updates.checkOnLaunch')}
             checked={autoCheck}
             onChange={(v) => set('updateAutoCheck', v)}
           />
           <CheckRow
-            label="Download and install automatically"
-            hint="Updates apply on the next restart; Strand never restarts itself."
+            label={t('updates.installAutomatically')}
+            hint={t('updates.restartHint')}
             checked={autoInstall}
             onChange={(v) => set('updateAutoInstall', v)}
           />

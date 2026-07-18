@@ -11,6 +11,7 @@ import {
   type TreeMenuItem,
 } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
+import { t } from '../lib/i18n';
 import { worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
@@ -1211,26 +1212,26 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       <div className="side-primary">
         <SideRow
           icon="changes"
-          label="Local Changes"
+          label={t('nav.localChanges')}
           badge={unstaged || undefined}
           active={view === 'local'}
           onClick={() => { setView('local'); selectFile(null); }}
         />
         <SideRow
           icon="check"
-          label="Review"
+          label={t('nav.review')}
           active={view === 'review' || view === 'workspace-review'}
           onClick={() => { setView('review'); selectFile(null); }}
         />
         <SideRow
           icon="remote"
-          label="Pull Requests"
+          label={t('nav.pullRequests')}
           active={view === 'pull-requests'}
           onClick={() => { setView('pull-requests'); selectFile(null); }}
         />
         <SideRow
           icon="graph"
-          label="All Commits"
+          label={t('nav.allCommits')}
           active={view === 'commits' || view === 'reflog'}
           onClick={() => { setView('commits'); selectFile(null); }}
         />
@@ -1239,11 +1240,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       <div className="side-tabs">
         <button type="button" className={'side-tab' + (tab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
           <Icon name="branch" size={12} />
-          <span>Git</span>
+          <span>{t('nav.git')}</span>
         </button>
         <button type="button" className={'side-tab' + (tab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
           <Icon name="folder" size={12} />
-          <span>Files</span>
+          <span>{t('nav.files')}</span>
         </button>
       </div>
 
@@ -1253,8 +1254,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter branches, tags…"
-            aria-label="Filter branches and tags"
+            placeholder={t('nav.filterRefs')}
+            aria-label={t('nav.filterRefsLabel')}
           />
         </div>
       )}

@@ -1076,7 +1076,9 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   DevOps Services keeps the official `az` path. GitLab and Bitbucket are
   follow-on provider adapters.
 - ☐ Telemetry (opt-in, clearly disclosed)
-- ☐ Localization framework + English baseline
+- ☑ Localization framework + English baseline (`lib/i18n.ts` typed catalog,
+  interpolation/plurals, locale-aware formatters, and migrated navigation,
+  settings shell, clone, and updater surfaces; 2026-07-18)
 - ☑ Performance pass on 100k-commit repos — closed 2026-07-06 with the 0.5
   perf pass: every PRD §8 target passes on its measured platform, and the
   engine numbers are taken on the 100k-commit / 10k-file fixtures
@@ -1966,6 +1968,15 @@ checkout, patch import/mailbox/bundles, expanded submodule lifecycle, and custom
 actions are explicitly 1.1 work. These surfaces mutate signing identity,
 repository shape, or execute new external/user-defined workflows, so they will
 not enter after the 1.0 daily-driver and hosted-review gates have closed.
+
+**English localization baseline shipped (2026-07-18):** `lib/i18n.ts` is the
+typed catalog and formatting seam for future languages, with fail-fast
+interpolation, English plural selection, and browser-locale date/number/percent
+formatters. App-wide navigation and the settings shell plus the release-critical
+clone and updater flows now use catalog keys. The contract keeps raw Git/provider
+diagnostics verbatim inside translated Strand context and intentionally withholds
+a locale picker until another complete catalog exists. TypeScript and 275 UI
+tests, including focused catalog/formatting coverage, are green.
 
 ---
 

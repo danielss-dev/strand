@@ -27,6 +27,7 @@ import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberS
 import { buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
+import { t } from './lib/i18n';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { appMenuInstalled, installAppMenu, type MenuHandlers } from './lib/menu';
@@ -1302,7 +1303,7 @@ export function App() {
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
       { id: 'init',    label: 'Initialize repository…', group: 'Actions', keywords: 'new create git init local repository', run: () => setInitRepoOpen(true) },
-      { id: 'clone',   label: 'Clone repository…', group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
+      { id: 'clone',   label: t('clone.paletteAction'), group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
       { id: 'workspace-new', label: 'New workspace…', group: 'Actions', keywords: 'workspace create group repositories multi repo', run: () => setWorkspaceManagerOpen('create') },
       { id: 'workspace-manage', label: 'Manage workspaces…', group: 'Actions', keywords: 'workspace edit curate repositories add remove rename delete', run: () => setWorkspaceManagerOpen(true) },
@@ -2270,13 +2271,13 @@ function MainHeader({
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
   const wsMembers = useWorkspaceReview((s) => s.members);
-  const title = view === 'local' ? 'Local Changes'
-    : view === 'commits' ? 'All Commits'
-    : view === 'reflog' ? 'Reflog'
-    : view === 'review' ? 'Review'
-    : view === 'workspace-review' ? 'Workspace Review'
-    : view === 'worktrees' ? 'Worktrees'
-    : view === 'branch' ? 'Branch'
+  const title = view === 'local' ? t('nav.localChanges')
+    : view === 'commits' ? t('nav.allCommits')
+    : view === 'reflog' ? t('nav.reflog')
+    : view === 'review' ? t('nav.review')
+    : view === 'workspace-review' ? t('nav.workspaceReview')
+    : view === 'worktrees' ? t('nav.worktrees')
+    : view === 'branch' ? t('nav.branch')
     : '';
   const sub = view === 'local'
     ? `${meta?.branch ?? '—'} · ${status.length} files with changes`

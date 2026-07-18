@@ -64,7 +64,7 @@ current official product material for:
 | Gap | Current state | 1.0 acceptance bar |
 | --- | --- | --- |
 | Hosted review completion | GitHub/Azure list, detail, threads, comments, readiness, follow, create, merge, close/reopen, and terminal read-only gating exist | Submit approve/request-changes reviews; viewed-file and unresolved-thread progress; update/check out branch; preserve drafts on provider failure |
-| Localization | English strings are embedded throughout the UI | Translation framework, English catalog, locale-safe dates/numbers, and no user-visible string trapped in backend-only errors |
+| Localization | Complete 2026-07-18: typed English catalog, interpolation/plurals, locale-aware formatters, and migrated global/release-critical surfaces | Keep new Strand-owned copy in the catalog; preserve raw Git/provider diagnostics inside translated context; add a locale picker only with another complete catalog |
 | Signed platform distribution | macOS signed/notarized; Windows EV and Linux signing open | Trusted installer/update path on macOS, Windows, and Linux; stable and beta update channels |
 | Security hardening | Complete 2026-07-18: production CSP, exact local desktop capability allowlist, signed stable-updater policy gate, and pre-URL clone-hook warning | Keep `pnpm release:check-security` green in PR and release CI; repeat the production-protocol smoke test for release candidates |
 | Platform validation | Windows runtime pass exists; Linux and several integration presets remain unverified | GNOME + KDE pass, Windows/Linux editor-terminal presets, credential prompts, file dialogs, shortcuts, and updater smoke-tested |

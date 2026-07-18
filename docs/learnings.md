@@ -1706,3 +1706,11 @@ OS-info commands even though the OS plugin injects platform internals, so do
 not restore `os:default`. Verify changes against an exact workspace executable
 path: launching by app identity on Windows may resolve to the installed
 `C:\Program Files\Strand\strand.exe` and produce false release evidence.
+
+**English is a typed catalog, not an excuse for fixed formatting (2026-07-18).**
+Put new Strand-owned UI copy in `ui/src/lib/i18n.ts`; unknown keys should remain
+a TypeScript error and missing interpolation values should fail loudly. Use its
+plural and browser-locale formatting helpers for counts, dates, numbers, and
+percentages. Keep Git/provider diagnostics verbatim and translate only Strand's
+context around them. Do not expose a locale picker until another catalog is
+complete enough to avoid a partially translated application.

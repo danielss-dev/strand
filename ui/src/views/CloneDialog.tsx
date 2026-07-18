@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { pickDirectory } from '../lib/dialog';
+import { t } from '../lib/i18n';
 import { useSettings } from '../stores/settings';
 
 /**
@@ -78,7 +79,7 @@ export function CloneDialog({
   const canClone = Boolean(url.trim() && dest);
 
   async function chooseParent() {
-    const dir = await pickDirectory('Clone into…', parent || undefined);
+    const dir = await pickDirectory(t('clone.pickerTitle'), parent || undefined);
     if (dir) setParent(dir);
   }
 
@@ -99,14 +100,14 @@ export function CloneDialog({
         className="clone-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Clone repository"
+        aria-label={t('clone.title')}
         ref={dialogRef}
         onKeyDown={onTrapKeyDown}
       >
         <div className="clone-head">
           <Icon name="remote" size={15} />
-          <span className="title">Clone repository</span>
-          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>
+          <span className="title">{t('clone.title')}</span>
+          <button type="button" className="cd-close" aria-label={t('common.close')} onClick={onClose}>
             ×
           </button>
         </div>
@@ -114,13 +115,11 @@ export function CloneDialog({
         <div className="clone-body">
           <div className="clone-security-note" role="note">
             <Icon name="warning" size={14} />
-            <span>
-              Clone may run hooks installed by your Git template or system configuration. Only clone repositories and URLs you trust.
-            </span>
+            <span>{t('clone.securityNotice')}</span>
           </div>
 
           <label className="clone-field">
-            <span className="lbl">Repository URL</span>
+            <span className="lbl">{t('clone.repositoryUrl')}</span>
             <input
               ref={urlRef}
               autoFocus
@@ -135,19 +134,19 @@ export function CloneDialog({
           </label>
 
           <label className="clone-field">
-            <span className="lbl">Destination folder</span>
+            <span className="lbl">{t('clone.destinationFolder')}</span>
             <div className="clone-dest">
               <button type="button" className="btn" onClick={() => void chooseParent()}>
-                Choose…
+                {t('common.choose')}
               </button>
               <span className="clone-dest-path" title={parent || undefined}>
-                {parent || 'No folder chosen'}
+                {parent || t('clone.noFolder')}
               </span>
             </div>
           </label>
 
           <label className="clone-field">
-            <span className="lbl">Folder name</span>
+            <span className="lbl">{t('clone.folderName')}</span>
             <input
               className="clone-input"
               placeholder="repo"
@@ -163,20 +162,20 @@ export function CloneDialog({
           </label>
 
           {trimmedName && !nameValid ? (
-            <div className="clone-error">Folder name must be a single folder, with no slashes or “..”.</div>
+            <div className="clone-error">{t('clone.invalidFolder')}</div>
           ) : dest ? (
             <div className="clone-dest-full">
-              Clones into <code>{dest}</code>
+              {t('clone.destinationPrefix')} <code>{dest}</code>
             </div>
           ) : null}
         </div>
 
         <div className="clone-foot">
           <button type="button" className="btn" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="button" className="btn primary" disabled={!canClone} onClick={start}>
-            Clone
+            {t('clone.action')}
           </button>
         </div>
       </div>
