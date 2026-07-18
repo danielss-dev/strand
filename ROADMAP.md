@@ -1959,6 +1959,14 @@ custom-protocol workspace binary was built and verified with Computer Use for
 CSP/session/SQLite startup, window controls, command-palette navigation, and the
 visible/accessibility clone warning.
 
+**1.0 power scope closed (2026-07-18):** Lazy GPG/SSH/X.509 verification and
+exact commit/series patch export remain part of the stable daily-driver bar.
+Guided bisect, LFS management, signing controls/key selection, Git-flow, sparse
+checkout, patch import/mailbox/bundles, expanded submodule lifecycle, and custom
+actions are explicitly 1.1 work. These surfaces mutate signing identity,
+repository shape, or execute new external/user-defined workflows, so they will
+not enter after the 1.0 daily-driver and hosted-review gates have closed.
+
 ---
 
 ## 1.1+ — Post-1.0
@@ -1972,6 +1980,11 @@ visible/accessibility clone warning.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
 - Git LFS (status badges + progress)
 - GPG / SSH commit signing UI
+- Guided Git bisect
+- Sparse checkout (cone mode first)
+- Patch import/mailbox and Git bundle workflows
+- Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
+- Repository/ref/file custom actions with safe argv templates
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
   typed, full-context data the `git` porcelain can't (same serde types

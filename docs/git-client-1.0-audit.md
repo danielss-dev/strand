@@ -89,17 +89,23 @@ current official product material for:
 
 ### Power-feature parity
 
+The 1.0 scope is closed: Strand keeps the already-shipped lazy GPG/SSH/X.509
+verification and exact commit/series patch export. Every unshipped power surface
+below moves to 1.1 so signing key mutation, repository-shape changes, external
+tool contracts, and user-defined command execution do not enter the stable
+release after the daily-driver and hosted-review gates have closed.
+
 | Feature | Notes | Priority |
 | --- | --- | --- |
-| Git bisect | Fork exposes visual bisect; Strand has no guided good/bad workflow | Power feature |
-| Git LFS UI | Filters work through system Git, but locks, tracked patterns, status, and transfer progress are invisible | Power feature |
-| Signing UI | Commits honor existing signing config, but key selection, sign toggle, verification, and status are absent | Power feature |
-| Git-flow | Fork/Tower expose start/finish feature, release, and hotfix workflows | Power feature |
-| Sparse checkout | Useful for monorepos; needs cone-mode-first UX and clear destructive boundaries | Power feature |
-| Patch workflows | Create/apply patches and bundles; email workflows can remain later | Power feature |
-| Submodule completeness | Add/remove/deinit, sync a selected submodule, change URL, and inspect nested status | Power feature |
+| Git bisect | Fork exposes visual bisect; Strand has no guided good/bad workflow | 1.1 |
+| Git LFS UI | Filters work through system Git, but locks, tracked patterns, status, and transfer progress are invisible | 1.1 |
+| Signing UI | Existing config is honored and verification ships; key selection and per-commit signing controls remain | 1.1 |
+| Git-flow | Fork/Tower expose start/finish feature, release, and hotfix workflows | 1.1 |
+| Sparse checkout | Useful for monorepos; needs cone-mode-first UX and clear destructive boundaries | 1.1 |
+| Patch workflows | Exact commit/series export ships; apply/mailbox/bundle flows remain | 1.1 |
+| Submodule completeness | Add/remove/deinit, sync a selected submodule, change URL, and inspect nested status | 1.1 |
 | Advanced history | Notes, replace refs, signed tags, tag move/force with confirmation | Later |
-| Custom actions | User-defined commands scoped to repository/ref/file with safe argv templates | Later |
+| Custom actions | User-defined commands scoped to repository/ref/file with safe argv templates | 1.1 |
 
 ### Hosted-provider parity after the current PR workspace
 
@@ -139,12 +145,12 @@ disabled with a reason, and the primary action stays first.
    lifecycle actions, and safe PR worktrees.
 4. **Stable-release hardening** — localization, CSP/capabilities, signed
    installers and update channels, Linux validation, full keyboard/a11y pass.
-5. **Power parity** — bisect, LFS/signing UI, Git-flow, sparse
-   checkout, and custom actions, taking only the items that fit the 1.0 date.
+5. **Power parity** — scope closed for 1.0: shipped verification and patch
+   export stay; every unshipped power surface is explicitly scheduled for 1.1.
 
 The active milestone remains **1.0 Stable**. Network/ref ergonomics, repository
 initialization, stash-to-branch and inspection, line-level staging,
 multi-commit actions, branch/ref comparison, rebase close-out, repository
 maintenance, and working-tree file actions are now shipped foundations. The
-daily local Git close-out is complete; the next bounded implementation slice
-is hosted review close-out.
+daily local Git and hosted-review close-outs are complete. Stable-release
+hardening is the remaining implementation wave.

@@ -63,9 +63,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   the fresh-clone hook warning are shipped. Localization, trusted Windows/Linux
   installers, Linux GNOME+KDE validation, and the full keyboard/accessibility/
   release-quality pass remain.
-- ☐ **Power parity selection.** Decide which of bisect, LFS/signing UI,
-  Git-flow, sparse checkout, patch workflows, and custom actions fit the 1.0
-  date; the rest move explicitly to 1.1.
+- ☑ **Power parity selection.** Keep the already-shipped signature verification
+  and exact patch/series export in 1.0; defer guided bisect, LFS management,
+  signing controls/key selection, Git-flow, sparse checkout, patch import/
+  mailbox/bundles, expanded submodule lifecycle, and custom actions explicitly
+  to 1.1 (`docs/git-client-1.0-audit.md`, decision recorded 2026-07-18).
 
 ---
 
