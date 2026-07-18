@@ -1885,14 +1885,16 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
-- ◐ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
+- ☑ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
   pricing section. **Deployed on Railway** — project `landings`, service
   `strand-landing`, live at https://strand.danielss.dev (custom domain DNS
   flipped). Site links point at the public `danielss-dev/strand` repo as of
   2026-06-12. Download buttons resolve release assets and `latest.json` is
-  served from GitHub Releases. Still pending: og:image.)
+  served from GitHub Releases. Social previews use the checked-in 1200×630
+  `og-image.svg` source and rendered `og-image.png`, with Open Graph + Twitter
+  metadata added 2026-07-18.)
 - ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
   fact-checked markdown pages + `manifest.json`, rendered client-side by
   `docs/index.html`/`docs.js` with vendored `marked.min.js`; no build step —

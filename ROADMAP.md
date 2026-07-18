@@ -2046,6 +2046,12 @@ reported `Launched.` in Strand. The original unconfigured editor preference
 was restored after the pass. Linux presets remain part of the real GNOME/KDE
 candidate matrix.
 
+**Release social preview shipped (2026-07-18):** The deployed static site now
+has complete Open Graph and Twitter large-image metadata backed by a checked-in
+1200×630 PNG. Its SVG source uses Strand's existing mark, fonts, dark tokens,
+and review UI language so the asset remains reproducible instead of becoming an
+opaque design export.
+
 ---
 
 ## 1.1+ — Post-1.0
