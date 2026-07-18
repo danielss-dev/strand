@@ -14,7 +14,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use strand_azdo_protocol::{MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation};
+use strand_azdo_protocol::{
+    MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation,
+    PullRequestStatus as AzdoPullRequestStatus,
+};
 use strand_core::Repo;
 use uuid::Uuid;
 
@@ -118,6 +121,13 @@ pub enum PullRequestMergeStrategy {
     MergeCommit,
     Squash,
     Rebase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestLifecycleAction {
+    Close,
+    Reopen,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -615,6 +625,24 @@ pub fn mark_ready(path: &str, id: u64) -> Result<()> {
     }
 }
 
+pub fn set_lifecycle(path: &str, id: u64, action: PullRequestLifecycleAction) -> Result<()> {
+    let (_, host) = host_for_path(path)?;
+    match host {
+        HostRepo::GitHub { owner, repo } => {
+            set_lifecycle_github(path, &owner, &repo, id, action)
+        }
+        HostRepo::Azure { organization, .. } => {
+            set_lifecycle_azure(path, &organization, id, action)
+        }
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => set_lifecycle_azure_server(profile_id, project, repo, id, action),
+    }
+}
+
 fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let repo = Repo::discover(path).map_err(|error| error.to_string())?;
     let refs = repo.refs().map_err(|error| error.to_string())?;
@@ -1101,6 +1129,25 @@ fn mark_ready_github(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<()> 
     Ok(())
 }
 
+fn set_lifecycle_github(
+    cwd: &str,
+    owner: &str,
+    repo: &str,
+    id: u64,
+    action: PullRequestLifecycleAction,
+) -> Result<()> {
+    let slug = format!("{owner}/{repo}");
+    let id = id.to_string();
+    let verb = github_lifecycle_verb(action);
+    run_command(
+        cwd,
+        "gh",
+        &["pr", verb, &id, "--repo", &slug],
+        &[("GH_PROMPT_DISABLED", "1")],
+    )?;
+    Ok(())
+}
+
 fn list_azure(
     cwd: &str,
     remote: String,
@@ -1498,6 +1545,25 @@ fn mark_ready_azure_server(profile_id: Uuid, project: String, repo: String, id: 
             project,
             repository: repo,
             id,
+        },
+    )?;
+    Ok(())
+}
+
+fn set_lifecycle_azure_server(
+    profile_id: Uuid,
+    project: String,
+    repo: String,
+    id: u64,
+    action: PullRequestLifecycleAction,
+) -> Result<()> {
+    server_execute(
+        profile_id,
+        AzdoOperation::SetStatus {
+            project,
+            repository: repo,
+            id,
+            status: azure_lifecycle_status(action),
         },
     )?;
     Ok(())
@@ -2051,6 +2117,37 @@ fn mark_ready_azure(cwd: &str, organization: &str, id: u64) -> Result<()> {
     Ok(())
 }
 
+fn set_lifecycle_azure(
+    cwd: &str,
+    organization: &str,
+    id: u64,
+    action: PullRequestLifecycleAction,
+) -> Result<()> {
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let id = id.to_string();
+    let status = azure_lifecycle_status_label(action);
+    run_command(
+        cwd,
+        "az",
+        &[
+            "repos",
+            "pr",
+            "update",
+            "--id",
+            &id,
+            "--status",
+            status,
+            "--organization",
+            &organization_url,
+            "--output",
+            "json",
+            "--only-show-errors",
+        ],
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    Ok(())
+}
+
 fn diff_azure(
     cwd: &str,
     remote: String,
@@ -2322,6 +2419,27 @@ fn github_merge_flag(strategy: PullRequestMergeStrategy) -> &'static str {
         PullRequestMergeStrategy::MergeCommit => "--merge",
         PullRequestMergeStrategy::Squash => "--squash",
         PullRequestMergeStrategy::Rebase => "--rebase",
+    }
+}
+
+fn github_lifecycle_verb(action: PullRequestLifecycleAction) -> &'static str {
+    match action {
+        PullRequestLifecycleAction::Close => "close",
+        PullRequestLifecycleAction::Reopen => "reopen",
+    }
+}
+
+fn azure_lifecycle_status(action: PullRequestLifecycleAction) -> AzdoPullRequestStatus {
+    match action {
+        PullRequestLifecycleAction::Close => AzdoPullRequestStatus::Abandoned,
+        PullRequestLifecycleAction::Reopen => AzdoPullRequestStatus::Active,
+    }
+}
+
+fn azure_lifecycle_status_label(action: PullRequestLifecycleAction) -> &'static str {
+    match azure_lifecycle_status(action) {
+        AzdoPullRequestStatus::Active => "active",
+        AzdoPullRequestStatus::Abandoned => "abandoned",
     }
 }
 
@@ -3674,6 +3792,26 @@ mod tests {
         assert_eq!(
             azure_merge_strategy(PullRequestMergeStrategy::Rebase),
             "rebase"
+        );
+    }
+
+    #[test]
+    fn maps_provider_lifecycle_states() {
+        assert_eq!(
+            github_lifecycle_verb(PullRequestLifecycleAction::Close),
+            "close"
+        );
+        assert_eq!(
+            github_lifecycle_verb(PullRequestLifecycleAction::Reopen),
+            "reopen"
+        );
+        assert_eq!(
+            azure_lifecycle_status(PullRequestLifecycleAction::Close),
+            AzdoPullRequestStatus::Abandoned
+        );
+        assert_eq!(
+            azure_lifecycle_status_label(PullRequestLifecycleAction::Reopen),
+            "active"
         );
     }
 

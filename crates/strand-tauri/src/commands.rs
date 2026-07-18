@@ -479,6 +479,21 @@ pub async fn repo_pull_request_ready(path: String, id: u64) -> CmdResult<()> {
     .await
 }
 
+/// Close or reopen a hosted pull request through its provider. Completed PRs
+/// are never offered this action by the UI; provider permissions stay final.
+#[tauri::command(async)]
+pub async fn repo_pull_request_lifecycle(
+    path: String,
+    id: u64,
+    action: pull_requests::PullRequestLifecycleAction,
+) -> CmdResult<()> {
+    run_blocking("pull request lifecycle", move || {
+        pull_requests::set_lifecycle(&path, id, action)
+            .map_err(|message| CmdError { message })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await

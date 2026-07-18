@@ -22,6 +22,14 @@ export function isCompletedPullRequest(pr: PullRequest): boolean {
   return ['merged', 'closed', 'completed', 'abandoned'].includes(pr.state.toLowerCase());
 }
 
+export function isOpenPullRequest(pr: PullRequest): boolean {
+  return ['open', 'active'].includes(pr.state.toLowerCase());
+}
+
+export function isReopenablePullRequest(pr: PullRequest): boolean {
+  return ['closed', 'abandoned'].includes(pr.state.toLowerCase());
+}
+
 export function filterPullRequests(
   pullRequests: readonly PullRequest[],
   filter: PullRequestInboxFilter,

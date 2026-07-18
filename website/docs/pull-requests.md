@@ -142,6 +142,14 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
+The adjacent **Pull request actions** menu closes an active PR behind a second
+confirmation. A closed GitHub or abandoned Azure DevOps PR shows **Reopen pull
+request** there instead. Merged/completed PRs have no lifecycle or merge action.
+Summary and Timeline replace their composers with an explicit read-only state,
+and Code keeps inline threads visible without reply, resolve, or comment
+controls. These rules are shared by GitHub, Azure DevOps Services, and the
+optional Azure DevOps Server helper.
+
 Directly below the PR title, the readiness strip combines the open/draft state,
 review decision, provider checks, merge conflicts or policy state, and the last
 reported update time. Select its **status details** disclosure to see the exact

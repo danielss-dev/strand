@@ -54,7 +54,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
   message copy actions (`Repo::{commit_signature,export_commit_patches}`,
   `CommitDetail.SignatureSummary`, `Commits.openCommitMenu`).
-- ☐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
+- ◐ **Hosted review close-out.** Viewed-file/thread ledger, batched review
   submission, update/check-out/close/reopen lifecycle actions, and Azure inline
   review parity.
 - ☐ **Stable-release hardening.** Localization, production CSP/capability
@@ -1402,9 +1402,10 @@ tree: watch the agent work, review fast, accept or reject safely.
     (`hosting_connection_status`, `HostingSection`).
     Azure DevOps Services continues to use the official `az` CLI; Azure inline
     comments, replies/resolution, and review submission remain out of scope.
-  - ☐ Hide provider write controls for terminal pull requests: a merged Azure
-    DevOps Server PR correctly renders read-only history but still shows the
-    **Merge pull request** split button in its detail header.
+  - ☑ Hide provider write controls for terminal pull requests: merged/completed
+    PRs expose read-only Summary, Timeline, Code, and thread cards; closed/
+    abandoned PRs keep only their Reopen lifecycle action
+    (`isOpenPullRequest`, `PullRequestDetails`, `PullRequestInlineThread`).
   - ☑ Persistent followed-PR monitoring (`repo_pull_request_for_branch`,
     `repo_pull_request_activity`, `stores/pullRequests.ts`,
     `PullRequestMonitor`): the active branch's open PR auto-follows without the
@@ -1510,7 +1511,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     - ☑ Merge with provider-supported strategies (`repo_pull_request_merge`,
       stale-head guard, keyboard-operable `PullRequestMergeControl`, and command-palette action).
     - ☐ Update/check out the PR branch.
-    - ☐ Close/reopen the PR.
+    - ☑ Close/reopen the PR (`repo_pull_request_lifecycle`; GitHub `gh pr`,
+      Azure Services `az repos pr update`, and Azure Server helper protocol v2
+      `Operation::SetStatus`; keyboard-operable confirmed overflow action).
   - ☐ GitLab merge-request adapter.
   - ☐ Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
   - ☐ Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth

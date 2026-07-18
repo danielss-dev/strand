@@ -85,7 +85,9 @@ keyboard alone, and the mouse stays first-class.
   selected line ranges. A compact readiness ledger combines review,
   checks, conflicts, merge state, and provider freshness. Permission-backed
   drafts expose **Ready for review** in place of Merge; active PRs merge with
-  merge-commit, squash, or rebase through a GitHub-style split control.
+  merge-commit, squash, or rebase through a GitHub-style split control and can
+  be closed from a confirmed overflow action. Closed PRs can be reopened;
+  merged PRs and every terminal discussion/thread surface remain read-only.
   GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
   independently updated, signed `strand-azdo` REST helper configured in Settings → Hosting;
@@ -102,8 +104,8 @@ keyboard alone, and the mouse stays first-class.
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure
-  inline comments need iteration tracking and
-  submit-review and other lifecycle actions are still in progress.
+  inline comments need iteration tracking; submit-review and branch update/
+  checkout actions are still in progress.
 - **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the

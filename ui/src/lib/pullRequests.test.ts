@@ -19,6 +19,8 @@ const {
   diffStats,
   filterPullRequests,
   isCompletedPullRequest,
+  isOpenPullRequest,
+  isReopenablePullRequest,
   markdownUrl,
   parsePullRequestPatch,
   pullRequestReadiness,
@@ -80,6 +82,17 @@ describe('canMarkPullRequestReady', () => {
     expect(canMarkPullRequestReady(
       pullRequest({ state: 'closed', is_draft: true, can_mark_ready: true }),
     )).toBe(false);
+  });
+});
+
+describe('pull request lifecycle capabilities', () => {
+  it('keeps active, reopenable, and terminal states distinct', () => {
+    expect(isOpenPullRequest(pullRequest({ state: 'OPEN' }))).toBe(true);
+    expect(isOpenPullRequest(pullRequest({ state: 'active' }))).toBe(true);
+    expect(isReopenablePullRequest(pullRequest({ state: 'closed' }))).toBe(true);
+    expect(isReopenablePullRequest(pullRequest({ state: 'ABANDONED' }))).toBe(true);
+    expect(isOpenPullRequest(pullRequest({ state: 'merged' }))).toBe(false);
+    expect(isReopenablePullRequest(pullRequest({ state: 'completed' }))).toBe(false);
   });
 });
 

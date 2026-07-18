@@ -5,6 +5,7 @@ import type { GitStatusEntry } from '@pierre/trees';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { ParsedDiff } from '../components/Diff';
+import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon, type IconName } from '../components/Icon';
 import { PierreTree } from '../components/PierreTree';
 import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
@@ -15,6 +16,8 @@ import {
   checkTone,
   diffStats,
   filterPullRequests,
+  isOpenPullRequest,
+  isReopenablePullRequest,
   reconcilePullRequestSelection,
   type PullRequestInboxFilter,
   markdownUrl,
@@ -403,7 +406,11 @@ function PullRequestSummary({
 
       <section className="pr-summary-comments">
         <h3>Comments <span>{pr.comments.length}</span></h3>
-        <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
+        {isOpenPullRequest(pr) ? (
+          <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
+        ) : (
+          <p className="pr-muted">This pull request is {displayState(pr)}. Its discussion is read-only in Strand.</p>
+        )}
       </section>
     </div>
   );
@@ -462,7 +469,11 @@ function PullRequestTimeline({
           );
         })}
       </div>
-      <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
+      {isOpenPullRequest(pr) ? (
+        <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
+      ) : (
+        <p className="pr-muted">This pull request is {displayState(pr)}. Its timeline is read-only in Strand.</p>
+      )}
     </div>
   );
 }
@@ -477,6 +488,7 @@ function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
 function PullRequestInlineThread({
   thread,
   prUrl,
+  canWrite,
   replying,
   replyDraft,
   writeKind,
@@ -490,6 +502,7 @@ function PullRequestInlineThread({
 }: {
   thread: PullRequestReviewThread;
   prUrl: string;
+  canWrite: boolean;
   replying: boolean;
   replyDraft: string;
   writeKind: 'reply' | 'resolve' | undefined;
@@ -518,7 +531,7 @@ function PullRequestInlineThread({
             {thread.is_resolved && <span>Resolved</span>}
             {thread.is_outdated && <span>Outdated</span>}
           </div>
-          {thread.can_reply && (
+          {canWrite && thread.can_reply && (
             <button
               type="button"
               id={`pr-thread-reply-${thread.id}`}
@@ -530,7 +543,7 @@ function PullRequestInlineThread({
               {replying ? 'Cancel reply' : 'Reply'}
             </button>
           )}
-          {!thread.is_resolved && thread.can_resolve && (
+          {canWrite && !thread.is_resolved && thread.can_resolve && (
             <button
               type="button"
               id={`pr-thread-state-${thread.id}`}
@@ -541,7 +554,7 @@ function PullRequestInlineThread({
               {writeKind === 'resolve' ? 'Resolving…' : 'Resolve'}
             </button>
           )}
-          {thread.is_resolved && thread.can_unresolve && (
+          {canWrite && thread.is_resolved && thread.can_unresolve && (
             <button
               type="button"
               id={`pr-thread-state-${thread.id}`}
@@ -581,7 +594,7 @@ function PullRequestInlineThread({
           {message.text}
         </div>
       )}
-      {replying && (
+      {canWrite && replying && (
         <form
           className="pr-thread-reply"
           onSubmit={(event) => {
@@ -1057,6 +1070,7 @@ function PullRequestChanges({
                           <PullRequestInlineThread
                             thread={thread}
                             prUrl={pr.url}
+                            canWrite={openForReview}
                             replying={replyingThreadId === thread.id}
                             replyDraft={replyDrafts[thread.id] ?? ''}
                             writeKind={threadWrites[thread.id]}
@@ -1206,6 +1220,12 @@ function PullRequestDetails({
 }) {
   const [commentDraft, setCommentDraft] = useState('');
   const [changesTarget, setChangesTarget] = useState<PullRequestChangesTarget | null>(null);
+  const [lifecycleMenu, setLifecycleMenu] = useState<{
+    x: number;
+    y: number;
+    items: MenuItem[];
+  } | null>(null);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const changesRequest = useRef(0);
   const open = () => { if (pr.url) void shellOpen(pr.url); };
   const readiness = pullRequestReadiness(pr, provider);
@@ -1225,7 +1245,50 @@ function PullRequestDetails({
       ? 'Only an open pull request can be merged'
       : !pr.source_commit
         ? 'Refresh this pull request before merging'
-        : '';
+      : '';
+  const lifecycleAction = isOpenPullRequest(pr)
+    ? 'close'
+    : isReopenablePullRequest(pr)
+      ? 'reopen'
+      : null;
+  const setLifecycle = async (action: 'close' | 'reopen') => {
+    if (lifecycleBusy) return;
+    setLifecycleBusy(true);
+    try {
+      await tauri.repoPullRequestLifecycle(path, pr.id, action);
+      let next: PullRequest;
+      try {
+        next = await tauri.repoPullRequest(path, pr.id);
+      } catch (refreshError) {
+        onToast(
+          `PR #${pr.id} was ${action === 'close' ? 'closed' : 'reopened'}, but it could not refresh: ${errMessage(refreshError)}`,
+          'error',
+        );
+        return;
+      }
+      onUpdated(next);
+      onToast(`${action === 'close' ? 'Closed' : 'Reopened'} PR #${pr.id}`);
+    } catch (caught) {
+      onToast(`Could not ${action} PR #${pr.id}: ${errMessage(caught)}`, 'error');
+    } finally {
+      setLifecycleBusy(false);
+    }
+  };
+  const openLifecycleMenu = (button: HTMLButtonElement) => {
+    if (!lifecycleAction || lifecycleBusy) return;
+    const rect = button.getBoundingClientRect();
+    setLifecycleMenu({
+      x: rect.right,
+      y: rect.bottom,
+      items: [{
+        label: lifecycleAction === 'close' ? 'Close pull request' : 'Reopen pull request',
+        icon: lifecycleAction === 'close' ? 'x' : 'refresh',
+        danger: lifecycleAction === 'close',
+        confirm: lifecycleAction === 'close',
+        onSelect: () => { void setLifecycle(lifecycleAction); },
+      }],
+    });
+  };
   const viewCommentInCode = (comment: PullRequestComment) => {
     if (!comment.path) return;
     const thread = (pr.review_threads ?? []).find((candidate) =>
@@ -1259,14 +1322,30 @@ function PullRequestDetails({
           >
             <Icon name="bell" size={13} /> {followed ? 'Following' : 'Follow'}
           </button>
-          <PullRequestMergeControl
-            path={path}
-            provider={provider}
-            pr={pr}
-            disabledReason={mergeDisabledReason}
-            onMerged={onUpdated}
-            onToast={onToast}
-          />
+          {isOpenPullRequest(pr) && (
+            <PullRequestMergeControl
+              path={path}
+              provider={provider}
+              pr={pr}
+              disabledReason={mergeDisabledReason}
+              onMerged={onUpdated}
+              onToast={onToast}
+            />
+          )}
+          {lifecycleAction && (
+            <button
+              type="button"
+              className="btn icon-btn"
+              aria-label="Pull request actions"
+              aria-haspopup="menu"
+              aria-expanded={lifecycleMenu != null}
+              disabled={lifecycleBusy}
+              title={lifecycleBusy ? 'Updating pull request…' : 'Pull request actions'}
+              onClick={(event) => openLifecycleMenu(event.currentTarget)}
+            >
+              <Icon name={lifecycleBusy ? 'refresh' : 'more'} size={13} className={lifecycleBusy ? 'spin' : undefined} />
+            </button>
+          )}
           <button type="button" className="btn" onClick={open} disabled={!pr.url}>
             <Icon name="external" size={13} /> Open on host
           </button>
@@ -1305,6 +1384,14 @@ function PullRequestDetails({
           </details>
         )}
       </div>
+      {lifecycleMenu && (
+        <ContextMenu
+          x={lifecycleMenu.x}
+          y={lifecycleMenu.y}
+          items={lifecycleMenu.items}
+          onClose={() => setLifecycleMenu(null)}
+        />
+      )}
 
       <div
         className={`pr-tab-panel ${tab}`}

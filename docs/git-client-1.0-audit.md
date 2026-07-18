@@ -63,7 +63,7 @@ current official product material for:
 
 | Gap | Current state | 1.0 acceptance bar |
 | --- | --- | --- |
-| Hosted review completion | GitHub/Azure list, detail, threads, comments, readiness, follow, create, and merge exist | Submit approve/request-changes reviews; viewed-file and unresolved-thread progress; close/reopen and update/check out branch; preserve drafts on provider failure |
+| Hosted review completion | GitHub/Azure list, detail, threads, comments, readiness, follow, create, merge, close/reopen, and terminal read-only gating exist | Submit approve/request-changes reviews; viewed-file and unresolved-thread progress; update/check out branch; preserve drafts on provider failure |
 | Localization | English strings are embedded throughout the UI | Translation framework, English catalog, locale-safe dates/numbers, and no user-visible string trapped in backend-only errors |
 | Signed platform distribution | macOS signed/notarized; Windows EV and Linux signing open | Trusted installer/update path on macOS, Windows, and Linux; stable and beta update channels |
 | Security hardening | Local-first boundaries are strong; production CSP and capability narrowing remain | Production CSP verified in a built app; signed-update enforcement tested; least-privilege capabilities; hook warning on fresh clones |

@@ -1622,3 +1622,12 @@ reverse insertion order, so reverse the argv to preserve the UI's oldest-to-
 newest selection. Stream into a create-new sibling temporary file first, reject
 symlink and `.git` destinations, and copy to the user-selected file only after
 Git succeeds so a formatting failure cannot truncate an existing export.
+
+**Hosted writes derive from lifecycle state at every surface (2026-07-18).**
+Do not merely disable the merge button for a terminal pull request: Summary and
+Timeline composers, inline comment selection, thread reply/resolution, and
+lifecycle menus must all use the same open-state predicate. Closed/abandoned
+requests may expose only Reopen; merged/completed requests are immutable
+history. When adding a new Azure DevOps Server write operation, bump the helper
+protocol so an already-installed older helper is upgraded rather than selected
+by a matching but incomplete capability contract.

@@ -641,16 +641,16 @@ mod tests {
     fn helper_version_accepts_the_declared_capabilities_contract() {
         let version: VersionOutput = serde_json::from_value(serde_json::json!({
             "version": "0.11.0",
-            "protocol_version": 1,
+            "protocol_version": PROTOCOL_VERSION,
             "capabilities": ["pull_requests", "pat"]
         }))
         .unwrap();
-        assert_eq!(version.protocol_version, 1);
+        assert_eq!(version.protocol_version, PROTOCOL_VERSION);
         assert_eq!(version._capabilities, ["pull_requests", "pat"]);
 
         let minimal: VersionOutput = serde_json::from_value(serde_json::json!({
             "version": "0.11.0",
-            "protocol_version": 1
+            "protocol_version": PROTOCOL_VERSION
         }))
         .unwrap();
         assert!(minimal._capabilities.is_empty());

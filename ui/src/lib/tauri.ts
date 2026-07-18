@@ -38,6 +38,7 @@ import type {
   PullRequestComment,
   PullRequestCreateOutcome,
   PullRequestList,
+  PullRequestLifecycleAction,
   PullRequestMergeStrategy,
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
@@ -203,6 +204,8 @@ export const tauri = {
   ) => invoke<void>('repo_pull_request_merge', { path, id, strategy, expectedHead }),
   repoPullRequestReady: (path: string, id: number) =>
     invoke<void>('repo_pull_request_ready', { path, id }),
+  repoPullRequestLifecycle: (path: string, id: number, action: PullRequestLifecycleAction) =>
+    invoke<void>('repo_pull_request_lifecycle', { path, id, action }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>

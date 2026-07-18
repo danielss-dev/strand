@@ -1880,6 +1880,16 @@ does not truncate an existing file when Git fails. Focused core tests and a
 Computer Use pass verified unsigned and trusted SSH states, clipboard payloads,
 keyboard multi-selection, the native save dialog, and emitted patch order.
 
+**Hosted PR lifecycle safety (2026-07-18):** Terminal pull requests are now
+read-only across Summary, Timeline, Code, and inline thread cards instead of
+leaving misleading provider write controls mounted. Active PRs expose a
+confirmed Close action and closed/abandoned PRs expose Reopen through GitHub,
+Azure DevOps Services, and Azure DevOps Server. The optional `strand-azdo`
+contract moved to protocol v2 for the new status operation, forcing a matching
+helper upgrade instead of silently invoking an older capability set. Focused
+provider/UI tests and a Computer Use pass against a real merged GitHub PR
+verified the terminal surface without performing a hosted write.
+
 ---
 
 ## 1.1+ — Post-1.0

@@ -253,6 +253,7 @@ export interface HostingConnectionStatus {
 
 export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
 export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
+export type PullRequestLifecycleAction = 'close' | 'reopen';
 
 export interface PullRequestRepository {
   provider: PullRequestProvider;

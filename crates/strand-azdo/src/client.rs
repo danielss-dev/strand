@@ -267,6 +267,23 @@ fn request_spec(operation: Operation) -> RequestSpec {
             body: Some(json!({"isDraft": false})),
             unwrap_value: false,
         },
+        Operation::SetStatus {
+            project,
+            repository,
+            id,
+            status,
+        } => RequestSpec {
+            method: Method::PATCH,
+            path: git_path(&project, &repository, &format!("pullrequests/{id}")),
+            query: api(),
+            body: Some(json!({
+                "status": match status {
+                    strand_azdo_protocol::PullRequestStatus::Active => "active",
+                    strand_azdo_protocol::PullRequestStatus::Abandoned => "abandoned",
+                }
+            })),
+            unwrap_value: false,
+        },
         Operation::Complete {
             project,
             repository,
@@ -504,6 +521,15 @@ mod tests {
         assert_eq!(body["lastMergeSourceCommit"]["commitId"], "abc123");
         assert_eq!(body["completionOptions"]["mergeStrategy"], "squash");
         assert!(complete.query.contains(&("api-version", "6.0".into())));
+
+        let close = request_spec(Operation::SetStatus {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            status: strand_azdo_protocol::PullRequestStatus::Abandoned,
+        });
+        assert_eq!(close.method, Method::PATCH);
+        assert_eq!(close.body.unwrap()["status"], "abandoned");
 
         let policy = request_spec(Operation::Policies {
             project: "Project".into(),
