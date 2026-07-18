@@ -1759,3 +1759,11 @@ helper signatures and compare packet key IDs, including helpers-only release
 paths. Do not rotate the embedded key to accommodate an unexpected machine or
 CI secret: select the established release key, keep the draft unpromoted, and
 then run the end-to-end updater rehearsal.
+
+**A trademark knock-out search is evidence, not clearance (2026-07-18).**
+Record exact queries, jurisdictions, classes, status, owners, and primary
+register links, but leave the gate open when live identical or related marks
+exist. `STRAND` has active class-9 registrations in the US and EU for Signify's
+lighting-control software/equipment and other related software marks exist.
+Only the owner with qualified counsel can decide coexistence, territory scope,
+or renaming; an agent must not convert a database result into legal approval.

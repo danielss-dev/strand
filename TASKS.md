@@ -1878,13 +1878,19 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   - ☑ `LICENSE` file (AGPL-3.0 text) at repo root (added 2026-06-12)
   - ☑ `COMMERCIAL.md` describing the commercial-license offer (added
     2026-06-12; linked from the website pricing card + footer)
-  - ☐ CLA workflow before opening to outside contributions
+  - ◐ CLA workflow before opening to outside contributions — README now pauses
+    outside code PRs and asks contributors to open an issue first (2026-07-18);
+    owner/legal approval of the assignment text and signing provider remains.
 
 ---
 
 ## Pre-launch checks (PRD §13)
 
-- ☐ Trademark search: USPTO, EUIPO, WIPO
+- ◐ Trademark search: USPTO, EUIPO, WIPO — preliminary official-register
+  knock-out documented in `docs/trademark-search.md` (2026-07-18). Live exact
+  `STRAND` class-9 registrations exist in the US and EU for Signify lighting-
+  control software/equipment, plus other related software marks; owner/counsel
+  clearance or a rename decision is required before this row can close.
 - ☐ Reserve `dev.danielss.strand` IDs in macOS App Store + Microsoft Store
 - ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)

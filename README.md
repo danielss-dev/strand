@@ -252,7 +252,13 @@ strand/
 
 ## Contributing
 
-Issues and pull requests are welcome. Before diving in:
+Issues are welcome. Outside code contributions are temporarily paused while
+the contributor-assignment terms and signing workflow required by Strand's
+AGPL/commercial dual-license model are reviewed. Please open an issue before
+writing a patch; do not open a pull request until this notice is replaced by
+the approved CLA process.
+
+When preparing an issue or discussing a future change:
 
 - [`PRD.md`](./PRD.md) explains what Strand is and the bar it has to clear —
   performance targets in §8 are not aspirational.

@@ -2077,6 +2077,18 @@ ID `5B0DEABB5904DD1F` instead of embedded ID `84FCBFD2A981CE5D`. A new release
 workflow gate rejects that mismatch for desktop and helper artifacts; no key
 was rotated and no draft/tag was published.
 
+**External 1.0 readiness audited (2026-07-18):** The live GitHub repository has
+all Apple and updater secret names configured. Every published v0.13.0 desktop
+updater signature and the helper manifest matches embedded key
+`84FCBFD2A981CE5D`; its universal macOS job was signed, notarized `Accepted`,
+and stapled. The public Windows MSI confirms the remaining publisher gap by
+reporting `NotSigned`. A preliminary USPTO/EUIPO/WIPO knock-out search is now
+recorded in `docs/trademark-search.md`; live identical `STRAND` class-9 US/EU
+registrations make name clearance an explicit owner/counsel decision rather
+than a checkbox an engineering release can silently close. The README now
+pauses outside code pull requests until contributor-assignment terms and a CLA
+signing provider receive owner/legal approval.
+
 ---
 
 ## 1.1+ — Post-1.0

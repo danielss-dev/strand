@@ -25,27 +25,45 @@ deliberate maintainer action.
 
 ## Publisher and update trust
 
-- [x] macOS Developer ID signing and notarization are wired and previously
-  validated on the universal build.
+- [x] macOS Developer ID signing and notarization are wired. The
+  [public v0.13.0 universal release job](https://github.com/danielss-dev/strand/actions/runs/29613997996/job/87994909306)
+  signed the app and DMG, received Apple notarization status `Accepted`, and
+  stapled the app on 2026-07-17.
 - [x] The embedded minisign public key and HTTPS stable endpoint are pinned by
   `scripts/check-release-security.mjs`; generated desktop/helper signatures
   hard-fail on another key through `scripts/check-updater-signatures.mjs`.
   Strand 1.0 intentionally exposes only this stable channel; selectable beta
-  updates are post-1.0.
+  updates are post-1.0. All five published v0.13.0 desktop updater signatures
+  plus its helper manifest from the
+  [published release](https://github.com/danielss-dev/strand/releases/tag/v0.13.0)
+  were independently decoded on 2026-07-18 and use embedded key
+  `84FCBFD2A981CE5D`, proving the GitHub release secret is correct.
 - [x] Linux AppImages receive a keyless Sigstore bundle in release CI. The same
   job immediately verifies the artifact against the exact Strand release
   workflow identity and GitHub Actions OIDC issuer before upload.
 - [ ] Import/configure the Windows publisher certificate or approved cloud-
   signing profile, then verify both the app executable and MSI with
   `Get-AuthenticodeSignature`. This requires a purchased external identity and
-  cannot be manufactured from repository code.
+  cannot be manufactured from repository code. The published v0.13.0 MSI was
+  also inspected on 2026-07-18 and reports `NotSigned` with no signer.
 - [ ] Build the exact candidate with updater key `84FCBFD2A981CE5D` and pass
   `pnpm release:check-updater-signatures`. The 2026-07-18 local MSI correctly
   failed this gate because the machine-wide environment supplied key
-  `5B0DEABB5904DD1F`; no key was rotated or disclosed.
+  `5B0DEABB5904DD1F`; no key was rotated or disclosed. This mismatch is isolated
+  to the workstation—the published evidence above proves the hosted secret.
 - [ ] Run the updater end to end from the last public version to the 1.0 draft
   promoted through a disposable test endpoint, then confirm the normal stable
   endpoint only sees the published release.
+
+## Brand and legal gate
+
+- [ ] Obtain owner/counsel review of `docs/trademark-search.md`. The preliminary
+  USPTO/EUIPO/WIPO pass found live identical `STRAND` class-9 registrations in
+  the US and EU plus related software marks. Decide that coexistence is legally
+  supportable or rename before tagging 1.0; this is not a clerical check.
+- [ ] Select and approve contributor-assignment terms before enabling a CLA
+  workflow for outside contributions. The AGPL/commercial dual-license model
+  does not determine the agreement text or signing provider by itself.
 
 ## Platform release-candidate matrix
 

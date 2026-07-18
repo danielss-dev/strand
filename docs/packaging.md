@@ -222,6 +222,9 @@ updater-enabled on their own. Verified 2026-06-01: the release key's generated
 `.sig` key ID matches the configured pubkey (`84FCBFD2A981CE5D`). A 2026-07-18
 local candidate exposed a different machine-wide key (`5B0DEABB5904DD1F`); the
 artifact gate rejected it without changing or disclosing that external secret.
+This is workstation-only: all published v0.13.0 desktop `.sig` files and the
+helper manifest use `84FCBFD2A981CE5D`, so the hosted Actions secret matches
+the embedded release key.
 
 ### Producing the macOS cert secret
 
