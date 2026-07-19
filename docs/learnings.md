@@ -1848,3 +1848,14 @@ Web textareas and Shiki expose LF line boundaries even when a Windows checkout
 is CRLF. Normalize the editable in-memory buffer to LF, keep the raw last-read
 text separately for optimistic writes, and reconstruct token streams with the
 source's actual separators whenever exact-source validation is required.
+
+**Windows discard keeps libgit2 fast and falls back only for its path ceiling
+(2026-07-20).** `git2::Repository::checkout_index` may inspect an unrelated
+ignored directory during its default refresh and fail with class `Filesystem`
+and `path too long` before applying a narrow checkout pathspec. Build discard's
+`CheckoutBuilder` with `refresh(false)`: every IPC discard opens a fresh
+repository and index, so the scan is redundant. Keep libgit2 as the normal
+batched path; on Windows only, retry that exact error through system Git's
+`checkout-index --force -- <paths>` with `-c core.longpaths=true`. Do not treat
+other checkout or filesystem errors as fallback candidates, and keep the
+pathspec after `--` so a repository filename cannot become an option.

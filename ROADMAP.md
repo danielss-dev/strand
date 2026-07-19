@@ -2224,6 +2224,13 @@ such as `.claude` therefore show a dot only for a real Git change, while an
 ignored child such as `worktrees` remains muted. Regression coverage exercises
 ignored-to-modified, modified-to-ignored, and removal transitions.
 
+**Windows discard long paths repaired (2026-07-20):** File and bulk discard no
+longer fail when an unrelated ignored worktree contains a deep pnpm path beyond
+libgit2's legacy Windows path limit. The normal batched libgit2 checkout remains
+the fast path with its redundant refresh disabled; only the exact
+`Filesystem/path too long` failure retries the selected index paths through
+long-path-enabled system Git.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

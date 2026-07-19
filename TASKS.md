@@ -136,7 +136,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Stage / unstage path (`Repo::stage_path` / `unstage_path` via git2)
 - ☑ Stage / unstage / discard **many** paths in one call (`Repo::stage_paths` /
   `unstage_paths` / `discard_paths` — open the repo + write the index once, vs
-  the old per-path loop; `reset_default` takes the whole pathspec list)
+  the old per-path loop; `reset_default` takes the whole pathspec list; Windows
+  checkout suppresses libgit2's unrelated refresh and narrowly retries its
+  `Filesystem/path too long` failure through long-path-enabled system Git)
 - ☑ Stage / unstage hunk + sub-hunk change block (unstaged: per-block
   Stage via `Repo::apply_patch(ApplyTarget::Index)`. Staged: per-block
   Unstage via `Repo::apply_patch(ApplyTarget::IndexReverse)`. TS-side

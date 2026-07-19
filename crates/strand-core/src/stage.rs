@@ -98,11 +98,24 @@ impl Repo {
         }
         if !tracked.is_empty() {
             let mut opts = git2::build::CheckoutBuilder::new();
-            opts.force();
-            for path in tracked {
+            // This command opened a fresh repository + index above, so there
+            // is nothing stale to refresh. More importantly, libgit2's refresh
+            // can walk unrelated ignored directories and hit its legacy
+            // MAX_PATH guard on Windows before it checks the pathspec.
+            opts.force().refresh(false);
+            for path in &tracked {
                 opts.path(path);
             }
-            repo.checkout_index(None, Some(&mut opts))?;
+            if let Err(error) = repo.checkout_index(None, Some(&mut opts)) {
+                #[cfg(windows)]
+                if is_windows_path_too_long(&error) {
+                    checkout_index_with_system_git(self, &tracked)?;
+                } else {
+                    return Err(error.into());
+                }
+                #[cfg(not(windows))]
+                return Err(error.into());
+            }
         }
         Ok(())
     }
@@ -135,6 +148,30 @@ impl Repo {
     pub fn discard_path(&self, path: &str) -> Result<()> {
         self.discard_paths(&[path.to_owned()])
     }
+}
+
+#[cfg(windows)]
+fn is_windows_path_too_long(error: &git2::Error) -> bool {
+    error.class() == git2::ErrorClass::Filesystem
+        && error
+            .message()
+            .to_ascii_lowercase()
+            .contains("path too long")
+}
+
+#[cfg(windows)]
+fn checkout_index_with_system_git(repo: &Repo, paths: &[&str]) -> Result<()> {
+    let mut args = vec![
+        "-c".to_string(),
+        "core.longpaths=true".to_string(),
+        "checkout-index".to_string(),
+        "--force".to_string(),
+        "--".to_string(),
+    ];
+    args.extend(paths.iter().map(|path| (*path).to_string()));
+    let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    repo.run_git(&refs)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -212,6 +249,64 @@ mod tests {
         repo.discard_paths(&["untracked.txt".into()]).unwrap();
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn system_git_checkout_restores_with_unrelated_long_ignored_path() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("tracked.txt"), "clean\n").unwrap();
+        repo.stage_paths(&["tracked.txt".into()]).unwrap();
+        repo.commit("add tracked", None, false).unwrap();
+        std::fs::write(dir.join("tracked.txt"), "dirty\n").unwrap();
+
+        let ignored = dir
+            .join(".claude/worktrees/generated/node_modules/.pnpm")
+            .join("react-resizable-panels@2.1.9_react-dom@18.3.1_react@18.3.1__react@18.3.1")
+            .join("node_modules/react-resizable-panels/dist/declarations/src/utils/dom");
+        std::fs::create_dir_all(&ignored).unwrap();
+        std::fs::write(
+            ignored.join("getResizeHandleElementsForGroup.d.ts"),
+            "generated\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".claude/worktrees/generated/.git"),
+            "gitdir: nowhere\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join(".git/info/exclude"), ".claude/worktrees/\n").unwrap();
+
+        checkout_index_with_system_git(&repo, &["tracked.txt"]).unwrap();
+
+        let restored = std::fs::read_to_string(dir.join("tracked.txt")).unwrap();
+        assert_eq!(restored.replace("\r\n", "\n"), "clean\n");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_long_path_checkout_error_is_detected_narrowly() {
+        let long_path = git2::Error::new(
+            git2::ErrorCode::GenericError,
+            git2::ErrorClass::Filesystem,
+            "path too long: 'generated/file'",
+        );
+        assert!(is_windows_path_too_long(&long_path));
+
+        let other_filesystem = git2::Error::new(
+            git2::ErrorCode::GenericError,
+            git2::ErrorClass::Filesystem,
+            "permission denied",
+        );
+        assert!(!is_windows_path_too_long(&other_filesystem));
+
+        let wrong_class = git2::Error::new(
+            git2::ErrorCode::GenericError,
+            git2::ErrorClass::Checkout,
+            "path too long",
+        );
+        assert!(!is_windows_path_too_long(&wrong_class));
     }
 
     #[test]
