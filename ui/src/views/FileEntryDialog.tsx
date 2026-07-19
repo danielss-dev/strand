@@ -19,6 +19,7 @@ export function FileEntryDialog({
   onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
   const refreshLocalChanges = useRepo((state) => state.refreshLocalChanges);
+  const markFilesTreeChanged = useRepo((state) => state.markFilesTreeChanged);
   const selectFile = useRepo((state) => state.selectFile);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -79,6 +80,7 @@ export function FileEntryDialog({
     try {
       await tauri.repoFileCreate(repoPath, target, directory);
       await refreshLocalChanges();
+      markFilesTreeChanged(repoPath, { kind: 'create', path: target, directory });
       selectFile(target, null, directory);
       onToast(`Created ${label} ${target}`);
       onClose();

@@ -2205,6 +2205,12 @@ Fully ignored subtrees project as one muted directory boundary, so their folder
 and descendants stay gray without internal change dots. Snapshot/status
 refreshes remain free of recursive ignored-directory work.
 
+**Files mutations stay live (2026-07-19):** Successful create, delete, rename,
+move, and ignore actions now advance a path-mutation signal that refreshes the
+ignored-inclusive Files cache in place without leaving the view. New empty
+folders receive session-local Pierre directory markers because Git snapshots
+cannot represent directories until they contain a file.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

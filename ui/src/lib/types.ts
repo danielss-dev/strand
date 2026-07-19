@@ -544,6 +544,17 @@ export interface WorkTreeEntry {
   ignored: boolean;
 }
 
+export type FilesTreeMutationChange =
+  | { kind: 'create'; path: string; directory: boolean }
+  | { kind: 'delete'; paths: string[] }
+  | { kind: 'move'; moves: Array<{ from: string; to: string }> }
+  | { kind: 'refresh' };
+
+export type FilesTreeMutation = FilesTreeMutationChange & {
+  revision: number;
+  repoPath: string;
+};
+
 /** A submodule's state relative to the superproject's recorded commit. */
 export type SubmoduleState = 'uninitialized' | 'up-to-date' | 'out-of-date' | 'modified';
 

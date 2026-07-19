@@ -56,9 +56,10 @@ The Files tree shows tracked, untracked, and Git-ignored local files. Ignored
 files and fully ignored folders are muted gray, have no internal change dots,
 and stay out of Local Changes. Strand loads them only after you open Files, so
 recursive generated directories never slow the normal status/snapshot path. An
-empty folder does not appear as a tree row until it contains a file; the
-new-folder action still opens that folder immediately, and a nested new-file
-path can populate it without leaving Strand.
+empty folder created in Strand appears in the tree immediately and remains
+visible for the session; Git itself cannot persist an empty directory across a
+restart until it contains a file. Successful creates, deletes, renames, and
+moves update the open Files tree without a reload or tab switch.
 
 ## Committing
 

@@ -48,7 +48,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   external editor/reveal, relative/absolute path copy, direct history/blame,
   rename, and confirmed deletion are available from the Files tree and Quick
   Launch (`Repo::{create_worktree_entry,delete_worktree_entries,reveal_in_file_manager}`,
-  `FileEntryDialog`, `Sidebar.fileMenu`, inline Files search/create toolbar).
+  `FileEntryDialog`, `Sidebar.fileMenu`, inline Files search/create toolbar,
+  mutation-driven live tree refresh with empty-directory markers).
 - ☑ **Commit metadata + selection actions.** Commit detail lazily verifies
   GPG/SSH/X.509 signatures, copies subject/body, and exports exact commits;
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-

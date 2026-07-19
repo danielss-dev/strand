@@ -23,6 +23,8 @@ import type {
   CommitSearchMode,
   FileDiff,
   FileStatus,
+  FilesTreeMutation,
+  FilesTreeMutationChange,
   MergeMode,
   Progress,
   PullMode,
@@ -205,6 +207,12 @@ export interface RepoState {
    * palette and kept fresh by every {@link RepoState.refreshSnapshot}; the
    * Files tab separately requests its ignored-inclusive listing on entry. */
   workTree: WorkTreeEntry[];
+  /** Advances only after a successful path/ignore mutation so the Files tab
+   * can refresh its ignored-inclusive cache without re-walking ignored
+   * directories after ordinary status-only updates. */
+  filesTreeRevision: number;
+  filesTreeMutation: FilesTreeMutation | null;
+  markFilesTreeChanged(repoPath: string, change: FilesTreeMutationChange): void;
 
   /** Submodules of the active repo (list + status), for the sidebar section. */
   submodules: Submodule[];
@@ -799,6 +807,8 @@ const EMPTY_ACTIVE = {
   remoteTags: null as string[] | null,
   stashes: [] as Stash[],
   workTree: [] as WorkTreeEntry[],
+  filesTreeRevision: 0,
+  filesTreeMutation: null as FilesTreeMutation | null,
   submodules: [] as Submodule[],
   worktrees: [] as Worktree[],
   reflog: [] as ReflogEntry[],
@@ -868,6 +878,14 @@ export const useRepo = create<RepoState>((set, get) => ({
   selectSinceBaseline: false,
   diffsTick: 0,
   ignoreDraft: null,
+
+  markFilesTreeChanged: (repoPath, change) => set((state) => {
+    const revision = state.filesTreeRevision + 1;
+    return {
+      filesTreeRevision: revision,
+      filesTreeMutation: { ...change, repoPath, revision } as FilesTreeMutation,
+    };
+  }),
 
   async restoreSession() {
     let saved: PersistedSession | null = null;
@@ -1482,6 +1500,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     // The ignored file drops out of untracked and .gitignore itself shows up
     // as modified/untracked — both ride the snapshot refresh.
     await get().refreshLocalChanges();
+    get().markFilesTreeChanged(path, { kind: 'refresh' });
   },
   async moveEntries(moves) {
     const path = get().activePath;
@@ -1519,6 +1538,7 @@ export const useRepo = create<RepoState>((set, get) => ({
         }
       }
       await get().refreshLocalChanges();
+      get().markFilesTreeChanged(path, { kind: 'move', moves: done });
     }
     return failures;
   },

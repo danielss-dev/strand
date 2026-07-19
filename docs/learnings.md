@@ -1811,6 +1811,18 @@ ignored directory boundary, then expand that already-ignored tree with an
 iterative native filesystem walk that does not follow symlinks and tolerates
 entries disappearing during package-manager updates.
 
+**Refresh the ignored Files cache from path mutations, not status changes
+(2026-07-19).** The ignored-inclusive listing masks the snapshot-backed
+`workTree` while Files is open, so refreshing only the snapshot leaves created,
+deleted, or moved paths stale. Advance a dedicated mutation signal after a
+successful create/delete/move and let Files re-fetch its ignored listing; never
+key that fetch to general status, because stage toggles would recursively walk
+generated directories. Git does not represent empty directories, so retain
+folders created in Strand as explicit trailing-slash Pierre paths for the
+session, and transform/remove those markers on move/delete. Explicit directory
+paths must stay out of PierreTree's file set so selection and context menus keep
+classifying them as folders.
+
 **In-app text writes are optimistic and encoding-preserving (2026-07-19).** A
 file editor must send the exact content it last read and the core must reject a
 write when the disk copy no longer matches; agents and external editors share

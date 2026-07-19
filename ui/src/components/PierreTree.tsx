@@ -261,7 +261,10 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
 
   // Set of known file paths — used to tell a file row from a folder row when
   // resolving an action target (a folder row's path is not in this set).
-  const fileSet = useMemo(() => new Set(paths), [pathsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fileSet = useMemo(
+    () => new Set(paths.filter((path) => !path.endsWith('/'))),
+    [pathsKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const fileSetRef = useRef(fileSet);
   fileSetRef.current = fileSet;
 

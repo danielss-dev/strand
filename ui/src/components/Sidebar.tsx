@@ -8,6 +8,7 @@ import {
   type TreeMenuItem,
 } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
+import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
 import { t } from '../lib/i18n';
 import { worktreeName } from '../lib/repoIdentity';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
@@ -179,6 +180,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const selectFile = useRepo((s) => s.selectFile);
   const setFileTab = useRepo((s) => s.setFileTab);
   const selectedFile = useRepo((s) => s.selectedFile);
+  const selectedFileIsDirectory = useRepo((s) => s.selectedFileIsDirectory);
   const status = useRepo((s) => s.status);
   const meta = useRepo((s) => s.meta);
   const recents = useRepo((s) => s.recents);
@@ -201,8 +203,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const remoteTags = useRepo((s) => s.remoteTags);
   const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
   const workTree = useRepo((s) => s.workTree);
+  const filesTreeRevision = useRepo((s) => s.filesTreeRevision);
+  const filesTreeMutation = useRepo((s) => s.filesTreeMutation);
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
+  const markFilesTreeChanged = useRepo((s) => s.markFilesTreeChanged);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const moveEntries = useRepo((s) => s.moveEntries);
   const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
@@ -399,13 +404,21 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   }, [submodules, filter]);
 
   // Files tab: lazily fetch the selected commit's immutable tree, or the
-  // working-tree listing when no commit detail is open. Working-tree freshness
-  // comes from `refreshSnapshot`, so this deliberately does NOT depend on
-  // `status`: the old status dep re-walked the tree after every stage toggle.
+  // working-tree listing when no commit detail is open. Path-changing actions
+  // advance `filesTreeRevision`; ordinary status/stage updates deliberately do
+  // not, because recursively re-walking ignored directories is expensive.
   const [treeLoading, setTreeLoading] = useState(false);
   const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
   const [ignoredTree, setIgnoredTree] = useState<typeof workTree | null>(null);
+  const [emptyDirectories, setEmptyDirectories] = useState<Set<string>>(new Set());
   const [treeError, setTreeError] = useState<string | null>(null);
+  const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
+  const workingTreeRevision = selectedCommit || !mutationTargetsRepo ? 0 : filesTreeRevision;
+  useEffect(() => setEmptyDirectories(new Set()), [meta?.path]);
+  useEffect(() => {
+    if (!filesTreeMutation || !mutationTargetsRepo) return;
+    setEmptyDirectories((current) => applyEmptyDirectoryMutation(current, filesTreeMutation));
+  }, [filesTreeMutation, mutationTargetsRepo]);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
     let cancelled = false;
@@ -433,7 +446,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return () => {
       cancelled = true;
     };
-  }, [tab, meta?.path, selectedCommit]);
+  }, [tab, meta?.path, selectedCommit, workingTreeRevision]);
 
   // Files tab — Pierre receives either the selected revision or working tree.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
@@ -441,7 +454,16 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const displayedTree = selectedCommit
     ? (revisionTree ?? [])
     : (ignoredTree ?? workTree);
-  const filePaths = useMemo(() => displayedTree.map((e) => e.path), [displayedTree]);
+  const filePaths = useMemo(
+    () => [
+      ...displayedTree.map((e) => e.path),
+      ...(selectedCommit ? [] : emptyDirectories),
+    ],
+    [displayedTree, emptyDirectories, selectedCommit],
+  );
+  const selectedTreePath = selectedFile && selectedFileIsDirectory
+    ? `${selectedFile.replace(/\/+$/, '')}/`
+    : selectedFile;
   const fileGitStatus = useMemo(() => workTreeGitStatus(displayedTree), [displayedTree]);
   // Rename / move — the drop handler for drag-to-move in the tree, and the
   // dialog behind the context menu's keyboard-operable equivalent.
@@ -588,6 +610,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                   selectFile(null);
                 }
                 await refreshLocalChanges();
+                markFilesTreeChanged(meta.path, { kind: 'delete', paths: actionPaths });
                 onToast(actionPaths.length > 1 ? `Deleted ${actionPaths.length} entries` : `Deleted ${actionPaths[0]}`);
               },
               (cause) => onToast(`Delete failed: ${errMessage(cause)}`, 'error'),
@@ -600,6 +623,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     [
       gitignoreAdd,
       meta,
+      markFilesTreeChanged,
       onCreateFileEntry,
       onOpenFileInEditor,
       onToast,
@@ -1419,7 +1443,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             paths={filePaths}
             gitStatus={fileGitStatus}
             onMove={selectedCommit ? undefined : moveTo}
-            selectedPath={selectedFile}
+            selectedPath={selectedTreePath}
             onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
             menuItems={fileMenu}
             search
