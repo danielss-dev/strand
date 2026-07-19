@@ -1106,11 +1106,17 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
-- ☑ Content tab — working-tree (or revision) content via `repo_file_content`,
-  rendered with Pierre's read-only `<File>` (syntax-highlighted, app-themed).
-  Shiki-direct highlighting deferred — `<File>` already covers it. Mod+F
-  searches the source with wrap-around match navigation and virtualized-line
-  scrolling (`FileSearchBar` + `searchFileText`).
+- ☑ Content tab — working-tree (or revision) content via `repo_file_content`.
+  Existing complete UTF-8 working-tree files edit through the syntax-highlighted
+  `HighlightedEditor` and save through stale-checked `repo_file_write`; revisions,
+  binaries, oversized files, and non-UTF-8 text stay on Pierre's read-only
+  `<File>`. Optimistic token projection keeps the last Shiki colors attached
+  to unchanged text during every edit—there is no plain-text refresh frame—and
+  reconstructs CRLF token streams without tripping the plain-text fallback.
+  Writes are explicit only, via the disk save icon or Mod+S; blur and idle time
+  never save a draft.
+  Mod+F searches the source with wrap-around match navigation and
+  virtualized-line scrolling (`FileSearchBar` + `searchFileText`).
 - ☑ Preview tab — rendered view for renderable text files, tab only offered
   for them (`PreviewTab` in `FileView.tsx`): SVG through the image pipeline
   (`ImagePreview`, data-URL `<img>`), markdown through `lib/markdown.tsx`
@@ -1129,6 +1135,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   list (only the viewport slice mounts, since blame can run to 50k lines); click
   a line to jump to its commit in the graph
 - ☐ Tab state persistence per-file (settings store)
+- ☐ Replace the status bar's hardcoded `UTF-8 · LF` label with the selected
+  file's detected encoding and line endings (`StatusBar.tsx`; currently reports
+  LF even for CRLF working-tree files).
 
 ### Command palette
 - ☑ Open / close, ⌘K, fuzzy filter, run-on-Enter

@@ -33,6 +33,8 @@ pub struct FileContent {
     pub binary: bool,
     /// True when the file exceeded [`MAX_CONTENT_BYTES`] and `text` is a prefix.
     pub truncated: bool,
+    /// True when the complete file is UTF-8 text and can be edited safely.
+    pub editable: bool,
 }
 
 /// Raw file bytes (base64) for the image diff preview.
@@ -91,6 +93,52 @@ impl Repo {
                 Ok(build_content(rel_path, blob.content(), blob.is_binary()))
             }
         }
+    }
+
+    /// Replace an existing working-tree text file. `expected` is the content
+    /// returned by the last read; refusing a stale write prevents the editor
+    /// from silently overwriting an agent or external editor's newer version.
+    pub fn write_file_content(
+        &self,
+        rel_path: &str,
+        expected: &str,
+        content: &str,
+    ) -> Result<FileContent> {
+        if content.len() > MAX_CONTENT_BYTES {
+            return Err(Error::Other(format!(
+                "{rel_path} is too large to edit in Strand"
+            )));
+        }
+
+        let full = self.safe_workdir_path(rel_path)?;
+        let metadata = std::fs::symlink_metadata(&full)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(Error::Other(format!("{rel_path} is not an editable file")));
+        }
+
+        let bytes = std::fs::read(&full)?;
+        if bytes.len() > MAX_CONTENT_BYTES || looks_binary(&bytes) {
+            return Err(Error::Other(format!("{rel_path} is not editable text")));
+        }
+        let current = std::str::from_utf8(&bytes)
+            .map_err(|_| Error::Other(format!("{rel_path} is not UTF-8 text")))?;
+        if current != expected {
+            return Err(Error::Other(format!(
+                "{rel_path} changed on disk; reload it before saving"
+            )));
+        }
+
+        // A textarea normalizes newlines to LF. Keep a consistently-CRLF file
+        // consistently CRLF so one edit does not turn every line into a diff.
+        let crlf_count = current.matches("\r\n").count();
+        let lf_count = current.bytes().filter(|byte| *byte == b'\n').count();
+        let output = if crlf_count > 0 && crlf_count == lf_count {
+            content.replace("\r\n", "\n").replace('\n', "\r\n")
+        } else {
+            content.to_string()
+        };
+        std::fs::write(&full, output.as_bytes())?;
+        Ok(build_content(rel_path, output.as_bytes(), false))
     }
 
     /// Read a file's raw bytes for the image preview: the working-tree copy,
@@ -193,6 +241,7 @@ fn build_content(path: &str, bytes: &[u8], binary: bool) -> FileContent {
         text,
         binary,
         truncated,
+        editable: !binary && !truncated && std::str::from_utf8(bytes).is_ok(),
     }
 }
 
@@ -329,6 +378,7 @@ mod tests {
         let wt = repo.file_content("c.txt", None).unwrap();
         assert_eq!(wt.text, "v2\n");
         assert!(!wt.binary);
+        assert!(wt.editable);
 
         let head = repo.file_content("c.txt", Some("HEAD")).unwrap();
         assert_eq!(head.text, "v1\n", "HEAD blob is the committed version");
@@ -338,6 +388,38 @@ mod tests {
 
         // Path traversal is rejected.
         assert!(repo.file_content("../escape.txt", None).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn content_write_preserves_line_endings_and_rejects_stale_writes() {
+        let (repo, dir) = scratch();
+        std::fs::write(dir.join("edit.txt"), "one\r\ntwo\r\n").unwrap();
+
+        let saved = repo
+            .write_file_content("edit.txt", "one\r\ntwo\r\n", "one\nchanged\n")
+            .unwrap();
+        assert_eq!(saved.text, "one\r\nchanged\r\n");
+        assert_eq!(std::fs::read(dir.join("edit.txt")).unwrap(), b"one\r\nchanged\r\n");
+
+        let stale = repo.write_file_content("edit.txt", "one\r\ntwo\r\n", "lost\n");
+        assert!(stale.is_err());
+        assert_eq!(std::fs::read(dir.join("edit.txt")).unwrap(), b"one\r\nchanged\r\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn content_write_rejects_non_utf8_and_traversal() {
+        let (repo, dir) = scratch();
+        std::fs::write(dir.join("invalid.txt"), [0xff, 0xfe]).unwrap();
+
+        let invalid = repo.file_content("invalid.txt", None).unwrap();
+        assert!(!invalid.binary);
+        assert!(!invalid.editable);
+        assert!(repo.write_file_content("invalid.txt", &invalid.text, "text").is_err());
+        assert!(repo.write_file_content("../escape.txt", "", "text").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

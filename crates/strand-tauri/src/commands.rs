@@ -651,6 +651,19 @@ pub async fn repo_file_content(path: String, file: String, rev: Option<String>) 
     .await
 }
 
+#[tauri::command(async)]
+pub async fn repo_file_write(
+    path: String,
+    file: String,
+    expected: String,
+    content: String,
+) -> CmdResult<FileContent> {
+    run_blocking("write file content", move || {
+        Ok(Repo::discover(&path)?.write_file_content(&file, &expected, &content)?)
+    })
+    .await
+}
+
 /// Raw file bytes (base64) for the image diff preview. `index = true` reads
 /// the staged copy; otherwise `rev = None` reads the working tree and
 /// `rev = Some(spec)` the blob at that revision.

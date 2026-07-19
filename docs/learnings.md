@@ -1788,3 +1788,18 @@ entire status walk when a generated descendant exceeds its path limit. Let Git
 classify the ignored directory boundary, then expand that already-ignored tree
 with an iterative native filesystem walk that does not follow symlinks and
 tolerates entries disappearing during package-manager updates.
+
+**In-app text writes are optimistic and encoding-preserving (2026-07-19).** A
+file editor must send the exact content it last read and the core must reject a
+write when the disk copy no longer matches; agents and external editors share
+the working tree, so last-writer-wins would silently destroy work. Mutate only
+complete UTF-8 regular files behind `safe_workdir_path`, reject symlinks and
+oversized/binary content, and preserve a consistently-CRLF file's line endings
+after textarea normalization. Commit/revision content remains immutable.
+Keep the last valid token map projected onto the current buffer while an async
+syntax refresh is pending; never replace a highlighted editor with plain text
+merely because its token result is one input behind.
+Web textareas and Shiki expose LF line boundaries even when a Windows checkout
+is CRLF. Normalize the editable in-memory buffer to LF, keep the raw last-read
+text separately for optimistic writes, and reconstruct token streams with the
+source's actual separators whenever exact-source validation is required.

@@ -28,7 +28,9 @@ It will be built as a **Tauri 2** application with a **Rust** git backend and a 
 
 ### Non-goals (v1)
 
-- A full code editor. Strand shows diffs and file contents at any commit — it does not edit working-tree files. Users edit in their editor of choice.
+- A full code editor. Strand supports lightweight, syntax-highlighted edits of
+  existing UTF-8 working-tree files, but leaves completion, refactoring,
+  diagnostics, and project-wide editing to the user's editor of choice.
 - A web/cloud product. Strand is a local-first desktop app. No accounts, no telemetry by default.
 - Hosting CI/CD or code-review data. Strand integrates with Git providers and
   may let users review and act on pull requests, but the provider remains the
@@ -128,7 +130,7 @@ This is the main workspace for committing — all staging, diff inspection, disc
 
 #### When **a file is selected** (from the sidebar Files tree) — four tabs
 
-1. **Content** — file content at the current revision (working tree by default, or at the selected commit). Syntax-highlighted via Shiki. Read-only.
+1. **Content** — file content at the current revision (working tree by default, or at the selected commit). Existing UTF-8 working-tree files are syntax-highlighted and editable; historical revisions, binaries, and oversized files are read-only.
 2. **History** — commits that touched this file, with a per-commit diff preview. Click a commit to jump to it in the graph.
 3. **Compare** — pick any two revisions (commits, branches, tags, or "working tree") and render the diff for this file using `@pierre/diffs`.
 4. **Blame** — per-line author + commit attribution. Click a line to jump to the commit that introduced it.
@@ -221,7 +223,7 @@ Priority levels: **P0** = required for first public release, **P1** = required b
 
 **Four-tab file view.** Clicking a file in the sidebar tree opens it in the main pane with four tabs:
 
-- **Content** — file content at the current revision (working tree by default, or at the selected commit). Syntax-highlighted with Shiki, read-only.
+- **Content** — file content at the current revision (working tree by default, or at the selected commit). Existing UTF-8 working-tree files are syntax-highlighted and editable; historical revisions, binaries, and oversized files are read-only.
 - **History** — commits that touched this file, with per-commit diff previews. Click a commit to jump to it in the graph.
 - **Compare** — pick any two revisions (commits, branches, tags, or "working tree") and render the diff for this file using `@pierre/diffs`.
 - **Blame** — per-line author + commit attribution. Click a line to jump to the commit that introduced it.

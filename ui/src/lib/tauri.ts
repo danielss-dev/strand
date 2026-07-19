@@ -255,6 +255,8 @@ export const tauri = {
     invoke<BaseBranch | null>('repo_detect_base_branch', { path, target }),
   repoFileContent: (path: string, file: string, rev: string | null) =>
     invoke<FileContent>('repo_file_content', { path, file, rev }),
+  repoFileWrite: (path: string, file: string, expected: string, content: string) =>
+    invoke<FileContent>('repo_file_write', { path, file, expected, content }),
   repoFileBlob: (path: string, file: string, rev: string | null, index: boolean) =>
     invoke<FileBlob>('repo_file_blob', { path, file, rev, index }),
   repoFileHistory: (path: string, file: string, limit?: number) =>
