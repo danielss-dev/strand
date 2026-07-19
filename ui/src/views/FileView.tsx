@@ -22,7 +22,8 @@ import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import { projectTokenColors, tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
+import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
+import { projectTokenColors } from '../lib/highlightProjection';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type {

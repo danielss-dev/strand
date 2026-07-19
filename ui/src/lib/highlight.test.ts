@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { projectTokenColors, type HlToken } from './highlight';
+import type { HlToken } from './highlight';
+import { projectTokenColors } from './highlightProjection';
 
 const tokens: HlToken[][] = [
   [
