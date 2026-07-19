@@ -52,10 +52,12 @@ Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
 - **Delete file/folder** requires a second confirmation click. Tracked entries
   become ordinary working-tree deletions; the index is not changed.
 
-Like Git itself, the Files tree is assembled from tracked and untracked files,
-so an empty folder does not appear as a tree row until it contains a file. The
-new-folder action still opens that folder immediately, and a nested new-file
-path can populate it without leaving Strand.
+The Files tree shows tracked and untracked files. Choose **Show ignored** in
+its toolbar to include Git-ignored local files; ignored files have no change
+badge and stay out of Local Changes. This is opt-in because generated ignored
+directories can be very large. An empty folder does not appear as a tree row
+until it contains a file; the new-folder action still opens that folder
+immediately, and a nested new-file path can populate it without leaving Strand.
 
 ## Committing
 

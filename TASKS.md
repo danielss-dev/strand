@@ -93,7 +93,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (`Repo::refs` → `Refs { branches, remotes, remote_branches, tags }`;
   exposed via `repo_refs` IPC; per-branch upstream + ahead/behind)
 - ☑ `Repo::work_tree` — working-tree file listing (index entries ∪ untracked,
-  ignored excluded, overlaid with change status) powering the Files sidebar tab
+  overlaid with change status) powering the Files sidebar tab; opt-in ignored
+  local files use `Repo::work_tree_with_ignored` + **Show ignored** without
+  slowing the snapshot hot path
 - ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
   oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
   out of git's `WIP on <branch>:` / `On <branch>:` message)

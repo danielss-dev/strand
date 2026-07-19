@@ -1,10 +1,10 @@
 //! Repository file listings — powers the Files sidebar tab.
 //!
 //! The working-tree path lists every tracked file (from the index) plus
-//! untracked-but-not-ignored files, each tagged with its change status so the
-//! UI can paint a badge. The revision path walks a commit tree and returns the
-//! immutable file set at that point in history. The frontend groups either
-//! flat list into a folder tree.
+//! local untracked files and, on request, ignored files, with Git changes
+//! tagged so the UI can paint a badge. The revision path walks a commit tree
+//! and returns the immutable file set at that point in history. The frontend
+//! groups either flat list into a folder tree.
 
 use std::collections::BTreeMap;
 
@@ -22,10 +22,19 @@ pub struct WorkTreeEntry {
 
 impl Repo {
     /// List the working tree: tracked paths (from the index) overlaid with
-    /// change status, plus untracked files. Ignored files are excluded.
+    /// change status, plus untracked local files.
     pub fn work_tree(&self) -> Result<Vec<WorkTreeEntry>> {
+        self.work_tree_with_ignored(false)
+    }
+
+    /// List the working tree, optionally including Git-ignored local files.
+    /// Ignored enumeration is opt-in because generated directories can be
+    /// very large and this path recursively resolves them for the Files tree.
+    pub fn work_tree_with_ignored(&self, include_ignored: bool) -> Result<Vec<WorkTreeEntry>> {
         let repo = self.git2()?;
-        let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
+        let statuses = repo.statuses(Some(
+            &mut crate::status::tree_status_options(include_ignored),
+        ))?;
         from_index_and_statuses(repo, &statuses)
     }
 
@@ -75,13 +84,15 @@ pub(crate) fn from_index_and_statuses(
         }
     }
 
-    // Overlay status: untracked files get inserted, changed tracked files
-    // get a kind. `statuses()` only returns changed entries, so clean
-    // tracked files keep the `None` from the index pass above.
+    // Overlay status: local files get inserted and changed tracked files get
+    // a kind. Ignored files intentionally have no change badge. `statuses()`
+    // only returns changed entries, so clean tracked files keep the `None`
+    // from the index pass above.
     for e in statuses.iter() {
         let Some(path) = e.path() else { continue };
         let s = e.status();
         if s.is_ignored() {
+            map.entry(path.to_string()).or_insert(None);
             continue;
         }
         map.insert(path.to_string(), Some(classify(s)));
@@ -193,6 +204,42 @@ mod tests {
 
         assert_eq!(repo.tree_at("HEAD").unwrap()[0].path, "a.txt");
         assert!(repo.tree_at("does-not-exist").is_err());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn work_tree_includes_ignored_files_without_change_badges() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join(".gitignore"), "target/\n*.local\n").unwrap();
+        std::fs::create_dir_all(dir.join("target/nested")).unwrap();
+        std::fs::write(dir.join("target/nested/cache.bin"), "cache\n").unwrap();
+        std::fs::write(dir.join("settings.local"), "local\n").unwrap();
+        std::fs::write(dir.join("visible.txt"), "visible\n").unwrap();
+
+        let entries = repo
+            .work_tree_with_ignored(true)
+            .unwrap()
+            .into_iter()
+            .map(|entry| (entry.path, entry.status))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(entries.get("target/nested/cache.bin"), Some(&None));
+        assert_eq!(entries.get("settings.local"), Some(&None));
+        assert_eq!(
+            entries.get("visible.txt"),
+            Some(&Some(StatusKind::Untracked))
+        );
+        assert!(repo
+            .work_tree()
+            .unwrap()
+            .iter()
+            .all(|entry| entry.path != "settings.local" && entry.path != "target/nested/cache.bin"));
+        assert!(repo
+            .status()
+            .unwrap()
+            .iter()
+            .all(|entry| entry.path != "settings.local" && entry.path != "target/nested/cache.bin"));
 
         let _ = std::fs::remove_dir_all(dir);
     }
