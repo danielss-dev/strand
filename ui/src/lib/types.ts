@@ -652,6 +652,8 @@ export interface FileContent {
   text: string;
   binary: boolean;
   truncated: boolean;
+  /** Complete UTF-8 text that can safely be written back to the working tree. */
+  editable: boolean;
 }
 
 /** Raw file bytes (worktree / index / revision) for the image diff preview. */

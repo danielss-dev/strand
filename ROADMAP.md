@@ -1105,9 +1105,10 @@ view (PRD §6.5) and submodules went from placeholders to wired features.
 - **File content.** `Repo::file_content(path, rev)` reads the working-tree copy
   from disk (behind the same `safe_workdir_path` traversal/symlink guard the
   conflict reader uses) or a blob at a revision via `git2`; binary heuristic +
-  2 MB cap (`truncated` flag). The Content tab renders it through Pierre's
-  read-only `<File>` (syntax-highlighted, app-themed) — not Shiki, which stays
-  a future polish.
+  2 MB cap (`truncated` flag). Existing complete UTF-8 working-tree files now
+  edit through the Pierre-themed Shiki token layer and `repo_file_write`;
+  historical revisions, binaries, oversized files, and non-UTF-8 text remain
+  on Pierre's read-only `<File>`.
 - **Blame.** `Repo::blame(path)` maps each HEAD line to its commit via
   `git2::blame_file`, paired with the HEAD blob content (per-commit summary
   cache, 50k-line cap). The Blame tab renders a **fixed-height virtual list**
@@ -2170,6 +2171,17 @@ body now grows to fit short and wrapped content, with a bounded scrollbar for
 long drafts, instead of reserving a fixed multi-line block after AI generation.
 The applied AI draft now remains directly editable without persistent
 coverage/provider status or an Undo row beneath the description.
+
+**Syntax-highlighted file editing shipped (2026-07-19):** Opening an existing
+UTF-8 working-tree file from Files now mounts a lightweight editor backed by
+Pierre's shared Shiki tokenizer. Save and Mod+S explicitly write through
+`repo_file_write`; the core preserves consistent CRLF endings and
+rejects stale, traversal, symlink, binary, non-UTF-8, and oversized writes.
+Historical revisions remain read-only. The editor projects the last Shiki token
+colors onto each new buffer immediately, so background retokenization never
+causes a plain-text flash while typing. Its in-memory buffer is LF-normalized
+for textarea/Shiki agreement while the core retains and restores the exact CRLF
+disk form on save.
 
 ---
 

@@ -89,7 +89,7 @@ Open any file from the sidebar's **Files** tab or the command palette to get a d
 
 | Tab | What it shows |
 | --- | --- |
-| Content | The working-tree file, or the selected commit's version, syntax-highlighted; images get a checkerboard preview |
+| Content | The editable, syntax-highlighted working-tree file, or a read-only selected-commit version; images get a checkerboard preview |
 | Preview | Rendered form of the working-tree or selected-commit file (only for previewable files) |
 | History | The file's commit history, following renames (`git log --follow`) |
 | Compare | This file diffed between any two of its revisions |
@@ -98,6 +98,13 @@ Open any file from the sidebar's **Files** tab or the command palette to get a d
 Press `Mod+F` anywhere in the file view to switch to Content and search the
 file's source. `Enter` / `Shift+Enter` (or `Down` / `Up`) move through matches
 with wrapping; `Esc` closes the search.
+
+For an existing UTF-8 working-tree file, type directly in Content. Strand keeps
+the same syntax highlighting while you edit. Changes remain unsaved until you
+use the save icon or `Mod+S`.
+Historical revisions, binaries, oversized files, and non-UTF-8 text stay
+read-only. If another tool changes the file after Strand opens it, Strand
+refuses the stale save instead of overwriting the newer disk content.
 
 ### Preview
 

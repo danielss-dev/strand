@@ -162,8 +162,9 @@ keyboard alone, and the mouse stays first-class.
 - **Command palette (⌘K)** — fuzzy search across commands, branches, tags,
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
-- **File view** — highlighted source, `--follow` history, compare any two
-  revisions, blame, and rendered previews for markdown and SVG; the Files tree
+- **File view** — edit existing UTF-8 working-tree files with syntax
+  highlighting, or inspect read-only historical source; `--follow` history,
+  compare any two revisions, blame, and rendered previews for markdown and SVG; the Files tree
   shows tracked and untracked files, with an opt-in view of Git-ignored local
   files, using recognizable language and tool logos. Selecting a commit
   re-roots it while pinning opened content to that revision. Selecting a folder

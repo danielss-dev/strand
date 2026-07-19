@@ -125,6 +125,7 @@ fn main() {
             commands::repo_diff_commit_file,
             commands::repo_diff_workdir_file,
             commands::repo_file_content,
+            commands::repo_file_write,
             commands::repo_file_blob,
             commands::repo_file_history,
             commands::repo_blame,

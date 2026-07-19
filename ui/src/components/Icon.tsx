@@ -8,7 +8,7 @@ export type IconName =
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye' | 'sparkle'
   | 'split' | 'unified' | 'rebase' | 'circle' | 'lock' | 'star' | 'gpg' | 'warning' | 'settings'
   | 'trash' | 'workspace'
-  | 'bell'
+  | 'bell' | 'save'
   | 'win-min' | 'win-max' | 'win-restore' | 'win-close';
 
 interface Props extends Omit<SVGProps<SVGSVGElement>, 'name' | 'stroke'> {
@@ -48,6 +48,7 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'folder':      return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4Z"/></svg>;
     case 'workspace':   return <svg {...p}><path d="M8 1.8 14.5 5 8 8.2 1.5 5 8 1.8Z"/><path d="M1.5 8 8 11.2 14.5 8"/><path d="M1.5 11 8 14.2 14.5 11"/></svg>;
     case 'bell':        return <svg {...p}><path d="M3 11h10l-1.2-1.6V6a3.8 3.8 0 0 0-7.6 0v3.4L3 11Z"/><path d="M6.5 13a1.6 1.6 0 0 0 3 0"/></svg>;
+    case 'save':        return <svg {...p}><path d="M2 2h10l2 2v10H2V2Z"/><path d="M5 2v4h6V2M5 14V9h6v5"/></svg>;
     case 'folder-open': return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v1.5H1.5V4Z"/><path d="M1.5 6h13l-1.2 6.6a1 1 0 0 1-1 .9H3.7a1 1 0 0 1-1-.9L1.5 6Z"/></svg>;
     case 'changes':     return <svg {...p}><circle cx="8" cy="8" r="6.2"/><path d="M5 8h6M8 5v6"/></svg>;
     case 'search':      return <svg {...p}><circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4l3.1 3.1"/></svg>;

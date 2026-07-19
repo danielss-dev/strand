@@ -17,11 +17,12 @@ import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
 import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { imageMime, isImagePath } from '../lib/image';
 import { directoryEntries, type DirectoryEntry } from '../lib/directoryEntries';
+import { t } from '../lib/i18n';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
+import { projectTokenColors, tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type {
@@ -39,6 +40,10 @@ type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
  *  Any non-hex string works — it never reaches git (the working-tree branch
  *  calls `repoDiffWorkdirFile`), it only needs to differ from real OIDs. */
 const WORKING = 'working-tree';
+
+function normalizeEditorText(text: string): string {
+  return text.replace(/\r\n?/g, '\n');
+}
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'content', label: 'Content', icon: 'content' },
@@ -343,16 +348,25 @@ function ContentTab({
   searchOpen: boolean;
   onCloseSearch: () => void;
 }) {
-  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const pierreTheme: HlTheme =
+    useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+  const [original, setOriginal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const savingRef = useRef(false);
   const selectLine = useCallback((line: number | null) => setSelectedLine(line), []);
+  const editable = Boolean(data?.editable && !revision);
+  const normalizedOriginal = useMemo(() => normalizeEditorText(original), [original]);
+  const dirty = editable && draft !== normalizedOriginal;
 
   useEffect(() => {
-    if (selectedLine == null || !data) return;
+    if (selectedLine == null || !data || editable) return;
     let attempts = 0;
     let cancelled = false;
     let timer: number | null = null;
@@ -380,7 +394,7 @@ function ContentTab({
       cancelAnimationFrame(frame);
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [selectedLine, data]);
+  }, [selectedLine, data, editable]);
 
   const closeSearch = useCallback(() => {
     setSelectedLine(null);
@@ -393,13 +407,54 @@ function ContentTab({
     setLoading(true);
     setError(null);
     setData(null);
+    setDraft('');
+    setOriginal('');
+    setSaveError(null);
+    savingRef.current = false;
     tauri
       .repoFileContent(repoPath, path, revision)
-      .then((c) => { if (!cancelled) setData(c); })
+      .then((c) => {
+        if (!cancelled) {
+          setData(c);
+          setDraft(normalizeEditorText(c.text));
+          setOriginal(c.text);
+        }
+      })
       .catch((e) => { if (!cancelled) setError(errMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [repoPath, path, revision]);
+
+  const save = useCallback(async () => {
+    if (!repoPath || !data?.editable || revision || !dirty || savingRef.current) return;
+    const next = draft;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const saved = await tauri.repoFileWrite(repoPath, path, original, next);
+      setData(saved);
+      setOriginal(saved.text);
+      // Do not clobber keystrokes entered while the write was in flight.
+      setDraft((current) => current === next ? normalizeEditorText(saved.text) : current);
+    } catch (caught) {
+      setSaveError(errMessage(caught));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }, [data?.editable, dirty, draft, original, path, repoPath, revision]);
+
+  useEffect(() => {
+    if (!editable) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      void save();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editable, save]);
 
   if (loading) return <FvEmpty>Loading…</FvEmpty>;
   if (error) return <FvEmpty>{error}</FvEmpty>;
@@ -420,19 +475,172 @@ function ContentTab({
   // runtime; not in `FileOptions`' type, so we build the object outside the
   // JSX to skip the excess-property check — same as MergeResolver).
   const opts = { theme: pierreTheme, disableBackground: true, disableFileHeader: true };
+  const searchText = editable ? draft : data.text;
   return (
     <div className="fv-tab diff-search-host">
       {data.truncated && (
-        <div className="fv-banner">Large file — showing the first part only.</div>
+        <div className="fv-banner">{t('file.largeReadOnly')}</div>
+      )}
+      {!data.truncated && !data.editable && (
+        <div className="fv-banner">{t('file.encodingReadOnly')}</div>
       )}
       {searchOpen && (
-        <FileSearchBar text={data.text} onSelect={selectLine} onClose={closeSearch} />
+        <FileSearchBar text={searchText} onSelect={selectLine} onClose={closeSearch} />
       )}
-      <div className="fv-pierre" ref={scrollRef}>
-        <PierreFile
-          file={{ name: path, contents: data.text }}
-          options={opts}
-          selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
+      {editable ? (
+        <>
+          <div className="fv-editor-toolbar">
+            <span
+              className={'fv-editor-status' + (saveError ? ' error' : dirty ? ' dirty' : '')}
+              role={saveError ? 'alert' : 'status'}
+            >
+              {saveError
+                ? t('file.saveFailed', { reason: saveError })
+                : saving
+                  ? t('file.saving')
+                  : dirty
+                    ? t('file.unsaved')
+                    : t('file.saved')}
+            </span>
+            <button
+              type="button"
+              className="icon-btn fv-editor-save"
+              disabled={!dirty || saving}
+              onClick={() => void save()}
+              title={`${t('file.save')} (Mod+S)`}
+              aria-label={saving ? t('file.saving') : t('file.save')}
+            >
+              <Icon name="save" size={15} />
+            </button>
+          </div>
+          <HighlightedEditor
+            path={path}
+            text={draft}
+            theme={pierreTheme}
+            selectedLine={selectedLine}
+            onChange={(next) => {
+              setDraft(next);
+              setSaveError(null);
+            }}
+          />
+        </>
+      ) : (
+        <div className="fv-pierre" ref={scrollRef}>
+          <PierreFile
+            file={{ name: path, contents: data.text }}
+            options={opts}
+            selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EDITOR_LINE_HEIGHT = 18;
+
+function HighlightedEditor({
+  path,
+  text,
+  theme,
+  selectedLine,
+  onChange,
+}: {
+  path: string;
+  text: string;
+  theme: HlTheme;
+  selectedLine: number | null;
+  onChange: (text: string) => void;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [highlight, setHighlight] = useState<{ text: string; tokens: HlToken[][] } | null>(null);
+  const lineCount = useMemo(() => text.split('\n').length, [text]);
+  const gutter = useMemo(
+    () => Array.from({ length: lineCount }, (_, index) => index + 1).join('\n'),
+    [lineCount],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void tokenizeFile(text, path, theme).then((tokens) => {
+        if (!cancelled && tokens) setHighlight({ text, tokens });
+      });
+    }, 24);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [path, text, theme]);
+
+  useEffect(() => {
+    if (selectedLine == null) return;
+    const input = inputRef.current;
+    if (!input) return;
+    const target = (selectedLine - 0.5) * EDITOR_LINE_HEIGHT - input.clientHeight / 2;
+    input.scrollTo({ top: Math.max(0, target) });
+    setScrollTop(input.scrollTop);
+  }, [selectedLine]);
+
+  const highlighted = useMemo(() => {
+    if (!highlight) return text;
+    return projectTokenColors(highlight.text, text, highlight.tokens).map((token, index) => (
+      <span key={index} style={token.color ? { color: token.color } : undefined}>
+        {token.content}
+      </span>
+    ));
+  }, [highlight, text]);
+
+  const insertTab = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    onChange(`${text.slice(0, start)}\t${text.slice(end)}`);
+    requestAnimationFrame(() => input.setSelectionRange(start + 1, start + 1));
+  }, [onChange, text]);
+
+  return (
+    <div className="fv-editor">
+      <div className="fv-editor-gutter" aria-hidden>
+        <pre style={{ transform: `translateY(${-scrollTop}px)` }}>{gutter}</pre>
+      </div>
+      <div className="fv-editor-surface">
+        {selectedLine != null && (
+          <div
+            className="fv-editor-selected-line"
+            style={{ top: 10 + (selectedLine - 1) * EDITOR_LINE_HEIGHT - scrollTop }}
+            aria-hidden
+          />
+        )}
+        <pre
+          className="fv-editor-highlight"
+          style={{ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }}
+          aria-hidden
+        >
+          {highlighted}
+        </pre>
+        <textarea
+          ref={inputRef}
+          className="fv-editor-input"
+          value={text}
+          onChange={(event) => onChange(event.target.value)}
+          onScroll={(event) => {
+            setScrollTop(event.currentTarget.scrollTop);
+            setScrollLeft(event.currentTarget.scrollLeft);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab' || event.metaKey || event.ctrlKey || event.altKey) return;
+            event.preventDefault();
+            insertTab();
+          }}
+          aria-label={t('file.editorLabel', { path })}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          wrap="off"
         />
       </div>
     </div>
