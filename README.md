@@ -173,7 +173,8 @@ keyboard alone, and the mouse stays first-class.
   opens its immediate contents with the same file-type icons, file/change
   counts, and keyboard navigation. A compact **+** menu beside search creates a
   file or folder at the repository root; fully ignored folders and their
-  descendants stay muted without internal change dots. Creates, deletes, and
+  descendants stay muted without creating change dots on mixed parent folders.
+  Creates, deletes, and
   renames update the tree in place, including newly created empty folders.
   Right-click any working-tree file to open that exact path in your configured
   external editor.

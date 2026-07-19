@@ -1,0 +1,14 @@
+diff --git a/dist/model/gitStatus.js b/dist/model/gitStatus.js
+index 1e57ee3cbdcbfafaa4c42186008015383ecd390f..fbcbef5f471ded139c3055dcbea617abc001f97c 100644
+--- a/dist/model/gitStatus.js
++++ b/dist/model/gitStatus.js
+@@ -109 +109 @@ function removeGitStatusPath({ canonicalPath, changeCountByDirectoryPath, direct
+-	decrementAncestorChangeCounts(changeCountByDirectoryPath, directoriesWithChanges, canonicalPath);
++	if (previousStatus !== "ignored") decrementAncestorChangeCounts(changeCountByDirectoryPath, directoriesWithChanges, canonicalPath);
+@@ -115 +115,5 @@ function setGitStatusPath({ canonicalPath, changeCountByDirectoryPath, directori
+-	if (previousStatus == null) incrementAncestorChangeCounts(changeCountByDirectoryPath, directoriesWithChanges, canonicalPath);
++	if (status !== "ignored" && (previousStatus == null || previousStatus === "ignored")) {
++		incrementAncestorChangeCounts(changeCountByDirectoryPath, directoriesWithChanges, canonicalPath);
++	} else if (status === "ignored" && previousStatus != null) {
++		decrementAncestorChangeCounts(changeCountByDirectoryPath, directoriesWithChanges, canonicalPath);
++	}

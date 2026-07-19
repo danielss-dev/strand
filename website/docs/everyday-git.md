@@ -56,7 +56,8 @@ The Files tree uses the repository's ignored-inclusive local listing directly;
 it does not first substitute the Git snapshot while that listing loads. Current
 Git state is overlaid on those local paths, so added, modified, and deleted
 entries keep their status colors. Ignored files and fully ignored folders are
-muted gray, have no internal change dots, and stay out of Local Changes. Strand
+muted gray, do not create change dots on their parent folders, and stay out of
+Local Changes. Strand
 loads the local listing only after you open Files. It lists ignored folder
 boundaries immediately, then fetches one directory level when you expand a
 muted folder; generated trees such as `node_modules` therefore do not block the

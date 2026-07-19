@@ -763,7 +763,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   synthesized folder; `FileView.DirectoryTab` renders a folder's immediate
   children with the shared tree file-type icons, descendant/change counts, and
   keyboard navigation without sending the directory path to
-  `repo_file_content`.
+  `repo_file_content`. Ignored statuses stay muted without incrementing
+  Pierre's ancestor change counters (`@pierre/trees` pinned patch).
 - ☑ Language-aware icons for source types missing from Pierre's complete set
   (`lib/treeIcons.ts`: real Material Icon Theme SVG marks in one static custom
   sprite + file-rule maps shared by every `PierreTree`, including C#, F#,

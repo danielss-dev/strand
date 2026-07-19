@@ -2217,6 +2217,13 @@ ignored-inclusive Files cache in place without leaving the view. New empty
 folders receive session-local Pierre directory markers because Git snapshots
 cannot represent directories until they contain a file.
 
+**Ignored children no longer mark parents modified (2026-07-19):** The pinned
+`@pierre/trees` status patch keeps ignored directory identity and inherited gray
+styling but excludes ignored rows from ancestor change counters. Mixed folders
+such as `.claude` therefore show a dot only for a real Git change, while an
+ignored child such as `worktrees` remains muted. Regression coverage exercises
+ignored-to-modified, modified-to-ignored, and removal transitions.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

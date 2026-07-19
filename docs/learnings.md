@@ -1810,9 +1810,12 @@ render the snapshot-backed tree, because Files would misleadingly swap from
 Git-visible paths to local paths. Use the cheap snapshot only as the current
 Git-status overlay, never as the Files path source. Ignored entries carry
 explicit identity for muted Pierre rows, stay badge-free, and remain out of
-Local Changes. Pierre counts every status entry toward ancestor change dots,
-including `ignored`; emit one ignored-root status so descendants inherit the
-muted color without producing dots inside the ignored tree. Never set
+Local Changes. Pierre's stock status model counts every status entry toward
+ancestor change dots, including `ignored`; keep the pinned package patch that
+excludes ignored statuses from `directoriesWithChanges` while retaining
+`ignoredDirectoryPaths` for inherited muted styling. Its transition logic must
+increment when ignored becomes a real status, decrement when real becomes
+ignored, and leave counters alone when an ignored status is removed. Never set
 libgit2's `recurse_ignored_dirs`: its Windows filesystem layer can abort the
 entire status walk when a generated descendant exceeds its path limit.
 
