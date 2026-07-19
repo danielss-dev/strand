@@ -7413,8 +7413,7 @@ textarea.clone-input {
 }
 .side-files-tools {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
   gap: 6px;
   padding: 7px 8px;
   border-bottom: 0.5px solid var(--border);
@@ -7434,6 +7433,13 @@ textarea.clone-input {
   font: inherit;
   font-size: var(--type-ui-sm);
   cursor: pointer;
+}
+.side-files-tools .side-files-create {
+  flex: 0 0 28px;
+  padding: 0;
+}
+.side-files-tools button:not(.side-files-create) {
+  flex: 1;
 }
 .side-files-tools button:hover,
 .side-files-tools button:focus-visible {

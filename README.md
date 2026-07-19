@@ -169,7 +169,8 @@ keyboard alone, and the mouse stays first-class.
   files, using recognizable language and tool logos. Selecting a commit
   re-roots it while pinning opened content to that revision. Selecting a folder
   opens its immediate contents with the same file-type icons, file/change
-  counts, and keyboard navigation.
+  counts, and keyboard navigation. A compact **+** menu creates a file or folder
+  at the repository root without crowding the tree toolbar.
   Right-click any working-tree file to open that exact path in your configured
   external editor.
 - **Comfortable to live in** — multiple repositories open at once (as a

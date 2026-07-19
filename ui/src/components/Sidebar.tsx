@@ -267,10 +267,30 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       return next;
     });
 
-  // The open right-click menu, if any. Per-row actions (checkout, delete,
-  // push, …) live here instead of inline on the row.
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  const openMenu = (x: number, y: number, items: MenuItem[]) => setMenu({ x, y, items });
+  // The open sidebar menu, if any. Per-row actions (checkout, delete, push,
+  // …) and the Files create actions share the same keyboard-operable surface.
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    items: MenuItem[];
+    source: 'context' | 'file-create';
+  } | null>(null);
+  const openMenu = (
+    x: number,
+    y: number,
+    items: MenuItem[],
+    source: 'context' | 'file-create' = 'context',
+  ) => setMenu({ x, y, items, source });
+  const fileCreateButtonRef = useRef<HTMLButtonElement>(null);
+
+  const openFileCreateMenu = () => {
+    const rect = fileCreateButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    openMenu(rect.left, rect.bottom + 4, [
+      { label: t('files.newFile'), icon: 'file-plus', onSelect: () => onCreateFileEntry('', false) },
+      { label: t('files.newFolder'), icon: 'folder-plus', onSelect: () => onCreateFileEntry('', true) },
+    ], 'file-create');
+  };
 
   const unstaged = status.filter((s) => !s.staged).length;
   const toggle = (k: keyof typeof sections) => setSections((s) => ({ ...s, [k]: !s[k] }));
@@ -1387,11 +1407,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           {renameDialog}
           {!selectedCommit && (
             <div className="side-files-tools" role="toolbar" aria-label="Working-tree file actions">
-              <button type="button" onClick={() => onCreateFileEntry('', false)}>
-                <Icon name="file" size={12} /> New file
-              </button>
-              <button type="button" onClick={() => onCreateFileEntry('', true)}>
-                <Icon name="folder" size={12} /> New folder
+              <button
+                ref={fileCreateButtonRef}
+                type="button"
+                className="side-files-create"
+                title={t('files.createEntry')}
+                aria-label={t('files.createEntry')}
+                aria-haspopup="menu"
+                aria-expanded={menu?.source === 'file-create'}
+                onClick={openFileCreateMenu}
+              >
+                <Icon name="plus" size={14} stroke={2} />
               </button>
               <button
                 type="button"

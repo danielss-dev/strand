@@ -2191,6 +2191,11 @@ causes a plain-text flash while typing. Its in-memory buffer is LF-normalized
 for textarea/Shiki agreement while the core retains and restores the exact CRLF
 disk form on save.
 
+**Files creation toolbar refined (2026-07-19):** The separate New file and New
+folder buttons are now one compact **+** menu with dedicated file-add and
+folder-add icons. The menu retains full arrow-key, Enter, Escape, and focus-
+return behavior while leaving both creation actions in Quick Launch.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

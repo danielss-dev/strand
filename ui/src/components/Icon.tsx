@@ -2,7 +2,7 @@ import type { SVGProps } from 'react';
 
 export type IconName =
   | 'edit' | 'graph' | 'branch' | 'tag' | 'stash' | 'remote' | 'submodule' | 'worktree'
-  | 'file' | 'folder' | 'folder-open' | 'changes' | 'search' | 'command'
+  | 'file' | 'file-plus' | 'folder' | 'folder-plus' | 'folder-open' | 'changes' | 'search' | 'command'
   | 'arrow-down' | 'arrow-up' | 'refresh' | 'sync' | 'plus' | 'minus' | 'x' | 'check'
   | 'chev-down' | 'chev-right' | 'chev-up' | 'chev-left' | 'expand-all' | 'collapse-all' | 'dot' | 'more'
   | 'history' | 'compare' | 'blame' | 'content' | 'terminal' | 'external' | 'eye' | 'sparkle'
@@ -45,7 +45,9 @@ export function Icon({ name, size = 14, stroke = 1.5, ...rest }: Props) {
     case 'submodule':   return <svg {...p}><rect x="2" y="2" width="12" height="12" rx="1.5"/><rect x="5" y="5" width="6" height="6" rx="0.5"/></svg>;
     case 'worktree':    return <svg {...p}><circle cx="4" cy="3.5" r="1.6"/><path d="M4 5.1v4.4M4 9.5c0 1.6 2.2 1.5 4 1.5"/><rect x="8" y="8.5" width="6" height="5" rx="1"/></svg>;
     case 'file':        return <svg {...p}><path d="M3 1.5h7l3 3v10H3v-13Z"/><path d="M10 1.5v3h3"/></svg>;
+    case 'file-plus':   return <svg {...p}><path d="M2.5 1.5h6l3 3v3M8.5 1.5v3h3M7.5 14.5h-5v-13"/><path d="M11.5 9v5M9 11.5h5"/></svg>;
     case 'folder':      return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4Z"/></svg>;
+    case 'folder-plus': return <svg {...p}><path d="M1.5 4a1 1 0 0 1 1-1h3l1.5 1.5h6.5a1 1 0 0 1 1 1v2M7.5 13.5h-5a1 1 0 0 1-1-1V4"/><path d="M11.5 9v5M9 11.5h5"/></svg>;
     case 'workspace':   return <svg {...p}><path d="M8 1.8 14.5 5 8 8.2 1.5 5 8 1.8Z"/><path d="M1.5 8 8 11.2 14.5 8"/><path d="M1.5 11 8 14.2 14.5 11"/></svg>;
     case 'bell':        return <svg {...p}><path d="M3 11h10l-1.2-1.6V6a3.8 3.8 0 0 0-7.6 0v3.4L3 11Z"/><path d="M6.5 13a1.6 1.6 0 0 0 3 0"/></svg>;
     case 'save':        return <svg {...p}><path d="M2 2h10l2 2v10H2V2Z"/><path d="M5 2v4h6V2M5 14V9h6v5"/></svg>;

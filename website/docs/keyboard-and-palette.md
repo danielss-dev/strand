@@ -83,8 +83,9 @@ Use `Tab` to move between actions and activity entries, `Enter` to run or
 expand one, and `Escape` to close when no operation is running.
 
 **New file…** and **New folder…** open a focus-trapped path dialog for the
-active repository. The Files sidebar exposes the same actions in its toolbar.
-Focus a file or folder row and press the Menu key or `Shift+F10` to reach its
+active repository. The Files sidebar exposes the same actions from its **+**
+menu; use the arrow keys and Enter to choose one, or Escape to close it. Focus a
+file or folder row and press the Menu key or `Shift+F10` to reach its
 editor/reveal, path-copy, history/blame, nested-create, rename, and confirmed
 delete actions without a pointer.
 
