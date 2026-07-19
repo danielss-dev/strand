@@ -1202,6 +1202,27 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     />
   );
 
+  const fileCreateToolbar = (
+    <div
+      className={'side-files-tools' + (filePaths.length === 0 ? ' standalone' : '')}
+      role="toolbar"
+      aria-label="Working-tree file actions"
+    >
+      <button
+        ref={fileCreateButtonRef}
+        type="button"
+        className="side-files-create"
+        title={t('files.createEntry')}
+        aria-label={t('files.createEntry')}
+        aria-haspopup="menu"
+        aria-expanded={menu?.source === 'file-create'}
+        onClick={openFileCreateMenu}
+      >
+        <Icon name="plus" size={14} stroke={2} />
+      </button>
+    </div>
+  );
+
   return (
     <div className="sidebar">
       {wtMerge && (
@@ -1388,22 +1409,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       ) : (
         <div className="side-files">
           {renameDialog}
-          {!selectedCommit && (
-            <div className="side-files-tools" role="toolbar" aria-label="Working-tree file actions">
-              <button
-                ref={fileCreateButtonRef}
-                type="button"
-                className="side-files-create"
-                title={t('files.createEntry')}
-                aria-label={t('files.createEntry')}
-                aria-haspopup="menu"
-                aria-expanded={menu?.source === 'file-create'}
-                onClick={openFileCreateMenu}
-              >
-                <Icon name="plus" size={14} stroke={2} />
-              </button>
-            </div>
-          )}
+          {!selectedCommit && filePaths.length === 0 && fileCreateToolbar}
           {selectedCommit && (
             <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
               Files at <code>{selectedCommit.slice(0, 7)}</code>
@@ -1417,6 +1423,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
             menuItems={fileMenu}
             search
+            searchAction={!selectedCommit && filePaths.length > 0 ? fileCreateToolbar : undefined}
             initialExpansion="closed"
             emptyLabel={
               treeLoading

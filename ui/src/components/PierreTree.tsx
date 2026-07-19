@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from 'react';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusEntry } from '@pierre/trees';
@@ -101,6 +102,8 @@ interface PierreTreeProps {
   onDiscard?: (paths: string[]) => void;
   /** Enable Pierre's in-tree fuzzy search (also bound to ⌘F / Ctrl+F). */
   search?: boolean;
+  /** Optional action placed inline at the trailing edge of the search row. */
+  searchAction?: ReactNode;
   /**
    * Enable drag-to-move: rows can be dragged onto a folder row — or a file
    * row's containing folder, or the tree's bare space for the repo root —
@@ -141,6 +144,23 @@ interface PierreTreeProps {
 const pathsKeyOf = (paths: readonly string[]) => paths.join('\n');
 const statusKeyOf = (entries: readonly GitStatusEntry[] | undefined) =>
   entries ? entries.map((e) => `${e.path}:${e.status}`).join('\n') : '';
+
+const SEARCH_ACTION_CSS = `
+  [data-file-tree-virtualized-root='true'] {
+    position: relative;
+  }
+  [data-type='header-slot'] {
+    position: absolute;
+    inset-block-start: 1px;
+    inset-inline-end: var(--trees-padding-inline);
+    z-index: 2;
+  }
+  [data-file-tree-search-container] {
+    padding-inline-end: calc(
+      var(--trees-padding-inline) + var(--strand-tree-search-action-space, 0px)
+    );
+  }
+`;
 
 /**
  * Walk an event's composed path (which crosses the shadow boundary) for the
@@ -207,6 +227,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     onDiscard,
     onMove,
     search,
+    searchAction,
     followFocus = false,
     rowDecoration,
     rowDecorationKey,
@@ -253,6 +274,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     itemHeight: 24,
     icons: TREE_ICONS,
     search: search ?? false,
+    unsafeCSS: SEARCH_ACTION_CSS,
     renderRowDecoration: (ctx) =>
       rowDecorationRef.current?.(ctx.item.path, ctx.item.kind) ?? null,
     initialSelectedPaths: selectedPath ? [selectedPath] : undefined,
@@ -635,7 +657,13 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     [menuItems, resolveTargets],
   );
 
-  const hostStyle: CSSProperties = { height: '100%', width: '100%', minHeight: 0, ...style };
+  const hostStyle = {
+    height: '100%',
+    width: '100%',
+    minHeight: 0,
+    '--strand-tree-search-action-space': searchAction ? '34px' : '0px',
+    ...style,
+  } as CSSProperties;
 
   if (paths.length === 0 && emptyLabel) {
     return <div className="tree-empty">{emptyLabel}</div>;
@@ -654,7 +682,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       onContextMenu={onContextMenu}
       onKeyDownCapture={onKeyDownCapture}
     >
-      <FileTree model={model} style={hostStyle} />
+      <FileTree header={searchAction} model={model} style={hostStyle} />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
     </div>
   );

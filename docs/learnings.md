@@ -24,6 +24,22 @@ gradients and masks cannot collide inside the combined sprite.
 
 ---
 
+## Keep Pierre search-row actions inside the shared wrapper
+
+**Rule.** Place an action beside Pierre's built-in search through the React
+`FileTree` header slot and `PierreTree`'s wrapper-owned shadow CSS. Install that
+CSS when the model is created, then vary reserved width with an inherited host
+custom property; `useFileTree` captures its option object once, so toggling an
+`unsafeCSS` option later does not update the mounted model.
+
+**Why.** Rendering the action outside the tree adds an empty toolbar row. The
+header slot keeps the control keyboard-accessible and in the tree's composition
+contract, while the host variable lets working-tree and historical views change
+the available search width without recreating Pierre's model or losing tree
+selection and expansion.
+
+---
+
 ## Desktop CLI children need the user's shell PATH, including dependencies
 
 **Rule.** Packaged GUI apps must not use their inherited process `PATH` as the

@@ -2193,9 +2193,9 @@ disk form on save.
 
 **Files creation toolbar refined (2026-07-19):** The separate New file and New
 folder buttons are now one compact **+** menu with dedicated file-add and
-folder-add icons, aligned at the top-right immediately above tree search. The
-menu retains full arrow-key, Enter, Escape, and focus-return behavior while
-leaving both creation actions in Quick Launch.
+folder-add icons, aligned at the trailing edge of the tree search row without
+adding another toolbar line. The menu retains full arrow-key, Enter, Escape,
+and focus-return behavior while leaving both creation actions in Quick Launch.
 
 **Ignored files integrated into Files (2026-07-19):** The opt-in toolbar toggle
 is gone. Opening Files now starts the ignored-inclusive enumeration in a Tauri
