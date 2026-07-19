@@ -1782,4 +1782,9 @@ trees such as `node_modules` and `target`; on a real development checkout the
 equivalent enumeration exceeded 20 seconds. Keep `status_options` and
 `Repo::snapshot` limited to index-plus-untracked data. The Files view may call
 `Repo::work_tree_with_ignored(true)` only after an explicit **Show ignored**
-action, and ignored entries stay badge-free and out of Local Changes.
+action, and ignored entries stay badge-free and out of Local Changes. Do not
+set libgit2's `recurse_ignored_dirs`: its Windows filesystem layer aborts the
+entire status walk when a generated descendant exceeds its path limit. Let Git
+classify the ignored directory boundary, then expand that already-ignored tree
+with an iterative native filesystem walk that does not follow symlinks and
+tolerates entries disappearing during package-manager updates.

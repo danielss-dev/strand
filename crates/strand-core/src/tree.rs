@@ -35,7 +35,12 @@ impl Repo {
         let statuses = repo.statuses(Some(
             &mut crate::status::tree_status_options(include_ignored),
         ))?;
-        from_index_and_statuses(repo, &statuses)
+        let entries = from_index_and_statuses(repo, &statuses)?;
+        if include_ignored {
+            Ok(expand_ignored_directories(&self.path, &statuses, entries))
+        } else {
+            Ok(entries)
+        }
     }
 
     /// List every file present at `rev`. Revision entries are immutable and
@@ -123,6 +128,71 @@ fn classify(s: git2::Status) -> StatusKind {
         return StatusKind::Renamed;
     }
     StatusKind::Modified
+}
+
+/// Expand directories that Git has already classified as ignored without
+/// asking libgit2 to recurse into them. libgit2's Windows filesystem layer
+/// rejects long generated paths; Rust's filesystem APIs support them.
+///
+/// The walk is deliberately best-effort. Generated directories can disappear
+/// while package managers are updating them, and one raced or unreadable entry
+/// should not make the whole Files tree fail to load.
+fn expand_ignored_directories(
+    workdir: &std::path::Path,
+    statuses: &git2::Statuses<'_>,
+    entries: Vec<WorkTreeEntry>,
+) -> Vec<WorkTreeEntry> {
+    let mut map = entries
+        .into_iter()
+        .map(|entry| (entry.path, entry.status))
+        .collect::<BTreeMap<_, _>>();
+
+    for status in statuses.iter().filter(|entry| entry.status().is_ignored()) {
+        let Some(path) = status.path() else { continue };
+        let relative = path.trim_end_matches('/');
+        let absolute = workdir.join(relative);
+        let Ok(metadata) = std::fs::symlink_metadata(&absolute) else {
+            continue;
+        };
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            continue;
+        }
+
+        // A non-recursive ignored status reports the directory itself. Pierre
+        // synthesizes folders from file paths, so replace that marker with its
+        // actual descendants.
+        map.remove(path);
+        map.remove(relative);
+
+        let mut pending = vec![(absolute, relative.to_string())];
+        while let Some((directory, prefix)) = pending.pop() {
+            let Ok(children) = std::fs::read_dir(directory) else {
+                continue;
+            };
+            for child in children.flatten() {
+                let Ok(name) = child.file_name().into_string() else {
+                    continue;
+                };
+                let child_path = if prefix.is_empty() {
+                    name
+                } else {
+                    format!("{prefix}/{name}")
+                };
+                let Ok(file_type) = child.file_type() else {
+                    continue;
+                };
+                if file_type.is_dir() && !file_type.is_symlink() {
+                    pending.push((child.path(), child_path));
+                } else {
+                    map.entry(child_path).or_insert(None);
+                }
+            }
+        }
+    }
+
+    map.into_iter()
+        .map(|(path, status)| WorkTreeEntry { path, status })
+        .collect()
 }
 
 #[cfg(test)]
@@ -240,6 +310,33 @@ mod tests {
             .unwrap()
             .iter()
             .all(|entry| entry.path != "settings.local" && entry.path != "target/nested/cache.bin"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn work_tree_handles_long_paths_inside_ignored_directories() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join(".gitignore"), "node_modules/\n").unwrap();
+
+        let mut nested = dir.join("node_modules/.pnpm");
+        for _ in 0..8 {
+            nested.push("react-resizable-panels-2.1.9_react-dom-18.3.1");
+        }
+        std::fs::create_dir_all(&nested).unwrap();
+        let ignored = nested.join("getResizeHandleElement.js");
+        std::fs::write(&ignored, "export {};\n").unwrap();
+
+        let relative = ignored
+            .strip_prefix(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let entries = repo.work_tree_with_ignored(true).unwrap();
+
+        assert!(entries
+            .iter()
+            .any(|entry| entry.path == relative && entry.status.is_none()));
 
         let _ = std::fs::remove_dir_all(dir);
     }
