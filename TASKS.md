@@ -97,10 +97,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   overlaid with change status) powering the Files sidebar tab; ignored local
   files load automatically on Files-tab entry through
   `Repo::work_tree_with_ignored` without slowing the snapshot hot path and carry
-  explicit muted-row metadata; ignored directories expand through the native
-  filesystem walker after Git classifies their boundary, avoiding libgit2's
-  Windows long-path failure (`WorkTreeEntry.ignored`,
-  `expand_ignored_directories`, `workTreeGitStatus`)
+  explicit muted-row metadata; the initial native walk stops at ignored
+  boundaries and `Repo::ignored_directory_children` fetches one level per
+  expansion, avoiding libgit2's Windows long-path failure
+  (`WorkTreeEntry.ignored`, `ignored_boundaries`, `workTreeGitStatus`)
 - ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
   oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
   out of git's `WIP on <branch>:` / `On <branch>:` message)
@@ -757,8 +757,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Copy path; the section header `sync` action updates all (`--init --recursive`).
 - ☑ Files tree — ignored-inclusive local folder tree from `repo_tree`, with
   current snapshot status colors overlaid without substituting snapshot paths;
-  click-to-open, lazily loaded when Files is shown, and mutation-refreshed in
-  place. `PierreTree` now reports whether a selected row is a file or
+  click-to-open, ignored directory boundaries loaded initially and descendants
+  fetched one level per expansion (`repo_tree_ignored_children`), and
+  mutation-refreshed in place. `PierreTree` now reports whether a selected row is a file or
   synthesized folder; `FileView.DirectoryTab` renders a folder's immediate
   children with the shared tree file-type icons, descendant/change counts, and
   keyboard navigation without sending the directory path to

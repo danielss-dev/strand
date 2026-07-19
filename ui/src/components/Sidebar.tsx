@@ -4,12 +4,13 @@ import { Icon, type IconName } from './Icon';
 import {
   copyToClipboard,
   PierreTree,
+  type PierreTreeHandle,
   type TreeMenuContext,
   type TreeMenuItem,
 } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
-import { applyLocalTreeMutation } from '../lib/localTreeMutation';
+import { applyLocalTreeMutation, retainLoadedIgnoredChildren } from '../lib/localTreeMutation';
 import { t } from '../lib/i18n';
 import { worktreeName } from '../lib/repoIdentity';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
@@ -414,13 +415,28 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     repoPath: string;
     entries: typeof workTree;
   } | null>(null);
+  const filesTreeRef = useRef<PierreTreeHandle>(null);
+  const loadedIgnoredDirectoriesRef = useRef(new Set<string>());
+  const loadingIgnoredDirectoriesRef = useRef(new Map<string, number>());
+  const ignoredLoadGenerationRef = useRef(0);
+  const pendingIgnoredExpansionRef = useRef<string | null>(null);
   const [emptyDirectories, setEmptyDirectories] = useState<Set<string>>(new Set());
   const [treeError, setTreeError] = useState<string | null>(null);
   const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
   const workingTreeRevision = selectedCommit || !mutationTargetsRepo ? 0 : filesTreeRevision;
-  useEffect(() => setEmptyDirectories(new Set()), [meta?.path]);
+  useEffect(() => {
+    setEmptyDirectories(new Set());
+    loadedIgnoredDirectoriesRef.current.clear();
+    loadingIgnoredDirectoriesRef.current.clear();
+    pendingIgnoredExpansionRef.current = null;
+    ignoredLoadGenerationRef.current++;
+  }, [meta?.path]);
   useEffect(() => {
     if (!filesTreeMutation || !mutationTargetsRepo) return;
+    loadedIgnoredDirectoriesRef.current.clear();
+    loadingIgnoredDirectoriesRef.current.clear();
+    pendingIgnoredExpansionRef.current = null;
+    ignoredLoadGenerationRef.current++;
     setEmptyDirectories((current) => applyEmptyDirectoryMutation(current, filesTreeMutation));
     setLocalTreeCache((current) => {
       if (!current || current.repoPath !== filesTreeMutation.repoPath) return current;
@@ -445,7 +461,18 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           if (!cancelled) setRevisionTree(tree);
         })
       : tauri.repoTree(meta.path, true).then((tree) => {
-          if (!cancelled) setLocalTreeCache({ repoPath: meta.path, entries: tree });
+          if (!cancelled) {
+            setLocalTreeCache((current) => ({
+              repoPath: meta.path,
+              entries: current?.repoPath === meta.path
+                ? retainLoadedIgnoredChildren(
+                    tree,
+                    current.entries,
+                    loadedIgnoredDirectoriesRef.current,
+                  )
+                : tree,
+            }));
+          }
         });
     void load
       .catch((e) => {
@@ -485,6 +512,53 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     () => workTreeGitStatus(displayedTree, selectedCommit ? displayedTree : workTree),
     [displayedTree, selectedCommit, workTree],
   );
+  const ignoredDirectoryPaths = useMemo(
+    () => new Set(displayedTree
+      .filter((entry) => entry.ignored && entry.path.endsWith('/'))
+      .map((entry) => entry.path.replace(/\/+$/, ''))),
+    [displayedTree],
+  );
+  const loadIgnoredDirectory = useCallback((directory: string) => {
+    const repoPath = meta?.path;
+    if (selectedCommit || !repoPath || !ignoredDirectoryPaths.has(directory)) return;
+    if (loadedIgnoredDirectoriesRef.current.has(directory)) return;
+    if (loadingIgnoredDirectoriesRef.current.has(directory)) return;
+
+    const generation = ignoredLoadGenerationRef.current;
+    loadingIgnoredDirectoriesRef.current.set(directory, generation);
+    void tauri.repoTreeIgnoredChildren(repoPath, directory)
+      .then((children) => {
+        if (ignoredLoadGenerationRef.current !== generation) return;
+        loadedIgnoredDirectoriesRef.current.add(directory);
+        if (children.length > 0) pendingIgnoredExpansionRef.current = directory;
+        setLocalTreeCache((current) => {
+          if (!current || current.repoPath !== repoPath) return current;
+          const entries = new Map(current.entries.map((entry) => [entry.path, entry]));
+          for (const child of children) entries.set(child.path, child);
+          return {
+            ...current,
+            entries: [...entries.values()].sort((a, b) => a.path.localeCompare(b.path)),
+          };
+        });
+      })
+      .catch((cause) => {
+        if (ignoredLoadGenerationRef.current === generation) {
+          onToast(`Could not load ${directory}: ${errMessage(cause)}`, 'error');
+        }
+      })
+      .finally(() => {
+        if (loadingIgnoredDirectoriesRef.current.get(directory) === generation) {
+          loadingIgnoredDirectoriesRef.current.delete(directory);
+        }
+      });
+  }, [ignoredDirectoryPaths, meta?.path, onToast, selectedCommit]);
+  useEffect(() => {
+    const directory = pendingIgnoredExpansionRef.current;
+    if (!directory || !filePaths.some((path) => path.startsWith(`${directory}/`))) return;
+    pendingIgnoredExpansionRef.current = null;
+    const frame = requestAnimationFrame(() => filesTreeRef.current?.expandPath(directory));
+    return () => cancelAnimationFrame(frame);
+  }, [filePaths]);
   // Rename / move — the drop handler for drag-to-move in the tree, and the
   // dialog behind the context menu's keyboard-operable equivalent.
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
@@ -1460,11 +1534,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             </div>
           )}
           <PierreTree
+            ref={filesTreeRef}
             paths={filePaths}
             gitStatus={fileGitStatus}
             onMove={selectedCommit ? undefined : moveTo}
             selectedPath={selectedTreePath}
             onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
+            onDirectoryExpand={loadIgnoredDirectory}
             menuItems={fileMenu}
             search
             searchAction={!selectedCommit && localTree && filePaths.length > 0 ? fileCreateToolbar : undefined}

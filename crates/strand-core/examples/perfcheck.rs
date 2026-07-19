@@ -91,6 +91,10 @@ fn main() {
     // --- status + work_tree (the post-change refresh; both run per refresh) ---
     bench("status", 30, || repo.status().expect("status"));
     bench("work_tree", 30, || repo.work_tree().expect("work_tree"));
+    bench("work_tree+ignored roots", 30, || {
+        repo.work_tree_with_ignored(true)
+            .expect("work_tree ignored roots")
+    });
 
     // --- diffs (Local Changes) ---
     bench("diff_unstaged", 20, || {

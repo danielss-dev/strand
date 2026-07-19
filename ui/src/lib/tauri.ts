@@ -378,6 +378,8 @@ export const tauri = {
     invoke<CheckoutOutcome>('repo_checkout_commit', { path, rev }),
   repoTree: (path: string, includeIgnored = false) =>
     invoke<WorkTreeEntry[]>('repo_tree', { path, includeIgnored }),
+  repoTreeIgnoredChildren: (path: string, directory: string) =>
+    invoke<WorkTreeEntry[]>('repo_tree_ignored_children', { path, directory }),
   repoTreeAt: (path: string, rev: string) =>
     invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),

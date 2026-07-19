@@ -2174,11 +2174,12 @@ coverage/provider status or an Undo row beneath the description.
 
 **Ignored-tree long paths repaired (2026-07-19):** Ignored-file loading does not
 let libgit2 recurse into generated directories, where a deep Windows
-`node_modules` path previously aborted the entire Files tree. Git identifies the
-ignored directory boundaries and `expand_ignored_directories` walks their
-contents with native filesystem APIs. A long `.pnpm` regression fixture and a
-live Tauri pass on this checkout verify that `node_modules` and `target` load
-without an error banner; the snapshot/status hot path remains unchanged.
+`node_modules` path previously aborted the entire Files tree. The initial local
+listing stops at ignored directory boundaries; `repo_tree_ignored_children`
+uses native filesystem APIs to fetch one level only when a folder is expanded.
+A long `.pnpm` regression fixture verifies that deeply nested paths remain
+loadable while `.git` stays inaccessible; the snapshot/status hot path remains
+unchanged.
 
 **Syntax-highlighted file editing shipped (2026-07-19):** Opening an existing
 UTF-8 working-tree file from Files now mounts a lightweight editor backed by
@@ -2203,8 +2204,11 @@ blocking task; Files waits for that local listing instead of first rendering
 the snapshot-backed Git tree, and explicit `WorkTreeEntry.ignored` metadata
 feeds Pierre's native muted ignored-file color. The inexpensive snapshot still
 overlays current added/modified/deleted state without becoming the path source.
-Fully ignored subtrees project as one muted directory boundary, so their folder
-and descendants stay gray without internal change dots. Snapshot/status
+Fully ignored subtrees project as one muted directory boundary and load one
+native filesystem level per expansion, so their folder and descendants stay
+gray without internal change dots. On this checkout the initial Files listing
+measures 27.23 ms median instead of the prior 2.8–8.9 second recursive scan and
+no longer sends roughly 131,000 generated paths to the webview. Snapshot/status
 refreshes remain free of recursive ignored-directory work.
 
 **Files mutations stay live (2026-07-19):** Successful create, delete, rename,

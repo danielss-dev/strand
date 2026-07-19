@@ -59,6 +59,8 @@ export interface PierreTreeHandle {
   openSearch(): void;
   /** Current Pierre multi-selection (file paths only). */
   getSelectedPaths(): string[];
+  /** Expand a mounted directory after lazy children have been added. */
+  expandPath(path: string): void;
 }
 
 interface PierreTreeProps {
@@ -77,6 +79,8 @@ interface PierreTreeProps {
   onSelect?: (path: string | null, kind: 'file' | 'directory' | null) => void;
   /** Fired whenever Pierre's multi-selection changes (file paths only). */
   onMultiSelectionChange?: (paths: string[]) => void;
+  /** Fired when a closed directory is activated so hosts can load children. */
+  onDirectoryExpand?: (path: string) => void;
   /**
    * Make plain ↑/↓/Home/End keyboard focus *select* the file it lands on
    * (firing {@link onSelect}), instead of just moving Pierre's focus ring.
@@ -222,6 +226,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     selectedPath = null,
     onSelect,
     onMultiSelectionChange,
+    onDirectoryExpand,
     onActivate,
     menuItems,
     onDiscard,
@@ -252,6 +257,8 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   selectedRef.current = selectedPath;
   const rowDecorationRef = useRef(rowDecoration);
   rowDecorationRef.current = rowDecoration;
+  const onDirectoryExpandRef = useRef(onDirectoryExpand);
+  onDirectoryExpandRef.current = onDirectoryExpand;
   // True while the reflection effect is rewriting Pierre's selection — the
   // intermediate selection-change events it causes must not echo to the host.
   const reflecting = useRef(false);
@@ -298,6 +305,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     () => ({
       openSearch: () => model.openSearch(),
       getSelectedPaths: () => model.getSelectedPaths().filter((p) => fileSetRef.current.has(p)),
+      expandPath: (path) => asDir(model.getItem(path))?.expand(),
     }),
     [model],
   );
@@ -421,13 +429,14 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   // Pierre's selection/focus/multi-select behaviour stays untouched.
   const onClickCapture = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {
-      if (toggleDirOnRowClick) return;
-      if (isChevronEvent(e.nativeEvent)) return; // chevron is the one place toggling is allowed
       const row = rowFromEvent(e.nativeEvent);
       if (!row || row.dataset.itemType !== 'folder') return;
       const path = row.dataset.itemPath!;
       const wasExpanded = asDir(model.getItem(path))?.isExpanded();
       if (wasExpanded == null) return;
+      if (!wasExpanded) onDirectoryExpandRef.current?.(path.replace(/\/+$/, ''));
+      if (toggleDirOnRowClick) return;
+      if (isChevronEvent(e.nativeEvent)) return; // chevron is the one place toggling is allowed
       queueMicrotask(() => {
         const dir = asDir(model.getItem(path));
         if (!dir) return;
@@ -444,18 +453,32 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   const onKeyDownCapture = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'Enter') {
-        if (!onActivateRef.current) return;
         const onRow = e.nativeEvent
           .composedPath()
           .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
         if (!onRow) return; // focus is in the search box, not a row
         const focused = model.getFocusedPath();
+        const directory = focused ? asDir(model.getItem(focused)) : null;
+        if (directory && !directory.isExpanded()) {
+          onDirectoryExpandRef.current?.(focused!.replace(/\/+$/, ''));
+        }
+        if (!onActivateRef.current) return;
         if (focused && fileSetRef.current.has(focused)) {
           e.preventDefault();
           e.stopPropagation();
           onActivateRef.current(resolveTargets(focused));
         }
         return;
+      }
+      if (e.key === 'ArrowRight') {
+        const onRow = e.nativeEvent
+          .composedPath()
+          .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
+        const focused = onRow ? model.getFocusedPath() : null;
+        const directory = focused ? asDir(model.getItem(focused)) : null;
+        if (directory && !directory.isExpanded()) {
+          onDirectoryExpandRef.current?.(focused!.replace(/\/+$/, ''));
+        }
       }
       // Delete / Backspace discard the focused row in a single press, acting on
       // the whole multi-selection (resolveTargets) when the focused row is part

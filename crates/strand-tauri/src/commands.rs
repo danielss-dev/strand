@@ -1068,6 +1068,17 @@ pub async fn repo_tree(
 }
 
 #[tauri::command(async)]
+pub async fn repo_tree_ignored_children(
+    path: String,
+    directory: String,
+) -> CmdResult<Vec<WorkTreeEntry>> {
+    run_blocking("ignored directory", move || {
+        Ok(Repo::discover(&path)?.ignored_directory_children(&directory)?)
+    })
+    .await
+}
+
+#[tauri::command(async)]
 pub async fn repo_tree_at(path: String, rev: String) -> CmdResult<Vec<WorkTreeEntry>> {
     run_blocking("tree at revision", move || {
         Ok(Repo::discover(&path)?.tree_at(&rev)?)

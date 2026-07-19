@@ -154,6 +154,7 @@ fn main() {
             commands::repo_checkout,
             commands::repo_checkout_commit,
             commands::repo_tree,
+            commands::repo_tree_ignored_children,
             commands::repo_tree_at,
             commands::repo_submodules,
             commands::repo_submodule_update,

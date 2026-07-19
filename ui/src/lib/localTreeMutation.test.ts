@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyLocalTreeMutation } from './localTreeMutation';
+import { applyLocalTreeMutation, retainLoadedIgnoredChildren } from './localTreeMutation';
 import type { FilesTreeMutation, FilesTreeMutationChange, WorkTreeEntry } from './types';
 
 const mutation = (change: FilesTreeMutationChange): FilesTreeMutation => ({
@@ -46,5 +46,31 @@ describe('applyLocalTreeMutation', () => {
       kind: 'delete',
       paths: ['.local'],
     }), [])).toEqual([]);
+  });
+
+  it('retains only descendants of loaded ignored directories', () => {
+    const boundaries: WorkTreeEntry[] = [
+      { path: 'node_modules/', status: null, ignored: true },
+      { path: 'target/', status: null, ignored: true },
+      { path: 'src/index.ts', status: null, ignored: false },
+    ];
+    const current: WorkTreeEntry[] = [
+      ...boundaries,
+      { path: 'node_modules/.bin/', status: null, ignored: true },
+      { path: 'node_modules/.bin/vite', status: null, ignored: true },
+      { path: 'target/debug/', status: null, ignored: true },
+    ];
+
+    expect(retainLoadedIgnoredChildren(
+      boundaries,
+      current,
+      new Set(['node_modules']),
+    ).map((entry) => entry.path)).toEqual([
+      'node_modules/',
+      'node_modules/.bin/',
+      'node_modules/.bin/vite',
+      'src/index.ts',
+      'target/',
+    ]);
   });
 });

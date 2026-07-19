@@ -31,20 +31,60 @@ impl Repo {
         self.work_tree_with_ignored(false)
     }
 
-    /// List the working tree, optionally including Git-ignored local files.
-    /// Ignored enumeration is opt-in because generated directories can be
-    /// very large and this path recursively resolves them for the Files tree.
+    /// List the working tree, optionally including Git-ignored boundaries.
+    /// Ignored directories stay collapsed until the Files tree requests one
+    /// level through [`Repo::ignored_directory_children`].
     pub fn work_tree_with_ignored(&self, include_ignored: bool) -> Result<Vec<WorkTreeEntry>> {
         let repo = self.git2()?;
-        let statuses = repo.statuses(Some(
-            &mut crate::status::tree_status_options(include_ignored),
-        ))?;
+        let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
         let entries = from_index_and_statuses(repo, &statuses)?;
         if include_ignored {
-            Ok(expand_ignored_directories(&self.path, &statuses, entries))
+            ignored_boundaries(repo, &self.path, entries)
         } else {
             Ok(entries)
         }
+    }
+
+    /// List one ignored directory's immediate children. Directories use
+    /// Pierre's canonical trailing slash and remain lazy themselves.
+    pub fn ignored_directory_children(&self, rel_path: &str) -> Result<Vec<WorkTreeEntry>> {
+        let relative = validate_ignored_directory_path(rel_path)?;
+        let repo = self.git2()?;
+        if !is_ignored_path(repo, relative)? {
+            return Err(crate::Error::Other(format!(
+                "path is not ignored: {relative}"
+            )));
+        }
+        let absolute = self.safe_workdir_path(relative)?;
+        let metadata = std::fs::symlink_metadata(&absolute)
+            .map_err(|_| crate::Error::Other(format!("directory does not exist: {relative}")))?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(crate::Error::Other(format!("not a directory: {relative}")));
+        }
+
+        let mut entries = Vec::new();
+        for child in std::fs::read_dir(absolute)?.flatten() {
+            let Ok(name) = child.file_name().into_string() else {
+                continue;
+            };
+            if name.eq_ignore_ascii_case(".git") {
+                continue;
+            }
+            let Ok(file_type) = child.file_type() else {
+                continue;
+            };
+            let mut path = format!("{relative}/{name}");
+            if file_type.is_dir() && !file_type.is_symlink() {
+                path.push('/');
+            }
+            entries.push(WorkTreeEntry {
+                path,
+                status: None,
+                ignored: true,
+            });
+        }
+        entries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        Ok(entries)
     }
 
     /// List every file present at `rev`. Revision entries are immutable and
@@ -135,69 +175,96 @@ fn classify(s: git2::Status) -> StatusKind {
     StatusKind::Modified
 }
 
-/// Expand directories that Git has already classified as ignored without
-/// asking libgit2 to recurse into them. libgit2's Windows filesystem layer
-/// rejects long generated paths; Rust's filesystem APIs support them.
-///
-/// The walk is deliberately best-effort. Generated directories can disappear
-/// while package managers are updating them, and one raced or unreadable entry
-/// should not make the whole Files tree fail to load.
-fn expand_ignored_directories(
+fn validate_ignored_directory_path(rel_path: &str) -> Result<&str> {
+    let relative = rel_path.trim_end_matches(['/', '\\']);
+    if relative.is_empty() {
+        return Err(crate::Error::Other("empty ignored directory path".into()));
+    }
+    if std::path::Path::new(relative)
+        .components()
+        .any(|component| {
+            component
+                .as_os_str()
+                .to_str()
+                .is_some_and(|part| part.eq_ignore_ascii_case(".git"))
+        })
+    {
+        return Err(crate::Error::Other("cannot enumerate .git".into()));
+    }
+    Ok(relative)
+}
+
+/// Stop as soon as an ignored ancestor is found. Asking libgit2 about the
+/// complete generated path can fail on Windows before the native filesystem
+/// APIs reach it, even though an early component such as `node_modules/`
+/// already proves every descendant is ignored.
+fn is_ignored_path(repo: &git2::Repository, relative: &str) -> Result<bool> {
+    let mut prefix = std::path::PathBuf::new();
+    for component in std::path::Path::new(relative).components() {
+        prefix.push(component);
+        if repo.status_should_ignore(&prefix)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Find ignored file/directory boundaries without entering ignored folders.
+/// Walking only non-ignored directories keeps generated trees out of the
+/// initial Files payload while still finding nested rules such as `ui/dist/`.
+fn ignored_boundaries(
+    repo: &git2::Repository,
     workdir: &std::path::Path,
-    statuses: &git2::Statuses<'_>,
     entries: Vec<WorkTreeEntry>,
-) -> Vec<WorkTreeEntry> {
+) -> Result<Vec<WorkTreeEntry>> {
     let mut map = entries
         .into_iter()
         .map(|entry| (entry.path, (entry.status, entry.ignored)))
         .collect::<BTreeMap<_, _>>();
+    let mut pending = vec![(workdir.to_path_buf(), String::new())];
 
-    for status in statuses.iter().filter(|entry| entry.status().is_ignored()) {
-        let Some(path) = status.path() else { continue };
-        let relative = path.trim_end_matches('/');
-        let absolute = workdir.join(relative);
-        let Ok(metadata) = std::fs::symlink_metadata(&absolute) else {
+    while let Some((directory, prefix)) = pending.pop() {
+        let Ok(children) = std::fs::read_dir(directory) else {
             continue;
         };
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            continue;
-        }
-
-        // A non-recursive ignored status reports the directory itself. Pierre
-        // synthesizes folders from file paths, so replace that marker with its
-        // actual descendants.
-        map.remove(path);
-        map.remove(relative);
-
-        let mut pending = vec![(absolute, relative.to_string())];
-        while let Some((directory, prefix)) = pending.pop() {
-            let Ok(children) = std::fs::read_dir(directory) else {
+        for child in children.flatten() {
+            let Ok(name) = child.file_name().into_string() else {
                 continue;
             };
-            for child in children.flatten() {
-                let Ok(name) = child.file_name().into_string() else {
-                    continue;
-                };
-                let child_path = if prefix.is_empty() {
-                    name
+            if prefix.is_empty() && name.eq_ignore_ascii_case(".git") {
+                continue;
+            }
+            let relative = if prefix.is_empty() {
+                name
+            } else {
+                format!("{prefix}/{name}")
+            };
+            let Ok(file_type) = child.file_type() else {
+                continue;
+            };
+            if repo.status_should_ignore(std::path::Path::new(&relative))? {
+                let path = if file_type.is_dir() && !file_type.is_symlink() {
+                    format!("{relative}/")
                 } else {
-                    format!("{prefix}/{name}")
+                    relative
                 };
-                let Ok(file_type) = child.file_type() else {
-                    continue;
-                };
-                if file_type.is_dir() && !file_type.is_symlink() {
-                    pending.push((child.path(), child_path));
-                } else {
-                    map.entry(child_path).or_insert((None, true));
-                }
+                map.insert(path, (None, true));
+                continue;
+            }
+            if file_type.is_dir() && !file_type.is_symlink() && !child.path().join(".git").exists() {
+                pending.push((child.path(), relative));
             }
         }
     }
 
-    map.into_iter()
-        .map(|(path, (status, ignored))| WorkTreeEntry { path, status, ignored })
-        .collect()
+    Ok(map
+        .into_iter()
+        .map(|(path, (status, ignored))| WorkTreeEntry {
+            path,
+            status,
+            ignored,
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -284,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn work_tree_includes_ignored_files_without_change_badges() {
+    fn work_tree_includes_ignored_boundaries_without_change_badges() {
         let (repo, dir) = scratch_repo();
         std::fs::write(dir.join(".gitignore"), "target/\n*.local\n").unwrap();
         std::fs::create_dir_all(dir.join("target/nested")).unwrap();
@@ -299,7 +366,8 @@ mod tests {
             .map(|entry| (entry.path, (entry.status, entry.ignored)))
             .collect::<BTreeMap<_, _>>();
 
-        assert_eq!(entries.get("target/nested/cache.bin"), Some(&(None, true)));
+        assert_eq!(entries.get("target/"), Some(&(None, true)));
+        assert!(!entries.contains_key("target/nested/cache.bin"));
         assert_eq!(entries.get("settings.local"), Some(&(None, true)));
         assert_eq!(
             entries.get("visible.txt"),
@@ -320,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn work_tree_handles_long_paths_inside_ignored_directories() {
+    fn ignored_directory_children_are_lazy_and_handle_long_paths() {
         let (repo, dir) = scratch_repo();
         std::fs::write(dir.join(".gitignore"), "node_modules/\n").unwrap();
 
@@ -338,10 +406,24 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/");
         let entries = repo.work_tree_with_ignored(true).unwrap();
+        assert!(entries.iter().any(|entry| entry.path == "node_modules/"));
+        assert!(entries.iter().all(|entry| entry.path != relative));
 
-        assert!(entries
+        std::fs::create_dir_all(dir.join("node_modules/.git")).unwrap();
+        let root_children = repo.ignored_directory_children("node_modules").unwrap();
+        assert!(root_children.iter().all(|entry| entry.path != "node_modules/.git/"));
+
+        let parent = nested
+            .strip_prefix(&dir)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let children = repo.ignored_directory_children(&parent).unwrap();
+        assert!(children
             .iter()
             .any(|entry| entry.path == relative && entry.status.is_none() && entry.ignored));
+
+        assert!(repo.ignored_directory_children(".git/objects").is_err());
 
         let _ = std::fs::remove_dir_all(dir);
     }

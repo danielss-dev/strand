@@ -40,20 +40,6 @@ pub(crate) fn status_options() -> git2::StatusOptions {
     opts
 }
 
-/// The Files tree can opt into ignored paths without making every status and
-/// snapshot refresh recursively enumerate large ignored build directories.
-pub(crate) fn tree_status_options(include_ignored: bool) -> git2::StatusOptions {
-    let mut opts = status_options();
-    if include_ignored {
-        // Let git identify each ignored boundary, but do not make libgit2 walk
-        // generated trees itself. On Windows it aborts the entire status call
-        // when one descendant exceeds its legacy path limit. `tree.rs`
-        // expands these already-ignored directories with the filesystem APIs.
-        opts.include_ignored(true).recurse_ignored_dirs(false);
-    }
-    opts
-}
-
 /// Convert an already-run `statuses()` walk into staging-UI rows. Split out
 /// so [`Repo::snapshot`](crate::snapshot) can share one walk between this
 /// and the work-tree listing.

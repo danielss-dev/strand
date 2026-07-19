@@ -156,6 +156,17 @@ is `!Sync`, so sharing across commands means a per-repo `Mutex` serializing
 the concurrent reads `spawn_blocking` just unblocked, plus config-staleness
 invalidation. Logged in TASKS → Performance with the numbers to beat.
 
+## Lazy ignored-directory baseline (2026-07-19)
+
+The real Strand checkout contains roughly 131,000 ignored generated paths.
+Recursively including them in the Files payload took 2.8–3.7s warm and 8.9s
+cold, then made the webview synchronously build a hierarchy from all 131,000
+paths. `work_tree_with_ignored(true)` now returns ignored directory boundaries
+without entering them; `repo_tree_ignored_children` reads one native filesystem
+level on expansion. The release `perfcheck` row `work_tree+ignored roots`
+measures **27.23ms median** (26.24ms min, 28.82ms max) on this checkout, while
+ordinary `status` remains 3.32ms and `work_tree` 3.37ms.
+
 ---
 
 # Webview / full-app baseline (Windows 11, 2026-06-29)

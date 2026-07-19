@@ -57,8 +57,10 @@ it does not first substitute the Git snapshot while that listing loads. Current
 Git state is overlaid on those local paths, so added, modified, and deleted
 entries keep their status colors. Ignored files and fully ignored folders are
 muted gray, have no internal change dots, and stay out of Local Changes. Strand
-loads the local listing only after you open Files, so recursive generated
-directories never slow the normal status/snapshot path. An
+loads the local listing only after you open Files. It lists ignored folder
+boundaries immediately, then fetches one directory level when you expand a
+muted folder; generated trees such as `node_modules` therefore do not block the
+view or the normal status/snapshot path. An
 empty folder created in Strand appears in the tree immediately and remains
 visible for the session; Git itself cannot persist an empty directory across a
 restart until it contains a file. Successful creates, deletes, renames, and

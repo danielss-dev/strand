@@ -47,3 +47,23 @@ export function applyLocalTreeMutation(
 
   return [...next.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
+
+/** Reattach lazily loaded ignored descendants after the cheap boundary list
+ * refreshes. A path mutation clears `loadedDirectories`, so stale children are
+ * never retained across create/delete/move operations. */
+export function retainLoadedIgnoredChildren(
+  boundaries: readonly WorkTreeEntry[],
+  current: readonly WorkTreeEntry[],
+  loadedDirectories: ReadonlySet<string>,
+): WorkTreeEntry[] {
+  if (loadedDirectories.size === 0) return [...boundaries];
+  const next = new Map(boundaries.map((entry) => [entry.path, entry]));
+  const prefixes = [...loadedDirectories].map((directory) => `${directory}/`);
+  for (const entry of current) {
+    if (!entry.ignored) continue;
+    if (prefixes.some((prefix) => entry.path.startsWith(prefix))) {
+      next.set(entry.path, entry);
+    }
+  }
+  return [...next.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
