@@ -33,11 +33,11 @@ Inside **Lines…**, `Tab` moves through each changed-line checkbox and action,
 ## Working-tree files
 
 Switch the sidebar from **Git** to **Files** to browse tracked and untracked
-working-tree entries. Open the toolbar's **+** menu to create an empty file or
-folder at the repository root; **New file…** and **New folder…** are also
-searchable in Quick Launch. A file path may include existing parent folders.
-Existing entries are never overwritten, and Strand rejects paths that escape
-the checkout or enter `.git`.
+working-tree entries. Open the top-right **+** menu immediately above search to
+create an empty file or folder at the repository root; **New file…** and **New
+folder…** are also searchable in Quick Launch. A file path may include existing
+parent folders. Existing entries are never overwritten, and Strand rejects
+paths that escape the checkout or enter `.git`.
 
 Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
 
@@ -53,12 +53,12 @@ Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
   become ordinary working-tree deletions; the index is not changed.
 
 The Files tree shows tracked, untracked, and Git-ignored local files. Ignored
-files are muted gray, have no change badge, and stay out of Local Changes.
-Strand loads them only after you open Files, so recursive generated directories
-never slow the normal status/snapshot path. An empty folder does not appear as
-a tree row until it contains a file; the new-folder action still opens that
-folder immediately, and a nested new-file path can populate it without leaving
-Strand.
+files and fully ignored folders are muted gray, have no internal change dots,
+and stay out of Local Changes. Strand loads them only after you open Files, so
+recursive generated directories never slow the normal status/snapshot path. An
+empty folder does not appear as a tree row until it contains a file; the
+new-folder action still opens that folder immediately, and a nested new-file
+path can populate it without leaving Strand.
 
 ## Committing
 

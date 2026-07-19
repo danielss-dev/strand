@@ -48,7 +48,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   external editor/reveal, relative/absolute path copy, direct history/blame,
   rename, and confirmed deletion are available from the Files tree and Quick
   Launch (`Repo::{create_worktree_entry,delete_worktree_entries,reveal_in_file_manager}`,
-  `FileEntryDialog`, `Sidebar.fileMenu`, Files toolbar create menu).
+  `FileEntryDialog`, `Sidebar.fileMenu`, top-right Files create menu).
 - ☑ **Commit metadata + selection actions.** Commit detail lazily verifies
   GPG/SSH/X.509 signatures, copies subject/body, and exports exact commits;
   graph multi-selection adds ordered patch-series export plus SHA/subject/full-
@@ -99,7 +99,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   explicit muted-row metadata; ignored directories expand through the native
   filesystem walker after Git classifies their boundary, avoiding libgit2's
   Windows long-path failure (`WorkTreeEntry.ignored`,
-  `expand_ignored_directories`)
+  `expand_ignored_directories`, `workTreeGitStatus`)
 - ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
   oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
   out of git's `WIP on <branch>:` / `On <branch>:` message)

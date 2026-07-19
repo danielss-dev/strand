@@ -2193,14 +2193,17 @@ disk form on save.
 
 **Files creation toolbar refined (2026-07-19):** The separate New file and New
 folder buttons are now one compact **+** menu with dedicated file-add and
-folder-add icons. The menu retains full arrow-key, Enter, Escape, and focus-
-return behavior while leaving both creation actions in Quick Launch.
+folder-add icons, aligned at the top-right immediately above tree search. The
+menu retains full arrow-key, Enter, Escape, and focus-return behavior while
+leaving both creation actions in Quick Launch.
 
 **Ignored files integrated into Files (2026-07-19):** The opt-in toolbar toggle
 is gone. Opening Files now starts the ignored-inclusive enumeration in a Tauri
 blocking task while the snapshot-backed tree remains available, and explicit
 `WorkTreeEntry.ignored` metadata feeds Pierre's native muted ignored-file color.
-Snapshot/status refreshes remain free of recursive ignored-directory work.
+Fully ignored subtrees project as one muted directory boundary, so their folder
+and descendants stay gray without internal change dots. Snapshot/status
+refreshes remain free of recursive ignored-directory work.
 
 ---
 

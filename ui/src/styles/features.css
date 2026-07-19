@@ -7414,9 +7414,9 @@ textarea.clone-input {
 .side-files-tools {
   flex: 0 0 auto;
   display: flex;
+  justify-content: flex-end;
   gap: 6px;
-  padding: 7px 8px;
-  border-bottom: 0.5px solid var(--border);
+  padding: 7px 24px 4px 8px;
 }
 .side-files-tools button {
   display: inline-flex;

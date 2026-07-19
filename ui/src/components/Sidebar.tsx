@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GitStatusEntry } from '@pierre/trees';
-
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
 import {
   copyToClipboard,
   PierreTree,
-  workStatusToGit,
   type TreeMenuContext,
   type TreeMenuItem,
 } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { t } from '../lib/i18n';
 import { worktreeName } from '../lib/repoIdentity';
+import { workTreeGitStatus } from '../lib/workTreeGitStatus';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type {
@@ -444,14 +442,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     ? (revisionTree ?? [])
     : (ignoredTree ?? workTree);
   const filePaths = useMemo(() => displayedTree.map((e) => e.path), [displayedTree]);
-  const fileGitStatus = useMemo<GitStatusEntry[]>(
-    () =>
-      displayedTree.flatMap((e) => {
-        const s = e.ignored ? 'ignored' : workStatusToGit(e.status);
-        return s ? [{ path: e.path, status: s }] : [];
-      }),
-    [displayedTree],
-  );
+  const fileGitStatus = useMemo(() => workTreeGitStatus(displayedTree), [displayedTree]);
   // Rename / move — the drop handler for drag-to-move in the tree, and the
   // dialog behind the context menu's keyboard-operable equivalent.
   const [renameTarget, setRenameTarget] = useState<string | null>(null);

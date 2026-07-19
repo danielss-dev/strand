@@ -15,25 +15,9 @@ import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusE
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { TREE_ICONS } from '../lib/treeIcons';
-import type { DiffStatus, StatusKind } from '../lib/types';
+import type { DiffStatus } from '../lib/types';
 
 // ─── status mapping ───────────────────────────────────────────────────────
-// Strand's status enums → Pierre's GitStatus (drives the colored filename +
-// status lane). Conflicted/copied/typechange have no Pierre equivalent, so
-// they fold onto the nearest colour.
-
-export function workStatusToGit(s: StatusKind | null): GitStatus | null {
-  switch (s) {
-    case 'MODIFIED': return 'modified';
-    case 'ADDED': return 'added';
-    case 'DELETED': return 'deleted';
-    case 'RENAMED': return 'renamed';
-    case 'UNTRACKED': return 'untracked';
-    case 'CONFLICTED': return 'modified';
-    default: return null;
-  }
-}
-
 export function diffStatusToGit(s: DiffStatus): GitStatus {
   switch (s) {
     case 'added': return 'added';

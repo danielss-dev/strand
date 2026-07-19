@@ -1784,7 +1784,11 @@ equivalent enumeration exceeded 20 seconds. Keep `status_options` and
 `Repo::work_tree_with_ignored(true)` automatically only after the user opens
 that tab, through the blocking IPC path; keep the snapshot-backed tree visible
 while it loads. Ignored entries carry explicit identity for muted Pierre rows,
-stay badge-free, and remain out of Local Changes. Do not set libgit2's
+stay badge-free, and remain out of Local Changes. Pierre counts every status
+entry toward ancestor change dots, including `ignored`; collapse a fully
+ignored subtree into one explicit trailing-slash directory status and omit its
+descendant statuses. The directory and descendants then inherit the muted color
+without producing dots inside the ignored tree. Do not set libgit2's
 `recurse_ignored_dirs`: its Windows filesystem layer aborts the entire status
 walk when a generated descendant exceeds its path limit. Let Git classify the
 ignored directory boundary, then expand that already-ignored tree with an
