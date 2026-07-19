@@ -201,9 +201,9 @@ export interface RepoState {
   /** Stash stack for the active tab, most-recent first. */
   stashes: Stash[];
 
-  /** Working-tree file listing for the Files sidebar tab. Loaded lazily via
-   * {@link RepoState.refreshTree} (Files tab shown / palette opened), then
-   * kept fresh by every {@link RepoState.refreshSnapshot}. */
+  /** Base tracked/untracked working-tree listing. Loaded lazily for the
+   * palette and kept fresh by every {@link RepoState.refreshSnapshot}; the
+   * Files tab separately requests its ignored-inclusive listing on entry. */
   workTree: WorkTreeEntry[];
 
   /** Submodules of the active repo (list + status), for the sidebar section. */

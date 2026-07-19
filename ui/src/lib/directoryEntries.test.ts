@@ -4,11 +4,11 @@ import { directoryEntries } from './directoryEntries';
 
 describe('directoryEntries', () => {
   const files = [
-    { path: 'src/lib/item10.ts', status: null },
-    { path: 'src/lib/item2.ts', status: 'MODIFIED' as const },
-    { path: 'src/app.ts', status: null },
-    { path: 'src/assets/logo.svg', status: 'ADDED' as const },
-    { path: 'README.md', status: null },
+    { path: 'src/lib/item10.ts', status: null, ignored: false },
+    { path: 'src/lib/item2.ts', status: 'MODIFIED' as const, ignored: false },
+    { path: 'src/app.ts', status: null, ignored: false },
+    { path: 'src/assets/logo.svg', status: 'ADDED' as const, ignored: false },
+    { path: 'README.md', status: null, ignored: false },
   ];
 
   it('returns immediate folders before files and aggregates descendants', () => {

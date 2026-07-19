@@ -2172,10 +2172,10 @@ long drafts, instead of reserving a fixed multi-line block after AI generation.
 The applied AI draft now remains directly editable without persistent
 coverage/provider status or an Undo row beneath the description.
 
-**Ignored-tree long paths repaired (2026-07-19):** **Show ignored** no longer
-lets libgit2 recurse into generated directories, where a deep Windows
-`node_modules` path previously aborted the entire Files tree. Git now identifies
-the ignored directory boundaries and `expand_ignored_directories` walks their
+**Ignored-tree long paths repaired (2026-07-19):** Ignored-file loading does not
+let libgit2 recurse into generated directories, where a deep Windows
+`node_modules` path previously aborted the entire Files tree. Git identifies the
+ignored directory boundaries and `expand_ignored_directories` walks their
 contents with native filesystem APIs. A long `.pnpm` regression fixture and a
 live Tauri pass on this checkout verify that `node_modules` and `target` load
 without an error banner; the snapshot/status hot path remains unchanged.
@@ -2195,6 +2195,12 @@ disk form on save.
 folder buttons are now one compact **+** menu with dedicated file-add and
 folder-add icons. The menu retains full arrow-key, Enter, Escape, and focus-
 return behavior while leaving both creation actions in Quick Launch.
+
+**Ignored files integrated into Files (2026-07-19):** The opt-in toolbar toggle
+is gone. Opening Files now starts the ignored-inclusive enumeration in a Tauri
+blocking task while the snapshot-backed tree remains available, and explicit
+`WorkTreeEntry.ignored` metadata feeds Pierre's native muted ignored-file color.
+Snapshot/status refreshes remain free of recursive ignored-directory work.
 
 ---
 

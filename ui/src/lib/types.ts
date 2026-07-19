@@ -540,6 +540,8 @@ export interface WorkTreeEntry {
   path: string;
   /** Change status, or `null` for a clean tracked file. */
   status: StatusKind | null;
+  /** Git-ignored local file; intentionally not represented as a change status. */
+  ignored: boolean;
 }
 
 /** A submodule's state relative to the superproject's recorded commit. */

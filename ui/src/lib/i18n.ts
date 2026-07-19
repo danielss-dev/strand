@@ -21,7 +21,6 @@ export const en = {
   'files.createEntry': 'New file or folder',
   'files.newFile': 'New file',
   'files.newFolder': 'New folder',
-  'files.showIgnored': 'Show ignored',
   'file.editorLabel': 'Edit {path}',
   'file.save': 'Save',
   'file.saving': 'Saving…',

@@ -7438,18 +7438,11 @@ textarea.clone-input {
   flex: 0 0 28px;
   padding: 0;
 }
-.side-files-tools button:not(.side-files-create) {
-  flex: 1;
-}
 .side-files-tools button:hover,
 .side-files-tools button:focus-visible {
   color: var(--text);
   background: var(--bg-hover);
   outline: 1px solid var(--accent);
-}
-.side-files-tools button[aria-pressed="true"] {
-  color: var(--text);
-  background: var(--bg-elev);
 }
 .side-files-revision {
   flex: 0 0 auto;

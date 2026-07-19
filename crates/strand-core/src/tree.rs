@@ -18,6 +18,10 @@ pub struct WorkTreeEntry {
     /// Change status if the file differs from HEAD/index; `None` for a clean
     /// tracked file. Drives the status badge in the Files tree.
     pub status: Option<StatusKind>,
+    /// Whether Git excludes this local path. Kept separate from `status`
+    /// because ignored files are not working-tree changes.
+    #[serde(default)]
+    pub ignored: bool,
 }
 
 impl Repo {
@@ -60,6 +64,7 @@ impl Repo {
                     entries.push(WorkTreeEntry {
                         path: format!("{root}{name}"),
                         status: None,
+                        ignored: false,
                     });
                 }
             }
@@ -81,11 +86,11 @@ pub(crate) fn from_index_and_statuses(
     // Start from the index — the canonical set of tracked paths. A
     // BTreeMap keeps the output path-sorted and dedupes conflict entries
     // (which appear once per stage).
-    let mut map: BTreeMap<String, Option<StatusKind>> = BTreeMap::new();
+    let mut map: BTreeMap<String, (Option<StatusKind>, bool)> = BTreeMap::new();
     let index = repo.index()?;
     for entry in index.iter() {
         if let Ok(p) = std::str::from_utf8(&entry.path) {
-            map.entry(p.to_string()).or_insert(None);
+            map.entry(p.to_string()).or_insert((None, false));
         }
     }
 
@@ -97,15 +102,15 @@ pub(crate) fn from_index_and_statuses(
         let Some(path) = e.path() else { continue };
         let s = e.status();
         if s.is_ignored() {
-            map.entry(path.to_string()).or_insert(None);
+            map.entry(path.to_string()).or_insert((None, true));
             continue;
         }
-        map.insert(path.to_string(), Some(classify(s)));
+        map.insert(path.to_string(), (Some(classify(s)), false));
     }
 
     Ok(map
         .into_iter()
-        .map(|(path, status)| WorkTreeEntry { path, status })
+        .map(|(path, (status, ignored))| WorkTreeEntry { path, status, ignored })
         .collect())
 }
 
@@ -144,7 +149,7 @@ fn expand_ignored_directories(
 ) -> Vec<WorkTreeEntry> {
     let mut map = entries
         .into_iter()
-        .map(|entry| (entry.path, entry.status))
+        .map(|entry| (entry.path, (entry.status, entry.ignored)))
         .collect::<BTreeMap<_, _>>();
 
     for status in statuses.iter().filter(|entry| entry.status().is_ignored()) {
@@ -184,14 +189,14 @@ fn expand_ignored_directories(
                 if file_type.is_dir() && !file_type.is_symlink() {
                     pending.push((child.path(), child_path));
                 } else {
-                    map.entry(child_path).or_insert(None);
+                    map.entry(child_path).or_insert((None, true));
                 }
             }
         }
     }
 
     map.into_iter()
-        .map(|(path, status)| WorkTreeEntry { path, status })
+        .map(|(path, (status, ignored))| WorkTreeEntry { path, status, ignored })
         .collect()
 }
 
@@ -291,14 +296,14 @@ mod tests {
             .work_tree_with_ignored(true)
             .unwrap()
             .into_iter()
-            .map(|entry| (entry.path, entry.status))
+            .map(|entry| (entry.path, (entry.status, entry.ignored)))
             .collect::<BTreeMap<_, _>>();
 
-        assert_eq!(entries.get("target/nested/cache.bin"), Some(&None));
-        assert_eq!(entries.get("settings.local"), Some(&None));
+        assert_eq!(entries.get("target/nested/cache.bin"), Some(&(None, true)));
+        assert_eq!(entries.get("settings.local"), Some(&(None, true)));
         assert_eq!(
             entries.get("visible.txt"),
-            Some(&Some(StatusKind::Untracked))
+            Some(&(Some(StatusKind::Untracked), false))
         );
         assert!(repo
             .work_tree()
@@ -336,7 +341,7 @@ mod tests {
 
         assert!(entries
             .iter()
-            .any(|entry| entry.path == relative && entry.status.is_none()));
+            .any(|entry| entry.path == relative && entry.status.is_none() && entry.ignored));
 
         let _ = std::fs::remove_dir_all(dir);
     }

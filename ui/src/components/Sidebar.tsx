@@ -204,7 +204,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
   const workTree = useRepo((s) => s.workTree);
   const selectedCommit = useRepo((s) => s.selectedCommit);
-  const refreshTree = useRepo((s) => s.refreshTree);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const moveEntries = useRepo((s) => s.moveEntries);
@@ -408,7 +407,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const [treeLoading, setTreeLoading] = useState(false);
   const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
   const [ignoredTree, setIgnoredTree] = useState<typeof workTree | null>(null);
-  const [showIgnored, setShowIgnored] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
@@ -416,17 +414,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     setTreeLoading(true);
     setTreeError(null);
     if (selectedCommit) setRevisionTree(null);
-    else if (showIgnored) setIgnoredTree(null);
+    else setIgnoredTree(null);
     const load = selectedCommit
       ? tauri.repoTreeAt(meta.path, selectedCommit).then((tree) => {
           if (!cancelled) setRevisionTree(tree);
         })
-      : showIgnored
-        ? tauri.repoTree(meta.path, true).then((tree) => {
-            if (!cancelled) setIgnoredTree(tree);
-          })
-      : refreshTree().then(() => {
-          if (!cancelled) setRevisionTree(null);
+      : tauri.repoTree(meta.path, true).then((tree) => {
+          if (!cancelled) setIgnoredTree(tree);
         });
     void load
       .catch((e) => {
@@ -441,21 +435,19 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return () => {
       cancelled = true;
     };
-  }, [tab, meta?.path, selectedCommit, refreshTree, showIgnored]);
+  }, [tab, meta?.path, selectedCommit]);
 
   // Files tab — Pierre receives either the selected revision or working tree.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
   // (git tab only) no longer touches this list.
   const displayedTree = selectedCommit
     ? (revisionTree ?? [])
-    : showIgnored
-      ? (ignoredTree ?? [])
-      : workTree;
+    : (ignoredTree ?? workTree);
   const filePaths = useMemo(() => displayedTree.map((e) => e.path), [displayedTree]);
   const fileGitStatus = useMemo<GitStatusEntry[]>(
     () =>
       displayedTree.flatMap((e) => {
-        const s = workStatusToGit(e.status);
+        const s = e.ignored ? 'ignored' : workStatusToGit(e.status);
         return s ? [{ path: e.path, status: s }] : [];
       }),
     [displayedTree],
@@ -1418,13 +1410,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 onClick={openFileCreateMenu}
               >
                 <Icon name="plus" size={14} stroke={2} />
-              </button>
-              <button
-                type="button"
-                aria-pressed={showIgnored}
-                onClick={() => setShowIgnored((shown) => !shown)}
-              >
-                <Icon name="eye" size={12} /> {t('files.showIgnored')}
               </button>
             </div>
           )}
