@@ -1775,3 +1775,11 @@ reference. Check `user.signingKey`, signing format/program, and a noninteractive
 test signature before the promotion window. If an owner explicitly overrides
 the gate, record the exact peeled commit and the unsigned status rather than
 describing the tag as signed.
+
+**Ignored-file enumeration is opt-in, never part of the snapshot hot path
+(2026-07-19).** Recursing Git-ignored directories can mean walking generated
+trees such as `node_modules` and `target`; on a real development checkout the
+equivalent enumeration exceeded 20 seconds. Keep `status_options` and
+`Repo::snapshot` limited to index-plus-untracked data. The Files view may call
+`Repo::work_tree_with_ignored(true)` only after an explicit **Show ignored**
+action, and ignored entries stay badge-free and out of Local Changes.

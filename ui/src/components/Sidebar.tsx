@@ -387,6 +387,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   // `status`: the old status dep re-walked the tree after every stage toggle.
   const [treeLoading, setTreeLoading] = useState(false);
   const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
+  const [ignoredTree, setIgnoredTree] = useState<typeof workTree | null>(null);
+  const [showIgnored, setShowIgnored] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
@@ -394,10 +396,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     setTreeLoading(true);
     setTreeError(null);
     if (selectedCommit) setRevisionTree(null);
+    else if (showIgnored) setIgnoredTree(null);
     const load = selectedCommit
       ? tauri.repoTreeAt(meta.path, selectedCommit).then((tree) => {
           if (!cancelled) setRevisionTree(tree);
         })
+      : showIgnored
+        ? tauri.repoTree(meta.path, true).then((tree) => {
+            if (!cancelled) setIgnoredTree(tree);
+          })
       : refreshTree().then(() => {
           if (!cancelled) setRevisionTree(null);
         });
@@ -414,12 +421,16 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     return () => {
       cancelled = true;
     };
-  }, [tab, meta?.path, selectedCommit, refreshTree]);
+  }, [tab, meta?.path, selectedCommit, refreshTree, showIgnored]);
 
   // Files tab — Pierre receives either the selected revision or working tree.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
   // (git tab only) no longer touches this list.
-  const displayedTree = selectedCommit ? (revisionTree ?? []) : workTree;
+  const displayedTree = selectedCommit
+    ? (revisionTree ?? [])
+    : showIgnored
+      ? (ignoredTree ?? [])
+      : workTree;
   const filePaths = useMemo(() => displayedTree.map((e) => e.path), [displayedTree]);
   const fileGitStatus = useMemo<GitStatusEntry[]>(
     () =>
@@ -1381,6 +1392,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
               </button>
               <button type="button" onClick={() => onCreateFileEntry('', true)}>
                 <Icon name="folder" size={12} /> New folder
+              </button>
+              <button
+                type="button"
+                aria-pressed={showIgnored}
+                onClick={() => setShowIgnored((shown) => !shown)}
+              >
+                <Icon name="eye" size={12} /> {t('files.showIgnored')}
               </button>
             </div>
           )}

@@ -18,6 +18,7 @@ export const en = {
   'nav.files': 'Files',
   'nav.filterRefs': 'Filter branches, tags…',
   'nav.filterRefsLabel': 'Filter branches and tags',
+  'files.showIgnored': 'Show ignored',
   'clone.title': 'Clone repository',
   'clone.paletteAction': 'Clone repository…',
   'clone.pickerTitle': 'Clone into…',

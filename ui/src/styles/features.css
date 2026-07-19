@@ -7284,7 +7284,7 @@ textarea.clone-input {
 .side-files-tools {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
   padding: 7px 8px;
   border-bottom: 0.5px solid var(--border);
@@ -7310,6 +7310,10 @@ textarea.clone-input {
   color: var(--text);
   background: var(--bg-hover);
   outline: 1px solid var(--accent);
+}
+.side-files-tools button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--bg-elev);
 }
 .side-files-revision {
   flex: 0 0 auto;

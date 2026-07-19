@@ -1044,8 +1044,14 @@ pub fn repo_checkout_commit(path: String, rev: String) -> CmdResult<CheckoutOutc
 }
 
 #[tauri::command(async)]
-pub async fn repo_tree(path: String) -> CmdResult<Vec<WorkTreeEntry>> {
-    run_blocking("tree", move || Ok(Repo::discover(&path)?.work_tree()?)).await
+pub async fn repo_tree(
+    path: String,
+    include_ignored: Option<bool>,
+) -> CmdResult<Vec<WorkTreeEntry>> {
+    run_blocking("tree", move || {
+        Ok(Repo::discover(&path)?.work_tree_with_ignored(include_ignored.unwrap_or(false))?)
+    })
+    .await
 }
 
 #[tauri::command(async)]
