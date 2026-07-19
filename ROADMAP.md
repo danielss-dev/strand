@@ -2231,6 +2231,13 @@ the fast path with its redundant refresh disabled; only the exact
 `Filesystem/path too long` failure retries the selected index paths through
 long-path-enabled system Git.
 
+**Strand 1.0.1 draft cut (2026-07-20):** The version bump and Windows discard
+repair were pushed to `main`, and the owner explicitly authorized the annotated
+but unsigned `v1.0.1` tag at `f173f8e`. Release run `29706062468` passed every
+Windows, macOS universal, Linux, updater-identity, notarization, Sigstore, and
+helper job, producing an 18-asset GitHub draft. It remains unpublished behind
+the same publisher, legal, updater-rehearsal, and real-platform gates as 1.0.0.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

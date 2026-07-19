@@ -111,6 +111,15 @@ no tag-signing identity was configured in this checkout. Re-signing it later
 would require replacing the published tag; this override is evidence of the
 push, not closure of the remaining publisher, legal, or runtime rows.
 
+The owner explicitly authorized the same override for the annotated `v1.0.1`
+tag at commit `f173f8e3a5021fd5854c7d836fb7d8ec08af4be5` on 2026-07-20.
+`git verify-tag v1.0.1` reports `no signature found`; no signing identity was
+invented or configured. Release run `29706062468` completed all desktop and
+helper jobs successfully and produced an 18-asset draft with updater signature
+identity checks, macOS signing/notarization, and Linux Sigstore verification
+green. This records the requested draft creation only; it does not close the
+remaining publication gates above.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:

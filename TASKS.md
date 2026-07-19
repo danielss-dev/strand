@@ -1921,7 +1921,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   populated an 18-asset draft with verified updater signatures, notarized
   macOS artifacts, Linux Sigstore evidence, and release notes. Public
   publication remains held for Windows publisher signing and the open legal /
-  real-platform checks in `docs/release-checklist.md`.
+  real-platform checks in `docs/release-checklist.md`. The owner repeated that
+  unsigned-tag override for `v1.0.1` at `f173f8e` on 2026-07-20; release run
+  `29706062468` completed all jobs and produced another 18-asset draft with the
+  same updater/notarization/Sigstore gates green.
 - ☑ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
