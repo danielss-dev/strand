@@ -2172,6 +2172,14 @@ long drafts, instead of reserving a fixed multi-line block after AI generation.
 The applied AI draft now remains directly editable without persistent
 coverage/provider status or an Undo row beneath the description.
 
+**Ignored-tree long paths repaired (2026-07-19):** **Show ignored** no longer
+lets libgit2 recurse into generated directories, where a deep Windows
+`node_modules` path previously aborted the entire Files tree. Git now identifies
+the ignored directory boundaries and `expand_ignored_directories` walks their
+contents with native filesystem APIs. A long `.pnpm` regression fixture and a
+live Tauri pass on this checkout verify that `node_modules` and `target` load
+without an error banner; the snapshot/status hot path remains unchanged.
+
 **Syntax-highlighted file editing shipped (2026-07-19):** Opening an existing
 UTF-8 working-tree file from Files now mounts a lightweight editor backed by
 Pierre's shared Shiki tokenizer. Save and Mod+S explicitly write through

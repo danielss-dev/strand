@@ -95,7 +95,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ `Repo::work_tree` — working-tree file listing (index entries ∪ untracked,
   overlaid with change status) powering the Files sidebar tab; opt-in ignored
   local files use `Repo::work_tree_with_ignored` + **Show ignored** without
-  slowing the snapshot hot path
+  slowing the snapshot hot path; ignored directories expand through the native
+  filesystem walker after Git classifies their boundary, avoiding libgit2's
+  Windows long-path failure (`expand_ignored_directories`)
 - ☑ Stash list (`Repo::stash_list` via `git2::stash_foreach`; `Stash { index,
   oid, message, branch }`, newest-first; `parse_stash_branch` reads the branch
   out of git's `WIP on <branch>:` / `On <branch>:` message)

@@ -45,7 +45,11 @@ pub(crate) fn status_options() -> git2::StatusOptions {
 pub(crate) fn tree_status_options(include_ignored: bool) -> git2::StatusOptions {
     let mut opts = status_options();
     if include_ignored {
-        opts.include_ignored(true).recurse_ignored_dirs(true);
+        // Let git identify each ignored boundary, but do not make libgit2 walk
+        // generated trees itself. On Windows it aborts the entire status call
+        // when one descendant exceeds its legacy path limit. `tree.rs`
+        // expands these already-ignored directories with the filesystem APIs.
+        opts.include_ignored(true).recurse_ignored_dirs(false);
     }
     opts
 }
