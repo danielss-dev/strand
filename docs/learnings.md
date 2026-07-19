@@ -1798,9 +1798,13 @@ trees such as `node_modules` and `target`; on a real development checkout the
 equivalent enumeration exceeded 20 seconds. Keep `status_options` and
 `Repo::snapshot` limited to index-plus-untracked data. The Files view may call
 `Repo::work_tree_with_ignored(true)` automatically only after the user opens
-that tab, through the blocking IPC path; keep the snapshot-backed tree visible
-while it loads. Ignored entries carry explicit identity for muted Pierre rows,
-stay badge-free, and remain out of Local Changes. Pierre counts every status
+that tab, through the blocking IPC path. While the first local enumeration is
+pending, show a loading state; do not temporarily render the snapshot-backed
+tree, because Files would misleadingly swap from Git-visible paths to local
+paths. Cache the local listing by repository and retain it during mutation
+refreshes. Use the cheap snapshot only as the current Git-status overlay, never
+as the Files path source. Ignored entries carry explicit identity for muted
+Pierre rows, stay badge-free, and remain out of Local Changes. Pierre counts every status
 entry toward ancestor change dots, including `ignored`; collapse a fully
 ignored subtree into one explicit trailing-slash directory status and omit its
 descendant statuses. The directory and descendants then inherit the muted color
@@ -1812,12 +1816,14 @@ iterative native filesystem walk that does not follow symlinks and tolerates
 entries disappearing during package-manager updates.
 
 **Refresh the ignored Files cache from path mutations, not status changes
-(2026-07-19).** The ignored-inclusive listing masks the snapshot-backed
-`workTree` while Files is open, so refreshing only the snapshot leaves created,
-deleted, or moved paths stale. Advance a dedicated mutation signal after a
-successful create/delete/move and let Files re-fetch its ignored listing; never
-key that fetch to general status, because stage toggles would recursively walk
-generated directories. Git does not represent empty directories, so retain
+(2026-07-19).** The ignored-inclusive listing is the sole Files path source, so
+refreshing only the snapshot leaves created, deleted, or moved paths stale.
+Advance a dedicated mutation signal after a successful create/delete/move,
+apply that mutation immediately to the loaded local cache, and re-fetch its
+ignored listing in the background. Never key that fetch to general status,
+because stage toggles would recursively walk generated directories; instead,
+overlay the cheap current snapshot metadata onto the cached local paths. Git
+does not represent empty directories, so retain
 folders created in Strand as explicit trailing-slash Pierre paths for the
 session, and transform/remove those markers on move/delete. Explicit directory
 paths must stay out of PierreTree's file set so selection and context menus keep

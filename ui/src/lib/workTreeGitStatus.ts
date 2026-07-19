@@ -28,7 +28,13 @@ function hasAncestor(path: string, directories: ReadonlySet<string>): boolean {
  * become one explicit directory status so their rows inherit the muted color
  * without every ignored descendant creating an ancestor change dot.
  */
-export function workTreeGitStatus(entries: readonly WorkTreeEntry[]): GitStatusEntry[] {
+export function workTreeGitStatus(
+  entries: readonly WorkTreeEntry[],
+  currentEntries: readonly WorkTreeEntry[] = entries,
+): GitStatusEntry[] {
+  const currentByPath = currentEntries === entries
+    ? null
+    : new Map(currentEntries.map((entry) => [entry.path, entry]));
   const directoryCounts = new Map<string, { total: number; ignored: number }>();
 
   for (const entry of entries) {
@@ -62,7 +68,8 @@ export function workTreeGitStatus(entries: readonly WorkTreeEntry[]): GitStatusE
       }
       continue;
     }
-    const status = workStatusToGit(entry.status);
+    const current = currentByPath?.get(entry.path);
+    const status = workStatusToGit(current ? current.status : entry.status);
     if (status) statuses.push({ path: entry.path, status });
   }
 

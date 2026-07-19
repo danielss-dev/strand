@@ -755,9 +755,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   submodule as its own tab (joins the superproject path + sub path via
   `openByPath`); right-click menu = Open submodule / Update (or Init & update) /
   Copy path; the section header `sync` action updates all (`--init --recursive`).
-- ☑ Files tree — working-tree folder tree from `repo_tree`, status badges,
-  click-to-open; lazily loaded when the Files tab is shown and refreshed on
-  status change. `PierreTree` now reports whether a selected row is a file or
+- ☑ Files tree — ignored-inclusive local folder tree from `repo_tree`, with
+  current snapshot status colors overlaid without substituting snapshot paths;
+  click-to-open, lazily loaded when Files is shown, and mutation-refreshed in
+  place. `PierreTree` now reports whether a selected row is a file or
   synthesized folder; `FileView.DirectoryTab` renders a folder's immediate
   children with the shared tree file-type icons, descendant/change counts, and
   keyboard navigation without sending the directory path to

@@ -30,4 +30,22 @@ describe('workTreeGitStatus', () => {
       { path: '.env', status: 'ignored' },
     ]);
   });
+
+  it('uses current Git state without replacing the local file list', () => {
+    const localEntries: WorkTreeEntry[] = [
+      { path: '.cache/state.json', status: null, ignored: true },
+      { path: 'src/clean.ts', status: 'MODIFIED', ignored: false },
+      { path: 'src/new.ts', status: null, ignored: false },
+    ];
+    const currentEntries: WorkTreeEntry[] = [
+      { path: 'src/clean.ts', status: null, ignored: false },
+      { path: 'src/new.ts', status: 'ADDED', ignored: false },
+      { path: 'src/git-only.ts', status: 'MODIFIED', ignored: false },
+    ];
+
+    expect(workTreeGitStatus(localEntries, currentEntries)).toEqual([
+      { path: '.cache/', status: 'ignored' },
+      { path: 'src/new.ts', status: 'added' },
+    ]);
+  });
 });

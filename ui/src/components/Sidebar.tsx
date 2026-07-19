@@ -9,6 +9,7 @@ import {
 } from './PierreTree';
 import { ignorePatterns } from '../lib/ignore';
 import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
+import { applyLocalTreeMutation } from '../lib/localTreeMutation';
 import { t } from '../lib/i18n';
 import { worktreeName } from '../lib/repoIdentity';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
@@ -409,7 +410,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   // not, because recursively re-walking ignored directories is expensive.
   const [treeLoading, setTreeLoading] = useState(false);
   const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
-  const [ignoredTree, setIgnoredTree] = useState<typeof workTree | null>(null);
+  const [localTreeCache, setLocalTreeCache] = useState<{
+    repoPath: string;
+    entries: typeof workTree;
+  } | null>(null);
   const [emptyDirectories, setEmptyDirectories] = useState<Set<string>>(new Set());
   const [treeError, setTreeError] = useState<string | null>(null);
   const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
@@ -418,6 +422,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   useEffect(() => {
     if (!filesTreeMutation || !mutationTargetsRepo) return;
     setEmptyDirectories((current) => applyEmptyDirectoryMutation(current, filesTreeMutation));
+    setLocalTreeCache((current) => {
+      if (!current || current.repoPath !== filesTreeMutation.repoPath) return current;
+      return {
+        ...current,
+        entries: applyLocalTreeMutation(
+          current.entries,
+          filesTreeMutation,
+          useRepo.getState().workTree,
+        ),
+      };
+    });
   }, [filesTreeMutation, mutationTargetsRepo]);
   useEffect(() => {
     if (tab !== 'files' || !meta?.path) return;
@@ -425,13 +440,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     setTreeLoading(true);
     setTreeError(null);
     if (selectedCommit) setRevisionTree(null);
-    else setIgnoredTree(null);
     const load = selectedCommit
       ? tauri.repoTreeAt(meta.path, selectedCommit).then((tree) => {
           if (!cancelled) setRevisionTree(tree);
         })
       : tauri.repoTree(meta.path, true).then((tree) => {
-          if (!cancelled) setIgnoredTree(tree);
+          if (!cancelled) setLocalTreeCache({ repoPath: meta.path, entries: tree });
         });
     void load
       .catch((e) => {
@@ -451,9 +465,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   // Files tab — Pierre receives either the selected revision or working tree.
   // Filtering is Pierre's own in-tree search box, so the shared filter box
   // (git tab only) no longer touches this list.
+  const localTree = localTreeCache && localTreeCache.repoPath === meta?.path
+    ? localTreeCache.entries
+    : null;
   const displayedTree = selectedCommit
     ? (revisionTree ?? [])
-    : (ignoredTree ?? workTree);
+    : (localTree ?? []);
   const filePaths = useMemo(
     () => [
       ...displayedTree.map((e) => e.path),
@@ -464,7 +481,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const selectedTreePath = selectedFile && selectedFileIsDirectory
     ? `${selectedFile.replace(/\/+$/, '')}/`
     : selectedFile;
-  const fileGitStatus = useMemo(() => workTreeGitStatus(displayedTree), [displayedTree]);
+  const fileGitStatus = useMemo(
+    () => workTreeGitStatus(displayedTree, selectedCommit ? displayedTree : workTree),
+    [displayedTree, selectedCommit, workTree],
+  );
   // Rename / move — the drop handler for drag-to-move in the tree, and the
   // dialog behind the context menu's keyboard-operable equivalent.
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
@@ -1433,7 +1453,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       ) : (
         <div className="side-files">
           {renameDialog}
-          {!selectedCommit && filePaths.length === 0 && fileCreateToolbar}
+          {!selectedCommit && localTree && filePaths.length === 0 && fileCreateToolbar}
           {selectedCommit && (
             <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
               Files at <code>{selectedCommit.slice(0, 7)}</code>
@@ -1447,10 +1467,10 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
             menuItems={fileMenu}
             search
-            searchAction={!selectedCommit && filePaths.length > 0 ? fileCreateToolbar : undefined}
+            searchAction={!selectedCommit && localTree && filePaths.length > 0 ? fileCreateToolbar : undefined}
             initialExpansion="closed"
             emptyLabel={
-              treeLoading
+              treeLoading || (!selectedCommit && !localTree)
                 ? selectedCommit ? 'Loading commit tree…' : 'Loading working tree…'
                 : treeError ?? (selectedCommit ? 'No files at this commit.' : 'No files in the working tree.')
             }

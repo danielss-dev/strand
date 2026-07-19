@@ -52,10 +52,13 @@ Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
 - **Delete file/folder** requires a second confirmation click. Tracked entries
   become ordinary working-tree deletions; the index is not changed.
 
-The Files tree shows tracked, untracked, and Git-ignored local files. Ignored
-files and fully ignored folders are muted gray, have no internal change dots,
-and stay out of Local Changes. Strand loads them only after you open Files, so
-recursive generated directories never slow the normal status/snapshot path. An
+The Files tree uses the repository's ignored-inclusive local listing directly;
+it does not first substitute the Git snapshot while that listing loads. Current
+Git state is overlaid on those local paths, so added, modified, and deleted
+entries keep their status colors. Ignored files and fully ignored folders are
+muted gray, have no internal change dots, and stay out of Local Changes. Strand
+loads the local listing only after you open Files, so recursive generated
+directories never slow the normal status/snapshot path. An
 empty folder created in Strand appears in the tree immediately and remains
 visible for the session; Git itself cannot persist an empty directory across a
 restart until it contains a file. Successful creates, deletes, renames, and

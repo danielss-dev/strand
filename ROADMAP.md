@@ -2199,8 +2199,10 @@ and focus-return behavior while leaving both creation actions in Quick Launch.
 
 **Ignored files integrated into Files (2026-07-19):** The opt-in toolbar toggle
 is gone. Opening Files now starts the ignored-inclusive enumeration in a Tauri
-blocking task while the snapshot-backed tree remains available, and explicit
-`WorkTreeEntry.ignored` metadata feeds Pierre's native muted ignored-file color.
+blocking task; Files waits for that local listing instead of first rendering
+the snapshot-backed Git tree, and explicit `WorkTreeEntry.ignored` metadata
+feeds Pierre's native muted ignored-file color. The inexpensive snapshot still
+overlays current added/modified/deleted state without becoming the path source.
 Fully ignored subtrees project as one muted directory boundary, so their folder
 and descendants stay gray without internal change dots. Snapshot/status
 refreshes remain free of recursive ignored-directory work.
