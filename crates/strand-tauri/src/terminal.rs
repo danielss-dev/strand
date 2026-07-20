@@ -115,10 +115,12 @@ impl TerminalManager {
             command.env("PATH", path);
         }
 
-        let mut child = pty
+        let child = pty
             .slave
             .spawn_command(command)
             .map_err(|e| cmd_err(format!("could not start {}: {e}", resolved.label)))?;
+        #[cfg(windows)]
+        let mut child = child;
         drop(pty.slave);
 
         #[cfg(unix)]
@@ -406,7 +408,7 @@ fn configure_terminal_environment(command: &mut CommandBuilder) {
     command.env("CLAUDE_CODE_NO_FLICKER", "1");
 }
 
-fn resolve_shell(choice: &EmbeddedShellChoice, cwd: Option<&Path>) -> CmdResult<ResolvedShell> {
+fn resolve_shell(choice: &EmbeddedShellChoice, _cwd: Option<&Path>) -> CmdResult<ResolvedShell> {
     let (program, args, label) = match choice {
         EmbeddedShellChoice::System => return resolve_system_shell(),
         EmbeddedShellChoice::Preset { id } => {
@@ -430,7 +432,7 @@ fn resolve_shell(choice: &EmbeddedShellChoice, cwd: Option<&Path>) -> CmdResult<
             let wsl = resolve_wsl_program()
                 .ok_or_else(|| cmd_err("Windows Subsystem for Linux was not found"))?;
             let mut args = vec!["--distribution".into(), distribution.into()];
-            if let Some(cwd) = cwd {
+            if let Some(cwd) = _cwd {
                 args.extend(["--cd".into(), cwd.to_string_lossy().into_owned()]);
             }
             (
@@ -495,10 +497,11 @@ pub fn wsl_distributions() -> Vec<String> {
     Vec::new()
 }
 
+#[cfg(any(windows, test))]
 fn decode_wsl_output(bytes: &[u8]) -> String {
     let looks_utf16 = bytes.starts_with(&[0xff, 0xfe])
         || (bytes.len() >= 2
-            && bytes.len() % 2 == 0
+            && bytes.len().is_multiple_of(2)
             && bytes.chunks_exact(2).filter(|pair| pair[1] == 0).count() > bytes.len() / 8);
     if !looks_utf16 {
         return String::from_utf8_lossy(bytes).into_owned();
