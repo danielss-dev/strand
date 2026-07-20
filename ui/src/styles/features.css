@@ -472,6 +472,44 @@
   color: oklch(0 0 0 / 0.6);
   margin-left: 2px;
 }
+.cb-top .cb-commit .commit-chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  color: var(--accent-fg);
+}
+.cb-top .cb-commit .commit-chord kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 19px;
+  min-width: 26px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--accent-fg) 12%, transparent);
+  box-shadow:
+    0 0 0 0.5px color-mix(in oklch, var(--accent-fg) 16%, transparent) inset,
+    0 -1px 0 color-mix(in oklch, var(--accent-fg) 28%, transparent) inset;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1;
+}
+.cb-top .cb-commit .commit-chord .chord-plus {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  opacity: 0.55;
+}
+.cb-top .cb-commit .commit-chord .enter-key {
+  min-width: 21px;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
 
 /* Body textarea — content-sized, capped so long messages do not crowd the diff. */
 .cb-body {
@@ -539,6 +577,9 @@
     display: none;
   }
   .cb-top .cb-commit .kbd-inline {
+    display: none;
+  }
+  .cb-top .cb-commit .commit-chord {
     display: none;
   }
 }

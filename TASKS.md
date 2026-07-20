@@ -1332,6 +1332,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     surface-local editing/navigation keys remain fixed and are fully listed in
     Settings → Keyboard plus the user guide. They are keyboard access, not
     hidden commands requiring a second binding registry.
+  - ☑ Windows/Linux commit shortcut polish: the Local Changes commit action
+    renders `Ctrl` + return as a compact two-key chord while macOS retains its
+    native `⌘↵` glyph treatment; Linux keeps its own platform identity while
+    sharing Ctrl-style shortcuts (`CommitBar` + `detectPlatform`, 2026-07-20).
 - ☑ Status-bar truth pass: branch/ahead/behind plus real derived sync state
   (up to date, ahead, behind, diverged, or conflicts) and modified/staged
   counts. Commit signing belongs to `SignatureSummary`; LFS/auth remain system-

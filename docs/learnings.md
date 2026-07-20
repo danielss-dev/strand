@@ -1919,6 +1919,15 @@ state. Surface CSS may size or skin the underlying select, but must size the
 `.select-control` wrapper too whenever the old select was itself a flex or grid
 item; otherwise the wrapper, rather than the select, becomes the layout child.
 
+**Linux shares Ctrl shortcuts, not Windows window chrome (2026-07-20).** Keep
+Linux as a distinct `Platform` even when shortcut formatting branches only on
+macOS versus non-macOS. Collapsing Linux into `win11` makes key labels correct
+but incorrectly opts it into Strand's custom Windows caption controls;
+collapsing it into `mac` preserves native chrome but emits Command glyphs and
+macOS toolbar spacing. Platform detection must identify all three targets, and
+individual surfaces may deliberately group Windows and Linux with a non-macOS
+predicate.
+
 **Embedding a file document must not change its editing contract (2026-07-20).**
 Work's tab chrome is presentation context, not an access-control boundary.
 Existing complete UTF-8 working-tree files remain editable whether the shared

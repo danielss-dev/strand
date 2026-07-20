@@ -255,7 +255,7 @@ const WIN_KEY: Record<string, string> = {
  * Render a binding for display. macOS uses glyphs joined tight (`⌘⇧P`); other
  * platforms use words joined with `+` (`Ctrl+Shift+P`).
  */
-export function formatBinding(binding: string | null, platform: 'mac' | 'win11'): string {
+export function formatBinding(binding: string | null, platform: 'mac' | 'win11' | 'linux'): string {
   if (!binding) return '';
   const mac = platform === 'mac';
   const mods = mac ? MAC_MOD : WIN_MOD;
