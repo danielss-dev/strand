@@ -1972,15 +1972,18 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
-- ◐ Promote the 1.0 GitHub release — annotated `v1.0.0` tag pushed at
-  `698158b` by explicit owner override on 2026-07-18; the green release workflow
-  populated an 18-asset draft with verified updater signatures, notarized
-  macOS artifacts, Linux Sigstore evidence, and release notes. Public
-  publication remains held for Windows publisher signing and the open legal /
-  real-platform checks in `docs/release-checklist.md`. The owner repeated that
-  unsigned-tag override for `v1.0.1` at `f173f8e` on 2026-07-20; release run
-  `29706062468` completed all jobs and produced another 18-asset draft with the
-  same updater/notarization/Sigstore gates green.
+- ◐ Promote stable GitHub releases and close external distribution gates —
+  `v1.0.0`, `v1.0.1`, and `v1.1.0` are public; `v1.1.0` is the latest stable
+  release. The owner authorized the annotated but unsigned `v1.1.0` tag at
+  `1b015f5` on 2026-07-20. Release run `29755981951` passed all eight desktop,
+  helper, signing, notarization, Sigstore, assembly, and promotion jobs and
+  published 18 assets. An independent download audit confirmed all five
+  desktop updater signatures plus the helper manifest use embedded key
+  `84FCBFD2A981CE5D`; the public stable manifest reports 1.1.0 and targets only
+  `v1.1.0`. This row remains partial because the Windows MSI is still
+  Authenticode `NotSigned`, the Git tag has no cryptographic signature, and the
+  legal, updater-rehearsal, and real-platform checks in
+  `docs/release-checklist.md` remain open.
 - ☑ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

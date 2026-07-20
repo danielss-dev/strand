@@ -2283,6 +2283,18 @@ lets users start in Work, Local Changes, Review, Pull Requests, or All Commits.
 The synchronous settings store seeds the repository view during initialization,
 so the choice survives relaunch without adding work to session restoration.
 
+**Strand 1.1.0 shipped (2026-07-20):** The owner authorized the annotated but
+unsigned `v1.1.0` tag at version commit `1b015f5`, and release run `29755981951`
+passed all eight desktop, helper, updater-identity, macOS notarization, Linux
+Sigstore, helper-assembly, and rolling-promotion jobs. The 18-asset GitHub
+release was published as latest stable at 16:04 UTC. Independent downloads
+confirmed all five desktop updater signatures and the helper manifest use key
+`84FCBFD2A981CE5D`; the public stable `latest.json` reports 1.1.0 and targets
+only `v1.1.0`. Universal macOS notarization returned `Accepted` (request
+`bcb128dd-36fc-4cd7-9beb-737b927be2ee`) and was stapled. The Windows MSI remains
+Authenticode `NotSigned`, and the Git tag has no cryptographic signature, so
+the external publisher and remaining release-checklist gates stay open.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

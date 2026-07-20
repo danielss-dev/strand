@@ -120,6 +120,23 @@ identity checks, macOS signing/notarization, and Linux Sigstore verification
 green. This records the requested draft creation only; it does not close the
 remaining publication gates above.
 
+The owner authorized creating release 1.1.0 with the same annotated-but-
+unsigned tag override at commit `1b015f51bb1f2e8d53169e3267db084c3a80493e` on
+2026-07-20. `git verify-tag v1.1.0` reports `no signature found`; no signing
+identity was invented or configured. Candidate CI run `29755733243` and release
+run `29755981951` passed. The latter completed all eight desktop, helper,
+assembly, and promotion jobs, and the 18-asset release was published as latest
+stable at 16:04 UTC. An independent download audit found all five desktop
+updater signatures and the helper manifest use embedded key
+`84FCBFD2A981CE5D`; public `latest.json` reports 1.1.0 and targets only the
+`v1.1.0` assets. Universal macOS notarization returned `Accepted` (request
+`bcb128dd-36fc-4cd7-9beb-737b927be2ee`) and the app was stapled; Linux Sigstore
+verification passed. `Get-AuthenticodeSignature` still reports `NotSigned` for
+the 17,588,224-byte Windows MSI (SHA-256
+`96B31FF0EB3990EEAB5378CFE9328E8F4E3E9EB6AB2298868A0AB8C181BB7463`).
+Publication does not close the remaining publisher, legal, updater-rehearsal,
+or real-platform rows above.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:
