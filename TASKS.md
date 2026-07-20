@@ -456,7 +456,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   popup.
 - ☑ Drag-and-drop one or more folders → each opens as a tab (`App.openMany`)
 - ☑ Recent-repos UI (sidebar empty-state + topbar `+` dropdown + command palette)
-- ☑ Multi-repo tabs (open, switch active, close; deduplicates by canonical path)
+- ☑ Multi-repo tabs (open, switch active, close by button/keyboard/middle-click;
+  deduplicates by canonical path via `RepoTabs` / `RepoRail`)
 - ☑ Tab persistence across launches (via `settings.session.tabs` in SQLite)
 - ☑ Open-repositories presentation toggle (Settings → Appearance, `repoNav`):
   the default vertical icon rail (`components/RepoRail.tsx`) or a horizontal
@@ -1118,7 +1119,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Per-repository mixed `WorkTab` model with one replaceable preview, pin
   promotion/deduplication, peer ordering, close fallback, path-mutation
   reconciliation, and stable Work return IDs (`stores/work.ts`,
-  `lib/workTabs.ts`). File tabs remain session-only.
+  `lib/workTabs.ts`). Tabs close by button, keyboard, or middle-click in
+  `views/Work.tsx`; file tabs remain session-only.
 - ☑ Embeddable file documents retain working-tree editing plus Content/Preview/
   History/Compare/Blame/image/directory behavior while mounting only the active
   file (`FileDocument`, `Work`); revisions remain read-only. Pierre activation

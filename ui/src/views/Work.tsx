@@ -225,7 +225,15 @@ function WorkTabs({
         onWheel={onWheel}
       >
         {tabs.map((tab) => (
-          <div className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')} key={tab.id}>
+          <div
+            className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')}
+            key={tab.id}
+            onAuxClick={(event) => {
+              if (event.button !== 1) return;
+              event.preventDefault();
+              onClose(tab.id);
+            }}
+          >
             <button
               ref={(node) => {
                 if (node) buttons.current.set(tab.id, node);

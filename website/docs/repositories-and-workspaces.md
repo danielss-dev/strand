@@ -45,6 +45,7 @@ Open repositories show in one of two layouts, chosen in [Settings](settings.md) 
 Both layouts share the same behavior:
 
 - Color-dot pills / icon tiles, with a close action on hover.
+- Middle-click a tab or rail tile to close it.
 - A `+` menu for open, clone, and recent repositories.
 - Right-click a repo to customize its icon and color, or close it.
 - When the tab strip overflows it scrolls, and a ▾ jump menu lists every open repo.

@@ -6,6 +6,20 @@ that future work (yours or another agent's) needs to respect.
 
 ---
 
+## Closeable tabs follow browser closing conventions
+
+**Rule.** Every closeable repository or Work tab supports its visible close
+control, Delete/Backspace while focused, and middle-click anywhere on the tab.
+Handle middle-click through the existing close action so workspace membership,
+terminal shutdown, active-tab fallback, and future confirmation rules remain
+centralized.
+
+**Why.** Repository pills, compact rail tiles, files, and terminals are
+different presentations of the same tab interaction. Letting any surface omit
+the browser-standard shortcut makes tab management feel unpredictable.
+
+---
+
 ## Extend Pierre's file icons through the shared tree config
 
 **Rule.** All `PierreTree` surfaces use `lib/treeIcons.ts`'s `TREE_ICONS`.

@@ -21,7 +21,7 @@ Open the sidebar's **Files** lens and select a file or folder:
   icons as the Files tree.
 - Use `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` to cycle tabs quickly, including
   while a terminal is focused. On the tab strip, Left/Right and Home/End move,
-  and Delete or Backspace closes the focused tab.
+  Delete or Backspace closes the focused tab, and middle-click closes any tab.
 
 Each file tab remembers its own Content, rendered Preview, History, Compare, or
 Blame mode. Images and folders retain their dedicated presentations. Only the

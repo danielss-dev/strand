@@ -52,7 +52,8 @@ diffs, a review queue, and worktree-aware baselines that include what the
 agent already staged or committed. It's also a complete everyday Git client
 — staging, commit graph, interactive rebase, stashes, tags — and it's
 keyboard-first, but never keyboard-only: almost every action works from the
-keyboard alone, and the mouse stays first-class.
+keyboard alone, and the mouse stays first-class. Repository and Work tabs close
+from their close control, with Delete/Backspace while focused, or by middle-click.
 
 ## Features
 
@@ -64,7 +65,7 @@ keyboard alone, and the mouse stays first-class.
   workspace switches, and full-screen terminal apps receive the fitted PTY
   grid. Claude Code starts with its complete dashboard and alternate-screen
   renderer in a configurable terminal font and size. Work tabs keep their width in a wheel-scrollable strip with an overflow
-  selector and tree-matched file icons. Only descriptors restore after
+  selector and tree-matched file icons, and middle-click closes a tab. Only descriptors restore after
   relaunch; selecting one starts a fresh process. The New Terminal split button
   can launch a one-off native or WSL shell, while Settings → Terminal provides
   a global default, paired repository and shell selectors for per-repository

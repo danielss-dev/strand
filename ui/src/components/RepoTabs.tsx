@@ -168,6 +168,11 @@ export function RepoTabs({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCust
               title={label.title}
               aria-label={label.ariaLabel}
               onClick={() => { void setActiveTab(t.path); }}
+              onAuxClick={(e) => {
+                if (e.button !== 1) return;
+                e.preventDefault();
+                void closeRepo(t.path);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Delete' || e.key === 'Backspace') {
                   e.preventDefault();

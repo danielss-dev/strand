@@ -23,7 +23,8 @@ system ported verbatim. No real feature surface yet.
 - ◐ **Open / clone / add existing repo**
   - ☑ Dialog flow (native picker via ⌘O + topbar `+` dropdown, drag-and-drop folder onto window; picker + drop are **multi-select** — open several repos at once, each as a tab)
   - ☑ SQLite-backed recent-repo list with last-opened timestamp
-  - ☑ Multi-repo tabs (open, switch, close, **persist across launches**)
+  - ☑ Multi-repo tabs (open, switch, button/keyboard/middle-click close,
+    **persist across launches**)
   - ☑ Clone (HTTPS / SSH) with streaming progress (shell-out `git clone
     --progress`; `CloneDialog` with URL + destination picker + live progress
     bar; opens the cloned repo on success)
@@ -2252,7 +2253,8 @@ relaunch. Integrations now carries global and `common_dir` shell choices, and a
 true final repository close confirms before draining terminals while workspace
 hiding leaves them alive. The Work strip now preserves tab width with
 wheel-scroll, active-tab reveal, a complete overflow selector, and Files-tree
-icons. Embedded PTYs are fitted before launch and resynchronized after creation
+icons; middle-click closes any file or terminal tab. Embedded PTYs are fitted
+before launch and resynchronized after creation
 and resize so full-screen alternate-screen agents occupy the complete pane;
 `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` cycle peers without leaving the agent.
 The terminal now has a dedicated Settings section with a live font preview,
