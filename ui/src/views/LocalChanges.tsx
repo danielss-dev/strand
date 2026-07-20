@@ -1757,7 +1757,17 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
           onClick={() => void submit()}
         >
           {amend ? 'Amend' : 'Commit'}
-          <span className="kbd-inline">{formatBinding('Mod+Enter', platform)}</span>
+          {platform === 'mac' ? (
+            <span className="kbd-inline" aria-hidden="true">
+              {formatBinding('Mod+Enter', platform)}
+            </span>
+          ) : (
+            <span className="commit-chord" aria-hidden="true">
+              <kbd>Ctrl</kbd>
+              <span className="chord-plus">+</span>
+              <kbd className="enter-key">↵</kbd>
+            </span>
+          )}
         </button>
       </div>
       <textarea

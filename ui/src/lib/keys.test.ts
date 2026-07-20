@@ -127,6 +127,7 @@ describe('formatBinding', () => {
     expect(formatBinding('Mod+Shift+P', 'win11')).toBe('Ctrl+Shift+P');
     expect(formatBinding('Mod+1', 'win11')).toBe('Ctrl+1');
     expect(formatBinding('Mod+Enter', 'win11')).toBe('Ctrl+Enter');
+    expect(formatBinding('Mod+Enter', 'linux')).toBe('Ctrl+Enter');
   });
 
   it('returns empty for an unbound command', () => {

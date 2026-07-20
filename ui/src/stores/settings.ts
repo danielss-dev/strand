@@ -12,7 +12,7 @@ export type ThemePref = Theme | 'system';
 /** Accent color preset. Each id maps to an OKLCH hue via a `[data-accent]`
  * block in tokens.css; the registry lives in `lib/theme.ts` (`ACCENT_OPTIONS`). */
 export type AccentId = 'amber' | 'rose' | 'magenta' | 'violet' | 'blue' | 'cyan' | 'teal' | 'green';
-export type Platform = 'mac' | 'win11';
+export type Platform = 'mac' | 'win11' | 'linux';
 export type Density = 'compact' | 'default' | 'relaxed';
 export type DiffMode = 'stacked' | 'split';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
@@ -69,10 +69,12 @@ function detectPlatform(): Platform {
     .__TAURI_OS_PLUGIN_INTERNALS__;
   if (internals?.os_type === 'windows') return 'win11';
   if (internals?.os_type === 'macos') return 'mac';
+  if (internals?.os_type === 'linux') return 'linux';
 
   // Fallback for browser mode
   const ua = navigator.userAgent.toLowerCase();
   if (ua.includes('win')) return 'win11';
+  if (ua.includes('linux')) return 'linux';
   return 'mac';
 }
 
