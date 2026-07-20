@@ -2,7 +2,7 @@
 
 Strand gives you three lenses on history: the All Commits graph for reachable history, the Reflog for everywhere `HEAD` has been (including orphaned commits), and a per-file view with follow-renames history, revision compare, and blame.
 
-## All Commits (`Mod+2`)
+## All Commits (`Mod+3`)
 
 The All Commits view renders the full commit graph as a virtualized table: an SVG lane graph on the left, then message, author, date, and short hash columns. Each branch gets its own colored lane; merge commits are marked with a ⊕ next to the message. Row height follows the density setting (compact / default / relaxed) from [Settings](settings.md).
 
@@ -83,9 +83,10 @@ Unlike the graph, the reflog includes commits orphaned by a reset, rebase, or am
 
 To recover a commit you lost to a bad reset: open the Reflog, find the entry from before the reset, and either **Create branch here…** to keep it or **Reset HEAD here…** to move your branch back. If the commit is orphaned it won't appear in the graph, but the context menu actions work on it directly.
 
-## File view
+## Work file documents
 
-Open any file from the sidebar's **Files** tab or the command palette to get a dedicated file view with up to five tabs:
+Open any file from the sidebar's **Files** tab or the command palette to get a
+document in [Work](work.md) with up to five modes:
 
 | Tab | What it shows |
 | --- | --- |
@@ -99,12 +100,10 @@ Press `Mod+F` anywhere in the file view to switch to Content and search the
 file's source. `Enter` / `Shift+Enter` (or `Down` / `Up`) move through matches
 with wrapping; `Esc` closes the search.
 
-For an existing UTF-8 working-tree file, type directly in Content. Strand keeps
-the same syntax highlighting while you edit. Changes remain unsaved until you
-use the save icon or `Mod+S`.
-Historical revisions, binaries, oversized files, and non-UTF-8 text stay
-read-only. If another tool changes the file after Strand opens it, Strand
-refuses the stale save instead of overwriting the newer disk content.
+For an existing UTF-8 working-tree file, type directly in Content. Changes
+remain unsaved until you use the save icon or `Mod+S`. Historical revisions,
+binaries, oversized files, and non-UTF-8 text stay read-only; stale saves are
+refused when another tool changed the disk content after Strand opened it.
 
 ### Preview
 

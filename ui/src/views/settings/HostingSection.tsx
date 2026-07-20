@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { pickPemCertificate } from '../../lib/dialog';
 import { createAzdoServerProfile, resolveAzdoServerCollectionUrl } from '../../lib/azdoProfile';
 import { errMessage, isTauri, tauri } from '../../lib/tauri';
@@ -438,7 +439,7 @@ function ProfileEditor({
       </p>
       <label>
         <span>Authentication</span>
-        <select
+        <Select
           className="settings-select"
           value={profile.auth_mode}
           onChange={(event) => {
@@ -452,7 +453,7 @@ function ProfileEditor({
         >
           <option value="pat">Personal access token</option>
           <option value="windows" disabled={!windowsAvailable}>Windows identity (Negotiate / NTLM)</option>
-        </select>
+        </Select>
       </label>
       <label>
         <span>Additional server aliases <small>Optional · one per line</small></span>

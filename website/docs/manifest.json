@@ -2,6 +2,7 @@
   "pages": [
     { "file": "index", "title": "Strand User Guide" },
     { "file": "getting-started", "title": "Getting Started" },
+    { "file": "work", "title": "Work: Files & Terminals" },
     { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces" },
     { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes" },
     { "file": "pull-requests", "title": "Pull Requests" },

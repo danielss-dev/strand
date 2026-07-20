@@ -93,7 +93,7 @@ interface PierreTreeProps {
    * file set to act on: the current multi-selection when a selected row is
    * activated, every file under a folder, or just the one file.
    */
-  onActivate?: (paths: string[]) => void;
+  onActivate?: (paths: string[], context: TreeMenuContext) => void;
   /** Right-click menu items for the resolved target file set plus the exact
    * row invoked (folder rows otherwise collapse to their descendant files). */
   menuItems?: (paths: string[], context: TreeMenuContext) => MenuItem[];
@@ -415,8 +415,12 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       if (isChevronEvent(e.nativeEvent)) return;
       const row = rowFromEvent(e.nativeEvent);
       if (!row) return;
+      const path = row.dataset.itemPath!.replace(/\/+$/, '');
       const targets = resolveTargets(row.dataset.itemPath!);
-      if (targets.length) onActivateRef.current(targets);
+      onActivateRef.current(targets, {
+        path,
+        kind: fileSetRef.current.has(path) ? 'file' : 'directory',
+      });
     },
     [resolveTargets],
   );
@@ -466,7 +470,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
         if (focused && fileSetRef.current.has(focused)) {
           e.preventDefault();
           e.stopPropagation();
-          onActivateRef.current(resolveTargets(focused));
+          onActivateRef.current(resolveTargets(focused), { path: focused, kind: 'file' });
         }
         return;
       }

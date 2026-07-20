@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 
+import { Select } from '../../components/Select';
+
 /**
  * Shared primitives for the settings sections — the roving radiogroup
  * keyboard helper plus the small form controls (segmented radio row,
@@ -126,7 +128,7 @@ export function SelectRow<Id extends string>({
   return (
     <div className="settings-frow">
       <RowText label={label} hint={hint} />
-      <select
+      <Select
         className="settings-select"
         aria-label={label}
         value={value}
@@ -137,7 +139,7 @@ export function SelectRow<Id extends string>({
             {opt.label}
           </option>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }

@@ -61,7 +61,9 @@ Open repositories appear either as a vertical icon rail or a horizontal tab stri
 
 ### Sidebar
 
-The sidebar has four primary rows — **Local Changes** (with an unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and two tabs below them:
+The sidebar has five primary rows — **Work**, **Local Changes** (with an
+unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and
+two tabs below them. Entering Work selects Files immediately.
 
 - **Git** — collapsible sections for Worktrees, Branches, Remotes, Tags, Stashes, and Submodules, with a filter box. Per-row right-click menus include upstream management, explicit branch-to-remote push, selected-branch fetch/pull, and copy actions.
 - **Files** — the working-tree file tree; when a commit is selected in All
@@ -70,23 +72,24 @@ The sidebar has four primary rows — **Local Changes** (with an unstaged-count 
   scripting languages, CMake, Razor, and XML. Clicking a folder opens an index
   of its immediate child folders and files using the same file-type icons; use
   Arrow keys, Home/End, and Enter/Space to navigate it. Clicking a file opens
-  the matching working-tree or historical version in the file view. Right-click a
+  a replaceable preview in Work; double-click or Enter pins it. Right-click a
   working-tree file and choose **Open in editor** to open that exact path with
   the editor selected in Settings → Integrations. The external action is
   intentionally hidden while browsing a historical commit.
 
 ### Main views
 
-Switch views with `Mod+1` through `Mod+6`:
+Switch views with `Mod+1` through `Mod+7`:
 
 | Shortcut | View | What it's for |
 |---|---|---|
-| `Mod+1` | Local Changes | Staging, diffs, and committing — see [Everyday Git](everyday-git.md) |
-| `Mod+2` | All Commits | The commit graph and history — see [Commits and history](commits-and-history.md) |
-| `Mod+3` | Reflog | HEAD reflog browser, the recovery path after resets and rebases |
-| `Mod+4` | Review | Reviewing changes as whole files with a queue and baselines — see [Reviewing agent changes](reviewing-agent-changes.md) |
-| `Mod+5` | Worktrees | Dashboard for parallel worktrees and agent attempts — see [Worktrees](worktrees.md) |
-| `Mod+6` | Workspace Review | Aggregated review across every repository in the active workspace |
+| `Mod+1` | Work | Lightweight file editing, inspection, and embedded terminals — see [Work](work.md) |
+| `Mod+2` | Local Changes | Staging, diffs, and committing — see [Everyday Git](everyday-git.md) |
+| `Mod+3` | All Commits | The commit graph and history — see [Commits and history](commits-and-history.md) |
+| `Mod+4` | Reflog | HEAD reflog browser, the recovery path after resets and rebases |
+| `Mod+5` | Review | Reviewing changes as whole files with a queue and baselines — see [Reviewing agent changes](reviewing-agent-changes.md) |
+| `Mod+6` | Worktrees | Dashboard for parallel worktrees and agent attempts — see [Worktrees](worktrees.md) |
+| `Mod+7` | Workspace Review | Aggregated review across every repository in the active workspace |
 
 **Pull Requests** currently has no dedicated number shortcut; open it from the
 sidebar or the palette action "Show: Pull Requests". See [Pull Requests](pull-requests.md).
@@ -115,6 +118,7 @@ Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has 
 ## Where to go next
 
 - [Everyday Git](everyday-git.md) — staging, committing, branching, stashing, and syncing.
+- [Work](work.md) — editable working-tree file tabs and repository-scoped embedded terminals.
 - [Commits and history](commits-and-history.md) — the commit graph, search, interactive rebase, and the reflog.
 - [Reviewing agent changes](reviewing-agent-changes.md) — the Review view, baselines, notes, and feedback export.
 - [Worktrees](worktrees.md) — one worktree per agent task, comparison, and merge-and-clean-up.

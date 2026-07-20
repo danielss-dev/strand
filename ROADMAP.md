@@ -2238,6 +2238,49 @@ Windows, macOS universal, Linux, updater-identity, notarization, Sigstore, and
 helper job, producing an 18-asset GitHub draft. It remains unpublished behind
 the same publisher, legal, updater-rehearsal, and real-platform gates as 1.0.0.
 
+**Work view and embedded terminals shipped (2026-07-20):** Work is now the
+startup destination and first numbered view. Its per-repository mixed tab strip
+implements replaceable file previews, pinned documents with editable working-
+tree Content, read-only revisions, per-tab Preview/History/Compare/Blame state,
+and multiple xterm.js terminals.
+The process-wide `portable-pty` runtime streams bounded ordered output through
+Tauri channels, resolves direct shell argv against Strand's recovered desktop
+PATH before applying the repository cwd, and tears down complete process trees
+with Unix process groups or Windows Job Objects. Terminal renderers survive
+view/repository/workspace switches; only dormant descriptors restore after
+relaunch. Integrations now carries global and `common_dir` shell choices, and a
+true final repository close confirms before draining terminals while workspace
+hiding leaves them alive. The Work strip now preserves tab width with
+wheel-scroll, active-tab reveal, a complete overflow selector, and Files-tree
+icons. Embedded PTYs are fitted before launch and resynchronized after creation
+and resize so full-screen alternate-screen agents occupy the complete pane;
+`Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` cycle peers without leaving the agent.
+The terminal now has a dedicated Settings section with a live font preview,
+configurable font family and 10–32px sizing while retaining complete JetBrains
+Mono fallback glyphs. Its split new-terminal action can pin a one-off native
+shell or an installed WSL distribution to the saved tab descriptor; the main
+action continues to use the global/repository default. WSL discovery is lazy
+and launch passes the repository through direct `--distribution`/`--cd` argv.
+The terminal also supplies Claude Code's full-logo
+and fullscreen-renderer compatibility environment, keeping the complete agent
+dashboard visible from a repository-root shell after onboarding notices have
+been consumed.
+
+**Terminal repository overrides and Windows PowerShell follow-up (2026-07-20):**
+Settings → Terminal now pairs a repository selector with a shell selector so
+every open repository family remains configurable without a long override
+matrix; linked worktrees retain one shared override. Windows terminal
+launch also removes canonical `\\?\` executable prefixes at the ConPTY boundary,
+fixing Windows PowerShell 5.1's interactive .NET Framework initialization while
+preserving normal profiles and shell behavior. The same custom-chevron native
+`Select` now owns dropdown spacing and disabled presentation throughout
+Settings, comparison views, rebase, branch networking, and worktree dialogs.
+
+**Configurable startup space shipped (2026-07-20):** Settings → Appearance now
+lets users start in Work, Local Changes, Review, Pull Requests, or All Commits.
+The synchronous settings store seeds the repository view during initialization,
+so the choice survives relaunch without adding work to session restoration.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

@@ -65,7 +65,63 @@ impl From<strand_core::Error> for CmdError {
     }
 }
 
-type CmdResult<T> = std::result::Result<T, CmdError>;
+pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
+
+#[tauri::command(async)]
+pub fn repo_terminal_create(
+    path: String,
+    shell: crate::terminal::EmbeddedShellChoice,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<crate::terminal::TerminalEvent>,
+    state: State<'_, AppState>,
+) -> CmdResult<crate::terminal::TerminalHandle> {
+    let is_open = state
+        .open_paths
+        .lock()
+        .map_err(|_| CmdError { message: "open repository registry poisoned".into() })?
+        .contains(&path);
+    if !is_open {
+        return Err(CmdError { message: "embedded terminals require an open repository".into() });
+    }
+    state.terminals.create(path, shell, cols, rows, on_event)
+}
+
+#[tauri::command(async)]
+pub fn terminal_write(id: String, data: String, state: State<'_, AppState>) -> CmdResult<()> {
+    state.terminals.write(&id, &data)
+}
+
+#[tauri::command(async)]
+pub fn terminal_resize(id: String, cols: u16, rows: u16, state: State<'_, AppState>) -> CmdResult<()> {
+    state.terminals.resize(&id, cols, rows)
+}
+
+#[tauri::command(async)]
+pub fn terminal_close(id: String, state: State<'_, AppState>) -> CmdResult<()> {
+    state.terminals.close(&id)
+}
+
+#[tauri::command(async)]
+pub fn repo_terminal_close_all(path: String, state: State<'_, AppState>) -> CmdResult<()> {
+    state.terminals.close_all(Some(&path));
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn repo_terminal_count(path: String, state: State<'_, AppState>) -> usize {
+    state.terminals.count(&path)
+}
+
+#[tauri::command(async)]
+pub fn terminal_shell_check(shell: crate::terminal::EmbeddedShellChoice) -> crate::terminal::ShellCheck {
+    crate::terminal::shell_check(shell)
+}
+
+#[tauri::command(async)]
+pub fn terminal_wsl_distributions() -> Vec<String> {
+    crate::terminal::wsl_distributions()
+}
 
 /// Run CPU/disk-bound work on tokio's blocking pool (see the module comment
 /// for why repo-size-scaled reads don't stay sync). `label` names the op in
@@ -146,6 +202,9 @@ pub fn repo_watch(
 pub fn repo_unwatch(path: String, state: State<'_, AppState>) -> CmdResult<()> {
     if let Ok(mut watchers) = state.watchers.lock() {
         watchers.remove(&path);
+    }
+    if let Ok(mut paths) = state.open_paths.lock() {
+        paths.remove(&path);
     }
     Ok(())
 }

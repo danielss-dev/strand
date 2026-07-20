@@ -9,8 +9,10 @@ import {
 import { recents as recentsDb, workspacesDb } from '../lib/db';
 import { pathKey, repoFamilyName, workspaceMemberSet } from '../lib/repoIdentity';
 import { tauri } from '../lib/tauri';
+import { t } from '../lib/i18n';
 import type { Workspace } from '../lib/types';
 import { useRepo, type RepoTab } from './repo';
+import { useWork } from './work';
 
 /**
  * The implicit "Default" workspace — the view you get with no named workspace
@@ -398,6 +400,20 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => {
 
     async removeRepo(id, path) {
       const key = pathKey(path);
+      const finalOwner = !get().workspaces.some(
+        (workspace) => workspace.id !== id
+          && workspace.repoPaths.some((repoPath) => pathKey(repoPath) === key),
+      );
+      if (finalOwner) {
+        const repo = useRepo.getState();
+        const tab = repo.tabs.find((item) => pathKey(item.path) === key);
+        const family = tab
+          ? repo.tabs
+              .filter((item) => pathKey(item.meta.common_dir) === pathKey(tab.meta.common_dir))
+              .map((item) => item.path)
+          : [path];
+        if (!await prepareFinalClose(family)) return;
+      }
       const workspaces = get().workspaces.map((w) =>
         w.id === id ? { ...w, repoPaths: w.repoPaths.filter((p) => pathKey(p) !== key) } : w,
       );
@@ -520,6 +536,7 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => {
       // A linked worktree tab isn't a member — plain close; the reconciler
       // moves focus if it was active.
       if (tab.meta.is_linked_worktree) {
+        if (!await prepareFinalClose([tabPath])) return;
         repo.closeTab(tabPath);
         reconcile();
         return;
@@ -538,6 +555,11 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => {
       const family = new Set(
         repo.tabs.filter((t) => pathKey(t.meta.common_dir) === common).map((t) => t.path),
       );
+      const heldElsewhere = get().workspaces.some(
+        (workspace) => workspace.id !== ws.id
+          && workspace.repoPaths.some((path) => pathKey(path) === pathKey(mainPath)),
+      );
+      if (!heldElsewhere && !await prepareFinalClose([...family])) return;
 
       // Move focus off the closing family first, onto a remaining member —
       // otherwise closeTab would pick a hidden neighbor and the view would
@@ -587,4 +609,17 @@ function ensureActiveVisible(get: () => WorkspacesState): void {
   const target = repo.tabs.find((t) => members.has(t.path));
   if (target) void repo.setActiveTab(target.path);
   else if (active) repo.deactivateTab();
+}
+
+async function prepareFinalClose(paths: string[]): Promise<boolean> {
+  const counts = await Promise.all(
+    paths.map((path) => tauri.repoTerminalCount(path).catch(() => 0)),
+  );
+  const count = counts.reduce((sum, value) => sum + value, 0);
+  if (count > 0 && !window.confirm(t('repo.closeWithTerminals', { count }))) return false;
+  await Promise.all(paths.map(async (path) => {
+    await tauri.repoTerminalCloseAll(path).catch(() => undefined);
+    await useWork.getState().clearRepo(path).catch(() => undefined);
+  }));
+  return true;
 }

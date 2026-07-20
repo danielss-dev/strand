@@ -1,8 +1,8 @@
 # Reviewing Agent Changes
 
-The Review view (`Mod+4`) is Strand's core workflow: a dedicated surface for reading everything an AI coding agent did to your repository — whether it left the changes unstaged, staged them, or already committed them — and turning your reading into verdicts and feedback. It is deliberately separate from Local Changes: staging lives there, reviewing lives here.
+The Review view (`Mod+5`) is Strand's core workflow: a dedicated surface for reading everything an AI coding agent did to your repository — whether it left the changes unstaged, staged them, or already committed them — and turning your reading into verdicts and feedback. It is deliberately separate from Local Changes: staging lives there, reviewing lives here.
 
-Open it from the sidebar **Review** row, with `Mod+4`, or via the palette action "Show: Review".
+Open it from the sidebar **Review** row, with `Mod+5`, or via the palette action "Show: Review".
 
 ## Two modes
 
@@ -94,4 +94,4 @@ See [Worktrees](worktrees.md) for creating worktrees, comparing multiple attempt
 
 ## Reviewing across repositories
 
-If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+6`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. See [Repositories and workspaces](repositories-and-workspaces.md).
+If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+7`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. See [Repositories and workspaces](repositories-and-workspaces.md).

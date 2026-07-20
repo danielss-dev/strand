@@ -63,6 +63,10 @@ import type {
   WorktreeArchive,
   WorktreeHealth,
   WorktreeStats,
+  EmbeddedShellChoice,
+  ShellCheck,
+  TerminalEvent,
+  TerminalHandle,
 } from './types';
 
 /**
@@ -125,6 +129,26 @@ export const tauri = {
   azdoProfileClearPat: (id: string) => invoke<void>('azdo_profile_clear_pat', { id }),
   azdoProfileTest: (id: string) => invoke<unknown>('azdo_profile_test', { id }),
   repoOpen: (path: string) => invoke<RepoMeta>('repo_open', { path }),
+  repoTerminalCreate: (
+    path: string,
+    shell: EmbeddedShellChoice,
+    cols: number,
+    rows: number,
+    onEvent: (event: TerminalEvent) => void,
+  ) => {
+    const channel = new Channel<TerminalEvent>();
+    channel.onmessage = onEvent;
+    return invoke<TerminalHandle>('repo_terminal_create', { path, shell, cols, rows, onEvent: channel });
+  },
+  terminalWrite: (id: string, data: string) => invoke<void>('terminal_write', { id, data }),
+  terminalResize: (id: string, cols: number, rows: number) =>
+    invoke<void>('terminal_resize', { id, cols, rows }),
+  terminalClose: (id: string) => invoke<void>('terminal_close', { id }),
+  repoTerminalCloseAll: (path: string) => invoke<void>('repo_terminal_close_all', { path }),
+  repoTerminalCount: (path: string) => invoke<number>('repo_terminal_count', { path }),
+  terminalShellCheck: (shell: EmbeddedShellChoice) =>
+    invoke<ShellCheck>('terminal_shell_check', { shell }),
+  terminalWslDistributions: () => invoke<string[]>('terminal_wsl_distributions'),
   repoMeta: (path: string) => invoke<RepoMeta>('repo_meta', { path }),
   repoStatus: (path: string) => invoke<FileStatus[]>('repo_status', { path }),
   repoSnapshot: (path: string) => invoke<Snapshot>('repo_snapshot', { path }),

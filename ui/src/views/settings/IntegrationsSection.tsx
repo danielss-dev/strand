@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Select } from '../../components/Select';
 import {
   editorPresets,
   resolveTemplate,
@@ -98,7 +99,7 @@ function ToolPicker({
     <div className="settings-field">
       <span className="settings-field-label">{label}</span>
       <div className="settings-row">
-        <select
+        <Select
           className="settings-select"
           aria-label={label}
           value={selectValue}
@@ -111,7 +112,7 @@ function ToolPicker({
             </option>
           ))}
           <option value={CUSTOM}>Custom command…</option>
-        </select>
+        </Select>
         <button type="button" className="btn" disabled={!template} onClick={() => void test()}>
           Test
         </button>

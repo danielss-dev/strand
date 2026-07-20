@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { errMessage, tauri } from '../lib/tauri';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
@@ -249,7 +250,7 @@ export function WorktreeDialog({
               </label>
               <label className="clone-field">
                 <span className="lbl">Start at</span>
-                <select
+                <Select
                   className="clone-input"
                   value={start}
                   disabled={busy}
@@ -288,7 +289,7 @@ export function WorktreeDialog({
                       ))}
                     </optgroup>
                   )}
-                </select>
+                </Select>
               </label>
               {remoteStart && (
                 <label className="stash-check">
@@ -310,7 +311,7 @@ export function WorktreeDialog({
           ) : (
             <label className="clone-field">
               <span className="lbl">Branch</span>
-              <select
+              <Select
                 className="clone-input"
                 value={existing}
                 disabled={busy || localBranches.length === 0}
@@ -320,7 +321,7 @@ export function WorktreeDialog({
                 {localBranches.map((b) => (
                   <option key={b} value={b}>{b}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
 

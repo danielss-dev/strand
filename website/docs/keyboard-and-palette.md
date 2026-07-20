@@ -17,7 +17,7 @@ Results are grouped, in this order:
 - **Branches** — checkout a local branch. Remote branches without a local counterpart appear too; running one creates a local tracking branch. The current branch reveals its tip in the graph instead.
 - **Tags** — reveal the tagged commit in the graph (non-destructive).
 - **Stashes** — "Apply stash: …", "Pop stash: …", and "Create branch from stash: …" rows per stash.
-- **Files** — working-tree files; opens the file in the file view.
+- **Files** — working-tree files; opens a pinned document in Work.
 - **Commits** — reveal the commit in the graph and open its detail panel.
 - **Workspaces** — one row per workspace (shown once a named workspace exists); running one switches to it. See [Repositories and workspaces](repositories-and-workspaces.md).
 - **Recent** — recently opened repositories; running one opens it by path.
@@ -50,12 +50,13 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+O` | Open repository… | General |
 | — | Clone repository… | General |
 | `Mod+,` | Settings | General |
-| `Mod+1` | Go to Local Changes | Navigation |
-| `Mod+2` | Go to All Commits | Navigation |
-| `Mod+3` | Go to Reflog | Navigation |
-| `Mod+4` | Go to Review | Navigation |
-| `Mod+5` | Go to Worktrees | Navigation |
-| `Mod+6` | Go to Workspace Review | Navigation |
+| `Mod+1` | Go to Work | Navigation |
+| `Mod+2` | Go to Local Changes | Navigation |
+| `Mod+3` | Go to All Commits | Navigation |
+| `Mod+4` | Go to Reflog | Navigation |
+| `Mod+5` | Go to Review | Navigation |
+| `Mod+6` | Go to Worktrees | Navigation |
+| `Mod+7` | Go to Workspace Review | Navigation |
 | `Mod+Tab` | Next repository | Navigation |
 | `Mod+Shift+Tab` | Previous repository | Navigation |
 | `Mod+E` | Switch repository… | Navigation |
@@ -103,6 +104,21 @@ Zoom works even while a text field is focused, shows a "Zoom N%" toast, and pers
 ## Surface-local keys
 
 Each view has its own small set of fixed (non-rebindable) keys. Settings → Keyboard lists the most common of them under "Context shortcuts" for reference; this page is the complete list.
+
+### Work tabs and embedded terminals
+
+| Key | Action |
+| --- | --- |
+| `Ctrl/⌘+PageUp` / `Ctrl/⌘+PageDown` | Activate the previous / next Work tab from anywhere in Work |
+| `←` / `→` | Focus and activate the previous / next file or terminal tab |
+| `Home` / `End` | Focus and activate the first / last Work tab |
+| `Delete` / `Backspace` | Close the focused Work tab |
+| `F6` | Return focus from a terminal or document to the active Work tab |
+
+When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
+`Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on
+Windows and Linux the numbered view shortcuts and the fixed Work-tab
+`Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
 
 ### Repository tabs
 

@@ -13,6 +13,7 @@ import {
   DENSITY_OPTIONS,
   MONO_FONT_OPTIONS,
   REPO_NAV_OPTIONS,
+  STARTUP_SPACE_OPTIONS,
   UI_FONT_OPTIONS,
   useSettings,
   type AccentId,
@@ -34,6 +35,7 @@ export function AppearanceSection() {
   const resolved = useSettings((s) => s.resolvedTheme);
   const accent = useSettings((s) => s.accent);
   const density = useSettings((s) => s.density);
+  const startupSpace = useSettings((s) => s.startupSpace);
   const repoNav = useSettings((s) => s.repoNav);
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
@@ -101,6 +103,13 @@ export function AppearanceSection() {
       </div>
 
       <div className="settings-rows">
+        <SelectRow
+          label="Start in"
+          hint="Choose the space Strand opens after launch."
+          options={STARTUP_SPACE_OPTIONS}
+          value={startupSpace}
+          onChange={(id) => set('startupSpace', id)}
+        />
         <SegRow
           label="Open repositories"
           hint="Show open repositories as a vertical sidebar rail or horizontal toolbar tabs."

@@ -1,10 +1,10 @@
 # Worktrees
 
-Git worktrees let you check out several branches of one repository into separate directories at the same time — which makes them the natural unit for parallel AI-agent work: one task, one branch, one worktree. Strand treats worktrees as first-class, with a dedicated dashboard (`Mod+5`) for creating, monitoring, reviewing, comparing, merging, and cleaning them up.
+Git worktrees let you check out several branches of one repository into separate directories at the same time — which makes them the natural unit for parallel AI-agent work: one task, one branch, one worktree. Strand treats worktrees as first-class, with a dedicated dashboard (`Mod+6`) for creating, monitoring, reviewing, comparing, merging, and cleaning them up.
 
 ## The Worktrees dashboard
 
-Open it with `Mod+5`, the palette entry "Show: Worktrees", or by clicking a worktree in the sidebar's Worktrees section. The header shows the repository's fleet at a glance — total, dirty, and merged counts — alongside the primary actions: **New worktree**, **Compare (N)** (appears once two or more rows are ticked), **Clean up (N)** (appears when clean, already-merged worktrees exist), and **Prune stale** (appears when the worktree registry points at directories that no longer exist).
+Open it with `Mod+6`, the palette entry "Show: Worktrees", or by clicking a worktree in the sidebar's Worktrees section. The header shows the repository's fleet at a glance — total, dirty, and merged counts — alongside the primary actions: **New worktree**, **Compare (N)** (appears once two or more rows are ticked), **Clean up (N)** (appears when clean, already-merged worktrees exist), and **Prune stale** (appears when the worktree registry points at directories that no longer exist).
 
 Each worktree is a row, ordered current first, then the main checkout, then the rest. A row tells you:
 
@@ -42,7 +42,7 @@ The **Review** button on a row (also `Enter` on the focused row, "Review vs base
 
 That means you see everything since the branch forked — the agent's commits, whatever it staged, and whatever is still uncommitted — as whole-file diffs in a single queue, regardless of how the agent left the working tree. The full review toolkit applies: reviewed marks, notes, and feedback export. See [Reviewing agent changes](reviewing-agent-changes.md).
 
-If several agent worktrees belong to repositories in one workspace, [Workspace Review](repositories-and-workspaces.md) (`Mod+6`) aggregates them: every open worktree tab of a member repository reviews as its own section.
+If several agent worktrees belong to repositories in one workspace, [Workspace Review](repositories-and-workspaces.md) (`Mod+7`) aggregates them: every open worktree tab of a member repository reviews as its own section.
 
 ## Comparing attempts
 
@@ -78,10 +78,10 @@ The collapsible **Archived snapshots** panel at the bottom of the dashboard list
 
 | Shortcut | Action |
 |---|---|
-| `Mod+5` | Go to Worktrees |
+| `Mod+6` | Go to Worktrees |
 | `↑` / `↓` | Move focus in the dashboard list |
 | `Enter` | Review the focused worktree vs its base |
 | `Space` | Tick the row for Compare |
-| `Mod+6` | Workspace Review (includes open worktree tabs) |
+| `Mod+7` | Workspace Review (includes open worktree tabs) |
 
-`Mod+5` and `Mod+6` are rebindable in [Settings](settings.md) → Keyboard; the full shortcut reference lives in [Keyboard and palette](keyboard-and-palette.md).
+`Mod+6` and `Mod+7` are rebindable in [Settings](settings.md) → Keyboard; the full shortcut reference lives in [Keyboard and palette](keyboard-and-palette.md).

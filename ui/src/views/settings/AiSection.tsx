@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { Select } from '../../components/Select';
 import { repoAiStyle } from '../../lib/db';
 import { errMessage, tauri } from '../../lib/tauri';
 import type { AiProvider, AiProviderStatus } from '../../lib/types';
@@ -168,7 +169,7 @@ export function AiSection() {
             <span className="settings-field-label">Provider</span>
             <span className="settings-frow-hint">Choose the account used for text generation</span>
           </span>
-          <select
+          <Select
             className="settings-select"
             aria-label="AI writing provider"
             value={aiProvider}
@@ -180,7 +181,7 @@ export function AiSection() {
             {PROVIDERS.map((provider) => (
               <option key={provider.id} value={provider.id}>{provider.label}</option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="settings-frow">
@@ -188,7 +189,7 @@ export function AiSection() {
             <span className="settings-field-label">Model</span>
             <span className="settings-frow-hint">{modelHint} · used for commits and pull requests</span>
           </span>
-          <select
+          <Select
             className="settings-select ai-model-select"
             aria-label={`${providerName} writing model`}
             value={model}
@@ -200,7 +201,7 @@ export function AiSection() {
             {models.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
 
