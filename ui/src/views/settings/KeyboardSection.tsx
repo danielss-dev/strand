@@ -42,6 +42,7 @@ const CONTEXT_SHORTCUTS: { keys: string; plain?: boolean; label: string }[] = [
   { keys: 'n / p', plain: true, label: 'Next / previous change block in the diff' },
   { keys: 'Shift+J / Shift+K', plain: true, label: 'Scroll the diff pane down / up' },
   { keys: '← → · Home/End · Delete', plain: true, label: t('settings.context.repoTabs') },
+  { keys: 'Ctrl/⌘+PageUp/PageDown · ← → · Home/End · Delete · F6', plain: true, label: t('settings.context.workTabs') },
   { keys: '↑ ↓ · ↵ · ⇥ · Esc', plain: true, label: 'Palette: navigate · run · change scope · close' },
   { keys: 'Ctrl/⌘ +  −  0', plain: true, label: 'Zoom UI in · out · reset to 100%' },
 ];

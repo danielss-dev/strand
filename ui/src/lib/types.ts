@@ -544,6 +544,31 @@ export interface WorkTreeEntry {
   ignored: boolean;
 }
 
+/** Shell used by Work's embedded terminal. Commands are tokenized into argv
+ * and launched directly; Strand never inserts an intermediary shell. */
+export type EmbeddedShellChoice =
+  | { kind: 'system' }
+  | { kind: 'preset'; id: string }
+  | { kind: 'wsl'; distribution: string }
+  | { kind: 'custom'; command: string };
+
+export interface TerminalHandle {
+  id: string;
+  label: string;
+}
+
+export interface ShellCheck {
+  available: boolean;
+  label: string;
+  executable: string | null;
+  error: string | null;
+}
+
+export type TerminalEvent =
+  | { type: 'output'; data: string }
+  | { type: 'exit'; code: number }
+  | { type: 'error'; message: string };
+
 export type FilesTreeMutationChange =
   | { kind: 'create'; path: string; directory: boolean }
   | { kind: 'delete'; paths: string[] }

@@ -52,7 +52,7 @@ interface PersistedSession {
 const SESSION_KEY = 'session.tabs';
 
 export type View =
-  | 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees'
+  | 'work' | 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees'
   | 'workspace-review' | 'pull-requests';
 
 /** Active tab within the file view ('preview' only offered for renderable
@@ -235,6 +235,10 @@ export interface RepoState {
    *  (drives the "Back to file" bar in the commits view). Cleared by any normal
    *  navigation (selecting a file, opening a repo, switching tabs). */
   fileReturn: string | null;
+  /** Exact Work document that initiated a History/Blame jump. Tab identity is
+   * stable across path moves, unlike a path-only return target. */
+  workFileReturn: { repoPath: string; tabId: string; path: string } | null;
+  setWorkFileReturn(target: { repoPath: string; tabId: string; path: string } | null): void;
   selectedFile: string | null;
   /** The selected Files-tree path is a synthesized folder row, not a file. */
   selectedFileIsDirectory: boolean;
@@ -799,6 +803,7 @@ const EMPTY_ACTIVE = {
   selectedFileIsDirectory: false,
   selectedFileRevision: null as string | null,
   fileReturn: null as string | null,
+  workFileReturn: null as { repoPath: string; tabId: string; path: string } | null,
   selectedCommit: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
@@ -867,7 +872,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   ...EMPTY_ACTIVE,
   recents: [],
 
-  view: 'local',
+  view: useSettings.getState().startupSpace,
   fileTab: 'content',
   selectedRef: null,
   commitSearchFocus: false,
@@ -2146,7 +2151,8 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshRecents();
   },
 
-  setView: (view) => set({ view }),
+  setView: (view) => set({ view, ...(view === 'commits' ? {} : { workFileReturn: null }) }),
+  setWorkFileReturn: (workFileReturn) => set({ workFileReturn }),
   revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
   clearReveal: () => set({ revealCommit: null }),
   requestCommitSearch: (mode) =>

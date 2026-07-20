@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Diff } from '../components/Diff';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
+import { Select } from '../components/Select';
 import { isImagePath } from '../lib/image';
 import { errMessage, tauri } from '../lib/tauri';
 import type { DiffStatus, FileDiff } from '../lib/types';
@@ -129,9 +130,9 @@ export function CompareRefsDialog({
         <div className="compare-refs-pickers">
           <label>
             <span>From</span>
-            <select autoFocus value={from} onChange={(event) => setFrom(event.target.value)}>
+            <Select autoFocus value={from} onChange={(event) => setFrom(event.target.value)}>
               {uniqueChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-            </select>
+            </Select>
           </label>
           <button
             type="button"
@@ -144,9 +145,9 @@ export function CompareRefsDialog({
           </button>
           <label>
             <span>To</span>
-            <select value={to} onChange={(event) => setTo(event.target.value)}>
+            <Select value={to} onChange={(event) => setTo(event.target.value)}>
               {uniqueChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-            </select>
+            </Select>
           </label>
         </div>
         <div className="compare-refs-message">

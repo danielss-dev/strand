@@ -10,6 +10,7 @@ import { HostingSection } from './settings/HostingSection';
 import { IntegrationsSection } from './settings/IntegrationsSection';
 import { KeyboardSection } from './settings/KeyboardSection';
 import { PrivacySection } from './settings/PrivacySection';
+import { TerminalSection } from './settings/TerminalSection';
 import { UpdatesSection } from './settings/UpdatesSection';
 
 /**
@@ -27,10 +28,11 @@ import { UpdatesSection } from './settings/UpdatesSection';
  */
 
 export type SettingsSectionId =
-  | 'appearance' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'updates' | 'privacy';
+  | 'appearance' | 'terminal' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'updates' | 'privacy';
 
 const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] = [
   { id: 'appearance', label: 'settings.appearance', icon: 'eye' },
+  { id: 'terminal', label: 'settings.terminal', icon: 'terminal' },
   { id: 'diff', label: 'settings.diff', icon: 'compare' },
   { id: 'keyboard', label: 'settings.keyboard', icon: 'command' },
   { id: 'git', label: 'settings.git', icon: 'branch' },
@@ -163,6 +165,7 @@ export function SettingsDialog({
             aria-labelledby={`settings-tab-${section}`}
           >
             {section === 'appearance' && <AppearanceSection />}
+            {section === 'terminal' && <TerminalSection />}
             {section === 'diff' && <DiffSection />}
             {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}

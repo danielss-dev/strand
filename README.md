@@ -27,7 +27,7 @@ shortcuts").
 | `Mod+K` | Command palette |
 | `Mod+O` | Open repository |
 | `Mod+,` | Settings |
-| `Mod+1…5` | Local Changes · All Commits · Reflog · Review · Worktrees |
+| `Mod+1…7` | Work · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review |
 | `Mod+Tab` / `Mod+Shift+Tab` | Next / previous repository |
 | `Mod+E` | Switch repository (quick-switcher) |
 | `Mod+P` | Push |
@@ -42,7 +42,9 @@ shortcuts").
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
 `Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
-diff · palette `↑↓`/`↵`/`⇥`/`Esc`.
+diff · Work tabs `Ctrl/⌘+PageUp`/`PageDown` or `←→`/`Home`/`End`/`Delete`,
+with `F6` to leave a terminal ·
+palette `↑↓`/`↵`/`⇥`/`Esc`.
 
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
 a dedicated surface for reviewing an agent's changes: whole-file-context
@@ -54,7 +56,22 @@ keyboard alone, and the mouse stays first-class.
 
 ## Features
 
-- **Review view (⌘4)** — read an agent's changes as whole files with the
+- **Work view (⌘1)** — Strand's default startup workspace combines editable
+  working-tree file documents and embedded shells in one tab strip. Files get VS Code-style
+  preview/pin behavior and retain Content, rendered Preview, History, Compare,
+  Blame, image, and directory modes. Multiple terminals run at the repository
+  root and keep output, scrollback, and selection across view, repository, and
+  workspace switches, and full-screen terminal apps receive the fitted PTY
+  grid. Claude Code starts with its complete dashboard and alternate-screen
+  renderer in a configurable terminal font and size. Work tabs keep their width in a wheel-scrollable strip with an overflow
+  selector and tree-matched file icons. Only descriptors restore after
+  relaunch; selecting one starts a fresh process. The New Terminal split button
+  can launch a one-off native or WSL shell, while Settings → Terminal provides
+  a global default, paired repository and shell selectors for per-repository
+  overrides, and typography without changing the separate external
+  **Open in terminal** action. Linked worktrees share one override.
+
+- **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've
   reviewed, a pinnable baseline captures everything since a commit —
   including work the agent already staged or committed — and a change map
@@ -117,7 +134,7 @@ keyboard alone, and the mouse stays first-class.
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure inline comments still need iteration tracking.
-- **Worktrees (⌘5)** — an AI-agent dashboard for every worktree with stable
+- **Worktrees (⌘6)** — an AI-agent dashboard for every worktree with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the
   branch diverged from main. Worktree tabs of one repo group together instead
@@ -162,8 +179,8 @@ keyboard alone, and the mouse stays first-class.
 - **Command palette (⌘K)** — fuzzy search across commands, branches, tags,
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
-- **File view** — edit existing UTF-8 working-tree files with syntax
-  highlighting, or inspect read-only historical source; `--follow` history,
+- **Work file documents** — edit syntax-highlighted working-tree files or
+  inspect historical source read-only; `--follow` history,
   compare any two revisions, blame, and rendered previews for markdown and SVG; the Files tree
   uses the local filesystem listing directly, including muted Git-ignored
   paths, while overlaying current Git-state colors and recognizable language
@@ -186,8 +203,9 @@ keyboard alone, and the mouse stays first-class.
   switching, and managing are all in ⌘K, including importing a VS Code
   `.code-workspace`), native desktop menus (global on macOS, in-window on
   Windows/Linux), open the repository or a chosen file in your editor, open a
-  terminal, settings (⌘,) for appearance / diff /
-  git / hosting / integrations / AI, in-app updates.
+  terminal, a configurable startup space, settings (⌘,) for appearance /
+  terminal / diff / git / hosting / integrations / AI, consistent
+  keyboard-native dropdowns, and in-app updates.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI

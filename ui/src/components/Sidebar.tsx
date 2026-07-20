@@ -16,6 +16,7 @@ import { worktreeName } from '../lib/repoIdentity';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
+import { useWork } from '../stores/work';
 import type {
   Branch,
   PullMode,
@@ -180,7 +181,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
-  const setFileTab = useRepo((s) => s.setFileTab);
   const selectedFile = useRepo((s) => s.selectedFile);
   const selectedFileIsDirectory = useRepo((s) => s.selectedFileIsDirectory);
   const status = useRepo((s) => s.status);
@@ -213,6 +213,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
   const moveEntries = useRepo((s) => s.moveEntries);
   const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
+  const workRepos = useWork((s) => s.repos);
+  const openWorkFile = useWork((s) => s.openFile);
   const stashes = useRepo((s) => s.stashes);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
@@ -257,6 +259,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   );
 
   const [tab, setTab] = useState<SideTab>('git');
+  useEffect(() => {
+    if (view === 'work') setTab('files');
+  }, [view]);
   const [filter, setFilter] = useState('');
   const [sections, setSections] = useState({
     worktrees: true, branches: true, remotes: true, tags: false, stashes: true, submods: false,
@@ -505,9 +510,15 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     ],
     [displayedTree, emptyDirectories, selectedCommit],
   );
-  const selectedTreePath = selectedFile && selectedFileIsDirectory
-    ? `${selectedFile.replace(/\/+$/, '')}/`
-    : selectedFile;
+  const activeWorkTab = meta
+    ? workRepos[meta.path]?.tabs.find((item) => item.id === workRepos[meta.path]?.activeTabId)
+    : null;
+  const workFile = activeWorkTab?.kind === 'file' ? activeWorkTab : null;
+  const selectedTreeFile = view === 'work' ? workFile?.path ?? null : selectedFile;
+  const selectedTreeDirectory = view === 'work' ? workFile?.isDirectory ?? false : selectedFileIsDirectory;
+  const selectedTreePath = selectedTreeFile && selectedTreeDirectory
+    ? `${selectedTreeFile.replace(/\/+$/, '')}/`
+    : selectedTreeFile;
   const fileGitStatus = useMemo(
     () => workTreeGitStatus(displayedTree, selectedCommit ? displayedTree : workTree),
     [displayedTree, selectedCommit, workTree],
@@ -591,7 +602,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         {
           label: 'Open',
           icon: 'content',
-          onSelect: () => selectFile(rowPath, selectedCommit, rowIsDirectory),
+          onSelect: () => {
+            if (!meta) return;
+            openWorkFile(meta.path, rowPath, selectedCommit, rowIsDirectory, 'pinned');
+            setView('work');
+          },
         },
       ];
       if (!selectedCommit && actionPaths.length === 1) {
@@ -618,16 +633,18 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             label: 'Open file history',
             icon: 'history',
             onSelect: () => {
-              selectFile(rowPath);
-              setFileTab('history');
+              if (!meta) return;
+              openWorkFile(meta.path, rowPath, null, false, 'pinned', 'history');
+              setView('work');
             },
           },
           {
             label: 'Open blame',
             icon: 'blame',
             onSelect: () => {
-              selectFile(rowPath);
-              setFileTab('blame');
+              if (!meta) return;
+              openWorkFile(meta.path, rowPath, null, false, 'pinned', 'blame');
+              setView('work');
             },
           },
         );
@@ -720,13 +737,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       markFilesTreeChanged,
       onCreateFileEntry,
       onOpenFileInEditor,
+      openWorkFile,
       onToast,
       openIgnoreDialog,
       refreshLocalChanges,
       selectFile,
       selectedCommit,
       selectedFile,
-      setFileTab,
       setView,
       workTree,
     ],
@@ -1364,6 +1381,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       )}
       <div className="side-primary">
         <SideRow
+          icon="terminal"
+          label={t('nav.work')}
+          active={view === 'work'}
+          onClick={() => { setView('work'); selectFile(null); setTab('files'); }}
+        />
+        <SideRow
           icon="changes"
           label={t('nav.localChanges')}
           badge={unstaged || undefined}
@@ -1539,7 +1562,16 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
             gitStatus={fileGitStatus}
             onMove={selectedCommit ? undefined : moveTo}
             selectedPath={selectedTreePath}
-            onSelect={(p, kind) => selectFile(p, selectedCommit, kind === 'directory')}
+            onSelect={(p, kind) => {
+              if (!p || !meta) return;
+              openWorkFile(meta.path, p, selectedCommit, kind === 'directory', 'preview');
+              setView('work');
+            }}
+            onActivate={(_paths, context) => {
+              if (!meta) return;
+              openWorkFile(meta.path, context.path, selectedCommit, context.kind === 'directory', 'pinned');
+              setView('work');
+            }}
             onDirectoryExpand={loadIgnoredDirectory}
             menuItems={fileMenu}
             search

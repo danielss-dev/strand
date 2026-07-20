@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 
-test('persists the last checked AI connection without account details', async () => {
+test('persists startup settings and seeds the configured initial space', async () => {
   const values = new Map<string, string>();
   const storage: Storage = {
     get length() { return values.size; },
@@ -20,11 +20,16 @@ test('persists the last checked AI connection without account details', async ()
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
     anthropic: null,
   });
+  useSettings.getState().set('startupSpace', 'review');
 
   const persisted = JSON.parse(storage.getItem('strand.settings') ?? '{}');
+  expect(persisted.state.startupSpace).toBe('review');
   expect(persisted.state.aiConnectionStatus).toEqual({
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
     anthropic: null,
   });
   expect(JSON.stringify(persisted.state.aiConnectionStatus)).not.toContain('account');
+
+  const { useRepo } = await import('./repo');
+  expect(useRepo.getState().view).toBe('review');
 });

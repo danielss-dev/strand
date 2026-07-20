@@ -7,6 +7,7 @@ mod hosting;
 mod path_env;
 mod pull_requests;
 mod state;
+mod terminal;
 
 use tauri::Manager;
 
@@ -72,6 +73,14 @@ fn main() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::repo_open,
+            commands::repo_terminal_create,
+            commands::terminal_write,
+            commands::terminal_resize,
+            commands::terminal_close,
+            commands::repo_terminal_close_all,
+            commands::repo_terminal_count,
+            commands::terminal_shell_check,
+            commands::terminal_wsl_distributions,
             commands::repo_init,
             commands::repo_meta,
             commands::repo_status,
@@ -258,6 +267,11 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running strand");
+        .build(tauri::generate_context!())
+        .expect("error while building strand")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
+                app.state::<state::AppState>().terminals.close_all(None);
+            }
+        });
 }

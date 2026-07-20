@@ -2,7 +2,7 @@
 
 Strand is a complete daily-driver Git client alongside its review features. This page covers staging and committing in Local Changes, syncing with remotes, the sidebar's branch/tag/stash/remote/submodule sections, history operations like cherry-pick and interactive rebase, and conflict resolution.
 
-## Local Changes (`Mod+1`)
+## Local Changes (`Mod+2`)
 
 Local Changes is a pure staging workspace: an Unstaged pane and a Staged pane (hierarchical file trees with status badges), a diff pane, and the commit form.
 

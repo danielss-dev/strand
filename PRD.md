@@ -86,11 +86,14 @@ The app has two primary regions plus a topbar and a status bar: a **left sidebar
 - **Stash** — split button: stash all, stash staged, pop, apply.
 - **Branch** — current branch + dropdown to switch / create.
 - **Open in…** — editor, terminal, file manager, web (GitHub/GitLab URL).
-- **Work** — toggle that focuses the main pane on Local Changes (staging mode).
+- **Work** is the startup destination for lightweight working-tree editing, file inspection, and
+  repository-scoped embedded terminals. Local Changes remains the separate
+  staging/commit workspace.
 - **Repo tabs** — multi-repo, like browser tabs. Reorderable, persisted across launches.
 
 ### Sidebar (left) — navigation source
 
+- **Work** — mixed file/terminal tabs for the active repository.
 - **Local Changes** — working tree + index status. Shows a badge with file count when there are uncommitted changes.
 - **Pull Requests** — hosted pull requests for the current repository, starting
   with GitHub and Azure DevOps; GitLab and Bitbucket follow through the same
@@ -110,6 +113,34 @@ The app has two primary regions plus a topbar and a status bar: a **left sidebar
 
 The main pane fills the right side and shows different content based on the sidebar selection.
 
+#### When **"Work"** is selected — documents and terminals
+
+Work has one peer tab strip for files, directories, and embedded
+shells. A single file click/focus owns one replaceable italic preview; Enter,
+double-click, Files **Open**, History, Blame, and palette selection pin it.
+File tabs keep Content, rendered Preview, History, Compare, or Blame per tab,
+and only the active file document mounts or fetches. File tabs survive view and
+repository switches during the process but are not restored after relaunch.
+The peer strip preserves tab width, scrolls horizontally by wheel, exposes an
+overflow jump list, and uses the Files tree's icons for file tabs.
+
+Terminal renderers and PTYs survive view, workspace, and repository switches.
+Their descriptors restore after relaunch without starting a process; explicitly
+selecting a restored tab starts a fresh shell at that worktree root. Natural
+exit keeps the transcript and offers Relaunch. Closing the tab removes its
+descriptor; final repository close confirms before stopping live terminals,
+and app exit always drains every terminal process tree. Settings → Terminal
+chooses a global embedded shell plus a repository-family override, terminal
+font, and font size. New-terminal affordances also expose installed shells and
+Windows WSL distributions for a one-off tab choice. This is
+separate from the external **Open in terminal** integration. PTY dimensions
+must match the fitted renderer before startup and after resize so full-screen
+alternate-screen tools can occupy the complete Work pane. The embedded terminal
+advertises modern xterm/true-color capability and agent-specific compatibility
+hints where they are inert for other commands; Claude Code opens its full
+dashboard and alternate-screen renderer rather than the post-onboarding mini
+logo.
+
 #### When **"Local Changes"** is selected — staging workspace
 
 A three-section vertical layout with a commit form pinned to the bottom:
@@ -128,12 +159,13 @@ This is the main workspace for committing — all staging, diff inspection, disc
   - Commit metadata (message, author, date, parents, sign status).
   - Changed files list + `@pierre/diffs` rendering.
 
-#### When **a file is selected** (from the sidebar Files tree) — four tabs
+#### When **a file is selected** (from the sidebar Files tree) — Work document modes
 
-1. **Content** — file content at the current revision (working tree by default, or at the selected commit). Existing UTF-8 working-tree files are syntax-highlighted and editable; historical revisions, binaries, and oversized files are read-only.
-2. **History** — commits that touched this file, with a per-commit diff preview. Click a commit to jump to it in the graph.
-3. **Compare** — pick any two revisions (commits, branches, tags, or "working tree") and render the diff for this file using `@pierre/diffs`.
-4. **Blame** — per-line author + commit attribution. Click a line to jump to the commit that introduced it.
+1. **Content** — editable existing UTF-8 working-tree text, or read-only content at a selected revision.
+2. **Preview** — safe rendered Markdown/SVG and image preview where supported.
+3. **History** — commits that touched this file, with a per-commit diff preview. Click a commit to jump to it in the graph.
+4. **Compare** — pick two revisions and render the file diff with `@pierre/diffs`.
+5. **Blame** — per-line author + commit attribution. Click a line to jump to the commit that introduced it.
 
 If the file has uncommitted changes, the Content tab shows the working-tree version with a banner offering to switch to the unstaged diff. Tab state persists per-file across the session.
 
@@ -216,19 +248,23 @@ Priority levels: **P0** = required for first public release, **P1** = required b
 | Git status badges (M/A/D/R/U)                  | P0       | Built into `@pierre/trees`.                                               |
 | Folder descendant-changed indicator            | P0       | Built-in.                                                                 |
 | Search / filter by name                        | P0       | Built-in.                                                                 |
-| Four-tab file view (see below)                 | P0       | The main pane when a file is selected from the sidebar tree.              |
+| Work file documents (see below)                | P0       | Preview/pinned tabs when a file is selected from Files.                    |
 | Drag-and-drop to move files                    | P1       | Renames tracked as Git renames.                                           |
 | Custom right-click menu                        | P0       | Open in editor, copy path, history, blame, ignore, reveal in finder, etc. |
 | Compact / default / relaxed density            | P1       | Pierre supports this; expose as a setting.                                |
 
-**Four-tab file view.** Clicking a file in the sidebar tree opens it in the main pane with four tabs:
+**Work file documents.** Files open in Work with Content, Preview (when
+supported), History, Compare, and Blame modes. Existing complete UTF-8 working-
+tree files support lightweight syntax-highlighted editing; historical revisions,
+binaries, oversized files, and non-UTF-8 text stay read-only.
 
-- **Content** — file content at the current revision (working tree by default, or at the selected commit). Existing UTF-8 working-tree files are syntax-highlighted and editable; historical revisions, binaries, and oversized files are read-only.
+- **Content** — editable syntax-highlighted working-tree text or read-only content at a selected revision.
+- **Preview** — rendered Markdown/SVG or an image/directory presentation where supported.
 - **History** — commits that touched this file, with per-commit diff previews. Click a commit to jump to it in the graph.
 - **Compare** — pick any two revisions (commits, branches, tags, or "working tree") and render the diff for this file using `@pierre/diffs`.
 - **Blame** — per-line author + commit attribution. Click a line to jump to the commit that introduced it.
 
-Tab state persists per-file across the session so jumping back to a file restores the last-used view.
+The inner mode persists per pinned Work tab during the session. File tabs do not restore after relaunch.
 
 ### 6.6 More features
 

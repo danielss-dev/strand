@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { KeyOverrides } from '../lib/keys';
-import type { AiProvider } from '../lib/types';
+import type { AiProvider, EmbeddedShellChoice } from '../lib/types';
 
 /** A concrete theme that maps to a `[data-theme]` token set in tokens.css. */
 export type Theme = 'dark' | 'light';
@@ -16,12 +16,15 @@ export type Platform = 'mac' | 'win11';
 export type Density = 'compact' | 'default' | 'relaxed';
 export type DiffMode = 'stacked' | 'split';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
+/** Repository space shown after Strand launches. */
+export type StartupSpace = 'work' | 'local' | 'review' | 'pull-requests' | 'commits';
 /** How open repositories are presented: a vertical icon rail down the left
  * edge (default), or a horizontal tab strip in the toolbar. */
 export type RepoNav = 'rail' | 'tabs';
 
 export type UiFont = 'geist' | 'inter' | 'iaq' | 'system';
 export type MonoFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'sfmono';
+export type TerminalFont = 'jetbrains' | 'geist' | 'plex' | 'commit' | 'system';
 export type OpenAiModel = 'gpt-5.6-luna' | 'gpt-5.6-terra' | 'gpt-5.6-sol';
 export type AnthropicModel = 'claude-haiku-4-5' | 'claude-sonnet-5' | 'claude-opus-4-8';
 
@@ -86,6 +89,8 @@ export interface SettingsState {
   accent: AccentId;
   platform: Platform;
   density: Density;
+  /** Repository space shown after Strand launches. */
+  startupSpace: StartupSpace;
   /** Open-repository presentation — vertical rail vs. horizontal tabs. */
   repoNav: RepoNav;
   /** Whole-UI zoom factor (1 = 100%). Driven by the Ctrl/⌘ +/− shortcuts and
@@ -116,6 +121,12 @@ export interface SettingsState {
   defaultCloneDir: string | null;
   editorTool: ExternalTool;
   terminalTool: ExternalTool;
+  /** Global shell used by Work terminals; a repository-family override may
+   * replace it through the generic settings table. */
+  embeddedShell: EmbeddedShellChoice;
+  /** Font family and pixel size used only by Work terminal renderers. */
+  terminalFont: TerminalFont;
+  terminalFontSize: number;
   /** Default AI provider for writing suggestions. */
   aiProvider: AiProvider;
   /** Codex model used for commit-message and pull-request writing. */
@@ -165,6 +176,14 @@ export const FONTS = {
   } satisfies Record<MonoFont, string>,
 };
 
+export const TERMINAL_FONTS = {
+  jetbrains: "'JetBrains Mono Terminal', 'JetBrains Mono', ui-monospace, monospace",
+  geist: "'Geist Mono', 'JetBrains Mono Terminal', ui-monospace, monospace",
+  plex: "'IBM Plex Mono', 'JetBrains Mono Terminal', ui-monospace, monospace",
+  commit: "'Commit Mono', 'JetBrains Mono Terminal', ui-monospace, monospace",
+  system: "ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'JetBrains Mono Terminal', monospace",
+} satisfies Record<TerminalFont, string>;
+
 /** Picker registries — bundled fonts only (the app ships these families;
  * arbitrary system fonts would render fallbacks unpredictably). */
 export const UI_FONT_OPTIONS: { id: UiFont; label: string }[] = [
@@ -182,6 +201,14 @@ export const MONO_FONT_OPTIONS: { id: MonoFont; label: string }[] = [
   { id: 'sfmono', label: 'SF Mono / system' },
 ];
 
+export const TERMINAL_FONT_OPTIONS: { id: TerminalFont; label: string }[] = [
+  { id: 'jetbrains', label: 'JetBrains Mono' },
+  { id: 'geist', label: 'Geist Mono' },
+  { id: 'plex', label: 'IBM Plex Mono' },
+  { id: 'commit', label: 'Commit Mono' },
+  { id: 'system', label: 'System monospace' },
+];
+
 export const DENSITY_OPTIONS: { id: Density; label: string }[] = [
   { id: 'compact', label: 'Compact' },
   { id: 'default', label: 'Default' },
@@ -193,6 +220,14 @@ export const REPO_NAV_OPTIONS: { id: RepoNav; label: string }[] = [
   { id: 'tabs', label: 'Tabs' },
 ];
 
+export const STARTUP_SPACE_OPTIONS: { id: StartupSpace; label: string }[] = [
+  { id: 'work', label: 'Work' },
+  { id: 'local', label: 'Local Changes' },
+  { id: 'review', label: 'Review' },
+  { id: 'pull-requests', label: 'Pull Requests' },
+  { id: 'commits', label: 'All Commits' },
+];
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -201,6 +236,7 @@ export const useSettings = create<SettingsState>()(
       accent: 'amber',
       platform: detectPlatform(),
       density: 'default',
+      startupSpace: 'work',
       repoNav: 'tabs',
       zoom: 1,
       diffMode: 'stacked',
@@ -218,6 +254,9 @@ export const useSettings = create<SettingsState>()(
       defaultCloneDir: null,
       editorTool: null,
       terminalTool: null,
+      embeddedShell: { kind: 'system' },
+      terminalFont: 'jetbrains',
+      terminalFontSize: 16,
       aiProvider: 'openai',
       openaiModel: 'gpt-5.6-luna',
       anthropicModel: 'claude-sonnet-5',
@@ -249,11 +288,21 @@ export const useSettings = create<SettingsState>()(
         const { platform, diffsCollapsed, resolvedTheme, ...rest } = state;
         return rest;
       },
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as object),
-        platform: detectPlatform(),
-      }),
+      merge: (persisted, current) => {
+        const next = { ...current, ...(persisted as Partial<SettingsState>) };
+        const terminalFont = TERMINAL_FONT_OPTIONS.some((option) => option.id === next.terminalFont)
+          ? next.terminalFont
+          : current.terminalFont;
+        const storedSize = Number(next.terminalFontSize);
+        return {
+          ...next,
+          platform: detectPlatform(),
+          terminalFont,
+          terminalFontSize: Number.isFinite(storedSize)
+            ? Math.min(32, Math.max(10, Math.round(storedSize)))
+            : current.terminalFontSize,
+        };
+      },
     },
   ),
 );

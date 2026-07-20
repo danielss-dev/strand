@@ -110,7 +110,7 @@ Everything is also reachable from the command palette (`Mod+K`):
 
 ### Workspace Review
 
-With a workspace active, `Mod+6` opens **Workspace Review** — an aggregated review of changes across every member repo (and their open worktree tabs) in one queue. See [Reviewing agent changes](reviewing-agent-changes.md).
+With a workspace active, `Mod+7` opens **Workspace Review** — an aggregated review of changes across every member repo (and their open worktree tabs) in one queue. See [Reviewing agent changes](reviewing-agent-changes.md).
 
 ## See also
 

@@ -65,6 +65,8 @@ import { RepoIconDialog } from './views/RepoIconDialog';
 import { WorkspaceManagerDialog } from './views/WorkspaceManagerDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
+import { Work } from './views/Work';
+import { useWork } from './stores/work';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
@@ -169,6 +171,8 @@ export function App() {
 
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
+  const openWorkFile = useWork((s) => s.openFile);
+  const addEmbeddedTerminal = useWork((s) => s.addTerminal);
   const selectFile = useRepo((s) => s.selectFile);
   const selectedFile = useRepo((s) => s.selectedFile);
   const meta = useRepo((s) => s.meta);
@@ -190,6 +194,8 @@ export function App() {
   const commits = useRepo((s) => s.commits);
   const workTree = useRepo((s) => s.workTree);
   const refreshTree = useRepo((s) => s.refreshTree);
+  const filesTreeMutation = useRepo((s) => s.filesTreeMutation);
+  const reconcileWork = useWork((s) => s.reconcile);
   const checkout = useRepo((s) => s.checkout);
   const createBranch = useRepo((s) => s.createBranch);
   const revealInGraph = useRepo((s) => s.revealInGraph);
@@ -198,6 +204,10 @@ export function App() {
   const requestSuggestCommitMessage = useRepo((s) => s.requestSuggestCommitMessage);
   const requestSelectSinceBaseline = useRepo((s) => s.requestSelectSinceBaseline);
   const selectCommit = useRepo((s) => s.selectCommit);
+
+  useEffect(() => {
+    if (filesTreeMutation) reconcileWork(filesTreeMutation.repoPath, filesTreeMutation);
+  }, [filesTreeMutation, reconcileWork]);
 
   const fetchRepo = useRepo((s) => s.fetch);
   const pullRepo = useRepo((s) => s.pull);
@@ -860,6 +870,7 @@ export function App() {
     'open-repo': () => { void openViaDialog(); },
     'clone-repo': () => setCloneOpen(true),
     'settings': () => openSettingsAt('appearance'),
+    'view-work': () => { setView('work'); selectFile(null); },
     'view-local': () => { setView('local'); selectFile(null); },
     'view-commits': () => { setView('commits'); selectFile(null); },
     'view-reflog': () => { setView('reflog'); selectFile(null); },
@@ -1103,6 +1114,8 @@ export function App() {
   // handlers are read through refs so settings changes never re-subscribe.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const inEmbeddedTerminal = eventInside(e, '.work-terminal-host, .xterm-helper-textarea');
+      const terminalMacCommand = inEmbeddedTerminal && osType() === 'macos' && e.metaKey;
       // Esc always closes the palette / repo switcher (their own handlers cover
       // the focused case; this is the global fallback).
       if (e.key === 'Escape') { setPaletteOpen(false); setRepoSwitcherOpen(false); return; }
@@ -1110,7 +1123,7 @@ export function App() {
       // rebindable registry: + / = (plus their Shift and numpad variants) don't
       // map to a single canonical binding, and zoom keys are conventionally
       // fixed. Allowed even in text fields, exactly like the browser's own zoom.
-      if (e.ctrlKey || e.metaKey) {
+      if ((e.ctrlKey || e.metaKey) && (!inEmbeddedTerminal || terminalMacCommand)) {
         const cur = useSettings.getState().zoom;
         let next: number | null = null;
         if (e.key === '+' || e.key === '=' || e.key === 'Add') next = clampZoom(cur + ZOOM_STEP);
@@ -1127,6 +1140,12 @@ export function App() {
       if (!binding) return;
       const cmd = keyMapRef.current.byBinding.get(binding);
       if (!cmd) return;
+      // The shell owns Ctrl+C/Ctrl+R/Ctrl+P and peers. macOS keeps Command
+      // shortcuts app-owned; Windows/Linux keep only numbered view navigation.
+      if (inEmbeddedTerminal) {
+        if (osType() === 'macos' && !e.metaKey) return;
+        if (osType() !== 'macos' && !/^Mod\+[1-7]$/.test(binding)) return;
+      }
       // AppKit fires native menu accelerators before the webview sees the key,
       // so defer to it on macOS. Windows/Linux keep this proven keydown path;
       // their window menus display the same accelerator and share the action.
@@ -1219,7 +1238,7 @@ export function App() {
       });
     }
 
-    // Files — open in the file view, same as clicking a row in the Files tab.
+    // Files — explicit palette selection opens a pinned Work document.
     for (const f of workTree) {
       out.push({
         id: `file:${f.path}`,
@@ -1227,7 +1246,12 @@ export function App() {
         group: 'Files',
         meta: f.status ? STATUS_ABBR[f.status] : undefined,
         metaLabel: f.status ? STATUS_WORD[f.status] : undefined,
-        run: () => { selectFile(f.path); },
+        run: () => {
+          if (!meta) return;
+          openWorkFile(meta.path, f.path, null, false, 'pinned');
+          setView('work');
+          selectFile(null);
+        },
       });
     }
 
@@ -1314,6 +1338,8 @@ export function App() {
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
+        { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: () => { setView('work'); selectFile(null); } },
+        { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); setView('work'); selectFile(null); } },
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
@@ -1720,9 +1746,10 @@ export function App() {
             </Panel>
             <PanelResizeHandle className="rs-handle vert" />
             <Panel minSize={30}>
+              <Work visible={view === 'work'} />
               {view === 'file' && selectedFile ? (
                 <FileView path={selectedFile} />
-              ) : (
+              ) : view !== 'work' ? (
                 <div className="main">
                   <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                   <OpBanner onToast={showToast} />
@@ -1755,7 +1782,7 @@ export function App() {
                     />
                   )}
                 </div>
-              )}
+              ) : null}
             </Panel>
           </PanelGroup>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { errMessage } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import type { Branch, BranchPushRequest, PushMode } from '../lib/types';
@@ -148,7 +149,7 @@ export function BranchNetworkDialog({
           {mode.kind === 'upstream' ? (
             <label className="clone-field">
               <span className="lbl">Upstream branch</span>
-              <select
+              <Select
                 autoFocus
                 className="clone-input"
                 value={upstream}
@@ -159,13 +160,13 @@ export function BranchNetworkDialog({
                 {upstreams.map((candidate) => (
                   <option key={candidate.full_name} value={candidate.name}>{candidate.name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           ) : (
             <>
               <label className="clone-field">
                 <span className="lbl">Remote</span>
-                <select
+                <Select
                   autoFocus
                   className="clone-input"
                   value={remote}
@@ -175,7 +176,7 @@ export function BranchNetworkDialog({
                   {refs.remotes.map((candidate) => (
                     <option key={candidate.name} value={candidate.name}>{candidate.name}</option>
                   ))}
-                </select>
+                </Select>
               </label>
 
               <label className="clone-field">
@@ -190,11 +191,11 @@ export function BranchNetworkDialog({
 
               <label className="clone-field">
                 <span className="lbl">Push strategy</span>
-                <select className="clone-input" value={pushMode} onChange={(event) => setPushMode(event.target.value as PushMode)}>
+                <Select className="clone-input" value={pushMode} onChange={(event) => setPushMode(event.target.value as PushMode)}>
                   <option value="default">Standard push</option>
                   <option value="follow-tags">Push with annotated tags</option>
                   <option value="force-with-lease">Force with lease</option>
-                </select>
+                </Select>
               </label>
 
               <label className="stash-check">

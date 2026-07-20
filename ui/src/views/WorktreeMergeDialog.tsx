@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import type { Worktree, WorktreeHealth } from '../lib/types';
@@ -222,7 +223,7 @@ export function WorktreeMergeDialog({
 
           <label className="clone-field">
             <span className="lbl">Into</span>
-            <select
+            <Select
               className="clone-input"
               value={base}
               disabled={busy}
@@ -233,7 +234,7 @@ export function WorktreeMergeDialog({
                   {b}{b === health.base_branch ? ' (detected base)' : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {modeOption(

@@ -10,6 +10,7 @@ import type {
   RepoIcon,
   ReviewNote,
   Workspace,
+  EmbeddedShellChoice,
 } from './types';
 import { isTauri } from './tauri';
 
@@ -240,6 +241,17 @@ export const repoAiStyle = {
   },
   set(commonDir: string, instruction: string): Promise<void> {
     return settings.set(`ai-style:${commonDir}`, instruction.slice(0, 1_000));
+  },
+};
+
+/** Per-repository-family embedded shell override. Linked worktrees share it
+ * through RepoMeta.common_dir; null means "Use global". */
+export const repoEmbeddedShell = {
+  get(commonDir: string): Promise<EmbeddedShellChoice | null> {
+    return settings.get<EmbeddedShellChoice>(`embedded-shell:${commonDir}`);
+  },
+  set(commonDir: string, shell: EmbeddedShellChoice | null): Promise<void> {
+    return settings.set(`embedded-shell:${commonDir}`, shell);
   },
 };
 

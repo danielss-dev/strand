@@ -22,6 +22,9 @@ pub struct AppState {
     /// In-flight cancellable ops (clone/fetch/pull/push), keyed by the
     /// frontend-generated op id.
     pub ops: Mutex<HashMap<String, OperationCancelHandle>>,
+    /// Live embedded PTYs. Their ownership is process-wide so switching views,
+    /// repositories, or workspaces never tears down a shell.
+    pub terminals: crate::terminal::TerminalManager,
 }
 
 #[derive(Clone)]

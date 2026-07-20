@@ -14,9 +14,11 @@ import { Diff } from '../components/Diff';
 import { FileSearchBar, focusFileSearchInput } from '../components/FileSearchBar';
 import { Icon, type IconName } from '../components/Icon';
 import { ImageDiff, ImagePreview, useBlob } from '../components/ImageDiff';
+import { Select } from '../components/Select';
 import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { imageMime, isImagePath } from '../lib/image';
 import { directoryEntries, type DirectoryEntry } from '../lib/directoryEntries';
+import { canEditFileContent } from '../lib/fileEditing';
 import { t } from '../lib/i18n';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
@@ -34,6 +36,7 @@ import type {
   StatusKind,
   WorkTreeEntry,
 } from '../lib/types';
+import type { WorkFileMode } from '../lib/workTabs';
 
 type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
 
@@ -80,11 +83,57 @@ export function FileView({ path }: { path: string }) {
   const tab = useRepo((s) => s.fileTab);
   const setTab = useRepo((s) => s.setFileTab);
   const jumpToCommit = useRepo((s) => s.jumpFromFile);
+  return (
+    <FileDocument
+      path={path}
+      repoPath={activePath}
+      revision={revision}
+      isDirectory={isDirectory}
+      mode={tab}
+      repoName={repoName}
+      onModeChange={setTab}
+      onClose={() => { setView('local'); selectFile(null); }}
+      onJump={jumpToCommit}
+      onOpenPath={(target, targetDirectory, targetMode) => {
+        selectFile(target, revision, targetDirectory);
+        if (targetMode) setTab(targetMode);
+      }}
+    />
+  );
+}
+
+export interface FileDocumentProps {
+  path: string;
+  repoPath: string | null;
+  revision: string | null;
+  isDirectory: boolean;
+  mode: WorkFileMode;
+  repoName: string;
+  onModeChange(mode: WorkFileMode): void;
+  onClose?: () => void;
+  onJump(hash: string): void;
+  onOpenPath(path: string, isDirectory: boolean, mode?: WorkFileMode): void;
+  embedded?: boolean;
+}
+
+/** The file surface embedded by Work. Only this active document is mounted,
+ * so content/history/blame requests remain tab-lazy. */
+export function FileDocument({
+  path,
+  repoPath,
+  revision,
+  isDirectory,
+  mode: tab,
+  repoName,
+  onModeChange: setTab,
+  onClose,
+  onJump: jumpToCommit,
+  onOpenPath,
+  embedded = false,
+}: FileDocumentProps) {
   const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
   const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
   const [searchOpen, setSearchOpen] = useState(false);
-
-  const close = () => { setView('local'); selectFile(null); };
 
   const previewable = !isDirectory && isPreviewablePath(path);
   const tabs = isDirectory
@@ -126,8 +175,8 @@ export function FileView({ path }: { path: string }) {
   const displayPath = isDirectory ? `${path.replace(/\/+$/, '')}/` : path;
 
   return (
-    <div className="main">
-      <div className="main-header">
+    <div className={'main' + (embedded ? ' work-document' : '')}>
+      {!embedded && <div className="main-header">
         <div className="crumb">
           <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             {repoName}
@@ -139,17 +188,17 @@ export function FileView({ path }: { path: string }) {
           {revision && <span className="ref-chip head">{revision.slice(0, 7)}</span>}
         </div>
         <div className="h-actions">
-          <button
+          {onClose && <button
             type="button"
             className="icon-btn"
-            onClick={close}
+            onClick={onClose}
             title={isDirectory ? 'Close folder' : 'Close file'}
             aria-label={isDirectory ? 'Close folder' : 'Close file'}
           >
             <Icon name="x" size={13} />
-          </button>
+          </button>}
         </div>
-      </div>
+      </div>}
       <div className="tab-strip" role="tablist">
         {tabs.map((t) => (
           <button
@@ -168,23 +217,30 @@ export function FileView({ path }: { path: string }) {
       <div className="fv-body">
         {/* `key={path}` resets each tab's internal load state when the file changes. */}
         {isDirectory ? (
-          <DirectoryTab path={path} repoPath={activePath} revision={revision} />
+          <DirectoryTab
+            path={path}
+            repoPath={repoPath}
+            revision={revision}
+            onOpenPath={onOpenPath}
+            includeIconSprite={!embedded}
+          />
         ) : active === 'content' ? (
           <ContentTab
             key={path}
             path={path}
-            repoPath={activePath}
+            repoPath={repoPath}
             revision={revision}
             searchOpen={searchOpen}
             onCloseSearch={() => setSearchOpen(false)}
+            followWorkingTree={embedded}
           />
         ) : null}
         {!isDirectory && active === 'preview' && (
-          <PreviewTab key={path} path={path} repoPath={activePath} revision={revision} />
+          <PreviewTab key={path} path={path} repoPath={repoPath} revision={revision} onOpenPath={onOpenPath} />
         )}
-        {!isDirectory && active === 'history' && <HistoryTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
-        {!isDirectory && active === 'compare' && <CompareTab key={path} path={path} repoPath={activePath} />}
-        {!isDirectory && active === 'blame' && <BlameTab key={path} path={path} repoPath={activePath} onJump={jumpToCommit} />}
+        {!isDirectory && active === 'history' && <HistoryTab key={path} path={path} repoPath={repoPath} onJump={jumpToCommit} />}
+        {!isDirectory && active === 'compare' && <CompareTab key={path} path={path} repoPath={repoPath} />}
+        {!isDirectory && active === 'blame' && <BlameTab key={path} path={path} repoPath={repoPath} onJump={jumpToCommit} />}
       </div>
     </div>
   );
@@ -213,13 +269,16 @@ function DirectoryTab({
   path,
   repoPath,
   revision,
+  onOpenPath,
+  includeIconSprite,
 }: {
   path: string;
   repoPath: string | null;
   revision: string | null;
+  onOpenPath(path: string, isDirectory: boolean): void;
+  includeIconSprite: boolean;
 }) {
   const workTree = useRepo((s) => s.workTree);
-  const selectFile = useRepo((s) => s.selectFile);
   const [revisionTree, setRevisionTree] = useState<WorkTreeEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -253,9 +312,9 @@ function DirectoryTab({
 
   const open = useCallback(
     (entry: DirectoryEntry) => {
-      selectFile(entry.path, revision, entry.kind === 'directory');
+      onOpenPath(entry.path, entry.kind === 'directory');
     },
-    [revision, selectFile],
+    [onOpenPath],
   );
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -280,7 +339,7 @@ function DirectoryTab({
 
   return (
     <div className="fv-tab fv-directory">
-      <TreeIconSprite />
+      {includeIconSprite && <TreeIconSprite />}
       <div className="fv-dir-summary">
         <span>{countLabel(folderCount, 'folder')}</span>
         <span className="dot" aria-hidden>·</span>
@@ -342,15 +401,18 @@ function ContentTab({
   revision,
   searchOpen,
   onCloseSearch,
+  followWorkingTree = false,
 }: {
   path: string;
   repoPath: string | null;
   revision: string | null;
   searchOpen: boolean;
   onCloseSearch: () => void;
+  followWorkingTree?: boolean;
 }) {
   const pierreTheme: HlTheme =
     useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const diffsTick = useRepo((s) => s.diffsTick);
   const [data, setData] = useState<FileContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -361,10 +423,21 @@ function ContentTab({
   const [saveError, setSaveError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
+  const loadedSourceRef = useRef<string | null>(null);
   const selectLine = useCallback((line: number | null) => setSelectedLine(line), []);
-  const editable = Boolean(data?.editable && !revision);
+  const editable = canEditFileContent(Boolean(data?.editable), revision);
   const normalizedOriginal = useMemo(() => normalizeEditorText(original), [original]);
   const dirty = editable && draft !== normalizedOriginal;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const [refetchKey, setRefetchKey] = useState(diffsTick);
+  const sourceKey = `${repoPath ?? ''}\0${path}\0${revision ?? ''}`;
+
+  // Follow external changes while the document is clean, but never replace a
+  // user's unsaved buffer. A stale save is rejected by repo_file_write.
+  useEffect(() => {
+    if (followWorkingTree && !revision && !dirty) setRefetchKey(diffsTick);
+  }, [diffsTick, dirty, followWorkingTree, revision]);
 
   useEffect(() => {
     if (selectedLine == null || !data || editable) return;
@@ -405,26 +478,34 @@ function ContentTab({
   useEffect(() => {
     if (!repoPath) return;
     let cancelled = false;
+    const refreshingLoadedSource = loadedSourceRef.current === sourceKey;
     setLoading(true);
     setError(null);
-    setData(null);
-    setDraft('');
-    setOriginal('');
-    setSaveError(null);
-    savingRef.current = false;
+    if (!refreshingLoadedSource) {
+      loadedSourceRef.current = null;
+      setData(null);
+      setDraft('');
+      setOriginal('');
+      setSaveError(null);
+      savingRef.current = false;
+    }
     tauri
       .repoFileContent(repoPath, path, revision)
       .then((c) => {
-        if (!cancelled) {
-          setData(c);
-          setDraft(normalizeEditorText(c.text));
-          setOriginal(c.text);
-        }
+        if (cancelled || (refreshingLoadedSource && dirtyRef.current)) return;
+        loadedSourceRef.current = sourceKey;
+        setData(c);
+        setDraft(normalizeEditorText(c.text));
+        setOriginal(c.text);
       })
-      .catch((e) => { if (!cancelled) setError(errMessage(e)); })
+      .catch((e) => {
+        if (cancelled) return;
+        if (refreshingLoadedSource) console.warn('file content refresh failed', e);
+        else setError(errMessage(e));
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [repoPath, path, revision]);
+  }, [repoPath, path, revision, refetchKey, sourceKey]);
 
   const save = useCallback(async () => {
     if (!repoPath || !data?.editable || revision || !dirty || savingRef.current) return;
@@ -457,7 +538,7 @@ function ContentTab({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [editable, save]);
 
-  if (loading) return <FvEmpty>Loading…</FvEmpty>;
+  if (loading && !data) return <FvEmpty>Loading…</FvEmpty>;
   if (error) return <FvEmpty>{error}</FvEmpty>;
   if (!data) return <FvEmpty>No content.</FvEmpty>;
   if (data.binary) {
@@ -660,10 +741,12 @@ function PreviewTab({
   path,
   repoPath,
   revision,
+  onOpenPath,
 }: {
   path: string;
   repoPath: string | null;
   revision: string | null;
+  onOpenPath(path: string, isDirectory: boolean, mode?: WorkFileMode): void;
 }) {
   if (isSvgPath(path)) {
     return (
@@ -672,20 +755,20 @@ function PreviewTab({
       </div>
     );
   }
-  return <MarkdownPreview path={path} repoPath={repoPath} revision={revision} />;
+  return <MarkdownPreview path={path} repoPath={repoPath} revision={revision} onOpenPath={onOpenPath} />;
 }
 
 function MarkdownPreview({
   path,
   repoPath,
   revision,
+  onOpenPath,
 }: {
   path: string;
   repoPath: string | null;
   revision: string | null;
+  onOpenPath(path: string, isDirectory: boolean, mode?: WorkFileMode): void;
 }) {
-  const selectFile = useRepo((s) => s.selectFile);
-  const setFileTab = useRepo((s) => s.setFileTab);
   // Re-fetch when the watcher refreshes — the agent-review loop edits docs
   // under us, and a stale preview defeats its purpose.
   const diffsTick = useRepo((s) => s.diffsTick);
@@ -718,10 +801,7 @@ function MarkdownPreview({
         if (href.startsWith('#')) return; // in-document anchors: no heading ids in v1
         const target = resolveRelative(dir, href);
         if (!target) return;
-        selectFile(target, revision);
-        // Stay in reading mode across doc → doc links even when the
-        // `fileOpenTab` setting opens files on the raw source.
-        if (isPreviewablePath(target)) setFileTab('preview');
+        onOpenPath(target, false, isPreviewablePath(target) ? 'preview' : undefined);
       },
       renderImage: (src, alt, key) => {
         if (/^(https?:|data:image\/)/i.test(src)) {
@@ -736,7 +816,7 @@ function MarkdownPreview({
       },
       renderMermaid: (code, key) => <Mermaid key={key} code={code} />,
     });
-  }, [data, dir, revision, selectFile, setFileTab]);
+  }, [data, dir, revision, onOpenPath]);
 
   if (error && !data) return <FvEmpty>{error}</FvEmpty>;
   if (!data) return <FvEmpty>Loading…</FvEmpty>;
@@ -1253,16 +1333,16 @@ function CompareTab({ path, repoPath }: { path: string; repoPath: string | null 
       <div className="cmp-picker">
         <label className="ref">
           <span className="lbl">Base</span>
-          <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Base revision">
+          <Select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Base revision">
             {entries.map(option)}
-          </select>
+          </Select>
         </label>
         <span className="arrow"><Icon name="chev-right" size={12} /></span>
         <label className="ref">
           <span className="lbl">Compare</span>
-          <select value={to} onChange={(e) => setTo(e.target.value)} aria-label="Compare revision">
+          <Select value={to} onChange={(e) => setTo(e.target.value)} aria-label="Compare revision">
             {entries.map(option)}
-          </select>
+          </Select>
         </label>
       </div>
       <div className="fv-pierre">

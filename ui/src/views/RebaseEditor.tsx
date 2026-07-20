@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { autosquashPlan } from '../lib/rebase';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
@@ -423,7 +424,7 @@ export function RebaseEditor({
                         <Icon name="chev-down" size={12} />
                       </button>
                     </span>
-                    <select
+                    <Select
                       className="rb-action"
                       value={r.action}
                       disabled={busy}
@@ -444,7 +445,7 @@ export function RebaseEditor({
                           {a.label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <code className="rb-sha">{r.short}</code>
                     {r.isMerge ? <span className="rb-merge-chip">merge</span> : null}
                     {r.action === 'reword' ? (

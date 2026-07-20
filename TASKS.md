@@ -1111,6 +1111,52 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   merge dialog's base picker; consider preferring the branch another worktree
   has checked out, or main-ish names, on exact rank ties.
 
+### Work view + embedded terminals
+- ☑ Work is the startup/sidebar/menu/palette destination; Files becomes the
+  active sidebar lens and numbered navigation is Work `Mod+1` through
+  Workspace Review `Mod+7` (`View`, `Sidebar`, `COMMANDS`, native View menu).
+- ☑ Per-repository mixed `WorkTab` model with one replaceable preview, pin
+  promotion/deduplication, peer ordering, close fallback, path-mutation
+  reconciliation, and stable Work return IDs (`stores/work.ts`,
+  `lib/workTabs.ts`). File tabs remain session-only.
+- ☑ Embeddable file documents retain working-tree editing plus Content/Preview/
+  History/Compare/Blame/image/directory behavior while mounting only the active
+  file (`FileDocument`, `Work`); revisions remain read-only. Pierre activation
+  now carries exact row path/kind.
+- ☑ xterm.js + Fit renderer layer with 5,000-line scrollback, roving tab focus,
+  F6 escape, fast peer cycling, fitted startup/resize PTY synchronization,
+  shell-control ownership, exited transcript, and Relaunch (`Work.tsx`).
+  Fixed-width tabs wheel-scroll, auto-reveal, expose an overflow selector, and
+  render `TreeFileIcon` symbols. Renderers survive view/repository/workspace
+  switches. Configurable terminal font/10–32px sizing with a live Settings
+  preview, complete JetBrains Mono fallback glyphs, and `configure_terminal_environment`
+  provides xterm/true-color capability and Claude Code full-dashboard/
+  alternate-screen compatibility.
+- ☑ `portable-pty` native runtime and Tauri channels: direct resolved argv,
+  recovered PATH, bounded ordered output/input/resize, per-session reader,
+  repository cwd/open validation, Unix process groups, Windows kill-on-close
+  Job Objects, and shutdown drain (`terminal.rs`, terminal IPC commands).
+- ☑ Terminal descriptor restore without process start; global embedded-shell
+  default, `common_dir` override, platform presets/custom argv, and non-spawning
+  availability check in Settings → Terminal. External terminal integration
+  remains separate.
+- ☑ Repository overrides are managed with paired repository and shell
+  selectors; linked worktrees deduplicate through their shared `common_dir`
+  (`TerminalSection`). The app-wide native dropdown treatment is shared by
+  every settings, compare, rebase, branch, and worktree selector (`Select`).
+- ☑ Windows terminal executable paths drop canonical `\\?\` prefixes before
+  ConPTY launch so Windows PowerShell 5.1 can initialize .NET Framework
+  (`normalize_windows_program_path`, PTY startup regression test).
+- ☑ Per-terminal shell split picker with persisted explicit choices and lazy
+  installed-WSL discovery on Windows; WSL launches the chosen distribution at
+  the repository through direct `wsl.exe --distribution … --cd …` argv
+  (`TerminalSection`, `NewTerminalButton`, `terminal_wsl_distributions`).
+- ☑ Workspace-aware final close confirmation stops live terminals and clears
+  Work state/descriptors; non-final workspace removal and workspace hiding do
+  not stop them (`workspaces.ts`).
+- ☐ Run interactive terminal/process-tree E2E on real macOS and Linux builds,
+  plus high-output and many-restored-descriptor performance baselines.
+
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
@@ -1122,7 +1168,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   to unchanged text during every edit—there is no plain-text refresh frame—and
   reconstructs CRLF token streams without tripping the plain-text fallback.
   Writes are explicit only, via the disk save icon or Mod+S; blur and idle time
-  never save a draft.
+  never save a draft. Focus/watcher refreshes keep the mounted editor and token
+  map in place, and a refresh that finishes after typing starts cannot replace
+  the draft (`ContentTab` loaded-source/dirty guards).
   Mod+F searches the source with wrap-around match navigation and
   virtualized-line scrolling (`FileSearchBar` + `searchFileText`).
 - ☑ Preview tab — rendered view for renderable text files, tab only offered
@@ -1183,7 +1231,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   fill the pane width —
   - ☑ **Appearance**: theme + accent (moved from the old single-section dialog),
     plus the previously UI-less `density` / `uiFont` / `monoFont` store fields
-    (segmented `SegRow` + selects in `views/settings/shared.tsx`)
+    (segmented `SegRow` + selects in `views/settings/shared.tsx`), and a
+    persisted startup-space picker (`startupSpace`, applied when the repo store
+    initializes)
   - ☑ **Diff**: default layout (`defaultDiffLayout`, seeds repos without a
     per-repo `diff-mode:` row — `loadRepoDiffMode` falls back to it), diff font
     (`--diffs-font-family`, pierces Pierre's shadow DOM), change indicators

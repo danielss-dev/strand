@@ -10,6 +10,7 @@ import { errMessage, tauri } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
+import { useWork } from '../stores/work';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon } from '../components/Icon';
 import { copyToClipboard } from '../components/PierreTree';
@@ -81,6 +82,9 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   // After a blame/history → commit jump, offer a way back to the file (at the
   // tab it was on). Lives inline in the toolbar so it doesn't add a second row.
   const fileReturn = useRepo((s) => s.fileReturn);
+  const workFileReturn = useRepo((s) => s.workFileReturn);
+  const setWorkFileReturn = useRepo((s) => s.setWorkFileReturn);
+  const setActiveTab = useRepo((s) => s.setActiveTab);
   const returnToFile = useRepo((s) => s.returnToFile);
   // One-shot signal from the command palette's "Search commits…" action.
   const commitSearchFocus = useRepo((s) => s.commitSearchFocus);
@@ -931,6 +935,24 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
               </button>
             </div>
           </div>
+        )}
+        {!fileReturn && workFileReturn && (
+          <button
+            type="button"
+            className="file-back-bar"
+            onClick={() => {
+              const target = workFileReturn;
+              void setActiveTab(target.repoPath).then(() => {
+                useWork.getState().activate(target.repoPath, target.tabId);
+                setWorkFileReturn(null);
+                setView('work');
+              });
+            }}
+            title={`Back to ${workFileReturn.path}`}
+          >
+            <Icon name="chev-left" size={13} />
+            <span>Back to {workFileReturn.path.split(/[\\/]/).filter(Boolean).pop() ?? workFileReturn.path}</span>
+          </button>
         )}
         <button
           type="button"

@@ -7,6 +7,7 @@ import {
 } from '@tauri-apps/api/menu';
 
 import type { CommandId } from './keys';
+import { t } from './i18n';
 
 /**
  * Native desktop menu, wired to the same callbacks the in-app UI uses. Tauri
@@ -30,7 +31,7 @@ import type { CommandId } from './keys';
  * owning that combo.
  */
 
-export type MenuViewId = 'local' | 'commits' | 'reflog' | 'review' | 'worktrees';
+export type MenuViewId = 'work' | 'local' | 'commits' | 'reflog' | 'review' | 'worktrees';
 
 export interface MenuHandlers {
   openRepo(): void;
@@ -138,6 +139,7 @@ export async function installAppMenu(
   });
 
   const views: { id: MenuViewId; text: string; cmd: CommandId }[] = [
+    { id: 'work', text: t('nav.work'), cmd: 'view-work' },
     { id: 'local', text: 'Local Changes', cmd: 'view-local' },
     { id: 'commits', text: 'All Commits', cmd: 'view-commits' },
     { id: 'reflog', text: 'Reflog', cmd: 'view-reflog' },

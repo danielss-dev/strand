@@ -522,8 +522,11 @@ loses its typography offline or behind a firewall, and `display=swap` reflows
 **How to apply.** `ui/public/fonts/fonts.css` mirrors Google's exact
 `@font-face` blocks for the **latin + latin-ext** subsets only (cyrillic/greek/
 vietnamese are dropped — this is an English-language dev tool), with `src`
-rewritten to local `/fonts/*.woff2`. Files in `ui/public/` are copied to `dist`
-verbatim by Vite and served at the root. To add/refresh a family: fetch the
+rewritten to local `/fonts/*.woff2`. The embedded terminal is the deliberate
+exception: its `JetBrains Mono Terminal` variable faces must remain complete
+because terminal TUIs depend on box-drawing and block glyphs outside the Latin
+subsets. Files in `ui/public/` are copied to `dist` verbatim by Vite and served
+at the root. To add/refresh a family: fetch the
 Google CSS with a modern-browser UA, keep only the latin/latin-ext blocks,
 download those woff2 (via `curl` — system CA), rewrite `src`, and commit the
 binaries (they're not git-ignored; `dist/` is). The user font picker
@@ -1843,7 +1846,10 @@ oversized/binary content, and preserve a consistently-CRLF file's line endings
 after textarea normalization. Commit/revision content remains immutable.
 Keep the last valid token map projected onto the current buffer while an async
 syntax refresh is pending; never replace a highlighted editor with plain text
-merely because its token result is one input behind.
+merely because its token result is one input behind. The same rule applies to
+focus/watcher refetches: keep the loaded editor mounted while the read is in
+flight, then update its buffer in place so the existing token projection
+survives. Reserve the empty loading surface for the initial file/source load.
 Web textareas and Shiki expose LF line boundaries even when a Windows checkout
 is CRLF. Normalize the editable in-memory buffer to LF, keep the raw last-read
 text separately for optimistic writes, and reconstruct token streams with the
@@ -1859,3 +1865,64 @@ batched path; on Windows only, retry that exact error through system Git's
 `checkout-index --force -- <paths>` with `-c core.longpaths=true`. Do not treat
 other checkout or filesystem errors as fallback candidates, and keep the
 pathspec after `--` so a repository filename cannot become an option.
+
+**Embedded terminals are process-owned; only their descriptors persist
+(2026-07-20).** Keep PTY runtimes in process-wide native state and xterm
+renderers mounted across view, repository, and workspace switches. Persist
+descriptors, never processes or scrollback; restore them dormant and unselected,
+then launch only after explicit activation. Resolve the executable and recovered
+PATH before applying the repository cwd, pass custom commands as direct argv,
+and terminate the full process group/job on tab close or app exit. Removing one
+workspace owner or hiding a workspace must not stop a repository terminal; a
+final repository close must confirm first. While xterm owns focus, preserve
+shell controls, keep Command shortcuts app-owned on macOS and only numbered
+view navigation plus the fixed Work `Ctrl+PageUp`/`Ctrl+PageDown` peer cycle
+app-owned on Windows/Linux, with `F6` returning focus to the peer Work tab
+strip. Fit xterm before creating the PTY and explicitly synchronize the native
+grid again once its runtime ID exists; an observer can fire during async startup
+and otherwise leave a full-screen alternate-screen app on the default 80x24
+grid. Claude Code deliberately replaces its complete welcome dashboard with a
+mini logo after setup warnings and release notes have been consumed; this is
+application state, not an xterm rendering failure. Strand's agent-first terminal
+sets `CLAUDE_CODE_FORCE_FULL_LOGO=1` and the supported
+`CLAUDE_CODE_NO_FLICKER=1` alternate-screen switch in
+`configure_terminal_environment`; keep such compatibility variables inert for
+other shells and cover them as a single tested environment contract. Mount only
+the active file document so terminal continuity does not turn inactive file tabs
+into a background rendering cost.
+
+**Terminal defaults and explicit shell choices have different lifetimes
+(2026-07-20).** The primary New Terminal action follows the repository/global
+default at process start; a shell chosen from its split menu is stored in that
+tab's descriptor and must survive relaunch/restore independently of later
+default changes. Discover installed WSL distributions lazily, decode redirected
+`wsl.exe --list --quiet` output as UTF-16LE on Windows, and pass distro plus
+Windows repository path through direct `--distribution`/`--cd` argv. Typography
+changes update existing xterm options and then refit/resynchronize only visible
+PTYs so a font preference cannot collapse a hidden terminal's native grid.
+
+**Legacy Windows shells cannot receive canonical verbatim executable paths
+(2026-07-20).** `std::fs::canonicalize` returns `\\?\C:\…` on Windows, which is
+useful for identity and safety but must be converted back to a normal drive/UNC
+path at the embedded-terminal process boundary. Windows PowerShell 5.1 passes
+its executable path into .NET Framework during interactive ConPTY startup; the
+verbatim form can abort initialization in `System.Net.ServicePointManager` even
+though non-interactive launches work. Keep canonical paths elsewhere, normalize
+only shell executable argv, and retain a PTY regression test that answers the
+shell's cursor-position query before asserting startup output.
+
+**Native dropdown chrome is an app-level primitive (2026-07-20).** Render
+selects through `components/Select.tsx`, not one-off `<select>` wrappers. The
+shared component keeps the platform-native keyboard/form/accessibility model
+while owning Strand's chevron, right-side text clearance, and disabled icon
+state. Surface CSS may size or skin the underlying select, but must size the
+`.select-control` wrapper too whenever the old select was itself a flex or grid
+item; otherwise the wrapper, rather than the select, becomes the layout child.
+
+**Embedding a file document must not change its editing contract (2026-07-20).**
+Work's tab chrome is presentation context, not an access-control boundary.
+Existing complete UTF-8 working-tree files remain editable whether the shared
+file document is standalone or embedded; revision, binary, size, encoding, and
+backend safety checks are the only read-only gates. An embedded clean document
+may follow watcher refreshes, but a watcher tick must never replace an unsaved
+draft; rely on the optimistic stale-write check to protect newer disk content.
