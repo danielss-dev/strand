@@ -72,13 +72,82 @@ pub(crate) fn map_cli_failure(
     provider_label: &str,
     err: String,
 ) -> String {
+    let diagnostic = cli_diagnostic_prefix(&err);
     if let Some(health_error) = &status.error {
         health_error.clone()
-    } else if !status.logged_in || is_auth_failure(&err) {
+    } else if !status.logged_in || is_auth_failure(diagnostic) {
         format!("{AI_AUTH_REQUIRED} {provider_label} is not signed in.")
     } else {
-        err
+        user_facing_cli_failure(provider_label, diagnostic, diagnostic.len() == err.len())
     }
+}
+
+fn cli_diagnostic_prefix(err: &str) -> &str {
+    ["<untrusted-", "\nuser\n", "\nUser\n"]
+        .iter()
+        .filter_map(|marker| err.find(marker))
+        .min()
+        .map_or(err, |end| &err[..end])
+}
+
+fn user_facing_cli_failure(provider_label: &str, err: &str, allow_detail: bool) -> String {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("rate limit") || lower.contains("too many requests") || lower.contains("429") {
+        return format!("{provider_label} is rate-limited right now. Wait a moment, then try again.");
+    }
+    if lower.contains("quota")
+        || lower.contains("billing")
+        || lower.contains("insufficient credits")
+    {
+        return format!(
+            "{provider_label} could not generate a suggestion because the provider quota or billing limit was reached."
+        );
+    }
+    if (lower.contains("model") && lower.contains("not found"))
+        || lower.contains("unsupported model")
+        || lower.contains("invalid model")
+    {
+        return format!(
+            "{provider_label} does not support the selected model. Choose another model in Settings → AI and try again."
+        );
+    }
+    if lower.contains("context length")
+        || lower.contains("context window")
+        || lower.contains("maximum context")
+        || lower.contains("too many tokens")
+    {
+        return format!(
+            "{provider_label} could not fit these changes in its context window. Stage or select fewer changes, then try again."
+        );
+    }
+    if lower.contains("timed out") {
+        return format!("{provider_label} took too long to respond. Check your connection and try again.");
+    }
+    if lower.contains("network")
+        || lower.contains("connection reset")
+        || lower.contains("connection refused")
+        || lower.contains("could not resolve host")
+        || lower.contains("dns")
+    {
+        return format!("{provider_label} could not be reached. Check your connection and try again.");
+    }
+
+    // Vendor CLIs can emit their full session preamble and echoed stdin on a
+    // failed run. That stdin contains repository paths and patches, so never
+    // surface or persist an unclassified transcript. A short single-line
+    // diagnostic is safe and usually already actionable.
+    let detail = err.trim();
+    if allow_detail
+        && !detail.is_empty()
+        && detail.len() <= 240
+        && !detail.contains(['\n', '\r'])
+        && !detail.contains("<untrusted-")
+    {
+        return format!("{provider_label} could not generate a suggestion: {detail}");
+    }
+    format!(
+        "{provider_label} could not generate a suggestion. Check the selected model, provider status, and connection, then try again."
+    )
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -277,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn map_cli_failure_preserves_error_when_logged_in() {
+    fn map_cli_failure_explains_rate_limits_when_logged_in() {
         let status = AiProviderStatus {
             provider: AiProvider::Anthropic,
             installed: true,
@@ -286,7 +355,10 @@ mod tests {
             error: None,
         };
         let err = map_cli_failure(&status, "Claude Code", "rate limited".into());
-        assert_eq!(err, "rate limited");
+        assert_eq!(
+            err,
+            "Claude Code is rate-limited right now. Wait a moment, then try again."
+        );
     }
 
     #[test]
@@ -314,6 +386,67 @@ mod tests {
         assert!(err.contains("Error: spawn /vendor/codex ENOENT"));
         assert!(!err.contains("stack trace"));
         assert!(err.contains("Settings → AI"));
+    }
+
+    #[test]
+    fn map_cli_failure_never_exposes_vendor_transcripts_or_prompts() {
+        let status = AiProviderStatus {
+            provider: AiProvider::Openai,
+            installed: true,
+            logged_in: true,
+            account_hint: None,
+            error: None,
+        };
+        let raw = "OpenAI Codex v0.144.3\nworkdir: C:\\repo\nsession id: secret\n\
+                   <untrusted-patches>private source patch</untrusted-patches>";
+        let err = map_cli_failure(&status, "Codex", raw.into());
+        assert_eq!(
+            err,
+            "Codex could not generate a suggestion. Check the selected model, provider status, and connection, then try again."
+        );
+        assert!(!err.contains("C:\\repo"));
+        assert!(!err.contains("private source patch"));
+    }
+
+    #[test]
+    fn map_cli_failure_explains_an_invalid_model_without_echoing_the_transcript() {
+        let status = AiProviderStatus {
+            provider: AiProvider::Openai,
+            installed: true,
+            logged_in: true,
+            account_hint: None,
+            error: None,
+        };
+        let err = map_cli_failure(
+            &status,
+            "Codex",
+            "session preamble\nError: selected model not found\n<untrusted-patches>secret</untrusted-patches>".into(),
+        );
+        assert_eq!(
+            err,
+            "Codex does not support the selected model. Choose another model in Settings → AI and try again."
+        );
+        assert!(!err.contains("secret"));
+    }
+
+    #[test]
+    fn map_cli_failure_does_not_classify_words_echoed_from_the_prompt() {
+        let status = AiProviderStatus {
+            provider: AiProvider::Openai,
+            installed: true,
+            logged_in: true,
+            account_hint: None,
+            error: None,
+        };
+        let err = map_cli_failure(
+            &status,
+            "Codex",
+            "session preamble\n<untrusted-patches>not logged in; invalid model; rate limit</untrusted-patches>".into(),
+        );
+        assert_eq!(
+            err,
+            "Codex could not generate a suggestion. Check the selected model, provider status, and connection, then try again."
+        );
     }
 
     #[test]

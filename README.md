@@ -116,6 +116,8 @@ from their close control, with Delete/Backspace while focused, or by middle-clic
   without changing local refs or `FETCH_HEAD`. Active PRs can be closed from a
   confirmed overflow action. Closed PRs can be reopened;
   merged PRs and every terminal discussion/thread surface remain read-only.
+  Completed Azure PR Code views remain available after the provider deletes
+  the source branch by using its recorded target and merge commits.
   GitHub and Azure DevOps Services authentication stays in the signed-in `gh` /
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
   independently updated, signed `strand-azdo` REST helper configured in Settings → Hosting;
@@ -218,8 +220,9 @@ from their close control, with Delete/Backspace while focused, or by middle-clic
   Generation is cancellable, scans conservative sensitive-file
   signals before provider launch, keeps the generated description content-sized,
   and can retry explicitly with the other provider without changing your
-  default. Repository-family writing profiles keep terminology and style
-  consistent across worktrees.
+  default. Provider failures are reduced to concise, actionable hints; raw CLI
+  session, prompt, and patch transcripts are never displayed. Repository-family
+  writing profiles keep terminology and style consistent across worktrees.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

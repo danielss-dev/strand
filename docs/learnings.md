@@ -1949,3 +1949,19 @@ file document is standalone or embedded; revision, binary, size, encoding, and
 backend safety checks are the only read-only gates. An embedded clean document
 may follow watcher refreshes, but a watcher tick must never replace an unsaved
 draft; rely on the optimistic stale-write check to protect newer disk content.
+
+**Completed Azure PR diffs must use provider-recorded merge history
+(2026-07-24).** Azure commonly deletes a completed PR's source branch, so never
+reconstruct its Code view by fetching that ref. Fetch the durable target ref
+without updating local refs or `FETCH_HEAD`, then compare
+`lastMergeTargetCommit` to `lastMergeCommit`. Keep a real remote-deletion
+integration test because a fixture with both refs cannot reproduce this
+provider lifecycle.
+
+**Raw AI CLI stderr is untrusted content, not a user-facing diagnostic
+(2026-07-24).** The general rule to preserve provider diagnostics verbatim
+still applies to Git and hosting operations, but AI vendor CLIs may emit session
+metadata plus echoed stdin containing repository paths, prompts, and patches.
+Preserve only bounded single-line diagnostics; classify known failures from the
+diagnostic prefix before any prompt boundary, and replace every unclassified
+transcript with a stable Strand-authored recovery hint.

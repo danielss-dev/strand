@@ -224,7 +224,9 @@ edge to edge beneath the same compact, collapsible file header used by Local
 Changes. Use the two layout buttons in that header to switch between stacked
 and split diffs; the choice is saved per repository. Only one file diff is
 mounted at a time to keep large PRs responsive. Provider patches larger than
-16 MB are not rendered.
+16 MB are not rendered. For completed Azure DevOps PRs, Code reconstructs the
+patch from the provider's recorded target and merge commits, so deleting the
+source branch does not remove the historical diff.
 
 Code also tracks review progress locally for the exact pull-request head and
 each file's rendered patch. Choose **Mark viewed** or press `v`; if that file or
