@@ -2295,6 +2295,14 @@ only `v1.1.0`. Universal macOS notarization returned `Accepted` (request
 Authenticode `NotSigned`, and the Git tag has no cryptographic signature, so
 the external publisher and remaining release-checklist gates stay open.
 
+**Linear bug sweep completed (2026-07-24):** DAN-24/25/26 are resolved.
+Completed Azure PR Code views now use durable target/merge history, so
+source-branch cleanup cannot blank the patch. AI vendor failures are reduced to
+bounded, actionable messages and transcript-shaped output never exposes echoed
+prompt or patch content. A real deleted-branch Git integration test covers the
+Azure path, and a live WebView2 pass confirmed Pierre uses its light palette
+when Strand resolves the system theme to light.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

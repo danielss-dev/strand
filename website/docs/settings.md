@@ -157,7 +157,10 @@ in, the action stays clickable and the hint appears inline. Sign-in starts the
 provider's browser or CLI flow, and once you complete it you run the action
 again. If a CLI launcher is present but its packaged executable is broken,
 Strand keeps that distinct from “signed out” and shows a repair hint beside the
-form rather than claiming that sign-in opened.
+form rather than claiming that sign-in opened. Generation failures use concise
+hints for recognized provider limits, model problems, timeouts, and connection
+errors. Strand never displays a raw vendor CLI session transcript because it
+can contain the prompt, repository paths, and patch content.
 
 Strand never runs an automatic provider-status subprocess from Local Changes.
 Provider checks remain explicit here. Writing generation is user-initiated,

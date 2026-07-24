@@ -3042,29 +3042,45 @@ fn diff_azure_value(cwd: &str, remote: String, value: Value) -> Result<String> {
     let source_remote = text(value.pointer("/forkSource/repository/remoteUrl"));
 
     let local = Repo::discover(cwd).map_err(|error| error.to_string())?;
-    if source_remote
-        .as_deref()
-        .is_none_or(|source| source == remote)
-    {
-        local
-            .fetch_refs_for_read(&remote, &[target_ref.as_str(), source_ref.as_str()])
-            .map_err(|error| error.to_string())?;
-    } else {
+    let completed_merge = text(value.get("status"))
+        .is_some_and(|status| status.eq_ignore_ascii_case("completed"))
+        .then(|| text(value.pointer("/lastMergeCommit/commitId")))
+        .flatten();
+    let (base, head) = if let Some(merge_commit) = completed_merge {
+        // Azure keeps the immutable result commit after completion even when
+        // completion deletes the source branch. The target branch reaches both
+        // this result and the pre-merge target commit, so historical Code views
+        // need only the durable target ref.
         local
             .fetch_refs_for_read(&remote, &[target_ref.as_str()])
             .map_err(|error| error.to_string())?;
-        local
-            .fetch_refs_for_read(
-                source_remote.as_deref().expect("checked above"),
-                &[source_ref.as_str()],
-            )
+        (target_commit, merge_commit)
+    } else {
+        if source_remote
+            .as_deref()
+            .is_none_or(|source| source == remote)
+        {
+            local
+                .fetch_refs_for_read(&remote, &[target_ref.as_str(), source_ref.as_str()])
+                .map_err(|error| error.to_string())?;
+        } else {
+            local
+                .fetch_refs_for_read(&remote, &[target_ref.as_str()])
+                .map_err(|error| error.to_string())?;
+            local
+                .fetch_refs_for_read(
+                    source_remote.as_deref().expect("checked above"),
+                    &[source_ref.as_str()],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+        let base = local
+            .merge_base(&target_commit, &source_commit)
             .map_err(|error| error.to_string())?;
-    }
-    let base = local
-        .merge_base(&target_commit, &source_commit)
-        .map_err(|error| error.to_string())?;
+        (base, source_commit)
+    };
     let files = local
-        .diff_between(&base, &source_commit)
+        .diff_between(&base, &head)
         .map_err(|error| error.to_string())?;
     let patch = files
         .into_iter()
@@ -4444,6 +4460,67 @@ mod tests {
         assert!(
             ensure_source_branch_on_remote(local.to_str().unwrap(), "origin", "different").is_err()
         );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn completed_azure_diff_survives_a_deleted_source_branch() {
+        let base = std::env::temp_dir().join(format!(
+            "strand-pr-completed-diff-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let publisher = base.join("publisher");
+        let consumer = base.join("consumer");
+        let remote = base.join("remote.git");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&publisher).unwrap();
+        git(&publisher, &["init", "-q", "-b", "main"]);
+        git(&publisher, &["config", "user.name", "Test"]);
+        git(&publisher, &["config", "user.email", "test@example.com"]);
+        git(&publisher, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(publisher.join("a.txt"), "one\n").unwrap();
+        git(&publisher, &["add", "a.txt"]);
+        git(&publisher, &["commit", "-q", "-m", "base"]);
+        let target_commit = git(&publisher, &["rev-parse", "HEAD"]);
+        git(&publisher, &["checkout", "-q", "-b", "topic"]);
+        std::fs::write(publisher.join("a.txt"), "two\n").unwrap();
+        git(&publisher, &["commit", "-qam", "topic"]);
+        let source_commit = git(&publisher, &["rev-parse", "HEAD"]);
+        git(&publisher, &["checkout", "-q", "main"]);
+        git(&publisher, &["merge", "-q", "--no-ff", "topic", "-m", "merge"]);
+        let merge_commit = git(&publisher, &["rev-parse", "HEAD"]);
+
+        git(&base, &["init", "-q", "--bare", remote.to_str().unwrap()]);
+        git(
+            &publisher,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(&publisher, &["push", "-q", "origin", "main", "topic"]);
+        git(&publisher, &["push", "-q", "origin", "--delete", "topic"]);
+
+        std::fs::create_dir_all(&consumer).unwrap();
+        git(&consumer, &["init", "-q", "-b", "main"]);
+        git(
+            &consumer,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        let patch = diff_azure_value(
+            consumer.to_str().unwrap(),
+            "origin".into(),
+            serde_json::json!({
+                "status": "completed",
+                "sourceRefName": "refs/heads/topic",
+                "targetRefName": "refs/heads/main",
+                "lastMergeSourceCommit": { "commitId": source_commit },
+                "lastMergeTargetCommit": { "commitId": target_commit },
+                "lastMergeCommit": { "commitId": merge_commit }
+            }),
+        )
+        .unwrap();
+        assert!(patch.contains("-one"));
+        assert!(patch.contains("+two"));
 
         let _ = std::fs::remove_dir_all(base);
     }

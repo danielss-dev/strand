@@ -1552,7 +1552,11 @@ tree: watch the agent work, review fast, accept or reject safely.
     diff; line totals stay in the selected-file header rather than crowding
     every tree row. The file header exposes the same
     persisted stacked/split controls in context. Azure comparisons
-    fetch source/target objects without updating repository refs or FETCH_HEAD.
+    fetch source/target objects without updating repository refs or FETCH_HEAD;
+    completed Azure PRs reconstruct the historical patch from
+    `lastMergeTargetCommit` → `lastMergeCommit`, so provider source-branch
+    cleanup cannot break Code (`completed_azure_diff_survives_a_deleted_source_branch`,
+    DAN-24).
   - ☑ 1.0 discussion threads and comment creation: Timeline reads GitHub
     issue comments, GitHub review-thread comments, and Azure thread comments
     (including inline file context) as safe
@@ -2105,6 +2109,11 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 - ☑ Broken vendor-CLI installs stay distinct from signed-out sessions
   (`AiProviderStatus.error`, auth-failure classification, and `--version`
   login preflight prevent false “browser opened” messages)
+- ☑ Vendor CLI failures become bounded, actionable messages instead of raw
+  session transcripts (`user_facing_cli_failure`, DAN-26): known rate-limit,
+  quota/billing, model, context, timeout, and network failures are classified;
+  prompt/patch text after vendor transcript boundaries is never used for
+  classification or shown to the user.
 - ☑ AI provider execution hardened and cancellable (`AiProviderAdapter`,
   canonical CLI resolution, isolated read-only Codex cwd/argv, bounded
   stdout/stderr, process-group/Windows Job Object teardown, and shared
