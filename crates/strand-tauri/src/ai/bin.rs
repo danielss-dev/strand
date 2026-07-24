@@ -660,49 +660,45 @@ mod tests {
         assert!(err.contains("timed out"), "unexpected error: {err}");
     }
 
+    fn assert_process_group_cancelled_promptly(
+        program: &'static str,
+        args: &'static [&'static str],
+    ) {
+        let cancel = AiCancelHandle::new();
+        let worker_cancel = cancel.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::sync_channel(0);
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            run_capture_cancellable(
+                Path::new(program),
+                args,
+                None,
+                None,
+                SUGGEST_TIMEOUT,
+                Some(&worker_cancel),
+            )
+        });
+        started_rx.recv().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let cancelled_at = Instant::now();
+        cancel.cancel();
+        let err = worker.join().unwrap().unwrap_err();
+        assert_eq!(err, "cancelled");
+        assert!(cancelled_at.elapsed() < Duration::from_secs(3));
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn run_capture_cancels_process_group() {
-        let cancel = AiCancelHandle::new();
-        let trigger = cancel.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(100));
-            trigger.cancel();
-        });
-        let started = Instant::now();
-        let err = run_capture_cancellable(
-            Path::new("/bin/sh"),
-            &["-c", "sleep 30 & wait"],
-            None,
-            None,
-            SUGGEST_TIMEOUT,
-            Some(&cancel),
-        )
-        .unwrap_err();
-        assert_eq!(err, "cancelled");
-        assert!(started.elapsed() < Duration::from_secs(3));
+        assert_process_group_cancelled_promptly("/bin/sh", &["-c", "sleep 30 & wait"]);
     }
 
     #[cfg(windows)]
     #[test]
     fn run_capture_cancels_process_group() {
-        let cancel = AiCancelHandle::new();
-        let trigger = cancel.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(100));
-            trigger.cancel();
-        });
-        let started = Instant::now();
-        let err = run_capture_cancellable(
-            Path::new("cmd.exe"),
+        assert_process_group_cancelled_promptly(
+            "cmd.exe",
             &["/C", "ping", "-n", "30", "127.0.0.1"],
-            None,
-            None,
-            SUGGEST_TIMEOUT,
-            Some(&cancel),
-        )
-        .unwrap_err();
-        assert_eq!(err, "cancelled");
-        assert!(started.elapsed() < Duration::from_secs(3));
+        );
     }
 }
