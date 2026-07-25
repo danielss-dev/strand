@@ -1694,7 +1694,7 @@ tree: watch the agent work, review fast, accept or reject safely.
 ## Platform / packaging
 
 - ☑ Replace placeholder icon with a real source (canonical `strand.svg` mark,
-  white-background `strand.png` app icon, and generated desktop, Store,
+  rounded white-tile `strand.png` app icon, and generated desktop, Store,
   Android, and iOS bundles)
 - ☑ Apple Developer ID + notarization pipeline. Local signing:
   `pnpm tauri build --target aarch64-apple-darwin` + `APPLE_SIGNING_IDENTITY`

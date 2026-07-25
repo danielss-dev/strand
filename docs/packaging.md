@@ -12,7 +12,7 @@ beta channel is explicitly post-1.0.
 ## Done so far (2026-06-01)
 
 - **Real icon.** Root `strand.svg` is the canonical Refined Circuit S mark and
-  root `strand.png` is its white-background app-icon source; the generated
+  root `strand.png` is its rounded white-tile app-icon source; the generated
   directory carries the complete desktop, Store, Android, and iOS icon set.
 - **Signed bundle.** On an Apple-Silicon Mac with Xcode + the "Developer ID
   Application: Daniel Schwarz Campos (57CBXS5P39)" cert in the Keychain:

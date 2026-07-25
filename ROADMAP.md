@@ -84,7 +84,7 @@ system ported verbatim. No real feature surface yet.
     folder rows open a keyboard-operable immediate-contents index)
 - ☑ **macOS packaging** — *release CI builds, signs, and notarizes the
   universal DMG (v0.5.0, 2026-06-12). See `docs/packaging.md` for the runbook.*
-  - ☑ Real app icon (canonical `strand.svg` mark, white-background
+  - ☑ Real app icon (canonical `strand.svg` mark, rounded white-tile
     `strand.png`, and generated desktop and platform bundles)
   - ☑ Apple Developer ID signing + notarization (release CI signs + notarizes
     `Strand_0.5.0_universal.dmg`)
@@ -2338,9 +2338,9 @@ when Strand resolves the system theme to light.
 
 **Refined Circuit S identity shipped (2026-07-25):** Strand's selected logo
 direction is now a canonical `strand.svg` shared by the website, docs, favicons,
-and social preview. The supplied white-background `strand.png` regenerates the
-complete desktop, Microsoft Store, Android, and iOS icon family without a
-separate reinterpretation.
+and social preview. The supplied `strand.png`, clipped to a rounded white app
+tile, regenerates the complete desktop, Microsoft Store, Android, and iOS icon
+family without a separate reinterpretation.
 
 ---
 
