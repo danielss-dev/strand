@@ -84,8 +84,8 @@ system ported verbatim. No real feature surface yet.
     folder rows open a keyboard-operable immediate-contents index)
 - ☑ **macOS packaging** — *release CI builds, signs, and notarizes the
   universal DMG (v0.5.0, 2026-06-12). See `docs/packaging.md` for the runbook.*
-  - ☑ Real app icon (Refined Circuit S canonical `app-icon.svg` plus generated
-    desktop and platform bundles)
+  - ☑ Real app icon (canonical `strand.svg` mark, white-background
+    `strand.png`, and generated desktop and platform bundles)
   - ☑ Apple Developer ID signing + notarization (release CI signs + notarizes
     `Strand_0.5.0_universal.dmg`)
   - ☑ First DMG ships — superseded by the public v0.5.0 GitHub Release
@@ -2337,9 +2337,10 @@ Azure path, and a live WebView2 pass confirmed Pierre uses its light palette
 when Strand resolves the system theme to light.
 
 **Refined Circuit S identity shipped (2026-07-25):** Strand's selected logo
-direction is now a precise canonical vector shared by the app, website, docs,
-favicons, and social preview. The Tauri source regenerates the complete desktop,
-Microsoft Store, Android, and iOS icon family from the same squircle artwork.
+direction is now a canonical `strand.svg` shared by the website, docs, favicons,
+and social preview. The supplied white-background `strand.png` regenerates the
+complete desktop, Microsoft Store, Android, and iOS icon family without a
+separate reinterpretation.
 
 ---
 

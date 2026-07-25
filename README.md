@@ -306,7 +306,7 @@ When preparing an issue or discussing a future change:
   every new surface keyboard-operable.
 - The visual identity lives in `ui/src/styles/` as design tokens — no
   hardcoded colors. The Refined Circuit S mark lives in `strand.svg`, with
-  the platform icon source in `crates/strand-tauri/icons/app-icon.svg`.
+  the white-background platform icon source in `strand.png`.
 
 ## License
 

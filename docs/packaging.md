@@ -11,9 +11,9 @@ beta channel is explicitly post-1.0.
 
 ## Done so far (2026-06-01)
 
-- **Real icon.** `crates/strand-tauri/icons/app-icon.svg` is the canonical
-  Refined Circuit S source; the generated directory carries its complete
-  desktop, Store, Android, and iOS icon set.
+- **Real icon.** Root `strand.svg` is the canonical Refined Circuit S mark and
+  root `strand.png` is its white-background app-icon source; the generated
+  directory carries the complete desktop, Store, Android, and iOS icon set.
 - **Signed bundle.** On an Apple-Silicon Mac with Xcode + the "Developer ID
   Application: Daniel Schwarz Campos (57CBXS5P39)" cert in the Keychain:
   ```sh
@@ -42,11 +42,10 @@ locally instead:
 
 ## 1. Real app icon
 
-1. Update the canonical 1024×1024
-   `crates/strand-tauri/icons/app-icon.svg` source.
+1. Update the canonical root `strand.png` app-icon source.
 2. Generate the full icon set from the repository root:
    ```sh
-   ./node_modules/.bin/tauri icon crates/strand-tauri/icons/app-icon.svg
+   ./node_modules/.bin/tauri icon strand.png
    ```
    This writes `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`,
    `icon.ico`, and the Windows/Store variants into
