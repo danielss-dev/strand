@@ -2,6 +2,8 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { create } from 'zustand';
 
+import { UPDATES_MANAGED_BY_STORE } from '../lib/distribution';
+
 /**
  * App-update state (Settings → Updates + the launch auto-check). One store so
  * the section and App's auto-check effect share a single in-flight update.
@@ -45,6 +47,11 @@ export const useUpdates = create<UpdatesState>()((set, get) => ({
   total: null,
 
   async check() {
+    if (UPDATES_MANAGED_BY_STORE) {
+      pending = null;
+      set({ status: 'upToDate', version: null, notes: null, error: null });
+      return;
+    }
     const { status } = get();
     if (status === 'checking' || status === 'downloading' || status === 'ready') return;
     set({ status: 'checking', error: null });
@@ -62,6 +69,7 @@ export const useUpdates = create<UpdatesState>()((set, get) => ({
   },
 
   async downloadAndInstall() {
+    if (UPDATES_MANAGED_BY_STORE) return;
     if (!pending || get().status !== 'available') return;
     set({ status: 'downloading', received: 0, total: null, error: null });
     try {

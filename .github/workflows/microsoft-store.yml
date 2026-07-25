@@ -1,0 +1,111 @@
+name: Microsoft Store candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to package (for example v1.1.1).'
+        required: true
+      publish_asset:
+        description: 'Upload the verified Store MSI to the existing GitHub release.'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.tag }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: microsoft-store-x64
+
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-release-version.mjs
+      - run: pnpm release:check-security
+      - run: pnpm store:check
+
+      - name: Import Windows publisher certificate
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet `
+            -bor [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet
+          $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $bytes,
+            $env:WINDOWS_CERTIFICATE_PASSWORD,
+            $flags
+          )
+          if (-not $cert.HasPrivateKey) {
+            throw 'The Windows publisher certificate has no private key.'
+          }
+          $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('My', 'CurrentUser')
+          $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+          try {
+            $store.Add($cert)
+          } finally {
+            $store.Close()
+          }
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+
+      - name: Prepare signing configuration
+        run: >
+          node scripts/prepare-microsoft-store-config.mjs
+          crates/strand-tauri/tauri.microsoftstore.conf.json
+          target/microsoft-store/tauri.microsoftstore.conf.json
+
+      - name: Build signed offline Store MSI
+        run: >
+          pnpm tauri build
+          --config target/microsoft-store/tauri.microsoftstore.conf.json
+          --ci
+
+      - name: Verify publisher and updater signatures
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.tag }}'.TrimStart('v')
+          $msi = "target/release/bundle/msi/Strand_${version}_x64_en-US.msi"
+          ./scripts/verify-microsoft-store-package.ps1 `
+            -MsiPath $msi `
+            -ExecutablePath target/release/strand.exe
+          pnpm release:check-updater-signatures
+
+          New-Item -ItemType Directory -Force target/microsoft-store/dist | Out-Null
+          $asset = "target/microsoft-store/dist/Strand_${version}_x64_en-US_store.msi"
+          Copy-Item -LiteralPath $msi -Destination $asset
+          Copy-Item -LiteralPath "$msi.sig" -Destination "$asset.sig"
+          "STORE_ASSET=$asset" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strand-microsoft-store-${{ inputs.tag }}
+          path: target/microsoft-store/dist/*
+          if-no-files-found: error
+
+      - name: Upload versioned package URL asset
+        if: inputs.publish_asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload '${{ inputs.tag }}' $env:STORE_ASSET "$env:STORE_ASSET.sig"

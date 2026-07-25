@@ -2,7 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useEffect, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
-import { buildCrashIssueUrl } from '../../lib/crashReport';
+import { buildContentReportUrl, buildCrashIssueUrl } from '../../lib/crashReport';
 import { osType } from '../../lib/integrations';
 import { errMessage, isTauri, tauri } from '../../lib/tauri';
 import { useSettings } from '../../stores/settings';
@@ -51,8 +51,31 @@ export function PrivacySection() {
     }
   };
 
+  const reportContent = async () => {
+    try {
+      const version = await getVersion().catch(() => 'unknown');
+      await shellOpen(buildContentReportUrl(version, osType()));
+      setStatus('Content report opened in your browser — review it before submitting.');
+    } catch (e) {
+      setStatus(`Couldn't open the report: ${errMessage(e)}`);
+    }
+  };
+
   return (
     <section className="settings-section" aria-label="Privacy">
+      <div className="settings-field">
+        <span className="settings-field-label">Content reports</span>
+        <div className="settings-row">
+          <button type="button" className="btn" onClick={() => void reportContent()}>
+            Report inappropriate content…
+          </button>
+        </div>
+        <p className="settings-hint">
+          Report inappropriate pull-request, user-generated, or AI-generated content.
+          Strand opens a pre-filled GitHub issue for you to review and submit; nothing
+          is sent automatically.
+        </p>
+      </div>
       <div className="settings-field">
         <span className="settings-field-label">Crash reports</span>
         <div className="settings-rows">

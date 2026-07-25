@@ -39,6 +39,10 @@ Preview locally with `pnpm site` from the repo root (serves on
   relative `foo.md` links — the viewer rewrites them (and they render on
   GitHub too). Keep the guide in sync with app releases: every claim in it
   was fact-checked against `ui/src` on 2026-07-18 for the 1.0 release candidate.
+  The public privacy policy used by distribution listings is
+  `/docs/?page=privacy`, and Store UGC guidance is
+  `/docs/?page=content-guidelines`; deploy website changes before submitting
+  either Store URL.
 
 ## Before launch
 

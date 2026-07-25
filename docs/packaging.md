@@ -108,6 +108,28 @@ Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
 AppImage a keyless Sigstore bundle; the Windows publisher identity remains an
 external 1.0 gate.
 
+### Microsoft Store MSI flavor
+
+The Microsoft Store uses a separate MSI flavor so the normal GitHub installer
+stays small. `crates/strand-tauri/tauri.microsoftstore.conf.json` builds only
+MSI, sets the non-product publisher name, and embeds the silent offline WebView2
+installer required by Microsoft's Win32 Store route. Run:
+
+```text
+pnpm store:check
+pnpm store:build
+```
+
+The manual **Microsoft Store candidate** workflow is the publishable path. It
+checks out an exact tag, imports the external Authenticode identity, injects
+only its thumbprint into a generated config, builds the offline MSI, verifies
+valid timestamped signatures on both `strand.exe` and the MSI, and reuses the
+existing updater-key identity gate. The optional `publish_asset` input attaches
+the verified package to the exact GitHub release under an immutable,
+version-bearing `_store.msi` name. Partner Center then links to that HTTPS asset.
+Listing copy, privacy/legal notes, screenshots, and remaining external gates
+live in `docs/microsoft-store-submission.md`.
+
 ---
 
 ## Release CI
@@ -199,14 +221,18 @@ repo (or org) Actions **secret**.
 | `APPLE_TEAM_ID` | macOS notarization | `57CBXS5P39` |
 | `TAURI_SIGNING_PRIVATE_KEY` | **Every build** | Tauri updater private key (see below) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **Every build** | Password for that key |
+| `WINDOWS_CERTIFICATE_BASE64` | Microsoft Store candidate | Base64 PKCS#12/PFX publisher certificate with private key |
+| `WINDOWS_CERTIFICATE_PASSWORD` | Microsoft Store candidate | Password for the publisher PKCS#12/PFX |
 
 The `APPLE_*` secrets are mandatory for the release workflow because both the
 app and the universal helper must be signed/notarized. The
 `TAURI_SIGNING_*` pair is also **mandatory**: it signs updater artifacts and
 the helper manifest, and `bundle.createUpdaterArtifacts` is `true`. Any bundle
 build (CI or local) fails without the private key. Windows publisher signing is
-not wired until the external certificate or cloud-signing identity is chosen;
-Linux AppImage publisher identity is keyless and needs no repository secret.
+wired for the separate Microsoft Store candidate once those two external
+certificate secrets exist; the normal release remains unsigned until the owner
+deliberately applies the same identity there. Linux AppImage publisher identity
+is keyless and needs no repository secret.
 
 > **Local builds** now need the key too. Point Tauri at the generated file:
 > ```sh

@@ -1,0 +1,67 @@
+name: Microsoft Store MSIX candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to package (for example v1.1.1).'
+        required: true
+      identity_name:
+        description: 'Exact Package/Identity/Name from Partner Center.'
+        required: true
+      publisher:
+        description: 'Exact Package/Identity/Publisher from Partner Center.'
+        required: true
+      publisher_display_name:
+        description: 'Exact Package/Properties/PublisherDisplayName from Partner Center.'
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ inputs.tag }}
+      MSIX_IDENTITY_NAME: ${{ inputs.identity_name }}
+      MSIX_PUBLISHER: ${{ inputs.publisher }}
+      MSIX_PUBLISHER_DISPLAY_NAME: ${{ inputs.publisher_display_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: microsoft-store-msix-x64
+
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-release-version.mjs
+      - run: pnpm release:check-security
+      - run: pnpm run store:msix:check
+
+      - name: Build unsigned Store MSIX
+        shell: pwsh
+        run: |
+          ./scripts/build-msix.ps1 `
+            -IdentityName $env:MSIX_IDENTITY_NAME `
+            -Publisher $env:MSIX_PUBLISHER `
+            -PublisherDisplayName $env:MSIX_PUBLISHER_DISPLAY_NAME `
+            -StoreSubmission
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strand-microsoft-store-msix-${{ inputs.tag }}
+          path: |
+            target/msix/dist/*.msix
+            target/msix/dist/*.msixupload
+          if-no-files-found: error

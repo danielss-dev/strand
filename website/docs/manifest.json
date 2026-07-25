@@ -10,6 +10,8 @@
     { "file": "everyday-git", "title": "Everyday Git" },
     { "file": "commits-and-history", "title": "Commits & History" },
     { "file": "keyboard-and-palette", "title": "Keyboard & Command Palette" },
-    { "file": "settings", "title": "Settings" }
+    { "file": "settings", "title": "Settings" },
+    { "file": "privacy", "title": "Privacy Policy" },
+    { "file": "content-guidelines", "title": "Content Guidelines" }
   ]
 }

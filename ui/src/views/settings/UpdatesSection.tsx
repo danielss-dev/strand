@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { useEffect, useState } from 'react';
 
+import { UPDATES_MANAGED_BY_STORE } from '../../lib/distribution';
 import { isTauri } from '../../lib/tauri';
 import { formatNumber, formatPercent, t } from '../../lib/i18n';
 import { useSettings } from '../../stores/settings';
@@ -30,6 +31,24 @@ export function UpdatesSection() {
   }, []);
 
   const inTauri = isTauri();
+  if (UPDATES_MANAGED_BY_STORE) {
+    return (
+      <section className="settings-section" aria-label={t('updates.section')}>
+        <div className="settings-field">
+          <span className="settings-field-label">{t('updates.version')}</span>
+          <div className="settings-row">
+            <span className="settings-path">
+              {inTauri ? `Strand ${current ?? '…'}` : t('updates.browserPreview')}
+            </span>
+          </div>
+          <p className="settings-hint" role="status">
+            {t('updates.managedByStore')}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   const statusLine =
     status === 'checking' ? t('updates.checking')
     : status === 'upToDate' ? t('updates.current')

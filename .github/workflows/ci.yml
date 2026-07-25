@@ -98,6 +98,12 @@ jobs:
       - name: Verify release security policy
         run: pnpm release:check-security
 
+      - name: Verify Microsoft Store package policy
+        run: pnpm store:check
+
+      - name: Verify Microsoft Store MSIX policy
+        run: pnpm run store:msix:check
+
       - name: Typecheck
         run: pnpm --filter ./ui exec tsc --noEmit
 

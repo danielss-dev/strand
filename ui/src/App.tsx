@@ -24,8 +24,9 @@ import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
+import { UPDATES_MANAGED_BY_STORE } from './lib/distribution';
 import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
-import { buildCrashIssueUrl } from './lib/crashReport';
+import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { t } from './lib/i18n';
@@ -1010,7 +1011,7 @@ export function App() {
   // update endpoint may not be reachable. One-shot by design: prefs read at
   // fire time, not subscribed.
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || UPDATES_MANAGED_BY_STORE) return;
     const timer = setTimeout(() => {
       const { updateAutoCheck, updateAutoInstall } = useSettings.getState();
       if (!updateAutoCheck) return;
@@ -1587,6 +1588,23 @@ export function App() {
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
+      {
+        id: 'report-inappropriate-content',
+        label: 'Report inappropriate content…',
+        group: 'Actions',
+        keywords: 'support abuse user generated ugc ai safety pull request report',
+        run: () => {
+          void (async () => {
+            try {
+              const version = await getVersion().catch(() => 'unknown');
+              await shellOpen(buildContentReportUrl(version, osType()));
+              showToast('Content report opened in your browser — review it before submitting');
+            } catch (e) {
+              showToast(`Couldn't open the report: ${errMessage(e)}`, 'error');
+            }
+          })();
+        },
+      },
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: keyHint('theme-toggle'), run: () => setTheme('system') },

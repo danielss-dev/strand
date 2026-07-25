@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCrashIssueUrl, crashIssueTitle } from './crashReport';
+import { buildContentReportUrl, buildCrashIssueUrl, crashIssueTitle } from './crashReport';
 
 const ENTRY = [
   '=== panic at unix:1730000000 (strand 0.8.0)',
@@ -45,5 +45,18 @@ describe('buildCrashIssueUrl', () => {
     const decoded = decodeURIComponent(url);
     expect(decoded).toContain('boom');
     expect(decoded).toContain('truncated — the full entry is in crash.log');
+  });
+});
+
+describe('buildContentReportUrl', () => {
+  it('opens a user-reviewed inappropriate-content report without private data', () => {
+    const url = buildContentReportUrl('1.1.1', 'windows');
+    expect(url.startsWith('https://github.com/danielss-dev/strand/issues/new?title=')).toBe(true);
+    const decoded = decodeURIComponent(url);
+    expect(decoded).toContain('Report inappropriate content');
+    expect(decoded).toContain('Strand version:** 1.1.1');
+    expect(decoded).toContain('Platform:** windows');
+    expect(decoded).toContain('Do not include credentials, secrets, or private repository content');
+    expect(decoded).toContain('User-generated content, pull-request interaction, or AI-generated draft');
   });
 });

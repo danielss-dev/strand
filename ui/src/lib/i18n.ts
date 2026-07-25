@@ -83,6 +83,7 @@ export const en = {
   'updates.checkOnLaunch': 'Check for updates on launch',
   'updates.installAutomatically': 'Download and install automatically',
   'updates.restartHint': 'Updates apply on the next restart; Strand never restarts itself.',
+  'updates.managedByStore': 'Updates for this installation are managed by Microsoft Store.',
   'settings.title': 'Settings',
   'settings.sections': 'Settings sections',
   'settings.done': 'Done',
