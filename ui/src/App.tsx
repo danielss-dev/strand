@@ -24,6 +24,7 @@ import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
+import { UPDATES_MANAGED_BY_STORE } from './lib/distribution';
 import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
 import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
@@ -1010,7 +1011,7 @@ export function App() {
   // update endpoint may not be reachable. One-shot by design: prefs read at
   // fire time, not subscribed.
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || UPDATES_MANAGED_BY_STORE) return;
     const timer = setTimeout(() => {
       const { updateAutoCheck, updateAutoInstall } = useSettings.getState();
       if (!updateAutoCheck) return;

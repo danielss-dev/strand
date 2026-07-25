@@ -1,30 +1,58 @@
 # Microsoft Store submission
 
 This is the source of truth for Strand's Microsoft Store listing and candidate
-package. It follows Microsoft's MSI/EXE submission route because Tauri 2
-produces MSI/EXE installers, not a native MSIX package.
+package. The preferred route is an x64 MSIX packaged-classic desktop app.
+Tauri 2 does not emit MSIX directly, so `scripts/build-msix.ps1` assembles the
+release executable, manifest, and Store assets with Microsoft's MakeAppx tool.
+The older MSI/EXE workflow remains available as a fallback, but it requires an
+external CA-backed Windows code-signing certificate.
 
 ## Before opening the submission
 
-- Reserve **Strand** as an **EXE or MSI app** in Partner Center. The repository
-  identifier `dev.danielss.strand` does not reserve a Store identity.
-- Confirm the Partner Center publisher name and the Authenticode certificate
-  subject with the owner. The Store build currently uses
-  **Daniel Schwarz Campos** as the MSI publisher; change it before certification
-  if the verified Partner Center identity differs.
+- Create **Strand** as an **MSIX or PWA app** in Partner Center. An existing
+  **EXE or MSI app** product cannot supply the package identity required by
+  this MSIX.
+- Open **Product management → Product identity** and copy these three values
+  exactly: `Package/Identity/Name`, `Package/Identity/Publisher`, and
+  `Package/Properties/PublisherDisplayName`. Do not use
+  `dev.danielss.strand` unless Partner Center actually assigned that value.
 - Complete owner/counsel review of the open Strand trademark gate and approve
   the factual privacy notice and user-content guidelines at
   `https://strand.danielss.dev/docs/?page=privacy` and
   `https://strand.danielss.dev/docs/?page=content-guidelines`.
-- Add `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` as GitHub
-  Actions secrets. The certificate must include its private key and chain to a
-  CA in the Microsoft Trusted Root Program. The existing
-  `TAURI_SIGNING_PRIVATE_KEY` secrets remain required for Strand's updater.
+- Do not obtain or upload a Windows publisher certificate for this route.
+  Partner Center signs the accepted MSIX during certification.
 
 ## Build and package
 
-Run the **Microsoft Store candidate** workflow with an existing version tag.
-The workflow:
+Run the **Microsoft Store MSIX candidate** workflow with an existing version
+tag and the three exact Product identity values. The workflow:
+
+1. checks out and version-checks the exact tag;
+2. validates Strand's release and MSIX policies;
+3. builds the app with the direct Tauri updater disabled in favor of
+   Store-managed updates;
+4. creates an x64 packaged-classic, medium-integrity, full-trust MSIX;
+5. validates the manifest and payload with MakeAppx; and
+6. uploads both `Strand_<version>.0_x64.msix` and the recommended
+   `.msixupload` wrapper as a workflow artifact.
+
+The resulting package is intentionally unsigned. Upload the `.msixupload`
+artifact to Partner Center; Microsoft signs the package after certification.
+Do not attach this unsigned Store artifact to a public GitHub release.
+
+For a local development build with a non-Store identity:
+
+```powershell
+pnpm run store:msix:check
+pnpm run store:msix:build
+```
+
+The development artifact is written to `target/msix/dist/`. It is suitable for
+manifest inspection and test-signing only. `-StoreSubmission` fails closed
+unless explicit non-development identity and publisher values are supplied.
+
+The older **Microsoft Store candidate** workflow is the MSI/EXE fallback. It:
 
 1. checks out and version-checks the exact tag;
 2. validates Strand's release and Store policies;
@@ -37,8 +65,10 @@ The workflow:
 7. uploads a workflow artifact named
    `Strand_<version>_x64_en-US_store.msi`.
 
-Select `publish_asset` only after those checks pass. It attaches the immutable
-Store MSI to the matching GitHub release, producing this versioned HTTPS URL:
+That fallback still requires `WINDOWS_CERTIFICATE_BASE64`,
+`WINDOWS_CERTIFICATE_PASSWORD`, and the Tauri updater signing secrets. Select
+`publish_asset` only after its checks pass. It attaches the immutable Store MSI
+to the matching GitHub release, producing this versioned HTTPS URL:
 
 ```text
 https://github.com/danielss-dev/strand/releases/download/v<version>/Strand_<version>_x64_en-US_store.msi
@@ -47,8 +77,8 @@ https://github.com/danielss-dev/strand/releases/download/v<version>/Strand_<vers
 Do not replace the bytes at a submitted URL. Publish a new versioned asset and
 update the Partner Center submission.
 
-Before certification, install the workflow artifact on a clean Windows 11 x64
-machine through:
+Before an MSI/EXE fallback certification, install its workflow artifact on a
+clean Windows 11 x64 machine through:
 
 ```powershell
 msiexec.exe /i .\Strand_<version>_x64_en-US_store.msi /qn /norestart
@@ -56,7 +86,8 @@ msiexec.exe /i .\Strand_<version>_x64_en-US_store.msi /qn /norestart
 
 Verify launch, repository open/clone, update, uninstall, and absence of a
 WebView2 download during installation. Then run Microsoft Defender over the
-MSI and installed directory. The Store supplies `/qn` for MSI packages.
+MSI and installed directory. The Store supplies `/qn` for MSI packages. This
+installer-specific step does not apply to the MSIX route.
 
 ## Partner Center fields
 
@@ -93,33 +124,34 @@ MSI and installed directory. The Store supplies `/qn` for MSI packages.
 Certification notes:
 
 ```text
-Strand is a local-first Git client. The x64 MSI is a standalone installer and
-bundles Microsoft's offline WebView2 runtime; Partner Center may use the normal
-/qn MSI switch. Strand installs no driver or NT service. It reads and writes
+Strand is a local-first Git client. The submitted x64 MSIX is a packaged-classic
+desktop app for Windows 11 and uses the operating system's WebView2 runtime.
+Strand installs no driver or NT service. It reads and writes
 repositories only after the user opens or clones them. Network operations are
 user initiated and delegated to system Git or the user's GitHub/Azure tooling.
-The built-in updater checks the signed stable GitHub Releases channel. The app
-has no product telemetry. Optional crash reporting opens a pre-filled GitHub
-issue that the user reviews and submits. Optional live generative AI features
-use the user's separately installed OpenAI Codex CLI or Claude Code CLI to
-draft commit messages and pull-request text only after an explicit action.
-Every draft is editable and is never committed or submitted automatically.
-Inappropriate provider, user-generated, or generated content can be reported
-from Settings > Privacy or the command palette. Reporting opens a pre-filled
-GitHub issue that the user reviews and submits; nothing is sent automatically.
+Microsoft Store manages updates for this installation; Strand's direct
+GitHub-Releases updater is disabled in the MSIX build. The app has no product
+telemetry. Optional crash reporting opens a pre-filled GitHub issue that the
+user reviews and submits. Optional live generative AI features use the user's
+separately installed OpenAI Codex CLI or Claude Code CLI to draft commit
+messages and pull-request text only after an explicit action. Every draft is
+editable and is never committed or submitted automatically. Inappropriate
+provider, user-generated, or generated content can be reported from Settings >
+Privacy or the command palette. Reporting opens a pre-filled GitHub issue that
+the user reviews and submits; nothing is sent automatically.
 ```
 
 ### Package
 
-- URL:
-  `https://github.com/danielss-dev/strand/releases/download/v<version>/Strand_<version>_x64_en-US_store.msi`
-- Architecture: **x64**
+- Upload: the `.msixupload` artifact from **Microsoft Store MSIX candidate**
+- Architecture: **x64** (declared by the package)
+- Minimum OS: **Windows 11, version 21H2 / build 22000**
 - Language: **English (United States)**
-- App type: **MSI**
-- Silent install: Partner Center default **`/qn`**
+- Runtime behavior: **packagedClassicApp**, **mediumIL**, `runFullTrust`
+- Updates: **Microsoft Store managed**
 
-The first submission is x64-only. Add a separately built and certified arm64
-package rather than marking this MSI neutral.
+The first submission is x64-only. Add a separately built arm64 package rather
+than marking this package neutral.
 
 ### Age ratings
 
@@ -241,11 +273,12 @@ names, tokens, email addresses, or terminal history.
 ## Final external gates
 
 - [ ] Partner Center developer account is verified.
-- [ ] **Strand** name is reserved as an MSI/EXE app.
-- [ ] Publisher/certificate identity is approved and Actions secrets are set.
+- [ ] **Strand** is created as an MSIX/PWA app.
+- [ ] Exact Product identity values are copied into the MSIX workflow.
 - [ ] Owner/counsel closes or explicitly accepts the trademark gate.
 - [ ] Owner approves the privacy and license listing text.
-- [ ] Signed Store workflow artifact passes clean install/update/uninstall.
+- [ ] Partner Center accepts the `.msixupload` and completes package validation.
+- [ ] Store-signed package passes clean install/update/uninstall.
 - [ ] Final screenshots and Store box art contain no private data.
 - [ ] Age-rating questionnaire is completed accurately.
 - [ ] First submission is certified through link-only discoverability.

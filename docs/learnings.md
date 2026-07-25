@@ -1983,3 +1983,17 @@ requires public user-content guidelines. Keep
 `website/docs/content-guidelines.md` linked from the documentation manifest and
 public site alongside the privacy notice, and keep reporting/removal guidance
 aligned with the actual in-product reporting path.
+
+**The verified packaged-classic MSIX is the preferred Microsoft Store route
+(2026-07-25), superseding the earlier prohibition on an unverified conversion.**
+Tauri still does not generate MSIX, but Microsoft's documented manual
+packaging path is now proven for Strand: MakeAppx completed semantic validation,
+a temporary test-signed package registered, and Windows launched the real
+WindowsApps executable through its AUMID. Keep the manifest identity fully
+parameterized and require the exact Partner Center `Name`, `Publisher`, and
+`PublisherDisplayName`; never submit the development `.test` identity. Build
+MSIX with `VITE_DISTRIBUTION=msix` so Microsoft Store owns updates and the
+direct GitHub updater is neither checked nor offered. The Store candidate
+workflow must emit an unsigned `.msixupload` for Partner Center to sign—do not
+reintroduce a CA certificate requirement into this route. Retain the signed,
+offline-WebView2 MSI workflow only as a fallback.

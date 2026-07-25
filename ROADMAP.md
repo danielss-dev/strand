@@ -2117,6 +2117,22 @@ unsigned. Partner Center reservation, the real publisher identity/secrets,
 trademark/privacy approval, and clean
 install/update/uninstall certification remain external gates.
 
+**Microsoft Store MSIX path verified (2026-07-25):** The preferred Store route
+is now an x64 packaged-classic MSIX assembled with MakeAppx from Strand's
+release executable and parameterized Partner Center identity. The MSIX build
+uses a compile-time distribution channel to disable the direct GitHub updater
+and show Store-managed updates instead. A fresh 17,656,211-byte 1.1.1
+development package passed full MakeAppx validation, was copied and signed with
+a temporary test certificate, registered as
+`dev.danielss.strand.msix.test_1.1.1.0_x64__94yh9fqhspgzm`, and launched a
+responsive Strand window from the protected WindowsApps location. Cleanup
+removed the exact package, process, and certificate from every touched store.
+The manual **Microsoft Store MSIX candidate** workflow now requires the exact
+Partner Center Name, Publisher, and PublisherDisplayName and emits an unsigned
+`.msix` plus `.msixupload` for Microsoft to sign. The existing MSI path remains
+a CA-certificate-dependent fallback. Product creation, real identity, upload,
+and Store certification remain external gates.
+
 ---
 
 ## 1.1+ — Post-1.0

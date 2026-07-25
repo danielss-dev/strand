@@ -59,8 +59,18 @@ deliberate maintainer action.
 
 ## Microsoft Store distribution
 
+- [x] Manual packaged-classic MSIX path builds a MakeAppx-validated x64 package,
+  disables the direct updater in favor of Store-managed updates, and fails
+  closed unless exact Partner Center identity values are supplied.
+- [x] A temporary locally signed MSIX registered and launched from its real
+  WindowsApps identity on Windows 11; the test app and certificates were then
+  removed and all four stores audited clean (2026-07-25).
+- [x] Manual **Microsoft Store MSIX candidate** workflow creates an unsigned
+  `.msix` plus the recommended `.msixupload`; Partner Center supplies the
+  production signature after certification.
 - [x] Store-only Tauri flavor builds an MSI with silent offline WebView2
-  (`tauri.microsoftstore.conf.json`) while preserving the signed stable updater.
+  (`tauri.microsoftstore.conf.json`) while preserving the signed stable updater
+  as a certificate-dependent fallback.
 - [x] Manual Store workflow imports the external publisher certificate,
   verifies timestamped Authenticode on both the executable and MSI, verifies
   the updater key, and can publish an immutable versioned GitHub asset.
@@ -69,13 +79,24 @@ deliberate maintainer action.
   guidelines, certification notes, and four sanitized screenshots are prepared in
   `docs/microsoft-store-submission.md` and `docs/store-assets/`.
 - [ ] Deploy the privacy page, verify the Partner Center developer account,
-  reserve **Strand** as an MSI/EXE product, and confirm the publisher name.
-- [ ] Configure the CA-backed publisher certificate secrets and obtain a green
-  **Microsoft Store candidate** workflow for the exact submitted tag.
+  create **Strand** as an MSIX/PWA product, and copy its exact Product identity.
+- [ ] Obtain a green **Microsoft Store MSIX candidate** workflow for the exact
+  submitted tag and upload its `.msixupload` to Partner Center.
 - [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender
   scans, then submit initially as link-only discoverability.
 
-The unsigned local 1.1.1 engineering build on 2026-07-25 produced a
+The fresh development-identity MSIX built on 2026-07-25 is 17,656,211 bytes
+(SHA-256
+`6D13C5B4E8CD7A705148EBA7B97EE1DB2615FFD46E82B0CF3DD5F9FCA7947D7F`).
+MakeAppx completed full semantic validation. A separately copied package was
+signed with a temporary self-signed test certificate, registered as
+`dev.danielss.strand.msix.test_1.1.1.0_x64__94yh9fqhspgzm`, and launched a
+responsive `Strand` window from its protected WindowsApps location. The test
+package and exact certificate thumbprint were removed afterward. This proves
+the repository-owned package path; it is not a Store candidate because only
+Partner Center can provide the real identity and production signature.
+
+The unsigned local 1.1.1 MSI engineering build on 2026-07-25 produced a
 221,757,440-byte offline MSI (SHA-256
 `301EFA1539BA289A46F0454E96CE2730409CB00C0E8D979CECE2C3113EA7D359`).
 WiX embeds `MicrosoftEdgeWebView2RuntimeInstallerX64.exe` and invokes it with

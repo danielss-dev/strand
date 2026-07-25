@@ -235,12 +235,14 @@ real-world repositories daily. The annotated `v1.0.0` tag and draft release
 artifacts now exist; the updater-signature gates passed, macOS was notarized,
 and Linux AppImages are keyless-signed with Sigstore. Public release remains
 held for Windows publisher signing and the real macOS/GNOME/KDE candidate
-runs. Microsoft Store engineering is prepared as a separate offline-WebView2
-MSI flavor with fail-closed publisher/updater signature checks, listing copy,
-privacy and user-content policies, in-product inappropriate-content reporting,
-and screenshots;
-Partner Center identity, trademark
-approval, and the external Windows certificate remain owner gates. See the
+runs. Microsoft Store engineering now has a verified packaged-classic MSIX
+path: a development-identity package registered and launched from WindowsApps,
+Store builds disable the direct updater in favor of Store-managed updates, and
+the workflow produces an unsigned `.msixupload` for Partner Center to sign.
+The signed offline-WebView2 MSI remains a fallback. Listing copy, privacy and
+user-content policies, in-product inappropriate-content reporting, and
+screenshots are prepared; the real Partner Center MSIX identity, trademark
+approval, and Store certification remain owner gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 
@@ -277,6 +279,7 @@ strand/
 │   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
 │   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands
+├── packaging/          # Store/distribution manifests assembled around release binaries
 ├── ui/                 # Vite + React + TypeScript frontend
 ├── website/            # strand.danielss.dev: landing page + user guide (website/docs/, no build step)
 ├── docs/               # design notes, perf baseline, packaging

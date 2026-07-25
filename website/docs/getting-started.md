@@ -107,9 +107,15 @@ the right.
 
 ## In-app updates
 
-Strand checks for updates on launch by default and manages them under Settings → Updates: check for updates, download and install, and restart to apply. Automatic download-and-install is off by default, and updates always apply on the next restart — Strand never restarts itself. Update packages are cryptographically signed.
+Direct Strand installations check for updates on launch by default and manage
+them under Settings → Updates: check for updates, download and install, and
+restart to apply. Automatic download-and-install is off by default, and updates
+always apply on the next restart — Strand never restarts itself. Update
+packages are cryptographically signed.
 
-The in-app updater covers every install method: the macOS app, the Windows MSI install, and the Linux `.deb`, `.rpm`, and AppImage packages.
+The in-app updater covers the macOS app, direct Windows MSI installs, and the
+Linux AppImage. Microsoft Store MSIX installs update through Microsoft Store;
+Linux `.deb` and `.rpm` installs update through their package manager.
 
 ## Settings
 

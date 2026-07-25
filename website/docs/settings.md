@@ -169,10 +169,19 @@ outputs, or sensitive classifications.
 
 ## Updates
 
-- **Version** — shows the current version with a state-dependent action: **Check for updates**, **Download & install** (with a progress bar), or **Restart now**. Release notes are shown when available.
-- **Automatic updates** — "Check for updates on launch" (on by default) and "Download and install automatically" (off by default). Updates always apply on the next restart; Strand never restarts itself.
+- **Version** — direct installations show the current version with a
+  state-dependent action: **Check for updates**, **Download & install** (with a
+  progress bar), or **Restart now**. Release notes are shown when available.
+- **Automatic updates** — direct installations provide "Check for updates on
+  launch" (on by default) and "Download and install automatically" (off by
+  default). Updates always apply on the next restart; Strand never restarts
+  itself.
 
-The in-app updater covers the macOS app, the Windows MSI install, and the Linux AppImage; `.deb` and `.rpm` installs are not covered — update them by downloading the new release from GitHub Releases.
+The in-app updater covers the macOS app, direct Windows MSI installs, and the
+Linux AppImage; `.deb` and `.rpm` installs are not covered — update them by
+downloading the new release from GitHub Releases. Microsoft Store MSIX
+installations instead show **Updates for this installation are managed by
+Microsoft Store** and hide the direct update controls.
 
 ## Privacy
 

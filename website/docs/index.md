@@ -25,10 +25,14 @@ Strand is open source under AGPL-3.0, free for individuals forever, with an hono
 | Platform | Installer |
 | --- | --- |
 | macOS | Universal `.dmg` (Apple Silicon + Intel), signed and notarized |
-| Windows | `.msi` |
+| Windows | `.msi`; `.msix` through Microsoft Store |
 | Linux | `.deb`, `.rpm`, `.AppImage` |
 
-Installers are small — roughly 15 MB for the Windows MSI and Linux `.deb`/`.rpm`, about 31 MB for the universal macOS DMG. The auto-updater covers the macOS app bundle, the Windows MSI, and the Linux AppImage; `.deb`/`.rpm` installs update through your package manager.
+Installers are small — roughly 15 MB for the direct Windows MSI and Linux
+`.deb`/`.rpm`, about 31 MB for the universal macOS DMG. The auto-updater covers
+the macOS app bundle, direct Windows MSI installs, and the Linux AppImage;
+Microsoft Store MSIX installs update through the Store, while `.deb`/`.rpm`
+installs update through your package manager.
 
 ## Guide contents
 

@@ -1972,9 +1972,19 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   `STRAND` class-9 registrations exist in the US and EU for Signify lighting-
   control software/equipment, plus other related software marks; owner/counsel
   clearance or a rename decision is required before this row can close.
-- ☐ Reserve `dev.danielss.strand` in the macOS App Store and reserve **Strand**
-  as an MSI/EXE product name in Microsoft Partner Center
-- ☑ Prepare the Microsoft Store MSI submission path
+- ☐ Reserve `dev.danielss.strand` in the macOS App Store; create **Strand** as
+  an MSIX/PWA product in Microsoft Partner Center and copy its exact Product
+  identity values
+- ☑ Prepare the preferred Microsoft Store MSIX submission path
+  (`AppxManifest.xml.in`, `build-msix.ps1`, MSIX distribution channel,
+  `.msixupload` workflow, and local WindowsApps registration/launch proof;
+  2026-07-25). The fresh 1.1.1 development package passed full MakeAppx
+  validation, registered with a temporary test signature, and launched a
+  responsive Strand window from its real package identity. The test package
+  and certificates were removed and audited clean. Exact Partner Center
+  identity values, Store upload/certification, and a Store-signed clean-machine
+  pass remain external gates in `docs/microsoft-store-submission.md`.
+- ☑ Prepare the Microsoft Store MSI/EXE fallback path
   (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
   checks, Partner Center copy, privacy and user-content policies, in-product
   inappropriate-content reporting, and four sanitized listing screenshots;
