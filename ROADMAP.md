@@ -2101,6 +2101,22 @@ tag itself is annotated but not cryptographically signed because this checkout
 has no tag-signing identity. This owner-authorized push does not close the
 Windows publisher, trademark, real-platform smoke, or public-release gates.
 
+**Microsoft Store engineering path prepared (2026-07-24):** Strand now has a
+separate x64 Store MSI flavor so GitHub's normal installer stays lean while the
+Store candidate embeds WebView2 for fully offline silent installation. A manual
+exact-tag workflow imports the external publisher PFX, requires timestamped
+Authenticode on both the executable and MSI, rechecks the established updater
+key, and can attach an immutable versioned Store asset. Partner Center copy,
+live-generative-AI disclosure, public privacy and user-content policies,
+certification notes, and an in-product inappropriate-content reporting route
+plus four sanitized
+2160×1380 screenshots are checked in. The local 1.1.1 engineering
+build produced a 221.8 MB offline MSI; signature inspection confirmed that
+both the MSI and embedded executable remain intentionally unpromoted and
+unsigned. Partner Center reservation, the real publisher identity/secrets,
+trademark/privacy approval, and clean
+install/update/uninstall certification remain external gates.
+
 ---
 
 ## 1.1+ — Post-1.0

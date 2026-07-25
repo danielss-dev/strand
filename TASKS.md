@@ -1972,7 +1972,18 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   `STRAND` class-9 registrations exist in the US and EU for Signify lighting-
   control software/equipment, plus other related software marks; owner/counsel
   clearance or a rename decision is required before this row can close.
-- ☐ Reserve `dev.danielss.strand` IDs in macOS App Store + Microsoft Store
+- ☐ Reserve `dev.danielss.strand` in the macOS App Store and reserve **Strand**
+  as an MSI/EXE product name in Microsoft Partner Center
+- ☑ Prepare the Microsoft Store MSI submission path
+  (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
+  checks, Partner Center copy, privacy and user-content policies, in-product
+  inappropriate-content reporting, and four sanitized listing screenshots;
+  2026-07-25). A local
+  1.1.1 Store-format MSI build passed the repository gates; Authenticode
+  inspection correctly remains `NotSigned`. External Partner Center name
+  reservation, publisher certificate, trademark/privacy approval, and
+  clean-install certification remain open in
+  `docs/microsoft-store-submission.md`.
 - ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)

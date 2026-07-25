@@ -235,7 +235,12 @@ real-world repositories daily. The annotated `v1.0.0` tag and draft release
 artifacts now exist; the updater-signature gates passed, macOS was notarized,
 and Linux AppImages are keyless-signed with Sigstore. Public release remains
 held for Windows publisher signing and the real macOS/GNOME/KDE candidate
-runs. See the
+runs. Microsoft Store engineering is prepared as a separate offline-WebView2
+MSI flavor with fail-closed publisher/updater signature checks, listing copy,
+privacy and user-content policies, in-product inappropriate-content reporting,
+and screenshots;
+Partner Center identity, trademark
+approval, and the external Windows certificate remain owner gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

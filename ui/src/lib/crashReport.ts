@@ -14,6 +14,36 @@ const URL_BUDGET = 7000;
 const TRUNCATION_NOTE = '\n… (truncated — the full entry is in crash.log)';
 
 /**
+ * Prefilled report for inappropriate pull-request, user-generated, or AI
+ * content. The reporter chooses what to disclose and submits the issue in
+ * their browser; Strand sends nothing automatically.
+ */
+export function buildContentReportUrl(version: string, platform: string): string {
+  const body = [
+    '<!-- Do not include credentials, secrets, or private repository content.',
+    'Share provider links only when they are safe for the public issue. -->',
+    '',
+    `**Strand version:** ${version}`,
+    `**Platform:** ${platform}`,
+    '',
+    '### Content type',
+    '',
+    '<!-- User-generated content, pull-request interaction, or AI-generated draft? -->',
+    '',
+    '### Where it appeared',
+    '',
+    '<!-- Name the Strand surface and, if safe, include the provider URL. -->',
+    '',
+    '### Why it is inappropriate',
+    '',
+    '<!-- Describe the concern and the action you are requesting. -->',
+    '',
+  ].join('\n');
+  return `${ISSUES_URL}?title=${encodeURIComponent('Report inappropriate content')}`
+    + `&body=${encodeURIComponent(body)}`;
+}
+
+/**
  * Derive an issue title from a panic entry. The hook writes the std panic
  * Display — `panicked at <file>:<line>:<col>:\n<message>` — so the message
  * is the line after the location. Falls back to a generic title.

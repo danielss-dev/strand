@@ -10,6 +10,7 @@ Run from the repository root on the exact candidate commit:
 ```text
 pnpm install --frozen-lockfile
 pnpm release:check-security
+pnpm store:check
 pnpm --filter ./ui exec tsc --noEmit
 pnpm --filter ./ui exec vitest run
 cargo check -p strand-core -p strand-tauri
@@ -55,6 +56,33 @@ deliberate maintainer action.
 - [ ] Run the updater end to end from the last public version to the 1.0 draft
   promoted through a disposable test endpoint, then confirm the normal stable
   endpoint only sees the published release.
+
+## Microsoft Store distribution
+
+- [x] Store-only Tauri flavor builds an MSI with silent offline WebView2
+  (`tauri.microsoftstore.conf.json`) while preserving the signed stable updater.
+- [x] Manual Store workflow imports the external publisher certificate,
+  verifies timestamped Authenticode on both the executable and MSI, verifies
+  the updater key, and can publish an immutable versioned GitHub asset.
+- [x] Partner Center copy, truthful live-generative-AI disclosure, in-product
+  inappropriate-content reporting, license text, privacy notice, user-content
+  guidelines, certification notes, and four sanitized screenshots are prepared in
+  `docs/microsoft-store-submission.md` and `docs/store-assets/`.
+- [ ] Deploy the privacy page, verify the Partner Center developer account,
+  reserve **Strand** as an MSI/EXE product, and confirm the publisher name.
+- [ ] Configure the CA-backed publisher certificate secrets and obtain a green
+  **Microsoft Store candidate** workflow for the exact submitted tag.
+- [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender
+  scans, then submit initially as link-only discoverability.
+
+The unsigned local 1.1.1 engineering build on 2026-07-25 produced a
+221,757,440-byte offline MSI (SHA-256
+`301EFA1539BA289A46F0454E96CE2730409CB00C0E8D979CECE2C3113EA7D359`).
+WiX embeds `MicrosoftEdgeWebView2RuntimeInstallerX64.exe` and invokes it with
+`/silent /install`. This proves the repository-owned offline/silent build
+path, not the publisher gate: both the MSI and executable correctly report
+`NotSigned` locally, and the workstation updater key remains the previously
+recorded mismatch. Do not publish this engineering artifact.
 
 ## Brand and legal gate
 

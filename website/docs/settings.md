@@ -176,7 +176,12 @@ The in-app updater covers the macOS app, the Windows MSI install, and the Linux 
 
 ## Privacy
 
-Strand has no telemetry. The only reporting mechanism is crash reports, and those are opt-in and user-mediated:
+Strand has no telemetry. Reports are user-mediated and open a pre-filled GitHub
+issue in your browser for review before anything is submitted:
+
+- **Report inappropriate content…** — report inappropriate pull-request,
+  user-generated, or AI-generated content. This action is also available from
+  the command palette.
 
 - **Offer to report crashes on launch** — off by default. When enabled and Strand crashed last time, a toast offers to report it; reporting opens a pre-filled GitHub issue in your browser, which you review and submit yourself. Nothing is ever uploaded automatically.
 - **Report last crash…** — manually start that flow for the most recent crash (disabled when the crash log is empty).

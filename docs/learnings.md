@@ -1965,3 +1965,21 @@ metadata plus echoed stdin containing repository paths, prompts, and patches.
 Preserve only bounded single-line diagnostics; classify known failures from the
 diagnostic prefix before any prompt boundary, and replace every unclassified
 transcript with a stable Strand-authored recovery hint.
+
+**The Microsoft Store MSI is a separate, fail-closed release flavor
+(2026-07-24).** Tauri's supported Store path links Partner Center to an
+unpackaged MSI; do not improvise an unverified MSIX conversion. Keep the normal
+GitHub MSI lean and merge `tauri.microsoftstore.conf.json` only for the Store
+candidate so WebView2 is embedded and installed silently. The submitted URL is
+immutable and version-bearing. Require both trust layers before upload:
+timestamped Authenticode on `strand.exe` plus the MSI, and Tauri updater
+signatures matching embedded key `84FCBFD2A981CE5D`. Store metadata must
+explicitly disclose the optional live-generative-AI drafts, link the public
+privacy notice, and keep a keyboard-reachable in-product route for reporting
+inappropriate provider, user-generated, or generated content; keyboard support
+alone is not evidence for claiming an audited accessibility standard.
+When Strand displays or sends Git-hosted user content, Store policy 11.12 also
+requires public user-content guidelines. Keep
+`website/docs/content-guidelines.md` linked from the documentation manifest and
+public site alongside the privacy notice, and keep reporting/removal guidance
+aligned with the actual in-product reporting path.
