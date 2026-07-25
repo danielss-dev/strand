@@ -425,7 +425,7 @@ not block stable.
 
 **Strand.** A single thread or fiber — clean, technical, and a natural fit alongside `@pierre/trees`. Suggests something light and fast without being cute about it. The name evokes the visual metaphor of Git itself: branches, threads of history, things woven together.
 
-**Domain:** [`strand.danielss.dev`](https://strand.danielss.dev) — landing page, downloads, docs, and auto-update manifest live here.
+**Domain:** [`strandgit.com`](https://strandgit.com) — landing page, downloads, docs, and auto-update manifest live here.
 
 Remaining pre-launch checks:
 

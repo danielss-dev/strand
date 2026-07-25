@@ -95,7 +95,7 @@ locally instead:
 2. Ship the stapled `.dmg`. (Auto-update is fully wired: the updater pubkey is
    real, `bundle.createUpdaterArtifacts` is on, and the `endpoints` point at the
    GitHub Releases manifest — `releases/latest/download/latest.json`, which
-   `tauri-action` publishes per release. The old `strand.danielss.dev/updates`
+   `tauri-action` publishes per release. The old `strandgit.com/updates`
    host was dropped in 0.6.1 (`ce1ffd0`). Note: the release workflow opens a
    **draft**, and `releases/latest/download/` only resolves once you publish it.)
 

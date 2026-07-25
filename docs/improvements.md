@@ -290,7 +290,7 @@ escape hatch (PRD §6.4 P1) keeps the modal simple while unblocking the hard cas
   nothing exists yet. At minimum wire a panic hook + Tauri webview error listener
   to a local log file now, so alpha bug reports come with evidence — the opt-in
   remote part can come later.
-- **Auto-update endpoint (P1).** Signing is done; `strand.danielss.dev` manifest
+- **Auto-update endpoint (P1).** Signing is done; `strandgit.com` manifest
   hosting is the last blocker (ROADMAP 0.5). Cheap to finish, unblocks the beta
   loop.
 - **License clarity for Pierre libs (P0-before-launch).** PRD open question 1 is

@@ -6,8 +6,8 @@
 [![CI](https://github.com/danielss-dev/strand/actions/workflows/ci.yml/badge.svg)](https://github.com/danielss-dev/strand/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 
-**[Website](https://strand.danielss.dev)** ·
-**[Docs](https://strand.danielss.dev/docs/)** ·
+**[Website](https://strandgit.com)** ·
+**[Docs](https://strandgit.com/docs/)** ·
 **[Download](https://github.com/danielss-dev/strand/releases/latest)** ·
 **[Roadmap](./ROADMAP.md)** ·
 **[Commercial license](./COMMERCIAL.md)**
@@ -281,7 +281,7 @@ strand/
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands
 ├── packaging/          # Store/distribution manifests assembled around release binaries
 ├── ui/                 # Vite + React + TypeScript frontend
-├── website/            # strand.danielss.dev: landing page + user guide (website/docs/, no build step)
+├── website/            # strandgit.com: landing page + user guide (website/docs/, no build step)
 ├── docs/               # design notes, perf baseline, packaging
 ├── PRD.md              # product spec
 ├── ROADMAP.md          # milestones and status

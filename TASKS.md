@@ -405,7 +405,7 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   release by CI since v0.5.0, all platforms). **Endpoint resolved (0.6.1,
   `ce1ffd0`):** the updater now points at the GitHub Releases manifest
   (`https://github.com/danielss-dev/strand/releases/latest/download/latest.json`),
-  which `tauri-action` publishes per release — the dead `strand.danielss.dev/updates`
+  which `tauri-action` publishes per release — the dead `strandgit.com/updates`
   host (it only ever served the landing page, so checks 404'd) is gone. CI opens a
   **draft** release; `releases/latest/download/` only resolves once it's published.
   (2026-06-07: on the Windows box the `TAURI_SIGNING_PRIVATE_KEY` in env does
@@ -2009,11 +2009,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   Authenticode `NotSigned`, the Git tag has no cryptographic signature, and the
   legal, updater-rehearsal, and real-platform checks in
   `docs/release-checklist.md` remain open.
-- ☑ Landing page at `strand.danielss.dev` + downloads + auto-update manifest
+- ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
   pricing section. **Deployed on Railway** — project `landings`, service
-  `strand-landing`, live at https://strand.danielss.dev (custom domain DNS
+  `strand-landing`, live at https://strandgit.com (custom domain DNS
   flipped). Site links point at the public `danielss-dev/strand` repo as of
   2026-06-12. Download buttons resolve release assets and `latest.json` is
   served from GitHub Releases. Social previews use the checked-in 1200×630

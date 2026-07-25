@@ -18,8 +18,8 @@ external CA-backed Windows code-signing certificate.
   `dev.danielss.strand` unless Partner Center actually assigned that value.
 - Complete owner/counsel review of the open Strand trademark gate and approve
   the factual privacy notice and user-content guidelines at
-  `https://strand.danielss.dev/docs/?page=privacy` and
-  `https://strand.danielss.dev/docs/?page=content-guidelines`.
+  `https://strandgit.com/docs/?page=privacy` and
+  `https://strandgit.com/docs/?page=content-guidelines`.
 - Do not obtain or upload a Windows publisher certificate for this route.
   Partner Center signs the accepted MSIX during certification.
 
@@ -110,11 +110,11 @@ installer-specific step does not apply to the MSIX route.
   repository content and connected Git-host data, and an optional
   user-reviewed crash report can contain repository paths.
 - Privacy policy:
-  `https://strand.danielss.dev/docs/?page=privacy`
-- Website: `https://strand.danielss.dev`
+  `https://strandgit.com/docs/?page=privacy`
+- Website: `https://strandgit.com`
 - Support: `https://github.com/danielss-dev/strand/issues`
 - User-generated content guidelines:
-  `https://strand.danielss.dev/docs/?page=content-guidelines`
+  `https://strandgit.com/docs/?page=content-guidelines`
 - Non-Microsoft drivers or NT services: **No**
 - Tested to meet accessibility guidelines: **Do not claim this yet.** Strand
   is keyboard-operable, but no external conformance audit is recorded.

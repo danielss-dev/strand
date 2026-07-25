@@ -1,13 +1,13 @@
 # Strand landing page
 
-Static site for `strand.danielss.dev`. No build step.
+Static site for `strandgit.com`. No build step.
 
 **Deployed on Railway**: project `landings` → service `strand-landing`
 (`railway up` from this folder redeploys; `npm start` is what Railway runs —
 `serve . -l $PORT`; `npm run build` is a no-op that exists only because the
 Railway image build wants a build command). Test URL:
 <https://strand-landing-production.up.railway.app>. The custom domain
-`strand.danielss.dev` is live through the Railway service.
+`strandgit.com` is live through the Railway service.
 
 Preview locally with `pnpm site` from the repo root (serves on
 <http://localhost:4321> via [`serve`](https://github.com/vercel/serve)).
@@ -46,7 +46,7 @@ Preview locally with `pnpm site` from the repo root (serves on
 
 ## Before launch
 
-- [x] Custom-domain DNS and TLS are live at `strand.danielss.dev`.
+- [x] Custom-domain DNS and TLS are live at `strandgit.com`.
 - [x] Download CTAs resolve the latest platform assets through the GitHub
       Releases API, with the release page as the failure fallback.
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow
@@ -56,6 +56,6 @@ Preview locally with `pnpm site` from the repo root (serves on
 - [x] Tauri updater manifest (`latest.json`) is served from GitHub Releases
       (`releases/latest/download/latest.json`), which `tauri-action` publishes
       automatically — `tauri.conf.json` points the updater there. No custom
-      `/updates` route on `strand.danielss.dev` is needed.
+      `/updates` route on `strandgit.com` is needed.
 - [x] The performance figures in §02 match `docs/perf-baseline.md` as of the
       2026-07-18 1.0 content pass.

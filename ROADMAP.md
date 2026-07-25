@@ -266,7 +266,7 @@ also pending (only `aarch64-apple-darwin` is installed).
   check / download / restart + auto-check & auto-install prefs); release CI
   publishes a signed all-platform `latest.json` per release (since v0.5.0); the
   updater endpoint now points at the GitHub Releases manifest
-  (`releases/latest/download/latest.json`) — the dead `strand.danielss.dev/updates`
+  (`releases/latest/download/latest.json`) — the dead `strandgit.com/updates`
   host was dropped in 0.6.1 (`ce1ffd0`). Operational note: CI opens a **draft**
   release; `releases/latest/download/` only resolves once it's published.
 - ☑ **Settings view** — multi-section dialog (Appearance / Diff / Git /
@@ -556,7 +556,7 @@ of both popup variants + the stacking fix.
 **0.5 remaining (as of 2026-06-05):** the public-beta milestone's open items are
 now all platform/infra rather than features: Windows 11 + Linux builds (need the
 target OSes to build/validate — can't be done from the macOS dev box), the
-auto-update *endpoint* (`strand.danielss.dev` must be live; pubkey + signed
+auto-update *endpoint* (`strandgit.com` must be live; pubkey + signed
 manifests already done), and the **performance pass** to hit PRD §8 targets —
 the concrete code items live in TASKS.md → Performance → "Audit follow-ups" and
 want benchmarking against large repos before merge (the prime directive forbids
@@ -718,7 +718,7 @@ markdown), `tsc`, `cargo check -p strand-tauri`.
 
 **Landing page (2026-06-12):** First pass at the public face, ahead of the
 beta: `website/` holds a static, no-build-step landing page for
-`strand.danielss.dev`. It reuses the app's identity wholesale — the OKLCH
+`strandgit.com`. It reuses the app's identity wholesale — the OKLCH
 token palette from `tokens.css`, self-hosted Geist + JetBrains Mono, the
 single-hue accent system (a row of hero dots rotates `--accent-h` live,
 exactly like Settings → Appearance) — so the site *is* the product's design
