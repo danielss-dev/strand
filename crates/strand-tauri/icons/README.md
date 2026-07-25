@@ -1,11 +1,12 @@
 # Icons
 
-Generate the full Tauri icon set from a 1024×1024 source PNG:
+`app-icon.svg` is the canonical squircle source for the desktop and Store icon
+set. Regenerate every platform size from the repository root with:
 
 ```
-pnpm --filter strand-ui exec tauri icon path/to/source.png
+.\node_modules\.bin\tauri.cmd icon crates\strand-tauri\icons\app-icon.svg
 ```
 
-This will populate `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`,
-and `icon.ico` in this directory. Until you do, `tauri build` will fail —
-`tauri dev` works without them.
+On macOS/Linux, run the equivalent local binary without the `.cmd` suffix.
+This populates the PNG, ICO, ICNS, Microsoft Store, Android, and iOS variants
+in this directory.

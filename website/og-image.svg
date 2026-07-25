@@ -18,7 +18,6 @@
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#000000" flood-opacity="0.38" />
     </filter>
-    <clipPath id="mark-clip"><rect x="0" y="0" width="80" height="80" rx="16" /></clipPath>
     <style>
       @font-face { font-family: Geist; src: url("fonts/geist-400-latin.woff2") format("woff2"); font-weight: 400; }
       @font-face { font-family: Geist; src: url("fonts/geist-500-latin.woff2") format("woff2"); font-weight: 500; }
@@ -37,9 +36,13 @@
 
   <g transform="translate(82 72)">
     <rect width="76" height="76" rx="18" fill="#f59b42" fill-opacity="0.12" stroke="#f59b42" stroke-opacity="0.34" />
-    <g transform="translate(10 10) scale(.7)" clip-path="url(#mark-clip)" fill="#ffab59">
-      <path d="m70.4 1.3c-2.4 0-4.7 1-6.2 3.7l-26.7.1c-5.5 0-9.9 1.1-13.9 3.9-4.4 3-9.6 8.9-10.3 15.8-1.2 10.1 3.5 21.1 14.7 24.6 3.7 1.2 7.6 1.6 13.9 2.8 1.7.3 3.4.6 4.8 2.1 2.3 2.2 2 5.1-.2 8.8-2 3.1-5.1 6.4-10.1 6.5H15.7c-1-2-3.1-3.7-6.1-3.6-3.1.1-6.1 2.6-6.1 6.5.1 3.4 2.7 6.5 6.2 6.5 2.6 0 5-1.2 6.1-4.1h20.7c5.4 0 9.2-1.8 12.4-5.2 2.9-3.2 5-7.5 4.9-11.6-.1-4.5-3.5-9.1-8.6-10.4-4-1-9.6-1.7-13.2-2.5-8.1-1.7-13.2-8.7-13.2-17.1.1-7.5 5.9-17.1 17.7-17.6h27.8c1.1 2.2 3.1 3.7 6.1 3.7 3.3-.1 6.1-2.5 6.1-6.2.1-3.3-2.5-6.7-6.1-6.7zM9.7 75.3c-1.4 0-2.7-1.2-2.7-2.8 0-1.4 1.2-2.9 2.7-2.9 1.6 0 2.9 1.3 2.9 2.9 0 1.4-1.3 2.8-2.9 2.8zm60.6-64.8c-1.5.1-3-1-3-2.9 0-1.2 1.1-2.9 3-2.8 1.3 0 2.8 1.1 2.8 2.8 0 1.6-1.5 2.8-2.8 2.9z" />
-      <path d="M53.2 17.9v5.3H37.9c-4 0-5.8 3-5.8 5.5 0 2.6 2.1 5 4.8 5.9 2.3.7 9.3 1.8 13.8 2.8 7.7 1.5 15.9 8.5 16 19.7-.1 6.6-3 13.4-10.1 19.1H45.1c6.7-1.8 16-8.6 16.1-18.6 0-6.3-4.1-13.1-11.2-14.6-3.1-.7-10-1.6-13.6-2.6-4.8-1.2-9.9-4.8-9.9-11.6 0-5 4.1-10.8 11.3-10.8h15.4v-.1z" />
+    <g transform="translate(10 10) scale(.56)" fill="#ffab59">
+      <g fill="none" stroke="#ffab59" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M69 22H43C27 22 18 31.5 18 45s11 22 26 22h17"/>
+        <path d="M31 78h26c16 0 25-9.5 25-23S71 33 56 33H39"/>
+      </g>
+      <path fill-rule="evenodd" d="M80 12a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/>
+      <path fill-rule="evenodd" d="M20 68a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/>
     </g>
     <text x="98" y="51" class="mono" font-size="34" font-weight="600" letter-spacing="-1" fill="#f4efe6">strand</text>
   </g>

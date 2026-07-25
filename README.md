@@ -305,7 +305,8 @@ When preparing an issue or discussing a future change:
   agents but applies to humans too: surgical diffs, simplicity first, and
   every new surface keyboard-operable.
 - The visual identity lives in `ui/src/styles/` as design tokens — no
-  hardcoded colors.
+  hardcoded colors. The Refined Circuit S mark lives in `strand.svg`, with
+  the platform icon source in `crates/strand-tauri/icons/app-icon.svg`.
 
 ## License
 

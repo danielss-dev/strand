@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title">
-  <title id="title">Strand</title>
-  <g fill="#1a1a1a">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Strand app icon</title>
+  <rect x="64" y="64" width="896" height="896" rx="216" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <g transform="translate(202 202) scale(6.2)" fill="#1a1a1a">
     <g fill="none" stroke="#1a1a1a" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
       <path d="M69 22H43C27 22 18 31.5 18 45s11 22 26 22h17"/>
       <path d="M31 78h26c16 0 25-9.5 25-23S71 33 56 33H39"/>

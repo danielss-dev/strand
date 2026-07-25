@@ -1693,8 +1693,9 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 ## Platform / packaging
 
-- ☑ Replace placeholder icon with a real 1024×1024 source (squircle on the
-  Apple grid; commit `aefc189`)
+- ☑ Replace placeholder icon with a real 1024×1024 source (Refined Circuit S
+  canonical `app-icon.svg` plus generated desktop, Store, Android, and iOS
+  bundles)
 - ☑ Apple Developer ID + notarization pipeline. Local signing:
   `pnpm tauri build --target aarch64-apple-darwin` + `APPLE_SIGNING_IDENTITY`
   yields a Developer-ID-signed DMG. Release CI signs **and notarizes** the
