@@ -1353,6 +1353,30 @@ export function App() {
           if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'vertical');
           setView('work'); selectFile(null);
         } },
+        { id: 'work-tab-move-previous-pane', label: t('work.moveTabPreviousPane'), group: 'Actions', keywords: 'work tab move editor group previous', run: () => {
+          useWork.getState().moveActiveTabToAdjacentPane(meta.path, -1);
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-tab-move-next-pane', label: t('work.moveTabNextPane'), group: 'Actions', keywords: 'work tab move editor group next', run: () => {
+          useWork.getState().moveActiveTabToAdjacentPane(meta.path, 1);
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-tab-move-new-left', label: t('work.moveTabNewLeft'), group: 'Actions', keywords: 'work tab move split editor group left', run: () => {
+          useWork.getState().splitActiveTab(meta.path, 'left');
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-tab-move-new-right', label: t('work.moveTabNewRight'), group: 'Actions', keywords: 'work tab move split editor group right', run: () => {
+          useWork.getState().splitActiveTab(meta.path, 'right');
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-tab-move-new-top', label: t('work.moveTabNewTop'), group: 'Actions', keywords: 'work tab move split editor group above top', run: () => {
+          useWork.getState().splitActiveTab(meta.path, 'top');
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-tab-move-new-bottom', label: t('work.moveTabNewBottom'), group: 'Actions', keywords: 'work tab move split editor group below bottom', run: () => {
+          useWork.getState().splitActiveTab(meta.path, 'bottom');
+          setView('work'); selectFile(null);
+        } },
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },

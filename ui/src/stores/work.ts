@@ -7,18 +7,23 @@ import {
   activateWorkTab,
   activeWorkPane,
   appendWorkTab,
+  closeEmptyWorkPane,
   closeWorkTab,
   EMPTY_REPO_WORK,
   findWorkPane,
   openWorkFile,
+  moveWorkTab,
   reconcileWorkMutation,
   restoreTerminalDescriptors,
   splitWorkPane,
+  splitWorkTab,
   terminalDescriptors,
+  workPanes,
   type RepoWorkTabs,
   type TerminalLifecycle,
   type WorkFileTab,
   type WorkFileMode,
+  type WorkPaneEdge,
   type WorkTab,
   type WorkTerminalTab,
 } from '../lib/workTabs';
@@ -48,6 +53,11 @@ interface WorkState {
   activate(repoPath: string, id: string): void;
   activatePane(repoPath: string, paneId: string): void;
   splitPane(repoPath: string, paneId: string, direction: 'horizontal' | 'vertical'): void;
+  moveTab(repoPath: string, tabId: string, paneId: string, beforeTabId?: string | null): void;
+  splitTab(repoPath: string, tabId: string, paneId: string, edge: WorkPaneEdge): void;
+  closePane(repoPath: string, paneId: string): void;
+  moveActiveTabToAdjacentPane(repoPath: string, delta: -1 | 1): void;
+  splitActiveTab(repoPath: string, edge: WorkPaneEdge): void;
   close(repoPath: string, id: string): Promise<void>;
   setTerminalRuntime(repoPath: string, id: string, runtimeId: string, label?: string): void;
   setTerminalState(
@@ -184,6 +194,55 @@ export const useWork = create<WorkState>((set, get) => ({
     const next = splitWorkPane(repo, pane.id, direction, makeId(), duplicate);
     set((state) => ({ repos: { ...state.repos, [repoPath]: next } }));
     if (duplicate?.kind === 'terminal') persistTerminals(repoPath, next);
+  },
+
+  moveTab(repoPath, tabId, paneId, beforeTabId = null) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo) return state;
+      const next = moveWorkTab(repo, tabId, paneId, beforeTabId);
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
+  },
+
+  splitTab(repoPath, tabId, paneId, edge) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo) return state;
+      const next = splitWorkTab(repo, tabId, paneId, edge, makeId());
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
+  },
+
+  closePane(repoPath, paneId) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo) return state;
+      const next = closeEmptyWorkPane(repo, paneId);
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
+  },
+
+  moveActiveTabToAdjacentPane(repoPath, delta) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo || !repo.activeTabId) return state;
+      const panes = workPanes(repo.layout);
+      if (panes.length < 2) return state;
+      const activeIndex = panes.findIndex((pane) => pane.id === repo.activePaneId);
+      const target = panes[(activeIndex + delta + panes.length) % panes.length];
+      const next = moveWorkTab(repo, repo.activeTabId, target.id);
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
+  },
+
+  splitActiveTab(repoPath, edge) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo || !repo.activeTabId) return state;
+      const next = splitWorkTab(repo, repo.activeTabId, repo.activePaneId, edge, makeId());
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
   },
 
   async close(repoPath, id) {

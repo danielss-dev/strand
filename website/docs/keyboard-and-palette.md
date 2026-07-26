@@ -116,7 +116,9 @@ Each view has its own small set of fixed (non-rebindable) keys. Settings → Key
 | `F6` | Return focus from a terminal or document to the active pane's tab |
 
 Quick Launch also exposes **Split pane right** and **Split pane down**, matching
-the two controls on every Work pane.
+the two controls on every Work pane. Its **Move active tab** actions transfer
+the current tab to the previous or next pane, or create a new pane to the left,
+right, above, or below—the keyboard equivalents of dragging a Work tab.
 
 When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
 `Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on

@@ -59,8 +59,9 @@ from their close control, with Delete/Backspace while focused, or by middle-clic
 
 - **Work view (⌘1)** — Strand's default startup workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
-  panes. Split the active view right or down; each pane keeps its own tabs and
-  replaceable preview while nested pane sizes are remembered. Files retain
+  panes. Drag tabs to reorder them, move them between panes, or drop on a pane
+  edge to create a left/right/top/bottom split; each pane keeps its own tabs
+  and replaceable preview while nested pane sizes are remembered. Files retain
   Content, rendered Preview, History, Compare, Blame, image, and directory
   modes. Multiple terminals run at the repository
   root and keep output, scrollback, and selection across view, repository, and

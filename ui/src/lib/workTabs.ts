@@ -46,6 +46,7 @@ export type WorkPaneSplit = {
 };
 
 export type WorkPaneLayout = WorkPane | WorkPaneSplit;
+export type WorkPaneEdge = 'left' | 'right' | 'top' | 'bottom';
 
 export interface RepoWorkTabs {
   tabs: WorkTab[];
@@ -217,6 +218,113 @@ export function splitWorkPane(
     layout: replaceWorkPane(state.layout, pane.id, split),
     activePaneId: nextPane.id,
     activeTabId: nextPane.activeTabId,
+  };
+}
+
+export function moveWorkTab(
+  state: RepoWorkTabs,
+  tabId: string,
+  targetPaneId: string,
+  beforeTabId: string | null = null,
+): RepoWorkTabs {
+  const source = workPanes(state.layout).find((pane) => pane.tabIds.includes(tabId));
+  const target = findWorkPane(state.layout, targetPaneId);
+  if (!source || !target || !state.tabs.some((tab) => tab.id === tabId)) return state;
+  if (source.id === target.id && beforeTabId === tabId) return activateWorkTab(state, tabId);
+
+  const sourceIndex = source.tabIds.indexOf(tabId);
+  const sourceIds = source.tabIds.filter((id) => id !== tabId);
+  const sourceActiveId = source.activeTabId === tabId
+    ? sourceIds[sourceIndex] ?? sourceIds[sourceIndex - 1] ?? null
+    : source.activeTabId;
+  const targetIds = source.id === target.id ? sourceIds : target.tabIds;
+  const beforeIndex = beforeTabId ? targetIds.indexOf(beforeTabId) : -1;
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetIds.length;
+  const nextTargetIds = targetIds.slice();
+  nextTargetIds.splice(insertIndex, 0, tabId);
+
+  let layout = updateWorkPane(state.layout, source.id, (pane) => ({
+    ...pane,
+    tabIds: sourceIds,
+    activeTabId: sourceActiveId,
+  }));
+  layout = updateWorkPane(layout, target.id, (pane) => ({
+    ...pane,
+    tabIds: nextTargetIds,
+    activeTabId: tabId,
+  }));
+  if (source.id !== target.id && sourceIds.length === 0 && workPanes(layout).length > 1) {
+    layout = collapseEmptyWorkPane(layout, source.id).layout;
+  }
+  return {
+    ...state,
+    tabs: state.tabs.map((tab) =>
+      tab.id === tabId && tab.kind === 'file' && tab.preview ? { ...tab, preview: false } : tab),
+    layout,
+    activePaneId: target.id,
+    activeTabId: tabId,
+  };
+}
+
+export function splitWorkTab(
+  state: RepoWorkTabs,
+  tabId: string,
+  targetPaneId: string,
+  edge: WorkPaneEdge,
+  newPaneId: string,
+): RepoWorkTabs {
+  const source = workPanes(state.layout).find((pane) => pane.tabIds.includes(tabId));
+  const target = findWorkPane(state.layout, targetPaneId);
+  if (!source || !target || !state.tabs.some((tab) => tab.id === tabId)) return state;
+
+  const sourceIndex = source.tabIds.indexOf(tabId);
+  const sourceIds = source.tabIds.filter((id) => id !== tabId);
+  const sourceActiveId = source.activeTabId === tabId
+    ? sourceIds[sourceIndex] ?? sourceIds[sourceIndex - 1] ?? null
+    : source.activeTabId;
+  let layout = updateWorkPane(state.layout, source.id, (pane) => ({
+    ...pane,
+    tabIds: sourceIds,
+    activeTabId: sourceActiveId,
+  }));
+  if (source.id !== target.id && sourceIds.length === 0 && workPanes(layout).length > 1) {
+    layout = collapseEmptyWorkPane(layout, source.id).layout;
+  }
+
+  const nextTarget = findWorkPane(layout, target.id);
+  if (!nextTarget) return state;
+  const nextPane: WorkPane = {
+    kind: 'pane',
+    id: newPaneId,
+    tabIds: [tabId],
+    activeTabId: tabId,
+  };
+  const nextFirst = edge === 'left' || edge === 'top';
+  const split: WorkPaneSplit = {
+    kind: 'split',
+    direction: edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical',
+    children: nextFirst ? [nextPane, nextTarget] : [nextTarget, nextPane],
+  };
+  return {
+    ...state,
+    tabs: state.tabs.map((tab) =>
+      tab.id === tabId && tab.kind === 'file' && tab.preview ? { ...tab, preview: false } : tab),
+    layout: replaceWorkPane(layout, nextTarget.id, split),
+    activePaneId: nextPane.id,
+    activeTabId: tabId,
+  };
+}
+
+export function closeEmptyWorkPane(state: RepoWorkTabs, paneId: string): RepoWorkTabs {
+  const pane = findWorkPane(state.layout, paneId);
+  if (!pane || pane.tabIds.length > 0 || workPanes(state.layout).length === 1) return state;
+  const collapsed = collapseEmptyWorkPane(state.layout, paneId);
+  const activePane = findWorkPane(collapsed.layout, collapsed.focusPaneId) ?? workPanes(collapsed.layout)[0];
+  return {
+    ...state,
+    layout: collapsed.layout,
+    activePaneId: activePane.id,
+    activeTabId: activePane.activeTabId,
   };
 }
 

@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
   type KeyboardEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -29,6 +30,7 @@ import {
   type WorkFileTab,
   type WorkFileMode,
   type WorkPane,
+  type WorkPaneEdge,
   type WorkPaneLayout,
   type RepoWorkTabs,
   type WorkTab,
@@ -52,6 +54,9 @@ export function Work({ visible }: { visible: boolean }) {
   const openFile = useWork((state) => state.openFile);
   const setFileMode = useWork((state) => state.setFileMode);
   const splitPane = useWork((state) => state.splitPane);
+  const moveTab = useWork((state) => state.moveTab);
+  const splitTab = useWork((state) => state.splitTab);
+  const closePane = useWork((state) => state.closePane);
   const restore = useWork((state) => state.restore);
   const setView = useRepo((state) => state.setView);
   const selectCommit = useRepo((state) => state.selectCommit);
@@ -62,6 +67,7 @@ export function Work({ visible }: { visible: boolean }) {
   const [paneHostVersion, setPaneHostVersion] = useState(0);
   const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
   const [focusTabsTick, setFocusTabsTick] = useState(0);
+  const [draggedTab, setDraggedTab] = useState<WorkTabDrag | null>(null);
   const terminals = useMemo(
     () => Object.values(repos).flatMap((state) =>
       state.tabs.filter((tab): tab is WorkTerminalTab => tab.kind === 'terminal')),
@@ -169,6 +175,18 @@ export function Work({ visible }: { visible: boolean }) {
             openFile(repoPath, path, revision, isDirectory, 'pinned', mode, paneId)}
           onSetFileMode={(id, mode) => setFileMode(repoPath, id, mode)}
           onSplit={(paneId, direction) => splitPane(repoPath, paneId, direction)}
+          draggedTab={draggedTab}
+          onTabDragStart={(tabId, sourcePaneId) => setDraggedTab({ tabId, sourcePaneId })}
+          onTabDragEnd={() => setDraggedTab(null)}
+          onMoveTab={(tabId, paneId, beforeTabId) => {
+            moveTab(repoPath, tabId, paneId, beforeTabId);
+            setDraggedTab(null);
+          }}
+          onSplitTab={(tabId, paneId, edge) => {
+            splitTab(repoPath, tabId, paneId, edge);
+            setDraggedTab(null);
+          }}
+          onClosePane={(paneId) => closePane(repoPath, paneId)}
           onJump={jump}
           registerPaneHost={registerPaneHost}
         />
@@ -210,6 +228,13 @@ interface PaneRect {
   height: number;
 }
 
+interface WorkTabDrag {
+  tabId: string;
+  sourcePaneId: string;
+}
+
+type WorkPaneDropZone = WorkPaneEdge | 'center';
+
 interface WorkPaneProps {
   repo: RepoWorkTabs;
   repoPath: string;
@@ -230,6 +255,12 @@ interface WorkPaneProps {
   ): void;
   onSetFileMode(id: string, mode: WorkFileMode): void;
   onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
+  draggedTab: WorkTabDrag | null;
+  onTabDragStart(tabId: string, sourcePaneId: string): void;
+  onTabDragEnd(): void;
+  onMoveTab(tabId: string, paneId: string, beforeTabId: string | null): void;
+  onSplitTab(tabId: string, paneId: string, edge: WorkPaneEdge): void;
+  onClosePane(paneId: string): void;
   onJump(tab: WorkFileTab, hash: string): void;
   registerPaneHost(paneId: string, node: HTMLDivElement | null): void;
 }
@@ -275,6 +306,12 @@ function WorkPaneView({
   onOpenFile,
   onSetFileMode,
   onSplit,
+  draggedTab,
+  onTabDragStart,
+  onTabDragEnd,
+  onMoveTab,
+  onSplitTab,
+  onClosePane,
   onJump,
   registerPaneHost,
 }: WorkPaneProps & {
@@ -283,14 +320,41 @@ function WorkPaneView({
   const tabs = pane.tabIds.flatMap((id) => repo.tabs.find((tab) => tab.id === id) ?? []);
   const active = tabs.find((tab) => tab.id === pane.activeTabId) ?? null;
   const isActive = pane.id === activePaneId;
+  const [dropZone, setDropZone] = useState<WorkPaneDropZone | null>(null);
   const hostRef = useCallback(
     (node: HTMLDivElement | null) => registerPaneHost(pane.id, node),
     [pane.id, registerPaneHost],
   );
 
+  useEffect(() => {
+    if (!draggedTab) setDropZone(null);
+  }, [draggedTab]);
+
+  const onContentDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggedTab) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropZone(workPaneDropZone(event));
+  };
+  const onContentDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    setDropZone(null);
+  };
+  const onContentDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggedTab) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const zone = workPaneDropZone(event);
+    if (zone === 'center') onMoveTab(draggedTab.tabId, pane.id, null);
+    else onSplitTab(draggedTab.tabId, pane.id, zone);
+    setDropZone(null);
+  };
+
   return (
     <section
-      className={'work-pane' + (isActive ? ' active' : '')}
+      className={'work-pane' + (isActive ? ' active' : '')
+        + (draggedTab ? ' drag-active' : '')
+        + (dropZone ? ' drag-over' : '')}
       aria-label={t('work.paneLabel')}
       onPointerDownCapture={() => onActivatePane(pane.id)}
       onFocusCapture={() => onActivatePane(pane.id)}
@@ -299,14 +363,22 @@ function WorkPaneView({
         tabs={tabs}
         activeId={pane.activeTabId}
         focusRequested={isActive ? focusTabsTick : 0}
+        paneId={pane.id}
+        draggedTab={draggedTab}
         onActivate={onActivate}
         onClose={onClose}
+        onDragStart={onTabDragStart}
+        onDragEnd={onTabDragEnd}
+        onMoveTab={onMoveTab}
         onNewTerminal={(shell, label) => onNewTerminal(pane.id, shell, label)}
         onSplit={(direction) => onSplit(pane.id, direction)}
       />
       <div
         ref={hostRef}
         className="work-content"
+        onDragOver={onContentDragOver}
+        onDragLeave={onContentDragLeave}
+        onDrop={onContentDrop}
       >
         {visible && active?.kind === 'file' && (
           active.missing ? (
@@ -341,6 +413,18 @@ function WorkPaneView({
               <Icon name="terminal" size={13} />
               {t('work.newTerminal')}
             </button>
+            {workPanes(repo.layout).length > 1 && (
+              <button type="button" className="btn" onClick={() => onClosePane(pane.id)}>
+                {t('work.closePane')}
+              </button>
+            )}
+          </div>
+        )}
+        {draggedTab && dropZone && (
+          <div className="work-pane-drop-layer" aria-hidden="true">
+            <div className={`work-pane-drop-preview ${dropZone}`}>
+              <span>{workPaneDropLabel(dropZone)}</span>
+            </div>
           </div>
         )}
       </div>
@@ -348,26 +432,60 @@ function WorkPaneView({
   );
 }
 
+function workPaneDropZone(event: DragEvent<HTMLDivElement>): WorkPaneDropZone {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+  const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+  const edges: Array<[WorkPaneEdge, number]> = [
+    ['left', x],
+    ['right', 1 - x],
+    ['top', y],
+    ['bottom', 1 - y],
+  ];
+  const [edge, distance] = edges.reduce((closest, candidate) =>
+    candidate[1] < closest[1] ? candidate : closest);
+  return distance <= 0.24 ? edge : 'center';
+}
+
+function workPaneDropLabel(zone: WorkPaneDropZone): string {
+  if (zone === 'left') return t('work.dropSplitLeft');
+  if (zone === 'right') return t('work.dropSplitRight');
+  if (zone === 'top') return t('work.dropSplitTop');
+  if (zone === 'bottom') return t('work.dropSplitBottom');
+  return t('work.dropMove');
+}
+
 function WorkTabs({
   tabs,
   activeId,
   focusRequested,
+  paneId,
+  draggedTab,
   onActivate,
   onClose,
+  onDragStart,
+  onDragEnd,
+  onMoveTab,
   onNewTerminal,
   onSplit,
 }: {
   tabs: WorkTab[];
   activeId: string | null;
   focusRequested: number;
+  paneId: string;
+  draggedTab: WorkTabDrag | null;
   onActivate(id: string): void;
   onClose(id: string): void;
+  onDragStart(tabId: string, sourcePaneId: string): void;
+  onDragEnd(): void;
+  onMoveTab(tabId: string, paneId: string, beforeTabId: string | null): void;
   onNewTerminal(shell?: EmbeddedShellChoice | null, label?: string): void;
   onSplit(direction: 'horizontal' | 'vertical'): void;
 }) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const [dropMarker, setDropMarker] = useState<{ tabId: string; side: 'before' | 'after' } | null>(null);
   const moveFocus = (current: string, key: string) => {
     const index = tabs.findIndex((tab) => tab.id === current);
     if (index < 0 || tabs.length === 0) return;
@@ -409,6 +527,10 @@ function WorkTabs({
     buttons.current.get(activeId)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeId, tabs]);
 
+  useEffect(() => {
+    if (!draggedTab) setDropMarker(null);
+  }, [draggedTab]);
+
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const lane = scrollRef.current;
     if (!lane || lane.scrollWidth <= lane.clientWidth) return;
@@ -423,11 +545,45 @@ function WorkTabs({
         role="tablist"
         aria-label={t('work.tabsLabel')}
         onWheel={onWheel}
+        onDragOver={(event) => {
+          if (!draggedTab) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={(event) => {
+          if (!draggedTab) return;
+          event.preventDefault();
+          onMoveTab(draggedTab.tabId, paneId, null);
+          setDropMarker(null);
+        }}
       >
         {tabs.map((tab) => (
           <div
-            className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')}
+            className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')
+              + (dropMarker?.tabId === tab.id ? ` drop-${dropMarker.side}` : '')}
             key={tab.id}
+            onDragOver={(event) => {
+              if (!draggedTab) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = 'move';
+              const rect = event.currentTarget.getBoundingClientRect();
+              setDropMarker({
+                tabId: tab.id,
+                side: event.clientX < rect.left + rect.width / 2 ? 'before' : 'after',
+              });
+            }}
+            onDrop={(event) => {
+              if (!draggedTab) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              const side = event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+              const index = tabs.findIndex((candidate) => candidate.id === tab.id);
+              const beforeTabId = side === 'before' ? tab.id : tabs[index + 1]?.id ?? null;
+              onMoveTab(draggedTab.tabId, paneId, beforeTabId);
+              setDropMarker(null);
+            }}
             onAuxClick={(event) => {
               if (event.button !== 1) return;
               event.preventDefault();
@@ -443,10 +599,20 @@ function WorkTabs({
               role="tab"
               aria-selected={activeId === tab.id}
               tabIndex={activeId === tab.id || (!activeId && tab === tabs[0]) ? 0 : -1}
-              className={'work-tab' + (tab.kind === 'file' && tab.preview ? ' preview' : '')}
+              className={'work-tab'
+                + (tab.kind === 'file' && tab.preview ? ' preview' : '')
+                + (draggedTab?.tabId === tab.id && draggedTab.sourcePaneId === paneId ? ' dragging' : '')}
               title={tab.kind === 'file' ? tab.path : tab.label}
+              draggable
               onClick={() => onActivate(tab.id)}
               onKeyDown={(event) => onKeyDown(event, tab.id)}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('application/x-strand-work-tab', tab.id);
+                event.dataTransfer.setData('text/plain', tab.kind === 'file' ? tab.path : tab.label);
+                onDragStart(tab.id, paneId);
+              }}
+              onDragEnd={onDragEnd}
             >
               {tab.kind === 'file' ? (
                 tab.isDirectory ? <Icon name="folder" size={14} /> : <TreeFileIcon path={tab.path} />

@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   adjacentWorkTabId,
   activateWorkPane,
+  closeEmptyWorkPane,
   closeWorkTab,
   EMPTY_REPO_WORK,
   openWorkFile,
+  moveWorkTab,
   splitWorkPane,
+  splitWorkTab,
   reconcileWorkMutation,
   restoreTerminalDescriptors,
   type RepoWorkTabs,
@@ -90,6 +93,76 @@ describe('Work tabs', () => {
     expect(state.layout).toMatchObject({ kind: 'pane', tabIds: ['left'] });
     expect(state.activePaneId).toBe('work-pane-root');
     expect(activateWorkPane(state, 'missing')).toBe(state);
+  });
+
+  it('reorders a tab within its pane using an insertion target', () => {
+    let state = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'a');
+    state = openWorkFile(state, file('b.ts'), 'pinned', () => 'b');
+    state = openWorkFile(state, file('c.ts'), 'pinned', () => 'c');
+    const moved = moveWorkTab(state, 'c', state.activePaneId, 'a');
+    expect(moved.layout).toMatchObject({ kind: 'pane', tabIds: ['c', 'a', 'b'], activeTabId: 'c' });
+  });
+
+  it('moves a tab into another pane and collapses its empty source', () => {
+    let state = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'a');
+    state = splitWorkPane(state, state.activePaneId, 'horizontal', 'right', null);
+    state = openWorkFile(state, file('b.ts'), 'pinned', () => 'b');
+    const moved = moveWorkTab(state, 'a', 'right', 'b');
+    expect(moved.layout).toMatchObject({
+      kind: 'pane',
+      id: 'right',
+      tabIds: ['a', 'b'],
+      activeTabId: 'a',
+    });
+    expect(moved.tabs.map((tab) => tab.id)).toEqual(['a', 'b']);
+  });
+
+  it('moves a live terminal without replacing its renderer descriptor', () => {
+    const restored = restoreTerminalDescriptors([{ id: 'term', label: 'Terminal 1' }]);
+    const terminal = {
+      ...restored.tabs[0],
+      repoPath: 'repo-a',
+      runtimeId: 'runtime-1',
+      lifecycle: 'running' as const,
+    };
+    let state: RepoWorkTabs = { ...restored, tabs: [terminal] };
+    state = splitWorkPane(state, state.activePaneId, 'horizontal', 'right', null);
+    const moved = moveWorkTab(state, 'term', 'right');
+    expect(moved.tabs[0]).toBe(terminal);
+    expect(moved.tabs[0]).toMatchObject({ runtimeId: 'runtime-1', lifecycle: 'running' });
+  });
+
+  it('creates a directional split by moving the dragged tab', () => {
+    let state = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'a');
+    state = openWorkFile(state, file('b.ts'), 'pinned', () => 'b');
+    const split = splitWorkTab(state, 'b', state.activePaneId, 'left', 'new-pane');
+    expect(split.layout).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+      children: [
+        { kind: 'pane', id: 'new-pane', tabIds: ['b'] },
+        { kind: 'pane', id: 'work-pane-root', tabIds: ['a'] },
+      ],
+    });
+    expect(split.tabs.map((tab) => tab.id)).toEqual(['a', 'b']);
+  });
+
+  it('keeps an empty source group when its only tab is split, then closes it explicitly', () => {
+    const state = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'a');
+    const split = splitWorkTab(state, 'a', state.activePaneId, 'bottom', 'new-pane');
+    expect(split.layout).toMatchObject({
+      kind: 'split',
+      direction: 'vertical',
+      children: [
+        { kind: 'pane', id: 'work-pane-root', tabIds: [] },
+        { kind: 'pane', id: 'new-pane', tabIds: ['a'] },
+      ],
+    });
+    expect(closeEmptyWorkPane(split, 'work-pane-root').layout).toMatchObject({
+      kind: 'pane',
+      id: 'new-pane',
+      tabIds: ['a'],
+    });
   });
 
   it('cycles peer tabs in either direction with wraparound', () => {

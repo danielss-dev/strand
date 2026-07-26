@@ -2350,7 +2350,10 @@ file opens a second pinned view; splitting a terminal starts a sibling shell.
 Terminal renderers remain process-wide and position against measured pane
 hosts, preserving live PTYs, scrollback, and selection through nesting and
 resize. Both split directions are keyboard-reachable through Quick Launch, and
-F6 returns focus to the active pane's tab strip.
+F6 returns focus to the active pane's tab strip. Tabs can now also be dragged
+to reorder, move between existing groups, or create a left/right/top/bottom
+split from an edge preview. Quick Launch exposes equivalent move-to-group and
+move-to-new-pane actions.
 
 ---
 

@@ -26,7 +26,8 @@ the browser-standard shortcut makes tab management feel unpredictable.
 but must not change the React parent that owns its xterm renderer. Keep every
 `TerminalPane` under the single process-wide runtime layer and position visible
 renderers against measured pane-content rectangles. Pane tab membership is
-state; renderer ownership is not.
+state; renderer ownership is not. Dragging a terminal between panes must update
+only that membership and active-pane state.
 
 **Why.** Moving a terminal component between recursive `PanelGroup` branches
 remounts its DOM, erasing xterm scrollback and selection even though the native

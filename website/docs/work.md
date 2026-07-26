@@ -19,6 +19,10 @@ Open the sidebar's **Files** lens and select a file or folder:
   width instead of compressing; scroll the strip with the mouse wheel, or use
   its overflow selector to jump directly to any tab in that pane. File tabs use
   the same file-type icons as the Files tree.
+- Drag a tab within its strip to reorder it. Drop it on another pane's strip or
+  center to move it there, or hover the left, right, top, or bottom edge and
+  release over the highlighted half-pane preview to create a split. Dragging
+  an italic preview makes it pinned.
 - Use `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` to cycle the active pane's tabs
   quickly, including while a terminal is focused. On a tab strip, Left/Right
   and Home/End move, Delete or Backspace closes the focused tab, and
@@ -47,6 +51,13 @@ Use the two pane buttons at the right of any Work tab strip to **Split pane
 right** or **Split pane down**. You can nest the two directions to build the
 same editor-group layouts used by VS Code, and drag every divider to resize it.
 The same actions are available in Quick Launch.
+
+You can also build and reorganize the layout directly from the tab strip:
+dragging to another pane transfers the existing file or terminal, while
+dropping on an edge creates a new pane in that direction. Moving a live
+terminal preserves its process, transcript, scrollback, and selection. Quick
+Launch provides keyboard equivalents for moving the active tab to the previous
+or next pane and to a new pane on any of the four sides.
 
 Splitting a file pins a second view of that file in the new pane. Splitting a
 terminal starts a sibling terminal with the same shell choice. Each pane owns
