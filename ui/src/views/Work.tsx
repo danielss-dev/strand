@@ -389,25 +389,23 @@ interface WorkPaneProps {
 
 function WorkLayout({
   node,
-  layoutPath = 'root',
   ...props
 }: WorkPaneProps & {
   node: WorkPaneLayout;
-  layoutPath?: string;
 }) {
   if (node.kind === 'pane') return <WorkPaneView pane={node} {...props} />;
   return (
     <PanelGroup
       direction={node.direction}
-      autoSaveId={`strand:work:${layoutPath}:${node.direction}`}
+      autoSaveId={`strand:work:${node.id}`}
       className="work-layout"
     >
       <Panel minSize={20}>
-        <WorkLayout node={node.children[0]} layoutPath={`${layoutPath}.0`} {...props} />
+        <WorkLayout node={node.children[0]} {...props} />
       </Panel>
       <PanelResizeHandle className={`rs-handle ${node.direction === 'horizontal' ? 'vert' : 'horiz'}`} />
       <Panel minSize={20}>
-        <WorkLayout node={node.children[1]} layoutPath={`${layoutPath}.1`} {...props} />
+        <WorkLayout node={node.children[1]} {...props} />
       </Panel>
     </PanelGroup>
   );

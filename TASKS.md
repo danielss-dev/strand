@@ -1126,7 +1126,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   drag tabs to reorder/move or create left/right/top/bottom splits, focus the
   active pane with F6, and collapse a pane when its final tab closes
   (`WorkPaneLayout`, `moveWorkTab`/`splitWorkTab`, `Work.beginTabDrag` pointer
-  state machine, `WorkLayout`, Quick Launch move actions).
+  state machine, split-scoped `PanelGroup` persistence, `WorkLayout`, Quick
+  Launch move actions).
   Terminal renderers remain under one stable runtime layer, so pane nesting and
   resizing preserve live PTYs, scrollback, and selection.
 - ☑ Embeddable file documents retain working-tree editing plus Content/Preview/

@@ -65,6 +65,7 @@ describe('Work tabs', () => {
     );
     expect(split.layout).toMatchObject({
       kind: 'split',
+      id: 'work-split-pane-b',
       direction: 'horizontal',
       children: [
         { kind: 'pane', tabIds: ['file-a'] },
@@ -138,6 +139,7 @@ describe('Work tabs', () => {
     const split = splitWorkTab(state, 'b', state.activePaneId, 'left', 'new-pane');
     expect(split.layout).toMatchObject({
       kind: 'split',
+      id: 'work-split-new-pane',
       direction: 'horizontal',
       children: [
         { kind: 'pane', id: 'new-pane', tabIds: ['b'] },

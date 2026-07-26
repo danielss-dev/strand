@@ -61,7 +61,8 @@ from their close control, with Delete/Backspace while focused, or by middle-clic
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane
   edge to create a left/right/top/bottom split; each pane keeps its own tabs
-  and replaceable preview while nested pane sizes are remembered. Files retain
+  and replaceable preview. New splits match the 50/50 hover preview, while
+  later resizing is remembered for that split. Files retain
   Content, rendered Preview, History, Compare, Blame, image, and directory
   modes. Multiple terminals run at the repository
   root and keep output, scrollback, and selection across view, repository, and

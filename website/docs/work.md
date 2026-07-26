@@ -22,7 +22,8 @@ Open the sidebar's **Files** lens and select a file or folder:
 - Drag a tab within its strip to reorder it. Drop it on another pane's strip or
   center to move it there, or hover the left, right, top, or bottom edge and
   release over the highlighted half-pane preview to create a split. Dragging
-  an italic preview makes it pinned.
+  an italic preview makes it pinned. A new split starts at the previewed 50/50
+  boundary; later resizing is remembered for that split.
 - Use `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` to cycle the active pane's tabs
   quickly, including while a terminal is focused. On a tab strip, Left/Right
   and Home/End move, Delete or Backspace closes the focused tab, and

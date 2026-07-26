@@ -41,6 +41,7 @@ export type WorkPane = {
 
 export type WorkPaneSplit = {
   kind: 'split';
+  id: string;
   direction: 'horizontal' | 'vertical';
   children: [WorkPaneLayout, WorkPaneLayout];
 };
@@ -209,6 +210,7 @@ export function splitWorkPane(
   };
   const split: WorkPaneSplit = {
     kind: 'split',
+    id: `work-split-${newPaneId}`,
     direction,
     children: [pane, nextPane],
   };
@@ -302,6 +304,7 @@ export function splitWorkTab(
   const nextFirst = edge === 'left' || edge === 'top';
   const split: WorkPaneSplit = {
     kind: 'split',
+    id: `work-split-${newPaneId}`,
     direction: edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical',
     children: nextFirst ? [nextPane, nextTarget] : [nextTarget, nextPane],
   };

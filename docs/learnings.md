@@ -39,6 +39,20 @@ shadow root.
 
 ---
 
+## Resizable Work groups persist by split identity
+
+**Rule.** Key each Work `PanelGroup` by the stable ID of its split node, not
+by layout path or direction. A newly created split must start 50/50 so its
+placed divider matches the drag preview; only that same split instance may
+restore a user-resized ratio.
+
+**Why.** Tree paths such as `root.0` are reused as panes are closed and split
+again, and direction-only keys also collide across repositories. Reusing those
+keys lets a fresh split inherit unrelated saved dimensions, making its divider
+jump away from the half-pane preview when the tab is dropped.
+
+---
+
 ## Live terminal renderers stay outside the Work pane tree
 
 **Rule.** Work pane nesting and resize may change where a terminal is shown,

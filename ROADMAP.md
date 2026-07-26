@@ -2353,7 +2353,8 @@ resize. Both split directions are keyboard-reachable through Quick Launch, and
 F6 returns focus to the active pane's tab strip. Tabs can now also be dragged
 to reorder, move between existing groups, or create a left/right/top/bottom
 split from an edge preview. Quick Launch exposes equivalent move-to-group and
-move-to-new-pane actions.
+move-to-new-pane actions. Fresh splits now persist by stable split identity, so
+their initial 50/50 divider matches the half-pane drag preview.
 
 ---
 
