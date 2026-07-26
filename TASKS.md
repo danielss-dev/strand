@@ -2030,7 +2030,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   2026-06-12. Download buttons resolve release assets and `latest.json` is
   served from GitHub Releases. Social previews use the checked-in 1200×630
   `og-image.svg` source and rendered `og-image.png`, with Open Graph + Twitter
-  metadata added 2026-07-18.)
+  metadata added 2026-07-18. The 2026-07-26 polish pass replaced the generic
+  download buttons with responsive Apple/Windows/Linux release cards and
+  platform-aware highlighting while retaining the releases-page fallback.)
 - ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
   fact-checked markdown pages + `manifest.json`, rendered client-side by
   `docs/index.html`/`docs.js` with vendored `marked.min.js`; no build step —

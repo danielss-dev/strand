@@ -15,7 +15,10 @@ Preview locally with `pnpm site` from the repo root (serves on
 - `index.html` / `style.css` / `script.js` — the whole site. Design tokens are
   lifted from the app (`ui/src/styles/tokens.css`): same warm-charcoal OKLCH
   palette, same single-hue accent system (the hero dots rotate `--accent-h`
-  exactly like the app's `[data-accent]`).
+  exactly like the app's `[data-accent]`). The download section uses
+  self-contained Apple, Windows, and Linux vector marks, highlights the
+  visitor's detected platform as a convenience, and keeps all three platform
+  choices visible.
 - `fonts/` — Geist + JetBrains Mono woff2, copied from `ui/public/fonts`
   (self-hosted, latin subsets only).
 - The hero window is a replica of the actual app shell (topbar / sidebar /

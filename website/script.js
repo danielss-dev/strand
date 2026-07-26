@@ -35,6 +35,18 @@
    * releases page. */
   const dlBtns = $$('[data-artifact]');
   if (dlBtns.length) {
+    const platformHint = `${navigator.userAgentData?.platform || ''} ${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
+    const platform = platformHint.includes('mac')
+      ? 'macos'
+      : platformHint.includes('win')
+        ? 'windows'
+        : platformHint.includes('linux')
+          ? 'linux'
+          : null;
+    if (platform) {
+      $(`[data-platform="${platform}"]`)?.classList.add('is-preferred');
+    }
+
     fetch('https://api.github.com/repos/danielss-dev/strand/releases/latest')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((rel) => {

@@ -2361,6 +2361,13 @@ are synchronized at 1.2.0 for the annotated `v1.2.0` tag. Tag-triggered CI
 will build the candidate and open a draft GitHub Release; publication remains
 subject to the existing signing and platform-validation gates.
 
+**Landing download polish shipped (2026-07-26):** The public site now presents
+macOS, Windows, and Linux as a responsive three-platform release picker with
+self-contained vector brand marks, artifact context, keyboard-visible focus,
+and a lightweight “your platform” highlight. All choices remain visible, the
+existing GitHub API resolver still links directly to the latest matching
+artifact, and the releases page remains the no-JavaScript/network fallback.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
