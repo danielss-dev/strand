@@ -42,8 +42,8 @@ shortcuts").
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
 `Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
-diff · Work tabs `Ctrl/⌘+PageUp`/`PageDown` or `←→`/`Home`/`End`/`Delete`,
-with `F6` to leave a terminal ·
+diff · tabs in the active Work pane `Ctrl/⌘+PageUp`/`PageDown` or
+`←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal ·
 palette `↑↓`/`↵`/`⇥`/`Esc`.
 
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
@@ -58,11 +58,13 @@ from their close control, with Delete/Backspace while focused, or by middle-clic
 ## Features
 
 - **Work view (⌘1)** — Strand's default startup workspace combines editable
-  working-tree file documents and embedded shells in one tab strip. Files get VS Code-style
-  preview/pin behavior and retain Content, rendered Preview, History, Compare,
-  Blame, image, and directory modes. Multiple terminals run at the repository
+  working-tree file documents and embedded shells in VS Code-style resizable
+  panes. Split the active view right or down; each pane keeps its own tabs and
+  replaceable preview while nested pane sizes are remembered. Files retain
+  Content, rendered Preview, History, Compare, Blame, image, and directory
+  modes. Multiple terminals run at the repository
   root and keep output, scrollback, and selection across view, repository, and
-  workspace switches, and full-screen terminal apps receive the fitted PTY
+  workspace switches, pane splits, and resizes, and full-screen terminal apps receive the fitted PTY
   grid. Claude Code starts with its complete dashboard and alternate-screen
   renderer in a configurable terminal font and size. Work tabs keep their width in a wheel-scrollable strip with an overflow
   selector and tree-matched file icons, and middle-click closes a tab. Only descriptors restore after

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   adjacentWorkTabId,
+  activateWorkPane,
   closeWorkTab,
   EMPTY_REPO_WORK,
   openWorkFile,
+  splitWorkPane,
   reconcileWorkMutation,
   restoreTerminalDescriptors,
   type RepoWorkTabs,
@@ -37,6 +39,8 @@ describe('Work tabs', () => {
     const state: RepoWorkTabs = {
       restored: true,
       activeTabId: 'b',
+      activePaneId: 'root',
+      layout: { kind: 'pane', id: 'root', tabIds: ['a', 'b', 'c'], activeTabId: 'b' },
       tabs: [
         { kind: 'terminal', id: 'a', repoPath: 'r', label: 'A', shell: null, runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null },
         { kind: 'terminal', id: 'b', repoPath: 'r', label: 'B', shell: null, runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null },
@@ -44,6 +48,48 @@ describe('Work tabs', () => {
       ],
     };
     expect(closeWorkTab(state, 'b').activeTabId).toBe('c');
+  });
+
+  it('splits the active view into a nested editor group', () => {
+    const source = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'file-a');
+    const duplicate = { ...source.tabs[0], id: 'file-b' };
+    const split = splitWorkPane(
+      source,
+      source.activePaneId,
+      'horizontal',
+      'pane-b',
+      duplicate,
+    );
+    expect(split.layout).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+      children: [
+        { kind: 'pane', tabIds: ['file-a'] },
+        { kind: 'pane', id: 'pane-b', tabIds: ['file-b'] },
+      ],
+    });
+    expect(split.activePaneId).toBe('pane-b');
+    expect(split.activeTabId).toBe('file-b');
+  });
+
+  it('deduplicates pinned files within a pane but allows the same file in another pane', () => {
+    let state = openWorkFile(EMPTY_REPO_WORK, file('a.ts'), 'pinned', () => 'left');
+    state = splitWorkPane(state, state.activePaneId, 'horizontal', 'right-pane', null);
+    state = openWorkFile(state, file('a.ts'), 'pinned', () => 'right');
+    state = openWorkFile(state, file('a.ts'), 'pinned', () => 'unused');
+    expect(state.tabs.map((tab) => tab.id)).toEqual(['left', 'right']);
+  });
+
+  it('keeps one replaceable preview per pane and collapses an empty split', () => {
+    let state = openWorkFile(EMPTY_REPO_WORK, file('left.ts'), 'preview', () => 'left');
+    state = splitWorkPane(state, state.activePaneId, 'horizontal', 'right-pane', null);
+    state = openWorkFile(state, file('right-a.ts'), 'preview', () => 'right');
+    state = openWorkFile(state, file('right-b.ts'), 'preview', () => 'unused');
+    expect(state.tabs.map((tab) => tab.kind === 'file' && tab.path)).toEqual(['left.ts', 'right-b.ts']);
+    state = closeWorkTab(state, 'right');
+    expect(state.layout).toMatchObject({ kind: 'pane', tabIds: ['left'] });
+    expect(state.activePaneId).toBe('work-pane-root');
+    expect(activateWorkPane(state, 'missing')).toBe(state);
   });
 
   it('cycles peer tabs in either direction with wraparound', () => {

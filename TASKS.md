@@ -1121,6 +1121,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   reconciliation, and stable Work return IDs (`stores/work.ts`,
   `lib/workTabs.ts`). Tabs close by button, keyboard, or middle-click in
   `views/Work.tsx`; file tabs remain session-only.
+- ☑ Nested VS Code-style Work panes: split the active file or terminal right
+  or down, resize every boundary, keep one preview and tab strip per pane,
+  focus the active pane with F6, and collapse a pane when its final tab closes
+  (`WorkPaneLayout`, `splitWorkPane`, `WorkLayout`, Quick Launch actions).
+  Terminal renderers remain under one stable runtime layer, so pane nesting and
+  resizing preserve live PTYs, scrollback, and selection.
 - ☑ Embeddable file documents retain working-tree editing plus Content/Preview/
   History/Compare/Blame/image/directory behavior while mounting only the active
   file (`FileDocument`, `Work`); revisions remain read-only. Pierre activation

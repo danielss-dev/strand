@@ -2342,6 +2342,16 @@ and social preview. The supplied `strand.png`, clipped to a rounded white app
 tile, regenerates the complete desktop, Microsoft Store, Android, and iOS icon
 family without a separate reinterpretation.
 
+**Resizable Work panes shipped (2026-07-26):** Work now supports nested
+right/down editor groups inside one repository tab. Each pane owns its active
+tab and replaceable preview, every boundary uses persisted resizable-panel
+proportions, and empty groups collapse when their final tab closes. Splitting a
+file opens a second pinned view; splitting a terminal starts a sibling shell.
+Terminal renderers remain process-wide and position against measured pane
+hosts, preserving live PTYs, scrollback, and selection through nesting and
+resize. Both split directions are keyboard-reachable through Quick Launch, and
+F6 returns focus to the active pane's tab strip.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

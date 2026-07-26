@@ -5,11 +5,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import '@xterm/xterm/css/xterm.css';
 
 import { Icon } from '../components/Icon';
@@ -20,7 +22,18 @@ import { t } from '../lib/i18n';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { EmbeddedShellChoice, TerminalEvent } from '../lib/types';
-import { adjacentWorkTabId, type WorkFileTab, type WorkTab, type WorkTerminalTab } from '../lib/workTabs';
+import {
+  adjacentWorkTabId,
+  findWorkPane,
+  workPanes,
+  type WorkFileTab,
+  type WorkFileMode,
+  type WorkPane,
+  type WorkPaneLayout,
+  type RepoWorkTabs,
+  type WorkTab,
+  type WorkTerminalTab,
+} from '../lib/workTabs';
 import { useOutsideClose } from '../lib/useOutsideClose';
 import { useRepo } from '../stores/repo';
 import { TERMINAL_FONTS, useSettings, type TerminalFont } from '../stores/settings';
@@ -33,21 +46,62 @@ export function Work({ visible }: { visible: boolean }) {
   const openRepos = useRepo((state) => state.tabs);
   const repos = useWork((state) => state.repos);
   const activate = useWork((state) => state.activate);
+  const activatePane = useWork((state) => state.activatePane);
   const close = useWork((state) => state.close);
   const addTerminal = useWork((state) => state.addTerminal);
   const openFile = useWork((state) => state.openFile);
   const setFileMode = useWork((state) => state.setFileMode);
+  const splitPane = useWork((state) => state.splitPane);
   const restore = useWork((state) => state.restore);
   const setView = useRepo((state) => state.setView);
   const selectCommit = useRepo((state) => state.selectCommit);
   const repo = repoPath ? repos[repoPath] : undefined;
-  const active = repo?.tabs.find((tab) => tab.id === repo.activeTabId) ?? null;
   const platform = useSettings((state) => state.platform);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const paneHosts = useRef(new Map<string, HTMLDivElement>());
+  const [paneHostVersion, setPaneHostVersion] = useState(0);
+  const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
+  const [focusTabsTick, setFocusTabsTick] = useState(0);
   const terminals = useMemo(
     () => Object.values(repos).flatMap((state) =>
       state.tabs.filter((tab): tab is WorkTerminalTab => tab.kind === 'terminal')),
     [repos],
   );
+  const activePane = repo ? findWorkPane(repo.layout, repo.activePaneId) : null;
+  const activePaneTabs = useMemo(
+    () => activePane?.tabIds.flatMap((id) => repo?.tabs.find((tab) => tab.id === id) ?? []) ?? [],
+    [activePane, repo?.tabs],
+  );
+
+  const registerPaneHost = useCallback((paneId: string, node: HTMLDivElement | null) => {
+    if (node) paneHosts.current.set(paneId, node);
+    else paneHosts.current.delete(paneId);
+    setPaneHostVersion((value) => value + 1);
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const measure = () => {
+      const rootRect = root.getBoundingClientRect();
+      const next: Record<string, PaneRect> = {};
+      for (const [id, node] of paneHosts.current) {
+        const rect = node.getBoundingClientRect();
+        next[id] = {
+          left: rect.left - rootRect.left,
+          top: rect.top - rootRect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+      }
+      setPaneRects(next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    for (const node of paneHosts.current.values()) observer.observe(node);
+    return () => observer.disconnect();
+  }, [paneHostVersion, repo?.layout, visible]);
 
   useEffect(() => {
     for (const tab of openRepos) void restore(tab.path);
@@ -57,13 +111,13 @@ export function Work({ visible }: { visible: boolean }) {
   // with repository switching on Mod+Tab. Capture first so a focused xterm
   // never forwards the shortcut to the shell before Work handles it.
   useEffect(() => {
-    if (!visible || !repoPath || !repo || repo.tabs.length === 0) return;
+    if (!visible || !repoPath || !repo || activePaneTabs.length === 0) return;
     const cycle = (event: globalThis.KeyboardEvent) => {
       const primary = platform === 'mac' ? event.metaKey : event.ctrlKey;
       if (!primary || event.altKey || event.shiftKey) return;
       const delta = event.key === 'PageUp' ? -1 : event.key === 'PageDown' ? 1 : 0;
       if (!delta) return;
-      const id = adjacentWorkTabId(repo.tabs, repo.activeTabId, delta);
+      const id = adjacentWorkTabId(activePaneTabs, activePane?.activeTabId ?? null, delta);
       if (!id) return;
       event.preventDefault();
       event.stopPropagation();
@@ -71,7 +125,18 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', cycle, true);
     return () => window.removeEventListener('keydown', cycle, true);
-  }, [activate, platform, repo, repoPath, visible]);
+  }, [activate, activePane?.activeTabId, activePaneTabs, platform, repo, repoPath, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const focusTabs = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'F6' || activePaneTabs.length === 0) return;
+      event.preventDefault();
+      setFocusTabsTick((value) => value + 1);
+    };
+    window.addEventListener('keydown', focusTabs);
+    return () => window.removeEventListener('keydown', focusTabs);
+  }, [activePaneTabs.length, visible]);
 
   const jump = useCallback((tab: WorkFileTab, hash: string) => {
     useWork.getState().activate(tab.repoPath, tab.id);
@@ -81,19 +146,169 @@ export function Work({ visible }: { visible: boolean }) {
   }, [selectCommit, setView]);
 
   return (
-    <div className={'work-root' + (visible ? '' : ' work-hidden')} aria-hidden={!visible}>
+    <div
+      ref={rootRef}
+      className={'work-root' + (visible ? '' : ' work-hidden')}
+      aria-hidden={!visible}
+    >
+      <TreeIconSprite />
       {repoPath && repo && (
-        <WorkTabs
-          tabs={repo.tabs}
-          activeId={repo.activeTabId}
+        <WorkLayout
+          node={repo.layout}
+          repo={repo}
+          repoPath={repoPath}
+          repoName={repoFamilyName(meta)}
+          visible={visible}
+          activePaneId={repo.activePaneId}
+          focusTabsTick={focusTabsTick}
           onActivate={(id) => activate(repoPath, id)}
+          onActivatePane={(paneId) => activatePane(repoPath, paneId)}
           onClose={(id) => void close(repoPath, id)}
-          onNewTerminal={(shell, label) => addTerminal(repoPath, shell, label)}
+          onNewTerminal={(paneId, shell, label) => addTerminal(repoPath, shell, label, paneId)}
+          onOpenFile={(paneId, path, revision, isDirectory, mode) =>
+            openFile(repoPath, path, revision, isDirectory, 'pinned', mode, paneId)}
+          onSetFileMode={(id, mode) => setFileMode(repoPath, id, mode)}
+          onSplit={(paneId, direction) => splitPane(repoPath, paneId, direction)}
+          onJump={jump}
+          registerPaneHost={registerPaneHost}
         />
       )}
 
-      <div className="work-content">
-        {visible && repoPath && active?.kind === 'file' && (
+      {/* Terminal renderers stay under one stable parent while their measured
+          pane rectangle changes. Splitting and resizing therefore preserve
+          xterm scrollback, selection, and the live PTY process. */}
+      <div className="terminal-runtime-layer">
+        {terminals.map((tab) => {
+          const terminalRepo = repos[tab.repoPath];
+          const pane = terminalRepo
+            ? workPanes(terminalRepo.layout).find((candidate) => candidate.tabIds.includes(tab.id))
+            : null;
+          const isVisible = Boolean(
+            visible
+            && repoPath === tab.repoPath
+            && pane?.activeTabId === tab.id
+            && paneRects[pane.id],
+          );
+          return (
+            <TerminalPane
+              key={tab.id}
+              tab={tab}
+              visible={isVisible}
+              rect={pane ? paneRects[pane.id] : undefined}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface PaneRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface WorkPaneProps {
+  repo: RepoWorkTabs;
+  repoPath: string;
+  repoName: string;
+  visible: boolean;
+  activePaneId: string;
+  focusTabsTick: number;
+  onActivate(id: string): void;
+  onActivatePane(paneId: string): void;
+  onClose(id: string): void;
+  onNewTerminal(paneId: string, shell?: EmbeddedShellChoice | null, label?: string): void;
+  onOpenFile(
+    paneId: string,
+    path: string,
+    revision: string | null,
+    isDirectory: boolean,
+    mode?: WorkFileMode,
+  ): void;
+  onSetFileMode(id: string, mode: WorkFileMode): void;
+  onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
+  onJump(tab: WorkFileTab, hash: string): void;
+  registerPaneHost(paneId: string, node: HTMLDivElement | null): void;
+}
+
+function WorkLayout({
+  node,
+  layoutPath = 'root',
+  ...props
+}: WorkPaneProps & {
+  node: WorkPaneLayout;
+  layoutPath?: string;
+}) {
+  if (node.kind === 'pane') return <WorkPaneView pane={node} {...props} />;
+  return (
+    <PanelGroup
+      direction={node.direction}
+      autoSaveId={`strand:work:${layoutPath}:${node.direction}`}
+      className="work-layout"
+    >
+      <Panel minSize={20}>
+        <WorkLayout node={node.children[0]} layoutPath={`${layoutPath}.0`} {...props} />
+      </Panel>
+      <PanelResizeHandle className={`rs-handle ${node.direction === 'horizontal' ? 'vert' : 'horiz'}`} />
+      <Panel minSize={20}>
+        <WorkLayout node={node.children[1]} layoutPath={`${layoutPath}.1`} {...props} />
+      </Panel>
+    </PanelGroup>
+  );
+}
+
+function WorkPaneView({
+  pane,
+  repo,
+  repoPath,
+  repoName,
+  visible,
+  activePaneId,
+  focusTabsTick,
+  onActivate,
+  onActivatePane,
+  onClose,
+  onNewTerminal,
+  onOpenFile,
+  onSetFileMode,
+  onSplit,
+  onJump,
+  registerPaneHost,
+}: WorkPaneProps & {
+  pane: WorkPane;
+}) {
+  const tabs = pane.tabIds.flatMap((id) => repo.tabs.find((tab) => tab.id === id) ?? []);
+  const active = tabs.find((tab) => tab.id === pane.activeTabId) ?? null;
+  const isActive = pane.id === activePaneId;
+  const hostRef = useCallback(
+    (node: HTMLDivElement | null) => registerPaneHost(pane.id, node),
+    [pane.id, registerPaneHost],
+  );
+
+  return (
+    <section
+      className={'work-pane' + (isActive ? ' active' : '')}
+      aria-label={t('work.paneLabel')}
+      onPointerDownCapture={() => onActivatePane(pane.id)}
+      onFocusCapture={() => onActivatePane(pane.id)}
+    >
+      <WorkTabs
+        tabs={tabs}
+        activeId={pane.activeTabId}
+        focusRequested={isActive ? focusTabsTick : 0}
+        onActivate={onActivate}
+        onClose={onClose}
+        onNewTerminal={(shell, label) => onNewTerminal(pane.id, shell, label)}
+        onSplit={(direction) => onSplit(pane.id, direction)}
+      />
+      <div
+        ref={hostRef}
+        className="work-content"
+      >
+        {visible && active?.kind === 'file' && (
           active.missing ? (
             <div className="work-empty" role="status">
               <Icon name="file" size={24} />
@@ -108,56 +323,47 @@ export function Work({ visible }: { visible: boolean }) {
               revision={active.revision}
               isDirectory={active.isDirectory}
               mode={active.mode}
-              repoName={repoFamilyName(meta)}
-              onModeChange={(mode) => setFileMode(repoPath, active.id, mode)}
-              onJump={(hash) => jump(active, hash)}
+              repoName={repoName}
+              onModeChange={(mode) => onSetFileMode(active.id, mode)}
+              onJump={(hash) => onJump(active, hash)}
               onOpenPath={(path, isDirectory, mode) =>
-                openFile(repoPath, path, active.revision, isDirectory, 'pinned', mode)}
+                onOpenFile(pane.id, path, active.revision, isDirectory, mode)}
               embedded
             />
           )
         )}
-        {visible && repoPath && !active && (
+        {visible && !active && (
           <div className="work-empty">
             <Icon name="terminal" size={24} />
-            <strong>{t('work.emptyTitle')}</strong>
+            <strong>{t('work.emptyPaneTitle')}</strong>
             <span>{t('work.emptyBody')}</span>
-            <button type="button" className="btn primary" onClick={() => addTerminal(repoPath)}>
+            <button type="button" className="btn primary" onClick={() => onNewTerminal(pane.id)}>
               <Icon name="terminal" size={13} />
               {t('work.newTerminal')}
             </button>
           </div>
         )}
-
-        {/* These renderers stay mounted even while Work or their repository is
-            hidden. That preserves xterm scrollback, selection, and process
-            state without keeping inactive file documents alive. */}
-        <div className="terminal-runtime-layer">
-          {terminals.map((tab) => (
-            <TerminalPane
-              key={tab.id}
-              tab={tab}
-              visible={Boolean(visible && repoPath === tab.repoPath && active?.id === tab.id)}
-            />
-          ))}
-        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
 function WorkTabs({
   tabs,
   activeId,
+  focusRequested,
   onActivate,
   onClose,
   onNewTerminal,
+  onSplit,
 }: {
   tabs: WorkTab[];
   activeId: string | null;
+  focusRequested: number;
   onActivate(id: string): void;
   onClose(id: string): void;
   onNewTerminal(shell?: EmbeddedShellChoice | null, label?: string): void;
+  onSplit(direction: 'horizontal' | 'vertical'): void;
 }) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -184,14 +390,9 @@ function WorkTabs({
   };
 
   useEffect(() => {
-    const focusTabs = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'F6' || tabs.length === 0) return;
-      event.preventDefault();
-      buttons.current.get(activeId ?? tabs[0].id)?.focus();
-    };
-    window.addEventListener('keydown', focusTabs);
-    return () => window.removeEventListener('keydown', focusTabs);
-  }, [activeId, tabs]);
+    if (!focusRequested || tabs.length === 0) return;
+    buttons.current.get(activeId ?? tabs[0].id)?.focus();
+  }, [activeId, focusRequested, tabs]);
 
   useLayoutEffect(() => {
     const lane = scrollRef.current;
@@ -216,7 +417,6 @@ function WorkTabs({
 
   return (
     <div className="work-tabbar">
-      <TreeIconSprite />
       <div
         className="work-tabs"
         ref={scrollRef}
@@ -272,6 +472,28 @@ function WorkTabs({
       {overflowing && (
         <WorkTabSelector tabs={tabs} activeId={activeId} onPick={onActivate} />
       )}
+      <div className="work-pane-actions">
+        <button
+          type="button"
+          className="work-pane-action"
+          title={t('work.splitRight')}
+          aria-label={t('work.splitRight')}
+          disabled={!activeId}
+          onClick={() => onSplit('horizontal')}
+        >
+          <Icon name="split" size={13} />
+        </button>
+        <button
+          type="button"
+          className="work-pane-action"
+          title={t('work.splitDown')}
+          aria-label={t('work.splitDown')}
+          disabled={!activeId}
+          onClick={() => onSplit('vertical')}
+        >
+          <Icon name="unified" size={13} />
+        </button>
+      </div>
       <NewTerminalButton onNewTerminal={onNewTerminal} />
     </div>
   );
@@ -465,7 +687,15 @@ function WorkTabSelector({
   );
 }
 
-function TerminalPane({ tab, visible }: { tab: WorkTerminalTab; visible: boolean }) {
+function TerminalPane({
+  tab,
+  visible,
+  rect,
+}: {
+  tab: WorkTerminalTab;
+  visible: boolean;
+  rect?: PaneRect;
+}) {
   const resolvedTheme = useSettings((state) => state.resolvedTheme);
   const terminalFont = useSettings((state) => state.terminalFont);
   const terminalFontSize = useSettings((state) => state.terminalFontSize);
@@ -635,7 +865,10 @@ function TerminalPane({ tab, visible }: { tab: WorkTerminalTab; visible: boolean
   };
 
   return (
-    <div className={'work-terminal-pane' + (visible ? ' visible' : '')}>
+    <div
+      className={'work-terminal-pane' + (visible ? ' visible' : '')}
+      style={rect as CSSProperties | undefined}
+    >
       <div ref={container} className="work-terminal-host" />
       {visible && (tab.lifecycle === 'exited' || tab.lifecycle === 'error') && (
         <div className="work-terminal-exit" role="status">

@@ -1341,6 +1341,18 @@ export function App() {
       base.push(
         { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: () => { setView('work'); selectFile(null); } },
         { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); setView('work'); selectFile(null); } },
+        { id: 'work-split-right', label: t('work.splitRight'), group: 'Actions', keywords: 'work pane editor group side by side', run: () => {
+          const work = useWork.getState();
+          const repoWork = work.repos[meta.path];
+          if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'horizontal');
+          setView('work'); selectFile(null);
+        } },
+        { id: 'work-split-down', label: t('work.splitDown'), group: 'Actions', keywords: 'work pane editor group stacked below', run: () => {
+          const work = useWork.getState();
+          const repoWork = work.repos[meta.path];
+          if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'vertical');
+          setView('work'); selectFile(null);
+        } },
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },

@@ -3,11 +3,17 @@ import { create } from 'zustand';
 import { settings } from '../lib/db';
 import { t } from '../lib/i18n';
 import {
+  activateWorkPane,
+  activateWorkTab,
+  activeWorkPane,
+  appendWorkTab,
   closeWorkTab,
   EMPTY_REPO_WORK,
+  findWorkPane,
   openWorkFile,
   reconcileWorkMutation,
   restoreTerminalDescriptors,
+  splitWorkPane,
   terminalDescriptors,
   type RepoWorkTabs,
   type TerminalLifecycle,
@@ -35,10 +41,13 @@ interface WorkState {
     isDirectory: boolean,
     disposition?: 'preview' | 'pinned',
     mode?: WorkFileMode,
+    paneId?: string,
   ): void;
   setFileMode(repoPath: string, id: string, mode: WorkFileMode): void;
-  addTerminal(repoPath: string, shell?: EmbeddedShellChoice | null, label?: string): string;
+  addTerminal(repoPath: string, shell?: EmbeddedShellChoice | null, label?: string, paneId?: string): string;
   activate(repoPath: string, id: string): void;
+  activatePane(repoPath: string, paneId: string): void;
+  splitPane(repoPath: string, paneId: string, direction: 'horizontal' | 'vertical'): void;
   close(repoPath: string, id: string): Promise<void>;
   setTerminalRuntime(repoPath: string, id: string, runtimeId: string, label?: string): void;
   setTerminalState(
@@ -82,7 +91,7 @@ export const useWork = create<WorkState>((set, get) => ({
     });
   },
 
-  openFile(repoPath, path, revision, isDirectory, disposition = 'preview', mode) {
+  openFile(repoPath, path, revision, isDirectory, disposition = 'preview', mode, paneId) {
     const initialMode = mode ?? (
       !isDirectory && useSettings.getState().fileOpenTab === 'preview' && isPreviewablePath(path)
         ? 'preview'
@@ -92,7 +101,9 @@ export const useWork = create<WorkState>((set, get) => ({
       repos: {
         ...state.repos,
         [repoPath]: openWorkFile(
-          state.repos[repoPath] ?? fresh(),
+          paneId
+            ? activateWorkPane(state.repos[repoPath] ?? fresh(), paneId)
+            : state.repos[repoPath] ?? fresh(),
           { repoPath, path, revision, isDirectory, mode: initialMode },
           disposition,
           makeId,
@@ -116,7 +127,7 @@ export const useWork = create<WorkState>((set, get) => ({
     });
   },
 
-  addTerminal(repoPath, shell = null, label) {
+  addTerminal(repoPath, shell = null, label, paneId) {
     const repo = get().repos[repoPath] ?? fresh();
     const terminalNumber = repo.tabs.filter((tab) => tab.kind === 'terminal').length + 1;
     const id = makeId();
@@ -126,7 +137,7 @@ export const useWork = create<WorkState>((set, get) => ({
       shell,
       runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null,
     };
-    const next = { ...repo, restored: true, tabs: [...repo.tabs, tab], activeTabId: id };
+    const next = { ...appendWorkTab(repo, tab, paneId), restored: true };
     set((state) => ({ repos: { ...state.repos, [repoPath]: next } }));
     persistTerminals(repoPath, next);
     return id;
@@ -136,8 +147,43 @@ export const useWork = create<WorkState>((set, get) => ({
     set((state) => {
       const repo = state.repos[repoPath];
       if (!repo?.tabs.some((tab) => tab.id === id)) return state;
-      return { repos: { ...state.repos, [repoPath]: { ...repo, activeTabId: id } } };
+      const next = activateWorkTab(repo, id);
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
     });
+  },
+
+  activatePane(repoPath, paneId) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      if (!repo || !findWorkPane(repo.layout, paneId)) return state;
+      const next = activateWorkPane(repo, paneId);
+      return next === repo ? state : { repos: { ...state.repos, [repoPath]: next } };
+    });
+  },
+
+  splitPane(repoPath, paneId, direction) {
+    const repo = get().repos[repoPath] ?? fresh();
+    const pane = findWorkPane(repo.layout, paneId) ?? activeWorkPane(repo);
+    const active = repo.tabs.find((tab) => tab.id === pane.activeTabId);
+    if (!active) return;
+    let duplicate: WorkTab | null = null;
+    if (active?.kind === 'file') {
+      duplicate = { ...active, id: makeId(), preview: false };
+    } else if (active?.kind === 'terminal') {
+      const terminalNumber = repo.tabs.filter((tab) => tab.kind === 'terminal').length + 1;
+      duplicate = {
+        ...active,
+        id: makeId(),
+        label: t('work.terminalLabel', { count: terminalNumber }),
+        runtimeId: null,
+        lifecycle: 'dormant',
+        exitCode: null,
+        error: null,
+      };
+    }
+    const next = splitWorkPane(repo, pane.id, direction, makeId(), duplicate);
+    set((state) => ({ repos: { ...state.repos, [repoPath]: next } }));
+    if (duplicate?.kind === 'terminal') persistTerminals(repoPath, next);
   },
 
   async close(repoPath, id) {

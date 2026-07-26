@@ -15,13 +15,14 @@ Open the sidebar's **Files** lens and select a file or folder:
 - Double-click or press `Enter` to pin the file. **Open**, file selection from
   the command palette, History, and Blame also open pinned tabs.
 - Opening an already pinned file activates it instead of creating a duplicate.
-- File and terminal tabs share one peer strip. Tabs keep their width instead of
-  compressing; scroll the strip with the mouse wheel, or use its overflow
-  selector to jump directly to any open tab. File tabs use the same file-type
-  icons as the Files tree.
-- Use `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` to cycle tabs quickly, including
-  while a terminal is focused. On the tab strip, Left/Right and Home/End move,
-  Delete or Backspace closes the focused tab, and middle-click closes any tab.
+- File and terminal tabs share the active pane's peer strip. Tabs keep their
+  width instead of compressing; scroll the strip with the mouse wheel, or use
+  its overflow selector to jump directly to any tab in that pane. File tabs use
+  the same file-type icons as the Files tree.
+- Use `Ctrl/⌘+PageUp` and `Ctrl/⌘+PageDown` to cycle the active pane's tabs
+  quickly, including while a terminal is focused. On a tab strip, Left/Right
+  and Home/End move, Delete or Backspace closes the focused tab, and
+  middle-click closes any tab.
 
 Each file tab remembers its own Content, rendered Preview, History, Compare, or
 Blame mode. Images and folders retain their dedicated presentations. Only the
@@ -39,6 +40,25 @@ Strand refuses the stale save instead of overwriting the newer disk content.
 If a file moves through Strand, its tabs follow the new path. A removed preview
 closes; a removed pinned file stays visible with a clear missing-file message.
 History and Blame jumps remember the exact originating Work tab for **Back**.
+
+## Split panes
+
+Use the two pane buttons at the right of any Work tab strip to **Split pane
+right** or **Split pane down**. You can nest the two directions to build the
+same editor-group layouts used by VS Code, and drag every divider to resize it.
+The same actions are available in Quick Launch.
+
+Splitting a file pins a second view of that file in the new pane. Splitting a
+terminal starts a sibling terminal with the same shell choice. Each pane owns
+its own active tab and replaceable preview; files opened from Files or Quick
+Launch go to the pane you most recently focused. Closing the final tab in a pane
+collapses that empty pane. Press `F6` from a document or terminal to focus the
+active pane's tab strip.
+
+Terminal renderers stay mounted while the layout changes, so splitting and
+resizing do not reset live processes, scrollback, or selection. Pane proportions
+are remembered for each nested split position. File tabs and the pane topology
+remain session-only, matching the rest of the Work file session.
 
 ## Embedded terminals
 

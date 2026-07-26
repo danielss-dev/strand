@@ -20,6 +20,22 @@ the browser-standard shortcut makes tab management feel unpredictable.
 
 ---
 
+## Live terminal renderers stay outside the Work pane tree
+
+**Rule.** Work pane nesting and resize may change where a terminal is shown,
+but must not change the React parent that owns its xterm renderer. Keep every
+`TerminalPane` under the single process-wide runtime layer and position visible
+renderers against measured pane-content rectangles. Pane tab membership is
+state; renderer ownership is not.
+
+**Why.** Moving a terminal component between recursive `PanelGroup` branches
+remounts its DOM, erasing xterm scrollback and selection even though the native
+PTY remains alive. A stable renderer parent preserves that state across
+right/down splits, empty-pane collapse, repository switches, and resize while
+still letting only the pane-local active terminal receive input.
+
+---
+
 ## Extend Pierre's file icons through the shared tree config
 
 **Rule.** All `PierreTree` surfaces use `lib/treeIcons.ts`'s `TREE_ICONS`.

@@ -32,9 +32,26 @@ export type WorkTerminalTab = {
 
 export type WorkTab = WorkFileTab | WorkTerminalTab;
 
+export type WorkPane = {
+  kind: 'pane';
+  id: string;
+  tabIds: string[];
+  activeTabId: string | null;
+};
+
+export type WorkPaneSplit = {
+  kind: 'split';
+  direction: 'horizontal' | 'vertical';
+  children: [WorkPaneLayout, WorkPaneLayout];
+};
+
+export type WorkPaneLayout = WorkPane | WorkPaneSplit;
+
 export interface RepoWorkTabs {
   tabs: WorkTab[];
   activeTabId: string | null;
+  activePaneId: string;
+  layout: WorkPaneLayout;
   restored: boolean;
 }
 
@@ -45,7 +62,14 @@ export interface TerminalDescriptor {
   shell?: EmbeddedShellChoice | null;
 }
 
-export const EMPTY_REPO_WORK: RepoWorkTabs = { tabs: [], activeTabId: null, restored: false };
+export const EMPTY_WORK_PANE_ID = 'work-pane-root';
+export const EMPTY_REPO_WORK: RepoWorkTabs = {
+  tabs: [],
+  activeTabId: null,
+  activePaneId: EMPTY_WORK_PANE_ID,
+  layout: { kind: 'pane', id: EMPTY_WORK_PANE_ID, tabIds: [], activeTabId: null },
+  restored: false,
+};
 
 export function fileIdentity(tab: Pick<WorkFileTab, 'path' | 'revision' | 'isDirectory'>): string {
   return `${tab.revision ?? 'WORKTREE'}\0${tab.isDirectory ? 'directory' : 'file'}\0${tab.path}`;
@@ -58,20 +82,27 @@ export function openWorkFile(
   makeId: () => string,
 ): RepoWorkTabs {
   const identity = fileIdentity(file);
-  const pinned = state.tabs.find(
-    (tab): tab is WorkFileTab => tab.kind === 'file' && !tab.preview && fileIdentity(tab) === identity,
-  );
-  if (pinned) return { ...state, activeTabId: pinned.id };
+  const pane = activeWorkPane(state);
+  const pinned = pane.tabIds
+    .flatMap((id) => state.tabs.find((tab) => tab.id === id) ?? [])
+    .find(
+      (tab): tab is WorkFileTab => tab.kind === 'file' && !tab.preview && fileIdentity(tab) === identity,
+    );
+  if (pinned) return activateWorkTab(state, pinned.id);
 
-  const previewIndex = state.tabs.findIndex((tab) => tab.kind === 'file' && tab.preview);
+  const previewId = pane.tabIds.find((id) => {
+    const tab = state.tabs.find((candidate) => candidate.id === id);
+    return tab?.kind === 'file' && tab.preview;
+  });
+  const previewIndex = previewId ? state.tabs.findIndex((tab) => tab.id === previewId) : -1;
   const matchingPreview = previewIndex >= 0
     && fileIdentity(state.tabs[previewIndex] as WorkFileTab) === identity;
   if (matchingPreview && disposition === 'pinned') {
     const tabs = state.tabs.slice();
     tabs[previewIndex] = { ...(tabs[previewIndex] as WorkFileTab), preview: false };
-    return { ...state, tabs, activeTabId: tabs[previewIndex].id };
+    return activateWorkTab({ ...state, tabs }, tabs[previewIndex].id);
   }
-  if (matchingPreview) return { ...state, activeTabId: state.tabs[previewIndex].id };
+  if (matchingPreview) return activateWorkTab(state, state.tabs[previewIndex].id);
 
   const tab: WorkFileTab = {
     kind: 'file',
@@ -84,19 +115,175 @@ export function openWorkFile(
     const tabs = state.tabs.slice();
     // Replacement keeps the preview's peer position stable.
     tabs[previewIndex] = { ...tab, id: state.tabs[previewIndex].id };
-    return { ...state, tabs, activeTabId: tabs[previewIndex].id };
+    return activateWorkTab({ ...state, tabs }, tabs[previewIndex].id);
   }
-  return { ...state, tabs: [...state.tabs, tab], activeTabId: tab.id };
+  return appendWorkTab(state, tab);
 }
 
 export function closeWorkTab(state: RepoWorkTabs, id: string): RepoWorkTabs {
   const index = state.tabs.findIndex((tab) => tab.id === id);
   if (index < 0) return state;
   const tabs = state.tabs.filter((tab) => tab.id !== id);
-  const activeTabId = state.activeTabId === id
-    ? (tabs[index] ?? tabs[index - 1] ?? null)?.id ?? null
+  const owner = workPanes(state.layout).find((pane) => pane.tabIds.includes(id));
+  if (!owner) return { ...state, tabs };
+  const tabIndex = owner.tabIds.indexOf(id);
+  const nextIds = owner.tabIds.filter((tabId) => tabId !== id);
+  const nextActiveId = owner.activeTabId === id
+    ? nextIds[tabIndex] ?? nextIds[tabIndex - 1] ?? null
+    : owner.activeTabId;
+  let layout = updateWorkPane(state.layout, owner.id, (pane) => ({
+    ...pane,
+    tabIds: nextIds,
+    activeTabId: nextActiveId,
+  }));
+  let activePaneId = state.activePaneId;
+  if (nextIds.length === 0 && workPanes(layout).length > 1) {
+    const collapsed = collapseEmptyWorkPane(layout, owner.id);
+    layout = collapsed.layout;
+    if (activePaneId === owner.id) activePaneId = collapsed.focusPaneId;
+  }
+  const activePane = findWorkPane(layout, activePaneId) ?? workPanes(layout)[0];
+  const activeTabId = state.activeTabId === id || activePaneId !== state.activePaneId
+    ? activePane.activeTabId
     : state.activeTabId;
-  return { ...state, tabs, activeTabId };
+  return { ...state, tabs, layout, activePaneId, activeTabId };
+}
+
+export function appendWorkTab(
+  state: RepoWorkTabs,
+  tab: WorkTab,
+  paneId = state.activePaneId,
+): RepoWorkTabs {
+  const target = findWorkPane(state.layout, paneId) ?? activeWorkPane(state);
+  const layout = updateWorkPane(state.layout, target.id, (pane) => ({
+    ...pane,
+    tabIds: [...pane.tabIds, tab.id],
+    activeTabId: tab.id,
+  }));
+  return {
+    ...state,
+    tabs: [...state.tabs, tab],
+    layout,
+    activePaneId: target.id,
+    activeTabId: tab.id,
+  };
+}
+
+export function activateWorkPane(state: RepoWorkTabs, paneId: string): RepoWorkTabs {
+  const pane = findWorkPane(state.layout, paneId);
+  if (!pane) return state;
+  if (state.activePaneId === pane.id && state.activeTabId === pane.activeTabId) return state;
+  return { ...state, activePaneId: pane.id, activeTabId: pane.activeTabId };
+}
+
+export function activateWorkTab(state: RepoWorkTabs, id: string): RepoWorkTabs {
+  const pane = workPanes(state.layout).find((candidate) => candidate.tabIds.includes(id));
+  if (!pane || !state.tabs.some((tab) => tab.id === id)) return state;
+  if (state.activePaneId === pane.id && state.activeTabId === id && pane.activeTabId === id) return state;
+  return {
+    ...state,
+    activePaneId: pane.id,
+    activeTabId: id,
+    layout: updateWorkPane(state.layout, pane.id, (candidate) => ({
+      ...candidate,
+      activeTabId: id,
+    })),
+  };
+}
+
+export function splitWorkPane(
+  state: RepoWorkTabs,
+  paneId: string,
+  direction: WorkPaneSplit['direction'],
+  newPaneId: string,
+  duplicate: WorkTab | null,
+): RepoWorkTabs {
+  const pane = findWorkPane(state.layout, paneId);
+  if (!pane) return state;
+  const nextPane: WorkPane = {
+    kind: 'pane',
+    id: newPaneId,
+    tabIds: duplicate ? [duplicate.id] : [],
+    activeTabId: duplicate?.id ?? null,
+  };
+  const split: WorkPaneSplit = {
+    kind: 'split',
+    direction,
+    children: [pane, nextPane],
+  };
+  return {
+    ...state,
+    tabs: duplicate ? [...state.tabs, duplicate] : state.tabs,
+    layout: replaceWorkPane(state.layout, pane.id, split),
+    activePaneId: nextPane.id,
+    activeTabId: nextPane.activeTabId,
+  };
+}
+
+export function activeWorkPane(state: RepoWorkTabs): WorkPane {
+  return findWorkPane(state.layout, state.activePaneId) ?? workPanes(state.layout)[0];
+}
+
+export function findWorkPane(layout: WorkPaneLayout, paneId: string): WorkPane | null {
+  if (layout.kind === 'pane') return layout.id === paneId ? layout : null;
+  return findWorkPane(layout.children[0], paneId) ?? findWorkPane(layout.children[1], paneId);
+}
+
+export function workPanes(layout: WorkPaneLayout): WorkPane[] {
+  if (layout.kind === 'pane') return [layout];
+  return [...workPanes(layout.children[0]), ...workPanes(layout.children[1])];
+}
+
+function updateWorkPane(
+  layout: WorkPaneLayout,
+  paneId: string,
+  update: (pane: WorkPane) => WorkPane,
+): WorkPaneLayout {
+  if (layout.kind === 'pane') return layout.id === paneId ? update(layout) : layout;
+  return {
+    ...layout,
+    children: [
+      updateWorkPane(layout.children[0], paneId, update),
+      updateWorkPane(layout.children[1], paneId, update),
+    ],
+  };
+}
+
+function replaceWorkPane(
+  layout: WorkPaneLayout,
+  paneId: string,
+  replacement: WorkPaneLayout,
+): WorkPaneLayout {
+  if (layout.kind === 'pane') return layout.id === paneId ? replacement : layout;
+  return {
+    ...layout,
+    children: [
+      replaceWorkPane(layout.children[0], paneId, replacement),
+      replaceWorkPane(layout.children[1], paneId, replacement),
+    ],
+  };
+}
+
+function collapseEmptyWorkPane(
+  layout: WorkPaneLayout,
+  paneId: string,
+): { layout: WorkPaneLayout; focusPaneId: string } {
+  if (layout.kind === 'pane') return { layout, focusPaneId: layout.id };
+  const [first, second] = layout.children;
+  if (first.kind === 'pane' && first.id === paneId) {
+    return { layout: second, focusPaneId: workPanes(second)[0].id };
+  }
+  if (second.kind === 'pane' && second.id === paneId) {
+    const panes = workPanes(first);
+    return { layout: first, focusPaneId: panes[panes.length - 1].id };
+  }
+  const inFirst = findWorkPane(first, paneId);
+  if (inFirst) {
+    const collapsed = collapseEmptyWorkPane(first, paneId);
+    return { layout: { ...layout, children: [collapsed.layout, second] }, focusPaneId: collapsed.focusPaneId };
+  }
+  const collapsed = collapseEmptyWorkPane(second, paneId);
+  return { layout: { ...layout, children: [first, collapsed.layout] }, focusPaneId: collapsed.focusPaneId };
 }
 
 /** Resolve the next peer tab with wraparound for fast keyboard navigation. */
@@ -137,9 +324,17 @@ export function reconcileWorkMutation(
 }
 
 export function restoreTerminalDescriptors(descriptors: TerminalDescriptor[]): RepoWorkTabs {
+  const pane: WorkPane = {
+    kind: 'pane',
+    id: EMPTY_WORK_PANE_ID,
+    tabIds: descriptors.map(({ id }) => id),
+    activeTabId: null,
+  };
   return {
     restored: true,
     activeTabId: null,
+    activePaneId: pane.id,
+    layout: pane,
     tabs: descriptors.map((descriptor) => ({
       kind: 'terminal' as const,
       repoPath: '',
