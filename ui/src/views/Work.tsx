@@ -42,6 +42,8 @@ import { TERMINAL_FONTS, useSettings, type TerminalFont } from '../stores/settin
 import { useWork } from '../stores/work';
 import { FileDocument } from './FileView';
 
+const WORK_PANE_SPLIT_EDGE_RATIO = 0.4;
+
 export function Work({ visible }: { visible: boolean }) {
   const repoPath = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
@@ -586,7 +588,7 @@ function workPaneDropZone(rect: DOMRect, clientX: number, clientY: number): Work
   ];
   const [edge, distance] = edges.reduce((closest, candidate) =>
     candidate[1] < closest[1] ? candidate : closest);
-  return distance <= 0.24 ? edge : 'center';
+  return distance <= WORK_PANE_SPLIT_EDGE_RATIO ? edge : 'center';
 }
 
 function workPaneDropLabel(zone: WorkPaneEdge | 'center'): string {

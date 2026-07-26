@@ -26,7 +26,8 @@ the browser-standard shortcut makes tab management feel unpredictable.
 threshold plus window-level move/up listeners and geometry-based targets. Do
 not depend on HTML5 `draggable` / `dragover` / `drop`. Keep per-frame cursor and
 ghost movement imperative; update React state only when the semantic target
-changes.
+changes. For Work pane splitting, the nearest edge owns the outer 40% of the
+pane; keep the center 20% for moving a tab into an existing pane.
 
 **Why.** Tauri/WebView2 owns a native window drag/drop path for repository
 folders. Browser drag events for internal tabs can consequently disappear
