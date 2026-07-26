@@ -5,11 +5,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import '@xterm/xterm/css/xterm.css';
 
 import { Icon } from '../components/Icon';
@@ -20,12 +23,26 @@ import { t } from '../lib/i18n';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { EmbeddedShellChoice, TerminalEvent } from '../lib/types';
-import { adjacentWorkTabId, type WorkFileTab, type WorkTab, type WorkTerminalTab } from '../lib/workTabs';
+import {
+  adjacentWorkTabId,
+  findWorkPane,
+  workPanes,
+  type WorkFileTab,
+  type WorkFileMode,
+  type WorkPane,
+  type WorkPaneEdge,
+  type WorkPaneLayout,
+  type RepoWorkTabs,
+  type WorkTab,
+  type WorkTerminalTab,
+} from '../lib/workTabs';
 import { useOutsideClose } from '../lib/useOutsideClose';
 import { useRepo } from '../stores/repo';
 import { TERMINAL_FONTS, useSettings, type TerminalFont } from '../stores/settings';
 import { useWork } from '../stores/work';
 import { FileDocument } from './FileView';
+
+const WORK_PANE_SPLIT_EDGE_RATIO = 0.4;
 
 export function Work({ visible }: { visible: boolean }) {
   const repoPath = useRepo((state) => state.activePath);
@@ -33,21 +50,163 @@ export function Work({ visible }: { visible: boolean }) {
   const openRepos = useRepo((state) => state.tabs);
   const repos = useWork((state) => state.repos);
   const activate = useWork((state) => state.activate);
+  const activatePane = useWork((state) => state.activatePane);
   const close = useWork((state) => state.close);
   const addTerminal = useWork((state) => state.addTerminal);
   const openFile = useWork((state) => state.openFile);
   const setFileMode = useWork((state) => state.setFileMode);
+  const splitPane = useWork((state) => state.splitPane);
+  const moveTab = useWork((state) => state.moveTab);
+  const splitTab = useWork((state) => state.splitTab);
+  const closePane = useWork((state) => state.closePane);
   const restore = useWork((state) => state.restore);
   const setView = useRepo((state) => state.setView);
   const selectCommit = useRepo((state) => state.selectCommit);
   const repo = repoPath ? repos[repoPath] : undefined;
-  const active = repo?.tabs.find((tab) => tab.id === repo.activeTabId) ?? null;
   const platform = useSettings((state) => state.platform);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const paneHosts = useRef(new Map<string, HTMLDivElement>());
+  const [paneHostVersion, setPaneHostVersion] = useState(0);
+  const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
+  const [focusTabsTick, setFocusTabsTick] = useState(0);
+  const [draggedTab, setDraggedTab] = useState<WorkTabDrag | null>(null);
+  const [tabDropTarget, setTabDropTarget] = useState<WorkTabDropTarget | null>(null);
+  const dragSessionRef = useRef<WorkTabDragSession | null>(null);
+  const suppressTabClickRef = useRef(false);
+  const moveTabRef = useRef(moveTab);
+  const splitTabRef = useRef(splitTab);
+  const repoPathRef = useRef(repoPath);
+  moveTabRef.current = moveTab;
+  splitTabRef.current = splitTab;
+  repoPathRef.current = repoPath;
   const terminals = useMemo(
     () => Object.values(repos).flatMap((state) =>
       state.tabs.filter((tab): tab is WorkTerminalTab => tab.kind === 'terminal')),
     [repos],
   );
+  const activePane = repo ? findWorkPane(repo.layout, repo.activePaneId) : null;
+  const activePaneTabs = useMemo(
+    () => activePane?.tabIds.flatMap((id) => repo?.tabs.find((tab) => tab.id === id) ?? []) ?? [],
+    [activePane, repo?.tabs],
+  );
+
+  const endTabDrag = useCallback((commit: boolean) => {
+    const drag = dragSessionRef.current;
+    if (!drag) return;
+    dragSessionRef.current = null;
+    drag.detach();
+    drag.ghost?.remove();
+    document.body.style.userSelect = drag.previousUserSelect;
+    setDraggedTab(null);
+    setTabDropTarget(null);
+    if (!drag.active) return;
+    suppressTabClickRef.current = true;
+    window.setTimeout(() => { suppressTabClickRef.current = false; }, 0);
+    const path = repoPathRef.current;
+    if (!commit || !path || !drag.target) return;
+    if (drag.target.kind === 'split') {
+      splitTabRef.current(path, drag.tabId, drag.target.paneId, drag.target.edge);
+    } else {
+      moveTabRef.current(path, drag.tabId, drag.target.paneId, drag.target.beforeTabId);
+    }
+  }, []);
+
+  const beginTabDrag = useCallback((
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ) => {
+    if (event.button !== 0 || dragSessionRef.current) return;
+    const onMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const drag = dragSessionRef.current;
+      if (!drag) return;
+      if (!drag.active) {
+        if (Math.hypot(moveEvent.clientX - drag.startX, moveEvent.clientY - drag.startY) < 5) return;
+        drag.active = true;
+        document.body.style.userSelect = 'none';
+        const ghost = document.createElement('div');
+        ghost.className = 'work-tab-drag-ghost';
+        ghost.textContent = drag.label;
+        document.body.appendChild(ghost);
+        drag.ghost = ghost;
+        setDraggedTab({ tabId: drag.tabId, sourcePaneId: drag.sourcePaneId });
+      }
+      moveEvent.preventDefault();
+      const target = resolveWorkTabDropTarget(
+        rootRef.current,
+        moveEvent.clientX,
+        moveEvent.clientY,
+        drag.sourcePaneId,
+      );
+      drag.target = target;
+      setTabDropTarget((current) => sameWorkTabDropTarget(current, target) ? current : target);
+      if (drag.ghost) {
+        drag.ghost.style.left = `${moveEvent.clientX + 14}px`;
+        drag.ghost.style.top = `${moveEvent.clientY + 10}px`;
+        drag.ghost.textContent = target
+          ? `${drag.label} · ${workTabDropTargetLabel(target)}`
+          : drag.label;
+        drag.ghost.classList.toggle('invalid', target == null);
+      }
+    };
+    const onMouseUp = () => endTabDrag(true);
+    const onKeyDown = (keyEvent: globalThis.KeyboardEvent) => {
+      if (keyEvent.key === 'Escape') endTabDrag(false);
+    };
+    const detach = () => {
+      window.removeEventListener('mousemove', onMouseMove, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+    dragSessionRef.current = {
+      tabId,
+      sourcePaneId,
+      label,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      ghost: null,
+      target: null,
+      previousUserSelect: document.body.style.userSelect,
+      detach,
+    };
+    window.addEventListener('mousemove', onMouseMove, true);
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('keydown', onKeyDown, true);
+  }, [endTabDrag]);
+
+  useEffect(() => () => endTabDrag(false), [endTabDrag]);
+
+  const registerPaneHost = useCallback((paneId: string, node: HTMLDivElement | null) => {
+    if (node) paneHosts.current.set(paneId, node);
+    else paneHosts.current.delete(paneId);
+    setPaneHostVersion((value) => value + 1);
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const measure = () => {
+      const rootRect = root.getBoundingClientRect();
+      const next: Record<string, PaneRect> = {};
+      for (const [id, node] of paneHosts.current) {
+        const rect = node.getBoundingClientRect();
+        next[id] = {
+          left: rect.left - rootRect.left,
+          top: rect.top - rootRect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+      }
+      setPaneRects(next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    for (const node of paneHosts.current.values()) observer.observe(node);
+    return () => observer.disconnect();
+  }, [paneHostVersion, repo?.layout, visible]);
 
   useEffect(() => {
     for (const tab of openRepos) void restore(tab.path);
@@ -57,13 +216,13 @@ export function Work({ visible }: { visible: boolean }) {
   // with repository switching on Mod+Tab. Capture first so a focused xterm
   // never forwards the shortcut to the shell before Work handles it.
   useEffect(() => {
-    if (!visible || !repoPath || !repo || repo.tabs.length === 0) return;
+    if (!visible || !repoPath || !repo || activePaneTabs.length === 0) return;
     const cycle = (event: globalThis.KeyboardEvent) => {
       const primary = platform === 'mac' ? event.metaKey : event.ctrlKey;
       if (!primary || event.altKey || event.shiftKey) return;
       const delta = event.key === 'PageUp' ? -1 : event.key === 'PageDown' ? 1 : 0;
       if (!delta) return;
-      const id = adjacentWorkTabId(repo.tabs, repo.activeTabId, delta);
+      const id = adjacentWorkTabId(activePaneTabs, activePane?.activeTabId ?? null, delta);
       if (!id) return;
       event.preventDefault();
       event.stopPropagation();
@@ -71,7 +230,18 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', cycle, true);
     return () => window.removeEventListener('keydown', cycle, true);
-  }, [activate, platform, repo, repoPath, visible]);
+  }, [activate, activePane?.activeTabId, activePaneTabs, platform, repo, repoPath, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const focusTabs = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'F6' || activePaneTabs.length === 0) return;
+      event.preventDefault();
+      setFocusTabsTick((value) => value + 1);
+    };
+    window.addEventListener('keydown', focusTabs);
+    return () => window.removeEventListener('keydown', focusTabs);
+  }, [activePaneTabs.length, visible]);
 
   const jump = useCallback((tab: WorkFileTab, hash: string) => {
     useWork.getState().activate(tab.repoPath, tab.id);
@@ -81,19 +251,233 @@ export function Work({ visible }: { visible: boolean }) {
   }, [selectCommit, setView]);
 
   return (
-    <div className={'work-root' + (visible ? '' : ' work-hidden')} aria-hidden={!visible}>
+    <div
+      ref={rootRef}
+      className={'work-root' + (visible ? '' : ' work-hidden')}
+      aria-hidden={!visible}
+      onClickCapture={(event) => {
+        if (!suppressTabClickRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <TreeIconSprite />
       {repoPath && repo && (
-        <WorkTabs
-          tabs={repo.tabs}
-          activeId={repo.activeTabId}
+        <WorkLayout
+          node={repo.layout}
+          repo={repo}
+          repoPath={repoPath}
+          repoName={repoFamilyName(meta)}
+          visible={visible}
+          activePaneId={repo.activePaneId}
+          focusTabsTick={focusTabsTick}
           onActivate={(id) => activate(repoPath, id)}
+          onActivatePane={(paneId) => activatePane(repoPath, paneId)}
           onClose={(id) => void close(repoPath, id)}
-          onNewTerminal={(shell, label) => addTerminal(repoPath, shell, label)}
+          onNewTerminal={(paneId, shell, label) => addTerminal(repoPath, shell, label, paneId)}
+          onOpenFile={(paneId, path, revision, isDirectory, mode) =>
+            openFile(repoPath, path, revision, isDirectory, 'pinned', mode, paneId)}
+          onSetFileMode={(id, mode) => setFileMode(repoPath, id, mode)}
+          onSplit={(paneId, direction) => splitPane(repoPath, paneId, direction)}
+          draggedTab={draggedTab}
+          tabDropTarget={tabDropTarget}
+          onTabDragStart={beginTabDrag}
+          onClosePane={(paneId) => closePane(repoPath, paneId)}
+          onJump={jump}
+          registerPaneHost={registerPaneHost}
         />
       )}
 
-      <div className="work-content">
-        {visible && repoPath && active?.kind === 'file' && (
+      {/* Terminal renderers stay under one stable parent while their measured
+          pane rectangle changes. Splitting and resizing therefore preserve
+          xterm scrollback, selection, and the live PTY process. */}
+      <div className="terminal-runtime-layer">
+        {terminals.map((tab) => {
+          const terminalRepo = repos[tab.repoPath];
+          const pane = terminalRepo
+            ? workPanes(terminalRepo.layout).find((candidate) => candidate.tabIds.includes(tab.id))
+            : null;
+          const isVisible = Boolean(
+            visible
+            && repoPath === tab.repoPath
+            && pane?.activeTabId === tab.id
+            && paneRects[pane.id],
+          );
+          return (
+            <TerminalPane
+              key={tab.id}
+              tab={tab}
+              visible={isVisible}
+              rect={pane ? paneRects[pane.id] : undefined}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface PaneRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface WorkTabDrag {
+  tabId: string;
+  sourcePaneId: string;
+}
+
+type WorkTabDropTarget =
+  | {
+    kind: 'move';
+    paneId: string;
+    beforeTabId: string | null;
+    surface: 'tabs' | 'center';
+    marker: { tabId: string; side: 'before' | 'after' } | null;
+  }
+  | {
+    kind: 'split';
+    paneId: string;
+    edge: WorkPaneEdge;
+  };
+
+interface WorkTabDragSession extends WorkTabDrag {
+  label: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+  ghost: HTMLDivElement | null;
+  target: WorkTabDropTarget | null;
+  previousUserSelect: string;
+  detach(): void;
+}
+
+interface WorkPaneProps {
+  repo: RepoWorkTabs;
+  repoPath: string;
+  repoName: string;
+  visible: boolean;
+  activePaneId: string;
+  focusTabsTick: number;
+  onActivate(id: string): void;
+  onActivatePane(paneId: string): void;
+  onClose(id: string): void;
+  onNewTerminal(paneId: string, shell?: EmbeddedShellChoice | null, label?: string): void;
+  onOpenFile(
+    paneId: string,
+    path: string,
+    revision: string | null,
+    isDirectory: boolean,
+    mode?: WorkFileMode,
+  ): void;
+  onSetFileMode(id: string, mode: WorkFileMode): void;
+  onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
+  draggedTab: WorkTabDrag | null;
+  tabDropTarget: WorkTabDropTarget | null;
+  onTabDragStart(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ): void;
+  onClosePane(paneId: string): void;
+  onJump(tab: WorkFileTab, hash: string): void;
+  registerPaneHost(paneId: string, node: HTMLDivElement | null): void;
+}
+
+function WorkLayout({
+  node,
+  ...props
+}: WorkPaneProps & {
+  node: WorkPaneLayout;
+}) {
+  if (node.kind === 'pane') return <WorkPaneView pane={node} {...props} />;
+  return (
+    <PanelGroup
+      direction={node.direction}
+      autoSaveId={`strand:work:${node.id}`}
+      className="work-layout"
+    >
+      <Panel minSize={20}>
+        <WorkLayout node={node.children[0]} {...props} />
+      </Panel>
+      <PanelResizeHandle className={`rs-handle ${node.direction === 'horizontal' ? 'vert' : 'horiz'}`} />
+      <Panel minSize={20}>
+        <WorkLayout node={node.children[1]} {...props} />
+      </Panel>
+    </PanelGroup>
+  );
+}
+
+function WorkPaneView({
+  pane,
+  repo,
+  repoPath,
+  repoName,
+  visible,
+  activePaneId,
+  focusTabsTick,
+  onActivate,
+  onActivatePane,
+  onClose,
+  onNewTerminal,
+  onOpenFile,
+  onSetFileMode,
+  onSplit,
+  draggedTab,
+  tabDropTarget,
+  onTabDragStart,
+  onClosePane,
+  onJump,
+  registerPaneHost,
+}: WorkPaneProps & {
+  pane: WorkPane;
+}) {
+  const tabs = pane.tabIds.flatMap((id) => repo.tabs.find((tab) => tab.id === id) ?? []);
+  const active = tabs.find((tab) => tab.id === pane.activeTabId) ?? null;
+  const isActive = pane.id === activePaneId;
+  const dropZone = tabDropTarget?.paneId === pane.id
+    ? tabDropTarget.kind === 'split'
+      ? tabDropTarget.edge
+      : tabDropTarget.surface === 'center'
+        ? 'center'
+        : null
+    : null;
+  const hostRef = useCallback(
+    (node: HTMLDivElement | null) => registerPaneHost(pane.id, node),
+    [pane.id, registerPaneHost],
+  );
+
+  return (
+    <section
+      className={'work-pane' + (isActive ? ' active' : '')
+        + (draggedTab ? ' drag-active' : '')
+        + (dropZone ? ' drag-over' : '')}
+      aria-label={t('work.paneLabel')}
+      data-work-pane-id={pane.id}
+      onPointerDownCapture={() => onActivatePane(pane.id)}
+      onFocusCapture={() => onActivatePane(pane.id)}
+    >
+      <WorkTabs
+        tabs={tabs}
+        activeId={pane.activeTabId}
+        focusRequested={isActive ? focusTabsTick : 0}
+        paneId={pane.id}
+        draggedTab={draggedTab}
+        tabDropTarget={tabDropTarget}
+        onActivate={onActivate}
+        onClose={onClose}
+        onDragStart={onTabDragStart}
+        onNewTerminal={(shell, label) => onNewTerminal(pane.id, shell, label)}
+        onSplit={(direction) => onSplit(pane.id, direction)}
+      />
+      <div
+        ref={hostRef}
+        className="work-content"
+      >
+        {visible && active?.kind === 'file' && (
           active.missing ? (
             <div className="work-empty" role="status">
               <Icon name="file" size={24} />
@@ -108,60 +492,165 @@ export function Work({ visible }: { visible: boolean }) {
               revision={active.revision}
               isDirectory={active.isDirectory}
               mode={active.mode}
-              repoName={repoFamilyName(meta)}
-              onModeChange={(mode) => setFileMode(repoPath, active.id, mode)}
-              onJump={(hash) => jump(active, hash)}
+              repoName={repoName}
+              onModeChange={(mode) => onSetFileMode(active.id, mode)}
+              onJump={(hash) => onJump(active, hash)}
               onOpenPath={(path, isDirectory, mode) =>
-                openFile(repoPath, path, active.revision, isDirectory, 'pinned', mode)}
+                onOpenFile(pane.id, path, active.revision, isDirectory, mode)}
               embedded
             />
           )
         )}
-        {visible && repoPath && !active && (
+        {visible && !active && (
           <div className="work-empty">
             <Icon name="terminal" size={24} />
-            <strong>{t('work.emptyTitle')}</strong>
+            <strong>{t('work.emptyPaneTitle')}</strong>
             <span>{t('work.emptyBody')}</span>
-            <button type="button" className="btn primary" onClick={() => addTerminal(repoPath)}>
+            <button type="button" className="btn primary" onClick={() => onNewTerminal(pane.id)}>
               <Icon name="terminal" size={13} />
               {t('work.newTerminal')}
             </button>
+            {workPanes(repo.layout).length > 1 && (
+              <button type="button" className="btn" onClick={() => onClosePane(pane.id)}>
+                {t('work.closePane')}
+              </button>
+            )}
           </div>
         )}
-
-        {/* These renderers stay mounted even while Work or their repository is
-            hidden. That preserves xterm scrollback, selection, and process
-            state without keeping inactive file documents alive. */}
-        <div className="terminal-runtime-layer">
-          {terminals.map((tab) => (
-            <TerminalPane
-              key={tab.id}
-              tab={tab}
-              visible={Boolean(visible && repoPath === tab.repoPath && active?.id === tab.id)}
-            />
-          ))}
-        </div>
       </div>
-    </div>
+      {draggedTab && dropZone && (
+        <div className="work-pane-drop-layer" aria-hidden="true">
+          <div className={`work-pane-drop-preview ${dropZone}`}>
+            <span>{workPaneDropLabel(dropZone)}</span>
+          </div>
+        </div>
+      )}
+    </section>
   );
+}
+
+function resolveWorkTabDropTarget(
+  root: HTMLDivElement | null,
+  clientX: number,
+  clientY: number,
+  sourcePaneId: string,
+): WorkTabDropTarget | null {
+  if (!root) return null;
+  const pane = Array.from(root.querySelectorAll<HTMLElement>('[data-work-pane-id]'))
+    .find((candidate) => pointInside(candidate.getBoundingClientRect(), clientX, clientY));
+  if (!pane) return null;
+  const paneId = pane.dataset.workPaneId;
+  if (!paneId) return null;
+
+  const lane = pane.querySelector<HTMLElement>('.work-tabs');
+  if (lane && pointInside(lane.getBoundingClientRect(), clientX, clientY)) {
+    const wraps = Array.from(lane.querySelectorAll<HTMLElement>('.work-tab-wrap'));
+    const over = wraps.find((candidate) => pointInside(candidate.getBoundingClientRect(), clientX, clientY));
+    if (!over) {
+      return { kind: 'move', paneId, beforeTabId: null, surface: 'tabs', marker: null };
+    }
+    const tabId = over.dataset.workTabId;
+    if (!tabId) return null;
+    const rect = over.getBoundingClientRect();
+    const side = clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+    const index = wraps.indexOf(over);
+    const beforeTabId = side === 'before' ? tabId : wraps[index + 1]?.dataset.workTabId ?? null;
+    return {
+      kind: 'move',
+      paneId,
+      beforeTabId,
+      surface: 'tabs',
+      marker: { tabId, side },
+    };
+  }
+
+  const zone = workPaneDropZone(pane.getBoundingClientRect(), clientX, clientY);
+  if (zone !== 'center') return { kind: 'split', paneId, edge: zone };
+  return paneId === sourcePaneId
+    ? null
+    : { kind: 'move', paneId, beforeTabId: null, surface: 'center', marker: null };
+}
+
+function pointInside(rect: DOMRect, x: number, y: number): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function workPaneDropZone(rect: DOMRect, clientX: number, clientY: number): WorkPaneEdge | 'center' {
+  const x = (clientX - rect.left) / Math.max(rect.width, 1);
+  const y = (clientY - rect.top) / Math.max(rect.height, 1);
+  const edges: Array<[WorkPaneEdge, number]> = [
+    ['left', x],
+    ['right', 1 - x],
+    ['top', y],
+    ['bottom', 1 - y],
+  ];
+  const [edge, distance] = edges.reduce((closest, candidate) =>
+    candidate[1] < closest[1] ? candidate : closest);
+  return distance <= WORK_PANE_SPLIT_EDGE_RATIO ? edge : 'center';
+}
+
+function workPaneDropLabel(zone: WorkPaneEdge | 'center'): string {
+  if (zone === 'left') return t('work.dropSplitLeft');
+  if (zone === 'right') return t('work.dropSplitRight');
+  if (zone === 'top') return t('work.dropSplitTop');
+  if (zone === 'bottom') return t('work.dropSplitBottom');
+  return t('work.dropMove');
+}
+
+function workTabDropTargetLabel(target: WorkTabDropTarget): string {
+  return target.kind === 'split' ? workPaneDropLabel(target.edge) : t('work.dropMove');
+}
+
+function sameWorkTabDropTarget(
+  first: WorkTabDropTarget | null,
+  second: WorkTabDropTarget | null,
+): boolean {
+  if (first === second) return true;
+  if (!first || !second || first.kind !== second.kind || first.paneId !== second.paneId) return false;
+  if (first.kind === 'split' && second.kind === 'split') return first.edge === second.edge;
+  if (first.kind !== 'move' || second.kind !== 'move') return false;
+  return first.beforeTabId === second.beforeTabId
+    && first.surface === second.surface
+    && first.marker?.tabId === second.marker?.tabId
+    && first.marker?.side === second.marker?.side;
 }
 
 function WorkTabs({
   tabs,
   activeId,
+  focusRequested,
+  paneId,
+  draggedTab,
+  tabDropTarget,
   onActivate,
   onClose,
+  onDragStart,
   onNewTerminal,
+  onSplit,
 }: {
   tabs: WorkTab[];
   activeId: string | null;
+  focusRequested: number;
+  paneId: string;
+  draggedTab: WorkTabDrag | null;
+  tabDropTarget: WorkTabDropTarget | null;
   onActivate(id: string): void;
   onClose(id: string): void;
+  onDragStart(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ): void;
   onNewTerminal(shell?: EmbeddedShellChoice | null, label?: string): void;
+  onSplit(direction: 'horizontal' | 'vertical'): void;
 }) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const dropMarker = tabDropTarget?.kind === 'move' && tabDropTarget.paneId === paneId
+    ? tabDropTarget.marker
+    : null;
   const moveFocus = (current: string, key: string) => {
     const index = tabs.findIndex((tab) => tab.id === current);
     if (index < 0 || tabs.length === 0) return;
@@ -184,14 +673,9 @@ function WorkTabs({
   };
 
   useEffect(() => {
-    const focusTabs = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'F6' || tabs.length === 0) return;
-      event.preventDefault();
-      buttons.current.get(activeId ?? tabs[0].id)?.focus();
-    };
-    window.addEventListener('keydown', focusTabs);
-    return () => window.removeEventListener('keydown', focusTabs);
-  }, [activeId, tabs]);
+    if (!focusRequested || tabs.length === 0) return;
+    buttons.current.get(activeId ?? tabs[0].id)?.focus();
+  }, [activeId, focusRequested, tabs]);
 
   useLayoutEffect(() => {
     const lane = scrollRef.current;
@@ -216,7 +700,6 @@ function WorkTabs({
 
   return (
     <div className="work-tabbar">
-      <TreeIconSprite />
       <div
         className="work-tabs"
         ref={scrollRef}
@@ -226,8 +709,10 @@ function WorkTabs({
       >
         {tabs.map((tab) => (
           <div
-            className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')}
+            className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')
+              + (dropMarker?.tabId === tab.id ? ` drop-${dropMarker.side}` : '')}
             key={tab.id}
+            data-work-tab-id={tab.id}
             onAuxClick={(event) => {
               if (event.button !== 1) return;
               event.preventDefault();
@@ -243,10 +728,18 @@ function WorkTabs({
               role="tab"
               aria-selected={activeId === tab.id}
               tabIndex={activeId === tab.id || (!activeId && tab === tabs[0]) ? 0 : -1}
-              className={'work-tab' + (tab.kind === 'file' && tab.preview ? ' preview' : '')}
+              className={'work-tab'
+                + (tab.kind === 'file' && tab.preview ? ' preview' : '')
+                + (draggedTab?.tabId === tab.id && draggedTab.sourcePaneId === paneId ? ' dragging' : '')}
               title={tab.kind === 'file' ? tab.path : tab.label}
               onClick={() => onActivate(tab.id)}
               onKeyDown={(event) => onKeyDown(event, tab.id)}
+              onMouseDown={(event) => onDragStart(
+                event,
+                tab.id,
+                paneId,
+                tab.kind === 'file' ? leaf(tab.path) : tab.label,
+              )}
             >
               {tab.kind === 'file' ? (
                 tab.isDirectory ? <Icon name="folder" size={14} /> : <TreeFileIcon path={tab.path} />
@@ -272,6 +765,28 @@ function WorkTabs({
       {overflowing && (
         <WorkTabSelector tabs={tabs} activeId={activeId} onPick={onActivate} />
       )}
+      <div className="work-pane-actions">
+        <button
+          type="button"
+          className="work-pane-action"
+          title={t('work.splitRight')}
+          aria-label={t('work.splitRight')}
+          disabled={!activeId}
+          onClick={() => onSplit('horizontal')}
+        >
+          <Icon name="split" size={13} />
+        </button>
+        <button
+          type="button"
+          className="work-pane-action"
+          title={t('work.splitDown')}
+          aria-label={t('work.splitDown')}
+          disabled={!activeId}
+          onClick={() => onSplit('vertical')}
+        >
+          <Icon name="unified" size={13} />
+        </button>
+      </div>
       <NewTerminalButton onNewTerminal={onNewTerminal} />
     </div>
   );
@@ -465,7 +980,15 @@ function WorkTabSelector({
   );
 }
 
-function TerminalPane({ tab, visible }: { tab: WorkTerminalTab; visible: boolean }) {
+function TerminalPane({
+  tab,
+  visible,
+  rect,
+}: {
+  tab: WorkTerminalTab;
+  visible: boolean;
+  rect?: PaneRect;
+}) {
   const resolvedTheme = useSettings((state) => state.resolvedTheme);
   const terminalFont = useSettings((state) => state.terminalFont);
   const terminalFontSize = useSettings((state) => state.terminalFontSize);
@@ -635,7 +1158,10 @@ function TerminalPane({ tab, visible }: { tab: WorkTerminalTab; visible: boolean
   };
 
   return (
-    <div className={'work-terminal-pane' + (visible ? ' visible' : '')}>
+    <div
+      className={'work-terminal-pane' + (visible ? ' visible' : '')}
+      style={rect as CSSProperties | undefined}
+    >
       <div ref={container} className="work-terminal-host" />
       {visible && (tab.lifecycle === 'exited' || tab.lifecycle === 'error') && (
         <div className="work-terminal-exit" role="status">

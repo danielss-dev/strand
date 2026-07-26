@@ -7504,8 +7504,9 @@ textarea.clone-input {
   align-items: center;
 }
 
-/* Work — one peer strip for read-only documents and embedded processes. */
+/* Work — resizable editor groups for documents and embedded processes. */
 .work-root {
+  position: relative;
   height: 100%;
   min-width: 0;
   min-height: 0;
@@ -7514,6 +7515,28 @@ textarea.clone-input {
   background: var(--bg-base);
 }
 .work-root.work-hidden { display: none; }
+.work-layout {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.work-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+}
+.work-pane.active {
+  z-index: 1;
+  box-shadow: inset 0 0 0 0.5px color-mix(in oklch, var(--accent) 46%, var(--border));
+}
+.work-pane.drag-active { z-index: 3; }
 .work-tabbar {
   flex: 0 0 34px;
   min-width: 0;
@@ -7545,6 +7568,20 @@ textarea.clone-input {
   background: var(--bg-base);
   box-shadow: inset 0 2px var(--accent);
 }
+.work-tab-wrap.drop-before::before,
+.work-tab-wrap.drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--bg-base);
+}
+.work-tab-wrap.drop-before::before { left: -1px; }
+.work-tab-wrap.drop-after::after { right: -1px; }
 .work-tab {
   flex: 1;
   min-width: 0;
@@ -7556,7 +7593,29 @@ textarea.clone-input {
   color: inherit;
   background: transparent;
   font: 11.5px var(--font-ui);
-  cursor: default;
+  cursor: grab;
+}
+.work-tab.dragging { cursor: grabbing; opacity: 0.48; }
+.work-tab-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 320px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+  font: 11px var(--font-ui);
+}
+.work-tab-drag-ghost.invalid {
+  border-color: var(--border-strong);
+  border-style: dashed;
+  color: var(--text-dim);
 }
 .work-tab > svg { flex: 0 0 auto; }
 .work-tab.preview span { font-style: italic; }
@@ -7567,6 +7626,7 @@ textarea.clone-input {
 }
 .work-tab:focus-visible,
 .work-tab-close:focus-visible,
+.work-pane-action:focus-visible,
 .work-new-terminal:focus-visible,
 .work-new-terminal-toggle:focus-visible {
   outline: 1px solid var(--accent);
@@ -7591,6 +7651,26 @@ textarea.clone-input {
 .work-tab-wrap.active .work-tab-close,
 .work-tab-close:focus-visible { opacity: 1; }
 .work-tab-close:hover { background: var(--bg-hover); color: var(--text); }
+.work-pane-actions {
+  flex: 0 0 56px;
+  display: flex;
+  align-items: stretch;
+  border-left: 0.5px solid var(--border);
+}
+.work-pane-action {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+}
+.work-pane-action:hover { background: var(--bg-hover); color: var(--text); }
+.work-pane-action:disabled {
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0.45;
+}
 .work-new-terminal-group {
   flex: 0 0 58px;
   display: flex;
@@ -7670,6 +7750,35 @@ textarea.clone-input {
   min-height: 0;
   overflow: hidden;
 }
+.work-pane-drop-layer {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+}
+.work-pane-drop-preview {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--accent) 82%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--accent) 14%, var(--bg-base));
+  box-shadow: inset 0 0 24px color-mix(in oklch, var(--accent) 8%, transparent);
+}
+.work-pane-drop-preview.left { inset: 4px 50% 4px 4px; }
+.work-pane-drop-preview.right { inset: 4px 4px 4px 50%; }
+.work-pane-drop-preview.top { inset: 4px 4px 50%; }
+.work-pane-drop-preview.bottom { inset: 50% 4px 4px; }
+.work-pane-drop-preview.center { inset: 4px; }
+.work-pane-drop-preview > span {
+  padding: 5px 8px;
+  border: 0.5px solid color-mix(in oklch, var(--accent) 58%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--bg-panel) 92%, transparent);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+  font: 11px var(--font-ui);
+}
 .work-document { height: 100%; }
 .work-empty {
   height: 100%;
@@ -7684,10 +7793,15 @@ textarea.clone-input {
 }
 .work-empty strong { color: var(--text); font-size: 13px; }
 .work-empty > span { max-width: 520px; font-size: 12px; }
-.terminal-runtime-layer,
-.work-terminal-pane {
+.terminal-runtime-layer {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  visibility: hidden;
+  z-index: 2;
+}
+.work-terminal-pane {
+  position: absolute;
   pointer-events: none;
   visibility: hidden;
 }

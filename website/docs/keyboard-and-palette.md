@@ -109,11 +109,16 @@ Each view has its own small set of fixed (non-rebindable) keys. Settings → Key
 
 | Key | Action |
 | --- | --- |
-| `Ctrl/⌘+PageUp` / `Ctrl/⌘+PageDown` | Activate the previous / next Work tab from anywhere in Work |
-| `←` / `→` | Focus and activate the previous / next file or terminal tab |
-| `Home` / `End` | Focus and activate the first / last Work tab |
+| `Ctrl/⌘+PageUp` / `Ctrl/⌘+PageDown` | Activate the previous / next tab in the active Work pane |
+| `←` / `→` | Focus and activate the previous / next file or terminal tab in that pane |
+| `Home` / `End` | Focus and activate the first / last tab in that pane |
 | `Delete` / `Backspace` | Close the focused Work tab |
-| `F6` | Return focus from a terminal or document to the active Work tab |
+| `F6` | Return focus from a terminal or document to the active pane's tab |
+
+Quick Launch also exposes **Split pane right** and **Split pane down**, matching
+the two controls on every Work pane. Its **Move active tab** actions transfer
+the current tab to the previous or next pane, or create a new pane to the left,
+right, above, or below—the keyboard equivalents of dragging a Work tab.
 
 When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
 `Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on

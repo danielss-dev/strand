@@ -20,6 +20,56 @@ the browser-standard shortcut makes tab management feel unpredictable.
 
 ---
 
+## Internal WebView drags use pointer state machines
+
+**Rule.** For draggable UI owned by Strand, use a small mouse-movement
+threshold plus window-level move/up listeners and geometry-based targets. Do
+not depend on HTML5 `draggable` / `dragover` / `drop`. Keep per-frame cursor and
+ghost movement imperative; update React state only when the semantic target
+changes. For Work pane splitting, the nearest edge owns the outer 40% of the
+pane; keep the center 20% for moving a tab into an existing pane.
+
+**Why.** Tauri/WebView2 owns a native window drag/drop path for repository
+folders. Browser drag events for internal tabs can consequently disappear
+before reaching pane content, especially over separately layered terminal
+renderers. Pointer coordinates remain available across those layers and let
+the Work view resolve a leaf pane from its full rectangle, so edge splitting
+works consistently. The Files tree uses the same pattern across Pierre's
+shadow root.
+
+---
+
+## Resizable Work groups persist by split identity
+
+**Rule.** Key each Work `PanelGroup` by the stable ID of its split node, not
+by layout path or direction. A newly created split must start 50/50 so its
+placed divider matches the drag preview; only that same split instance may
+restore a user-resized ratio.
+
+**Why.** Tree paths such as `root.0` are reused as panes are closed and split
+again, and direction-only keys also collide across repositories. Reusing those
+keys lets a fresh split inherit unrelated saved dimensions, making its divider
+jump away from the half-pane preview when the tab is dropped.
+
+---
+
+## Live terminal renderers stay outside the Work pane tree
+
+**Rule.** Work pane nesting and resize may change where a terminal is shown,
+but must not change the React parent that owns its xterm renderer. Keep every
+`TerminalPane` under the single process-wide runtime layer and position visible
+renderers against measured pane-content rectangles. Pane tab membership is
+state; renderer ownership is not. Dragging a terminal between panes must update
+only that membership and active-pane state.
+
+**Why.** Moving a terminal component between recursive `PanelGroup` branches
+remounts its DOM, erasing xterm scrollback and selection even though the native
+PTY remains alive. A stable renderer parent preserves that state across
+right/down splits, empty-pane collapse, repository switches, and resize while
+still letting only the pane-local active terminal receive input.
+
+---
+
 ## Extend Pierre's file icons through the shared tree config
 
 **Rule.** All `PierreTree` surfaces use `lib/treeIcons.ts`'s `TREE_ICONS`.
