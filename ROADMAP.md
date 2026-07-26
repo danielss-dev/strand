@@ -2356,6 +2356,11 @@ split from an edge preview. Quick Launch exposes equivalent move-to-group and
 move-to-new-pane actions. Fresh splits now persist by stable split identity, so
 their initial 50/50 divider matches the half-pane drag preview.
 
+**Strand 1.2.0 release candidate cut (2026-07-26):** The release manifests
+are synchronized at 1.2.0 for the annotated `v1.2.0` tag. Tag-triggered CI
+will build the candidate and open a draft GitHub Release; publication remains
+subject to the existing signing and platform-validation gates.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
