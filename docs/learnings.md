@@ -20,6 +20,24 @@ the browser-standard shortcut makes tab management feel unpredictable.
 
 ---
 
+## Internal WebView drags use pointer state machines
+
+**Rule.** For draggable UI owned by Strand, use a small mouse-movement
+threshold plus window-level move/up listeners and geometry-based targets. Do
+not depend on HTML5 `draggable` / `dragover` / `drop`. Keep per-frame cursor and
+ghost movement imperative; update React state only when the semantic target
+changes.
+
+**Why.** Tauri/WebView2 owns a native window drag/drop path for repository
+folders. Browser drag events for internal tabs can consequently disappear
+before reaching pane content, especially over separately layered terminal
+renderers. Pointer coordinates remain available across those layers and let
+the Work view resolve a leaf pane from its full rectangle, so edge splitting
+works consistently. The Files tree uses the same pattern across Pierre's
+shadow root.
+
+---
+
 ## Live terminal renderers stay outside the Work pane tree
 
 **Rule.** Work pane nesting and resize may change where a terminal is shown,

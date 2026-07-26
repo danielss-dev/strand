@@ -6,8 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { FitAddon } from '@xterm/addon-fit';
@@ -68,6 +68,15 @@ export function Work({ visible }: { visible: boolean }) {
   const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
   const [focusTabsTick, setFocusTabsTick] = useState(0);
   const [draggedTab, setDraggedTab] = useState<WorkTabDrag | null>(null);
+  const [tabDropTarget, setTabDropTarget] = useState<WorkTabDropTarget | null>(null);
+  const dragSessionRef = useRef<WorkTabDragSession | null>(null);
+  const suppressTabClickRef = useRef(false);
+  const moveTabRef = useRef(moveTab);
+  const splitTabRef = useRef(splitTab);
+  const repoPathRef = useRef(repoPath);
+  moveTabRef.current = moveTab;
+  splitTabRef.current = splitTab;
+  repoPathRef.current = repoPath;
   const terminals = useMemo(
     () => Object.values(repos).flatMap((state) =>
       state.tabs.filter((tab): tab is WorkTerminalTab => tab.kind === 'terminal')),
@@ -78,6 +87,94 @@ export function Work({ visible }: { visible: boolean }) {
     () => activePane?.tabIds.flatMap((id) => repo?.tabs.find((tab) => tab.id === id) ?? []) ?? [],
     [activePane, repo?.tabs],
   );
+
+  const endTabDrag = useCallback((commit: boolean) => {
+    const drag = dragSessionRef.current;
+    if (!drag) return;
+    dragSessionRef.current = null;
+    drag.detach();
+    drag.ghost?.remove();
+    document.body.style.userSelect = drag.previousUserSelect;
+    setDraggedTab(null);
+    setTabDropTarget(null);
+    if (!drag.active) return;
+    suppressTabClickRef.current = true;
+    window.setTimeout(() => { suppressTabClickRef.current = false; }, 0);
+    const path = repoPathRef.current;
+    if (!commit || !path || !drag.target) return;
+    if (drag.target.kind === 'split') {
+      splitTabRef.current(path, drag.tabId, drag.target.paneId, drag.target.edge);
+    } else {
+      moveTabRef.current(path, drag.tabId, drag.target.paneId, drag.target.beforeTabId);
+    }
+  }, []);
+
+  const beginTabDrag = useCallback((
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ) => {
+    if (event.button !== 0 || dragSessionRef.current) return;
+    const onMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const drag = dragSessionRef.current;
+      if (!drag) return;
+      if (!drag.active) {
+        if (Math.hypot(moveEvent.clientX - drag.startX, moveEvent.clientY - drag.startY) < 5) return;
+        drag.active = true;
+        document.body.style.userSelect = 'none';
+        const ghost = document.createElement('div');
+        ghost.className = 'work-tab-drag-ghost';
+        ghost.textContent = drag.label;
+        document.body.appendChild(ghost);
+        drag.ghost = ghost;
+        setDraggedTab({ tabId: drag.tabId, sourcePaneId: drag.sourcePaneId });
+      }
+      moveEvent.preventDefault();
+      const target = resolveWorkTabDropTarget(
+        rootRef.current,
+        moveEvent.clientX,
+        moveEvent.clientY,
+        drag.sourcePaneId,
+      );
+      drag.target = target;
+      setTabDropTarget((current) => sameWorkTabDropTarget(current, target) ? current : target);
+      if (drag.ghost) {
+        drag.ghost.style.left = `${moveEvent.clientX + 14}px`;
+        drag.ghost.style.top = `${moveEvent.clientY + 10}px`;
+        drag.ghost.textContent = target
+          ? `${drag.label} · ${workTabDropTargetLabel(target)}`
+          : drag.label;
+        drag.ghost.classList.toggle('invalid', target == null);
+      }
+    };
+    const onMouseUp = () => endTabDrag(true);
+    const onKeyDown = (keyEvent: globalThis.KeyboardEvent) => {
+      if (keyEvent.key === 'Escape') endTabDrag(false);
+    };
+    const detach = () => {
+      window.removeEventListener('mousemove', onMouseMove, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+    dragSessionRef.current = {
+      tabId,
+      sourcePaneId,
+      label,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      ghost: null,
+      target: null,
+      previousUserSelect: document.body.style.userSelect,
+      detach,
+    };
+    window.addEventListener('mousemove', onMouseMove, true);
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('keydown', onKeyDown, true);
+  }, [endTabDrag]);
+
+  useEffect(() => () => endTabDrag(false), [endTabDrag]);
 
   const registerPaneHost = useCallback((paneId: string, node: HTMLDivElement | null) => {
     if (node) paneHosts.current.set(paneId, node);
@@ -156,6 +253,11 @@ export function Work({ visible }: { visible: boolean }) {
       ref={rootRef}
       className={'work-root' + (visible ? '' : ' work-hidden')}
       aria-hidden={!visible}
+      onClickCapture={(event) => {
+        if (!suppressTabClickRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
     >
       <TreeIconSprite />
       {repoPath && repo && (
@@ -176,16 +278,8 @@ export function Work({ visible }: { visible: boolean }) {
           onSetFileMode={(id, mode) => setFileMode(repoPath, id, mode)}
           onSplit={(paneId, direction) => splitPane(repoPath, paneId, direction)}
           draggedTab={draggedTab}
-          onTabDragStart={(tabId, sourcePaneId) => setDraggedTab({ tabId, sourcePaneId })}
-          onTabDragEnd={() => setDraggedTab(null)}
-          onMoveTab={(tabId, paneId, beforeTabId) => {
-            moveTab(repoPath, tabId, paneId, beforeTabId);
-            setDraggedTab(null);
-          }}
-          onSplitTab={(tabId, paneId, edge) => {
-            splitTab(repoPath, tabId, paneId, edge);
-            setDraggedTab(null);
-          }}
+          tabDropTarget={tabDropTarget}
+          onTabDragStart={beginTabDrag}
           onClosePane={(paneId) => closePane(repoPath, paneId)}
           onJump={jump}
           registerPaneHost={registerPaneHost}
@@ -233,7 +327,30 @@ interface WorkTabDrag {
   sourcePaneId: string;
 }
 
-type WorkPaneDropZone = WorkPaneEdge | 'center';
+type WorkTabDropTarget =
+  | {
+    kind: 'move';
+    paneId: string;
+    beforeTabId: string | null;
+    surface: 'tabs' | 'center';
+    marker: { tabId: string; side: 'before' | 'after' } | null;
+  }
+  | {
+    kind: 'split';
+    paneId: string;
+    edge: WorkPaneEdge;
+  };
+
+interface WorkTabDragSession extends WorkTabDrag {
+  label: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+  ghost: HTMLDivElement | null;
+  target: WorkTabDropTarget | null;
+  previousUserSelect: string;
+  detach(): void;
+}
 
 interface WorkPaneProps {
   repo: RepoWorkTabs;
@@ -256,10 +373,13 @@ interface WorkPaneProps {
   onSetFileMode(id: string, mode: WorkFileMode): void;
   onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
   draggedTab: WorkTabDrag | null;
-  onTabDragStart(tabId: string, sourcePaneId: string): void;
-  onTabDragEnd(): void;
-  onMoveTab(tabId: string, paneId: string, beforeTabId: string | null): void;
-  onSplitTab(tabId: string, paneId: string, edge: WorkPaneEdge): void;
+  tabDropTarget: WorkTabDropTarget | null;
+  onTabDragStart(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ): void;
   onClosePane(paneId: string): void;
   onJump(tab: WorkFileTab, hash: string): void;
   registerPaneHost(paneId: string, node: HTMLDivElement | null): void;
@@ -307,10 +427,8 @@ function WorkPaneView({
   onSetFileMode,
   onSplit,
   draggedTab,
+  tabDropTarget,
   onTabDragStart,
-  onTabDragEnd,
-  onMoveTab,
-  onSplitTab,
   onClosePane,
   onJump,
   registerPaneHost,
@@ -320,35 +438,17 @@ function WorkPaneView({
   const tabs = pane.tabIds.flatMap((id) => repo.tabs.find((tab) => tab.id === id) ?? []);
   const active = tabs.find((tab) => tab.id === pane.activeTabId) ?? null;
   const isActive = pane.id === activePaneId;
-  const [dropZone, setDropZone] = useState<WorkPaneDropZone | null>(null);
+  const dropZone = tabDropTarget?.paneId === pane.id
+    ? tabDropTarget.kind === 'split'
+      ? tabDropTarget.edge
+      : tabDropTarget.surface === 'center'
+        ? 'center'
+        : null
+    : null;
   const hostRef = useCallback(
     (node: HTMLDivElement | null) => registerPaneHost(pane.id, node),
     [pane.id, registerPaneHost],
   );
-
-  useEffect(() => {
-    if (!draggedTab) setDropZone(null);
-  }, [draggedTab]);
-
-  const onContentDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!draggedTab) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    setDropZone(workPaneDropZone(event));
-  };
-  const onContentDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-    setDropZone(null);
-  };
-  const onContentDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (!draggedTab) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const zone = workPaneDropZone(event);
-    if (zone === 'center') onMoveTab(draggedTab.tabId, pane.id, null);
-    else onSplitTab(draggedTab.tabId, pane.id, zone);
-    setDropZone(null);
-  };
 
   return (
     <section
@@ -356,6 +456,7 @@ function WorkPaneView({
         + (draggedTab ? ' drag-active' : '')
         + (dropZone ? ' drag-over' : '')}
       aria-label={t('work.paneLabel')}
+      data-work-pane-id={pane.id}
       onPointerDownCapture={() => onActivatePane(pane.id)}
       onFocusCapture={() => onActivatePane(pane.id)}
     >
@@ -365,20 +466,16 @@ function WorkPaneView({
         focusRequested={isActive ? focusTabsTick : 0}
         paneId={pane.id}
         draggedTab={draggedTab}
+        tabDropTarget={tabDropTarget}
         onActivate={onActivate}
         onClose={onClose}
         onDragStart={onTabDragStart}
-        onDragEnd={onTabDragEnd}
-        onMoveTab={onMoveTab}
         onNewTerminal={(shell, label) => onNewTerminal(pane.id, shell, label)}
         onSplit={(direction) => onSplit(pane.id, direction)}
       />
       <div
         ref={hostRef}
         className="work-content"
-        onDragOver={onContentDragOver}
-        onDragLeave={onContentDragLeave}
-        onDrop={onContentDrop}
       >
         {visible && active?.kind === 'file' && (
           active.missing ? (
@@ -420,22 +517,67 @@ function WorkPaneView({
             )}
           </div>
         )}
-        {draggedTab && dropZone && (
-          <div className="work-pane-drop-layer" aria-hidden="true">
-            <div className={`work-pane-drop-preview ${dropZone}`}>
-              <span>{workPaneDropLabel(dropZone)}</span>
-            </div>
-          </div>
-        )}
       </div>
+      {draggedTab && dropZone && (
+        <div className="work-pane-drop-layer" aria-hidden="true">
+          <div className={`work-pane-drop-preview ${dropZone}`}>
+            <span>{workPaneDropLabel(dropZone)}</span>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-function workPaneDropZone(event: DragEvent<HTMLDivElement>): WorkPaneDropZone {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
-  const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+function resolveWorkTabDropTarget(
+  root: HTMLDivElement | null,
+  clientX: number,
+  clientY: number,
+  sourcePaneId: string,
+): WorkTabDropTarget | null {
+  if (!root) return null;
+  const pane = Array.from(root.querySelectorAll<HTMLElement>('[data-work-pane-id]'))
+    .find((candidate) => pointInside(candidate.getBoundingClientRect(), clientX, clientY));
+  if (!pane) return null;
+  const paneId = pane.dataset.workPaneId;
+  if (!paneId) return null;
+
+  const lane = pane.querySelector<HTMLElement>('.work-tabs');
+  if (lane && pointInside(lane.getBoundingClientRect(), clientX, clientY)) {
+    const wraps = Array.from(lane.querySelectorAll<HTMLElement>('.work-tab-wrap'));
+    const over = wraps.find((candidate) => pointInside(candidate.getBoundingClientRect(), clientX, clientY));
+    if (!over) {
+      return { kind: 'move', paneId, beforeTabId: null, surface: 'tabs', marker: null };
+    }
+    const tabId = over.dataset.workTabId;
+    if (!tabId) return null;
+    const rect = over.getBoundingClientRect();
+    const side = clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+    const index = wraps.indexOf(over);
+    const beforeTabId = side === 'before' ? tabId : wraps[index + 1]?.dataset.workTabId ?? null;
+    return {
+      kind: 'move',
+      paneId,
+      beforeTabId,
+      surface: 'tabs',
+      marker: { tabId, side },
+    };
+  }
+
+  const zone = workPaneDropZone(pane.getBoundingClientRect(), clientX, clientY);
+  if (zone !== 'center') return { kind: 'split', paneId, edge: zone };
+  return paneId === sourcePaneId
+    ? null
+    : { kind: 'move', paneId, beforeTabId: null, surface: 'center', marker: null };
+}
+
+function pointInside(rect: DOMRect, x: number, y: number): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function workPaneDropZone(rect: DOMRect, clientX: number, clientY: number): WorkPaneEdge | 'center' {
+  const x = (clientX - rect.left) / Math.max(rect.width, 1);
+  const y = (clientY - rect.top) / Math.max(rect.height, 1);
   const edges: Array<[WorkPaneEdge, number]> = [
     ['left', x],
     ['right', 1 - x],
@@ -447,12 +589,30 @@ function workPaneDropZone(event: DragEvent<HTMLDivElement>): WorkPaneDropZone {
   return distance <= 0.24 ? edge : 'center';
 }
 
-function workPaneDropLabel(zone: WorkPaneDropZone): string {
+function workPaneDropLabel(zone: WorkPaneEdge | 'center'): string {
   if (zone === 'left') return t('work.dropSplitLeft');
   if (zone === 'right') return t('work.dropSplitRight');
   if (zone === 'top') return t('work.dropSplitTop');
   if (zone === 'bottom') return t('work.dropSplitBottom');
   return t('work.dropMove');
+}
+
+function workTabDropTargetLabel(target: WorkTabDropTarget): string {
+  return target.kind === 'split' ? workPaneDropLabel(target.edge) : t('work.dropMove');
+}
+
+function sameWorkTabDropTarget(
+  first: WorkTabDropTarget | null,
+  second: WorkTabDropTarget | null,
+): boolean {
+  if (first === second) return true;
+  if (!first || !second || first.kind !== second.kind || first.paneId !== second.paneId) return false;
+  if (first.kind === 'split' && second.kind === 'split') return first.edge === second.edge;
+  if (first.kind !== 'move' || second.kind !== 'move') return false;
+  return first.beforeTabId === second.beforeTabId
+    && first.surface === second.surface
+    && first.marker?.tabId === second.marker?.tabId
+    && first.marker?.side === second.marker?.side;
 }
 
 function WorkTabs({
@@ -461,11 +621,10 @@ function WorkTabs({
   focusRequested,
   paneId,
   draggedTab,
+  tabDropTarget,
   onActivate,
   onClose,
   onDragStart,
-  onDragEnd,
-  onMoveTab,
   onNewTerminal,
   onSplit,
 }: {
@@ -474,18 +633,24 @@ function WorkTabs({
   focusRequested: number;
   paneId: string;
   draggedTab: WorkTabDrag | null;
+  tabDropTarget: WorkTabDropTarget | null;
   onActivate(id: string): void;
   onClose(id: string): void;
-  onDragStart(tabId: string, sourcePaneId: string): void;
-  onDragEnd(): void;
-  onMoveTab(tabId: string, paneId: string, beforeTabId: string | null): void;
+  onDragStart(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabId: string,
+    sourcePaneId: string,
+    label: string,
+  ): void;
   onNewTerminal(shell?: EmbeddedShellChoice | null, label?: string): void;
   onSplit(direction: 'horizontal' | 'vertical'): void;
 }) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
-  const [dropMarker, setDropMarker] = useState<{ tabId: string; side: 'before' | 'after' } | null>(null);
+  const dropMarker = tabDropTarget?.kind === 'move' && tabDropTarget.paneId === paneId
+    ? tabDropTarget.marker
+    : null;
   const moveFocus = (current: string, key: string) => {
     const index = tabs.findIndex((tab) => tab.id === current);
     if (index < 0 || tabs.length === 0) return;
@@ -527,10 +692,6 @@ function WorkTabs({
     buttons.current.get(activeId)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeId, tabs]);
 
-  useEffect(() => {
-    if (!draggedTab) setDropMarker(null);
-  }, [draggedTab]);
-
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const lane = scrollRef.current;
     if (!lane || lane.scrollWidth <= lane.clientWidth) return;
@@ -545,45 +706,13 @@ function WorkTabs({
         role="tablist"
         aria-label={t('work.tabsLabel')}
         onWheel={onWheel}
-        onDragOver={(event) => {
-          if (!draggedTab) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-        }}
-        onDrop={(event) => {
-          if (!draggedTab) return;
-          event.preventDefault();
-          onMoveTab(draggedTab.tabId, paneId, null);
-          setDropMarker(null);
-        }}
       >
         {tabs.map((tab) => (
           <div
             className={'work-tab-wrap' + (activeId === tab.id ? ' active' : '')
               + (dropMarker?.tabId === tab.id ? ` drop-${dropMarker.side}` : '')}
             key={tab.id}
-            onDragOver={(event) => {
-              if (!draggedTab) return;
-              event.preventDefault();
-              event.stopPropagation();
-              event.dataTransfer.dropEffect = 'move';
-              const rect = event.currentTarget.getBoundingClientRect();
-              setDropMarker({
-                tabId: tab.id,
-                side: event.clientX < rect.left + rect.width / 2 ? 'before' : 'after',
-              });
-            }}
-            onDrop={(event) => {
-              if (!draggedTab) return;
-              event.preventDefault();
-              event.stopPropagation();
-              const rect = event.currentTarget.getBoundingClientRect();
-              const side = event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
-              const index = tabs.findIndex((candidate) => candidate.id === tab.id);
-              const beforeTabId = side === 'before' ? tab.id : tabs[index + 1]?.id ?? null;
-              onMoveTab(draggedTab.tabId, paneId, beforeTabId);
-              setDropMarker(null);
-            }}
+            data-work-tab-id={tab.id}
             onAuxClick={(event) => {
               if (event.button !== 1) return;
               event.preventDefault();
@@ -603,16 +732,14 @@ function WorkTabs({
                 + (tab.kind === 'file' && tab.preview ? ' preview' : '')
                 + (draggedTab?.tabId === tab.id && draggedTab.sourcePaneId === paneId ? ' dragging' : '')}
               title={tab.kind === 'file' ? tab.path : tab.label}
-              draggable
               onClick={() => onActivate(tab.id)}
               onKeyDown={(event) => onKeyDown(event, tab.id)}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('application/x-strand-work-tab', tab.id);
-                event.dataTransfer.setData('text/plain', tab.kind === 'file' ? tab.path : tab.label);
-                onDragStart(tab.id, paneId);
-              }}
-              onDragEnd={onDragEnd}
+              onMouseDown={(event) => onDragStart(
+                event,
+                tab.id,
+                paneId,
+                tab.kind === 'file' ? leaf(tab.path) : tab.label,
+              )}
             >
               {tab.kind === 'file' ? (
                 tab.isDirectory ? <Icon name="folder" size={14} /> : <TreeFileIcon path={tab.path} />
