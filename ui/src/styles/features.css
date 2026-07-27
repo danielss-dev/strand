@@ -7532,10 +7532,6 @@ textarea.clone-input {
   flex-direction: column;
   background: var(--bg-base);
 }
-.work-pane.active {
-  z-index: 1;
-  box-shadow: inset 0 0 0 0.5px color-mix(in oklch, var(--accent) 46%, var(--border));
-}
 .work-pane.drag-active { z-index: 3; }
 .work-tabbar {
   flex: 0 0 34px;
