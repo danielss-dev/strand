@@ -2375,6 +2375,11 @@ the opposite appearance, while Pierre's dual-theme AST cache remains intact.
 The Settings → Diff preview and the production diff paths share the same
 mapping and a focused regression test.
 
+**DAN-27 Work pane frame removed (2026-07-27):** Active Work panes no longer
+draw an accent-tinted border around all four edges. Existing tab accents and
+keyboard focus rings continue to identify active and focused controls without
+framing the workspace.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

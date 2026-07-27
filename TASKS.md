@@ -1130,6 +1130,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Launch move actions).
   Terminal renderers remain under one stable runtime layer, so pane nesting and
   resizing preserve live PTYs, scrollback, and selection.
+- ☑ Active Work panes no longer draw a four-sided accent frame; tab and focus
+  indicators remain the active-state cues (`features.css`; DAN-27).
 - ☑ Embeddable file documents retain working-tree editing plus Content/Preview/
   History/Compare/Blame/image/directory behavior while mounting only the active
   file (`FileDocument`, `Work`); revisions remain read-only. Pierre activation
