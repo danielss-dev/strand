@@ -242,9 +242,11 @@ impl Repo {
     }
 
     /// Prune registry entries whose working trees are gone
-    /// (`git worktree prune`). Used to clear `is_prunable` leftovers.
+    /// (`git worktree prune --expire now`). The explicit expiry matters for
+    /// freshly-deleted directories: the UI already confirmed they are stale,
+    /// so Git's normal grace period would only make the action appear broken.
     pub fn prune_worktrees(&self) -> Result<()> {
-        run_git(&self.path, &["worktree", "prune"])?;
+        run_git(&self.path, &["worktree", "prune", "--expire", "now"])?;
         Ok(())
     }
 
@@ -942,6 +944,36 @@ mod tests {
         assert_eq!(wts.len(), 1, "back to just main");
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn prunes_a_freshly_missing_worktree_immediately() {
+        let main = setup("prune");
+        let base = main.parent().unwrap();
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let linked = base.join("feature");
+        repo.add_worktree(linked.to_str().unwrap(), "feature", true, None, false)
+            .unwrap();
+
+        std::fs::remove_dir_all(&linked).unwrap();
+        let stale = repo
+            .worktrees()
+            .unwrap()
+            .into_iter()
+            .find(|w| w.branch.as_deref() == Some("feature"))
+            .expect("stale worktree remains registered");
+        assert!(stale.is_prunable);
+
+        repo.prune_worktrees().unwrap();
+        assert!(
+            repo.worktrees()
+                .unwrap()
+                .into_iter()
+                .all(|w| w.branch.as_deref() != Some("feature")),
+            "fresh stale entry was pruned without waiting for Git's grace period"
+        );
+
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]
