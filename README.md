@@ -54,6 +54,8 @@ agent already staged or committed. It's also a complete everyday Git client
 keyboard-first, but never keyboard-only: almost every action works from the
 keyboard alone, and the mouse stays first-class. Repository and Work tabs close
 from their close control, with Delete/Backspace while focused, or by middle-click.
+Light, dark, and system appearance apply consistently to the shell, code diffs,
+and the live Diff settings preview.
 
 ## Features
 

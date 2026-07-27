@@ -12,6 +12,7 @@ import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
 import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
+import { pierreThemeOptions } from '../lib/pierreTheme';
 import { isImagePath } from '../lib/image';
 import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
 import { ignorePatterns } from '../lib/ignore';
@@ -929,7 +930,7 @@ export function HunkAnnotatedDiff({
 }) {
   const applyPatch = useRepo((s) => s.applyPatch);
   const discardPatch = useRepo((s) => s.discardPatch);
-  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const resolvedTheme = useSettings((s) => s.resolvedTheme);
   const [pending, setPending] = useState<string | null>(null);
   const [lineSelection, setLineSelection] = useState<ActiveLineSelection | null>(null);
   const [linePicker, setLinePicker] = useState<string | null>(null);
@@ -1176,7 +1177,7 @@ export function HunkAnnotatedDiff({
   const fileDiffOptions = useMemo(
     () => ({
       diffStyle: layout,
-      theme: pierreTheme,
+      ...pierreThemeOptions(resolvedTheme),
       disableBackground: true,
       disableFileHeader: true,
       ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
@@ -1184,7 +1185,7 @@ export function HunkAnnotatedDiff({
       enableLineSelection: true,
       onLineSelected,
     }),
-    [layout, pierreTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
+    [layout, resolvedTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {

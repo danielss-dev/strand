@@ -17,7 +17,7 @@ The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Ho
 
 ## Diff
 
-Diff options come with a live preview — a sample diff at the bottom of the section re-renders as you change settings.
+Diff options come with a live preview — a sample diff at the bottom of the section re-renders as you change settings. The preview and every diff pane follow Strand's resolved Light, Dark, or System appearance, even when an explicit choice differs from the operating-system theme.
 
 - **Default layout** — Stacked or Split. This is the default for repositories that haven't picked their own layout; each repository can override it with the toggle in the diff-pane header, and that per-repo choice is remembered.
 - **Diff font** — "Same as mono font" (default) or any of the mono fonts.

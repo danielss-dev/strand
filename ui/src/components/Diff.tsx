@@ -8,6 +8,7 @@ import { FileDiff as PierreFileDiff, PatchDiff } from '@pierre/diffs/react';
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
 
 import { hashPatch } from '../lib/patch';
+import { pierreThemeOptions } from '../lib/pierreTheme';
 import { useSettings, type SettingsState } from '../stores/settings';
 
 /**
@@ -102,7 +103,7 @@ export function Diff({
   // Follow the app theme — Pierre ships matching pierre-light / pierre-dark.
   // `disableBackground` keeps the surface on our tokens; the theme drives the
   // syntax colors, which need to flip with light/dark.
-  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const resolvedTheme = useSettings((s) => s.resolvedTheme);
   const diffIndicators = useSettings((s) => s.diffIndicators);
   const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
   const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
@@ -118,7 +119,7 @@ export function Diff({
   }, [patch]);
   const options = {
     diffStyle: layout,
-    theme: pierreTheme,
+    ...pierreThemeOptions(resolvedTheme),
     disableBackground: true,
     disableFileHeader: hideFileHeader,
     ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
@@ -145,13 +146,13 @@ export function ParsedDiff<LAnnotation = undefined>({
   className,
   style,
 }: ParsedDiffProps<LAnnotation>) {
-  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const resolvedTheme = useSettings((s) => s.resolvedTheme);
   const diffIndicators = useSettings((s) => s.diffIndicators);
   const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
   const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
   const options = {
     diffStyle: layout,
-    theme: pierreTheme,
+    ...pierreThemeOptions(resolvedTheme),
     disableBackground: true,
     disableFileHeader: hideFileHeader,
     enableLineSelection: Boolean(onLineSelected),

@@ -951,7 +951,11 @@ remount re-tokenizes.
 **How to apply.** Pool render options (theme, `lineDiffType`,
 `tokenizeMaxLineLength`) are *global* while a pool is active — per-instance
 options are ignored for tokenization. Theme is registered dual
-(pierre-dark + pierre-light), so theme flips don't re-highlight; settings
+(pierre-dark + pierre-light), so theme flips don't re-highlight. Every mounted
+Pierre diff must still pass the resolved app theme as `themeType` (use
+`pierreThemeOptions()`); passing only `theme` is ignored by the active pool and
+falls back to Pierre's OS color-scheme, which is wrong when Strand explicitly
+overrides the OS theme. Settings
 that affect tokenization must be pushed via `pool.setRenderOptions(...)`
 (see `RenderOptionsSync`). The pool self-heals after `terminate()` (Strict
 Mode's dev double-mount), re-initializing on the next task. Vite needs
