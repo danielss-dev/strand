@@ -2368,6 +2368,13 @@ and a lightweight “your platform” highlight. All choices remain visible, the
 existing GitHub API resolver still links directly to the latest matching
 artifact, and the releases page remains the no-JavaScript/network fallback.
 
+**DAN-28 diff theme fix shipped (2026-07-27):** Every shared and annotated
+Pierre diff now passes Strand's resolved appearance as the worker renderer's
+`themeType`. Explicit Light or Dark choices therefore win even when the OS uses
+the opposite appearance, while Pierre's dual-theme AST cache remains intact.
+The Settings → Diff preview and the production diff paths share the same
+mapping and a focused regression test.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
