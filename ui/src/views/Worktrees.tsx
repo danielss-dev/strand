@@ -595,7 +595,17 @@ export function Worktrees({
                       Open tab
                     </button>
                   )}
-                  {!w.is_main && !w.is_current && (forcePath === w.path ? (
+                  {!w.is_main && !w.is_current && (w.is_prunable ? (
+                    <button
+                      type="button"
+                      className="btn ghost danger"
+                      onClick={(e) => { e.stopPropagation(); prune(); }}
+                      title="Remove registry entries whose worktree directories no longer exist"
+                      aria-label="Prune stale"
+                    >
+                      <Icon name="sync" size={12} />
+                    </button>
+                  ) : forcePath === w.path ? (
                     <>
                       <button
                         type="button"

@@ -957,8 +957,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Worktree engine (`strand-core/src/worktree.rs` — `Repo::worktrees()` parses
   `git worktree list --porcelain`; `add_worktree` / `remove_worktree` /
   `prune_worktrees` shell out via a module-local `run_git` + `GIT_SAFE_CONFIG`;
+  pruning uses `--expire now` so freshly missing worktrees disappear
+  immediately (DAN-32);
   `Worktree` struct carries branch/head/bare/detached/locked/prunable/main/current.
-  +2 tests: list→add→remove round-trip, dash-arg rejection.)
+  +3 tests: list→add→remove round-trip, immediate stale prune, dash-arg
+  rejection.)
 - ☑ `RepoMeta.common_dir` + `is_linked_worktree` (gix `common_dir()` + git2
   `is_worktree()`) so the tab strip can group a repo's worktrees.
 - ☑ IPC `repo_worktrees` / `repo_worktree_add` / `repo_worktree_remove` /
@@ -974,7 +977,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   + ↑/↓ + Enter).
 - ☑ Sidebar Worktrees section (first section in the Git tab; current marked with
   the accent check; single-click → overview, double-click/Enter → open as tab;
-  context menu open/show/copy/remove/force-remove/prune; header `+` opens dialog).
+  context menu open/show/copy/remove/force-remove/prune; stale entries expose
+  prune instead of the inapplicable remove/force-remove actions; header `+`
+  opens dialog).
 - ☑ Grouped worktree tabs (`Topbar.tsx` `groupTabs` clusters by `common_dir`,
   shared dot color via `groupColor`, linked tabs show stable repo-family name +
   branch/worktree context + worktree glyph).

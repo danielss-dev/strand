@@ -1239,7 +1239,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       );
     }
     // The main worktree and the one you're in can't be removed.
-    if (!w.is_main && !w.is_current) {
+    if (!w.is_main && !w.is_current && !w.is_prunable) {
       items.push({ label: 'Remove worktree', icon: 'trash', danger: true, confirm: true, onSelect: () => runWorktreeRemove(w, false) });
       items.push({ label: 'Force remove (discard changes)', icon: 'trash', danger: true, confirm: true, onSelect: () => runWorktreeRemove(w, true) });
     }

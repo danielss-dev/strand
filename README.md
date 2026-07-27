@@ -158,7 +158,7 @@ and the live Diff settings preview.
   worktree can start from any branch, remote branch, tag, or commit
   (fetch-first for remote bases) and copies gitignored setup files listed in
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
-  box.
+  box. Stale entries whose directories are already gone prune immediately.
 - **Everyday Git** — stage, unstage, or recoverably discard whole change
   blocks or individually selected lines inline in the diff; initialize a
   repository with an initial branch, optional

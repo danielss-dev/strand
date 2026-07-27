@@ -15,7 +15,7 @@ Each worktree is a row, ordered current first, then the main checkout, then the 
 - **Badges** — `current`, `main`, `merged`, `unpushed` / `unmerged` (work exists only here), `locked` (with the lock reason as a tooltip), `detached`, and `stale` (prunable). Worktrees created by agent tooling (for example under `.claude/worktrees/`, or on `vk/` branches) get a creator badge, so you can tell your own checkouts from agent sessions.
 - **Overlap warnings** — when two dirty worktrees have uncommitted changes touching the same files, each shows an `overlaps <name>: N` warning badge, with the file list in the tooltip. Use it to spot parallel attempts that are about to collide before you merge anything.
 
-Per-row actions: **Review** (any non-main worktree — see below), **Open** (the main checkout), **Merge…** (shown while the branch isn't merged into its detected base), **Open tab**, and remove. If git refuses a removal (dirty or locked worktree), the row offers a **Force remove / Cancel** fallback — safe either way, because a snapshot is archived first.
+Per-row actions: **Review** (any non-main worktree — see below), **Open** (the main checkout), **Merge…** (shown while the branch isn't merged into its detected base), **Open tab**, and remove. If git refuses a removal (dirty or locked worktree), the row offers a **Force remove / Cancel** fallback — safe either way, because a snapshot is archived first. A stale row, whose directory is already gone, offers **Prune** instead of remove and clears the obsolete registry entry immediately.
 
 The list is a keyboard listbox:
 
