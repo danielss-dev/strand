@@ -7,15 +7,24 @@ release executable, manifest, and Store assets with Microsoft's MakeAppx tool.
 The older MSI/EXE workflow remains available as a fallback, but it requires an
 external CA-backed Windows code-signing certificate.
 
-## Before opening the submission
+## Production identity
 
-- Create **Strand** as an **MSIX or PWA app** in Partner Center. An existing
-  **EXE or MSI app** product cannot supply the package identity required by
-  this MSIX.
-- Open **Product management → Product identity** and copy these three values
-  exactly: `Package/Identity/Name`, `Package/Identity/Publisher`, and
-  `Package/Properties/PublisherDisplayName`. Do not use
-  `dev.danielss.strand` unless Partner Center actually assigned that value.
+Strand is registered as Store product `9N0JG96LRC4W`. Its public manifest
+identity, pinned by the Store workflow and MSIX policy check, is:
+
+```text
+Package/Identity/Name: Danielss.strand
+Package/Identity/Publisher: CN=7BDB5F20-9C38-41B0-82F1-799F0AFDF699
+Package/Properties/PublisherDisplayName: Danielss
+```
+
+The Store protocol link is
+`ms-windows-store://pdp/?productid=9N0JG96LRC4W`. The Product identity page's
+MSA app ID is not the Microsoft Entra application/client ID used by release
+automation.
+
+## Remaining submission prerequisites
+
 - Complete owner/counsel review of the open Strand trademark gate and approve
   the factual privacy notice and user-content guidelines at
   `https://strandgit.com/docs/?page=privacy` and
@@ -23,10 +32,10 @@ external CA-backed Windows code-signing certificate.
 - Do not obtain or upload a Windows publisher certificate for this route.
   Partner Center signs the accepted MSIX during certification.
 
-## Build and package
+## GitHub release automation
 
-Run the **Microsoft Store MSIX candidate** workflow with an existing version
-tag and the three exact Product identity values. The workflow:
+Publishing a GitHub draft release triggers the **Microsoft Store release**
+workflow for that exact release tag. It:
 
 1. checks out and version-checks the exact tag;
 2. validates Strand's release and MSIX policies;
@@ -35,11 +44,47 @@ tag and the three exact Product identity values. The workflow:
 4. creates an x64 packaged-classic, medium-integrity, full-trust MSIX;
 5. validates the manifest and payload with MakeAppx; and
 6. uploads both `Strand_<version>.0_x64.msix` and the recommended
-   `.msixupload` wrapper as a workflow artifact.
+   `.msixupload` wrapper as a private workflow artifact;
+7. authenticates to Partner Center with the official Microsoft Store
+   Developer CLI GitHub Action; and
+8. submits the `.msixupload` to Store product `9N0JG96LRC4W`.
 
-The resulting package is intentionally unsigned. Upload the `.msixupload`
-artifact to Partner Center; Microsoft signs the package after certification.
-Do not attach this unsigned Store artifact to a public GitHub release.
+The resulting package is intentionally unsigned. Partner Center signs it after
+certification. Certification and publication are asynchronous Microsoft
+operations; a successful GitHub job means Partner Center accepted the
+submission, not that certification has completed. Do not attach the unsigned
+Store artifact to a public GitHub release.
+
+The workflow can also be run manually with an existing tag. Its `submit`
+checkbox defaults to off, so a manual run builds a candidate without changing
+Partner Center unless the maintainer deliberately enables submission.
+
+### One-time GitHub and Partner Center setup
+
+1. Associate a Microsoft Entra tenant with the Partner Center account.
+2. Register a dedicated Entra application and add it under Partner Center
+   **Account settings → User management → Microsoft Entra applications** with
+   the **Manager** role.
+3. Create these encrypted GitHub Actions secrets, preferably on the
+   `microsoft-store-production` environment:
+
+   | Secret | Value |
+   | --- | --- |
+   | `AZURE_AD_APPLICATION_CLIENT_ID` | Entra application (client) ID |
+   | `AZURE_AD_APPLICATION_SECRET` | Entra client secret value |
+   | `AZURE_AD_TENANT_ID` | Entra directory (tenant) ID |
+   | `SELLER_ID` | Partner Center seller ID |
+
+4. In GitHub, configure the `microsoft-store-production` environment with the
+   desired deployment reviewers. Without reviewers, a published GitHub release
+   proceeds directly to Store submission.
+
+Never commit those four credential values. The Store product ID and package
+identity are public metadata and intentionally live in the workflow.
+Microsoft's GitHub Actions publication path currently supports free Store
+products; Strand is configured as free.
+
+## Build and package locally
 
 For a local development build with a non-Store identity:
 
@@ -143,7 +188,7 @@ the user reviews and submits; nothing is sent automatically.
 
 ### Package
 
-- Upload: the `.msixupload` artifact from **Microsoft Store MSIX candidate**
+- Upload: submitted automatically by **Microsoft Store release**
 - Architecture: **x64** (declared by the package)
 - Minimum OS: **Windows 11, version 21H2 / build 22000**
 - Language: **English (United States)**
@@ -273,8 +318,10 @@ names, tokens, email addresses, or terminal history.
 ## Final external gates
 
 - [ ] Partner Center developer account is verified.
-- [ ] **Strand** is created as an MSIX/PWA app.
-- [ ] Exact Product identity values are copied into the MSIX workflow.
+- [x] **Strand** is created as MSIX/PWA Store product `9N0JG96LRC4W`.
+- [x] Exact Product identity values are pinned in the MSIX workflow.
+- [ ] Entra release application is assigned Partner Center Manager access and
+  the four GitHub environment secrets are configured.
 - [ ] Owner/counsel closes or explicitly accepts the trademark gate.
 - [ ] Owner approves the privacy and license listing text.
 - [ ] Partner Center accepts the `.msixupload` and completes package validation.

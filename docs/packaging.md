@@ -107,7 +107,23 @@ Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
 AppImage a keyless Sigstore bundle; the Windows publisher identity remains an
 external 1.0 gate.
 
-### Microsoft Store MSI flavor
+### Microsoft Store MSIX release
+
+The preferred Microsoft Store route is the packaged-classic MSIX assembled by
+`scripts/build-msix.ps1`. Publishing a GitHub draft release triggers
+`.github/workflows/microsoft-store-msix.yml`, which rebuilds the exact tag with
+the production Partner Center identity, retains the unsigned `.msixupload` as
+a private workflow artifact, and submits it to Store product `9N0JG96LRC4W`
+through Microsoft's official Store Developer CLI action. The Store signs the
+accepted package during certification.
+
+The workflow requires four encrypted secrets on the
+`microsoft-store-production` GitHub environment:
+`AZURE_AD_APPLICATION_CLIENT_ID`, `AZURE_AD_APPLICATION_SECRET`,
+`AZURE_AD_TENANT_ID`, and `SELLER_ID`. Exact setup and recovery instructions
+live in `docs/microsoft-store-submission.md`.
+
+### Microsoft Store MSI fallback
 
 The Microsoft Store uses a separate MSI flavor so the normal GitHub installer
 stays small. `crates/strand-tauri/tauri.microsoftstore.conf.json` builds only

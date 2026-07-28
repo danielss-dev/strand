@@ -77,11 +77,21 @@ if (!updatesSection.includes("t('updates.managedByStore')")) {
 }
 
 for (const fragment of [
-  'identity_name:',
-  'publisher:',
-  'publisher_display_name:',
+  'release:',
+  'types: [published]',
+  'MSIX_IDENTITY_NAME: Danielss.strand',
+  'MSIX_PUBLISHER: CN=7BDB5F20-9C38-41B0-82F1-799F0AFDF699',
+  'MSIX_PUBLISHER_DISPLAY_NAME: Danielss',
+  'MS_STORE_PRODUCT_ID: 9N0JG96LRC4W',
   '-StoreSubmission',
   'target/msix/dist/*.msixupload',
+  'microsoft/microsoft-store-apppublisher@v1.1',
+  'AZURE_AD_APPLICATION_CLIENT_ID',
+  'AZURE_AD_APPLICATION_SECRET',
+  'AZURE_AD_TENANT_ID',
+  'SELLER_ID',
+  'msstore publish',
+  'environment: microsoft-store-production',
 ]) {
   if (!workflow.includes(fragment)) {
     fail(`Store workflow must retain ${JSON.stringify(fragment)}`);
@@ -106,5 +116,6 @@ if (!/^\d+\.\d+\.\d+$/.test(packageJson.version)) {
 console.log(
   `MSIX packaging policy is valid for Strand ${packageJson.version}: `
   + 'x64 packaged-classic full trust, Windows 11 minimum, parameterized '
-  + 'Partner Center identity, validated assets, and Store-managed updates.',
+  + 'Partner Center identity, validated assets, Store-managed updates, and '
+  + 'GitHub-to-Partner-Center release submission.',
 );

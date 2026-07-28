@@ -242,13 +242,14 @@ artifacts now exist; the updater-signature gates passed, macOS was notarized,
 and Linux AppImages are keyless-signed with Sigstore. Public release remains
 held for Windows publisher signing and the real macOS/GNOME/KDE candidate
 runs. Microsoft Store engineering now has a verified packaged-classic MSIX
-path: a development-identity package registered and launched from WindowsApps,
-Store builds disable the direct updater in favor of Store-managed updates, and
-the workflow produces an unsigned `.msixupload` for Partner Center to sign.
-The signed offline-WebView2 MSI remains a fallback. Listing copy, privacy and
-user-content policies, in-product inappropriate-content reporting, and
-screenshots are prepared; the real Partner Center MSIX identity, trademark
-approval, and Store certification remain owner gates. See the
+with production identity `Danielss.strand`. Publishing a GitHub release builds
+the exact tag and submits its unsigned `.msixupload` to Store product
+`9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
+the accepted package. The signed offline-WebView2 MSI remains a fallback.
+Listing copy, privacy and user-content policies, in-product inappropriate-
+content reporting, and screenshots are prepared; GitHub's Partner Center
+credentials, trademark approval, and Store certification remain owner gates.
+See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

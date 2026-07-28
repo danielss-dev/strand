@@ -68,6 +68,10 @@ deliberate maintainer action.
 - [x] Manual **Microsoft Store MSIX candidate** workflow creates an unsigned
   `.msix` plus the recommended `.msixupload`; Partner Center supplies the
   production signature after certification.
+- [x] GitHub release publication rebuilds the exact tag with Store identity
+  `Danielss.strand` and submits its `.msixupload` to product `9N0JG96LRC4W`
+  through Microsoft's official Store Developer CLI action; manual
+  build-without-submit recovery remains available.
 - [x] Store-only Tauri flavor builds an MSI with silent offline WebView2
   (`tauri.microsoftstore.conf.json`) while preserving the signed stable updater
   as a certificate-dependent fallback.
@@ -78,10 +82,11 @@ deliberate maintainer action.
   inappropriate-content reporting, license text, privacy notice, user-content
   guidelines, certification notes, and four sanitized screenshots are prepared in
   `docs/microsoft-store-submission.md` and `docs/store-assets/`.
-- [ ] Deploy the privacy page, verify the Partner Center developer account,
-  create **Strand** as an MSIX/PWA product, and copy its exact Product identity.
-- [ ] Obtain a green **Microsoft Store MSIX candidate** workflow for the exact
-  submitted tag and upload its `.msixupload` to Partner Center.
+- [ ] Deploy the privacy page and verify the Partner Center developer account.
+- [ ] Assign a dedicated Entra application the Partner Center Manager role and
+  configure the four `microsoft-store-production` GitHub secrets.
+- [ ] Obtain a green **Microsoft Store release** workflow for the exact
+  submitted tag and confirm Partner Center accepted its `.msixupload`.
 - [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender
   scans, then submit initially as link-only discoverability.
 

@@ -2380,6 +2380,16 @@ draw an accent-tinted border around all four edges. Existing tab accents and
 keyboard focus rings continue to identify active and focused controls without
 framing the workspace.
 
+**Microsoft Store delivery automated (2026-07-28):** Strand's production Store
+identity (`Danielss.strand`, product `9N0JG96LRC4W`) is now pinned by the MSIX
+policy gate. Publishing a GitHub release rebuilds its exact tag, retains the
+unsigned Store payload as a private Actions artifact, and submits it to Partner
+Center through Microsoft's official Store Developer CLI action. The workflow
+uses a protected production environment, fails closed when any of its four
+Entra/Partner Center secrets is absent, and preserves a manual build-only
+recovery path. Credential provisioning and the first certified run remain
+external owner gates.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

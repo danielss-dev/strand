@@ -1,35 +1,38 @@
-name: Microsoft Store MSIX candidate
+name: Microsoft Store release
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to package (for example v1.1.1).'
+        description: 'Existing release tag to package (for example v1.2.0).'
         required: true
-      identity_name:
-        description: 'Exact Package/Identity/Name from Partner Center.'
-        required: true
-      publisher:
-        description: 'Exact Package/Identity/Publisher from Partner Center.'
-        required: true
-      publisher_display_name:
-        description: 'Exact Package/Properties/PublisherDisplayName from Partner Center.'
-        required: true
+      submit:
+        description: 'Submit the package to Partner Center after building it.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: microsoft-store-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ github.event.release.tag_name || inputs.tag }}
+  MSIX_IDENTITY_NAME: Danielss.strand
+  MSIX_PUBLISHER: CN=7BDB5F20-9C38-41B0-82F1-799F0AFDF699
+  MSIX_PUBLISHER_DISPLAY_NAME: Danielss
+  MS_STORE_PRODUCT_ID: 9N0JG96LRC4W
 
 jobs:
   build:
     runs-on: windows-latest
     permissions:
       contents: read
-    env:
-      VERSION: ${{ inputs.tag }}
-      MSIX_IDENTITY_NAME: ${{ inputs.identity_name }}
-      MSIX_PUBLISHER: ${{ inputs.publisher }}
-      MSIX_PUBLISHER_DISPLAY_NAME: ${{ inputs.publisher_display_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.VERSION }}
 
       - uses: pnpm/action-setup@v4
 
@@ -60,8 +63,78 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: strand-microsoft-store-msix-${{ inputs.tag }}
+          name: strand-microsoft-store-msix-${{ env.VERSION }}
           path: |
             target/msix/dist/*.msix
             target/msix/dist/*.msixupload
           if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release' || inputs.submit
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    environment: microsoft-store-production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: strand-microsoft-store-msix-${{ env.VERSION }}
+          path: store-package
+
+      - name: Require Partner Center credentials
+        shell: pwsh
+        env:
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: |
+          $required = @(
+            'AZURE_AD_APPLICATION_CLIENT_ID',
+            'AZURE_AD_APPLICATION_SECRET',
+            'AZURE_AD_TENANT_ID',
+            'SELLER_ID'
+          )
+          $missing = $required | Where-Object {
+            [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
+          }
+          if ($missing.Count -gt 0) {
+            throw "Missing Microsoft Store GitHub secrets: $($missing -join ', ')"
+          }
+
+      - name: Install Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Configure Microsoft Store credentials
+        shell: pwsh
+        env:
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: |
+          msstore settings --enableTelemetry false
+          msstore reconfigure `
+            --tenantId $env:AZURE_AD_TENANT_ID `
+            --sellerId $env:SELLER_ID `
+            --clientId $env:AZURE_AD_APPLICATION_CLIENT_ID `
+            --clientSecret $env:AZURE_AD_APPLICATION_SECRET
+
+      - name: Submit MSIX update to Partner Center
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem -LiteralPath store-package -Filter *.msixupload)
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one .msixupload, found $($packages.Count)."
+          }
+          msstore publish $packages[0].FullName -id $env:MS_STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) {
+            throw "Microsoft Store submission failed with exit code $LASTEXITCODE."
+          }
+          @"
+          ### Microsoft Store submission
+
+          Submitted **$env:VERSION** for Store product **$env:MS_STORE_PRODUCT_ID**.
+          Partner Center certification and publication continue asynchronously.
+          "@ >> $env:GITHUB_STEP_SUMMARY

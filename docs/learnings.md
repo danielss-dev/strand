@@ -2051,3 +2051,13 @@ direct GitHub updater is neither checked nor offered. The Store candidate
 workflow must emit an unsigned `.msixupload` for Partner Center to sign—do not
 reintroduce a CA certificate requirement into this route. Retain the signed,
 offline-WebView2 MSI workflow only as a fallback.
+
+**Microsoft Store CD starts from a published GitHub release and ends at
+Partner Center acceptance (2026-07-28).** Pin the public Store product and
+manifest identity in the repository, but keep the Entra client ID/secret,
+tenant ID, and seller ID in the protected `microsoft-store-production`
+environment. Use Microsoft's Store Developer CLI action for managed MSIX; the
+older `store-submission` action targets unmanaged MSI/EXE. A successful
+workflow submission does not mean certification is complete, and the unsigned
+`.msixupload` remains a private Actions artifact. Preserve manual build-only
+dispatch so packaging can be diagnosed without mutating Partner Center.
