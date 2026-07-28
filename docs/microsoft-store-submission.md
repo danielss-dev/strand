@@ -320,8 +320,9 @@ names, tokens, email addresses, or terminal history.
 - [ ] Partner Center developer account is verified.
 - [x] **Strand** is created as MSIX/PWA Store product `9N0JG96LRC4W`.
 - [x] Exact Product identity values are pinned in the MSIX workflow.
-- [ ] Entra release application is assigned Partner Center Manager access and
-  the four GitHub environment secrets are configured.
+- [x] Entra release application is assigned Partner Center Manager access and
+  the four GitHub environment secrets are configured (owner-confirmed
+  2026-07-28).
 - [ ] Owner/counsel closes or explicitly accepts the trademark gate.
 - [ ] Owner approves the privacy and license listing text.
 - [ ] Partner Center accepts the `.msixupload` and completes package validation.

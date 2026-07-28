@@ -2387,8 +2387,15 @@ unsigned Store payload as a private Actions artifact, and submits it to Partner
 Center through Microsoft's official Store Developer CLI action. The workflow
 uses a protected production environment, fails closed when any of its four
 Entra/Partner Center secrets is absent, and preserves a manual build-only
-recovery path. Credential provisioning and the first certified run remain
-external owner gates.
+recovery path. The owner reports credential provisioning complete; the first
+certified run remains an external gate.
+
+**Strand 1.2.1 release candidate cut (2026-07-28):** All five app manifests and
+the Cargo lockfile are synchronized at 1.2.1. The candidate includes the
+post-1.2.0 theme-resolution, Work-pane-frame, stale-worktree, landing-download,
+and Microsoft Store delivery fixes. The annotated `v1.2.1` tag will drive the
+signed desktop/helper pipeline and open the reviewed GitHub release before its
+first automated Store submission.
 
 ---
 

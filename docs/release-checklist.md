@@ -83,8 +83,9 @@ deliberate maintainer action.
   guidelines, certification notes, and four sanitized screenshots are prepared in
   `docs/microsoft-store-submission.md` and `docs/store-assets/`.
 - [ ] Deploy the privacy page and verify the Partner Center developer account.
-- [ ] Assign a dedicated Entra application the Partner Center Manager role and
-  configure the four `microsoft-store-production` GitHub secrets.
+- [x] Assign a dedicated Entra application the Partner Center Manager role and
+  configure the four `microsoft-store-production` GitHub secrets
+  (owner-confirmed 2026-07-28).
 - [ ] Obtain a green **Microsoft Store release** workflow for the exact
   submitted tag and confirm Partner Center accepted its `.msixupload`.
 - [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender

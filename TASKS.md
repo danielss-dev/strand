@@ -2006,8 +2006,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☑ Automate GitHub release submission to Microsoft Store (release-published
   trigger, production identity, official Store Developer CLI action, protected
   environment credential contract, and manual build-only recovery in
-  `microsoft-store-msix.yml`; 2026-07-28). Partner Center Manager assignment,
-  GitHub secrets, and the first green certified run remain external gates.
+  `microsoft-store-msix.yml`; 2026-07-28). The owner reports the Partner Center
+  Manager assignment and GitHub secrets configured; the first green certified
+  run remains an external gate.
 - ☑ Prepare the Microsoft Store MSI/EXE fallback path
   (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
   checks, Partner Center copy, privacy and user-content policies, in-product
@@ -2023,8 +2024,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
   `v1.0.0`, `v1.0.1`, and `v1.1.0` are public; `v1.1.0` remains the latest
-  stable release. `v1.2.0` is a tag-triggered release candidate as of
-  2026-07-26, pending CI and draft-asset review. The owner previously
+  stable release. `v1.2.1` is being cut from synchronized release manifests on
+  2026-07-28, pending CI, draft-asset review, and the first automated Microsoft
+  Store submission. The owner previously
   authorized the annotated but unsigned `v1.1.0` tag at `1b015f5` on
   2026-07-20. Release run `29755981951` passed all eight desktop, helper,
   signing, notarization, Sigstore, assembly, and promotion jobs and published

@@ -236,20 +236,17 @@ and the live Diff settings preview.
 
 ## Status
 
-Strand's **1.0 release candidate is feature-complete** and works on large
-real-world repositories daily. The annotated `v1.0.0` tag and draft release
-artifacts now exist; the updater-signature gates passed, macOS was notarized,
-and Linux AppImages are keyless-signed with Sigstore. Public release remains
-held for Windows publisher signing and the real macOS/GNOME/KDE candidate
-runs. Microsoft Store engineering now has a verified packaged-classic MSIX
+Strand is preparing the **1.2.1 stable release** and works on large real-world
+repositories daily. Release CI produces updater-signed desktop artifacts,
+notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft
+Store engineering has a verified packaged-classic MSIX
 with production identity `Danielss.strand`. Publishing a GitHub release builds
 the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
 the accepted package. The signed offline-WebView2 MSI remains a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
-content reporting, and screenshots are prepared; GitHub's Partner Center
-credentials, trademark approval, and Store certification remain owner gates.
-See the
+credentials are configured, while trademark approval and the first automated
+Store certification remain owner gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 
