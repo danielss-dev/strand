@@ -236,7 +236,7 @@ and the live Diff settings preview.
 
 ## Status
 
-Strand is preparing the **1.2.1 stable release** and works on large real-world
+Strand **1.2.1 is the current stable release** and works on large real-world
 repositories daily. Release CI produces updater-signed desktop artifacts,
 notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft
 Store engineering has a verified packaged-classic MSIX
@@ -245,8 +245,9 @@ the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
 the accepted package. The signed offline-WebView2 MSI remains a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
-credentials are configured, while trademark approval and the first automated
-Store certification remain owner gates. See the
+content reporting, and release credentials are configured. The first automated
+submission was accepted by Partner Center on 2026-07-28; certification,
+trademark approval, and clean-machine validation remain external gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

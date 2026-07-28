@@ -2007,8 +2007,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   trigger, production identity, official Store Developer CLI action, protected
   environment credential contract, and manual build-only recovery in
   `microsoft-store-msix.yml`; 2026-07-28). The owner reports the Partner Center
-  Manager assignment and GitHub secrets configured; the first green certified
-  run remains an external gate.
+  Manager assignment and GitHub secrets configured. Release run `30382509727`
+  built the exact `v1.2.1` tag and Partner Center accepted its `.msixupload` on
+  retry after the conflicting portal-created draft was canceled; certification
+  and clean-machine validation remain external gates.
 - ☑ Prepare the Microsoft Store MSI/EXE fallback path
   (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
   checks, Partner Center copy, privacy and user-content policies, in-product
@@ -2023,10 +2025,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
-  `v1.0.0`, `v1.0.1`, and `v1.1.0` are public; `v1.1.0` remains the latest
-  stable release. `v1.2.1` is being cut from synchronized release manifests on
-  2026-07-28, pending CI, draft-asset review, and the first automated Microsoft
-  Store submission. The owner previously
+  `v1.0.0`, `v1.0.1`, `v1.1.0`, and `v1.2.1` are public; `v1.2.1` is the latest
+  stable release. Release run `30380876997` passed all desktop, helper, signing,
+  notarization, Sigstore, assembly, and promotion jobs and published 18 assets.
+  Microsoft Store run `30382509727` then built the exact tag and Partner Center
+  accepted its `.msixupload` on 2026-07-28. The owner previously
   authorized the annotated but unsigned `v1.1.0` tag at `1b015f5` on
   2026-07-20. Release run `29755981951` passed all eight desktop, helper,
   signing, notarization, Sigstore, assembly, and promotion jobs and published

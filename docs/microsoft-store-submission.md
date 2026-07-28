@@ -55,6 +55,11 @@ operations; a successful GitHub job means Partner Center accepted the
 submission, not that certification has completed. Do not attach the unsigned
 Store artifact to a public GitHub release.
 
+The first automated production submission was `v1.2.1`. Workflow run
+`30382509727`, attempt 2, completed successfully on 2026-07-28 after the owner
+canceled a conflicting portal-created draft. Partner Center accepted the
+`.msixupload`; certification and publication continue asynchronously.
+
 The workflow can also be run manually with an existing tag. Its `submit`
 checkbox defaults to off, so a manual run builds a candidate without changing
 Partner Center unless the maintainer deliberately enables submission.

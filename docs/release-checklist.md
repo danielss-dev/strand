@@ -86,8 +86,9 @@ deliberate maintainer action.
 - [x] Assign a dedicated Entra application the Partner Center Manager role and
   configure the four `microsoft-store-production` GitHub secrets
   (owner-confirmed 2026-07-28).
-- [ ] Obtain a green **Microsoft Store release** workflow for the exact
-  submitted tag and confirm Partner Center accepted its `.msixupload`.
+- [x] Obtain a green **Microsoft Store release** workflow for the exact
+  submitted tag and confirm Partner Center accepted its `.msixupload`
+  (`v1.2.1`, run `30382509727`, attempt 2; 2026-07-28).
 - [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender
   scans, then submit initially as link-only discoverability.
 
