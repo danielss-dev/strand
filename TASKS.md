@@ -2095,7 +2095,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   `og-image.svg` source and rendered `og-image.png`, with Open Graph + Twitter
   metadata added 2026-07-18. The 2026-07-26 polish pass replaced the generic
   download buttons with responsive Apple/Windows/Linux release cards and
-  platform-aware highlighting while retaining the releases-page fallback.)
+  platform-aware highlighting while retaining the releases-page fallback.
+  The 2026-07-29 app-replica sync added current Workspaces/network/sidebar
+  chrome, all five primary views, Work file/terminal tabs, pull-request
+  selection, repository/workspace Review scope, notes/baseline/file actions,
+  and pointer + keyboard pane resizing; desktop/narrow browser QA is clean.)
 - ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
   fact-checked markdown pages + `manifest.json`, rendered client-side by
   `docs/index.html`/`docs.js` with vendored `marked.min.js`; no build step —

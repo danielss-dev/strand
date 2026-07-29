@@ -12,6 +12,9 @@
 **[Roadmap](./ROADMAP.md)** ·
 **[Commercial license](./COMMERCIAL.md)**
 
+The website includes a keyboard-operable, resizable demo of Strand's current
+Work, Local Changes, Review, Pull Requests, and All Commits surfaces.
+
 Keyboard-first: almost every action is operable from the keyboard alone —
 never keyboard-only, the mouse stays first-class. Shortcuts are listed below
 and **every global one is rebindable** in Settings → Keyboard.

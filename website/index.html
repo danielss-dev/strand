@@ -106,37 +106,44 @@
       <!-- Live mock of the app's Review view (chrome metrics + Pierre palette
            lifted from the real app). j/k steps the queue, space marks reviewed. -->
       <div class="wrap mock-wrap" data-reveal>
-        <div class="mock" id="mock" data-view="review">
+        <div class="mock" id="mock" data-view="review" data-diff="stacked" data-scope="repository">
 
           <div class="m-topbar">
             <span class="traffic"><i class="tdot c"></i><i class="tdot mi"></i><i class="tdot mx"></i></span>
-            <span class="repo-tab"><i class="repo-dot"></i>acme/api</span>
-            <span class="tab-add">+</span>
+            <button class="workspace-btn" type="button" id="workspace-btn" aria-expanded="false" title="Workspaces" data-demo-action="Workspace switcher opened">
+              <svg viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>
+              <span>Agent workspace</span>
+              <svg class="bchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button class="repo-tab" type="button" aria-pressed="true"><i class="repo-dot"></i>acme/api</button>
+            <button class="tab-add" type="button" title="Open repository" aria-label="Open repository" data-demo-action="Repository picker opened">+</button>
             <span class="m-spacer"></span>
             <span class="sync-group">
-              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
-              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>0</span>
-              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>3</span>
+              <button class="sync-btn" type="button" data-demo-action="Fetched" aria-label="Fetch"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+              <button class="sync-btn" type="button" data-demo-action="Already up to date" aria-label="Pull (0 behind)"><svg viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>0</button>
+              <button class="sync-btn" type="button" data-demo-action="Pushed 3 commits" aria-label="Push (3 ahead)"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>3</button>
+              <button class="sync-btn chev" type="button" id="network-menu-btn" title="More fetch, pull, and push options" aria-expanded="false" data-demo-action="Network options opened"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
             </span>
             <span class="sync-group">
-              <span class="sync-btn"><svg viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>Stash</span>
-              <span class="sync-btn chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+              <button class="sync-btn" type="button" data-demo-action="Snapshot saved"><svg viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>Stash</button>
+              <button class="sync-btn chev" type="button" data-demo-action="Stash options opened" title="Stash options"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
             </span>
-            <span class="branch-btn"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>feature/auth-retry<svg class="bchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
-            <span class="cmd-pill" id="open-palette" role="button" tabindex="0"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Quick Launch<kbd>⌘K</kbd></span>
+            <button class="branch-btn" type="button" data-demo-action="Branch switcher opened"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>feature/auth-retry<svg class="bchev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button class="cmd-pill" id="open-palette" type="button"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Quick Launch<kbd>⌘K</kbd></button>
           </div>
 
           <div class="m-body">
             <aside class="m-side">
               <div class="m-side-primary">
-                <div class="side-row"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="m7 9 2 2-2 2M12 14h5"/></svg><span class="label">Work</span></div>
-                <div class="side-row" data-view="local"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg><span class="label">Local Changes</span><span class="badge">8</span></div>
-                <div class="side-row active" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span class="label">Review</span></div>
-                <div class="side-row" data-view="commits"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M1.05 12H7M17 12h5.95"/></svg><span class="label">All Commits</span></div>
+                <button class="side-row" type="button" data-view="work"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="m7 9 2 2-2 2M12 14h5"/></svg><span class="label">Work</span></button>
+                <button class="side-row" type="button" data-view="local"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg><span class="label">Local Changes</span><span class="badge">8</span></button>
+                <button class="side-row active" type="button" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span class="label">Review</span></button>
+                <button class="side-row" type="button" data-view="pull-requests"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V3M18 9c0 5-3 8-9 8"/></svg><span class="label">Pull Requests</span><span class="pr-live-dot" title="1 updated pull request"></span></button>
+                <button class="side-row" type="button" data-view="commits"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M1.05 12H7M17 12h5.95"/></svg><span class="label">All Commits</span></button>
               </div>
               <div class="side-tabs">
-                <span class="side-tab on"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Git</span>
-                <span class="side-tab"><svg class="ico" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Files</span>
+                <button class="side-tab on" type="button" data-side="git"><svg class="ico" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Git</button>
+                <button class="side-tab" type="button" data-side="files"><svg class="ico" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Files</button>
               </div>
               <div class="side-filter"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Filter branches, tags…</div>
               <div class="side-scroll">
@@ -154,32 +161,82 @@
                 <div class="side-section"><i class="chev">▸</i>Submodules<span class="ss-n">0</span></div>
               </div>
             </aside>
+            <div class="m-resize body-resize" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical"></div>
 
             <div class="m-right">
               <div class="m-mainheader">
                 <span class="crumb">acme/api<i class="sep">›</i><b class="leaf" id="crumb-leaf">Review</b><span class="dim" id="crumb-note">· 8 unstaged files</span></span>
                 <span class="h-actions">
-                  <span class="icon-btn on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg></span>
-                  <span class="icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></span>
-                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
-                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg></span>
-                  <span class="icon-btn"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg></span>
+                  <span class="seg only-review" role="group" aria-label="Review scope">
+                    <button class="on" type="button" data-scope="repository" aria-pressed="true">Repository</button>
+                    <button type="button" data-scope="workspace" aria-pressed="false">Workspace</button>
+                  </span>
+                  <button class="icon-btn on" type="button" data-diff-mode="stacked" title="Stacked (unified)" aria-label="Stacked (unified) diff view"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg></button>
+                  <button class="icon-btn" type="button" data-diff-mode="split" title="Split (side-by-side)" aria-label="Split (side-by-side) diff view"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg></button>
+                  <button class="icon-btn" type="button" data-demo-action="Refreshed" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+                  <button class="icon-btn" type="button" data-demo-action="Opened in terminal" aria-label="Open in terminal"><svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg></button>
+                  <button class="icon-btn" type="button" data-demo-action="Opened in editor" aria-label="Open in editor"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg></button>
                 </span>
               </div>
+
+              <div class="work-surface only-work">
+                <div class="work-tabs" role="tablist" aria-label="Work tabs">
+                  <button type="button" role="tab" class="work-tab active" data-work-tab="file" aria-selected="true"><i class="fico ts">TS</i>session.ts<span>×</span></button>
+                  <button type="button" role="tab" class="work-tab" data-work-tab="terminal" aria-selected="false"><svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal<span>×</span></button>
+                  <button type="button" class="work-add" data-work-tab="terminal" aria-label="New terminal">+</button>
+                </div>
+                <div class="work-pane work-file on" data-work-pane="file">
+                  <div class="work-file-tools"><span>src/auth/session.ts</span><button type="button" data-demo-action="File saved">Save <kbd>⌘S</kbd></button></div>
+                  <pre><code><i>import</i> { getToken } <i>from</i> <b>'./token'</b>
+<i>import</i> { withRetry } <i>from</i> <b>'./retry'</b>
+
+<i>export async function</i> getSession(url: <em>string</em>) {
+  <i>const</i> token = <i>await</i> getToken()
+  <i>const</i> headers = { Authorization: <b>`Bearer ${token}`</b> }
+  <i>const</i> res = <i>await</i> withRetry(() =&gt; fetch(url, { headers }))
+  <i>return</i> res.json()
+}</code></pre>
+                </div>
+                <div class="work-pane work-terminal" data-work-pane="terminal">
+                  <p><b>acme/api</b> on <i>feature/auth-retry</i></p>
+                  <p><span>❯</span> pnpm test</p>
+                  <p class="term-ok">✓ 18 tests passed in 412ms</p>
+                  <p><span>❯</span> <i class="term-caret"></i></p>
+                </div>
+              </div>
+
+              <div class="pr-surface only-pr">
+                <div class="pr-list" role="listbox" aria-label="Pull requests">
+                  <div class="pr-list-head">Open pull requests <button type="button" data-demo-action="Pull requests refreshed">↻</button></div>
+                  <button type="button" role="option" aria-selected="true" class="pr-row active" data-pr="142"><b>#142</b><span>Retry transient auth failures</span><small>feature/auth-retry → main · updated 4m</small></button>
+                  <button type="button" role="option" aria-selected="false" class="pr-row" data-pr="139"><b>#139</b><span>Reduce token-cache allocations</span><small>fix/token-cache → main · updated 2h</small></button>
+                  <button type="button" role="option" aria-selected="false" class="pr-row" data-pr="136"><b>#136</b><span>Update API examples</span><small>docs/api → main · updated 1d</small></button>
+                </div>
+                <div class="pr-detail">
+                  <div class="pr-detail-head"><span class="pr-state">Open</span><strong id="pr-title">Retry transient auth failures</strong><button type="button" data-demo-action="Checked out pull request">Checkout</button></div>
+                  <p id="pr-meta">#142 by dana · feature/auth-retry into main</p>
+                  <div class="pr-checks"><span class="ok">✓</span><b>All checks passed</b><span>3 checks</span></div>
+                  <div class="pr-summary"><b>8 files changed</b><span class="stat-add">+41</span><span class="stat-del">−12</span><button type="button" data-demo-action="Pull request review started">Review changes</button></div>
+                  <div class="pr-commit"><i class="ai-chip">ai</i><span>feat(auth): retry transient session failures</span><code>9c4e7a1</code></div>
+                  <div class="pr-commit"><span>test: cover retry exhaustion + backoff timing</span><code>41d2c9f</code></div>
+                </div>
+              </div>
+
               <div class="rv-toolbar only-review">
                 <span class="rv-chip"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Unstaged changes</span>
                 <span class="rv-progress"><span class="rv-bar"><i id="bar-fill"></i></span><span id="bar-text">4/8 reviewed</span></span>
                 <span class="rv-actions">
-                  <span class="h-link danger" id="discard-link">Discard unreviewed (4)</span>
-                  <span class="h-link">Pin baseline at HEAD</span>
+                  <button class="h-link" type="button" id="copy-feedback">Copy feedback (1)</button>
+                  <button class="h-link danger" type="button" id="discard-link">Discard unreviewed (4)</button>
+                  <button class="h-link" type="button" id="baseline-link">Pin baseline at HEAD</button>
                 </span>
               </div>
 
               <div class="lc-toolbar only-local">
-                <span class="lc-col">Unstaged<b>8</b></span>
-                <span class="h-link">Stage all</span>
+                <span class="lc-col">Unstaged<b id="lc-unstaged-count">8</b></span>
+                <button class="h-link" type="button" id="stage-all">Stage all</button>
                 <span class="m-spacer"></span>
-                <span class="lc-col dim2">Staged<b>0</b></span>
+                <span class="lc-col dim2">Staged<b id="lc-staged-count">0</b></span>
               </div>
 
               <div class="m-panes only-panes">
@@ -209,19 +266,23 @@
                   </div>
                 </div>
 
+                <div class="m-resize panes-resize" role="separator" tabindex="0" aria-label="Resize file queue" aria-orientation="vertical"></div>
                 <div class="m-diff">
                   <div class="rv-file-head">
                     <span class="path" id="d-path">src/auth/session.ts</span>
                     <span class="stat-del" id="d-del">-2</span><span class="stat-add" id="d-add">+6</span>
-                    <span class="h-link-sm only-review-i">Note</span>
-                    <span class="h-link-sm">Stage</span>
-                    <span class="h-link-sm danger">Discard</span>
-                    <span class="rv-check only-review-i" id="mark-btn"><i>✓</i>Mark reviewed</span>
+                    <button class="h-link-sm only-review-i" type="button" id="note-btn">Note</button>
+                    <button class="h-link-sm" type="button" id="stage-btn">Stage</button>
+                    <button class="h-link-sm danger" type="button" id="discard-file-btn">Discard</button>
+                    <button class="rv-check only-review-i" type="button" id="mark-btn"><i>✓</i>Mark reviewed</button>
                   </div>
+                  <form class="note-editor" id="note-editor" hidden>
+                    <input type="text" id="note-input" aria-label="Review note" placeholder="Note this file — Enter saves, Esc cancels" />
+                  </form>
                   <div class="d-scroll" id="d-scroll">
 
                 <div class="mockdiff on" data-d="a" data-add="+6" data-del="-2">
-                  <div class="dnotes"><span class="dnote"><b class="ln">✎ L13</b>surface the retry count in the error message<i class="x">×</i></span></div>
+                  <div class="dnotes"><span class="dnote"><b class="ln">✎ L13</b>surface the retry count in the error message<button type="button" class="x" aria-label="Remove note">×</button></span></div>
                   <div class="dline ctx"><span class="g">1</span><span class="g">1</span><span class="c"><i class="k">import</i> { getToken, refreshToken } <i class="k">from</i> <i class="str">'./token'</i></span></div>
                   <div class="dline add"><span class="g"></span><span class="g">2</span><span class="c"><i class="k">import</i> { withRetry } <i class="k">from</i> <i class="str">'./retry'</i></span></div>
                   <div class="dline ctx"><span class="g">2</span><span class="g">3</span><span class="c"></span></div>
@@ -345,7 +406,7 @@
                 <div class="cb-top">
                   <span class="subject-row"><input class="subject" type="text" placeholder="Commit subject" aria-label="Commit subject" /></span>
                   <label class="amend"><input type="checkbox" class="cbx" />Amend</label>
-                  <span class="btn-commit">Commit<kbd>⌘↵</kbd></span>
+                  <button class="btn-commit" type="button">Commit<kbd>⌘↵</kbd></button>
                 </div>
                 <span class="subject-row desc-row"><input class="subject" type="text" placeholder="Description (optional)" aria-label="Commit description" /></span>
               </div>
@@ -363,6 +424,7 @@
             </div>
           </div>
 
+          <div class="mock-toast" id="mock-toast" role="status" aria-live="polite" hidden></div>
           <div class="m-status">
             <span class="sb branch"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>feature/auth-retry</span>
             <span class="sb">3↑ 0↓</span>

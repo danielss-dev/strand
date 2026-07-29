@@ -21,14 +21,16 @@ Preview locally with `pnpm site` from the repo root (serves on
   choices visible.
 - `fonts/` — Geist + JetBrains Mono woff2, copied from `ui/public/fonts`
   (self-hosted, latin subsets only).
-- The hero window is a replica of the actual app shell (topbar / sidebar /
-  Review toolbar / queue tree / diff / statusbar), built to the real metrics
+- The hero window is a replica of the actual app shell (workspace/repo tabs,
+  network and stash controls, sidebar, Work tabs, Review toolbar and queue,
+  pull requests, commit graph, diff, and statusbar), built to the real metrics
   in `ui/src/styles/chrome.css` and `features.css`, with syntax colors taken
   from the app's `pierre-dark` Shiki theme (`@pierre/theme`). It's a working
-  demo: the sidebar switches Local Changes / Review / All Commits views, tree
-  folders collapse, `j`/`k`/`space` drive the queue (and the commit graph),
-  and the commit bar "commits". If the app's chrome changes materially,
-  re-sync the mock against fresh screenshots.
+  demo: all five primary sidebar destinations switch in place; file/terminal
+  tabs, Git/Files, repository/workspace Review scope, PR selection, file
+  actions, review notes, baselines, tree folders, keyboard navigation, commit
+  form, and both pane resizers respond like their app counterparts. If the
+  app's chrome changes materially, re-sync the mock against fresh screenshots.
 - ⌘K opens a page-level clone of the app's command palette (same grouped /
   fuzzy / highlighted UI): it scrolls to page sections, switches the demo
   views, sets the accent, and opens GitHub / X. Items live in `ITEMS` in
