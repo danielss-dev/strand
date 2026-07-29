@@ -1,36 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
+import { startCloneDialogFocusLifecycle } from '../lib/cloneDialogFocus';
 import { pickDirectory } from '../lib/dialog';
 import { t } from '../lib/i18n';
 import { useSettings } from '../stores/settings';
-
-type FocusTarget = { focus: () => void };
-
-/**
- * Defer the dialog's initial focus until a closing command palette has restored
- * its opener. The returned cleanup restores whichever control was behind the
- * modal rather than the auto-focused URL input.
- */
-export function startCloneDialogFocusLifecycle(
-  initialOpener: FocusTarget | null,
-  getActive: () => FocusTarget | null,
-  getInput: () => FocusTarget | null,
-  requestFrame: (callback: () => void) => number,
-  cancelFrame: (id: number) => void,
-): () => void {
-  let opener = initialOpener;
-  const frame = requestFrame(() => {
-    const input = getInput();
-    const active = getActive();
-    if (active && active !== input) opener = active;
-    input?.focus();
-  });
-  return () => {
-    cancelFrame(frame);
-    opener?.focus();
-  };
-}
 
 /**
  * Modal for configuring a clone. The user pastes a URL and picks a destination;

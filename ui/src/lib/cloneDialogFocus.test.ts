@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.stubGlobal('window', {});
-
-const { startCloneDialogFocusLifecycle } = await import('./CloneDialog');
+import { startCloneDialogFocusLifecycle } from './cloneDialogFocus';
 
 describe('CloneDialog focus lifecycle', () => {
   it('reclaims focus after a closing palette restores a control behind the modal', () => {

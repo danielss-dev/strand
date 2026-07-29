@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RecentRepo, RepoMeta } from '../lib/types';
-import type { RepoTab } from '../stores/repo';
-
-vi.stubGlobal('window', {});
-
-const { mergeKnownRepositories, validateRecentRepositories } = await import(
-  './WorkspaceManagerDialog'
-);
+import type { RecentRepo, RepoMeta } from './types';
+import { mergeKnownRepositories, validateRecentRepositories } from './workspaceRepositories';
 
 function meta(path: string, name = 'repo'): RepoMeta {
   return {
@@ -55,11 +49,11 @@ describe('Workspace Manager repository candidates', () => {
   });
 
   it('keeps open main repositories and deduplicates them from validated recents', () => {
-    const main = { path: 'D:\\src\\repo', meta: meta('D:\\src\\repo') } as RepoTab;
+    const main = { path: 'D:\\src\\repo', meta: meta('D:\\src\\repo') };
     const linked = {
       path: 'D:\\src\\repo-worktree',
       meta: { ...meta('D:\\src\\repo-worktree'), is_linked_worktree: true },
-    } as RepoTab;
+    };
 
     expect(
       mergeKnownRepositories(

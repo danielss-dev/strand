@@ -5,69 +5,13 @@ import { recents as recentsDb } from '../lib/db';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from '../lib/dialog';
 import { pathKey, pathLeaf, repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import type { RecentRepo, RepoMeta } from '../lib/types';
-import { useRepo, type RepoTab } from '../stores/repo';
+import {
+  mergeKnownRepositories,
+  validateRecentRepositories,
+  type KnownRepository,
+} from '../lib/workspaceRepositories';
+import { useRepo } from '../stores/repo';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
-
-interface KnownRepository {
-  path: string;
-  name: string;
-}
-
-/**
- * Re-open persisted recents before offering them as workspace candidates.
- * Besides rejecting deleted paths, repoOpen gives us the canonical workdir
- * spelling that workspace membership expects.
- */
-export async function validateRecentRepositories(
-  recents: RecentRepo[],
-  repoOpen: (path: string) => Promise<RepoMeta> = tauri.repoOpen,
-): Promise<KnownRepository[]> {
-  const unique = new Map<string, RecentRepo>();
-  for (const recent of recents) {
-    const key = pathKey(recent.path);
-    if (!unique.has(key)) unique.set(key, recent);
-  }
-
-  const resolved = await Promise.all(
-    [...unique.values()].map(async (recent): Promise<KnownRepository | null> => {
-      try {
-        const meta = await repoOpen(recent.path);
-        return { path: meta.path, name: repoFamilyName(meta) };
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  const valid = new Map<string, KnownRepository>();
-  for (const repository of resolved) {
-    if (repository && !valid.has(pathKey(repository.path))) {
-      valid.set(pathKey(repository.path), repository);
-    }
-  }
-  return [...valid.values()];
-}
-
-/** Merge validated recents with currently-open main repositories by identity. */
-export function mergeKnownRepositories(
-  validatedRecents: KnownRepository[],
-  tabs: RepoTab[],
-): KnownRepository[] {
-  const known = new Map<string, KnownRepository>();
-  for (const recent of validatedRecents) {
-    if (!known.has(pathKey(recent.path))) known.set(pathKey(recent.path), recent);
-  }
-  for (const tab of tabs) {
-    if (!tab.meta.is_linked_worktree && !known.has(pathKey(tab.path))) {
-      known.set(pathKey(tab.path), {
-        path: tab.path,
-        name: repoFamilyName(tab.meta),
-      });
-    }
-  }
-  return [...known.values()];
-}
 
 /**
  * Manage workspaces: pick a workspace on the left, curate its repositories on
@@ -143,7 +87,7 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
     let current = true;
     setValidatedRecents([]);
     setValidatingRecents(true);
-    void validateRecentRepositories(toValidate).then((valid) => {
+    void validateRecentRepositories(toValidate, tauri.repoOpen).then((valid) => {
       if (current) {
         setValidatedRecents(valid);
         setValidatingRecents(false);
