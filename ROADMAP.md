@@ -2405,8 +2405,15 @@ platform binary's strict `version --json` response and assembly rejects
 cross-platform version/protocol drift. Signed artifacts promote to a
 protocol-specific rolling channel so a future protocol cannot strand older
 desktop clients; protocol 5 also updates the legacy channel used by existing
-Strand 1.2 releases. Operational close remains gated on publishing the signed
-`strand-azdo-v1.2.1` migration release and passing its hosted channel smoke.
+Strand 1.2 releases.
+
+**DAN-33 helper release contract shipped (2026-07-29):**
+The signed `strand-azdo-v1.2.1` migration release was published from
+`2c60c83e`, promoted to both `strand-azdo-protocol-5` and the legacy channel,
+and verified by the hosted post-promotion Linux smoke. Release run
+`30427932365` completed successfully; the immutable, protocol-specific, and
+legacy manifests were byte-for-byte identical and advertised helper `1.2.1`
+with protocol `5`.
 
 ---
 

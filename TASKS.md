@@ -1740,10 +1740,10 @@ tree: watch the agent work, review fast, accept or reject safely.
   channel (`bump-azdo-version.mjs`, `azdo-helper-manifest.test.mjs`,
   `azdo_helper::install_base_url`; 2026-07-29). Windows CI compiles and tests
   WinHTTP.
-- ◐ DAN-33 production recovery: source and CI contract are complete; publish
-  the signed `strand-azdo-v1.2.1` migration release, then require the hosted
-  post-promotion smoke job to pass for both `strand-azdo-protocol-5` and the
-  legacy `strand-azdo-latest` manifest before closing the Linear issue.
+- ☑ DAN-33 production recovery: signed `strand-azdo-v1.2.1` published and
+  promoted to `strand-azdo-protocol-5` plus the legacy `strand-azdo-latest`
+  channel; hosted post-promotion Linux smoke passed and all three manifests
+  matched byte-for-byte (`Release` run `30427932365`; 2026-07-29).
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed
