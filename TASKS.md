@@ -837,7 +837,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Commit kbd shortcut (⌘↵)
 - ☑ Per-row Discard action (`FileSection.menuItems` adds a confirm-gated
   "Discard…" item to the Unstaged file-row right-click menu, wired to
-  `discardMany`; acts on the row or the whole multi-selection)
+  `discardMany`; acts on the row or the whole multi-selection, expanding every
+  selected folder to its changed descendants via `resolveTreeActionTargets`)
 - ✗ Recent-messages dropdown on the subject field — **removed 2026-07-02**
   (shipped 2026-05-29, cut on user feedback: resurfacing stale old commit
   messages made no sense next to AI suggestions). The `commit_messages`

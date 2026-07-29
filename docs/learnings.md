@@ -2079,3 +2079,12 @@ older `store-submission` action targets unmanaged MSI/EXE. A successful
 workflow submission does not mean certification is complete, and the unsigned
 `.msixupload` remains a private Actions artifact. Preserve manual build-only
 dispatch so packaging can be diagnosed without mutating Partner Center.
+
+**Pierre action targets must expand every selected directory (2026-07-29).**
+Pierre's raw multi-selection contains both file and directory paths. Never
+filter it to exact file rows before resolving an action: doing so silently
+drops every selected folder from a mixed selection. Expand each selected
+directory against the wrapper's known file set, deduplicate overlaps by
+iterating that set once, and keep an action on an unselected context row scoped
+to that row. `expandTreeSelection` / `resolveTreeActionTargets` own this
+boundary; preserve the single batched IPC call after expansion.
