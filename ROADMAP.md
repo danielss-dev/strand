@@ -2442,6 +2442,16 @@ error reporting. Selective-stash messages now have explicit regression
 coverage. The fixes retain snapshot-driven refreshes rather than adding
 polling or recursive scans to hot paths.
 
+**Website app replica synchronized (2026-07-29):** The landing-page demo now
+matches the current Strand shell instead of the earlier three-view snapshot:
+Workspaces and network options are present, Pull Requests joins the primary
+sidebar, and Work, Local Changes, Review, Pull Requests, and All Commits all
+run in place. Work file/terminal tabs, Git/Files navigation,
+repository/workspace Review scope, PR selection, review notes, baseline and
+file actions, command-palette destinations, plus pointer and keyboard pane
+resizing are interactive. Desktop and 900/680 px browser passes found no
+runtime warnings or horizontal overflow.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
