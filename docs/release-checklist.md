@@ -51,11 +51,11 @@ manifest. A normal Strand tag must not renumber or publish the helper.
 - [x] Linux AppImages receive a keyless Sigstore bundle in release CI. The same
   job immediately verifies the artifact against the exact Strand release
   workflow identity and GitHub Actions OIDC issuer before upload.
-- [ ] Import/configure the Windows publisher certificate or approved cloud-
-  signing profile, then verify both the app executable and MSI with
-  `Get-AuthenticodeSignature`. This requires a purchased external identity and
-  cannot be manufactured from repository code. The published v0.13.0 MSI was
-  also inspected on 2026-07-18 and reports `NotSigned` with no signer.
+- [x] Use the Partner Center-signed Microsoft Store MSIX as the trusted Windows
+  distribution (production identity `Danielss.strand`; owner-confirmed signing
+  complete 2026-07-29). The standalone GitHub MSI remains `NotSigned` and is
+  not the trusted Store channel. A separate Authenticode identity is required
+  only if the unmanaged MSI/EXE fallback is promoted.
 - [x] Build the exact candidate with updater key `84FCBFD2A981CE5D` and pass
   `pnpm release:check-updater-signatures`. Release run `29657871779` produced
   five desktop updater `.sig` artifacts for `v1.0.0`; a fresh download verified
@@ -98,6 +98,8 @@ manifest. A normal Strand tag must not renumber or publish the helper.
 - [x] Obtain a green **Microsoft Store release** workflow for the exact
   submitted tag and confirm Partner Center accepted its `.msixupload`
   (`v1.2.1`, run `30382509727`, attempt 2; 2026-07-28).
+- [x] Partner Center completed production signing of the accepted `v1.2.1`
+  MSIX (owner-confirmed 2026-07-29).
 - [ ] Run clean Windows 11 install/update/uninstall and Microsoft Defender
   scans, then submit initially as link-only discoverability.
 
@@ -135,7 +137,7 @@ recorded mismatch. Do not publish this engineering artifact.
 
 | Platform | Required evidence |
 | --- | --- |
-| Windows 11 | Clean install, valid publisher signature, launch/update/uninstall, native titlebar, editor and terminal presets |
+| Windows 11 | Clean Store install of the Partner Center-signed MSIX, launch/update/uninstall, native titlebar, editor and terminal presets |
 | macOS Apple Silicon | Gatekeeper + stapler validation, install/launch/update, native menu, editor and terminal presets |
 | macOS Intel | Universal binary launch/update smoke test |
 | Ubuntu GNOME | AppImage plus `.deb` install/launch/update, system theme/chrome, editor and terminal presets |
@@ -148,7 +150,7 @@ warning, status feedback, accessibility structure, and external integration
 launches. The 2026-07-18 integration pass observed Strand launching VS Code
 with `code.cmd -g <active-repository>` and a new Windows Terminal process from
 the `wt -d <active-repository>` preset. This closes the Windows preset slice,
-not the clean-install, publisher-signature, updater, or uninstall rows. macOS
+not the clean-install, updater, or uninstall rows. macOS
 and Linux runtime rows still require their actual platforms; cross-compilation
 is not equivalent evidence.
 
@@ -174,7 +176,8 @@ macOS candidate received notarization status `Accepted` (request
 verified Sigstore bundle. The Git tag is not cryptographically signed because
 no tag-signing identity was configured in this checkout. Re-signing it later
 would require replacing the published tag; this override is evidence of the
-push, not closure of the remaining publisher, legal, or runtime rows.
+push, not closure of the remaining legal or runtime rows. Windows trusted
+distribution is handled separately by the Partner Center-signed Store MSIX.
 
 The owner explicitly authorized the same override for the annotated `v1.0.1`
 tag at commit `f173f8e3a5021fd5854c7d836fb7d8ec08af4be5` on 2026-07-20.
@@ -199,8 +202,9 @@ updater signatures and the helper manifest use embedded key
 verification passed. `Get-AuthenticodeSignature` still reports `NotSigned` for
 the 17,588,224-byte Windows MSI (SHA-256
 `96B31FF0EB3990EEAB5378CFE9328E8F4E3E9EB6AB2298868A0AB8C181BB7463`).
-Publication does not close the remaining publisher, legal, updater-rehearsal,
-or real-platform rows above.
+That standalone MSI is not the trusted Store channel; Partner Center signing
+of the production MSIX closes the Windows signed-distribution row. Legal,
+updater-rehearsal, clean-machine, and real-platform rows remain open.
 
 ## Desktop smoke pass
 

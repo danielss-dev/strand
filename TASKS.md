@@ -65,8 +65,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   shipped. Linux AppImages are keyless-signed with Sigstore and the full
   keyboard/accessibility pass is closed. The Rust 1.92 CI lint gate is clean
   at `1.0.0` (`repo_branch_pull` IPC-shape allowance plus `div_ceil`/borrow
-  cleanups). Windows publisher signing, real
-  macOS/GNOME/KDE candidate validation and the
+  cleanups). Windows trusted distribution is closed through the Partner
+  Center-signed Microsoft Store MSIX. Real macOS/GNOME/KDE candidate validation
+  and the
   release-quality checklist remain (`docs/release-checklist.md`).
 - ☑ **Power parity selection.** Keep the already-shipped signature verification
   and exact patch/series export in 1.0; defer guided bisect, LFS management,
@@ -1720,7 +1721,10 @@ tree: watch the agent work, review fast, accept or reject safely.
   yields a Developer-ID-signed DMG. Release CI signs **and notarizes** the
   universal build (`Strand_0.5.0_universal.dmg` on the v0.5.0 GitHub Release,
   2026-06-12).
-- ☐ Windows EV cert (~$300/yr — budget per PRD §12)
+- ☑ Windows trusted distribution through the Partner Center-signed Microsoft
+  Store MSIX (production identity `Danielss.strand`; owner-confirmed signing
+  complete 2026-07-29). A separate EV/Authenticode certificate is only needed
+  for the unmanaged MSI/EXE fallback and is not a release gate.
 - ☑ Linux Sigstore signing for AppImage: release CI creates and immediately
   identity-verifies a keyless Cosign bundle, then uploads it beside the
   AppImage (`.github/workflows/release.yml`, `docs/packaging.md`, 2026-07-18).
@@ -2012,23 +2016,25 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   responsive Strand window from its real package identity. The test package
   and certificates were removed and audited clean. Exact Partner Center
   identity values, Store upload/certification, and a Store-signed clean-machine
-  pass remain external gates in `docs/microsoft-store-submission.md`.
+  pass were the external gates in `docs/microsoft-store-submission.md`;
+  production Store signing is now complete and clean-machine validation remains.
 - ☑ Automate GitHub release submission to Microsoft Store (release-published
   trigger, production identity, official Store Developer CLI action, protected
   environment credential contract, and manual build-only recovery in
   `microsoft-store-msix.yml`; 2026-07-28). The owner reports the Partner Center
   Manager assignment and GitHub secrets configured. Release run `30382509727`
   built the exact `v1.2.1` tag and Partner Center accepted its `.msixupload` on
-  retry after the conflicting portal-created draft was canceled; certification
-  and clean-machine validation remain external gates.
+  retry after the conflicting portal-created draft was canceled. Partner Center
+  signing completed (owner-confirmed 2026-07-29); clean-machine validation
+  remains an external gate.
 - ☑ Prepare the Microsoft Store MSI/EXE fallback path
   (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
   checks, Partner Center copy, privacy and user-content policies, in-product
   inappropriate-content reporting, and four sanitized listing screenshots;
   2026-07-25). A local
   1.1.1 Store-format MSI build passed the repository gates; Authenticode
-  inspection correctly remains `NotSigned`. External Partner Center name
-  reservation, publisher certificate, trademark/privacy approval, and
+  inspection correctly remains `NotSigned`. The fallback still needs its own
+  publisher certificate if it is ever promoted; trademark/privacy approval and
   clean-install certification remain open in
   `docs/microsoft-store-submission.md`.
 - ☑ Create GitHub org / repo + decide visibility (`danielss-dev/strand`,
@@ -2045,10 +2051,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   signing, notarization, Sigstore, assembly, and promotion jobs and published
   18 assets. An independent download audit confirmed all five desktop updater
   signatures plus the helper manifest use embedded key `84FCBFD2A981CE5D`; the
-  public stable manifest reports 1.1.0 and targets only `v1.1.0`. This row
-  remains partial because the Windows MSI is still
-  Authenticode `NotSigned`, the Git tag has no cryptographic signature, and the
-  legal, updater-rehearsal, and real-platform checks in
+  public stable manifest reports 1.1.0 and targets only `v1.1.0`. The Windows
+  trusted-distribution gate is closed by the Partner Center-signed
+  MSIX; the standalone GitHub MSI remains intentionally unsigned. This row
+  remains partial because the Git tag has no cryptographic signature and the
+  legal, updater-rehearsal, clean-machine, and real-platform checks in
   `docs/release-checklist.md` remain open.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static, no build step, design tokens + fonts lifted

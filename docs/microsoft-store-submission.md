@@ -58,7 +58,8 @@ Store artifact to a public GitHub release.
 The first automated production submission was `v1.2.1`. Workflow run
 `30382509727`, attempt 2, completed successfully on 2026-07-28 after the owner
 canceled a conflicting portal-created draft. Partner Center accepted the
-`.msixupload`; certification and publication continue asynchronously.
+`.msixupload`, and the owner confirmed production Store signing complete on
+2026-07-29. Clean-machine install/update/uninstall validation remains separate.
 
 The workflow can also be run manually with an existing tag. Its `submit`
 checkbox defaults to off, so a manual run builds a candidate without changing
@@ -330,7 +331,8 @@ names, tokens, email addresses, or terminal history.
   2026-07-28).
 - [ ] Owner/counsel closes or explicitly accepts the trademark gate.
 - [ ] Owner approves the privacy and license listing text.
-- [ ] Partner Center accepts the `.msixupload` and completes package validation.
+- [x] Partner Center accepted the `v1.2.1` `.msixupload` and completed
+  production Store signing (owner-confirmed 2026-07-29).
 - [ ] Store-signed package passes clean install/update/uninstall.
 - [ ] Final screenshots and Store box art contain no private data.
 - [ ] Age-rating questionnaire is completed accurately.

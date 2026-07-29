@@ -1092,9 +1092,11 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   follow-ups — spawn_blocking reads, per-`Repo` git2 handle, snapshot batch,
   virtualization, stable snapshot slices — are all ☑ or declined by
   measurement)
-- ◐ Signed installers on all three platforms (macOS signed + notarized via
+- ☑ Signed installers on all three platforms (macOS signed + notarized via
   release CI since v0.5.0; Linux AppImages keyless-signed with Sigstore;
-  Windows publisher certificate remains the external gate)
+  Windows distributed as the Partner Center-signed Microsoft Store MSIX.
+  The standalone GitHub MSI remains unsigned and is not the trusted Store
+  distribution channel.)
 - ☑ Mature-client parity close-out — audited against current Fork, GitKraken,
   and Tower surfaces in `docs/git-client-1.0-audit.md`. Network strategy + ref
   context-menu slices shipped 2026-07-16, including upstream management,
@@ -2084,8 +2086,9 @@ was rotated and, at the time of this audit, no draft/tag had been published.
 all Apple and updater secret names configured. Every published v0.13.0 desktop
 updater signature and the helper manifest matches embedded key
 `84FCBFD2A981CE5D`; its universal macOS job was signed, notarized `Accepted`,
-and stapled. The public Windows MSI confirms the remaining publisher gap by
-reporting `NotSigned`. A preliminary USPTO/EUIPO/WIPO knock-out search is now
+and stapled. At the time, the public Windows MSI reported `NotSigned`; the
+later Partner Center-signed MSIX superseded that standalone-installer gap. A
+preliminary USPTO/EUIPO/WIPO knock-out search is now
 recorded in `docs/trademark-search.md`; live identical `STRAND` class-9 US/EU
 registrations make name clearance an explicit owner/counsel decision rather
 than a checkbox an engineering release can silently close. The README now
@@ -2100,7 +2103,8 @@ was notarized `Accepted` and stapled, and the AppImage has a verified Sigstore
 bundle. The remote Windows MSI is deliberately still `NotSigned`, and the Git
 tag itself is annotated but not cryptographically signed because this checkout
 has no tag-signing identity. This owner-authorized push does not close the
-Windows publisher, trademark, real-platform smoke, or public-release gates.
+trademark, real-platform smoke, or public-release gates; Windows trusted
+distribution was subsequently closed through the Partner Center-signed MSIX.
 
 **Microsoft Store engineering path prepared (2026-07-24):** Strand now has a
 separate x64 Store MSI flavor so GitHub's normal installer stays lean while the
@@ -2422,12 +2426,21 @@ overlapping selections, row context actions, and the `d d` / Delete keyboard
 paths all preserve the full intended target set while retaining one bulk IPC
 call.
 
+**Windows signed distribution closed through Microsoft Store (2026-07-29):**
+Partner Center signing of Strand's production MSIX closes the Windows leg of
+the three-platform signed-installer milestone. The preferred Windows trust
+channel is now the Store-signed MSIX; a separately purchased EV/Authenticode
+certificate is no longer a release requirement and remains relevant only if
+the unmanaged MSI/EXE fallback is promoted. The normal GitHub MSI remains
+truthfully documented as unsigned.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
-- **Security & signing.** EV cert for Windows. macOS notarization pipeline
-  must be live by 0.1 alpha.
+- **Security & signing.** ☑ Windows uses the Partner Center-signed Microsoft
+  Store MSIX; macOS uses Developer ID signing + notarization; Linux AppImages
+  use keyless Sigstore bundles.
 - **Keyboard accessibility.** Almost every action must be keyboard-operable,
   not just the command palette (PRD §2, §6.8). New surfaces in each
   milestone ship with a focus model + shortcuts; audit before each release

@@ -67,7 +67,7 @@ It will be built as a **Tauri 2** application with a **Rust** git backend and a 
 | Persistence           | **SQLite** via `tauri-plugin-sql`                                | Recent repos, settings, command palette history, blame cache.                                                                                                                                                                                |
 | IPC                   | **Tauri commands + events**                                      | Rust↔frontend, with streaming events for long-running ops (clone, fetch).                                                                                                                                                                   |
 | Updates               | **Tauri updater**                                                | Signed auto-updates on all three platforms.                                                                                                                                                                                                  |
-| Packaging             | Tauri bundler → `.dmg`, `.msi`/`.exe`, `.deb`/`.AppImage`/`.rpm` | Single CI pipeline produces all three.                                                                                                                                                                                                       |
+| Packaging             | Tauri bundler → `.dmg`, `.msi`/`.exe`, `.deb`/`.AppImage`/`.rpm`; MakeAppx → Store `.msix` | Release automation produces all three trusted distribution paths.                                                                                                                                                                             |
 
 ### Why not Electron?
 
@@ -316,8 +316,8 @@ The inner mode persists per pinned Work tab during the session. File tabs do not
 | Menus               | Native menubar                                     | In-window menubar                             | In-window menubar                                  |
 | File pickers        | Native                                             | Native                                        | Native via XDG portals                             |
 | Notifications       | Native                                             | Native                                        | libnotify                                          |
-| Code signing        | Apple Developer ID + notarization                  | EV cert                                       | Optional sigstore for AppImage                     |
-| Installer           | `.dmg` (universal: x86_64 + aarch64)               | `.msi` and `.exe` (x86_64; aarch64 P1)        | `.deb`, `.rpm`, `.AppImage` (x86_64; aarch64 P1)   |
+| Code signing        | Apple Developer ID + notarization                  | Partner Center-signed Store MSIX; EV/Authenticode only for unmanaged fallback | Optional sigstore for AppImage                     |
+| Installer           | `.dmg` (universal: x86_64 + aarch64)               | Store `.msix` preferred; unmanaged `.msi`/`.exe` fallback (x86_64; aarch64 P1) | `.deb`, `.rpm`, `.AppImage` (x86_64; aarch64 P1)   |
 | Auto-update channel | Stable in 1.0; beta post-1.0                        | Stable in 1.0; beta post-1.0                   | Stable in 1.0; beta post-1.0                       |
 | Credential storage  | Azure Server PAT in Keychain; Git delegates        | Azure Server PAT in Credential Manager; Git delegates | Azure Server PAT in Secret Service; Git delegates |
 
@@ -405,7 +405,7 @@ not block stable.
 | Pierre libraries' licenses not yet confirmed for commercial use | **Open Q1: verify licenses** before committing. Both are described as "open source" but the exact license matters. |
 | `gix` does not yet cover 100% of write operations               | Hybrid with `git2` and shell-out is fine and proven (Sublime Merge does it).                                       |
 | Interactive rebase UX is hard                                   | Plan a custom sequence-editor protocol with the shelled-out `git rebase -i`. Tower's implementation is the bar.    |
-| Windows code signing requires an EV cert (~$300/yr)             | Budget for it. Required for trusted installs.                                                                      |
+| Windows unmanaged MSI/EXE signing requires an EV/Authenticode identity | Preferred distribution uses the Partner Center-signed Store MSIX; obtain a separate identity only if promoting the unmanaged fallback. |
 | Code-signing review on macOS takes 1–2 weeks first time         | Start notarization process during alpha.                                                                           |
 | Tauri 2 native menu API is still maturing on Linux              | Acceptable. Test on GNOME + KDE early.                                                                             |
 

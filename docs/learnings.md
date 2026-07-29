@@ -2080,6 +2080,13 @@ workflow submission does not mean certification is complete, and the unsigned
 `.msixupload` remains a private Actions artifact. Preserve manual build-only
 dispatch so packaging can be diagnosed without mutating Partner Center.
 
+**The Store-signed MSIX fulfills Strand's Windows signed-installer requirement
+(2026-07-29).** Partner Center signing of the production `Danielss.strand`
+package is the trusted Windows distribution boundary. Do not keep a purchased
+EV/Authenticode certificate as a release gate for that route, and do not imply
+that Store signing also signs the standalone GitHub MSI. The unmanaged
+MSI/EXE fallback still needs its own certificate if it is ever promoted.
+
 **Pierre action targets must expand every selected directory (2026-07-29).**
 Pierre's raw multi-selection contains both file and directory paths. Never
 filter it to exact file rows before resolving an action: doing so silently

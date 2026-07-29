@@ -1,11 +1,12 @@
 # Packaging & signing runbook
 
-Status (2026-07-18): release CI builds all three platforms, signs and notarizes
+Status (2026-07-29): release CI builds all three platforms, signs and notarizes
 the universal macOS app, produces minisign-verified updater artifacts, and
-keyless-signs Linux AppImages with Sigstore. The remaining 1.0 distribution
-gates are the Windows publisher certificate and release-candidate validation
-on Windows, macOS, GNOME, and KDE. The 1.0 updater is stable-only; a selectable
-beta channel is explicitly post-1.0.
+keyless-signs Linux AppImages with Sigstore. Partner Center signing of the
+production Microsoft Store MSIX closes the Windows trusted-distribution gate;
+the standalone GitHub MSI remains unsigned. Remaining distribution work is
+release-candidate validation on Windows, macOS, GNOME, and KDE. The 1.0 updater
+is stable-only; a selectable beta channel is explicitly post-1.0.
 
 ---
 
@@ -104,8 +105,9 @@ locally instead:
 
 Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
 `bundle.targets` and build without an Apple account. Release CI gives each
-AppImage a keyless Sigstore bundle; the Windows publisher identity remains an
-external 1.0 gate.
+AppImage a keyless Sigstore bundle. The Partner Center-signed Store MSIX is the
+trusted Windows distribution; a separate Windows publisher identity is needed
+only for the unmanaged MSI/EXE fallback.
 
 ### Microsoft Store MSIX release
 
@@ -211,9 +213,10 @@ that tag and verifies it against `crates/strand-azdo/Cargo.toml`; it never
 rebuilds or replaces desktop installers.
 
 The macOS helper binary is Developer-ID signed before archiving and its archive
-is submitted to Apple notarization. Windows publisher signing remains coupled
-to the planned Windows certificate work; the signed manifest is mandatory on
-all platforms. Installation extracts only the expected regular file, refuses
+is submitted to Apple notarization. The separately downloaded Windows helper
+binary is outside the Store MSIX trust boundary and remains coupled to any
+future Windows Authenticode certificate work; its signed manifest is mandatory
+on all platforms. Installation extracts only the expected regular file, refuses
 links/traversal, and keeps the previous helper until the replacement verifies.
 
 ### Release security policy gate
@@ -264,11 +267,10 @@ The `APPLE_*` secrets are mandatory for the release workflow because both the
 app and the universal helper must be signed/notarized. The
 `TAURI_SIGNING_*` pair is also **mandatory**: it signs updater artifacts and
 the helper manifest, and `bundle.createUpdaterArtifacts` is `true`. Any bundle
-build (CI or local) fails without the private key. Windows publisher signing is
-wired for the separate Microsoft Store candidate once those two external
-certificate secrets exist; the normal release remains unsigned until the owner
-deliberately applies the same identity there. Linux AppImage publisher identity
-is keyless and needs no repository secret.
+build (CI or local) fails without the private key. Windows Authenticode signing
+is wired only for the unmanaged MSI/EXE fallback once those two external
+certificate secrets exist; the Partner Center-signed MSIX needs neither secret.
+Linux AppImage publisher identity is keyless and needs no repository secret.
 
 > **Local builds** now need the key too. Point Tauri at the generated file:
 > ```sh

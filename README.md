@@ -245,11 +245,14 @@ Store engineering has a verified packaged-classic MSIX
 with production identity `Danielss.strand`. Publishing a GitHub release builds
 the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
-the accepted package. The signed offline-WebView2 MSI remains a fallback.
+the accepted package, and production Store signing is complete. The standalone
+GitHub MSI remains unsigned; the certificate-backed offline-WebView2 MSI
+workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated
-submission was accepted by Partner Center on 2026-07-28; certification,
-trademark approval, and clean-machine validation remain external gates. See the
+submission was accepted by Partner Center on 2026-07-28; Store signing was
+confirmed complete on 2026-07-29. Trademark approval and clean-machine
+validation remain external gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 
