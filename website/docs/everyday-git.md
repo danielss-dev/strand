@@ -10,6 +10,7 @@ Right-click a single file in Local Changes or Review and choose **Open in editor
 
 - The view opens with a "show all" stacked diff of every changed file. Clicking the Unstaged or Staged column title re-selects that side's full changeset, and selecting a folder row aggregates the diffs beneath it.
 - Stage or unstage a whole file from its row, or use **Stage all** / **Unstage all** for the whole side.
+- Multi-select files and folders with `Mod`-click or Shift-click. Stage, Unstage, Stash, and Discard act on every selected file plus every changed file beneath each selected folder.
 - **Block and line staging**: each change block in the diff has inline **Stage** and **Discard** buttons (**Unstage** on the staged side). Drag across changed line numbers to act on a contiguous range, or choose **Lines…** for a keyboard-operable checklist that can select any combination of deleted and added lines. The action labels show the selected-line count.
 - **Discarding a change block or selected lines is recoverable**: it shows an Undo toast for a few seconds. Whole-file and bulk discards are immediate and permanent — there is no Undo toast and no automatic safety stash — so stash first if you might want the changes back.
 - Toggle between stacked and split diff layout with the header buttons; the choice is remembered per repository. `Mod+F` opens in-diff text search.

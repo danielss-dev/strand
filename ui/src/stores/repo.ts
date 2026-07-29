@@ -106,7 +106,7 @@ export interface RepoState {
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
   localSelection: LocalSelection | null;
-  /** Pierre multi-select per side — mirrors Local Changes tree selection. */
+  /** Pierre multi-select per side, with selected folders expanded to their files. */
   localTreeSelection: { unstaged: string[]; staged: string[] };
   setLocalTreeSelection(staged: boolean, paths: string[]): void;
 

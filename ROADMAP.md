@@ -2415,6 +2415,13 @@ and verified by the hosted post-promotion Linux smoke. Release run
 legacy manifests were byte-for-byte identical and advertised helper `1.2.1`
 with protocol `5`.
 
+**Mixed tree-selection discard repaired (2026-07-29):** Local Changes now
+expands every selected folder to its changed file descendants before Stage,
+Unstage, Stash, or Discard resolves its batch. Mixed folder/file selections,
+overlapping selections, row context actions, and the `d d` / Delete keyboard
+paths all preserve the full intended target set while retaining one bulk IPC
+call.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

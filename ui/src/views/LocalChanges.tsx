@@ -29,6 +29,7 @@ import {
   type SliceDirection,
 } from '../lib/patch';
 import { treeFileOrder } from '../lib/treeOrder';
+import { resolveActiveTreeTargets } from '../lib/treeSelection';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -206,6 +207,16 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
 
       const state = useRepo.getState();
       const sel = state.localSelection;
+      const discardSelection = () => {
+        if (!sel) return;
+        const pool = sel.staged ? state.stagedDiffs : state.unstagedDiffs;
+        const treeSelection = sel.staged
+          ? state.localTreeSelection.staged
+          : state.localTreeSelection.unstaged;
+        void state.discardMany(
+          resolveActiveTreeTargets(pool.map((diff) => diff.path), treeSelection, sel.file),
+        ).catch(fail('Discard'));
+      };
 
       // Nav order: unstaged → staged, each in the tree's *display* order
       // (folders first, natural sort) so j/k step straight down the list the
@@ -262,7 +273,7 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
           if (confirmDiscard === sel.file) {
             if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
             setConfirmDiscard(null);
-            void state.discardMany([sel.file]).catch(fail('Discard'));
+            discardSelection();
           } else {
             setConfirmDiscard(sel.file);
             if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
@@ -278,7 +289,7 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
           e.preventDefault();
           if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
           setConfirmDiscard(null);
-          void state.discardMany([sel.file]).catch(fail('Discard'));
+          discardSelection();
           break;
         }
         case 'c': {

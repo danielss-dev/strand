@@ -16,6 +16,7 @@ import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusE
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { TREE_ICONS } from '../lib/treeIcons';
+import { expandTreeSelection, resolveTreeActionTargets } from '../lib/treeSelection';
 import type { DiffStatus } from '../lib/types';
 
 // ─── status mapping ───────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ export interface TreeRowDecoration {
 /** Imperative handle so a host can open Pierre's in-tree search on demand. */
 export interface PierreTreeHandle {
   openSearch(): void;
-  /** Current Pierre multi-selection (file paths only). */
+  /** Current Pierre multi-selection expanded to concrete file paths. */
   getSelectedPaths(): string[];
   /** Expand a mounted directory after lazy children have been added. */
   expandPath(path: string): void;
@@ -77,7 +78,7 @@ interface PierreTreeProps {
   selectedPath?: string | null;
   /** Fired with the active (last-selected) path and its kind, or `null` when the selection empties. */
   onSelect?: (path: string | null, kind: 'file' | 'directory' | null) => void;
-  /** Fired whenever Pierre's multi-selection changes (file paths only). */
+  /** Fired whenever Pierre's multi-selection changes, with directories expanded to files. */
   onMultiSelectionChange?: (paths: string[]) => void;
   /** Fired when a closed directory is activated so hosts can load children. */
   onDirectoryExpand?: (path: string) => void;
@@ -99,7 +100,7 @@ interface PierreTreeProps {
   menuItems?: (paths: string[], context: TreeMenuContext) => MenuItem[];
   /**
    * Discard the resolved target file set — bound to the Delete / Backspace
-   * keys while a file row is focused. Resolves the same way the context menu
+   * keys while a file or folder row is focused. Resolves the same way the context menu
    * does: a focused row inside a multi-selection discards the *whole*
    * selection, not just the active row. Omit to disable.
    */
@@ -291,7 +292,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     onSelectionChange: (sel) => {
       if (reflecting.current) return; // our own rewrite, not a user gesture
       const files = fileSetRef.current;
-      const fileSel = sel.filter((p) => files.has(p));
+      const fileSel = expandTreeSelection([...files], sel);
       onMultiSelectionChangeRef.current?.(fileSel);
       const next = sel.length ? sel[sel.length - 1] : null;
       // Ignore the echo of our own reflection (covers null === null too).
@@ -304,29 +305,20 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     ref,
     () => ({
       openSearch: () => model.openSearch(),
-      getSelectedPaths: () => model.getSelectedPaths().filter((p) => fileSetRef.current.has(p)),
+      getSelectedPaths: () =>
+        expandTreeSelection([...fileSetRef.current], model.getSelectedPaths()),
       expandPath: (path) => asDir(model.getItem(path))?.expand(),
     }),
     [model],
   );
 
   // Resolve the file set an action targets, given the row it was invoked on:
-  // a selected file row with a multi-selection → the whole selection; a folder
-  // row → every known file beneath it; otherwise → just that file.
+  // a selected row with a multi-selection → the whole expanded selection; an
+  // unselected folder row → every known file beneath it; otherwise → that file.
   const resolveTargets = useCallback(
     (rowPath: string): string[] => {
       const files = fileSetRef.current;
-      if (files.has(rowPath)) {
-        const selected = model.getSelectedPaths();
-        if (selected.length > 1 && selected.includes(rowPath)) {
-          return selected.filter((p) => files.has(p));
-        }
-        return [rowPath];
-      }
-      const prefix = rowPath.replace(/\/+$/, '') + '/';
-      const out: string[] = [];
-      for (const p of files) if (p.startsWith(prefix)) out.push(p);
-      return out;
+      return resolveTreeActionTargets([...files], model.getSelectedPaths(), rowPath);
     },
     [model],
   );
@@ -486,9 +478,9 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
       }
       // Delete / Backspace discard the focused row in a single press, acting on
       // the whole multi-selection (resolveTargets) when the focused row is part
-      // of one. stopPropagation keeps the window-level shortcut from also firing
-      // and double-discarding. Guarded to file rows so Backspace in the search
-      // box still edits text.
+      // of one. Folder selections expand to their descendant files.
+      // stopPropagation keeps the window-level shortcut from also firing and
+      // double-discarding. The on-row guard keeps Backspace in search editable.
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!onDiscardRef.current) return;
         const onRow = e.nativeEvent
@@ -496,10 +488,11 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
           .some((n) => n instanceof HTMLElement && n.dataset.type === 'item');
         if (!onRow) return; // focus is in the search box, not a row
         const focused = model.getFocusedPath();
-        if (focused && fileSetRef.current.has(focused)) {
+        const targets = focused ? resolveTargets(focused) : [];
+        if (targets.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-          onDiscardRef.current(resolveTargets(focused));
+          onDiscardRef.current(targets);
         }
         return;
       }

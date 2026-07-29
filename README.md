@@ -161,8 +161,9 @@ and the live Diff settings preview.
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box. Stale entries whose directories are already gone prune immediately.
 - **Everyday Git** — stage, unstage, or recoverably discard whole change
-  blocks or individually selected lines inline in the diff; initialize a
-  repository with an initial branch, optional
+  blocks or individually selected lines inline in the diff; bulk tree actions
+  include every selected file and every changed file beneath selected folders;
+  initialize a repository with an initial branch, optional
   `.gitignore`, and optional first commit; inspect a stash from the sidebar
   without applying it, or create and check out a branch from it; fetch / pull /
   push with streaming progress and explicit
