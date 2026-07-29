@@ -1,6 +1,7 @@
 name: Release
 
-# Builds, signs, and publishes a Strand release for macOS, Windows, and Linux.
+# Builds and signs Strand desktop releases and independently versioned
+# strand-azdo helper releases.
 #
 # Trigger by pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`),
 # or run manually from the Actions tab. The job opens a **draft** GitHub Release
@@ -10,7 +11,9 @@ name: Release
 # package.json — Tauri names the artifacts (e.g. Strand_0.1.0_aarch64.dmg) from
 # the config version, not the tag.
 #
-# Required / optional secrets are documented in docs/packaging.md § "Release CI".
+# Push `strand-azdo-vX.Y.Z` to publish the helper to its immutable release and
+# protocol-specific rolling channel. Required / optional secrets are documented
+# in docs/packaging.md § "Release CI".
 
 on:
   push:
@@ -20,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.1.0). Must match the version in tauri.conf.json.'
+        description: 'Release tag: vX.Y.Z for Strand, or strand-azdo-vX.Y.Z for a helper-only release.'
         required: true
       helpers_only:
         description: 'Backfill signed strand-azdo assets without rebuilding desktop installers.'
@@ -29,6 +32,7 @@ on:
 
 jobs:
   helper:
+    if: ${{ startsWith(github.ref_name, 'strand-azdo-v') || (github.event_name == 'workflow_dispatch' && inputs.helpers_only) }}
     permissions:
       contents: read
     strategy:
@@ -51,16 +55,15 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Resolve helper release version
-        if: startsWith(github.ref_name, 'strand-azdo-v')
         shell: bash
-        run: echo "VERSION=${VERSION#strand-azdo-}" >> "$GITHUB_ENV"
+        run: echo "HELPER_VERSION=${VERSION#strand-azdo-v}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Verify release security policy
         run: node scripts/check-release-security.mjs
-      - name: Verify release tag matches Strand version
-        run: node scripts/check-release-version.mjs
+      - name: Verify release tag matches strand-azdo version
+        run: node scripts/check-azdo-release-version.mjs
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -90,7 +93,7 @@ jobs:
           codesign --force --options runtime --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" dist/strand-azdo
           codesign --verify --strict --verbose=2 dist/strand-azdo
-          ASSET="strand-azdo-${VERSION#v}-${{ matrix.target }}.zip"
+          ASSET="strand-azdo-${HELPER_VERSION}-${{ matrix.target }}.zip"
           zip -j "dist/$ASSET" dist/strand-azdo
           xcrun notarytool submit "dist/$ASSET" \
             --apple-id "$APPLE_ID" \
@@ -112,7 +115,7 @@ jobs:
         run: |
           cargo build -p strand-azdo --release --target "${{ matrix.target }}"
           mkdir -p dist
-          ASSET="strand-azdo-${VERSION#v}-${{ matrix.target }}.tar.gz"
+          ASSET="strand-azdo-${HELPER_VERSION}-${{ matrix.target }}.tar.gz"
           tar -czf "dist/$ASSET" -C "target/${{ matrix.target }}/release" strand-azdo
           node scripts/azdo-helper-metadata.mjs \
             "target/${{ matrix.target }}/release/strand-azdo" "dist/$ASSET" \
@@ -124,8 +127,7 @@ jobs:
         run: |
           cargo build -p strand-azdo --release --target "${{ matrix.target }}"
           New-Item -ItemType Directory -Force dist | Out-Null
-          $ReleaseVersion = $env:VERSION.TrimStart('v')
-          $Asset = "strand-azdo-$ReleaseVersion-${{ matrix.target }}.zip"
+          $Asset = "strand-azdo-$env:HELPER_VERSION-${{ matrix.target }}.zip"
           Compress-Archive -Path "target/${{ matrix.target }}/release/strand-azdo.exe" -DestinationPath "dist/$Asset"
           node scripts/azdo-helper-metadata.mjs `
             "target/${{ matrix.target }}/release/strand-azdo.exe" "dist/$Asset" `
@@ -286,8 +288,8 @@ jobs:
           done
 
   helper-release:
-    needs: [helper, release]
-    if: ${{ always() && needs.helper.result == 'success' && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.helpers_only) || (needs.release.result == 'skipped' && startsWith(github.ref_name, 'strand-azdo-v'))) }}
+    needs: helper
+    if: ${{ always() && needs.helper.result == 'success' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -316,18 +318,39 @@ jobs:
           pnpm tauri signer sign helper-dist/strand-azdo-manifest.json
           node scripts/check-updater-signatures.mjs helper-dist/strand-azdo-manifest.json.sig
           node -e "const fs=require('node:fs'); const source='helper-dist/strand-azdo-manifest.json.sig'; fs.writeFileSync('helper-dist/strand-azdo-manifest.json.minisig', Buffer.from(fs.readFileSync(source, 'utf8').trim(), 'base64')); fs.unlinkSync(source)"
-      - name: Upload helper assets to the exact release tag
+      - name: Create dedicated helper release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          RELEASE_TAG="${RELEASE_TAG#strand-azdo-}"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+              echo "Helper release $RELEASE_TAG is already published; bump the helper version" >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "${RELEASE_TAG/strand-azdo-/strand-azdo }" \
+              --notes "Signed strand-azdo helper release. Strand selects it only through a compatible protocol channel." \
+              --draft \
+              --prerelease
+          fi
+      - name: Upload helper assets to the dedicated release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
           gh release upload "$RELEASE_TAG" \
             helper-dist/strand-azdo-*.zip \
             helper-dist/strand-azdo-*.tar.gz \
-            helper-dist/strand-azdo-manifest.json \
-            helper-dist/strand-azdo-manifest.json.minisig \
             --clobber
+          gh release upload "$RELEASE_TAG" \
+            helper-dist/strand-azdo-manifest.json.minisig --clobber
+          gh release upload "$RELEASE_TAG" \
+            helper-dist/strand-azdo-manifest.json --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease
       - name: Preserve signed helper assets for rolling promotion
         uses: actions/upload-artifact@v4
         with:
@@ -347,23 +370,91 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Download signed helper assets
         uses: actions/download-artifact@v4
         with:
           name: strand-azdo-release-assets
           path: helper-dist
-      - name: Publish the rolling latest compatible helper
+      - name: Publish protocol-specific and legacy-compatible channels
         run: |
-          if ! gh release view strand-azdo-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
-              --title "strand-azdo latest" \
-              --notes "Rolling signed strand-azdo helper assets. Strand accepts these only when the protocol version is compatible." \
-              --prerelease
+          PROTOCOL_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('helper-dist/strand-azdo-manifest.json')).protocol_version")"
+          CHANNEL="strand-azdo-protocol-$PROTOCOL_VERSION"
+          TARGET_SHA="$(git rev-parse HEAD)"
+
+          publish_channel() {
+            local channel="$1"
+            local title="$2"
+            if ! gh release view "$channel" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release create "$channel" --repo "$GITHUB_REPOSITORY" \
+                --target "$TARGET_SHA" \
+                --title "$title" \
+                --notes "Rolling signed strand-azdo assets for protocol $PROTOCOL_VERSION." \
+                --prerelease
+            fi
+            gh release upload "$channel" --repo "$GITHUB_REPOSITORY" \
+              helper-dist/strand-azdo-*.zip \
+              helper-dist/strand-azdo-*.tar.gz \
+              --clobber
+            gh release upload "$channel" --repo "$GITHUB_REPOSITORY" \
+              helper-dist/strand-azdo-manifest.json.minisig --clobber
+            gh release upload "$channel" --repo "$GITHUB_REPOSITORY" \
+              helper-dist/strand-azdo-manifest.json --clobber
+          }
+
+          publish_channel "$CHANNEL" "strand-azdo protocol $PROTOCOL_VERSION"
+          if [ "$PROTOCOL_VERSION" = "5" ]; then
+            publish_channel strand-azdo-latest "strand-azdo latest (legacy protocol 5)"
           fi
-          gh release upload strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
-            helper-dist/strand-azdo-*.zip \
-            helper-dist/strand-azdo-*.tar.gz \
-            helper-dist/strand-azdo-manifest.json \
-            helper-dist/strand-azdo-manifest.json.minisig \
-            --clobber
+
+  helper-smoke:
+    needs: helper-promote
+    if: ${{ always() && needs['helper-promote'].result == 'success' }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download through Strand's published protocol channel
+        run: |
+          mkdir -p tagged smoke
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern strand-azdo-manifest.json --dir tagged
+          PROTOCOL_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('tagged/strand-azdo-manifest.json')).protocol_version")"
+          CHANNEL="strand-azdo-protocol-$PROTOCOL_VERSION"
+          ASSET="$(node -e "const m=JSON.parse(require('fs').readFileSync('tagged/strand-azdo-manifest.json')); process.stdout.write(m.assets.find((a) => a.target === 'x86_64-unknown-linux-gnu').name)")"
+          gh release download "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
+            --pattern strand-azdo-manifest.json \
+            --pattern "$ASSET" \
+            --dir smoke
+          tar -xzf "smoke/$ASSET" -C smoke
+          node scripts/azdo-helper-metadata.mjs \
+            smoke/strand-azdo "smoke/$ASSET" x86_64-unknown-linux-gnu "$ASSET" \
+            smoke/downloaded.metadata.json
+          node scripts/check-azdo-helper-metadata.mjs \
+            smoke/strand-azdo-manifest.json smoke/downloaded.metadata.json
+          if [ "$PROTOCOL_VERSION" = "5" ]; then
+            mkdir legacy
+            gh release download strand-azdo-latest --repo "$GITHUB_REPOSITORY" \
+              --pattern strand-azdo-manifest.json \
+              --pattern "$ASSET" \
+              --dir legacy
+            tar -xzf "legacy/$ASSET" -C legacy
+            node scripts/azdo-helper-metadata.mjs \
+              legacy/strand-azdo "legacy/$ASSET" x86_64-unknown-linux-gnu "$ASSET" \
+              legacy/downloaded.metadata.json
+            node scripts/check-azdo-helper-metadata.mjs \
+              legacy/strand-azdo-manifest.json legacy/downloaded.metadata.json
+          fi

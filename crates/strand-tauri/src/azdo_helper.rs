@@ -441,8 +441,10 @@ fn release_target() -> Result<&'static str> {
     }
 }
 
-fn install_base_url() -> &'static str {
-    "https://github.com/danielss-dev/strand/releases/download/strand-azdo-latest"
+fn install_base_url() -> String {
+    format!(
+        "https://github.com/danielss-dev/strand/releases/download/strand-azdo-protocol-{PROTOCOL_VERSION}"
+    )
 }
 
 fn install_client() -> Result<reqwest::blocking::Client> {
@@ -657,10 +659,12 @@ mod tests {
     }
 
     #[test]
-    fn helper_download_uses_the_rolling_signed_release() {
+    fn helper_download_uses_its_protocol_specific_signed_release() {
         assert_eq!(
             install_base_url(),
-            "https://github.com/danielss-dev/strand/releases/download/strand-azdo-latest"
+            format!(
+                "https://github.com/danielss-dev/strand/releases/download/strand-azdo-protocol-{PROTOCOL_VERSION}"
+            )
         );
     }
 

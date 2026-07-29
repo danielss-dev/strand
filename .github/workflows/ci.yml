@@ -98,6 +98,9 @@ jobs:
       - name: Verify release security policy
         run: pnpm release:check-security
 
+      - name: Test Azure DevOps helper release manifest
+        run: pnpm release:test-helper
+
       - name: Verify Microsoft Store package policy
         run: pnpm store:check
 

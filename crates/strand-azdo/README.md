@@ -2,8 +2,14 @@
 
 `strand-azdo` is Strand's optional Azure DevOps Server 2020+ REST helper. It is
 not a general replacement for Azure CLI and is not installed on `PATH` by
-Strand. The desktop app downloads the exact matching release only after the
-integration is enabled in Settings → Hosting.
+Strand. The desktop app downloads the latest signed helper from its compiled
+protocol channel only after the integration is enabled in Settings → Hosting.
+Helper versions advance independently from Strand versions; a breaking IPC
+change creates a new protocol channel instead of replacing an older one.
+
+Maintainers bump this crate with `pnpm version:azdo patch` (or an explicit
+version) and publish the printed `strand-azdo-vX.Y.Z` tag. Release metadata is
+derived from each built binary's `version --json`, never duplicated by hand.
 
 The human CLI stores profiles in the platform application-configuration
 directory and PATs in Keychain, Windows Credential Manager, or Linux Secret

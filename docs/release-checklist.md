@@ -10,6 +10,7 @@ Run from the repository root on the exact candidate commit:
 ```text
 pnpm install --frozen-lockfile
 pnpm release:check-security
+pnpm release:test-helper
 pnpm store:check
 pnpm --filter ./ui exec tsc --noEmit
 pnpm --filter ./ui exec vitest run
@@ -23,6 +24,14 @@ Also require the GitHub Actions PR/CI checks to pass. The release workflow must
 check out the requested tag, confirm that its version matches the tag, create
 signed updater artifacts, and open a draft release; publishing remains a
 deliberate maintainer action.
+
+Helper releases use their own `strand-azdo-vX.Y.Z` tags. Require the helper
+version check, binary-derived version/protocol metadata on all three targets,
+the signed draft-then-published versioned helper prerelease, and promotion only
+to the matching
+`strand-azdo-protocol-N` channel. The post-promotion smoke job must download
+through that channel and match the running Linux binary and archive to the
+manifest. A normal Strand tag must not renumber or publish the helper.
 
 ## Publisher and update trust
 
