@@ -2398,6 +2398,16 @@ and published 18 assets. Microsoft Store run `30382509727` built the exact tag;
 after the owner canceled a conflicting portal-created draft, its second attempt
 was accepted by Partner Center for asynchronous certification and publication.
 
+**DAN-33 helper release contract implementation (2026-07-29):**
+`strand-azdo` now owns its semantic version and `strand-azdo-vX.Y.Z`
+prereleases independently from Strand. Release metadata is derived from each
+platform binary's strict `version --json` response and assembly rejects
+cross-platform version/protocol drift. Signed artifacts promote to a
+protocol-specific rolling channel so a future protocol cannot strand older
+desktop clients; protocol 5 also updates the legacy channel used by existing
+Strand 1.2 releases. Operational close remains gated on publishing the signed
+`strand-azdo-v1.2.1` migration release and passing its hosted channel smoke.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

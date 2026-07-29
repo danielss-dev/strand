@@ -14,7 +14,8 @@
 //   node scripts/bump-version.mjs minor --dry-run
 //
 // `website/package.json` is intentionally NOT touched — the landing site
-// versions independently of the app.
+// versions independently of the app. `strand-azdo` is also intentionally
+// excluded; use bump-azdo-version.mjs for its independent release version.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -99,7 +100,7 @@ const edits = [
   ['ui/package.json', jsonVersion('ui package')],
   ['crates/strand-tauri/tauri.conf.json', jsonVersion('tauri config')],
   ['Cargo.toml', tomlWorkspaceVersion],
-  ['Cargo.lock', lockfileCrates(['strand-azdo', 'strand-azdo-protocol', 'strand-core', 'strand-tauri'])],
+  ['Cargo.lock', lockfileCrates(['strand-azdo-protocol', 'strand-core', 'strand-tauri'])],
 ];
 
 console.log(`Bumping ${current} -> ${next}${dryRun ? '  (dry run, no files written)' : ''}\n`);

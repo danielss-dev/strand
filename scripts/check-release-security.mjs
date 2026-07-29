@@ -84,8 +84,12 @@ if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {
   fail('release jobs do not all check out the requested tag');
 }
 const versionCheck = 'run: node scripts/check-release-version.mjs';
-if (releaseWorkflow.split(versionCheck).length - 1 < 2) {
-  fail('desktop and helper release jobs do not both verify the requested version');
+if (releaseWorkflow.split(versionCheck).length - 1 < 1) {
+  fail('desktop release job does not verify the requested version');
+}
+const helperVersionCheck = 'run: node scripts/check-azdo-release-version.mjs';
+if (releaseWorkflow.split(helperVersionCheck).length - 1 < 1) {
+  fail('helper release job does not verify its independent requested version');
 }
 for (const fragment of [
   'id-token: write',
@@ -96,10 +100,13 @@ for (const fragment of [
   "--certificate-oidc-issuer 'https://token.actions.githubusercontent.com'",
   'pnpm release:check-updater-signatures',
   'node scripts/check-updater-signatures.mjs helper-dist/strand-azdo-manifest.json.sig',
+  'CHANNEL="strand-azdo-protocol-$PROTOCOL_VERSION"',
+  'gh release create "$RELEASE_TAG"',
+  'node scripts/check-azdo-helper-metadata.mjs',
 ]) {
   if (!releaseWorkflow.includes(fragment)) {
     fail(`release workflow policy is missing: ${fragment}`);
   }
 }
 
-console.log('Release CSP, capabilities, signed updater, tag checkout, and Linux Sigstore policies are valid.');
+console.log('Release CSP, capabilities, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');

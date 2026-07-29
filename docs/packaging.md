@@ -172,26 +172,43 @@ cosign verify-blob Strand_1.0.0_amd64.AppImage \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The same workflow also builds the optional `strand-azdo` helper for universal
-macOS, Windows x86_64, and Linux x86_64. It publishes versioned `.zip`/
-`.tar.gz` archives plus `strand-azdo-manifest.json` and its minisign signature
-under the exact app tag and the rolling `strand-azdo-latest` prerelease. The
-published `.minisig` is the raw Minisign text expected by the desktop verifier;
-the workflow decodes the base64 envelope emitted by Tauri's signer before upload.
-The manifest records helper/protocol/target agreement,
-archive and extracted-binary SHA-256 values, size, and asset name. The helper
-uses the existing updater signing key and embedded public key; `latest` is never
-part of the install path; the app downloads the rolling release and rejects a
-different protocol version. After the exact-tag upload succeeds, the same signed
-workflow artifacts are promoted to the rolling release without a post-upload
-smoke-test matrix.
+The Release workflow also owns the optional `strand-azdo` pipeline, but helper
+versions are independent from Strand versions. Run `pnpm version:azdo patch`
+(or pass an explicit semantic version), commit the helper change, then push the
+matching `strand-azdo-vX.Y.Z` tag. Normal `vX.Y.Z` Strand releases do not rebuild
+or renumber the helper.
 
-If a published release predates or missed the helper jobs, run **Release**
-manually with that exact tag and **helpers_only** enabled. This rebuilds, signs,
-uploads, and promotes only the `strand-azdo` assets; it does not rebuild or
-replace the desktop installers already attached to the release. A maintainer
-with Git push access can use the equivalent `strand-azdo-vX.Y.Z` tag trigger;
-the workflow targets the existing `vX.Y.Z` release and skips every desktop job.
+The helper tag builds universal macOS, Windows x86_64, and Linux x86_64
+`.zip`/`.tar.gz` archives. Each runner executes its built binary's
+`version --json`; the metadata and manifest jobs fail unless all three binaries
+report the tag's helper version and the same protocol version. No manifest
+version or protocol is handwritten. The workflow signs the resulting
+`strand-azdo-manifest.json`, uploads the binaries and signature before the
+manifest to a draft versioned helper release, publishes it as a prerelease, and
+then promotes the identical
+artifacts to `strand-azdo-protocol-N`. Strand constructs that channel from its
+compiled protocol version, so publishing protocol N+1 cannot break reinstall
+for an older Strand release. Protocol 5 is additionally promoted to the legacy
+`strand-azdo-latest` channel used by already-published Strand 1.2 clients. A
+post-promotion Linux smoke job downloads through the protocol channel, executes
+the published helper, and rechecks its version, protocol, archive/binary hashes,
+size, target, and asset name against the published manifest. Protocol 5 repeats
+that check through the legacy channel before the recovery release is green.
+Rerunning an unfinished draft is supported; an already-published helper version
+is never overwritten and requires a new version/tag.
+
+The published `.minisig` is the raw Minisign text expected by the desktop
+verifier; the workflow decodes the base64 envelope emitted by Tauri's signer
+before upload. The manifest records helper/protocol/target agreement, archive
+and extracted-binary SHA-256 values, size, and asset name. Schema 1's
+`strand_version` key is retained for old desktop compatibility but contains the
+helper version. The helper uses the existing updater signing key and embedded
+public key; the desktop rejects a different protocol version.
+
+For a manual helper release, run **Release** with the exact
+`strand-azdo-vX.Y.Z` tag and **helpers_only** enabled. The workflow checks out
+that tag and verifies it against `crates/strand-azdo/Cargo.toml`; it never
+rebuilds or replaces desktop installers.
 
 The macOS helper binary is Developer-ID signed before archiving and its archive
 is submitted to Apple notarization. Windows publisher signing remains coupled
@@ -220,6 +237,10 @@ warning is a failed release, never an artifact to promote.
 **Before tagging:** bump `version` in `tauri.conf.json`, the workspace
 `Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
 from the config version, not the tag.
+
+For helper-only tags, use `pnpm version:azdo <version|major|minor|patch>`.
+That command changes only `crates/strand-azdo/Cargo.toml` and its Cargo.lock
+entry and prints the required `strand-azdo-vX.Y.Z` tag.
 
 ### Secrets to add (Settings → Secrets and variables → Actions)
 

@@ -17,7 +17,9 @@
     "store:build": "tauri build --config crates/strand-tauri/tauri.microsoftstore.conf.json --ci",
     "store:msix:check": "node scripts/check-msix.mjs",
     "store:msix:build": "pwsh -NoProfile -File scripts/build-msix.ps1",
-    "version:set": "node scripts/bump-version.mjs"
+    "version:set": "node scripts/bump-version.mjs",
+    "version:azdo": "node scripts/bump-azdo-version.mjs",
+    "release:test-helper": "node --test scripts/azdo-helper-manifest.test.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

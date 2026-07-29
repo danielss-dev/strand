@@ -1678,9 +1678,27 @@ response schema in sync with every emitted field, including `capabilities`.
 command writes a base64 envelope around the Minisign text. Decode that envelope
 before publishing `strand-azdo-manifest.json.minisig`; the desktop passes the
 downloaded text directly to `minisign_verify::Signature::decode`. Rolling
-promotion reuses the signed workflow artifact after exact-tag upload; there is
-no post-upload release smoke matrix, so the desktop verifier remains the runtime
-enforcement point for signature and hash agreement.
+promotion reuses the signed workflow artifact after exact-tag upload. The
+post-promotion Linux smoke checks the public archive, binary, hashes, version,
+and protocol; the desktop verifier remains the runtime enforcement point for
+the cryptographic signature on every platform.
+
+**Helper versions and protocol channels are independent (2026-07-29).** Never
+copy the desktop version or handwrite the helper protocol into release
+metadata. `strand-azdo` owns its explicit Cargo version and
+`strand-azdo-vX.Y.Z` tag. Every platform runner executes the built binary's
+strict `version --json`; manifest assembly accepts only one reported helper
+version and one protocol across all targets. Promote the signed artifacts to
+`strand-azdo-protocol-N`, not a global latest that a future incompatible
+protocol can overwrite. Keep protocol 5 mirrored to `strand-azdo-latest` only
+for already-shipped clients. Upload archives before the signature and manifest
+so an interrupted promotion never advertises a missing binary; a transient
+manifest/signature mismatch remains fail-closed. After promotion, download
+through the protocol channel and compare the running native binary plus both
+hashes to the public manifest. Schema 1's misleading `strand_version` field is
+the helper version and must remain until old clients no longer consume it.
+Assemble an exact helper release as a draft and publish only after every asset
+is present; never overwrite an already-published helper version.
 
 **Peel commit-ish inputs before commit lookup (2026-07-18).** A revparse result
 can be an annotated-tag object rather than a commit even when the user-visible

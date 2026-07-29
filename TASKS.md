@@ -1731,10 +1731,19 @@ tree: watch the agent work, review fast, accept or reject safely.
   installers + signed `latest.json` published.)
 - ☑ Optional Azure DevOps Server helper release pipeline
   (`.github/workflows/release.yml`, `scripts/azdo-helper-*.mjs`): builds
-  universal macOS, Windows x86_64, and Linux x86_64 archives under the same
-  exact tag, signs/notarizes macOS, publishes a minisign-authenticated manifest
-  with archive/binary hashes, and promotes the same signed workflow artifacts
-  to the rolling helper release. Windows CI compiles and tests WinHTTP.
+  universal macOS, Windows x86_64, and Linux x86_64 archives, signs/notarizes
+  macOS, publishes a minisign-authenticated manifest with archive/binary
+  hashes, and promotes the same signed workflow artifacts. DAN-33 decoupled
+  helper versions/tags from Strand, derives version/protocol from every built
+  binary, and publishes dedicated `strand-azdo-vX.Y.Z` plus
+  `strand-azdo-protocol-N` releases while retaining the protocol-5 legacy
+  channel (`bump-azdo-version.mjs`, `azdo-helper-manifest.test.mjs`,
+  `azdo_helper::install_base_url`; 2026-07-29). Windows CI compiles and tests
+  WinHTTP.
+- ◐ DAN-33 production recovery: source and CI contract are complete; publish
+  the signed `strand-azdo-v1.2.1` migration release, then require the hosted
+  post-promotion smoke job to pass for both `strand-azdo-protocol-5` and the
+  legacy `strand-azdo-latest` manifest before closing the Linear issue.
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed
