@@ -72,9 +72,9 @@ moves update the open Files tree without a reload or tab switch.
 
 The commit form takes a subject and an optional description body. The body grows
 with short or wrapped text, then scrolls once a long message reaches its bounded
-height so it does not crowd the diff. `Mod+Enter` in the message box commits
-(the Commit button shows the same chip). An **amend** checkbox rewrites the
-previous commit instead.
+height so it does not crowd the diff. `Mod+Enter` in either field commits (the
+Commit button shows the same chip); plain Enter still inserts a newline in the
+description. An **amend** checkbox rewrites the previous commit instead.
 
 **Commit signing honors your existing setup**: if `commit.gpgSign=true` is configured, Strand runs your real `git commit`, so GPG or SSH signing happens automatically and pre-commit/commit-msg hooks fire as they would on the command line. With signing off, commits are made by Strand's own engine and hooks are not run.
 

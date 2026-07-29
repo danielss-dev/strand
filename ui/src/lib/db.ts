@@ -115,6 +115,74 @@ export interface StoredBaseline {
   setAt: number;
 }
 
+type ReviewNotes = Record<string, ReviewNote[]>;
+
+/** Versioned envelope for notes from independent review comparisons. */
+interface StoredReviewNotesV2 {
+  version: 2;
+  activeScope: string;
+  scopes: Record<string, ReviewNotes>;
+  /** Most-recent first; bounds abandoned review sessions in SQLite. */
+  order: string[];
+}
+
+const MAX_REVIEW_NOTE_SCOPES = 12;
+
+function isStoredReviewNotesV2(value: unknown): value is StoredReviewNotesV2 {
+  if (value == null || typeof value !== 'object') return false;
+  const candidate = value as Partial<StoredReviewNotesV2>;
+  return (
+    candidate.version === 2 &&
+    typeof candidate.activeScope === 'string' &&
+    candidate.scopes != null &&
+    typeof candidate.scopes === 'object' &&
+    Array.isArray(candidate.order)
+  );
+}
+
+/**
+ * Read one comparison's notes from the persisted value. A pre-v2 plain map is
+ * treated as belonging to the first scope opened after upgrade; the caller
+ * then writes the returned migration so existing notes are preserved.
+ */
+export function readReviewNotesForScope(
+  value: unknown,
+  scope: string,
+): { notes: ReviewNotes; migration: StoredReviewNotesV2 | null } {
+  if (isStoredReviewNotesV2(value)) {
+    return { notes: value.scopes[scope] ?? {}, migration: null };
+  }
+  const notes =
+    value != null && typeof value === 'object' ? (value as ReviewNotes) : {};
+  return {
+    notes,
+    migration: {
+      version: 2,
+      activeScope: scope,
+      scopes: { [scope]: notes },
+      order: [scope],
+    },
+  };
+}
+
+/** Replace one scope without disturbing notes saved for other comparisons. */
+export function writeReviewNotesForScope(
+  value: unknown,
+  scope: string,
+  notes: ReviewNotes,
+): StoredReviewNotesV2 {
+  const current = isStoredReviewNotesV2(value)
+    ? value
+    : readReviewNotesForScope(value, scope).migration!;
+  const order = [scope, ...current.order.filter((key) => key !== scope)]
+    .slice(0, MAX_REVIEW_NOTE_SCOPES);
+  const scopes = { ...current.scopes, [scope]: notes };
+  for (const key of Object.keys(scopes)) {
+    if (!order.includes(key)) delete scopes[key];
+  }
+  return { version: 2, activeScope: scope, scopes, order };
+}
+
 /**
  * Per-repo review session state: the pinned baseline and the reviewed-file
  * map (`path → hash of the reviewed diff`). Persisted so an app restart
@@ -134,11 +202,37 @@ export const reviewSession = {
   setReviewed(repoPath: string, reviewed: Record<string, string>): Promise<void> {
     return settings.set(`reviewed:${repoPath}`, reviewed);
   },
-  getNotes(repoPath: string): Promise<Record<string, ReviewNote[]> | null> {
-    return settings.get<Record<string, ReviewNote[]>>(`review-notes:${repoPath}`);
+  async getNotes(repoPath: string, scope?: string): Promise<ReviewNotes | null> {
+    const key = `review-notes:${repoPath}`;
+    const stored = await settings.get<unknown>(key);
+    if (!scope) {
+      if (isStoredReviewNotesV2(stored)) {
+        return stored.scopes[stored.activeScope] ?? {};
+      }
+      return stored as ReviewNotes | null;
+    }
+    if (stored == null) return null;
+    const { notes, migration } = readReviewNotesForScope(stored, scope);
+    if (migration) await settings.set(key, migration);
+    return notes;
   },
-  setNotes(repoPath: string, notes: Record<string, ReviewNote[]>): Promise<void> {
-    return settings.set(`review-notes:${repoPath}`, notes);
+  async setNotes(repoPath: string, notes: ReviewNotes, scope?: string): Promise<void> {
+    const key = `review-notes:${repoPath}`;
+    const stored = await settings.get<unknown>(key);
+    if (scope) {
+      await settings.set(key, writeReviewNotesForScope(stored, scope, notes));
+      return;
+    }
+    // Compatibility for callers not yet supplying a scope: once a v2 record
+    // exists, update its active bucket instead of flattening it back to v1.
+    if (isStoredReviewNotesV2(stored)) {
+      await settings.set(
+        key,
+        writeReviewNotesForScope(stored, stored.activeScope, notes),
+      );
+      return;
+    }
+    await settings.set(key, notes);
   },
 };
 

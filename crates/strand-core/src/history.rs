@@ -399,7 +399,12 @@ impl Repo {
         match run_git_env(&self.path, args, envs) {
             Ok(_) => Ok(self.operation_in_progress().is_some()),
             Err(e) => {
-                if self.has_conflicts().unwrap_or(false) || self.operation_in_progress().is_some() {
+                // A conflict is the expected paused outcome. Git can also
+                // leave CHERRY_PICK_HEAD/REVERT_HEAD behind after a *real*
+                // commit failure (for example, signing failed). Treating the
+                // marker alone as success hides that error behind a
+                // misleading "Ready to continue" banner.
+                if self.has_conflicts().unwrap_or(false) {
                     Ok(true)
                 } else {
                     Err(e)
@@ -704,6 +709,32 @@ mod tests {
         repo.cherry_pick(&[pick], None).unwrap();
         assert!(dir.join("only-feature.txt").exists(), "cherry-picked file present on main");
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cherry_pick_surfaces_a_commit_failure_instead_of_reporting_a_pause() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "base.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        let pick = write_commit(&dir, "only-feature.txt", "x\n", "add only-feature");
+        git(&dir, &["checkout", "-q", "main"]);
+
+        // Simulate a non-interactive signing failure during cherry-pick's
+        // commit step. Git applies/stages the change and leaves
+        // CHERRY_PICK_HEAD, but there is no conflict: this is a genuine error
+        // the UI must show, not `Ok(true)` / "Ready to continue".
+        git(&dir, &["config", "commit.gpgsign", "true"]);
+        git(&dir, &["config", "gpg.format", "openpgp"]);
+        git(&dir, &["config", "gpg.program", "false"]);
+        let err = repo.cherry_pick(&[pick], None).unwrap_err().to_string();
+        assert!(err.contains("failed to sign") || err.contains("gpg failed"));
+        assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("cherry-pick"));
+        assert!(!repo.has_conflicts().unwrap());
+
+        // Restore the repo before cleanup so this test also exercises the
+        // normal recovery marker path.
+        repo.abort_operation().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 

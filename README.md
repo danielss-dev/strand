@@ -83,7 +83,8 @@ and the live Diff settings preview.
   reviewed, a pinnable baseline captures everything since a commit —
   including work the agent already staged or committed — and a change map
   beside the scrollbar shows where every edit sits in the file (click to
-  jump).
+  jump). Inline feedback notes persist with their baseline/branch comparison,
+  so switching review targets never mixes two agents' feedback.
 - **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
   opening and being followed automatically even before the PR view is opened.

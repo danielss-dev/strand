@@ -4,7 +4,12 @@ import {
   buildReviewFeedback,
   buildWorkspaceReviewFeedback,
   collectFeedbackFiles,
+  reviewNoteScope,
 } from './reviewExport';
+import {
+  readReviewNotesForScope,
+  writeReviewNotesForScope,
+} from './db';
 import type { ReviewNote } from './types';
 
 let seq = 0;
@@ -300,5 +305,70 @@ describe('collectFeedbackFiles', () => {
   it('returns nothing when no notes exist', () => {
     expect(collectFeedbackFiles(pool, {})).toEqual([]);
     expect(collectFeedbackFiles(pool, { 'a.ts': [] })).toEqual([]);
+  });
+});
+
+describe('review note scopes', () => {
+  const mainScope = reviewNoteScope({
+    baselineOid: 'base-a',
+    branch: 'main',
+    detached: false,
+    headOid: 'head-1',
+  });
+  const featureScope = reviewNoteScope({
+    baselineOid: 'base-a',
+    branch: 'feature',
+    detached: false,
+    headOid: 'head-2',
+  });
+
+  it('changes for a new baseline or ref, but not when the same branch advances', () => {
+    expect(
+      reviewNoteScope({
+        baselineOid: 'base-a',
+        branch: 'main',
+        detached: false,
+        headOid: 'head-2',
+      }),
+    ).toBe(mainScope);
+    expect(featureScope).not.toBe(mainScope);
+    expect(
+      reviewNoteScope({
+        baselineOid: 'base-b',
+        branch: 'main',
+        detached: false,
+        headOid: 'head-1',
+      }),
+    ).not.toBe(mainScope);
+  });
+
+  it('uses the exact HEAD for detached comparisons', () => {
+    const detached = (headOid: string) =>
+      reviewNoteScope({
+        baselineOid: null,
+        branch: headOid.slice(0, 7),
+        detached: true,
+        headOid,
+      });
+    expect(detached('111111111')).not.toBe(detached('222222222'));
+  });
+
+  it('migrates legacy notes into the first active scope without losing them', () => {
+    const legacy = { 'src/a.ts': [note('legacy')] };
+    const first = readReviewNotesForScope(legacy, mainScope);
+    expect(first.notes).toEqual(legacy);
+    expect(first.migration).not.toBeNull();
+    expect(readReviewNotesForScope(first.migration, mainScope).notes).toEqual(legacy);
+    expect(readReviewNotesForScope(first.migration, featureScope).notes).toEqual({});
+  });
+
+  it('retains independent note buckets and restores them when returning to a scope', () => {
+    const mainNotes = { 'src/main.ts': [note('main note')] };
+    const featureNotes = { 'src/feature.ts': [note('feature note')] };
+    const withMain = writeReviewNotesForScope(null, mainScope, mainNotes);
+    const withFeature = writeReviewNotesForScope(withMain, featureScope, featureNotes);
+
+    expect(readReviewNotesForScope(withFeature, mainScope).notes).toEqual(mainNotes);
+    expect(readReviewNotesForScope(withFeature, featureScope).notes).toEqual(featureNotes);
   });
 });

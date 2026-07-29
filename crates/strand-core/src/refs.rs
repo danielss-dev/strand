@@ -154,11 +154,15 @@ impl Repo {
         // `target` since the merge-base (fewer = forked later = closer
         // parent), tie-break on commits the candidate has since the
         // merge-base (a branch still sitting at the fork point beats a
-        // sibling that moved on), then name for determinism. Candidates that
+        // sibling that moved on), then prefer the primary branch before name
+        // for determinism. Candidates that
         // *contain* target (merge-base = target tip, i.e. children or
         // already-merged integration branches) rank last — pinning the
-        // baseline at target's own tip would review nothing.
-        let mut best: Option<((bool, usize, usize), BaseBranch)> = None;
+        // baseline at target's own tip would review nothing. Equal-tip peers
+        // are also ambiguous unless they are the primary branch: they may
+        // have been created from `target` later rather than being its parent.
+        let primary = primary_branch(repo).map(|(name, _)| name);
+        let mut best: Option<((bool, usize, usize, bool), BaseBranch)> = None;
         if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
             for (branch, _) in branches.flatten() {
                 let name = match branch.name() {
@@ -169,7 +173,20 @@ impl Repo {
                 let Ok(mb) = repo.merge_base(target_id, tip) else { continue };
                 let Ok((ahead, _)) = repo.graph_ahead_behind(target_id, mb) else { continue };
                 let Ok((base_ahead, _)) = repo.graph_ahead_behind(tip, mb) else { continue };
-                let rank = (ahead == 0, ahead, base_ahead);
+                // The primary branch at the same tip is the strongest
+                // fallback for a fresh branch created from HEAD. A non-primary
+                // equal-tip branch is only a peer and may have been created
+                // *after* target, so it belongs with strict descendants at the
+                // back of the ranking.
+                let is_primary = primary.as_deref() == Some(name.as_str());
+                let ambiguous_child_or_peer =
+                    mb == target_id && (tip != target_id || !is_primary);
+                let rank = (
+                    ambiguous_child_or_peer,
+                    ahead,
+                    base_ahead,
+                    !is_primary,
+                );
                 let better = match &best {
                     None => true,
                     Some((r, c)) => (rank, name.as_str()) < (*r, c.name.as_str()),
@@ -583,6 +600,46 @@ mod tests {
         // portal30 itself forked from main.
         let hit = repo.detect_base_branch("portal30").unwrap().unwrap();
         assert_eq!(hit.name, "main");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_base_branch_treats_an_equal_tip_as_a_fresh_branch_parent() {
+        let dir = std::env::temp_dir().join(format!(
+            "strand-detect-fresh-head-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        git(&dir, &["init", "-q", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        git(&dir, &["config", "core.logAllRefUpdates", "true"]);
+
+        std::fs::write(dir.join("root.txt"), "root\n").unwrap();
+        git(&dir, &["add", "root.txt"]);
+        git(&dir, &["commit", "-q", "-m", "root"]);
+        let root = git(&dir, &["rev-parse", "HEAD"]);
+        std::fs::write(dir.join("main.txt"), "main\n").unwrap();
+        git(&dir, &["add", "main.txt"]);
+        git(&dir, &["commit", "-q", "-m", "main tip"]);
+        let main_tip = git(&dir, &["rev-parse", "HEAD"]);
+
+        // `git branch fresh` records "Created from HEAD", not the parent's
+        // name. Neither an older nor an equal-tip alphabetically-first sibling
+        // may beat the primary branch in the fallback scan.
+        git(&dir, &["branch", "aaa-old", &root]);
+        git(&dir, &["branch", "aaa-peer"]);
+        git(&dir, &["branch", "fresh"]);
+
+        let repo = Repo::discover(dir.to_str().unwrap()).unwrap();
+        let hit = repo.detect_base_branch("fresh").unwrap().unwrap();
+        assert_eq!(hit.name, "main");
+        assert_eq!(hit.merge_base, main_tip);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

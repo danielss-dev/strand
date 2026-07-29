@@ -429,6 +429,33 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const [treeError, setTreeError] = useState<string | null>(null);
   const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
   const workingTreeRevision = selectedCommit || !mutationTargetsRepo ? 0 : filesTreeRevision;
+  // `repo_snapshot` already carries the authoritative tracked/untracked
+  // listing after commits, checkouts, and watcher events. Fold that cheap list
+  // into the ignored-inclusive Files cache instead of waiting for a tab switch
+  // (or paying for another recursive ignored scan).
+  useEffect(() => {
+    const repoPath = meta?.path;
+    if (!repoPath) return;
+    setLocalTreeCache((current) => {
+      if (!current || current.repoPath !== repoPath) return current;
+      const entries = new Map(
+        current.entries.filter((entry) => entry.ignored).map((entry) => [entry.path, entry]),
+      );
+      for (const entry of workTree) entries.set(entry.path, entry);
+      const next = [...entries.values()].sort((a, b) => a.path.localeCompare(b.path));
+      const unchanged =
+        next.length === current.entries.length &&
+        next.every((entry, i) => {
+          const prev = current.entries[i];
+          return (
+            prev?.path === entry.path &&
+            prev.status === entry.status &&
+            prev.ignored === entry.ignored
+          );
+        });
+      return unchanged ? current : { ...current, entries: next };
+    });
+  }, [meta?.path, workTree]);
   useEffect(() => {
     setEmptyDirectories(new Set());
     loadedIgnoredDirectoriesRef.current.clear();

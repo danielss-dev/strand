@@ -11,6 +11,7 @@ import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
+import { handleCommitShortcut, type CommitShortcutEvent } from '../lib/commitShortcut';
 import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
 import { pierreThemeOptions } from '../lib/pierreTheme';
 import { isImagePath } from '../lib/image';
@@ -1704,6 +1705,10 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     }
   }
 
+  function submitOnShortcut(event: CommitShortcutEvent) {
+    handleCommitShortcut(event, () => void submit());
+  }
+
   const disabled = submitting || !subject.trim() || (!canCommit && !amend);
   // Missing CLI does not disable the button: clicking surfaces the backend's
   // install/sign-in hint inline, instead of a dead control (DAN-11).
@@ -1726,12 +1731,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
             placeholder="Commit subject"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void submit();
-              }
-            }}
+            onKeyDown={submitOnShortcut}
           />
           <button
             type="button"
@@ -1788,6 +1788,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         placeholder="Description (optional)"
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        onKeyDown={submitOnShortcut}
       />
       {sensitivePrompt && (
         <div className="cb-error" role="alert">

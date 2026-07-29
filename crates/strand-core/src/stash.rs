@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn stash_push_paths_partial() {
+    fn stash_push_paths_preserves_message_and_selection() {
         let dir = std::env::temp_dir().join(format!("strand-stash-paths-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -384,6 +384,7 @@ mod tests {
 
         let stashes = repo.stash_list().unwrap();
         assert_eq!(stashes.len(), 1);
+        assert_eq!(stashes[0].message, "On main: partial");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
