@@ -49,6 +49,9 @@ While reading, attach notes to what you want changed:
 
 - Press `m` (or use the file-header **Note** button) to add a note on the current file; in inbox mode, per-change-block Note buttons attach a note anchored to a specific line.
 - Notes appear as chips above the diff (line-anchored ones show an `L<line>` chip) and can be removed with their × button.
+- Notes are scoped to the current baseline and branch (or exact detached
+  commit). Switching comparisons shows that comparison's own notes; returning
+  restores the notes you left there.
 
 When you are done, click **Copy feedback (N)** in the toolbar (palette: "Review: copy feedback as prompt"). Strand assembles every note into one Markdown prompt — branch and baseline header, per-file sections, each line note with a fenced diff excerpt of the surrounding lines, and a closing instruction — ready to paste straight back into the agent. "Review: clear notes" wipes the slate for the next round.
 

@@ -5,6 +5,33 @@ import { pickDirectory } from '../lib/dialog';
 import { t } from '../lib/i18n';
 import { useSettings } from '../stores/settings';
 
+type FocusTarget = { focus: () => void };
+
+/**
+ * Defer the dialog's initial focus until a closing command palette has restored
+ * its opener. The returned cleanup restores whichever control was behind the
+ * modal rather than the auto-focused URL input.
+ */
+export function startCloneDialogFocusLifecycle(
+  initialOpener: FocusTarget | null,
+  getActive: () => FocusTarget | null,
+  getInput: () => FocusTarget | null,
+  requestFrame: (callback: () => void) => number,
+  cancelFrame: (id: number) => void,
+): () => void {
+  let opener = initialOpener;
+  const frame = requestFrame(() => {
+    const input = getInput();
+    const active = getActive();
+    if (active && active !== input) opener = active;
+    input?.focus();
+  });
+  return () => {
+    cancelFrame(frame);
+    opener?.focus();
+  };
+}
+
 /**
  * Modal for configuring a clone. The user pastes a URL and picks a destination;
  * on submit it hands `(url, dest)` to `onStartClone` and closes immediately —
@@ -25,12 +52,22 @@ export function CloneDialog({
   const [nameEdited, setNameEdited] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  if (openerRef.current === null && document.activeElement instanceof HTMLElement) {
+    openerRef.current = document.activeElement;
+  }
 
-  // Restore focus to whatever opened the dialog when it closes, so keyboard
-  // flow returns to the graph/sidebar instead of falling to <body>.
+  // A palette action mounts this auto-focused input before the palette's
+  // unmount cleanup restores its own opener. Re-claim focus one frame later so
+  // typing cannot escape into the view behind this aria-modal dialog.
   useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
+    return startCloneDialogFocusLifecycle(
+      openerRef.current,
+      () => document.activeElement as HTMLElement | null,
+      () => urlRef.current,
+      (callback) => window.requestAnimationFrame(callback),
+      (id) => window.cancelAnimationFrame(id),
+    );
   }, []);
 
   // Keep Tab focus inside the modal — required by the aria-modal contract,

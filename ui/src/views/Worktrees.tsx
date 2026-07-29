@@ -157,7 +157,7 @@ export function Worktrees({
     }
 
     return () => { cancelled = true; };
-  }, [pathsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [worktrees]);
 
   const refreshArchives = useCallback(async () => {
     const path = activePath;
@@ -478,10 +478,9 @@ export function Worktrees({
       ) : (
         <div
           className="wt-list"
-          role="listbox"
+          role="list"
           tabIndex={0}
           aria-label="Worktrees"
-          aria-activedescendant={`wt-row-${focused}`}
           onKeyDown={onKeyDown}
         >
           {orderedWorktrees.map((w, i) => {
@@ -494,8 +493,8 @@ export function Worktrees({
                 key={w.path}
                 id={`wt-row-${i}`}
                 ref={i === focused ? focusedRowRef : undefined}
-                role="option"
-                aria-selected={i === focused}
+                role="listitem"
+                aria-current={i === focused ? 'true' : undefined}
                 aria-label={`${name}, ${statusText(st)}, ${w.path}`}
                 className={'wt-card' + (i === focused ? ' focused' : '') + (w.is_current ? ' current' : '')}
                 onClick={() => setFocused(i)}

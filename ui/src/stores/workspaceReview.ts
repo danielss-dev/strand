@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { reviewSession, type StoredBaseline } from '../lib/db';
 import { pathKey, repoFamilyName, tabWorktreeName } from '../lib/repoIdentity';
+import { reviewNoteScope } from '../lib/reviewExport';
 import { errMessage, tauri } from '../lib/tauri';
 import type { FileDiff, ReviewNote } from '../lib/types';
 import {
@@ -59,6 +60,8 @@ export interface MemberReview {
   /** Reviewer notes (`path → notes`), shared with the repo's own Review
    * session persistence — feed for the repo-grouped feedback export. */
   notes: Record<string, ReviewNote[]>;
+  /** Comparison identity used to keep notes out of unrelated baselines/refs. */
+  noteScope: string;
   loading: boolean;
   /** Human-readable fetch failure for this member, or `null`. */
   error: string | null;
@@ -200,14 +203,28 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     // Prefer the single-repo store's in-memory marks + notes for the active
     // repo — its persistence is fire-and-forget, so the DB read can be a
     // beat stale.
+    const noteScope = reviewNoteScope({
+      baselineOid: baseline?.oid ?? null,
+      branch: meta.branch,
+      detached: meta.detached,
+      headOid: meta.head_oid,
+    });
     const repoState = useRepo.getState();
     const active = isActiveRepo(path);
+    const activeScope = repoState.meta
+      ? reviewNoteScope({
+          baselineOid: repoState.baseline?.oid ?? null,
+          branch: repoState.meta.branch,
+          detached: repoState.meta.detached,
+          headOid: repoState.meta.head_oid,
+        })
+      : null;
     const reviewed = active
       ? repoState.reviewed
       : ((await reviewSession.getReviewed(path).catch(() => null)) ?? {});
-    const notes = active
+    const notes = active && activeScope === noteScope
       ? repoState.reviewNotes
-      : ((await reviewSession.getNotes(path).catch(() => null)) ?? {});
+      : ((await reviewSession.getNotes(path, noteScope).catch(() => null)) ?? {});
 
     if (gen !== generation) return;
     patchMember(path, {
@@ -222,6 +239,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       unstaged,
       reviewed,
       notes,
+      noteScope,
       loading: false,
       error,
     });
@@ -257,6 +275,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
             unstaged: old?.unstaged ?? [],
             reviewed: old?.reviewed ?? {},
             notes: old?.notes ?? {},
+            noteScope: old?.noteScope ?? '',
             loading: true,
             error: null,
           };
@@ -365,10 +384,24 @@ function persistNotes(
   next: Record<string, ReviewNote[]>,
 ): void {
   patchMember(member.path, { notes: next });
-  if (isActiveRepo(member.path)) useRepo.setState({ reviewNotes: next });
+  if (isActiveRepo(member.path) && activeRepoNoteScope() === member.noteScope) {
+    useRepo.setState({ reviewNotes: next });
+  }
   void reviewSession
-    .setNotes(member.path, next)
+    .setNotes(member.path, next, member.noteScope)
     .catch((e) => console.warn('workspace review: notes persist failed', e));
+}
+
+/** Scope currently shown by the single-repo Review lens, when available. */
+function activeRepoNoteScope(): string | null {
+  const state = useRepo.getState();
+  if (!state.meta) return null;
+  return reviewNoteScope({
+    baselineOid: state.baseline?.oid ?? null,
+    branch: state.meta.branch,
+    detached: state.meta.detached,
+    headOid: state.meta.head_oid,
+  });
 }
 
 /** Write-op tail: refresh the touched member, and when it's the active repo

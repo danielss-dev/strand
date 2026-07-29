@@ -2095,3 +2095,22 @@ directory against the wrapper's known file set, deduplicate overlaps by
 iterating that set once, and keep an action on an unselected context row scoped
 to that row. `expandTreeSelection` / `resolveTreeActionTargets` own this
 boundary; preserve the single batched IPC call after expansion.
+
+**A persistent terminal host must stay compositable (2026-07-29).** A stable
+xterm runtime layer can preserve PTYs, DOM nodes, and input while still making
+every renderer invisible if an ancestor uses `visibility: hidden`. Keep the
+runtime ancestor visible and hide only inactive terminal panes; test both
+halves of that CSS contract.
+
+**Nested modal launchers can race focus restoration (2026-07-29).** When a
+command palette launches a modal, its unmount cleanup may restore the palette
+opener after the modal's native `autoFocus` runs. Reclaim modal focus on the
+next animation frame, remember any control restored behind it, and return focus
+to that real opener when the modal closes.
+
+**Equal-tip branches are peers unless provenance says otherwise
+(2026-07-29).** Git may record a new branch as merely “Created from HEAD,” so
+base detection needs an equal-tip fallback. Prefer the primary branch at the
+same tip; do not treat arbitrary equal-tip siblings as parents because they may
+have been created from the target later. An explicitly named reflog parent
+still wins.

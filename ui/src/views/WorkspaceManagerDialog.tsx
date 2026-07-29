@@ -5,8 +5,69 @@ import { recents as recentsDb } from '../lib/db';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from '../lib/dialog';
 import { pathKey, pathLeaf, repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import { useRepo } from '../stores/repo';
+import type { RecentRepo, RepoMeta } from '../lib/types';
+import { useRepo, type RepoTab } from '../stores/repo';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
+
+interface KnownRepository {
+  path: string;
+  name: string;
+}
+
+/**
+ * Re-open persisted recents before offering them as workspace candidates.
+ * Besides rejecting deleted paths, repoOpen gives us the canonical workdir
+ * spelling that workspace membership expects.
+ */
+export async function validateRecentRepositories(
+  recents: RecentRepo[],
+  repoOpen: (path: string) => Promise<RepoMeta> = tauri.repoOpen,
+): Promise<KnownRepository[]> {
+  const unique = new Map<string, RecentRepo>();
+  for (const recent of recents) {
+    const key = pathKey(recent.path);
+    if (!unique.has(key)) unique.set(key, recent);
+  }
+
+  const resolved = await Promise.all(
+    [...unique.values()].map(async (recent): Promise<KnownRepository | null> => {
+      try {
+        const meta = await repoOpen(recent.path);
+        return { path: meta.path, name: repoFamilyName(meta) };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const valid = new Map<string, KnownRepository>();
+  for (const repository of resolved) {
+    if (repository && !valid.has(pathKey(repository.path))) {
+      valid.set(pathKey(repository.path), repository);
+    }
+  }
+  return [...valid.values()];
+}
+
+/** Merge validated recents with currently-open main repositories by identity. */
+export function mergeKnownRepositories(
+  validatedRecents: KnownRepository[],
+  tabs: RepoTab[],
+): KnownRepository[] {
+  const known = new Map<string, KnownRepository>();
+  for (const recent of validatedRecents) {
+    if (!known.has(pathKey(recent.path))) known.set(pathKey(recent.path), recent);
+  }
+  for (const tab of tabs) {
+    if (!tab.meta.is_linked_worktree && !known.has(pathKey(tab.path))) {
+      known.set(pathKey(tab.path), {
+        path: tab.path,
+        name: repoFamilyName(tab.meta),
+      });
+    }
+  }
+  return [...known.values()];
+}
 
 /**
  * Manage workspaces: pick a workspace on the left, curate its repositories on
@@ -44,6 +105,8 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
   const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   // Error from the last "add from disk" attempt (e.g. a non-repo folder).
   const [addError, setAddError] = useState<string | null>(null);
+  const [validatedRecents, setValidatedRecents] = useState<KnownRepository[]>([]);
+  const [validatingRecents, setValidatingRecents] = useState(true);
   const selected =
     workspaces.find((w) => w.id === selectedId) ??
     workspaces.find((w) => w.id === DEFAULT_WORKSPACE_ID) ??
@@ -64,21 +127,39 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Every repo we know a path for — recents plus anything open — as the pool
-  // to add from. Keyed by path *identity* (pathKey), not raw string, so the
-  // same repo recorded under two spellings (D:/x vs D:\x) shows once.
-  const known = useMemo(() => {
-    const m = new Map<string, { path: string; name: string }>();
-    for (const r of recents) {
-      if (!m.has(pathKey(r.path))) m.set(pathKey(r.path), { path: r.path, name: r.name });
-    }
-    for (const t of tabs) {
-      if (!t.meta.is_linked_worktree && !m.has(pathKey(t.path))) {
-        m.set(pathKey(t.path), { path: t.path, name: repoFamilyName(t.meta) });
+  // Open tabs are already valid. Re-open only the other recents, both to
+  // canonicalize them and to avoid offering deleted worktrees from the DB.
+  const openMainKeySignature = useMemo(
+    () =>
+      tabs
+        .filter((tab) => !tab.meta.is_linked_worktree)
+        .map((tab) => pathKey(tab.path))
+        .join('\0'),
+    [tabs],
+  );
+  useEffect(() => {
+    const openKeys = new Set(openMainKeySignature ? openMainKeySignature.split('\0') : []);
+    const toValidate = recents.filter((recent) => !openKeys.has(pathKey(recent.path)));
+    let current = true;
+    setValidatedRecents([]);
+    setValidatingRecents(true);
+    void validateRecentRepositories(toValidate).then((valid) => {
+      if (current) {
+        setValidatedRecents(valid);
+        setValidatingRecents(false);
       }
-    }
-    return [...m.values()];
-  }, [recents, tabs]);
+    });
+    return () => {
+      current = false;
+    };
+  }, [recents, openMainKeySignature]);
+
+  // Every valid repo we know a path for — validated recents plus anything
+  // open — keyed by path identity so alternate spellings show once.
+  const known = useMemo(
+    () => mergeKnownRepositories(validatedRecents, tabs),
+    [validatedRecents, tabs],
+  );
 
   const nameFor = (path: string) =>
     known.find((k) => pathKey(k.path) === pathKey(path))?.name ?? pathLeaf(path);
@@ -271,7 +352,9 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
                 </div>
                 {addError && <div className="ws-mgr-error">{addError}</div>}
                 <div className="ws-mgr-repos add">
-                  {candidates.length === 0 ? (
+                  {validatingRecents ? (
+                    <div className="ws-mgr-hint">Checking recent repositories…</div>
+                  ) : candidates.length === 0 ? (
                     <div className="ws-mgr-hint">Every known repository is already in this workspace.</div>
                   ) : (
                     candidates.map((k) => (

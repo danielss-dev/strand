@@ -2,6 +2,27 @@ import { fencedDiff } from './patchExport';
 import type { ReviewNote } from './types';
 
 /**
+ * Stable identity for one Review comparison. Notes are shared between the
+ * repo and workspace lenses only while they are looking at this same scope.
+ *
+ * Branch names intentionally identify attached HEADs: moving HEAD forward on
+ * the same branch keeps an in-progress review together, while checking out a
+ * different branch does not leak its notes into the new comparison. Detached
+ * reviews use the exact HEAD OID because there is no stable ref name.
+ */
+export function reviewNoteScope(input: {
+  baselineOid: string | null;
+  branch: string | null;
+  detached: boolean;
+  headOid: string | null;
+}): string {
+  const ref = input.detached
+    ? `detached:${input.headOid ?? input.branch ?? ''}`
+    : `branch:${input.branch ?? ''}`;
+  return JSON.stringify([input.baselineOid ?? 'inbox', ref]);
+}
+
+/**
  * Rendering review notes into one Markdown prompt — the hand-back half of the
  * agent feedback loop: annotate files/lines in the Review view, then paste the
  * whole bundle into the coding agent. Pure (no store/window access) so the

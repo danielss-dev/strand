@@ -14,6 +14,7 @@ import { hashPatch } from '../lib/patch';
 import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
+import { reviewNoteScope } from '../lib/reviewExport';
 import { jsonEqual, stable } from '../lib/stable';
 import { errMessage, tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
@@ -696,6 +697,19 @@ function samePath(a: string, b: string): boolean {
   return pathKey(a) === pathKey(b);
 }
 
+/** Scope review notes to the exact comparison currently shown. */
+function activeReviewNoteScope(
+  state: Pick<RepoState, 'meta' | 'baseline'>,
+  baselineOid = state.baseline?.oid ?? null,
+): string {
+  return reviewNoteScope({
+    baselineOid,
+    branch: state.meta?.branch ?? null,
+    detached: state.meta?.detached ?? false,
+    headOid: state.meta?.head_oid ?? null,
+  });
+}
+
 /**
  * The remote tag pushes target by default: `remote.pushDefault`, the current
  * branch's upstream remote, `origin`, or the first configured remote. Tags
@@ -1155,18 +1169,46 @@ export const useRepo = create<RepoState>((set, get) => ({
     const oid = at ?? get().meta?.head_oid;
     if (!path || !oid) return;
     const baseline: StoredBaseline = { oid, short: oid.slice(0, 7), setAt: Date.now() };
+    const scope = activeReviewNoteScope(get(), oid);
     set({ baseline });
     void reviewSession.setBaseline(path, baseline).catch((e) =>
       console.warn('baseline persist failed', e));
-    await get().refreshReviewDiffs();
+    await Promise.all([
+      get().refreshReviewDiffs(),
+      reviewSession
+        .getNotes(path, scope)
+        .then((notes) => {
+          if (
+            get().activePath === path &&
+            get().baseline?.oid === oid &&
+            activeReviewNoteScope(get(), oid) === scope
+          ) {
+            set({ reviewNotes: notes ?? {} });
+          }
+        })
+        .catch((e) => console.warn('review notes load failed', e)),
+    ]);
   },
 
   async clearBaseline() {
     const path = get().activePath;
+    const scope = activeReviewNoteScope(get(), null);
     set({ baseline: null, baselineDiffs: [] });
     if (path) {
       void reviewSession.setBaseline(path, null).catch((e) =>
         console.warn('baseline clear failed', e));
+      try {
+        const notes = await reviewSession.getNotes(path, scope);
+        if (
+          get().activePath === path &&
+          get().baseline === null &&
+          activeReviewNoteScope(get(), null) === scope
+        ) {
+          set({ reviewNotes: notes ?? {} });
+        }
+      } catch (e) {
+        console.warn('review notes load failed', e);
+      }
     }
   },
 
@@ -1202,12 +1244,20 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     try {
-      const [baseline, reviewed, notes] = await Promise.all([
+      const [baseline, reviewed] = await Promise.all([
         reviewSession.getBaseline(path),
         reviewSession.getReviewed(path),
-        reviewSession.getNotes(path),
       ]);
       if (get().activePath !== path) return;
+      const effectiveBaseline = baseline ?? null;
+      const scope = activeReviewNoteScope(get(), effectiveBaseline?.oid ?? null);
+      const notes = await reviewSession.getNotes(path, scope);
+      if (
+        get().activePath !== path ||
+        activeReviewNoteScope(get(), effectiveBaseline?.oid ?? null) !== scope
+      ) {
+        return;
+      }
       set({ baseline: baseline ?? null, reviewed: reviewed ?? {}, reviewNotes: notes ?? {} });
       if (baseline) await get().refreshReviewDiffs();
     } catch (e) {
@@ -1235,8 +1285,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path || !note) return;
     const cur = get().reviewNotes;
     const next = { ...cur, [file]: [...(cur[file] ?? []), note] };
+    const scope = activeReviewNoteScope(get());
     set({ reviewNotes: next });
-    void reviewSession.setNotes(path, next).catch((e) =>
+    void reviewSession.setNotes(path, next, scope).catch((e) =>
       console.warn('review notes persist failed', e));
   },
 
@@ -1249,16 +1300,18 @@ export const useRepo = create<RepoState>((set, get) => ({
     const next = { ...cur };
     if (remaining.length === 0) delete next[file];
     else next[file] = remaining;
+    const scope = activeReviewNoteScope(get());
     set({ reviewNotes: next });
-    void reviewSession.setNotes(path, next).catch((e) =>
+    void reviewSession.setNotes(path, next, scope).catch((e) =>
       console.warn('review notes persist failed', e));
   },
 
   clearReviewNotes() {
     const path = get().activePath;
     if (!path) return;
+    const scope = activeReviewNoteScope(get());
     set({ reviewNotes: {} });
-    void reviewSession.setNotes(path, {}).catch((e) =>
+    void reviewSession.setNotes(path, {}, scope).catch((e) =>
       console.warn('review notes persist failed', e));
   },
 
@@ -1741,13 +1794,21 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoCheckout(path, branch);
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshWorktrees(),
+    ]);
   },
   async checkoutCommit(rev) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoCheckoutCommit(path, rev);
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshWorktrees(),
+    ]);
   },
   async createBranch(name, startPoint, checkout) {
     const path = get().activePath;
@@ -1755,7 +1816,9 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoBranchCreate(path, name, startPoint, checkout);
     await Promise.all([
       get().refreshSnapshot(),
-      ...(checkout ? [get().refreshDiffs(), get().refreshLog()] : []),
+      ...(checkout
+        ? [get().refreshDiffs(), get().refreshLog(), get().refreshWorktrees()]
+        : []),
     ]);
   },
   async deleteBranch(name, force) {
@@ -1777,8 +1840,13 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     await tauri.repoBranchRename(path, oldName, newName);
-    // Refs ride along in the snapshot; the graph's ref chips read the log.
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    // Refs ride along in the snapshot; the graph's ref chips read the log and
+    // the family worktree list owns the checked-out branch labels.
+    await Promise.all([
+      get().refreshLocalChanges(),
+      get().refreshLog(),
+      get().refreshWorktrees(),
+    ]);
   },
   async setBranchUpstream(branch, upstream) {
     const path = get().activePath;
@@ -2151,7 +2219,17 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshRecents();
   },
 
-  setView: (view) => set({ view, ...(view === 'commits' ? {} : { workFileReturn: null }) }),
+  setView: (view) => set({
+    view,
+    ...(view === 'commits' ? {} : { workFileReturn: null }),
+    ...(view === 'commits' || view === 'branch'
+      ? {}
+      : {
+          selectedCommit: null,
+          selectedCommitDiffs: [],
+          selectedCommitDiffsLoading: false,
+        }),
+  }),
   setWorkFileReturn: (workFileReturn) => set({ workFileReturn }),
   revealInGraph: (hash) => set({ view: 'commits', revealCommit: hash }),
   clearReveal: () => set({ revealCommit: null }),

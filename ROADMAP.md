@@ -2434,6 +2434,14 @@ certificate is no longer a release requirement and remains relevant only if
 the unmanaged MSI/EXE fallback is promoted. The normal GitHub MSI remains
 truthfully documented as unsigned.
 
+**Desktop Git-client audit hardening shipped (2026-07-29):** A seven-section
+macOS audit repaired embedded-terminal compositing, clone-dialog focus,
+commit-form submission, stale workspace candidates, repository/worktree
+refreshes and accessibility, comparison-scoped review notes, and sequencer
+error reporting. Selective-stash messages now have explicit regression
+coverage. The fixes retain snapshot-driven refreshes rather than adding
+polling or recursive scans to hot paths.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

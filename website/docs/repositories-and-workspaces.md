@@ -102,6 +102,8 @@ Everything is also reachable from the command palette (`Mod+K`):
 - Create a workspace (created immediately with a placeholder name, then renamed inline).
 - Rename or delete a workspace. Deleting a workspace does not close or delete any repository.
 - Add repositories to a workspace — from recents, from currently open repos, or via a disk picker.
+- Missing or moved entries are checked before the recent-repository choices
+  appear, so deleted worktrees and stale paths are not offered as members.
 - Remove a repository from a workspace. The repo stays on disk, but removing it from its **last** holding workspace also closes its open tabs (main plus linked worktrees) — otherwise it would be unreachable from every view.
 - Import a `.code-workspace` file.
 

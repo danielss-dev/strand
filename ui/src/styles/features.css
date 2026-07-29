@@ -7793,7 +7793,6 @@ textarea.clone-input {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  visibility: hidden;
   z-index: 2;
 }
 .work-terminal-pane {

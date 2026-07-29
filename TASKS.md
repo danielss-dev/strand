@@ -433,6 +433,33 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ## Frontend — components & wiring
 
+### 2026-07-29 desktop audit hardening
+- ☑ Work terminals remain composited under the stable runtime layer while
+  inactive panes alone are hidden (`features.css`, `Work.test.ts`).
+- ☑ Clone opened from Quick Launch reclaims URL-field focus after palette
+  teardown and restores the real underlying opener on close
+  (`startCloneDialogFocusLifecycle`).
+- ☑ `Mod+Enter` submits from both commit subject and description while plain
+  Enter remains available for body newlines (`handleCommitShortcut`).
+- ☑ Workspace Manager validates persisted recents in parallel, drops missing
+  repositories, canonicalizes valid paths, and still includes open main tabs
+  (`validateRecentRepositories`, `mergeKnownRepositories`).
+- ☑ Repository/worktree state refreshes after checkout, detach, checked-out
+  branch creation, and rename; Files consumes the authoritative snapshot
+  without another ignored-tree scan; worktree stats rerun on explicit list
+  refresh; historical file context clears outside history views
+  (`repo.ts`, `Sidebar`, `Worktrees`).
+- ☑ Review notes persist per baseline/ref comparison, migrate the legacy
+  per-repository map lazily, and stay synchronized only between repo/workspace
+  lenses showing the same scope (`reviewNoteScope`, review-session v2).
+- ☑ Worktree base detection handles fresh equal-tip primary branches without
+  preferring later-created peers; worktree row actions remain exposed to
+  accessibility APIs; non-conflict cherry-pick/signing failures surface their
+  real Git error instead of a false conflict pause (`detect_base_branch`,
+  `run_sequencer_env`, list/listitem semantics).
+- ☑ Selective-stash message forwarding is regression-covered end to end
+  (`stash_push_paths_preserves_message_and_selection`).
+
 ### Repo opening
 - ☑ Create a new local repository (initial branch + optional `.gitignore` /
   first commit), as required by PRD §6.1 P0 (`init_repository`, `repo_init`,
