@@ -1006,20 +1006,24 @@ export function App() {
     else root.style.removeProperty('--accent-h');
   }, [activeAccentHue]);
 
-  // Update auto-check on launch (Settings → Updates). Delayed a few seconds
-  // so it never competes with cold-start work, and soft-fails quietly — the
-  // update endpoint may not be reachable. One-shot by design: prefs read at
-  // fire time, not subscribed.
+  // Update check on launch (Settings → Updates). Delayed a few seconds so it
+  // never competes with cold-start work, and soft-fails quietly. Direct
+  // installs respect the auto-check preference; Store installs always ask the
+  // Store API once so an available Store-owned update is not invisible.
   useEffect(() => {
-    if (!isTauri() || UPDATES_MANAGED_BY_STORE) return;
+    if (!isTauri()) return;
     const timer = setTimeout(() => {
       const { updateAutoCheck, updateAutoInstall } = useSettings.getState();
-      if (!updateAutoCheck) return;
+      if (!UPDATES_MANAGED_BY_STORE && !updateAutoCheck) return;
       void (async () => {
         const updates = useUpdates.getState();
         await updates.check();
         const { status, version } = useUpdates.getState();
         if (status !== 'available') return;
+        if (UPDATES_MANAGED_BY_STORE) {
+          showToast('A Strand update is available in Microsoft Store — see Settings → Updates');
+          return;
+        }
         if (updateAutoInstall) {
           await updates.downloadAndInstall();
           if (useUpdates.getState().status === 'ready') {

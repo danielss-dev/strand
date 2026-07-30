@@ -2398,6 +2398,13 @@ and published 18 assets. Microsoft Store run `30382509727` built the exact tag;
 after the owner canceled a conflicting portal-created draft, its second attempt
 was accepted by Partner Center for asynchronous certification and publication.
 
+**DAN-35 Microsoft Store update discovery shipped (2026-07-30):** MSIX
+installs now query Windows' native Store package-update API after launch and
+from Settings → Updates. An available update produces an in-app notification
+and a keyboard-reachable **Open Microsoft Store** handoff while Microsoft Store
+retains ownership of download and installation. Direct installs keep using the
+signed GitHub Releases updater.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

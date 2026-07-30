@@ -180,8 +180,10 @@ outputs, or sensitive classifications.
 The in-app updater covers the macOS app, direct Windows MSI installs, and the
 Linux AppImage; `.deb` and `.rpm` installs are not covered — update them by
 downloading the new release from GitHub Releases. Microsoft Store MSIX
-installations instead show **Updates for this installation are managed by
-Microsoft Store** and hide the direct update controls.
+installations instead check Microsoft Store on launch and from this section.
+When an update is available, Strand notifies you and offers **Open Microsoft
+Store**; Microsoft Store remains responsible for downloading and installing
+the package.
 
 ## Privacy
 

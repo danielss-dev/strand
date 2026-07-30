@@ -145,6 +145,22 @@ pub async fn repo_open(path: String, state: State<'_, AppState>) -> CmdResult<Re
 }
 
 #[tauri::command(async)]
+pub async fn microsoft_store_update_available() -> CmdResult<bool> {
+    run_blocking("Microsoft Store update check", || {
+        crate::microsoft_store::update_available().map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn microsoft_store_open_product() -> CmdResult<()> {
+    run_blocking("open Microsoft Store", || {
+        crate::microsoft_store::open_product().map_err(|message| CmdError { message })
+    })
+    .await
+}
+
+#[tauri::command(async)]
 pub async fn repo_meta(path: String) -> CmdResult<RepoMeta> {
     run_blocking("meta", move || Ok(Repo::discover(&path)?.meta()?)).await
 }

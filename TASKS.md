@@ -2003,6 +2003,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   and certificates were removed and audited clean. Exact Partner Center
   identity values, Store upload/certification, and a Store-signed clean-machine
   pass remain external gates in `docs/microsoft-store-submission.md`.
+- ☑ Notify Microsoft Store installs when an update is available
+  (`microsoft_store_update_available`, launch toast, and Settings check /
+  **Open Microsoft Store** handoff; DAN-35, 2026-07-30).
 - ☑ Automate GitHub release submission to Microsoft Store (release-published
   trigger, production identity, official Store Developer CLI action, protected
   environment credential contract, and manual build-only recovery in

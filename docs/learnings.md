@@ -2061,3 +2061,14 @@ older `store-submission` action targets unmanaged MSI/EXE. A successful
 workflow submission does not mean certification is complete, and the unsigned
 `.msixupload` remains a private Actions artifact. Preserve manual build-only
 dispatch so packaging can be diagnosed without mutating Partner Center.
+
+**Store-owned MSIX updates still need in-product discovery (2026-07-30).**
+Keep the direct GitHub updater disabled for `VITE_DISTRIBUTION=msix`, but query
+`Windows.Services.Store.StoreContext.GetAppAndOptionalStorePackageUpdatesAsync`
+after launch and on an explicit check. Microsoft throttles that API to one
+fresh check per 30 minutes and ten per 24 hours, so one delayed launch check is
+enough; repeated calls may return cached status. Strand may notify and open the
+Store product page, but Microsoft Store remains responsible for downloading,
+signing, and installing the package. The API requires package identity, so
+browser and unpackaged development runs can verify the UI/state contract but
+not a real availability response.

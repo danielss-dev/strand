@@ -179,8 +179,10 @@ desktop app for Windows 11 and uses the operating system's WebView2 runtime.
 Strand installs no driver or NT service. It reads and writes
 repositories only after the user opens or clones them. Network operations are
 user initiated and delegated to system Git or the user's GitHub/Azure tooling.
-Microsoft Store manages updates for this installation; Strand's direct
-GitHub-Releases updater is disabled in the MSIX build. The app has no product
+Microsoft Store manages installation of updates; Strand checks the native
+Store package-update API on launch, notifies when an update is available, and
+opens product `9N0JG96LRC4W` for installation. Strand's direct GitHub-Releases
+updater is disabled in the MSIX build. The app has no product
 telemetry. Optional crash reporting opens a pre-filled GitHub issue that the
 user reviews and submits. Optional live generative AI features use the user's
 separately installed OpenAI Codex CLI or Claude Code CLI to draft commit

@@ -214,7 +214,8 @@ and the live Diff settings preview.
   Windows/Linux), open the repository or a chosen file in your editor, open a
   terminal, a configurable startup space, settings (⌘,) for appearance /
   terminal / diff / git / hosting / integrations / AI, consistent
-  keyboard-native dropdowns, and in-app updates.
+  keyboard-native dropdowns, and update checks for both direct and Microsoft
+  Store installations.
 - **AI commit messages** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
@@ -243,7 +244,9 @@ Store engineering has a verified packaged-classic MSIX
 with production identity `Danielss.strand`. Publishing a GitHub release builds
 the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
-the accepted package. The signed offline-WebView2 MSI remains a fallback.
+the accepted package. Store installs check Microsoft's native package-update
+API on launch, notify when an update is available, and hand installation back
+to the Store. The signed offline-WebView2 MSI remains a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated
 submission was accepted by Partner Center on 2026-07-28; certification,

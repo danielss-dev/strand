@@ -108,6 +108,10 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  microsoftStoreUpdateAvailable: () =>
+    invoke<boolean>('microsoft_store_update_available'),
+  microsoftStoreOpenProduct: () =>
+    invoke<void>('microsoft_store_open_product'),
   repoInit: (
     path: string,
     initialBranch: string,
