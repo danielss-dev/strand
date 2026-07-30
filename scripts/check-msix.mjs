@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const manifest = readFileSync('packaging/msix/AppxManifest.xml.in', 'utf8');
 const buildScript = readFileSync('scripts/build-msix.ps1', 'utf8');
+const iconScript = readFileSync('scripts/generate-msix-icons.ps1', 'utf8');
 const workflow = readFileSync(
   '.github/workflows/microsoft-store-msix.yml',
   'utf8',
@@ -66,6 +67,42 @@ for (const fragment of [
   }
 }
 
+const targetSizes = [
+  16, 20, 24, 30, 32, 36, 40, 44,
+  48, 60, 64, 72, 80, 96, 256,
+];
+for (const targetSize of targetSizes) {
+  for (const alternateForm of ['unplated', 'lightunplated']) {
+    const path = 'crates/strand-tauri/icons/'
+      + `Square44x44Logo.targetsize-${targetSize}_altform-${alternateForm}.png`;
+    const size = pngSize(path);
+    if (size.width !== targetSize || size.height !== targetSize) {
+      fail(`${path} must be ${targetSize}x${targetSize}, `
+        + `got ${size.width}x${size.height}`);
+    }
+  }
+}
+
+for (const fragment of [
+  'HighQualityBicubic',
+  "('unplated', 'lightunplated')",
+  '16, 20, 24, 30, 32, 36, 40, 44, 48, 60, 64, 72, 80, 96, 256',
+  'Square44x44Logo.targetsize-$($targetSize)_altform-$alternateForm.png',
+]) {
+  const normalizedFragment = fragment.replace(/\s+/g, ' ');
+  const normalizedIconScript = iconScript.replace(/\s+/g, ' ');
+  const normalizedBuildScript = buildScript.replace(/\s+/g, ' ');
+  if (!normalizedIconScript.includes(normalizedFragment)) {
+    fail(`MSIX icon generator must retain ${JSON.stringify(fragment)}`);
+  }
+  if (
+    fragment !== 'HighQualityBicubic'
+    && !normalizedBuildScript.includes(normalizedFragment)
+  ) {
+    fail(`MSIX build must retain ${JSON.stringify(fragment)}`);
+  }
+}
+
 if (!updatesStore.includes('UPDATES_MANAGED_BY_STORE')) {
   fail('update store must recognize Store-managed MSIX updates');
 }
@@ -119,6 +156,7 @@ if (!/^\d+\.\d+\.\d+$/.test(packageJson.version)) {
 console.log(
   `MSIX packaging policy is valid for Strand ${packageJson.version}: `
   + 'x64 packaged-classic full trust, Windows 11 minimum, parameterized '
-  + 'Partner Center identity, validated assets, Store-managed updates, and '
+  + 'Partner Center identity, DPI-tailored unplated assets, Store-managed '
+  + 'updates, and '
   + 'GitHub-to-Partner-Center release submission.',
 );

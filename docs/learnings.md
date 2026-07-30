@@ -2125,3 +2125,12 @@ Store product page, but Microsoft Store remains responsible for downloading,
 signing, and installing the package. The API requires package identity, so
 browser and unpackaged development runs can verify the UI/state contract but
 not a real availability response.
+
+**MSIX shell icons need the complete target-size unplated matrix
+(2026-07-30).** A lone `Square44x44Logo.targetsize-44_altform-unplated.png`
+does not cover Windows display scales. The shell then shrinks the plated
+manifest logo, producing blur and an accent-color backplate. Generate exact
+16/20/24/30/32/36/40/44/48/60/64/72/80/96/256 px `unplated` and
+`lightunplated` variants directly from canonical `strand.png`, copy every
+variant into the MSIX, and keep the cross-platform policy check aligned with
+that matrix.
