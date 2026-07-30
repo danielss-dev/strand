@@ -106,9 +106,19 @@ foreach ($asset in @('StoreLogo.png', 'Square150x150Logo.png', 'Square44x44Logo.
         -LiteralPath (Join-Path $repoRoot "crates\strand-tauri\icons\$asset") `
         -Destination (Join-Path $layoutPath "Assets\$asset")
 }
-Copy-Item `
-    -LiteralPath (Join-Path $repoRoot 'crates\strand-tauri\icons\Square44x44Logo.png') `
-    -Destination (Join-Path $layoutPath 'Assets\Square44x44Logo.targetsize-44_altform-unplated.png')
+$targetSizes = @(
+    16, 20, 24, 30, 32, 36, 40, 44,
+    48, 60, 64, 72, 80, 96, 256
+)
+foreach ($targetSize in $targetSizes) {
+    foreach ($alternateForm in @('unplated', 'lightunplated')) {
+        $asset =
+            "Square44x44Logo.targetsize-$($targetSize)_altform-$alternateForm.png"
+        Copy-Item `
+            -LiteralPath (Join-Path $repoRoot "crates\strand-tauri\icons\$asset") `
+            -Destination (Join-Path $layoutPath "Assets\$asset")
+    }
+}
 
 $templatePath = Join-Path $repoRoot 'packaging\msix\AppxManifest.xml.in'
 $manifest = Get-Content -Raw -LiteralPath $templatePath

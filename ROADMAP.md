@@ -2459,6 +2459,12 @@ and a keyboard-reachable **Open Microsoft Store** handoff while Microsoft Store
 retains ownership of download and installation. Direct installs keep using the
 signed GitHub Releases updater.
 
+**DAN-36 Microsoft Store icon parity shipped (2026-07-30):** The MSIX now
+includes exact-size dark- and light-shell unplated app-list resources generated
+from Strand's canonical icon. Windows can select a pixel-matched taskbar or
+Start asset at every supported display scale instead of shrinking the plated
+fallback onto an accent-color backplate.
+
 **DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend

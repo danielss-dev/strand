@@ -7,6 +7,11 @@ release executable, manifest, and Store assets with Microsoft's MakeAppx tool.
 The older MSI/EXE workflow remains available as a fallback, but it requires an
 external CA-backed Windows code-signing certificate.
 
+The `Square44x44Logo` resource includes exact target-size `unplated` and
+`lightunplated` variants generated from the canonical `strand.png`. Keep the
+full size matrix when changing the icon; otherwise Windows can resample the
+plated fallback and add an accent-color backplate on the taskbar or Start.
+
 ## Production identity
 
 Strand is registered as Store product `9N0JG96LRC4W`. Its public manifest

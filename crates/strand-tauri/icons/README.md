@@ -11,3 +11,12 @@ root with:
 On macOS/Linux, run the equivalent local binary without the `.cmd` suffix.
 This populates the PNG, ICO, ICNS, Microsoft Store, Android, and iOS variants
 in this directory.
+
+Then regenerate the MSIX app-list variants on Windows:
+
+```
+.\scripts\generate-msix-icons.ps1
+```
+
+These exact-size dark- and light-shell resources prevent Windows from scaling
+the plated fallback behind the Store app icon.

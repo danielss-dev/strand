@@ -252,9 +252,10 @@ the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
 the accepted package, and production Store signing is complete. Store installs
 check Microsoft's native package-update API on launch, notify when an update is
-available, and hand installation back to the Store. The standalone GitHub MSI
-remains unsigned; the certificate-backed offline-WebView2 MSI workflow is only
-a fallback.
+available, and hand installation back to the Store. DPI-tailored unplated icon
+assets keep the Store taskbar and Start icon as sharp and background-free as
+the direct MSI. The standalone GitHub MSI remains unsigned; the
+certificate-backed offline-WebView2 MSI workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated
 submission was accepted by Partner Center on 2026-07-28; Store signing was
