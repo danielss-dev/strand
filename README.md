@@ -103,7 +103,7 @@ and the live Diff settings preview.
   inbox filters All, Authored, and Completed PRs using the signed-in provider
   identity while keeping the latest-100 query shallow. Each PR gets compact,
   toolbar-centered Summary, Timeline, and Code tabs: read rendered Markdown descriptions,
-  follow commits/comments/lifecycle events on one chronology rail, compose
+  follow commits/comments/lifecycle events newest-first on one chronology rail, compose
   top-level comments from Summary or Timeline with one preserved draft, and inspect
   lazily loaded code in the Local Changes-style Pierre file tree with aggregate
   and selected-file addition/deletion totals,

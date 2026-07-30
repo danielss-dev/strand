@@ -2459,6 +2459,11 @@ and a keyboard-reachable **Open Microsoft Store** handoff while Microsoft Store
 retains ownership of download and installation. Direct installs keep using the
 signed GitHub Releases updater.
 
+**DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
+pull-request chronology now places the latest commit, comment, or lifecycle
+event at the top while retaining deterministic tie ordering. Focused frontend
+tests cover merged and closed timelines.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
