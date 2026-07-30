@@ -2452,6 +2452,11 @@ file actions, command-palette destinations, plus pointer and keyboard pane
 resizing are interactive. Desktop and 900/680 px browser passes found no
 runtime warnings or horizontal overflow.
 
+**DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
+pull-request chronology now places the latest commit, comment, or lifecycle
+event at the top while retaining deterministic tie ordering. Focused frontend
+tests cover merged and closed timelines.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

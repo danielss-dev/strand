@@ -183,7 +183,7 @@ Timeline, so an unsent draft survives tab switches and refreshes.
 ### Timeline
 
 Timeline orders commits, GitHub issue/review-thread comments, Azure DevOps
-thread comments, and opened/merged/closed lifecycle markers oldest-first on one
+thread comments, and opened/merged/closed lifecycle markers newest-first on one
 chronology rail. Commit events show the author, subject, short hash, timestamp,
 and a provider link when available. Comments render as safe Markdown with author
 markers, timestamps, and inline file paths. Commit metadata is fetched only for

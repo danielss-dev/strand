@@ -101,7 +101,7 @@ export function buildPullRequestTimeline(pr: PullRequest): PullRequestTimelineEv
   return events.sort((left, right) => {
     const leftAt = Date.parse(left.at);
     const rightAt = Date.parse(right.at);
-    const time = (Number.isNaN(leftAt) ? 0 : leftAt) - (Number.isNaN(rightAt) ? 0 : rightAt);
+    const time = (Number.isNaN(rightAt) ? 0 : rightAt) - (Number.isNaN(leftAt) ? 0 : leftAt);
     return time || rank[left.kind] - rank[right.kind] || left.id.localeCompare(right.id);
   });
 }
