@@ -1,3 +1,4 @@
+#[cfg(target_os = "windows")]
 const STRAND_STORE_URI: &str = "ms-windows-store://pdp/?ProductId=9N0JG96LRC4W";
 
 #[cfg(target_os = "windows")]
