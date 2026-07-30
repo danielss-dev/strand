@@ -4,6 +4,7 @@ mod ai;
 mod azdo_helper;
 mod commands;
 mod hosting;
+mod microsoft_store;
 mod path_env;
 mod pull_requests;
 mod state;
@@ -73,6 +74,8 @@ fn main() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::repo_open,
+            commands::microsoft_store_update_available,
+            commands::microsoft_store_open_product,
             commands::repo_terminal_create,
             commands::terminal_write,
             commands::terminal_resize,

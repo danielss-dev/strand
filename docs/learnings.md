@@ -2114,3 +2114,14 @@ base detection needs an equal-tip fallback. Prefer the primary branch at the
 same tip; do not treat arbitrary equal-tip siblings as parents because they may
 have been created from the target later. An explicitly named reflog parent
 still wins.
+
+**Store-owned MSIX updates still need in-product discovery (2026-07-30).**
+Keep the direct GitHub updater disabled for `VITE_DISTRIBUTION=msix`, but query
+`Windows.Services.Store.StoreContext.GetAppAndOptionalStorePackageUpdatesAsync`
+after launch and on an explicit check. Microsoft throttles that API to one
+fresh check per 30 minutes and ten per 24 hours, so one delayed launch check is
+enough; repeated calls may return cached status. Strand may notify and open the
+Store product page, but Microsoft Store remains responsible for downloading,
+signing, and installing the package. The API requires package identity, so
+browser and unpackaged development runs can verify the UI/state contract but
+not a real availability response.

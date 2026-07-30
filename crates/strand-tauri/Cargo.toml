@@ -53,6 +53,11 @@ portable-pty = "0.9"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Services_Store",
+    "System",
+] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_JobObjects",

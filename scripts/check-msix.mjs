@@ -69,11 +69,14 @@ for (const fragment of [
 if (!updatesStore.includes('UPDATES_MANAGED_BY_STORE')) {
   fail('update store must recognize Store-managed MSIX updates');
 }
-if (!app.includes('if (!isTauri() || UPDATES_MANAGED_BY_STORE) return;')) {
-  fail('launch auto-update check must be disabled for MSIX');
+if (!app.includes('if (!UPDATES_MANAGED_BY_STORE && !updateAutoCheck) return;')) {
+  fail('launch update check must always run for MSIX');
 }
-if (!updatesSection.includes("t('updates.managedByStore')")) {
-  fail('Updates settings must explain Store-managed updates');
+if (!updatesStore.includes('microsoftStoreUpdateAvailable')) {
+  fail('update store must query Microsoft Store for MSIX updates');
+}
+if (!updatesSection.includes("t('updates.openStore')")) {
+  fail('Updates settings must hand available Store updates to Microsoft Store');
 }
 
 for (const fragment of [
