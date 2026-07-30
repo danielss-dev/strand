@@ -3,6 +3,7 @@ import { check, type Update } from '@tauri-apps/plugin-updater';
 import { create } from 'zustand';
 
 import { UPDATES_MANAGED_BY_STORE } from '../lib/distribution';
+import { errMessage, tauri } from '../lib/tauri';
 
 /**
  * App-update state (Settings → Updates + the launch auto-check). One store so
@@ -32,6 +33,7 @@ interface UpdatesState {
   total: number | null;
   check(): Promise<void>;
   downloadAndInstall(): Promise<void>;
+  openMicrosoftStore(): Promise<void>;
   restart(): Promise<void>;
 }
 
@@ -49,7 +51,15 @@ export const useUpdates = create<UpdatesState>()((set, get) => ({
   async check() {
     if (UPDATES_MANAGED_BY_STORE) {
       pending = null;
-      set({ status: 'upToDate', version: null, notes: null, error: null });
+      const { status } = get();
+      if (status === 'checking') return;
+      set({ status: 'checking', version: null, notes: null, error: null });
+      try {
+        const available = await tauri.microsoftStoreUpdateAvailable();
+        set({ status: available ? 'available' : 'upToDate' });
+      } catch (e) {
+        set({ status: 'error', error: errMessage(e) });
+      }
       return;
     }
     const { status } = get();
@@ -81,6 +91,15 @@ export const useUpdates = create<UpdatesState>()((set, get) => ({
       set({ status: 'ready' });
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  async openMicrosoftStore() {
+    if (!UPDATES_MANAGED_BY_STORE) return;
+    try {
+      await tauri.microsoftStoreOpenProduct();
+    } catch (e) {
+      set({ status: 'error', error: errMessage(e) });
     }
   },
 

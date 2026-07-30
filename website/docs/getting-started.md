@@ -114,8 +114,10 @@ always apply on the next restart — Strand never restarts itself. Update
 packages are cryptographically signed.
 
 The in-app updater covers the macOS app, direct Windows MSI installs, and the
-Linux AppImage. Microsoft Store MSIX installs update through Microsoft Store;
-Linux `.deb` and `.rpm` installs update through their package manager.
+Linux AppImage. Microsoft Store MSIX installs check Store availability on
+launch, notify you when an update exists, and open the Strand Store page for
+installation. Linux `.deb` and `.rpm` installs update through their package
+manager.
 
 ## Settings
 

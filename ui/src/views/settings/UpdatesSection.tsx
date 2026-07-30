@@ -23,6 +23,7 @@ export function UpdatesSection() {
   const total = useUpdates((s) => s.total);
   const checkNow = useUpdates((s) => s.check);
   const downloadAndInstall = useUpdates((s) => s.downloadAndInstall);
+  const openMicrosoftStore = useUpdates((s) => s.openMicrosoftStore);
   const restart = useUpdates((s) => s.restart);
 
   const [current, setCurrent] = useState<string | null>(null);
@@ -32,6 +33,14 @@ export function UpdatesSection() {
 
   const inTauri = isTauri();
   if (UPDATES_MANAGED_BY_STORE) {
+    const storeStatusLine =
+      status === 'checking' ? t('updates.checking')
+      : status === 'upToDate' ? t('updates.storeCurrent')
+      : status === 'available' ? t('updates.storeAvailable')
+      : status === 'error'
+        ? error ? t('updates.storeErrorReason', { reason: error }) : t('updates.storeError')
+      : null;
+
     return (
       <section className="settings-section" aria-label={t('updates.section')}>
         <div className="settings-field">
@@ -40,10 +49,33 @@ export function UpdatesSection() {
             <span className="settings-path">
               {inTauri ? `Strand ${current ?? '…'}` : t('updates.browserPreview')}
             </span>
+            {status === 'available' ? (
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => void openMicrosoftStore()}
+              >
+                {t('updates.openStore')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                disabled={!inTauri || status === 'checking'}
+                onClick={() => void checkNow()}
+              >
+                {t('updates.check')}
+              </button>
+            )}
           </div>
           <p className="settings-hint" role="status">
             {t('updates.managedByStore')}
           </p>
+          {storeStatusLine && (
+            <p className="settings-hint" role="status">
+              {storeStatusLine}
+            </p>
+          )}
         </div>
       </section>
     );

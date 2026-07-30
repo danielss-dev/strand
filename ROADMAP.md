@@ -2452,6 +2452,13 @@ file actions, command-palette destinations, plus pointer and keyboard pane
 resizing are interactive. Desktop and 900/680 px browser passes found no
 runtime warnings or horizontal overflow.
 
+**DAN-35 Microsoft Store update discovery shipped (2026-07-30):** MSIX
+installs now query Windows' native Store package-update API after launch and
+from Settings → Updates. An available update produces an in-app notification
+and a keyboard-reachable **Open Microsoft Store** handoff while Microsoft Store
+retains ownership of download and installation. Direct installs keep using the
+signed GitHub Releases updater.
+
 **DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend
