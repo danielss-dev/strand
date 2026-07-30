@@ -258,7 +258,7 @@ describe('pull request timeline', () => {
     path: null,
   };
 
-  it('orders lifecycle, commits, and comments oldest-first with stable ties', () => {
+  it('orders lifecycle, commits, and comments newest-first with stable ties', () => {
     const events = buildPullRequestTimeline(pullRequest({
       state: 'merged',
       created_at: '2026-07-15T09:00:00Z',
@@ -284,13 +284,13 @@ describe('pull request timeline', () => {
       comments: [comment],
     }));
     expect(events.map((event) => event.id)).toEqual([
-      'opened:42',
+      'completed:42',
+      'comment:comment-1',
       `commit:${'a'.repeat(40)}`,
       `commit:${'b'.repeat(40)}`,
-      'comment:comment-1',
-      'completed:42',
+      'opened:42',
     ]);
-    expect(events.at(-1)).toMatchObject({ kind: 'completed', state: 'merged' });
+    expect(events[0]).toMatchObject({ kind: 'completed', state: 'merged' });
   });
 
   it('deduplicates flattened review comments and emits a closed marker', () => {
@@ -300,7 +300,7 @@ describe('pull request timeline', () => {
       comments: [comment, { ...comment }],
     }));
     expect(events.filter((event) => event.kind === 'comment')).toHaveLength(1);
-    expect(events.at(-1)).toMatchObject({ kind: 'completed', state: 'closed' });
+    expect(events[0]).toMatchObject({ kind: 'completed', state: 'closed' });
   });
 });
 

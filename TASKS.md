@@ -1667,7 +1667,9 @@ tree: watch the agent work, review fast, accept or reject safely.
     `buildPullRequestTimeline`, `PullRequestSummary`): only opened PR detail
     fetches normalized GitHub/Azure commits; Timeline combines commits,
     flattened comments, and opened/merged/closed lifecycle markers with stable
-    ordering, while Summary keeps checks collapsible and readiness persistent.
+    newest-first ordering, while Summary keeps checks collapsible and readiness
+    persistent (DAN-38: descending timestamp comparator in
+    `buildPullRequestTimeline`).
   - ☑ 1.0 review evolution + local action: safe exact-head **Open branch in
     worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
     from target** are shipped (`repo_pull_request_prepare_checkout`,
