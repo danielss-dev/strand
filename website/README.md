@@ -59,9 +59,10 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
 - [ ] Redirect `www.strandgit.com` permanently to `https://strandgit.com/`
       in the Railway/DNS control plane (the stale `www` record currently lands
       on an unrelated 404 host).
-- [ ] Verify the apex domain in Google Search Console, import it into Bing
-      Webmaster Tools, and submit `https://strandgit.com/sitemap.xml` after
-      this SEO build is deployed.
+- [x] Verify the apex domain in Google Search Console (DNS verification completed
+      2026-07-31).
+- [ ] Import the verified property into Bing Webmaster Tools and submit
+      `https://strandgit.com/sitemap.xml` after this SEO build is deployed.
 - [x] Download CTAs resolve the latest platform assets through the GitHub
       Releases API, with the release page as the failure fallback.
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow

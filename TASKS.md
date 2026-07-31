@@ -2123,9 +2123,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   title/H1/copy and section order; canonical/Open Graph/SoftwareApplication
   metadata; 13 pre-rendered guide routes; generated `robots.txt` and
   `sitemap.xml`; `seo-check.mjs` validates metadata, JSON-LD, routes, and links)
-- ☐ Deploy the SEO build, permanently redirect `www.strandgit.com` to the apex
+- ◐ Deploy the SEO build, permanently redirect `www.strandgit.com` to the apex
   domain, verify the domain in Google Search Console, import it into Bing
-  Webmaster Tools, and submit `https://strandgit.com/sitemap.xml`.
+  Webmaster Tools, and submit `https://strandgit.com/sitemap.xml` (Google domain
+  property verified by DNS on 2026-07-31; deployment, redirect, Bing, and sitemap
+  submission remain).
 
 ---
 
