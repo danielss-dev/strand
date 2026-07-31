@@ -3,19 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Strand — Review what your AI agent did</title>
-  <meta name="description" content="Strand is a fast, keyboard-first Git client built for reviewing AI coding agents' changes. Whole-file context, live working-tree watch, feedback you can paste back. Free for individuals, one-time license for companies." />
-  <meta property="og:title" content="Strand — Review what your AI agent did" />
-  <meta property="og:description" content="A fast, keyboard-first Git client built around reviewing AI coding agents' changes. Free for individuals." />
+  <title>Strand Git Client — Fast Git GUI for Windows, macOS &amp; Linux</title>
+  <meta name="description" content="Strand is a fast, keyboard-first Git client for Windows, macOS, and Linux. Review diffs, stage changes, manage branches and worktrees, and more." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://strandgit.com/" />
+  <meta property="og:title" content="Strand Git Client — Fast Git GUI for Windows, macOS &amp; Linux" />
+  <meta property="og:description" content="A fast, keyboard-first Git client for Windows, macOS, and Linux, with first-class workflows for reviewing code written by AI agents." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://strandgit.com" />
+  <meta property="og:url" content="https://strandgit.com/" />
+  <meta property="og:site_name" content="Strand Git" />
+  <meta property="og:locale" content="en_US" />
   <meta property="og:image" content="https://strandgit.com/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="Strand — a fast, keyboard-first Git client for reviewing agent-written code" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Strand — Review what your AI agent did" />
-  <meta name="twitter:description" content="A fast, keyboard-first Git client built around reviewing AI coding agents' changes." />
+  <meta name="twitter:title" content="Strand Git Client — Fast Git GUI for Windows, macOS &amp; Linux" />
+  <meta name="twitter:description" content="A fast, keyboard-first Git client for Windows, macOS, and Linux, with first-class AI-agent review workflows." />
   <meta name="twitter:image" content="https://strandgit.com/og-image.png" />
   <meta name="twitter:image:alt" content="Strand — a fast, keyboard-first Git client for reviewing agent-written code" />
   <meta name="theme-color" content="#171511" />
@@ -24,6 +28,31 @@
   <link rel="preload" href="fonts/jetbrains-mono-600-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/geist-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="style.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Strand",
+    "alternateName": "Strand Git",
+    "description": "A fast, keyboard-first Git client for Windows, macOS, and Linux, with first-class workflows for reviewing code written by AI agents.",
+    "url": "https://strandgit.com/",
+    "image": "https://strandgit.com/og-image.png",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "downloadUrl": "https://github.com/danielss-dev/strand/releases/latest",
+    "license": "https://github.com/danielss-dev/strand/blob/main/LICENSE",
+    "sameAs": [
+      "https://github.com/danielss-dev/strand"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "name": "Strand for individuals",
+      "description": "Free for individual use with no account or feature gates.",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
 </head>
 <body id="top">
 
@@ -70,12 +99,12 @@
     <!-- ============================== HERO ============================== -->
     <section class="hero">
       <div class="wrap">
-        <p class="eyebrow" data-reveal>A Git client for the agent era</p>
-        <h1 data-reveal>Agents write the code.<br /><em>Someone</em> has to review it.</h1>
+        <p class="eyebrow" data-reveal>Git client for Windows, macOS &amp; Linux</p>
+        <h1 data-reveal>The fast Git client<br /> for <em>modern development.</em></h1>
         <p class="hero-sub" data-reveal>
-          Strand is a fast, keyboard-first Git client built around one workflow: watch an AI coding
-          agent change your working tree, review every line with whole-file context, and send
-          feedback straight back to the agent. Free for individuals.
+          Strand is a fast, keyboard-first Git GUI for macOS, Windows, and Linux. Review diffs,
+          stage changes, manage branches and worktrees, resolve conflicts, and inspect AI-agent
+          changes with whole-file context. Free for individuals.
         </p>
         <div class="cta-row" data-reveal>
           <a class="btn btn-accent" href="#download">Download Strand</a>
@@ -441,11 +470,138 @@
       </div>
     </section>
 
+    <!-- ============================== SPEED ============================== -->
+    <section class="section section-alt" id="speed">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>01 — Performance</p>
+        <h2 data-reveal>Fast is the feature.</h2>
+        <p class="lead" data-reveal>
+          Strand's prime directive — written into the repo, enforced in review: <em>stable, fast,
+          performance-first</em>. A Rust engine, your OS's native webview, and a standing rule that
+          no change ships if it regresses a hot path.
+        </p>
+        <div class="stats" data-reveal>
+          <div class="stat">
+            <div class="stat-num"><span data-count="47">47</span><small>ms</small></div>
+            <div class="stat-label">to open a 100k-commit repo</div>
+            <div class="stat-sub">discover + first 5,000 commits</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num"><span data-count="42">42</span><small>ms</small></div>
+            <div class="stat-label">status refresh, 10k-file tree</div>
+            <div class="stat-sub">the path every agent edit touches</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num"><span data-count="15">15</span><small>MB</small></div>
+            <div class="stat-label">installer, whole app</div>
+            <div class="stat-sub">Windows MSI · Linux deb/rpm · macOS universal ~31 MB</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">0<small>&nbsp;</small></div>
+            <div class="stat-label">bytes of Electron</div>
+            <div class="stat-sub">Rust + Tauri + native webview</div>
+          </div>
+        </div>
+        <p class="stats-note" data-reveal>Engine benchmarks on an M1&nbsp;Pro against synthetic 100k-commit / 10k-file fixtures — methodology in <a href="https://github.com/danielss-dev/strand/blob/main/docs/perf-baseline.md" target="_blank" rel="noopener">docs/perf-baseline.md</a>.</p>
+      </div>
+    </section>
+
+    <!-- ============================== FULL CLIENT ============================== -->
+    <section class="section section-alt" id="features">
+      <div class="wrap">
+        <p class="eyebrow" data-reveal>02 — Complete Git client</p>
+        <h2 data-reveal>A whole Git client.<br />Not just a review pane.</h2>
+        <p class="lead" data-reveal>
+          The review workflow sits on top of a complete, fast Git client — so accepting the agent's
+          work and shipping it never leaves the app.
+        </p>
+        <div class="grid" data-reveal>
+          <div class="card" style="--c:var(--b-1)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 14V7a3 3 0 0 1 3-3h8"/><path d="m11 1 3 3-3 3"/><circle cx="3" cy="16" r="1.6"/></svg></div>
+            <h3>Interactive rebase</h3>
+            <p>Reorder, reword, squash, fixup, drop — no editor in the loop. fixup! commits auto-arrange like <span class="mono-inline">--autosquash</span>.</p>
+          </div>
+          <div class="card" style="--c:var(--b-2)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 2v6a4 4 0 0 0 4 4h6"/><path d="M14 2v4a4 4 0 0 1-4 4"/><circle cx="14" cy="15" r="1.6"/></svg></div>
+            <h3>Three-way conflicts</h3>
+            <p>Theirs and ours side-by-side, the assembled result below. Pick per conflict or per side; resolve writes and stages.</p>
+          </div>
+          <div class="card" style="--c:var(--b-3)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 2v14"/><path d="M5 7c0-2 1.5-3 3.5-3H13"/><circle cx="13" cy="4" r="1.6"/><path d="M5 11c0 2 1.5 3 3.5 3H13"/><circle cx="13" cy="14" r="1.6"/></svg></div>
+            <h3>Worktrees, first-class</h3>
+            <p>One worktree per agent, grouped as tabs, with a dashboard, one-click review from the fork point, side-by-side <em>Compare</em> of parallel attempts, and <em>Merge&nbsp;&amp;&nbsp;clean&nbsp;up</em> to land the winner — removals snapshot-archived, always restorable.</p>
+          </div>
+          <div class="card" style="--c:var(--b-5)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 16 9 9 16 2 9Z"/></svg></div>
+            <h3>Stashes on the graph</h3>
+            <p>Stashes render as nodes hanging off their base commit — apply, pop, or drop them right where they live.</p>
+          </div>
+          <div class="card" style="--c:var(--b-7)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/></svg></div>
+            <h3>Time travel</h3>
+            <p>Blame with commit jump, a reflog browser with recovery actions, file history that follows renames. Nothing is ever lost.</p>
+          </div>
+          <div class="card" style="--c:var(--b-4)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="14" height="12" rx="2"/><circle cx="6.5" cy="7.5" r="1.4"/><path d="m2 13 4-4 3 3 3.5-3.5L16 12"/></svg></div>
+            <h3>Sees more than text</h3>
+            <p>Before/after image diffs, markdown and SVG previews that re-render live as the agent edits the docs.</p>
+          </div>
+          <div class="card" style="--c:var(--b-6)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 2a10 10 0 0 1 0 14M9 2a10 10 0 0 0 0 14M2.5 6.5h13M2.5 11.5h13"/></svg></div>
+            <h3>Light, dark, yours</h3>
+            <p>Light and dark themes, eight accent hues, three densities — one OKLCH hue rotation recolors the whole app live.</p>
+          </div>
+          <div class="card" style="--c:var(--accent)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m3 5 4 4-4 4"/><path d="M9 13h6"/></svg></div>
+            <h3>Honest git</h3>
+            <p>Network and signing shell out to <em>your</em> git — credentials, SSH agent, GPG, and LFS work on day one. No re-implementation surprises.</p>
+          </div>
+          <div class="card card-wide" style="--c:var(--b-3)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="10" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="10" width="6" height="6" rx="1.5"/><rect x="10" y="10" width="6" height="6" rx="1.5"/></svg></div>
+            <h3>Workspaces</h3>
+            <p>Group the repos behind one product. Open a workspace to focus the rail on just those repos, review changes across all of them in one merged queue, and import straight from a VS Code <span class="mono-inline">.code-workspace</span>.</p>
+          </div>
+          <div class="card card-wide" style="--c:var(--b-4)">
+            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 10.8 6.6 15.5 7.2 12 10.4 13 15 9 12.6 5 15 6 10.4 2.5 7.2 7.2 6.6Z"/></svg></div>
+            <h3>AI commit messages</h3>
+            <p>Suggest subject + body from your staged changes via the ChatGPT subscription you already have (Codex CLI) or Claude Code — no API key, sign in once in Settings → AI.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== KEYBOARD ============================== -->
+    <section class="section" id="keyboard">
+      <div class="wrap kb-grid">
+        <div class="kb-copy">
+          <p class="eyebrow" data-reveal>03 — Keyboard</p>
+          <h2 data-reveal>Hands on home row.</h2>
+          <p class="lead" data-reveal>
+            Keyboard-first, never keyboard-only. Every surface in Strand has a focus model — lists,
+            trees, dialogs, menus — so reviewing an agent session never makes you reach for the
+            mouse. And when you forget a key, <span class="mono-inline">⌘K</span> finds everything:
+            branches, files, commits, actions, fuzzy-matched.
+          </p>
+          <p class="kb-foot" data-reveal>Menus open with <kbd class="kbd kbd-xs">⇧F10</kbd>, dialogs trap focus, screen readers get announced toasts. Accessibility isn't a mode.</p>
+        </div>
+        <ul class="kb-list" data-reveal>
+          <li><span class="keys"><kbd class="kbd" data-k="j">j</kbd><kbd class="kbd" data-k="k">k</kbd></span><span>step through the review queue</span></li>
+          <li><span class="keys"><kbd class="kbd" data-k="space">space</kbd></span><span>mark reviewed — and stay put</span></li>
+          <li><span class="keys"><kbd class="kbd">n</kbd><kbd class="kbd">p</kbd></span><span>jump between change blocks</span></li>
+          <li><span class="keys"><kbd class="kbd">s</kbd></span><span>stage the file</span></li>
+          <li><span class="keys"><kbd class="kbd">d</kbd><kbd class="kbd">d</kbd></span><span>discard — safety-stashed first</span></li>
+          <li><span class="keys"><kbd class="kbd">m</kbd></span><span>leave a note on the line</span></li>
+          <li><span class="keys"><kbd class="kbd">c</kbd></span><span>jump to the commit form</span></li>
+          <li class="kb-hero"><span class="keys"><kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd></span><span>everything else, fuzzy</span></li>
+        </ul>
+      </div>
+    </section>
+
     <!-- ============================== WORKFLOW ============================== -->
     <section class="section" id="loop">
       <div class="wrap loop-grid">
         <div class="loop-copy">
-          <p class="eyebrow" data-reveal>01 — The loop</p>
+          <p class="eyebrow" data-reveal>04 — Agent review</p>
           <h2 data-reveal>Built around the agent loop, not bolted onto it.</h2>
           <p class="lead" data-reveal>
             Claude Code in one pane, Strand in the other. Most Git clients were designed for changes
@@ -526,133 +682,6 @@
           </div>
           <p class="cc-foot">Strand tags agent commits in the graph — the <i class="ai-chip">ai</i> chip — and
             “select commits since baseline” rounds up the whole session for review.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============================== SPEED ============================== -->
-    <section class="section section-alt" id="speed">
-      <div class="wrap">
-        <p class="eyebrow" data-reveal>02 — Performance</p>
-        <h2 data-reveal>Fast is the feature.</h2>
-        <p class="lead" data-reveal>
-          Strand's prime directive — written into the repo, enforced in review: <em>stable, fast,
-          performance-first</em>. A Rust engine, your OS's native webview, and a standing rule that
-          no change ships if it regresses a hot path.
-        </p>
-        <div class="stats" data-reveal>
-          <div class="stat">
-            <div class="stat-num"><span data-count="47">47</span><small>ms</small></div>
-            <div class="stat-label">to open a 100k-commit repo</div>
-            <div class="stat-sub">discover + first 5,000 commits</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num"><span data-count="42">42</span><small>ms</small></div>
-            <div class="stat-label">status refresh, 10k-file tree</div>
-            <div class="stat-sub">the path every agent edit touches</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num"><span data-count="15">15</span><small>MB</small></div>
-            <div class="stat-label">installer, whole app</div>
-            <div class="stat-sub">Windows MSI · Linux deb/rpm · macOS universal ~31 MB</div>
-          </div>
-          <div class="stat">
-            <div class="stat-num">0<small>&nbsp;</small></div>
-            <div class="stat-label">bytes of Electron</div>
-            <div class="stat-sub">Rust + Tauri + native webview</div>
-          </div>
-        </div>
-        <p class="stats-note" data-reveal>Engine benchmarks on an M1&nbsp;Pro against synthetic 100k-commit / 10k-file fixtures — methodology in <a href="https://github.com/danielss-dev/strand/blob/main/docs/perf-baseline.md" target="_blank" rel="noopener">docs/perf-baseline.md</a>.</p>
-      </div>
-    </section>
-
-    <!-- ============================== KEYBOARD ============================== -->
-    <section class="section" id="keyboard">
-      <div class="wrap kb-grid">
-        <div class="kb-copy">
-          <p class="eyebrow" data-reveal>03 — Keyboard</p>
-          <h2 data-reveal>Hands on home row.</h2>
-          <p class="lead" data-reveal>
-            Keyboard-first, never keyboard-only. Every surface in Strand has a focus model — lists,
-            trees, dialogs, menus — so reviewing an agent session never makes you reach for the
-            mouse. And when you forget a key, <span class="mono-inline">⌘K</span> finds everything:
-            branches, files, commits, actions, fuzzy-matched.
-          </p>
-          <p class="kb-foot" data-reveal>Menus open with <kbd class="kbd kbd-xs">⇧F10</kbd>, dialogs trap focus, screen readers get announced toasts. Accessibility isn't a mode.</p>
-        </div>
-        <ul class="kb-list" data-reveal>
-          <li><span class="keys"><kbd class="kbd" data-k="j">j</kbd><kbd class="kbd" data-k="k">k</kbd></span><span>step through the review queue</span></li>
-          <li><span class="keys"><kbd class="kbd" data-k="space">space</kbd></span><span>mark reviewed — and stay put</span></li>
-          <li><span class="keys"><kbd class="kbd">n</kbd><kbd class="kbd">p</kbd></span><span>jump between change blocks</span></li>
-          <li><span class="keys"><kbd class="kbd">s</kbd></span><span>stage the file</span></li>
-          <li><span class="keys"><kbd class="kbd">d</kbd><kbd class="kbd">d</kbd></span><span>discard — safety-stashed first</span></li>
-          <li><span class="keys"><kbd class="kbd">m</kbd></span><span>leave a note on the line</span></li>
-          <li><span class="keys"><kbd class="kbd">c</kbd></span><span>jump to the commit form</span></li>
-          <li class="kb-hero"><span class="keys"><kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd></span><span>everything else, fuzzy</span></li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- ============================== FULL CLIENT ============================== -->
-    <section class="section section-alt" id="features">
-      <div class="wrap">
-        <p class="eyebrow" data-reveal>04 — Everything else</p>
-        <h2 data-reveal>A whole Git client.<br />Not just a review pane.</h2>
-        <p class="lead" data-reveal>
-          The review workflow sits on top of a complete, fast Git client — so accepting the agent's
-          work and shipping it never leaves the app.
-        </p>
-        <div class="grid" data-reveal>
-          <div class="card" style="--c:var(--b-1)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 14V7a3 3 0 0 1 3-3h8"/><path d="m11 1 3 3-3 3"/><circle cx="3" cy="16" r="1.6"/></svg></div>
-            <h3>Interactive rebase</h3>
-            <p>Reorder, reword, squash, fixup, drop — no editor in the loop. fixup! commits auto-arrange like <span class="mono-inline">--autosquash</span>.</p>
-          </div>
-          <div class="card" style="--c:var(--b-2)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 2v6a4 4 0 0 0 4 4h6"/><path d="M14 2v4a4 4 0 0 1-4 4"/><circle cx="14" cy="15" r="1.6"/></svg></div>
-            <h3>Three-way conflicts</h3>
-            <p>Theirs and ours side-by-side, the assembled result below. Pick per conflict or per side; resolve writes and stages.</p>
-          </div>
-          <div class="card" style="--c:var(--b-3)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 2v14"/><path d="M5 7c0-2 1.5-3 3.5-3H13"/><circle cx="13" cy="4" r="1.6"/><path d="M5 11c0 2 1.5 3 3.5 3H13"/><circle cx="13" cy="14" r="1.6"/></svg></div>
-            <h3>Worktrees, first-class</h3>
-            <p>One worktree per agent, grouped as tabs, with a dashboard, one-click review from the fork point, side-by-side <em>Compare</em> of parallel attempts, and <em>Merge&nbsp;&amp;&nbsp;clean&nbsp;up</em> to land the winner — removals snapshot-archived, always restorable.</p>
-          </div>
-          <div class="card" style="--c:var(--b-5)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 16 9 9 16 2 9Z"/></svg></div>
-            <h3>Stashes on the graph</h3>
-            <p>Stashes render as nodes hanging off their base commit — apply, pop, or drop them right where they live.</p>
-          </div>
-          <div class="card" style="--c:var(--b-7)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/></svg></div>
-            <h3>Time travel</h3>
-            <p>Blame with commit jump, a reflog browser with recovery actions, file history that follows renames. Nothing is ever lost.</p>
-          </div>
-          <div class="card" style="--c:var(--b-4)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="14" height="12" rx="2"/><circle cx="6.5" cy="7.5" r="1.4"/><path d="m2 13 4-4 3 3 3.5-3.5L16 12"/></svg></div>
-            <h3>Sees more than text</h3>
-            <p>Before/after image diffs, markdown and SVG previews that re-render live as the agent edits the docs.</p>
-          </div>
-          <div class="card" style="--c:var(--b-6)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M9 2a10 10 0 0 1 0 14M9 2a10 10 0 0 0 0 14M2.5 6.5h13M2.5 11.5h13"/></svg></div>
-            <h3>Light, dark, yours</h3>
-            <p>Light and dark themes, eight accent hues, three densities — one OKLCH hue rotation recolors the whole app live.</p>
-          </div>
-          <div class="card" style="--c:var(--accent)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m3 5 4 4-4 4"/><path d="M9 13h6"/></svg></div>
-            <h3>Honest git</h3>
-            <p>Network and signing shell out to <em>your</em> git — credentials, SSH agent, GPG, and LFS work on day one. No re-implementation surprises.</p>
-          </div>
-          <div class="card card-wide" style="--c:var(--b-3)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="10" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="10" width="6" height="6" rx="1.5"/><rect x="10" y="10" width="6" height="6" rx="1.5"/></svg></div>
-            <h3>Workspaces</h3>
-            <p>Group the repos behind one product. Open a workspace to focus the rail on just those repos, review changes across all of them in one merged queue, and import straight from a VS Code <span class="mono-inline">.code-workspace</span>.</p>
-          </div>
-          <div class="card card-wide" style="--c:var(--b-4)">
-            <div class="card-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 2 10.8 6.6 15.5 7.2 12 10.4 13 15 9 12.6 5 15 6 10.4 2.5 7.2 7.2 6.6Z"/></svg></div>
-            <h3>AI commit messages</h3>
-            <p>Suggest subject + body from your staged changes via the ChatGPT subscription you already have (Codex CLI) or Claude Code — no API key, sign in once in Settings → AI.</p>
-          </div>
         </div>
       </div>
     </section>
@@ -757,7 +786,7 @@
           <svg class="brand-mark" aria-hidden="true"><use href="#strand-mark"/></svg>
           <span>strand</span>
         </a>
-        <p>The Git client for the agent era.<br />Stable, fast, performance-first.</p>
+        <p>The fast, cross-platform Git client.<br />Stable, clear, performance-first.</p>
       </div>
       <div class="footer-col">
         <h4>Product</h4>
@@ -771,8 +800,8 @@
         <a href="https://github.com/danielss-dev/strand" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/danielss-dev/strand/issues" target="_blank" rel="noopener">Issues</a>
         <a href="https://github.com/danielss-dev/strand/blob/main/COMMERCIAL.md" target="_blank" rel="noopener">Licensing</a>
-        <a href="docs/?page=privacy">Privacy</a>
-        <a href="docs/?page=content-guidelines">Content guidelines</a>
+        <a href="docs/privacy/">Privacy</a>
+        <a href="docs/content-guidelines/">Content guidelines</a>
       </div>
     </div>
     <div class="wrap footer-fine">

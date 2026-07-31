@@ -1,16 +1,19 @@
 # Strand landing page
 
-Static site for `strandgit.com`. No build step.
+Static site for `strandgit.com`. A zero-dependency Node build pre-renders the
+Markdown user guide into crawlable HTML and writes the deployable site to
+`dist/`.
 
 **Deployed on Railway**: project `landings` → service `strand-landing`
-(`railway up` from this folder redeploys; `npm start` is what Railway runs —
-`serve . -l $PORT`; `npm run build` is a no-op that exists only because the
-Railway image build wants a build command). Test URL:
+(`railway up` from this folder redeploys; Railway runs `npm run build` and then
+`npm start`, which serves `dist/` on `$PORT`). Test URL:
 <https://strand-landing-production.up.railway.app>. The custom domain
 `strandgit.com` is live through the Railway service.
 
-Preview locally with `pnpm site` from the repo root (serves on
-<http://localhost:4321> via [`serve`](https://github.com/vercel/serve)).
+Preview locally with `pnpm site` from the repo root (builds and serves on
+<http://localhost:4321> via [`serve`](https://github.com/vercel/serve)). Run
+`npm test` from this folder to build and validate titles, descriptions,
+canonicals, JSON-LD, the sitemap, robots policy, and internal links.
 
 - `index.html` / `style.css` / `script.js` — the whole site. Design tokens are
   lifted from the app (`ui/src/styles/tokens.css`): same warm-charcoal OKLCH
@@ -35,23 +38,31 @@ Preview locally with `pnpm site` from the repo root (serves on
   fuzzy / highlighted UI): it scrolls to page sections, switches the demo
   views, sets the accent, and opens GitHub / X. Items live in `ITEMS` in
   `script.js` — add new destinations there.
-- `docs/` — the user guide, served at `/docs/`. Content is plain markdown
-  (`*.md`, one file per page) rendered client-side by `docs/index.html` +
-  `docs/docs.js` using the vendored `docs/marked.min.js` (still no build
-  step). **To update a page, edit its `.md` and redeploy. To add a page,
-  drop the `.md` in `docs/` and add a row to `docs/manifest.json`** (order
-  there drives the sidebar and prev/next pager). Cross-page links are plain
-  relative `foo.md` links — the viewer rewrites them (and they render on
-  GitHub too). Keep the guide in sync with app releases: every claim in it
+- `docs/` — the user-guide source, served as pre-rendered pages at `/docs/`
+  and `/docs/<slug>/`. Content is plain markdown (`*.md`, one file per page),
+  converted at build time by `build.mjs` with the vendored
+  `docs/marked.min.js`. **To update a page, edit its `.md` and redeploy. To add
+  a page, drop the `.md` in `docs/` and add a title + unique description row
+  to `docs/manifest.json`** (order drives the sidebar, sitemap, and prev/next
+  pager). Cross-page links stay as relative `foo.md` links in source so they
+  render on GitHub; the build rewrites them to canonical clean URLs. Keep the
+  guide in sync with app releases: every claim in it
   was fact-checked against `ui/src` on 2026-07-18 for the 1.0 release candidate.
   The public privacy policy used by distribution listings is
-  `/docs/?page=privacy`, and Store UGC guidance is
-  `/docs/?page=content-guidelines`; deploy website changes before submitting
-  either Store URL.
+  `/docs/privacy/`, and Store UGC guidance is `/docs/content-guidelines/`.
+  Legacy `?page=` URLs redirect to their clean equivalents; deploy website
+  changes before submitting either Store URL.
 
 ## Before launch
 
 - [x] Custom-domain DNS and TLS are live at `strandgit.com`.
+- [ ] Redirect `www.strandgit.com` permanently to `https://strandgit.com/`
+      in the Railway/DNS control plane (the stale `www` record currently lands
+      on an unrelated 404 host).
+- [x] Verify the apex domain in Google Search Console (DNS verification completed
+      2026-07-31).
+- [ ] Import the verified property into Bing Webmaster Tools and submit
+      `https://strandgit.com/sitemap.xml` after this SEO build is deployed.
 - [x] Download CTAs resolve the latest platform assets through the GitHub
       Releases API, with the release page as the failure fallback.
 - [ ] Point "Get a commercial license" at `COMMERCIAL.md` / a purchase flow

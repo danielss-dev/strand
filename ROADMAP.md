@@ -718,7 +718,7 @@ doc → doc links stay in Preview either way. Verified: `vitest` (105, +17
 markdown), `tsc`, `cargo check -p strand-tauri`.
 
 **Landing page (2026-06-12):** First pass at the public face, ahead of the
-beta: `website/` holds a static, no-build-step landing page for
+beta: `website/` initially held a static, no-build-step landing page for
 `strandgit.com`. It reuses the app's identity wholesale — the OKLCH
 token palette from `tokens.css`, self-hosted Geist + JetBrains Mono, the
 single-hue accent system (a row of hero dots rotates `--accent-h` live,
@@ -1526,10 +1526,10 @@ store-level `reviewWorktree`); palette gained Clean up / Prune entries; the
 documentation: `website/docs/` holds nine markdown guide pages (overview,
 getting started, repositories & workspaces, reviewing agent changes,
 worktrees, everyday git, commits & history, keyboard & palette, settings),
-each fact-checked against `ui/src` before landing, rendered client-side by a
-static viewer (`docs/index.html` + vendored `marked.min.js` — the site keeps
-its no-build-step invariant; updating docs = editing the `.md` and
-redeploying). The landing page was synced to 0.9.x reality: Linux download
+each fact-checked against `ui/src` before landing. Markdown remains the source
+of truth; since 2026-07-31 a zero-dependency build pre-renders it through the
+vendored `marked.min.js` into static clean-URL HTML. The landing page was synced
+to 0.9.x reality: Linux download
 button live (AppImage), stale ~10 MB installer claims corrected to real
 15/31 MB sizes, the worktrees card now covers Compare + Merge & clean up, new
 Workspaces and AI-commit-messages cards fill the feature grid, and Docs is
@@ -2469,6 +2469,14 @@ fallback onto an accent-color backplate.
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend
 tests cover merged and closed timelines.
+
+**Website SEO foundation shipped (2026-07-31):** Strand's public site now
+leads with its fast cross-platform Git-client category while keeping agent
+review as the differentiator. The homepage exposes canonical, social, and
+SoftwareApplication metadata; all 13 guide pages pre-render to crawlable clean
+URLs; and the build emits a sitemap plus robots policy. A repository SEO check
+fails on duplicate or missing metadata, invalid JSON-LD, broken routes, legacy
+query/Markdown links, or a sitemap that drifts from the generated pages.
 
 ---
 

@@ -2093,7 +2093,7 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   legal, updater-rehearsal, clean-machine, and real-platform checks in
   `docs/release-checklist.md` remain open.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
-  (site built: `website/` — static, no build step, design tokens + fonts lifted
+  (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
   pricing section. **Deployed on Railway** — project `landings`, service
   `strand-landing`, live at https://strandgit.com (custom domain DNS
@@ -2109,9 +2109,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   selection, repository/workspace Review scope, notes/baseline/file actions,
   and pointer + keyboard pane resizing; desktop/narrow browser QA is clean.)
 - ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
-  fact-checked markdown pages + `manifest.json`, rendered client-side by
-  `docs/index.html`/`docs.js` with vendored `marked.min.js`; no build step —
-  updating docs = editing the `.md` files and redeploying. Landing page synced
+  fact-checked markdown pages + `manifest.json`; since 2026-07-31, `build.mjs`
+  pre-renders them with vendored `marked.min.js` into crawlable clean-URL HTML
+  under `website/dist/`, while Markdown remains the source of truth. Landing page synced
   to 0.9.x: Linux download button live, installer sizes corrected, worktree
   Compare / Merge & clean up + Workspaces + AI commit messages cards, Docs
   link in nav/footer/⌘K.)
@@ -2119,6 +2119,15 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   2026-07-18 across all nine guide pages, native-menu language, privacy/status
   copy, landing release labels, website maintainer notes, and
   `docs/changelog/2026-07-18-strand-1.0.0.md`.
+- ☑ Website SEO foundation (2026-07-31: general-first Git-client homepage
+  title/H1/copy and section order; canonical/Open Graph/SoftwareApplication
+  metadata; 13 pre-rendered guide routes; generated `robots.txt` and
+  `sitemap.xml`; `seo-check.mjs` validates metadata, JSON-LD, routes, and links)
+- ◐ Deploy the SEO build, permanently redirect `www.strandgit.com` to the apex
+  domain, verify the domain in Google Search Console, import it into Bing
+  Webmaster Tools, and submit `https://strandgit.com/sitemap.xml` (Google domain
+  property verified by DNS on 2026-07-31; deployment, redirect, Bing, and sitemap
+  submission remain).
 
 ---
 

@@ -112,10 +112,10 @@ if (!/"file"\s*:\s*"privacy"/i.test(docsManifest)) {
 if (!/"file"\s*:\s*"content-guidelines"/i.test(docsManifest)) {
   fail('documentation manifest must include the content guidelines');
 }
-if (!/docs\/\?page=privacy/i.test(websiteIndex)) {
+if (!/docs\/privacy\//i.test(websiteIndex)) {
   fail('website footer must link to the privacy policy');
 }
-if (!/docs\/\?page=content-guidelines/i.test(websiteIndex)) {
+if (!/docs\/content-guidelines\//i.test(websiteIndex)) {
   fail('website footer must link to the content guidelines');
 }
 if (
