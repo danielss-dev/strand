@@ -1,17 +1,17 @@
 {
   "pages": [
-    { "file": "index", "title": "Strand User Guide" },
-    { "file": "getting-started", "title": "Getting Started" },
-    { "file": "work", "title": "Work: Files & Terminals" },
-    { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces" },
-    { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes" },
-    { "file": "pull-requests", "title": "Pull Requests" },
-    { "file": "worktrees", "title": "Worktrees" },
-    { "file": "everyday-git", "title": "Everyday Git" },
-    { "file": "commits-and-history", "title": "Commits & History" },
-    { "file": "keyboard-and-palette", "title": "Keyboard & Command Palette" },
-    { "file": "settings", "title": "Settings" },
-    { "file": "privacy", "title": "Privacy Policy" },
-    { "file": "content-guidelines", "title": "Content Guidelines" }
+    { "file": "index", "title": "Strand User Guide", "description": "Learn how to use Strand, the fast, keyboard-first Git client for Windows, macOS, and Linux." },
+    { "file": "getting-started", "title": "Getting Started", "description": "Download and install the Strand Git client on Windows, macOS, or Linux, then open your first repository." },
+    { "file": "work", "title": "Work: Files & Terminals", "description": "Use Strand as a Git client with an integrated file browser, lightweight editor, previews, and repository terminals." },
+    { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces", "description": "Manage multiple Git repositories, tabs, recent projects, and cross-repository workspaces in Strand." },
+    { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes", "description": "Review AI coding-agent changes with whole-file diffs, baselines, notes, and reusable feedback in Strand." },
+    { "file": "pull-requests", "title": "Pull Requests", "description": "Browse and review GitHub and Azure DevOps pull requests from the Strand desktop Git client." },
+    { "file": "worktrees", "title": "Worktrees", "description": "Use Strand's Git worktree GUI to isolate agent tasks, compare attempts, review changes, and merge the winner." },
+    { "file": "everyday-git", "title": "Everyday Git", "description": "Stage files and lines, commit, branch, merge, rebase, resolve conflicts, and synchronize repositories visually." },
+    { "file": "commits-and-history", "title": "Commits & History", "description": "Explore your Git commit graph, search history, inspect diffs, rebase commits, use reflog, and blame files in Strand." },
+    { "file": "keyboard-and-palette", "title": "Keyboard & Command Palette", "description": "Drive the Strand Git client from the keyboard with configurable shortcuts, focused navigation, and a command palette." },
+    { "file": "settings", "title": "Settings", "description": "Configure Strand themes, diffs, Git identity, shortcuts, integrations, AI providers, updates, and privacy." },
+    { "file": "privacy", "title": "Privacy Policy", "description": "Read how the local-first Strand Git client handles repositories, credentials, AI features, updates, and website data." },
+    { "file": "content-guidelines", "title": "Content Guidelines", "description": "Read the content, reporting, and acceptable-use guidelines for Strand's Git hosting integrations and AI-assisted features." }
   ]
 }

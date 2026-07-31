@@ -2,11 +2,13 @@
   "name": "strand-website",
   "private": true,
   "version": "0.0.1",
-  "description": "Static landing page for strandgit.com (no build step).",
+  "description": "Static landing page and pre-rendered user guide for strandgit.com.",
   "scripts": {
-    "build": "echo 'static site - nothing to build'",
-    "start": "serve . -l ${PORT:-4321}",
-    "serve": "serve . -l 4321"
+    "build": "node build.mjs",
+    "check:seo": "node seo-check.mjs",
+    "test": "npm run build && npm run check:seo",
+    "start": "serve dist -l ${PORT:-4321}",
+    "serve": "npm run build && serve dist -l 4321"
   },
   "dependencies": {
     "serve": "^14"

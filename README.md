@@ -1,7 +1,7 @@
 # Strand
 
-> A fast, keyboard-first Git client — built for reviewing what AI coding
-> agents do to your code.
+> A fast, keyboard-first Git client for Windows, macOS, and Linux — with
+> first-class workflows for reviewing what AI coding agents do to your code.
 
 [![CI](https://github.com/danielss-dev/strand/actions/workflows/ci.yml/badge.svg)](https://github.com/danielss-dev/strand/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
@@ -299,7 +299,7 @@ strand/
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands
 ├── packaging/          # Store/distribution manifests assembled around release binaries
 ├── ui/                 # Vite + React + TypeScript frontend
-├── website/            # strandgit.com: landing page + user guide (website/docs/, no build step)
+├── website/            # strandgit.com: landing page + pre-rendered user guide
 ├── docs/               # design notes, perf baseline, packaging
 ├── PRD.md              # product spec
 ├── ROADMAP.md          # milestones and status
