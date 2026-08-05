@@ -7,11 +7,8 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ComponentProps,
-  type ComponentType,
-  type ReactNode,
 } from 'react';
-import { File as PierreFile } from '@pierre/diffs/react';
-import * as PierreReact from '@pierre/diffs/react';
+import { EditProvider, File as PierreFile } from '@pierre/diffs/react';
 import { Editor } from '@pierre/diffs/edit';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
@@ -618,15 +615,15 @@ function ContentTab({
             </button>
           </div>
           <div className="fv-pierre fv-pierre-edit" ref={scrollRef}>
-            <PierreEditProvider createEditor={createPierreEditor}>
-              <EditablePierreFile
+            <EditProvider createEditor={createPierreEditor}>
+              <PierreFile
                 file={{ name: path, contents: draft, cacheKey: draftKey ?? sourceKey }}
                 options={opts}
                 edit
                 editOptions={editorOptions}
                 selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
               />
-            </PierreEditProvider>
+            </EditProvider>
           </div>
         </>
       ) : (
@@ -642,13 +639,8 @@ function ContentTab({
   );
 }
 
-type PierreFileProps = ComponentProps<typeof PierreFile> & {
-  edit?: boolean;
-  editOptions?: { persistState?: boolean; onChange?(text: string): void };
-};
+type PierreFileProps = ComponentProps<typeof PierreFile>;
 type PierreEditOptions = NonNullable<PierreFileProps['editOptions']>;
-const PierreEditProvider = (PierreReact as unknown as { EditProvider: ComponentType<{ createEditor(options: Record<string, unknown>): unknown; children?: ReactNode }> }).EditProvider;
-const EditablePierreFile = PierreFile as ComponentType<PierreFileProps>;
 
 const sessionFileDrafts = new Map<string, string>();
 
