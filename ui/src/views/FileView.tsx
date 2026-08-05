@@ -620,7 +620,7 @@ function ContentTab({
                 file={{ name: path, contents: draft, cacheKey: draftKey ?? sourceKey }}
                 options={opts}
                 edit
-                editOptions={editorOptions}
+                editorOptions={editorOptions}
                 selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
               />
             </EditProvider>
@@ -640,7 +640,7 @@ function ContentTab({
 }
 
 type PierreFileProps = ComponentProps<typeof PierreFile>;
-type PierreEditOptions = NonNullable<PierreFileProps['editOptions']>;
+type PierreEditOptions = NonNullable<PierreFileProps['editorOptions']>;
 
 const sessionFileDrafts = new Map<string, string>();
 
