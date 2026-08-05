@@ -194,8 +194,8 @@ and the live Diff settings preview.
 - **Command palette (⌘K)** — fuzzy search across commands, branches, tags,
   files, commits, and recent repos, with scope filtering and full keyboard +
   screen-reader operability.
-- **Work file documents** — edit syntax-highlighted working-tree files or
-  inspect historical source read-only; `--follow` history,
+- **Work file documents** — edit working-tree files with Pierre Diffs edit mode
+  (unsaved drafts persist while navigating) or inspect historical source read-only; `--follow` history,
   compare any two revisions, blame, and rendered previews for markdown and SVG; the Files tree
   uses the local filesystem listing directly, including muted Git-ignored
   paths, while overlaying current Git-state colors and recognizable language

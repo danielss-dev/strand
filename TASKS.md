@@ -1208,16 +1208,14 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`.
-  Existing complete UTF-8 working-tree files edit through the syntax-highlighted
-  `HighlightedEditor` and save through stale-checked `repo_file_write`; revisions,
-  binaries, oversized files, and non-UTF-8 text stay on Pierre's read-only
-  `<File>`. Optimistic token projection keeps the last Shiki colors attached
-  to unchanged text during every edit—there is no plain-text refresh frame—and
-  reconstructs CRLF token streams without tripping the plain-text fallback.
+  Existing complete UTF-8 working-tree files edit through Pierre Diffs edit mode
+  (`EditProvider`/`Editor`) and save through stale-checked `repo_file_write`;
+  revisions, binaries, oversized files, and non-UTF-8 text stay on Pierre's
+  read-only `<File>`.
   Writes are explicit only, via the disk save icon or Mod+S; blur and idle time
-  never save a draft. Focus/watcher refreshes keep the mounted editor and token
-  map in place, and a refresh that finishes after typing starts cannot replace
-  the draft (`ContentTab` loaded-source/dirty guards).
+  never save a draft. Unsaved drafts stay in memory when navigating around
+  Strand. Focus/watcher refreshes keep the mounted editor state in place, and a refresh that finishes
+  after typing starts cannot replace the draft (`ContentTab` loaded-source/dirty guards).
   Mod+F searches the source with wrap-around match navigation and
   virtualized-line scrolling (`FileSearchBar` + `searchFileText`).
 - ☑ Preview tab — rendered view for renderable text files, tab only offered

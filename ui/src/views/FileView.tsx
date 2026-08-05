@@ -6,8 +6,13 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
 } from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
+import * as PierreReact from '@pierre/diffs/react';
+import { Editor } from '@pierre/diffs/edit';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
 import { Diff } from '../components/Diff';
@@ -18,14 +23,13 @@ import { Select } from '../components/Select';
 import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { imageMime, isImagePath } from '../lib/image';
 import { directoryEntries, type DirectoryEntry } from '../lib/directoryEntries';
-import { canEditFileContent } from '../lib/fileEditing';
+import { canEditFileContent, fileDraftKey } from '../lib/fileEditing';
 import { t } from '../lib/i18n';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
-import { projectTokenColors } from '../lib/highlightProjection';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import type {
@@ -422,6 +426,7 @@ function ContentTab({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const draftKey = useMemo(() => fileDraftKey(repoPath, path, revision), [repoPath, path, revision]);
   const savingRef = useRef(false);
   const loadedSourceRef = useRef<string | null>(null);
   const selectLine = useCallback((line: number | null) => setSelectedLine(line), []);
@@ -484,7 +489,7 @@ function ContentTab({
     if (!refreshingLoadedSource) {
       loadedSourceRef.current = null;
       setData(null);
-      setDraft('');
+      if (!draftKey || !sessionFileDrafts.has(draftKey)) setDraft('');
       setOriginal('');
       setSaveError(null);
       savingRef.current = false;
@@ -495,7 +500,8 @@ function ContentTab({
         if (cancelled || (refreshingLoadedSource && dirtyRef.current)) return;
         loadedSourceRef.current = sourceKey;
         setData(c);
-        setDraft(normalizeEditorText(c.text));
+        const normalized = normalizeEditorText(c.text);
+        setDraft(draftKey ? sessionFileDrafts.get(draftKey) ?? normalized : normalized);
         setOriginal(c.text);
       })
       .catch((e) => {
@@ -505,7 +511,7 @@ function ContentTab({
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [repoPath, path, revision, refetchKey, sourceKey]);
+  }, [repoPath, path, revision, refetchKey, sourceKey, draftKey]);
 
   const save = useCallback(async () => {
     if (!repoPath || !data?.editable || revision || !dirty || savingRef.current) return;
@@ -518,14 +524,19 @@ function ContentTab({
       setData(saved);
       setOriginal(saved.text);
       // Do not clobber keystrokes entered while the write was in flight.
-      setDraft((current) => current === next ? normalizeEditorText(saved.text) : current);
+      setDraft((current) => {
+        const normalized = normalizeEditorText(saved.text);
+        if (current === next && draftKey) sessionFileDrafts.delete(draftKey);
+        else if (draftKey) sessionFileDrafts.set(draftKey, current);
+        return current === next ? normalized : current;
+      });
     } catch (caught) {
       setSaveError(errMessage(caught));
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [data?.editable, dirty, draft, original, path, repoPath, revision]);
+  }, [data?.editable, dirty, draft, original, path, repoPath, revision, draftKey]);
 
   useEffect(() => {
     if (!editable) return;
@@ -558,6 +569,17 @@ function ContentTab({
   // JSX to skip the excess-property check — same as MergeResolver).
   const opts = { theme: pierreTheme, disableBackground: true, disableFileHeader: true };
   const searchText = editable ? draft : data.text;
+  const editorOptions = useMemo<PierreEditOptions>(() => ({
+    persistState: true,
+    onChange: (next: string) => {
+      setDraft(next);
+      if (draftKey) {
+        if (next === normalizedOriginal) sessionFileDrafts.delete(draftKey);
+        else sessionFileDrafts.set(draftKey, next);
+      }
+      setSaveError(null);
+    },
+  }), [draftKey, normalizedOriginal]);
   return (
     <div className="fv-tab diff-search-host">
       {data.truncated && (
@@ -595,16 +617,17 @@ function ContentTab({
               <Icon name="save" size={15} />
             </button>
           </div>
-          <HighlightedEditor
-            path={path}
-            text={draft}
-            theme={pierreTheme}
-            selectedLine={selectedLine}
-            onChange={(next) => {
-              setDraft(next);
-              setSaveError(null);
-            }}
-          />
+          <div className="fv-pierre fv-pierre-edit" ref={scrollRef}>
+            <PierreEditProvider createEditor={createPierreEditor}>
+              <EditablePierreFile
+                file={{ name: path, contents: draft, cacheKey: draftKey ?? sourceKey }}
+                options={opts}
+                edit
+                editOptions={editorOptions}
+                selectedLines={selectedLine == null ? null : { start: selectedLine, end: selectedLine }}
+              />
+            </PierreEditProvider>
+          </div>
         </>
       ) : (
         <div className="fv-pierre" ref={scrollRef}>
@@ -619,114 +642,18 @@ function ContentTab({
   );
 }
 
-const EDITOR_LINE_HEIGHT = 18;
+type PierreFileProps = ComponentProps<typeof PierreFile> & {
+  edit?: boolean;
+  editOptions?: { persistState?: boolean; onChange?(text: string): void };
+};
+type PierreEditOptions = NonNullable<PierreFileProps['editOptions']>;
+const PierreEditProvider = (PierreReact as unknown as { EditProvider: ComponentType<{ createEditor(options: Record<string, unknown>): unknown; children?: ReactNode }> }).EditProvider;
+const EditablePierreFile = PierreFile as ComponentType<PierreFileProps>;
 
-function HighlightedEditor({
-  path,
-  text,
-  theme,
-  selectedLine,
-  onChange,
-}: {
-  path: string;
-  text: string;
-  theme: HlTheme;
-  selectedLine: number | null;
-  onChange: (text: string) => void;
-}) {
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-  const [highlight, setHighlight] = useState<{ text: string; tokens: HlToken[][] } | null>(null);
-  const lineCount = useMemo(() => text.split('\n').length, [text]);
-  const gutter = useMemo(
-    () => Array.from({ length: lineCount }, (_, index) => index + 1).join('\n'),
-    [lineCount],
-  );
+const sessionFileDrafts = new Map<string, string>();
 
-  useEffect(() => {
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void tokenizeFile(text, path, theme).then((tokens) => {
-        if (!cancelled && tokens) setHighlight({ text, tokens });
-      });
-    }, 24);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [path, text, theme]);
-
-  useEffect(() => {
-    if (selectedLine == null) return;
-    const input = inputRef.current;
-    if (!input) return;
-    const target = (selectedLine - 0.5) * EDITOR_LINE_HEIGHT - input.clientHeight / 2;
-    input.scrollTo({ top: Math.max(0, target) });
-    setScrollTop(input.scrollTop);
-  }, [selectedLine]);
-
-  const highlighted = useMemo(() => {
-    if (!highlight) return text;
-    return projectTokenColors(highlight.text, text, highlight.tokens).map((token, index) => (
-      <span key={index} style={token.color ? { color: token.color } : undefined}>
-        {token.content}
-      </span>
-    ));
-  }, [highlight, text]);
-
-  const insertTab = useCallback(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    const start = input.selectionStart;
-    const end = input.selectionEnd;
-    onChange(`${text.slice(0, start)}\t${text.slice(end)}`);
-    requestAnimationFrame(() => input.setSelectionRange(start + 1, start + 1));
-  }, [onChange, text]);
-
-  return (
-    <div className="fv-editor">
-      <div className="fv-editor-gutter" aria-hidden>
-        <pre style={{ transform: `translateY(${-scrollTop}px)` }}>{gutter}</pre>
-      </div>
-      <div className="fv-editor-surface">
-        {selectedLine != null && (
-          <div
-            className="fv-editor-selected-line"
-            style={{ top: 10 + (selectedLine - 1) * EDITOR_LINE_HEIGHT - scrollTop }}
-            aria-hidden
-          />
-        )}
-        <pre
-          className="fv-editor-highlight"
-          style={{ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }}
-          aria-hidden
-        >
-          {highlighted}
-        </pre>
-        <textarea
-          ref={inputRef}
-          className="fv-editor-input"
-          value={text}
-          onChange={(event) => onChange(event.target.value)}
-          onScroll={(event) => {
-            setScrollTop(event.currentTarget.scrollTop);
-            setScrollLeft(event.currentTarget.scrollLeft);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Tab' || event.metaKey || event.ctrlKey || event.altKey) return;
-            event.preventDefault();
-            insertTab();
-          }}
-          aria-label={t('file.editorLabel', { path })}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          wrap="off"
-        />
-      </div>
-    </div>
-  );
+function createPierreEditor(options: ConstructorParameters<typeof Editor>[0]) {
+  return new Editor(options);
 }
 
 // ─── Preview ──────────────────────────────────────────────────────────────

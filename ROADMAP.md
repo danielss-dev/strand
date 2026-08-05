@@ -2220,14 +2220,12 @@ loadable while `.git` stays inaccessible; the snapshot/status hot path remains
 unchanged.
 
 **Syntax-highlighted file editing shipped (2026-07-19):** Opening an existing
-UTF-8 working-tree file from Files now mounts a lightweight editor backed by
-Pierre's shared Shiki tokenizer. Save and Mod+S explicitly write through
+UTF-8 working-tree file from Files now mounts Pierre Diffs edit mode. Save and Mod+S explicitly write through
 `repo_file_write`; the core preserves consistent CRLF endings and
 rejects stale, traversal, symlink, binary, non-UTF-8, and oversized writes.
-Historical revisions remain read-only. The editor projects the last Shiki token
-colors onto each new buffer immediately, so background retokenization never
-causes a plain-text flash while typing. Its in-memory buffer is LF-normalized
-for textarea/Shiki agreement while the core retains and restores the exact CRLF
+Historical revisions remain read-only. Unsaved working-tree drafts now stay in
+memory when users switch files, tabs, repositories, or Work panes, but writes
+remain explicit-only; the core retains and restores the exact CRLF
 disk form on save.
 
 **Files creation toolbar refined (2026-07-19):** The separate New file and New
