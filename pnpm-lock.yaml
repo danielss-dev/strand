@@ -379,6 +379,9 @@ packages:
     resolution: {integrity: sha512-GC2OWTAfTIIWWYhPCygwG8t2EtePQkRfON4MI2rwIkJylmiyqIttJID2dCL8sUD8cNdEvYkEyfEHHKMeCiDLoQ==}
     engines: {vscode: ^1.0.0}
 
+  '@pierre/theme@2.0.0':
+    resolution: {tarball: https://registry.npmjs.org/@pierre/theme/-/theme-2.0.0.tgz}
+
   '@pierre/theming@0.0.2':
     resolution: {integrity: sha512-QM1M4stXfnzfaE8I8YbjXSApV8c+2dBsXJj8eYg9WTpBR/cTmCZIcfGnN4p13iRrYu2Br/R/OJfEL7uR8Qjctw==}
     peerDependencies:
@@ -397,6 +400,20 @@ packages:
       react-dom:
         optional: true
       shiki:
+        optional: true
+
+  '@pierre/theming@1.0.0':
+    resolution: {tarball: https://registry.npmjs.org/@pierre/theming/-/theming-1.0.0.tgz}
+    peerDependencies:
+      '@pierre/theme': ^2.0.0
+      react: ^18.3.1 || ^19.0.0
+      react-dom: ^18.3.1 || ^19.0.0
+    peerDependenciesMeta:
+      '@pierre/theme':
+        optional: true
+      react:
+        optional: true
+      react-dom:
         optional: true
 
   '@pierre/trees@1.0.0-beta.5':
@@ -1190,8 +1207,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  diff@8.0.3:
-    resolution: {integrity: sha512-qejHi7bcSD4hQAZE0tNAawRK1ZtafHDmMTMkrrIGgSLl7hTnQHmKCeB45xAcbfTqK2zowkM3j3bHt/4b/ARbYQ==}
+  diff@9.0.0:
+    resolution: {tarball: https://registry.npmjs.org/diff/-/diff-9.0.0.tgz}
     engines: {node: '>=0.3.1'}
 
   dompurify@3.4.11:
@@ -2052,18 +2069,26 @@ snapshots:
 
   '@pierre/diffs@1.3.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@pierre/theme': 1.0.3
+      '@pierre/theme': 2.0.0
+      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@shikijs/transformers': 3.23.0
-      diff: 8.0.3
+      diff: 9.0.0
       hast-util-to-html: 9.0.5
       lru_map: 0.4.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       shiki: 3.23.0
 
-  '@pierre/theme@1.0.3': {}
 
   '@pierre/theme@1.1.0': {}
+
+  '@pierre/theme@2.0.0': {}
+
+  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@pierre/theme': 2.0.0
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@pierre/theming@0.0.2(@pierre/theme@1.1.0)(@shikijs/themes@3.23.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(shiki@3.23.0)':
     optionalDependencies:
@@ -2868,7 +2893,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  diff@8.0.3: {}
+  diff@9.0.0: {}
 
   dompurify@3.4.11:
     optionalDependencies:
