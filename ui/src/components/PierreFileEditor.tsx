@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { FileOptions } from '@pierre/diffs/react';
 import { EditProvider, File } from '@pierre/diffs/react';
 import { Editor, type EditorOptions } from '@pierre/diffs/edit';
@@ -10,6 +10,14 @@ interface PierreFileEditorProps {
   selectedLine: number | null;
   text: string;
   onChange(text: string): void;
+  onHistoryChange(editor: PierreEditorHistory | null): void;
+}
+
+export interface PierreEditorHistory {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  undo(): void;
+  redo(): void;
 }
 
 function createEditor(options: EditorOptions<undefined>): Editor<undefined> {
@@ -24,12 +32,25 @@ export default function PierreFileEditor({
   selectedLine,
   text,
   onChange,
+  onHistoryChange,
 }: PierreFileEditorProps) {
+  const editorRef = useRef<Editor<undefined> | null>(null);
   const file = useMemo(() => ({ name: path, contents: text, cacheKey }), [cacheKey, path, text]);
   const editorOptions = useMemo<EditorOptions<undefined>>(
-    () => ({ onChange: (changed) => onChange(changed.contents) }),
-    [onChange],
+    () => ({
+      onAttach: (editor) => {
+        editorRef.current = editor;
+        onHistoryChange(editor);
+      },
+      onChange: (changed) => {
+        onChange(changed.contents);
+        if (editorRef.current) onHistoryChange(editorRef.current);
+      },
+    }),
+    [onChange, onHistoryChange],
   );
+
+  useEffect(() => () => onHistoryChange(null), [onHistoryChange]);
 
   return (
     <EditProvider createEditor={createEditor}>

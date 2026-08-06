@@ -34,6 +34,7 @@ import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
+import type { PierreEditorHistory } from '../components/PierreFileEditor';
 import type {
   BlameLine,
   FileContent,
@@ -51,6 +52,18 @@ type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
  *  calls `repoDiffWorkdirFile`), it only needs to differ from real OIDs. */
 const WORKING = 'working-tree';
 const PierreFileEditor = lazy(() => import('../components/PierreFileEditor'));
+
+interface EditorHistoryState {
+  editor: PierreEditorHistory | null;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+const EMPTY_EDITOR_HISTORY: EditorHistoryState = {
+  editor: null,
+  canUndo: false,
+  canRedo: false,
+};
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'content', label: 'Content', icon: 'content' },
@@ -429,6 +442,7 @@ function ContentTab({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
+  const [editorHistory, setEditorHistory] = useState<EditorHistoryState>(EMPTY_EDITOR_HISTORY);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
   const loadedSourceRef = useRef<string | null>(null);
@@ -462,6 +476,16 @@ function ContentTab({
       next === normalizeEditorText(base) ? null : { original: base, text: next },
     );
   }, [path, repoPath, setFileDraft]);
+
+  const updateEditorHistory = useCallback((editor: PierreEditorHistory | null) => {
+    const canUndo = editor?.canUndo ?? false;
+    const canRedo = editor?.canRedo ?? false;
+    setEditorHistory((current) => (
+      current.editor === editor && current.canUndo === canUndo && current.canRedo === canRedo
+        ? current
+        : { editor, canUndo, canRedo }
+    ));
+  }, []);
 
   // Follow external changes while the document is clean, but never replace a
   // user's unsaved buffer. A stale save is rejected by repo_file_write.
@@ -525,7 +549,10 @@ function ContentTab({
         if (cancelled || (refreshingLoadedSource && dirtyRef.current)) return;
         loadedSourceRef.current = sourceKey;
         setData(c);
-        if (refreshingLoadedSource) setEditorGeneration((generation) => generation + 1);
+        if (refreshingLoadedSource) {
+          setEditorHistory(EMPTY_EDITOR_HISTORY);
+          setEditorGeneration((generation) => generation + 1);
+        }
         const normalizedDisk = normalizeEditorText(c.text);
         const stored = !revision
           ? useWork.getState().fileDrafts[workFileDraftKey(repoPath, path)]
@@ -592,6 +619,7 @@ function ContentTab({
     // Pierre owns its document after mounting; a new cache key rebuilds it
     // from the restored text without touching the working-tree file. Refresh
     // afterward so an external disk change that caused a stale save also wins.
+    setEditorHistory(EMPTY_EDITOR_HISTORY);
     setEditorGeneration((generation) => generation + 1);
     setDiscardRefreshKey((key) => key + 1);
   }, [dirty, path, repoPath, setFileDraft]);
@@ -650,6 +678,28 @@ function ContentTab({
                     ? t('file.unsaved')
                     : t('file.saved')}
             </span>
+            <div className="fv-editor-history" role="group" aria-label={t('file.historyActions')}>
+              <button
+                type="button"
+                className="icon-btn fv-editor-history-btn"
+                disabled={!editorHistory.canUndo}
+                onClick={() => editorHistory.editor?.undo()}
+                title={`${t('file.undo')} (Mod+Z)`}
+                aria-label={t('file.undo')}
+              >
+                <Icon name="undo" size={15} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn fv-editor-history-btn"
+                disabled={!editorHistory.canRedo}
+                onClick={() => editorHistory.editor?.redo()}
+                title={`${t('file.redo')} (Mod+Shift+Z)`}
+                aria-label={t('file.redo')}
+              >
+                <Icon name="redo" size={15} />
+              </button>
+            </div>
             <button
               type="button"
               className="icon-btn fv-editor-discard"
@@ -680,6 +730,7 @@ function ContentTab({
                 selectedLine={selectedLine}
                 text={draft}
                 onChange={updateDraft}
+                onHistoryChange={updateEditorHistory}
               />
             </Suspense>
           </div>

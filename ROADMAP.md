@@ -2487,6 +2487,12 @@ remain explicit through Save / Mod+S and retain the optimistic stale-write guard
 the editor's Discard changes action resets the session buffer and reloads disk
 content without issuing a write.
 
+**Editor undo/redo controls shipped (2026-08-06):** Work Content's toolbar now
+exposes Pierre's structure-aware undo history through state-aware Undo and Redo
+buttons. The controls track the same history as Mod+Z, Mod+Shift+Z, and Ctrl+Y,
+and reset when Strand intentionally rebuilds the editor after a clean external
+refresh or Discard.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
