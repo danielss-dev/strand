@@ -42,7 +42,10 @@ multiple cursors, smart indentation, bracket matching, and undo/redo. Unsaved
 drafts remain available when you switch tabs, panes, views, workspaces, or
 repositories during the current app session. Strand does not save on blur,
 navigation, or idle time: use the save icon or `Mod+S` when you want to write
-the file. Use **Discard changes** beside Save to reset the current unsaved
+the file. Use the toolbar's **Undo** and **Redo** controls or `Mod+Z` and
+`Mod+Shift+Z`; Windows and Linux also support `Ctrl+Y` for redo. The buttons
+disable automatically at the ends of Pierre's structure-aware history. Use
+**Discard changes** beside Save to reset the current unsaved
 buffer and reload the file from disk without writing it. Historical revisions,
 binaries, oversized files, and non-UTF-8 text
 stay read-only. If another tool changes the file while you have unsaved edits,

@@ -1941,6 +1941,11 @@ text separately for optimistic writes so the core can restore the original
 line-ending convention on save. Discarding editor changes is a session-buffer
 operation: clear the stored draft, rebuild Pierre from the last-read text, then
 refresh from disk; never implement it through a working-tree write.
+Expose undo/redo through Pierre's public `Editor` instance and its `canUndo` /
+`canRedo` flags; never maintain a parallel history over the session draft. The
+toolbar and Pierre's keymap must walk the same stack, and an intentional editor
+rebuild (clean external refresh or Discard) must clear the exposed handle until
+the replacement document attaches.
 
 **Windows discard keeps libgit2 fast and falls back only for its path ceiling
 (2026-07-20).** `git2::Repository::checkout_index` may inspect an unrelated

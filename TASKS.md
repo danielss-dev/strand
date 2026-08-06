@@ -1221,7 +1221,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   and a refresh that finishes after typing starts cannot replace the draft
   (`ContentTab` loaded-source/dirty guards). Mod+F uses Pierre's editor search
   and replace while editing; read-only and palette-triggered searches retain
-  Strand's wrap-around `FileSearchBar` + `searchFileText` path.
+  Strand's wrap-around `FileSearchBar` + `searchFileText` path. Toolbar Undo
+  and Redo controls bind directly to Pierre's structure-aware history, mirror
+  its `canUndo` / `canRedo` state, and stay aligned with the existing
+  Mod+Z / Mod+Shift+Z / Ctrl+Y editor shortcuts (`PierreFileEditor` history
+  bridge + `ContentTab` controls).
 - ☑ Preview tab — rendered view for renderable text files, tab only offered
   for them (`PreviewTab` in `FileView.tsx`): SVG through the image pipeline
   (`ImagePreview`, data-URL `<img>`), markdown through `lib/markdown.tsx`

@@ -1936,6 +1936,24 @@
 }
 .fv-editor-status.dirty { color: var(--warn); }
 .fv-editor-status.error { color: var(--del); }
+.fv-editor-history {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 10px;
+  border-right: 0.5px solid var(--border);
+}
+.fv-editor-history-btn {
+  width: 28px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.fv-editor-history-btn:hover:not(:disabled) {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.fv-editor-history-btn:disabled { opacity: 0.35; }
 .fv-editor-discard {
   width: 28px;
   height: 26px;
