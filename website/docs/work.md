@@ -37,8 +37,14 @@ survive repository and view switches during the current run but intentionally
 start empty after relaunch.
 
 For an existing UTF-8 working-tree file, type directly in **Content**. Strand
-keeps syntax highlighting while you edit; use the save icon or `Mod+S` to write
-the file. Historical revisions, binaries, oversized files, and non-UTF-8 text
+uses Pierre's lightweight edit mode for syntax highlighting, find and replace,
+multiple cursors, smart indentation, bracket matching, and undo/redo. Unsaved
+drafts remain available when you switch tabs, panes, views, workspaces, or
+repositories during the current app session. Strand does not save on blur,
+navigation, or idle time: use the save icon or `Mod+S` when you want to write
+the file. Use **Discard changes** beside Save to reset the current unsaved
+buffer and reload the file from disk without writing it. Historical revisions,
+binaries, oversized files, and non-UTF-8 text
 stay read-only. If another tool changes the file while you have unsaved edits,
 Strand refuses the stale save instead of overwriting the newer disk content.
 

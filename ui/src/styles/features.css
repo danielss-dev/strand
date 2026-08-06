@@ -1936,6 +1936,17 @@
 }
 .fv-editor-status.dirty { color: var(--warn); }
 .fv-editor-status.error { color: var(--del); }
+.fv-editor-discard {
+  width: 28px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.fv-editor-discard:hover:not(:disabled) {
+  background: var(--del-bg);
+  color: var(--del);
+}
+.fv-editor-discard:disabled { opacity: 0.35; }
 .fv-editor-save {
   width: 28px;
   height: 26px;
@@ -1953,97 +1964,9 @@
   background: var(--bg-elev);
   color: var(--text-dim);
 }
-.fv-editor {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-  background: var(--bg-base);
+.fv-pierre-edit {
   font-family: var(--font-mono);
   font-size: var(--type-mono);
-  line-height: 18px;
-}
-.fv-editor-gutter {
-  position: relative;
-  z-index: 3;
-  width: 52px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-right: 0.5px solid var(--border);
-  background: var(--gutter);
-  color: var(--text-dim);
-  text-align: right;
-  user-select: none;
-}
-.fv-editor-gutter pre,
-.fv-editor-highlight {
-  box-sizing: border-box;
-  margin: 0;
-  font: inherit;
-  line-height: inherit;
-  tab-size: 4;
-  white-space: pre;
-}
-.fv-editor-gutter pre {
-  width: 100%;
-  padding: 10px 10px 10px 4px;
-}
-.fv-editor-surface {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.fv-editor-highlight {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 0;
-  min-width: 100%;
-  min-height: 100%;
-  padding: 10px 16px;
-  color: var(--text);
-  pointer-events: none;
-  transform-origin: top left;
-}
-.fv-editor-selected-line {
-  position: absolute;
-  z-index: 0;
-  left: 0;
-  right: 0;
-  height: 18px;
-  background: var(--bg-sel);
-  pointer-events: none;
-}
-.fv-editor-input {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  resize: none;
-  overflow: auto;
-  border: 0;
-  outline: none;
-  padding: 10px 16px;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--text);
-  font: inherit;
-  line-height: inherit;
-  tab-size: 4;
-  white-space: pre;
-  -webkit-text-fill-color: transparent;
-}
-
-.fv-editor-input::-webkit-scrollbar-corner {
-  background: var(--bg-base);
-}
-
-.fv-editor-input::selection {
-  background: var(--selection);
 }
 .fv-empty {
   margin: auto;
