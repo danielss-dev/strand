@@ -1208,18 +1208,20 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`.
-  Existing complete UTF-8 working-tree files edit through the syntax-highlighted
-  `HighlightedEditor` and save through stale-checked `repo_file_write`; revisions,
+  Existing complete UTF-8 working-tree files edit through Pierre's lazy-loaded
+  `<File edit>` surface and save through stale-checked `repo_file_write`; revisions,
   binaries, oversized files, and non-UTF-8 text stay on Pierre's read-only
-  `<File>`. Optimistic token projection keeps the last Shiki colors attached
-  to unchanged text during every edit—there is no plain-text refresh frame—and
-  reconstructs CRLF token streams without tripping the plain-text fallback.
+  `<File>`. Session-scoped `useWork.fileDrafts` keeps LF-normalized unsaved text
+  across tab, pane, view, workspace, and repository navigation and follows
+  Strand-initiated moves without writing to disk.
   Writes are explicit only, via the disk save icon or Mod+S; blur and idle time
-  never save a draft. Focus/watcher refreshes keep the mounted editor and token
-  map in place, and a refresh that finishes after typing starts cannot replace
-  the draft (`ContentTab` loaded-source/dirty guards).
-  Mod+F searches the source with wrap-around match navigation and
-  virtualized-line scrolling (`FileSearchBar` + `searchFileText`).
+  never save a draft. The adjacent Discard changes action clears only the
+  in-memory draft and reloads the working-tree file without writing it.
+  Focus/watcher refreshes keep the mounted editor in place,
+  and a refresh that finishes after typing starts cannot replace the draft
+  (`ContentTab` loaded-source/dirty guards). Mod+F uses Pierre's editor search
+  and replace while editing; read-only and palette-triggered searches retain
+  Strand's wrap-around `FileSearchBar` + `searchFileText` path.
 - ☑ Preview tab — rendered view for renderable text files, tab only offered
   for them (`PreviewTab` in `FileView.tsx`): SVG through the image pipeline
   (`ImagePreview`, data-URL `<img>`), markdown through `lib/markdown.tsx`

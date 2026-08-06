@@ -1923,23 +1923,24 @@ session, and transform/remove those markers on move/delete. Explicit directory
 paths must stay out of PierreTree's file set so selection and context menus keep
 classifying them as folders.
 
-**In-app text writes are optimistic and encoding-preserving (2026-07-19).** A
-file editor must send the exact content it last read and the core must reject a
-write when the disk copy no longer matches; agents and external editors share
-the working tree, so last-writer-wins would silently destroy work. Mutate only
-complete UTF-8 regular files behind `safe_workdir_path`, reject symlinks and
-oversized/binary content, and preserve a consistently-CRLF file's line endings
-after textarea normalization. Commit/revision content remains immutable.
-Keep the last valid token map projected onto the current buffer while an async
-syntax refresh is pending; never replace a highlighted editor with plain text
-merely because its token result is one input behind. The same rule applies to
-focus/watcher refetches: keep the loaded editor mounted while the read is in
-flight, then update its buffer in place so the existing token projection
-survives. Reserve the empty loading surface for the initial file/source load.
-Web textareas and Shiki expose LF line boundaries even when a Windows checkout
-is CRLF. Normalize the editable in-memory buffer to LF, keep the raw last-read
-text separately for optimistic writes, and reconstruct token streams with the
-source's actual separators whenever exact-source validation is required.
+**In-app text writes are optimistic and encoding-preserving (2026-07-19,
+updated 2026-08-06).** A file editor must send the exact content it last read
+and the core must reject a write when the disk copy no longer matches; agents
+and external editors share the working tree, so last-writer-wins would silently
+destroy work. Mutate only complete UTF-8 regular files behind
+`safe_workdir_path`, reject symlinks and oversized/binary content, and preserve
+a consistently-CRLF file's line endings after editor normalization.
+Commit/revision content remains immutable. Pierre's lazy-loaded `<File edit>`
+surface owns live tokenization and editor behavior; do not restore the parallel
+textarea/highlight overlay. Focus/watcher refetches keep the loaded editor
+mounted while the read is in flight, and a completed refresh must never replace
+an unsaved draft. Reserve the empty loading surface for the initial file/source
+load. Pierre's editable document exposes LF line boundaries even when a Windows
+checkout is CRLF. Normalize the session buffer to LF and keep the raw last-read
+text separately for optimistic writes so the core can restore the original
+line-ending convention on save. Discarding editor changes is a session-buffer
+operation: clear the stored draft, rebuild Pierre from the last-read text, then
+refresh from disk; never implement it through a working-tree write.
 
 **Windows discard keeps libgit2 fast and falls back only for its path ceiling
 (2026-07-20).** `git2::Repository::checkout_index` may inspect an unrelated

@@ -2478,6 +2478,15 @@ URLs; and the build emits a sitemap plus robots policy. A repository SEO check
 fails on duplicate or missing metadata, invalid JSON-LD, broken routes, legacy
 query/Markdown links, or a sitemap that drifts from the generated pages.
 
+**Pierre file edit mode shipped (2026-08-06):** Work Content documents now
+lazy-load `@pierre/diffs/edit` instead of maintaining a separate textarea and
+highlight overlay. Unsaved working-tree buffers are retained in session memory
+across tab, pane, view, workspace, and repository navigation, follow file moves,
+and are cleared only when saved, deleted, or the repository closes. Disk writes
+remain explicit through Save / Mod+S and retain the optimistic stale-write guard;
+the editor's Discard changes action resets the session buffer and reloads disk
+content without issuing a write.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

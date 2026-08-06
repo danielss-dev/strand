@@ -30,6 +30,11 @@ import {
 import type { FilesTreeMutationChange } from '../lib/types';
 import type { EmbeddedShellChoice } from '../lib/types';
 import { isPreviewablePath } from '../lib/preview';
+import {
+  reconcileWorkFileDrafts,
+  workFileDraftKey,
+  type WorkFileDraft,
+} from '../lib/fileEditing';
 import { useSettings } from './settings';
 
 const key = (repoPath: string) => `work-terminals:${repoPath}`;
@@ -38,6 +43,8 @@ const makeId = () => crypto.randomUUID();
 
 interface WorkState {
   repos: Record<string, RepoWorkTabs>;
+  /** Unsaved working-tree buffers live for this app session only. */
+  fileDrafts: Record<string, WorkFileDraft>;
   restore(repoPath: string): Promise<void>;
   openFile(
     repoPath: string,
@@ -68,6 +75,7 @@ interface WorkState {
   ): void;
   clearTerminalRuntime(repoPath: string, id: string): void;
   reconcile(repoPath: string, change: FilesTreeMutationChange): void;
+  setFileDraft(repoPath: string, path: string, draft: WorkFileDraft | null): void;
   clearRepo(repoPath: string): Promise<void>;
 }
 
@@ -78,6 +86,7 @@ function persistTerminals(repoPath: string, state: RepoWorkTabs): void {
 
 export const useWork = create<WorkState>((set, get) => ({
   repos: {},
+  fileDrafts: {},
 
   async restore(repoPath) {
     if (get().repos[repoPath]?.restored) return;
@@ -296,8 +305,27 @@ export const useWork = create<WorkState>((set, get) => ({
   reconcile(repoPath, change) {
     set((state) => {
       const repo = state.repos[repoPath];
-      if (!repo) return state;
-      return { repos: { ...state.repos, [repoPath]: reconcileWorkMutation(repo, change) } };
+      const fileDrafts = reconcileWorkFileDrafts(state.fileDrafts, repoPath, change);
+      if (!repo) return fileDrafts === state.fileDrafts ? state : { fileDrafts };
+      return {
+        repos: { ...state.repos, [repoPath]: reconcileWorkMutation(repo, change) },
+        fileDrafts,
+      };
+    });
+  },
+
+  setFileDraft(repoPath, path, draft) {
+    const draftKey = workFileDraftKey(repoPath, path);
+    set((state) => {
+      const current = state.fileDrafts[draftKey];
+      if (draft == null) {
+        if (current == null) return state;
+        const fileDrafts = { ...state.fileDrafts };
+        delete fileDrafts[draftKey];
+        return { fileDrafts };
+      }
+      if (current?.original === draft.original && current.text === draft.text) return state;
+      return { fileDrafts: { ...state.fileDrafts, [draftKey]: draft } };
     });
   },
 
@@ -312,7 +340,11 @@ export const useWork = create<WorkState>((set, get) => ({
     set((state) => {
       const repos = { ...state.repos };
       delete repos[repoPath];
-      return { repos };
+      const prefix = `${repoPath}\0`;
+      const fileDrafts = Object.fromEntries(
+        Object.entries(state.fileDrafts).filter(([draftKey]) => !draftKey.startsWith(prefix)),
+      );
+      return { repos, fileDrafts };
     });
     await settings.set(key(repoPath), []);
   },

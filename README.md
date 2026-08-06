@@ -69,7 +69,10 @@ and the live Diff settings preview.
   and replaceable preview. New splits match the 50/50 hover preview, while
   later resizing is remembered for that split. Files retain
   Content, rendered Preview, History, Compare, Blame, image, and directory
-  modes. Multiple terminals run at the repository
+  modes. Content uses Pierre's lightweight edit mode; unsaved drafts survive
+  navigation during the app session and reach disk only through Save or `Mod+S`;
+  Discard changes resets the current buffer without writing it.
+  Multiple terminals run at the repository
   root and keep output, scrollback, and selection across view, repository, and
   workspace switches, pane splits, and resizes, and full-screen terminal apps receive the fitted PTY
   grid. Claude Code starts with its complete dashboard and alternate-screen
