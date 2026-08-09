@@ -2100,7 +2100,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
   `v1.0.0`, `v1.0.1`, `v1.1.0`, and `v1.2.1` are public; `v1.2.1` is the latest
-  stable release. Release run `30380876997` passed all desktop, helper, signing,
+  stable release. The `v1.3.0` release candidate was cut from synchronized
+  desktop manifests on 2026-08-09, pending release CI and draft-asset review.
+  Release run `30380876997` passed all desktop, helper, signing,
   notarization, Sigstore, assembly, and promotion jobs and published 18 assets.
   Microsoft Store run `30382509727` then built the exact tag and Partner Center
   accepted its `.msixupload` on 2026-07-28. The owner previously

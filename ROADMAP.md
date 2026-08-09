@@ -2404,6 +2404,12 @@ and published 18 assets. Microsoft Store run `30382509727` built the exact tag;
 after the owner canceled a conflicting portal-created draft, its second attempt
 was accepted by Partner Center for asynchronous certification and publication.
 
+**Strand 1.3.0 release candidate cut (2026-08-09):** The five lockstep desktop
+app manifests and Cargo lockfile are synchronized at 1.3.0. The separately
+versioned `strand-azdo` helper remains at 1.2.1. The annotated `v1.3.0` tag
+drives the signed desktop release pipeline and opens the draft GitHub release
+for review before publication.
+
 **DAN-33 helper release contract implementation (2026-07-29):**
 `strand-azdo` now owns its semantic version and `strand-azdo-vX.Y.Z`
 prereleases independently from Strand. Release metadata is derived from each

@@ -257,8 +257,9 @@ the resolved app appearance automatically.
 
 ## Status
 
-Strand **1.2.1 is the current stable release** and works on large real-world
-repositories daily. Release CI produces updater-signed desktop artifacts,
+Strand **1.2.1 is the current stable release**, with **1.3.0 preparing for
+release**, and works on large real-world repositories daily. Release CI
+produces updater-signed desktop artifacts,
 notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft
 Store engineering has a verified packaged-classic MSIX
 with production identity `Danielss.strand`. Publishing a GitHub release builds
