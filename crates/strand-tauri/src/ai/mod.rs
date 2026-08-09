@@ -182,32 +182,22 @@ pub struct PullRequestSuggestion {
     pub description: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CodeReviewSeverity {
     Critical,
     High,
+    #[default]
     Medium,
     Low,
 }
 
-impl Default for CodeReviewSeverity {
-    fn default() -> Self {
-        Self::Medium
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CodeReviewSide {
+    #[default]
     New,
     Old,
-}
-
-impl Default for CodeReviewSide {
-    fn default() -> Self {
-        Self::New
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
