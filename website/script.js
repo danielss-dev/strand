@@ -236,9 +236,9 @@
   });
   $('#baseline-link').addEventListener('click', () => {
     sessionMode = !sessionMode;
-    $('.rv-chip', mock).lastChild.textContent = sessionMode ? 'Session since 9c4e7a1 · now' : 'Unstaged changes';
-    $('#baseline-link').textContent = sessionMode ? 'Clear baseline' : 'Pin baseline at HEAD';
-    showDemoToast(sessionMode ? 'Baseline pinned at HEAD' : 'Baseline cleared');
+    $('.rv-chip', mock).lastChild.textContent = sessionMode ? 'Session since 9c4e7a1 · now' : 'Uncommitted changes';
+    $('#baseline-link').textContent = sessionMode ? 'Clear baseline' : 'Review from branch start';
+    showDemoToast(sessionMode ? 'Baseline pinned at branch fork point' : 'Baseline cleared');
   });
   discardLink.addEventListener('click', () => {
     if (!discardArmed) {
@@ -384,8 +384,8 @@
         b.setAttribute('aria-pressed', String(on));
       });
       crumbLeaf.textContent = scope === 'workspace' ? 'Workspace Review' : 'Review';
-      crumbNote.textContent = scope === 'workspace' ? '· 2 repos + 1 worktree · 8 files to review' : '· 8 unstaged files';
-      $('.rv-chip', mock).lastChild.textContent = scope === 'workspace' ? 'Workspace changes' : (sessionMode ? 'Session since 9c4e7a1 · now' : 'Unstaged changes');
+      crumbNote.textContent = scope === 'workspace' ? '· 2 repos + 1 worktree · 8 files to review' : '· 8 uncommitted files';
+      $('.rv-chip', mock).lastChild.textContent = scope === 'workspace' ? 'Workspace changes' : (sessionMode ? 'Session since 9c4e7a1 · now' : 'Uncommitted changes');
     });
   });
 

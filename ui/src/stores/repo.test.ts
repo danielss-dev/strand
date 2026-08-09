@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { RepoMeta } from '../lib/types';
 
 const values = new Map<string, string>();
 const storage: Storage = {
@@ -15,7 +16,7 @@ vi.stubGlobal('navigator', { userAgent: '' });
 vi.stubGlobal('document', { documentElement: { dataset: {} } });
 
 const { tauri } = await import('../lib/tauri');
-const { useRepo } = await import('./repo');
+const { addAiReviewNoteSet, useRepo } = await import('./repo');
 
 const original = useRepo.getState();
 
@@ -69,5 +70,77 @@ describe('repository navigation state', () => {
     expect(refreshLocalChanges).toHaveBeenCalledOnce();
     expect(refreshLog).toHaveBeenCalledOnce();
     expect(refreshWorktrees).toHaveBeenCalledOnce();
+  });
+
+  it('keeps staged files in the uncommitted Review pool', async () => {
+    const diffs = [{
+      path: 'staged.ts', old_path: null, status: 'modified', adds: 1, dels: 0,
+      patch: '@@ -1 +1 @@\n-old\n+new\n', binary: false,
+    }] as const;
+    const diffSince = vi.spyOn(tauri, 'repoDiffSinceFull').mockResolvedValue([...diffs]);
+    useRepo.setState({ activePath: '/repo', baseline: null, reviewUnstagedDiffs: [] });
+
+    await useRepo.getState().refreshReviewDiffs();
+
+    expect(diffSince).toHaveBeenCalledWith('/repo', 'HEAD');
+    expect(useRepo.getState().reviewUnstagedDiffs).toEqual(diffs);
+  });
+
+  it('pins the initial baseline at the detected branch fork point', async () => {
+    const setBaseline = vi.fn(async () => {});
+    const detect = vi.spyOn(tauri, 'repoDetectBaseBranch').mockResolvedValue({
+      name: 'main',
+      merge_base: '1234567890',
+    });
+    useRepo.setState({
+      activePath: '/repo',
+      meta: { branch: 'feature', detached: false } as RepoMeta,
+      setBaseline,
+    });
+
+    await expect(useRepo.getState().setBranchBaseline()).resolves.toEqual({
+      name: 'main',
+      merge_base: '1234567890',
+    });
+    expect(detect).toHaveBeenCalledWith('/repo', 'feature');
+    expect(setBaseline).toHaveBeenCalledWith('1234567890');
+  });
+});
+
+describe('AI review notes', () => {
+  it('adds accepted AI findings without touching existing feedback', () => {
+    const next = addAiReviewNoteSet(
+      {
+        'src/old.ts': [
+          { id: 'human', text: 'Keep this', line: null, createdAt: 1 },
+          { id: 'old-ai', text: 'Existing finding', line: 2, source: 'ai', severity: 'low', createdAt: 2 },
+        ],
+        'src/ai-only.ts': [
+          { id: 'old-only', text: 'Keep this too', line: null, source: 'ai', severity: 'medium', createdAt: 3 },
+        ],
+      },
+      [{
+        path: 'src/new.ts',
+        line: 7,
+        side: 'new',
+        severity: 'high',
+        title: 'Possible race',
+        body: 'The shared value is not synchronized.',
+      }],
+    );
+
+    expect(next['src/old.ts']).toEqual([
+      { id: 'human', text: 'Keep this', line: null, createdAt: 1 },
+      { id: 'old-ai', text: 'Existing finding', line: 2, source: 'ai', severity: 'low', createdAt: 2 },
+    ]);
+    expect(next['src/ai-only.ts']).toEqual([
+      { id: 'old-only', text: 'Keep this too', line: null, source: 'ai', severity: 'medium', createdAt: 3 },
+    ]);
+    expect(next['src/new.ts']).toMatchObject([{
+      text: 'Possible race — The shared value is not synchronized.',
+      line: 7,
+      source: 'ai',
+      severity: 'high',
+    }]);
   });
 });

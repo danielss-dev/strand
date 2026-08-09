@@ -18,6 +18,7 @@ use serde_json::Value;
 use strand_azdo_protocol::{
     DiffSide as AzdoDiffSide, MergeStrategy as AzdoMergeStrategy, Operation as AzdoOperation,
     PullRequestStatus as AzdoPullRequestStatus, ReviewVote as AzdoReviewVote,
+    ThreadStatus as AzdoThreadStatus,
 };
 use strand_core::Repo;
 use uuid::Uuid;
@@ -37,7 +38,7 @@ const MAX_AZURE_ITERATION_CHANGE_PAGES: u32 = 32;
 const GITHUB_BRANCH_STATE: &str = "open";
 const AZURE_BRANCH_STATUS: &str = "active";
 const GITHUB_LIST_FIELDS: &str = concat!(
-    "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
+    "number,title,state,isDraft,author,headRefName,headRefOid,baseRefName,createdAt,updatedAt,",
     "closedAt,mergedAt,url,reviewDecision,additions,deletions,changedFiles"
 );
 const GITHUB_DETAIL_FIELDS: &str = concat!(
@@ -258,6 +259,12 @@ pub struct PullRequestReviewThreadUpdate {
     pub can_reply: bool,
     pub can_resolve: bool,
     pub can_unresolve: bool,
+}
+
+#[derive(Debug)]
+struct AzureDiscussion {
+    comments: Vec<PullRequestComment>,
+    review_threads: Vec<PullRequestReviewThread>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -629,9 +636,23 @@ pub fn reply_to_thread(path: &str, thread_id: &str, body: &str) -> Result<PullRe
     let (_, host) = host_for_path(path)?;
     match host {
         HostRepo::GitHub { .. } => reply_to_thread_github(path, thread_id, body),
-        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
-            "Azure DevOps review-thread replies are not available yet. Open this pull request on Azure DevOps to reply."
-                .to_string(),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => reply_to_thread_azure(path, &organization, &project, &repo, thread_id, body),
+        HostRepo::AzureServer {
+            profile_id,
+            collection_url,
+            project,
+            repo,
+        } => reply_to_thread_azure_server(
+            profile_id,
+            &collection_url,
+            &project,
+            &repo,
+            thread_id,
+            body,
         ),
     }
 }
@@ -645,9 +666,29 @@ pub fn set_thread_resolved(
     let (_, host) = host_for_path(path)?;
     match host {
         HostRepo::GitHub { .. } => set_thread_resolved_github(path, thread_id, resolved),
-        HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
-            "Azure DevOps review-thread resolution is not available yet. Open this pull request on Azure DevOps to update the thread."
-                .to_string(),
+        HostRepo::Azure {
+            organization,
+            project,
+            repo,
+        } => set_thread_resolved_azure(
+            path,
+            &organization,
+            &project,
+            &repo,
+            thread_id,
+            resolved,
+        ),
+        HostRepo::AzureServer {
+            profile_id,
+            project,
+            repo,
+            ..
+        } => set_thread_resolved_azure_server(
+            profile_id,
+            &project,
+            &repo,
+            thread_id,
+            resolved,
         ),
     }
 }
@@ -1692,8 +1733,10 @@ fn detail_azure_server(
         let checks = scope.spawn(|| azure_server_policies(profile_id, &project, &project_id, id));
         (comments.join(), commits.join(), checks.join())
     });
-    pull_request.comments =
+    let discussion =
         comments.map_err(|_| "Azure DevOps Server discussion worker failed".to_string())??;
+    pull_request.comments = discussion.comments;
+    pull_request.review_threads = discussion.review_threads;
     pull_request.comment_count = pull_request.comments.len();
     pull_request.commits =
         commits.map_err(|_| "Azure DevOps Server commit worker failed".to_string())??;
@@ -1723,6 +1766,7 @@ fn activity_azure_server(
     let pull_request = parse_azure_pr(&value, &collection_url, &project, &repo, None)
         .ok_or_else(|| format!("Azure DevOps Server returned no data for PR #{id}"))?;
     let comments = azure_server_comments(profile_id, &collection_url, &project, &repo, id)?
+        .comments
         .into_iter()
         .map(|comment| PullRequestActivityComment {
             id: comment.id,
@@ -1781,7 +1825,7 @@ fn azure_server_comments(
     project: &str,
     repo: &str,
     id: u64,
-) -> Result<Vec<PullRequestComment>> {
+) -> Result<AzureDiscussion> {
     let value = server_execute(
         profile_id,
         AzdoOperation::Threads {
@@ -1790,9 +1834,72 @@ fn azure_server_comments(
             id,
         },
     )?;
-    Ok(parse_azure_comments(
+    Ok(parse_azure_discussion(
         &value,
         &azure_server_pr_url(collection_url, project, repo, id),
+        id,
+    ))
+}
+
+fn reply_to_thread_azure_server(
+    profile_id: Uuid,
+    collection_url: &str,
+    project: &str,
+    repo: &str,
+    thread_id: &str,
+    body: &str,
+) -> Result<PullRequestComment> {
+    let (pull_request_id, azure_thread_id, parent_comment_id) =
+        parse_azure_thread_id(thread_id)?;
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::ReplyToThread {
+            project: project.into(),
+            repository: repo.into(),
+            id: pull_request_id,
+            thread_id: azure_thread_id,
+            parent_comment_id,
+            body: body.into(),
+        },
+    )?;
+    parse_azure_comment(
+        &value,
+        azure_thread_id,
+        &azure_server_pr_url(collection_url, project, repo, pull_request_id),
+        None,
+    )
+    .ok_or_else(|| "Azure DevOps Server returned no usable review-thread reply".into())
+}
+
+fn set_thread_resolved_azure_server(
+    profile_id: Uuid,
+    project: &str,
+    repo: &str,
+    thread_id: &str,
+    resolved: bool,
+) -> Result<PullRequestReviewThreadUpdate> {
+    let (pull_request_id, azure_thread_id, parent_comment_id) =
+        parse_azure_thread_id(thread_id)?;
+    let value = server_execute(
+        profile_id,
+        AzdoOperation::SetThreadStatus {
+            project: project.into(),
+            repository: repo.into(),
+            id: pull_request_id,
+            thread_id: azure_thread_id,
+            status: if resolved {
+                AzdoThreadStatus::Fixed
+            } else {
+                AzdoThreadStatus::Active
+            },
+        },
+    )?;
+    Ok(parse_azure_thread_update(
+        &value,
+        pull_request_id,
+        azure_thread_id,
+        parent_comment_id,
+        resolved,
     ))
 }
 
@@ -2300,8 +2407,9 @@ fn detail_azure(
         let checks = scope.spawn(|| azure_policies(cwd, &organization, id));
         (comments.join(), commits.join(), checks.join())
     });
-    pull_request.comments =
-        comments.map_err(|_| "Azure discussion query worker failed".to_string())??;
+    let discussion = comments.map_err(|_| "Azure discussion query worker failed".to_string())??;
+    pull_request.comments = discussion.comments;
+    pull_request.review_threads = discussion.review_threads;
     pull_request.comment_count = pull_request.comments.len();
     pull_request.commits =
         commits.map_err(|_| "Azure commit query worker failed".to_string())??;
@@ -2331,6 +2439,7 @@ fn activity_azure(
     let pull_request = parse_azure_pr(&value, &organization, &project, &repo, None)
         .ok_or_else(|| format!("Azure CLI returned no data for PR #{id}"))?;
     let comments = azure_comments(cwd, &organization, &project, &repo, id)?
+        .comments
         .into_iter()
         .map(|comment| PullRequestActivityComment {
             id: comment.id,
@@ -2400,7 +2509,7 @@ fn azure_comments(
     project: &str,
     repo: &str,
     id: u64,
-) -> Result<Vec<PullRequestComment>> {
+) -> Result<AzureDiscussion> {
     let organization_url = format!("https://dev.azure.com/{organization}/");
     let id_text = id.to_string();
     let project_arg = format!("project={project}");
@@ -2432,11 +2541,12 @@ fn azure_comments(
     )?;
     let value: Value = serde_json::from_slice(&output)
         .map_err(|error| format!("Azure CLI returned invalid discussion JSON: {error}"))?;
-    Ok(parse_azure_comments(
+    Ok(parse_azure_discussion(
         &value,
         &format!(
             "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{id_text}"
         ),
+        id,
     ))
 }
 
@@ -2548,6 +2658,134 @@ fn azure_invoke_json(
     )?;
     serde_json::from_slice(&output)
         .map_err(|error| format!("Azure CLI returned invalid {resource} JSON: {error}"))
+}
+
+fn azure_invoke_write_json(
+    cwd: &str,
+    organization: &str,
+    resource: &str,
+    route_parameters: &[String],
+    method: &str,
+    payload: &Value,
+) -> Result<Value> {
+    let mut request = tempfile::NamedTempFile::new()
+        .map_err(|error| format!("Could not prepare Azure {resource} request: {error}"))?;
+    serde_json::to_writer(&mut request, payload)
+        .map_err(|error| format!("Could not encode Azure {resource} request: {error}"))?;
+    request
+        .flush()
+        .map_err(|error| format!("Could not prepare Azure {resource} request: {error}"))?;
+    let request_path = request
+        .path()
+        .to_str()
+        .ok_or_else(|| format!("Azure {resource} request path is not valid UTF-8"))?;
+    let organization_url = format!("https://dev.azure.com/{organization}/");
+    let mut args = vec![
+        "devops".to_string(),
+        "invoke".to_string(),
+        "--area".to_string(),
+        "git".to_string(),
+        "--resource".to_string(),
+        resource.to_string(),
+        "--route-parameters".to_string(),
+    ];
+    args.extend_from_slice(route_parameters);
+    args.extend([
+        "--organization".into(),
+        organization_url,
+        "--api-version".into(),
+        "7.1".into(),
+        "--http-method".into(),
+        method.into(),
+        "--in-file".into(),
+        request_path.into(),
+        "--media-type".into(),
+        "application/json".into(),
+        "--output".into(),
+        "json".into(),
+        "--only-show-errors".into(),
+    ]);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let output = run_command(
+        cwd,
+        "az",
+        &arg_refs,
+        &[("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", "no")],
+    )?;
+    serde_json::from_slice(&output)
+        .map_err(|error| format!("Azure CLI returned invalid {resource} JSON: {error}"))
+}
+
+fn reply_to_thread_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    thread_id: &str,
+    body: &str,
+) -> Result<PullRequestComment> {
+    let (pull_request_id, azure_thread_id, parent_comment_id) =
+        parse_azure_thread_id(thread_id)?;
+    let routes = vec![
+        format!("project={project}"),
+        format!("repositoryId={repo}"),
+        format!("pullRequestId={pull_request_id}"),
+        format!("threadId={azure_thread_id}"),
+    ];
+    let value = azure_invoke_write_json(
+        cwd,
+        organization,
+        "pullRequestThreadComments",
+        &routes,
+        "POST",
+        &serde_json::json!({
+            "parentCommentId": parent_comment_id,
+            "content": body,
+            "commentType": 1
+        }),
+    )?;
+    parse_azure_comment(
+        &value,
+        azure_thread_id,
+        &format!(
+            "https://dev.azure.com/{organization}/{project}/_git/{repo}/pullrequest/{pull_request_id}"
+        ),
+        None,
+    )
+    .ok_or_else(|| "Azure DevOps returned no usable review-thread reply".into())
+}
+
+fn set_thread_resolved_azure(
+    cwd: &str,
+    organization: &str,
+    project: &str,
+    repo: &str,
+    thread_id: &str,
+    resolved: bool,
+) -> Result<PullRequestReviewThreadUpdate> {
+    let (pull_request_id, azure_thread_id, parent_comment_id) =
+        parse_azure_thread_id(thread_id)?;
+    let routes = vec![
+        format!("project={project}"),
+        format!("repositoryId={repo}"),
+        format!("pullRequestId={pull_request_id}"),
+        format!("threadId={azure_thread_id}"),
+    ];
+    let value = azure_invoke_write_json(
+        cwd,
+        organization,
+        "pullRequestThreads",
+        &routes,
+        "PATCH",
+        &serde_json::json!({ "status": if resolved { 2 } else { 1 } }),
+    )?;
+    Ok(parse_azure_thread_update(
+        &value,
+        pull_request_id,
+        azure_thread_id,
+        parent_comment_id,
+        resolved,
+    ))
 }
 
 fn azure_review_coordinates(
@@ -3347,6 +3585,41 @@ fn validate_thread_id(thread_id: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn azure_thread_id(pull_request_id: u64, thread_id: u64, parent_comment_id: u64) -> String {
+    format!("azure:{pull_request_id}:{thread_id}:{parent_comment_id}")
+}
+
+fn parse_azure_thread_id(thread_id: &str) -> Result<(u64, u64, u64)> {
+    let mut parts = thread_id.split(':');
+    if parts.next() != Some("azure") {
+        return Err("Azure review thread is invalid; refresh the pull request and try again".into());
+    }
+    let pull_request_id = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0);
+    let azure_thread_id = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0);
+    let parent_comment_id = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0);
+    if parts.next().is_some()
+        || pull_request_id.is_none()
+        || azure_thread_id.is_none()
+        || parent_comment_id.is_none()
+    {
+        return Err("Azure review thread is invalid; refresh the pull request and try again".into());
+    }
+    Ok((
+        pull_request_id.unwrap(),
+        azure_thread_id.unwrap(),
+        parent_comment_id.unwrap(),
+    ))
 }
 
 fn validate_review_id(review_id: &str) -> Result<()> {
@@ -4171,14 +4444,50 @@ fn parse_azure_commits(value: &Value) -> Vec<PullRequestCommit> {
         .collect()
 }
 
-fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> {
-    let threads = value
+fn azure_threads(value: &Value) -> &[Value] {
+    value
         .get("value")
         .and_then(Value::as_array)
         .or_else(|| value.as_array())
         .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    threads
+        .unwrap_or(&[])
+}
+
+fn parse_azure_comment(
+    value: &Value,
+    thread_id: u64,
+    pr_url: &str,
+    path: Option<String>,
+) -> Option<PullRequestComment> {
+    let comment = value.get("value").filter(|value| value.is_object()).unwrap_or(value);
+    if comment
+        .get("isDeleted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let body = text(comment.get("content")).unwrap_or_default();
+    if body.trim().is_empty() {
+        return None;
+    }
+    let comment_id = comment.get("id").and_then(Value::as_u64)?;
+    Some(PullRequestComment {
+        id: format!("{thread_id}:{comment_id}"),
+        author: text(comment.pointer("/author/displayName")).unwrap_or_else(|| "unknown".into()),
+        avatar_url: text(comment.pointer("/author/imageUrl"))
+            .or_else(|| text(comment.pointer("/author/_links/avatar/href"))),
+        body,
+        created_at: text(comment.get("publishedDate")).unwrap_or_default(),
+        url: pr_url.to_string(),
+        is_system: text(comment.get("commentType"))
+            .is_some_and(|kind| kind.eq_ignore_ascii_case("system")),
+        path,
+    })
+}
+
+fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> {
+    azure_threads(value)
         .iter()
         .filter(|thread| {
             !thread
@@ -4189,35 +4498,114 @@ fn parse_azure_comments(value: &Value, pr_url: &str) -> Vec<PullRequestComment> 
         .flat_map(|thread| {
             let thread_id = thread.get("id").and_then(Value::as_u64).unwrap_or(0);
             let path = text(thread.pointer("/threadContext/filePath"));
-            array(thread, "comments").iter().filter_map(move |comment| {
-                if comment
-                    .get("isDeleted")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-                {
-                    return None;
-                }
-                let body = text(comment.get("content")).unwrap_or_default();
-                if body.trim().is_empty() {
-                    return None;
-                }
-                let comment_id = comment.get("id").and_then(Value::as_u64).unwrap_or(0);
-                Some(PullRequestComment {
-                    id: format!("{thread_id}:{comment_id}"),
-                    author: text(comment.pointer("/author/displayName"))
-                        .unwrap_or_else(|| "unknown".into()),
-                    avatar_url: text(comment.pointer("/author/imageUrl"))
-                        .or_else(|| text(comment.pointer("/author/_links/avatar/href"))),
-                    body,
-                    created_at: text(comment.get("publishedDate")).unwrap_or_default(),
-                    url: pr_url.to_string(),
-                    is_system: text(comment.get("commentType"))
-                        .is_some_and(|kind| kind.eq_ignore_ascii_case("system")),
-                    path: path.clone(),
+            array(thread, "comments")
+                .iter()
+                .filter_map(move |comment| parse_azure_comment(comment, thread_id, pr_url, path.clone()))
+        })
+        .collect()
+}
+
+fn azure_thread_resolved(value: &Value, fallback: bool) -> bool {
+    match value.get("status") {
+        Some(Value::Number(status)) => match status.as_u64() {
+            Some(1 | 6) => false,
+            Some(2..=5) => true,
+            _ => fallback,
+        },
+        Some(Value::String(status)) => match status.to_ascii_lowercase().as_str() {
+            "active" | "pending" => false,
+            "fixed" | "wontfix" | "closed" | "bydesign" => true,
+            _ => fallback,
+        },
+        _ => fallback,
+    }
+}
+
+fn parse_azure_review_threads(
+    value: &Value,
+    pr_url: &str,
+    pull_request_id: u64,
+) -> Vec<PullRequestReviewThread> {
+    azure_threads(value)
+        .iter()
+        .filter(|thread| {
+            !thread
+                .get("isDeleted")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .filter_map(|thread| {
+            let thread_id = thread.get("id").and_then(Value::as_u64)?;
+            let path = text(thread.pointer("/threadContext/filePath"))?
+                .trim_start_matches('/')
+                .to_string();
+            if path.is_empty() {
+                return None;
+            }
+            let right_start = thread.pointer("/threadContext/rightFileStart/line").and_then(Value::as_u64);
+            let right_end = thread.pointer("/threadContext/rightFileEnd/line").and_then(Value::as_u64);
+            let left_start = thread.pointer("/threadContext/leftFileStart/line").and_then(Value::as_u64);
+            let left_end = thread.pointer("/threadContext/leftFileEnd/line").and_then(Value::as_u64);
+            let (start_line, end_line, side) = if right_start.is_some() || right_end.is_some() {
+                let end = right_end.or(right_start)?;
+                (right_start.unwrap_or(end), end, PullRequestDiffSide::Additions)
+            } else {
+                let end = left_end.or(left_start)?;
+                (left_start.unwrap_or(end), end, PullRequestDiffSide::Deletions)
+            };
+            let comments = array(thread, "comments")
+                .iter()
+                .filter_map(|comment| {
+                    parse_azure_comment(comment, thread_id, pr_url, Some(path.clone()))
                 })
+                .collect::<Vec<_>>();
+            if comments.is_empty() {
+                return None;
+            }
+            let parent_comment_id = array(thread, "comments")
+                .iter()
+                .find_map(|comment| comment.get("id").and_then(Value::as_u64))?;
+            let is_resolved = azure_thread_resolved(thread, false);
+            Some(PullRequestReviewThread {
+                id: azure_thread_id(pull_request_id, thread_id, parent_comment_id),
+                path,
+                start_line: u32::try_from(start_line).ok()?,
+                end_line: u32::try_from(end_line).ok()?,
+                side,
+                is_resolved,
+                is_outdated: false,
+                can_reply: true,
+                can_resolve: !is_resolved,
+                can_unresolve: is_resolved,
+                comments,
             })
         })
         .collect()
+}
+
+fn parse_azure_thread_update(
+    value: &Value,
+    pull_request_id: u64,
+    thread_id: u64,
+    parent_comment_id: u64,
+    resolved: bool,
+) -> PullRequestReviewThreadUpdate {
+    let is_resolved = azure_thread_resolved(value, resolved);
+    PullRequestReviewThreadUpdate {
+        id: azure_thread_id(pull_request_id, thread_id, parent_comment_id),
+        is_resolved,
+        is_outdated: false,
+        can_reply: true,
+        can_resolve: !is_resolved,
+        can_unresolve: is_resolved,
+    }
+}
+
+fn parse_azure_discussion(value: &Value, pr_url: &str, pull_request_id: u64) -> AzureDiscussion {
+    AzureDiscussion {
+        comments: parse_azure_comments(value, pr_url),
+        review_threads: parse_azure_review_threads(value, pr_url, pull_request_id),
+    }
 }
 
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
@@ -4622,6 +5010,7 @@ mod tests {
             "changedFiles",
             "closedAt",
             "mergedAt",
+            "headRefOid",
         ] {
             assert!(GITHUB_LIST_FIELDS.contains(field));
         }
@@ -4838,6 +5227,64 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_azure_review_threads_with_replies_ranges_and_statuses() {
+        let value = serde_json::json!({ "value": [
+            {
+                "id": 9,
+                "status": "active",
+                "threadContext": {
+                    "filePath": "/src/lib.rs",
+                    "rightFileStart": { "line": 27, "offset": 1 },
+                    "rightFileEnd": { "line": 29, "offset": 1 }
+                },
+                "comments": [
+                    { "id": 1, "content": "Please validate this.", "commentType": "text",
+                      "publishedDate": "2026-07-13T12:00:00Z", "author": { "displayName": "Octo" } },
+                    { "id": 2, "content": "Fixed.", "commentType": "text",
+                      "publishedDate": "2026-07-13T12:05:00Z", "author": { "displayName": "Ada" } }
+                ]
+            },
+            {
+                "id": 10,
+                "status": 2,
+                "threadContext": {
+                    "filePath": "/src/old.rs",
+                    "leftFileStart": { "line": 4, "offset": 1 },
+                    "leftFileEnd": { "line": 4, "offset": 1 }
+                },
+                "comments": [
+                    { "id": 1, "content": "Why remove this?", "commentType": "text",
+                      "author": { "displayName": "Grace" } }
+                ]
+            },
+            { "id": 11, "status": "active", "comments": [
+                { "id": 1, "content": "General comment", "commentType": "text",
+                  "author": { "displayName": "Linus" } }
+            ] }
+        ] });
+
+        let discussion = parse_azure_discussion(&value, "https://dev.azure.com/acme/pr/7", 7);
+        assert_eq!(discussion.comments.len(), 4);
+        assert_eq!(discussion.review_threads.len(), 2);
+        let added = &discussion.review_threads[0];
+        assert_eq!(added.id, "azure:7:9:1");
+        assert_eq!(added.path, "src/lib.rs");
+        assert_eq!((added.start_line, added.end_line), (27, 29));
+        assert_eq!(added.side, PullRequestDiffSide::Additions);
+        assert!(!added.is_resolved);
+        assert!(added.can_reply);
+        assert!(added.can_resolve);
+        assert!(!added.can_unresolve);
+        assert_eq!(added.comments[1].author, "Ada");
+        assert_eq!(added.comments[0].path.as_deref(), Some("src/lib.rs"));
+        let deleted = &discussion.review_threads[1];
+        assert_eq!(deleted.side, PullRequestDiffSide::Deletions);
+        assert!(deleted.is_resolved);
+        assert!(!deleted.can_resolve);
+        assert!(deleted.can_unresolve);
+    }
+
+    #[test]
     fn normalizes_github_review_threads_with_replies_and_ranges() {
         let value = serde_json::json!({
             "data": { "repository": { "pullRequest": { "viewerCanUpdate": true,
@@ -4969,37 +5416,37 @@ mod tests {
     }
 
     #[test]
-    fn validates_thread_ids_and_rejects_azure_thread_writes() {
+    fn validates_provider_thread_ids() {
         assert!(validate_thread_id("PRRT_kwDOExample").is_ok());
         assert!(validate_thread_id(" ").is_err());
         assert!(validate_thread_id("bad\nid").is_err());
         assert!(validate_thread_id(&"x".repeat(MAX_THREAD_ID_BYTES + 1)).is_err());
-
-        let dir = std::env::temp_dir().join(format!(
-            "strand-pr-thread-provider-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        git(&dir, &["init", "-q"]);
-        git(
-            &dir,
-            &[
-                "remote",
-                "add",
-                "origin",
-                "https://dev.azure.com/acme/project/_git/repo",
-            ],
+        assert_eq!(azure_thread_id(7, 9, 1), "azure:7:9:1");
+        assert_eq!(
+            parse_azure_thread_id("azure:7:9:1").unwrap(),
+            (7, 9, 1)
         );
-        let path = dir.to_str().unwrap();
-        assert!(reply_to_thread(path, "thread-1", "Reply")
-            .unwrap_err()
-            .contains("not available"));
-        assert!(set_thread_resolved(path, "thread-1", true)
-            .unwrap_err()
-            .contains("not available"));
-        let _ = std::fs::remove_dir_all(dir);
+        for invalid in [
+            "thread-1",
+            "azure:7:9",
+            "azure:0:9:1",
+            "azure:7:0:1",
+            "azure:7:9:0",
+            "azure:7:9:1:10",
+        ] {
+            assert!(parse_azure_thread_id(invalid).is_err());
+        }
+
+        let resolved = parse_azure_thread_update(
+            &serde_json::json!({ "id": 9, "status": "fixed" }),
+            7,
+            9,
+            1,
+            true,
+        );
+        assert_eq!(resolved.id, "azure:7:9:1");
+        assert!(resolved.is_resolved);
+        assert!(resolved.can_unresolve);
     }
 
     #[test]

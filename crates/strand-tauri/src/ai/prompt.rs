@@ -20,6 +20,12 @@ Reply with JSON only, no markdown fences: {\"title\":\"...\",\"description\":\".
 Keep the title concise. Write a useful Markdown description that explains what changed and why.\n\
 Mention testing only when the changes provide clear evidence; do not invent results or implementation details.";
 
+const CODE_REVIEW_INSTRUCTION: &str = "Review the changed code for actionable defects. Trace how each change affects callers and related behavior visible in the supplied patches.\n\
+Prioritize correctness, data loss, security, concurrency, performance, and compatibility problems. Do not report style preferences or praise.\n\
+Every finding must identify a changed file. Use a line present on the selected diff side when possible; otherwise use null.\n\
+Reply with JSON only, no markdown fences: {\"findings\":[{\"path\":\"src/file.rs\",\"line\":42,\"side\":\"new\",\"severity\":\"high\",\"title\":\"Short issue\",\"body\":\"Why this can fail and when\"}]}.\n\
+Severity is critical, high, medium, or low. Return {\"findings\":[]} when there are no actionable defects.";
+
 pub struct PromptBuild {
     pub text: String,
     pub manifest_files: usize,
@@ -50,6 +56,10 @@ pub fn build_pull_request_prompt(
         recent_subjects,
         style_instruction,
     )
+}
+
+pub fn build_code_review_prompt(diffs: &[FileDiff]) -> PromptBuild {
+    build(CODE_REVIEW_INSTRUCTION, None, diffs, &[], None)
 }
 
 fn build(
@@ -294,6 +304,15 @@ mod tests {
         let built = build_prompt(&diffs, &[], None);
         assert_eq!(built.patch_files, 8);
         assert_eq!(built.omitted_patch_files, 4);
+    }
+
+    #[test]
+    fn review_prompt_requires_structured_actionable_findings() {
+        let built = build_code_review_prompt(&[sample_diff("src/lib.rs", "+unsafe change")]);
+        assert!(built.text.contains("actionable defects"));
+        assert!(built.text.contains("\"findings\""));
+        assert!(built.text.contains("critical, high, medium, or low"));
+        assert!(built.text.contains("<patch path=\"src/lib.rs\""));
     }
 
     #[test]

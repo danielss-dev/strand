@@ -8,7 +8,7 @@ Open it from the sidebar **Review** row, with `Mod+5`, or via the palette action
 
 Review works in one of two modes, decided by whether a baseline is pinned:
 
-- **Inbox mode** (no baseline) — the review set is your current unstaged changes. Each change block carries inline Stage / Discard buttons, so you can act hunk by hunk as you read.
+- **Inbox mode** (no baseline) — the review set is every uncommitted change, staged and unstaged together. Staging a file never removes it from Review. Files with only unstaged work carry inline Stage / Discard buttons; a file with staged content renders read-only at hunk level so a combined patch cannot be applied to the index incorrectly.
 - **Session mode** (baseline pinned) — the review set is *everything since the baseline commit*: the agent's commits, plus whatever is staged and unstaged on top. Diffs are read-only in this mode; you act at the file level (mark reviewed, add notes) rather than staging hunks.
 
 If the view is empty, the placeholder tells you which mode you are in — in session mode it reads "No changes since `<short>`. Let the agent work — this view follows along live."
@@ -21,9 +21,9 @@ Every file in the review set renders in its entirety, with the edits inline — 
 
 ## Pinning a baseline
 
-A baseline says "review everything since this commit." Pin one before you hand a task to an agent, and the session captures the agent's commits, staged work, and unstaged work in one combined diff.
+A baseline says "review everything since this commit." Use the branch-start action to include every commit made on the current branch, plus its staged and unstaged work, in one combined diff.
 
-- **From the Review toolbar** — "Pin baseline at HEAD" (or, once pinned, "Move baseline to HEAD" to re-pin at the current HEAD, and "Clear baseline" to drop back to inbox mode). The toolbar shows "Session since `<short>`" while pinned.
+- **From the Review toolbar** — "Review from branch start" detects the branch you forked from and pins the baseline at their merge base. Once pinned, "Move baseline to HEAD" starts a fresh session at the current HEAD, while "Clear baseline" returns to inbox mode. The toolbar shows "Session since `<short>`" while pinned.
 - **From the commit graph** — right-click any commit and choose "Review changes since this" to pin the baseline at that exact commit. See [Commits and history](commits-and-history.md).
 - **From the palette** — the baseline actions (pin, move, clear) are all available under `Mod+K`.
 
@@ -54,6 +54,14 @@ While reading, attach notes to what you want changed:
   restores the notes you left there.
 
 When you are done, click **Copy feedback (N)** in the toolbar (palette: "Review: copy feedback as prompt"). Strand assembles every note into one Markdown prompt — branch and baseline header, per-file sections, each line note with a fenced diff excerpt of the surrounding lines, and a closing instruction — ready to paste straight back into the agent. "Review: clear notes" wipes the slate for the next round.
+
+## AI code review
+
+Click **Review with Codex/Claude Code** in the Review toolbar, or run "Review changes with AI…" from the command palette. Strand sends the exact pool currently shown—staged and unstaged changes in inbox mode, or committed, staged, and unstaged changes since the pinned baseline in session mode—to the provider and model selected in Settings → AI.
+
+Actionable findings first appear in a pending suggestions list. AI review never edits files, stages work, or adds notes automatically. Inspect each suggestion, then choose **Add note** or **Add all as notes** to keep the feedback, or dismiss it. Accepted findings become removable notes labelled **AI · critical/high/medium/low**. Strand validates every returned path against the submitted changes and keeps a line anchor only when that line exists on the reported diff side; an otherwise useful finding becomes a file note rather than pointing at invented code. If the diff or baseline changes while the provider is working or while suggestions are pending, Strand cancels or discards the stale answer.
+
+The same privacy controls as commit and PR suggestions apply: conservative sensitive-file matches require an explicit exclude/include choice before provider launch, context and output are bounded, the operation is cancellable, and provider failures can retry with the other configured CLI. The coverage row reports how many patches were included or truncated. AI findings are possible issues to verify, not an approval verdict; Strand does not mark files reviewed automatically.
 
 ## Live following
 

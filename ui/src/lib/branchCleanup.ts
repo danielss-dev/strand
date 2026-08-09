@@ -4,6 +4,8 @@ export interface BranchCleanupCandidate {
   local: Branch;
   /** Matching remote-tracking ref, when it is still known locally. */
   remote: RemoteBranch | null;
+  /** Provider confirmed this exact tip was merged even though ancestry did not. */
+  providerMerged: boolean;
 }
 
 export interface BranchCleanupPlan {
@@ -35,12 +37,18 @@ function matchingRemote(branch: Branch, refs: Refs): RemoteBranch | null {
  * Build the safe, display-ready cleanup plan from already-loaded ref/worktree
  * state. No ancestry walk or network request belongs on the dialog-open path.
  */
-export function mergedBranchCleanupPlan(refs: Refs, worktrees: Worktree[]): BranchCleanupPlan {
+export function mergedBranchCleanupPlan(
+  refs: Refs,
+  worktrees: Worktree[],
+  providerMergedBranches: ReadonlySet<string> = new Set(),
+): BranchCleanupPlan {
   const checkedOutBranches = new Set(
     worktrees.map((worktree) => worktree.branch).filter((branch): branch is string => !!branch),
   );
   const merged = refs.branches.filter(
-    (branch) => branch.merged && !branch.is_head && branch.name !== refs.primary_branch,
+    (branch) => (branch.merged || providerMergedBranches.has(branch.name))
+      && !branch.is_head
+      && branch.name !== refs.primary_branch,
   );
 
   const checkedOut = merged
@@ -48,7 +56,11 @@ export function mergedBranchCleanupPlan(refs: Refs, worktrees: Worktree[]): Bran
     .map((branch) => branch.name);
   const candidates = merged
     .filter((branch) => !checkedOutBranches.has(branch.name))
-    .map((local) => ({ local, remote: matchingRemote(local, refs) }));
+    .map((local) => ({
+      local,
+      remote: matchingRemote(local, refs),
+      providerMerged: !local.merged && providerMergedBranches.has(local.name),
+    }));
 
   return { candidates, checkedOut };
 }

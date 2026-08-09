@@ -1,4 +1,4 @@
-use super::{CommitMessageSuggestion, PullRequestSuggestion};
+use super::{CodeReviewSuggestion, CommitMessageSuggestion, PullRequestSuggestion};
 
 const MAX_COMMIT_BODY_BYTES: usize = 65_536;
 const MAX_DIAGNOSTIC_BYTES: usize = 2_048;
@@ -57,6 +57,28 @@ pub fn parse_pull_request_suggestion(raw: &str) -> Result<PullRequestSuggestion,
             )
         })?;
     normalize_pull_request(parsed)
+}
+
+/// Extract a structured code-review result. Unlike writing suggestions, parse
+/// failures do not echo the model response: a review may quote source code.
+pub fn parse_code_review_suggestion(raw: &str) -> Result<CodeReviewSuggestion, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("AI returned an empty response.".into());
+    }
+    serde_json::from_str::<CodeReviewSuggestion>(trimmed)
+        .ok()
+        .or_else(|| {
+            extract_json_object(trimmed)
+                .and_then(|json| serde_json::from_str::<CodeReviewSuggestion>(&json).ok())
+        })
+        .or_else(|| {
+            extract_fenced_json(trimmed)
+                .and_then(|json| serde_json::from_str::<CodeReviewSuggestion>(&json).ok())
+        })
+        .ok_or_else(|| {
+            "Could not parse AI review. Expected JSON with a findings array.".to_string()
+        })
 }
 
 fn normalize(mut s: CommitMessageSuggestion) -> Result<CommitMessageSuggestion, String> {
@@ -235,5 +257,19 @@ mod tests {
         let suggestion = parse_pull_request_suggestion(&raw).unwrap();
         assert!(suggestion.title.len() <= 512);
         assert!(suggestion.title.is_char_boundary(suggestion.title.len()));
+    }
+
+    #[test]
+    fn parses_code_review_json_in_prose() {
+        let raw = "Review:\n{\"findings\":[{\"path\":\"src/lib.rs\",\"line\":7,\"side\":\"new\",\"severity\":\"high\",\"title\":\"Race\",\"body\":\"The write is unsynchronized.\"}]}";
+        let review = parse_code_review_suggestion(raw).unwrap();
+        assert_eq!(review.findings.len(), 1);
+        assert_eq!(review.findings[0].path, "src/lib.rs");
+    }
+
+    #[test]
+    fn code_review_parse_error_does_not_echo_source() {
+        let err = parse_code_review_suggestion("secret source copied by model").unwrap_err();
+        assert!(!err.contains("secret source"));
     }
 }

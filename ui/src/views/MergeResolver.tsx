@@ -3,6 +3,7 @@ import { File as PierreFile } from '@pierre/diffs/react';
 
 import { Icon } from '../components/Icon';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { pierreThemeOptions } from '../lib/pierreTheme';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -26,7 +27,9 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
   const activePath = useRepo((s) => s.activePath);
   const oursBranch = useRepo((s) => s.meta?.branch ?? 'HEAD');
   const resolveConflict = useRepo((s) => s.resolveConflict);
-  const pierreTheme = useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const resolvedTheme = useSettings((s) => s.resolvedTheme);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
+  const pierreTheme = pierreThemeOptions(resolvedTheme, diffSyntaxTheme);
 
   const [raw, setRaw] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -161,7 +164,7 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     side: 'theirs' | 'ours' | 'result',
     onPick?: (index: number) => void,
   ) => ({
-    theme: pierreTheme,
+    ...pierreTheme,
     disableBackground: true,
     disableFileHeader: true,
     onLineClick: (p: { lineNumber: number }) => {

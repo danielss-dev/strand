@@ -7,7 +7,7 @@ use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 pub const MAX_REQUEST_BYTES: usize = 128 * 1024;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -101,6 +101,21 @@ pub enum Operation {
         repository: String,
         id: u64,
     },
+    ReplyToThread {
+        project: String,
+        repository: String,
+        id: u64,
+        thread_id: u64,
+        parent_comment_id: u64,
+        body: String,
+    },
+    SetThreadStatus {
+        project: String,
+        repository: String,
+        id: u64,
+        thread_id: u64,
+        status: ThreadStatus,
+    },
     PullRequestIterations {
         project: String,
         repository: String,
@@ -174,6 +189,13 @@ pub enum Operation {
 pub enum PullRequestStatus {
     Active,
     Abandoned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThreadStatus {
+    Active,
+    Fixed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

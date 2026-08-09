@@ -104,6 +104,7 @@ export function Diff({
   // `disableBackground` keeps the surface on our tokens; the theme drives the
   // syntax colors, which need to flip with light/dark.
   const resolvedTheme = useSettings((s) => s.resolvedTheme);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const diffIndicators = useSettings((s) => s.diffIndicators);
   const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
   const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
@@ -119,7 +120,7 @@ export function Diff({
   }, [patch]);
   const options = {
     diffStyle: layout,
-    ...pierreThemeOptions(resolvedTheme),
+    ...pierreThemeOptions(resolvedTheme, diffSyntaxTheme),
     disableBackground: true,
     disableFileHeader: hideFileHeader,
     ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
@@ -147,12 +148,13 @@ export function ParsedDiff<LAnnotation = undefined>({
   style,
 }: ParsedDiffProps<LAnnotation>) {
   const resolvedTheme = useSettings((s) => s.resolvedTheme);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const diffIndicators = useSettings((s) => s.diffIndicators);
   const diffLineNumbers = useSettings((s) => s.diffLineNumbers);
   const diffWordHighlight = useSettings((s) => s.diffWordHighlight);
   const options = {
     diffStyle: layout,
-    ...pierreThemeOptions(resolvedTheme),
+    ...pierreThemeOptions(resolvedTheme, diffSyntaxTheme),
     disableBackground: true,
     disableFileHeader: hideFileHeader,
     enableLineSelection: Boolean(onLineSelected),

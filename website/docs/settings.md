@@ -20,6 +20,7 @@ The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Ho
 Diff options come with a live preview — a sample diff at the bottom of the section re-renders as you change settings. The preview and every diff pane follow Strand's resolved Light, Dark, or System appearance, even when an explicit choice differs from the operating-system theme.
 
 - **Default layout** — Stacked or Split. This is the default for repositories that haven't picked their own layout; each repository can override it with the toggle in the diff-pane header, and that per-repo choice is remembered.
+- **Syntax colors** — Standard (default), Soft, Vibrant, Red–green accessible, or Blue–yellow accessible. Strand automatically uses the matching light or dark Pierre palette for the current app appearance.
 - **Diff font** — "Same as mono font" (default) or any of the mono fonts.
 - **Change indicators** — `+ / −` classic markers, Bars (default), or None.
 - **Line numbers** — checkbox, on by default.
@@ -118,18 +119,19 @@ Configure Work's embedded terminals separately from external applications.
 ## AI
 
 Strand can suggest a commit message from staged changes, or all unstaged changes
-when nothing is staged, and draft pull-request text from committed branch
-changes. It has no API key of its own — suggestions run through a CLI you
+when nothing is staged, draft pull-request text from committed branch changes,
+and inspect the Review view's exact change set for possible code issues. It has
+no API key of its own — generation runs through a CLI you
 already have, on your own subscription. Auth and billing stay entirely in the
 vendor's CLI; Strand only orchestrates it.
 
 - **Provider** — choose OpenAI (default) or Anthropic. The account card below
   shows only the selected provider's CLI path, sign-in, sign-out, and status
   controls.
-- **Model** — choose the selected provider's writing model. Strand remembers
+- **Model** — choose the selected provider's generation model. Strand remembers
   one choice per provider and uses it for both commit-message suggestions and
-  pull-request drafts. The performance-first defaults remain `gpt-5.6-luna`
-  and `claude-sonnet-5`.
+  pull-request drafts as well as AI code review. The performance-first defaults
+  remain `gpt-5.6-luna` and `claude-sonnet-5`.
 - **Provider account** — optionally override the selected provider's CLI path
   (leave empty to use `codex` or `claude` on PATH), sign in or out, and check
   whether the CLI is missing, signed out, signed in, or unable to run. Strand
@@ -152,8 +154,10 @@ to override automatic resolution.
 To get a commit suggestion, stage some changes and press the sparkle button next
 to the commit subject field in Local Changes, use `Mod+Shift+M`, or run "Suggest
 commit message" from the palette. To draft a PR, use **Fill with Codex/Claude
-Code** in the Create PR dialog. If the CLI isn't installed or you aren't signed
-in, the action stays clickable and the hint appears inline. Sign-in starts the
+Code** in the Create PR dialog. To inspect the current Review inbox or
+pinned-baseline session, use **Review with Codex/Claude Code** in that toolbar
+or "Review changes with AI…" in the palette. If the CLI isn't installed or you
+aren't signed in, the action stays clickable and the hint appears inline. Sign-in starts the
 provider's browser or CLI flow, and once you complete it you run the action
 again. If a CLI launcher is present but its packaged executable is broken,
 Strand keeps that distinct from “signed out” and shows a repair hint beside the

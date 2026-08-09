@@ -253,6 +253,13 @@ helper processes (browser / GPU / renderer / network / utility + the diff
 highlight workers). JS heap is tiny (7 MB), so the overage is structural to
 WebView2's multi-process model, not app allocation.
 
+**DAN-30 follow-up (2026-08-07):** A Task Manager screenshot reported 326.5MB
+for the WebView2 process group: 203.6MB GPU, 99.2MB renderer, and the remainder
+across manager/network/storage/crashpad processes. Task Manager's Memory column
+is working set, so it is not comparable to the PRD's private-byte guardrail;
+it is also below this baseline's 408MB empty-shell working set. No Strand-owned
+growth or supported process-count optimization was identified.
+
 ## Verdict vs PRD §8 (webview/app targets)
 
 | target | result | status |

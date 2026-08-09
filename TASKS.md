@@ -731,13 +731,15 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (confirm). HEAD shows a disabled "Current branch".
 - ☑ Merged-branch indicators (DAN-19 — `refs::Branch.merged` uses commit
   ancestry against the repository's primary branch; sidebar icons and
-  commit-graph ref chips mark contained non-current branches that are safe to
-  delete, without mislabeling the primary branch while a feature is checked out).
+  commit-graph ref chips also use `providerMergedBranchNames` to mark an exact
+  local source tip from a completed GitHub/Azure PR into that primary branch,
+  without mislabeling the primary branch while a feature is checked out).
 - ☑ Clear merged branches in bulk (`BranchCleanupDialog` +
   `mergedBranchCleanupPlan`: palette action with per-branch local selection,
   opt-in matching upstream/origin deletion, checked-out-worktree exclusion,
   remote-tip containment via `RemoteBranch.merged`, and a deletion-time
-  `Repo::delete_branch(force=false)` containment/worktree guard).
+  ancestry guard or provider-tip `Repo::delete_branch_at` guard; DAN-41 adds
+  squash/rebase PR cleanup while keeping provider-unproven remotes protected).
 - ☑ Ref clipboard/context expansion (2026-07-16): local branches copy name /
   full ref / SHA and the current branch exposes Pull + Push strategy submenus;
   remote branches copy short name / remote ref / SHA; tags copy name / SHA and
@@ -1289,11 +1291,14 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     initializes)
   - ☑ **Diff**: default layout (`defaultDiffLayout`, seeds repos without a
     per-repo `diff-mode:` row — `loadRepoDiffMode` falls back to it), diff font
-    (`--diffs-font-family`, pierces Pierre's shadow DOM), change indicators
+    (`--diffs-font-family`, pierces Pierre's shadow DOM), five paired Pierre
+    syntax-palette families (`diffSyntaxTheme`, DAN-29), change indicators
     (`classic`/`bars`/`none`), line numbers, word-level highlight; live Pierre
-    preview. Options flow through `diffAppearanceOptions()` (`components/Diff.tsx`)
-    into both `Diff` and LocalChanges' `fileDiffOptions` memo. MergeResolver
-    deliberately stays pinned (gutter measurement).
+    preview. Syntax palettes flow through `pierreThemePair()` into the shared
+    worker pool and every diff/merge surface; the remaining options flow through
+    `diffAppearanceOptions()` (`components/Diff.tsx`) into both `Diff` and
+    LocalChanges' `fileDiffOptions` memo. MergeResolver keeps its gutter-affecting
+    settings pinned for reliable measurement.
   - ☑ **Git**: global `user.name`/`user.email` read/write
     (`gitconfig::global_identity` / `set_global_identity`, IPC
     `git_global_identity` / `git_set_global_identity`) + default clone/open
@@ -1424,16 +1429,17 @@ tree: watch the agent work, review fast, accept or reject safely.
 - ☑ **Dedicated Review view** (`views/Review.tsx`, sidebar "Review" row with
   a pending-count badge, ⌘4, palette "Show: Review") — review lives in its
   own surface; Local Changes stays a pure staging workspace. Two modes:
-  **inbox** (no baseline → the unstaged set; diffs keep per-hunk
+  **inbox** (no baseline → staged + unstaged changes combined against HEAD;
+  staging never removes a file, and unstaged-only diffs keep safe per-hunk
   Stage/Discard via the shared `HunkAnnotatedDiff`) and **session** (baseline
   pinned → everything since that commit incl. the agent's commits, rendered
   read-only with file-level actions). Queue on the left (Pierre tree),
   one file at a time on the right, progress bar + verdict actions in the
   toolbar, keyboard-hint footer.
 - ☑ Review diffs carry **whole-file context** — the agent's edits read
-  inside the entire file, not isolated hunks (`diff_unstaged_full` /
-  `diff_since_full` in `strand-core/src/diff.rs`,
-  `repo_diff_unstaged_full` / `repo_diff_since_full` IPC; inbox pool lives
+  inside the entire file, not isolated hunks (`diff_since_full` in
+  `strand-core/src/diff.rs`, `repo_diff_since_full` IPC; inbox compares
+  against `HEAD` so the pool survives staging and lives
   in `reviewUnstagedDiffs`, refreshed only while the Review view is live so
   Local Changes' hot path doesn't pay for it).
 - ☑ Review queue is a Pierre tree (`PierreTree` with the new
@@ -1466,7 +1472,9 @@ tree: watch the agent work, review fast, accept or reject safely.
   (`diff_tree_to_workdir_with_index` against the baseline tree, so committed +
   staged + unstaged agent work shows in one diff), `repo_diff_since` IPC,
   `RepoMeta.head_oid` to pin it, persisted per-repo (`reviewSession` in
-  `lib/db.ts`); pin/move/clear from the Review toolbar or the palette.
+  `lib/db.ts`); the initial toolbar/palette action detects the current branch's
+  parent with `repoDetectBaseBranch` and pins its merge base, while move/clear
+  and explicit commit-graph baselines remain available.
 - ☑ Review-state tracking: reviewed map (`path → FNV hash of the diff`,
   `hashPatch` in `lib/patch.ts`) — a file the agent touches after review
   flips back to unreviewed (row shows "changed"); persisted per-repo in
@@ -1563,8 +1571,8 @@ tree: watch the agent work, review fast, accept or reject safely.
     signed-in `gh` / `az` accounts plus helper/profile authentication readiness
     (`hosting_connection_status`, `HostingSection`).
     Azure DevOps Services continues to use the official `az` CLI. Both Azure
-    adapters support iteration-tracked inline comments and review submission;
-    replies/resolution on existing Azure threads remain out of scope.
+    adapters support iteration-tracked inline comments, review submission, and
+    reply/resolve/reopen writes on existing inline threads (protocol v6).
   - ☑ Hide provider write controls for terminal pull requests: merged/completed
     PRs expose read-only Summary, Timeline, Code, and thread cards; closed/
     abandoned PRs keep only their Reopen lifecycle action
@@ -1620,16 +1628,17 @@ tree: watch the agent work, review fast, accept or reject safely.
     character count, provider avatars with initials fallback, and comment
     permalinks. File-backed timeline comments expose a keyboard-operable
     **View in Code** action that selects the file and focuses its fetched
-    GitHub thread when coordinates exist. GitHub Code uses Pierre's native hover-gutter `+`,
+    provider thread when coordinates exist. Code uses Pierre's native hover-gutter `+`,
     line-range selection, persistent fetched thread cards with replies and
     resolved/outdated state, and an annotation-row composer through
     `repo_pull_request_inline_comment`, with
-    exact-head validation before publishing. GitHub thread cards now publish
+    exact-head validation before publishing. GitHub and Azure thread cards publish
     immediate replies and Resolve/Reopen writes through provider-capability-
     gated GraphQL mutations, patching Code + Timeline locally without a
     detail/patch reload (`repo_pull_request_thread_reply`,
-    `repo_pull_request_thread_resolve`). Azure replies/resolution on existing
-    threads, direct binary attachment uploads, and suggestions are 1.1 scope.
+    `repo_pull_request_thread_resolve`; Azure Services uses `az devops invoke`
+    and Azure Server uses helper protocol v6). Direct binary attachment uploads
+    and suggestions remain 1.1 scope.
   - ☑ Submit reviews: comment, approve, and request changes through one
     exact-head review draft (`repo_pull_request_submit_review`, GitHub atomic
     review payload, Azure Services/Server iteration-tracked inline writes plus
@@ -1750,7 +1759,9 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 - ☑ Replace placeholder icon with a real source (canonical `strand.svg` mark,
   rounded white-tile `strand.png` app icon, and generated desktop, Store,
-  Android, and iOS bundles)
+  Android, and iOS bundles; DAN-40 reasserts the embedded `icon.ico` as native
+  big/small HWND icons on Windows `RunEvent::Ready`, guarded by the release
+  policy check, so updater replacement cannot leave a generic taskbar icon)
 - ☑ Apple Developer ID + notarization pipeline. Local signing:
   `pnpm tauri build --target aarch64-apple-darwin` + `APPLE_SIGNING_IDENTITY`
   yields a Developer-ID-signed DMG. Release CI signs **and notarizes** the
@@ -1794,6 +1805,9 @@ tree: watch the agent work, review fast, accept or reject safely.
   — lanes/merges/invariants; `lib/conflictParse.test.ts` — parse + resolution
   assembly; `lib/fuzzy.test.ts` — palette scoring, extracted to `lib/fuzzy.ts`.
   `pnpm --filter ./ui test`.)
+- ☑ Stale Vite optimizer recovery after dependency upgrades
+  (`ui/scripts/clean-stale-js.mjs` validates cached optimizer source paths and
+  removes only `ui/node_modules/.vite` when pnpm has removed one; 2026-08-07).
 - ☑ Stable auto-update channel is signed and fail-closed; GitHub's stable
   `releases/latest` endpoint excludes prereleases. A user-selectable beta
   channel is explicitly 1.1 scope so 1.0 cannot silently change trust channels
@@ -1857,7 +1871,10 @@ a running-app pass.
   targets: macOS **< 250MB** (unchanged; confirm on the Mac box), Windows
   **< 300MB private** plus app-attributable **< 50MB over the empty shell**
   (measured ~32MB — the number app code actually controls), Linux TBD at the
-  GNOME+KDE platform pass. Windows passes both restated figures.
+  GNOME+KDE platform pass. Windows passes both restated figures. DAN-30's
+  326.5MB Task Manager WebView2-group screenshot is working set, not private
+  bytes, and remains below the measured 408MB empty-shell working-set baseline
+  (`docs/perf-baseline.md`).
 - ☑ **Virtualize the Local Changes stacked diff pane** (perf follow-up from the
   webview pass) — done 2026-07-06. `DiffPane` (`views/LocalChanges.tsx`) now
   wraps the stacked file list in Pierre's `<Virtualizer className="lc-diff-scroll">`
@@ -2218,6 +2235,10 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   back to all unstaged changes when no staged diff exists)
 - ☑ Pull-request title/description suggestions from committed merge-base diffs
   (`repo_suggest_pull_request`, Create PR **Fill with Codex/Claude Code**)
+- ☑ AI review of the exact Review pool (DAN-18: `repo_review_changes`,
+  structured/validated `CodeReviewFinding`s, Review toolbar + palette action,
+  stale-diff guard, and a transient approval list; findings change nothing
+  until the user chooses Add note/Add all, and AI review never edits files)
 - ☑ Windows CLI spawning hardened (DAN-11: `ai/bin.rs` resolves `.exe`/`.cmd`/
   `.bat` only — never npm's extensionless POSIX shims — and runs batch shims
   via `cmd /C`; prompts travel over stdin; null stdin + 30s/120s timeouts so

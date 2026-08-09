@@ -3,6 +3,7 @@ import { WorkerPoolContextProvider, useWorkerPool } from '@pierre/diffs/react';
 // Vite bundles the package's worker entry as a real Worker module.
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 
+import { pierreThemePair } from '../lib/pierreTheme';
 import { useSettings } from '../stores/settings';
 
 /**
@@ -26,7 +27,7 @@ export function DiffWorkerPool({ children }: { children: ReactNode }) {
         poolSize: 2,
       }}
       highlighterOptions={{
-        theme: { dark: 'pierre-dark', light: 'pierre-light' },
+        theme: pierreThemePair(useSettings.getState().diffSyntaxTheme),
         lineDiffType: initialLineDiffType(),
       }}
     >
@@ -47,11 +48,15 @@ function initialLineDiffType(): 'word-alt' | 'none' {
  */
 function RenderOptionsSync() {
   const pool = useWorkerPool();
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const wordHighlight = useSettings((s) => s.diffWordHighlight);
   useEffect(() => {
     void pool
-      ?.setRenderOptions({ lineDiffType: wordHighlight ? 'word-alt' : 'none' })
+      ?.setRenderOptions({
+        theme: pierreThemePair(diffSyntaxTheme),
+        lineDiffType: wordHighlight ? 'word-alt' : 'none',
+      })
       .catch((e) => console.warn('diff worker setRenderOptions failed', e));
-  }, [pool, wordHighlight]);
+  }, [pool, diffSyntaxTheme, wordHighlight]);
   return null;
 }

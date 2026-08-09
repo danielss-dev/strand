@@ -153,6 +153,9 @@ export interface ReviewNote {
    * persisted before this field existed are all new-side.
    */
   side?: 'new' | 'old';
+  /** Accepted AI findings stay distinguishable from human-authored notes. */
+  source?: 'ai';
+  severity?: CodeReviewSeverity;
   createdAt: number;
 }
 
@@ -812,6 +815,21 @@ export interface CommitMessageSuggestion {
   body: string | null;
 }
 
+export type CodeReviewSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+export interface CodeReviewFinding {
+  path: string;
+  line: number | null;
+  side: 'new' | 'old';
+  severity: CodeReviewSeverity;
+  title: string;
+  body: string;
+}
+
+export interface CodeReviewSuggestion {
+  findings: CodeReviewFinding[];
+}
+
 export type AiSensitiveDecision =
   | { mode: 'scan' }
   | { mode: 'exclude'; fingerprint: string }
@@ -823,7 +841,7 @@ export interface AiGenerationRequest {
   styleInstruction: string | null;
 }
 
-export type AiInputScope = 'staged' | 'unstaged' | 'committed';
+export type AiInputScope = 'staged' | 'unstaged' | 'committed' | 'review';
 
 export interface AiInputCoverage {
   scope: AiInputScope;

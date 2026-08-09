@@ -6,9 +6,12 @@ import { computeGraph } from '../lib/graph';
 import { pickCommitPatchDestination } from '../lib/dialog';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { selectedCommitsOldestFirst } from '../lib/historySelection';
+import { providerMergedBranchNames } from '../lib/branchIntegration';
+import { pathKey } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { useBranchIntegration } from '../stores/branchIntegration';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
@@ -64,6 +67,10 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
   const refs = useRepo((s) => s.refs);
+  const activePath = useRepo((s) => s.activePath);
+  const integration = useBranchIntegration((s) => (
+    activePath ? s.records[pathKey(activePath)] : undefined
+  ));
   const selectedCommit = useRepo((s) => s.selectedCommit);
   const selectCommit = useRepo((s) => s.selectCommit);
   const stashApply = useRepo((s) => s.stashApply);
@@ -477,7 +484,14 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     },
     [rowH],
   );
-  const refsByOid = useMemo(() => indexRefs(refs), [refs]);
+  const providerMergedBranches = useMemo(
+    () => integration?.data ? providerMergedBranchNames(refs, integration.data) : new Set<string>(),
+    [integration?.data, refs],
+  );
+  const refsByOid = useMemo(
+    () => indexRefs(refs, providerMergedBranches),
+    [providerMergedBranches, refs],
+  );
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
   const colWidth = graphColWidth(graph.laneCount);
 
@@ -1446,7 +1460,7 @@ interface RefChip {
   title?: string;
 }
 
-function indexRefs(refs: Refs): Map<string, RefChip[]> {
+function indexRefs(refs: Refs, providerMergedBranches: ReadonlySet<string>): Map<string, RefChip[]> {
   const m = new Map<string, RefChip[]>();
   const push = (oid: string, chip: RefChip) => {
     const arr = m.get(oid);
@@ -1454,12 +1468,13 @@ function indexRefs(refs: Refs): Map<string, RefChip[]> {
     else m.set(oid, [chip]);
   };
   for (const b of refs.branches) {
+    const merged = b.merged || providerMergedBranches.has(b.name);
     push(b.target, {
       key: `b:${b.full_name}`,
       label: b.name,
       kind: b.is_head ? 'head' : 'local',
-      merged: b.merged,
-      title: b.merged
+      merged,
+      title: merged
         ? `Merged into ${refs.primary_branch ?? 'the primary branch'}; safe to delete`
         : undefined,
     });

@@ -76,7 +76,8 @@ system ported verbatim. No real feature surface yet.
     create + track a remote branch, or `Create branch…` via prompt
   - ☑ Clear merged branches from the command palette with per-branch local and
     matching remote selection (`BranchCleanupDialog`; worktree-held branches
-    stay protected)
+    stay protected; DAN-41 also recognizes exact tips from completed
+    GitHub/Azure squash or rebase PRs without weakening remote deletion)
 - ☑ **File tree**
   - ☑ Working-tree view, status badges, click to file detail (`Repo::work_tree`
     lists index entries overlaid with status; Sidebar Files tab renders a
@@ -85,7 +86,8 @@ system ported verbatim. No real feature surface yet.
 - ☑ **macOS packaging** — *release CI builds, signs, and notarizes the
   universal DMG (v0.5.0, 2026-06-12). See `docs/packaging.md` for the runbook.*
   - ☑ Real app icon (canonical `strand.svg` mark, rounded white-tile
-    `strand.png`, and generated desktop and platform bundles)
+    `strand.png`, generated desktop/platform bundles, and DAN-40's updater-safe
+    native Windows taskbar handle assignment)
   - ☑ Apple Developer ID signing + notarization (release CI signs + notarizes
     `Strand_0.5.0_universal.dmg`)
   - ☑ First DMG ships — superseded by the public v0.5.0 GitHub Release
@@ -1070,11 +1072,11 @@ passes on its measured platform. Doc-only change: PRD §8, `docs/perf-baseline.m
   rendered Markdown, color-coded checks, discussions with top-level comment
   creation, current-branch auto-open, and full-width lazy selected-file Pierre
   diffs shipped 2026-07-13 through authenticated provider CLIs. Inline/review
-  comments, exact-head batched GitHub/Azure inline reviews, GitHub thread
+  comments, exact-head batched GitHub/Azure inline reviews, GitHub/Azure thread
   replies/resolution, permission-gated Ready for review, merge controls,
   close/reopen, PR worktrees, and GitHub branch update now ship. The accepted
-  1.0 review bar is closed; Azure existing-thread lifecycle and pagination
-  beyond the bounded GitHub detail query are 1.1 work. Azure DevOps Server
+  1.0 review bar is closed; pagination beyond the bounded GitHub detail query
+  is 1.1 work. Azure DevOps Server
   2020+ now uses the optional release-pinned `strand-azdo` REST helper with
   PAT/private-CA profiles and Windows integrated authentication, while Azure
   DevOps Services keeps the official `az` path. GitLab and Bitbucket are
@@ -2174,8 +2176,8 @@ and Store certification remain external gates.
   - ☑ Isolated, cancellable provider execution with sensitive-file confirmation,
     deterministic bounded context, per-repository writing profiles, PR-draft
     coverage/undo, and explicit alternate-provider retry
-- ◐ Hosted-review expansion — GitLab/Bitbucket adapters, Azure existing-thread
-  lifecycle, deeper pagination, merge queue/auto-complete, and review-evolution
+- ◐ Hosted-review expansion — GitLab/Bitbucket adapters, deeper pagination,
+  merge queue/auto-complete, and review-evolution
   comparisons build on the completed GitHub/Azure 1.0 workspace.
 
 **AI commit messages (2026-07-01):** Subscription-first suggestions prefer the
@@ -2492,6 +2494,59 @@ exposes Pierre's structure-aware undo history through state-aware Undo and Redo
 buttons. The controls track the same history as Mod+Z, Mod+Shift+Z, and Ctrl+Y,
 and reset when Strand intentionally rebuilds the editor after a clean external
 refresh or Discard.
+
+**DAN-41 provider-aware merged branches shipped (2026-08-07):** Sidebar and
+commit-graph checks plus **Clear merged branches…** now recognize a local branch
+whose exact current tip is the recorded source of a completed GitHub or Azure
+PR into the primary branch, covering squash and rebase merges that Git ancestry
+cannot prove. Provider lookup is delayed and session-cached off the repo-open
+hot path; explicit cleanup refreshes and freezes the snapshot, keeps remote
+deletion ancestry-only, and rechecks the local branch SHA at deletion time.
+
+**DAN-40 updater-safe Windows taskbar icon shipped (2026-08-07):** Strand now
+loads the embedded `icon.ico` resource into explicit big and small native HWND
+icon handles after Tauri reaches `RunEvent::Ready`. Windows no longer depends
+on its executable-path icon cache after an in-place updater replacement. A
+native before/after probe moved the visible window from zero icon handles to
+the correct Strand artwork, and the release policy check locks the contract.
+
+**DAN-39 Azure review-thread lifecycle shipped (2026-08-07):** Azure DevOps
+Services and Server inline discussions now retain provider range/side/status
+metadata in Code, group replies beneath the anchored diff, and expose the same
+Reply, Resolve, and Reopen controls as GitHub on open pull requests. Azure
+Services writes through the signed-in `az` CLI; Server uses helper protocol v6.
+
+**DAN-30 Windows resource-usage audit closed (2026-08-07):** The reported
+326.5MB is Task Manager working set for WebView2's normal manager, GPU,
+renderer, network, storage, and crashpad process group—not Strand-private
+allocation. It is below the measured 408MB empty-shell working-set baseline;
+the production acceptance measure remains 248→280MB private bytes and 7MB JS
+heap with one medium repository, within the Windows PRD budget.
+
+**DAN-29 Pierre syntax palettes shipped (2026-08-07):** Settings → Diff now
+offers Standard, Soft, Vibrant, red–green-accessible, and blue–yellow-accessible
+syntax-color families with a live preview. Strand automatically selects each
+family's matching light or dark Pierre theme, persists the choice, lazy-loads
+non-default palettes, and updates the shared highlight worker cache once per
+family change across local, review, hosted-PR, and merge-conflict surfaces.
+
+**DAN-18 AI code review shipped (2026-08-07):** Review can now ask the selected
+Codex or Claude Code subscription to inspect the exact uncommitted inbox or pinned
+baseline session for actionable defects. Findings return as severity-labelled,
+pending suggestions that require explicit acceptance before becoming removable
+review notes; the backend rejects invented paths, downgrades invalid
+line anchors to file notes, bounds context/output, and reuses sensitive-file,
+cancellation, authentication, and provider-fallback contracts. A content hash
+prevents an answer from attaching after the reviewed diff changes, and AI
+review never edits repository files or persists findings automatically.
+
+**Review continuity and branch-start baselines shipped (2026-08-07):** Inbox
+mode now compares HEAD to the index-overlaid working tree, so staged and
+partially staged files stay visible instead of disappearing after acceptance.
+The initial baseline action detects the current branch's parent and pins the
+fork-point merge base, making the complete branch history the default session
+scope. Combined staged patches remain read-only at hunk level so index writes
+cannot apply the wrong patch.
 
 ---
 
