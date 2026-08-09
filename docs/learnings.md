@@ -1577,8 +1577,9 @@ also produce false negatives for older merged branches.
 
 **How to apply.** Compute the flag while collecting refs with libgit2 commit
 ancestry (`graph_descendant_of`, including equal tips), and refresh it through
-the existing snapshot path after history or checkout operations. Squash merges
-do not preserve ancestry and therefore do not receive this mark.
+the existing snapshot path after history or checkout operations. Squash and
+rebase merges do not preserve ancestry and therefore do not change this core
+field; provider-aware UI may add the exact-tip overlay described below.
 
 **Bulk cleanup extension (2026-07-17).** `RemoteBranch.merged` applies the same
 containment test to remote-tracking tips, but does not suppress the primary ref
@@ -1590,6 +1591,18 @@ after its local branch was merged. Local cleanup calls
 `Repo::delete_branch(force=false)`, which re-checks containment and linked-
 worktree occupancy at deletion time; never rely on a frozen dialog snapshot as
 the final destructive-operation guard.
+
+**Provider exact-tip extension (2026-08-07, DAN-41).** The sidebar, commit
+graph, and bulk cleanup may additionally mark a non-current local branch when a
+completed GitHub/Azure PR targets the primary branch, the PR source name matches
+the local branch, and its recorded source SHA exactly equals the current local
+tip. This is the safe signal for squash/rebase merges: never infer them from
+tree equality, subjects, PR numbers, or ahead/behind. Keep discovery async,
+delayed, deduplicated, and session-cached off repo-open/ref-snapshot hot paths;
+explicit cleanup refreshes once and freezes its display plan. Remote deletion
+remains ancestry-only. Local provider-confirmed deletion must call
+`Repo::delete_branch_at`, which rejects a moved tip and any current/worktree-
+held branch at execution time.
 
 ---
 
@@ -1765,6 +1778,11 @@ history. When adding a new Azure DevOps Server write operation, bump the helper
 protocol so an already-installed older helper is upgraded rather than selected
 by a matching but incomplete capability contract.
 
+Azure thread IDs are scoped to a pull request rather than globally unique, and
+a reply also needs the thread's root comment ID. Normalize all three as one
+provider-prefixed ID in shared UI state, and decode it only at the provider
+boundary; the visible thread ID alone cannot build either Azure write route.
+
 **Hosted viewed marks fingerprint the rendered file, not the provider patch
 (2026-07-18).** A provider/Pierre cache key can identify the whole PR patch, so
 using it for one file makes every unrelated push invalidate all review
@@ -1831,6 +1849,16 @@ restore geometry before the frame appears; the existing setup may then apply
 Windows decorations/shadow and show it. Verify persistence by changing state,
 closing the process through the UI, and launching the exact workspace binary.
 A same-process hide/show or app-identity launch does not prove disk restore.
+
+**A Windows executable icon is not a retained taskbar icon (2026-08-07,
+DAN-40).** Extracting a valid `icon.ico` from `strand.exe` proves the resource,
+not the visible HWND state. After an in-place update, Windows' executable-path
+cache can fall back to a generic document icon when `WM_GETICON` returns no big
+or small handle. At `RunEvent::Ready`, enumerate the current process's visible
+top-level window, load shared big/small handles from winres resource `32512`,
+and send both `WM_SETICON` messages. Verify the real visible HWND in a fresh
+process: `ICON_BIG` and `ICON_SMALL` must be non-zero and extract to the Strand
+artwork. Keep this contract in `scripts/check-release-security.mjs`.
 
 **Animated notifications need one stable accessibility channel (2026-07-18).**
 Keep visible success/error/network pills `aria-hidden` and mirror the active
@@ -2140,3 +2168,35 @@ manifest logo, producing blur and an accent-color backplate. Generate exact
 `lightunplated` variants directly from canonical `strand.png`, copy every
 variant into the MSIX, and keep the cross-platform policy check aligned with
 that matrix.
+
+**Pierre worker themes are global light/dark pairs (2026-08-07).** Use the
+official palette names already registered by `@pierre/diffs`, initialize the
+pool with both the light and dark member, and change families through
+`pool.setRenderOptions`. A mounted diff's `themeType` should only select which
+already-highlighted palette to display, so ordinary Strand light/dark toggles
+do not discard and recompute highlighted ASTs. Do not register those official
+names again: duplicate registration logs errors and makes Vite emit a second
+copy of every palette chunk.
+
+**AI review results must stay bound to the submitted diff (2026-08-07).** Key
+each request by the review baseline plus per-file patch hashes and cancel or
+ignore it when that key changes. Normalize model paths against the submitted
+`FileDiff`s on the Rust side, drop unknown files, and retain a line anchor only
+when the patch proves that line exists on the reported old/new side; a valid
+finding with a bad line becomes a file note. Keep provider findings transient:
+AI review must not edit files or persist notes until the reviewer explicitly
+accepts an individual finding or the pending set. Append accepted findings in
+one write without replacing human or previously accepted AI feedback. This
+keeps hallucinated or stale coordinates out of the diff and avoids N IndexedDB
+writes for N findings.
+
+## Vite optimizer cache must follow pnpm dependency upgrades (2026-08-07)
+
+Vite's generated `ui/node_modules/.vite/deps/_metadata.json` can survive a
+`pnpm install` while still pointing at a package-version directory pnpm has
+removed. The failure is an ENOENT during dependency optimization, before Vite
+can reliably invalidate its own cache. The pre-dev/build
+`ui/scripts/clean-stale-js.mjs` check therefore validates every recorded
+optimizer `src` path and removes only `ui/node_modules/.vite` when one is
+missing. Keep this check generic; do not special-case a package or delete the
+whole dependency installation.

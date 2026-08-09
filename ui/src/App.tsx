@@ -232,6 +232,7 @@ export function App() {
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const baseline = useRepo((s) => s.baseline);
   const setBaseline = useRepo((s) => s.setBaseline);
+  const setBranchBaseline = useRepo((s) => s.setBranchBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
   const stageReviewed = useRepo((s) => s.stageReviewed);
   const clearReviewNotes = useRepo((s) => s.clearReviewNotes);
@@ -1487,8 +1488,14 @@ export function App() {
           requestDiffSearch();
         } },
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
-        { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: pin baseline at HEAD', group: 'Actions', keywords: 'ai agent session since diff review baseline', run: () => {
-          void setBaseline().then(() => { setView('review'); selectFile(null); })
+        { id: 'review-with-ai', label: 'Review changes with AI…', group: 'Actions', keywords: 'ai codex claude inspect code bugs issues findings', run: () => {
+          setView('review');
+          selectFile(null);
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent('strand:review-with-ai')), 50);
+        } },
+        { id: 'review-baseline', label: baseline ? `Review: move baseline to HEAD (now at ${baseline.short})` : 'Review: start at branch fork point', group: 'Actions', keywords: 'ai agent session since diff review baseline branch creation fork point', run: () => {
+          const action = baseline ? setBaseline() : setBranchBaseline();
+          void action.then(() => { setView('review'); selectFile(null); })
             .catch((e) => showToast(`Set baseline failed: ${errMessage(e)}`, 'error'));
         } },
         ...(baseline ? [{ id: 'review-clear', label: 'Review: clear baseline', group: 'Actions', keywords: 'ai agent session review baseline', run: () => { void clearBaseline(); } } satisfies PaletteAction] : []),
@@ -1502,7 +1509,7 @@ export function App() {
             const st = useRepo.getState();
             const pool = st.baseline ? st.baselineDiffs : st.reviewUnstagedDiffs;
             // Union: pool files with notes + noted paths outside the pool
-            // (staged away, or Review never populated the pool this session) —
+            // (committed/reverted away, or Review never populated the pool) —
             // a stored note always exports, just without an excerpt.
             const files = collectFeedbackFiles(pool, st.reviewNotes);
             if (!st.activePath || files.length === 0) {
@@ -1702,7 +1709,7 @@ export function App() {
       showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
-      baseline, setBaseline, clearBaseline, stageReviewed, commits, resetTo,
+      baseline, setBaseline, setBranchBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,

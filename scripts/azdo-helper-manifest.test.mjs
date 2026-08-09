@@ -18,7 +18,7 @@ async function fixture(overrides = {}) {
     path.join(directory, `${target}.metadata.json`),
     JSON.stringify({
       helper_version: '1.2.1',
-      protocol_version: 5,
+      protocol_version: 6,
       target,
       name: `strand-azdo-1.2.1-${target}.${target.includes('linux') ? 'tar.gz' : 'zip'}`,
       archive_sha256: `${index}`.repeat(64),
@@ -37,7 +37,7 @@ test('manifest derives one helper and protocol version from build metadata', asy
     await buildManifest(directory, output);
     const manifest = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(manifest.strand_version, '1.2.1');
-    assert.equal(manifest.protocol_version, 5);
+    assert.equal(manifest.protocol_version, 6);
     assert.equal(manifest.assets.length, 3);
     assert.ok(manifest.assets.every((asset) => !('helper_version' in asset)));
     assert.ok(manifest.assets.every((asset) => !('protocol_version' in asset)));

@@ -5509,6 +5509,93 @@ textarea.clone-input {
 .rv-toolbar .h-link.danger {
   color: var(--del);
 }
+.rv-toolbar .h-link:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+.rv-ai-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rv-ai-review {
+  flex: none;
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-elev));
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.rv-ai-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elev));
+}
+.rv-ai-panel > span:first-child { margin-right: auto; }
+.rv-ai-panel .h-link { flex: none; color: var(--accent); }
+.rv-ai-findings {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0 12px 8px;
+}
+.rv-ai-finding {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 0.5px solid var(--border);
+  font-size: 11px;
+}
+.rv-ai-severity {
+  min-width: 50px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--text-2);
+  background: var(--bg-base);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-align: center;
+  text-transform: uppercase;
+}
+.rv-ai-severity.critical,
+.rv-ai-severity.high { color: var(--del); }
+.rv-ai-severity.medium { color: var(--warn); }
+.rv-ai-severity.low { color: var(--text-dim); }
+.rv-ai-finding-copy { min-width: 0; }
+.rv-ai-finding-title {
+  color: var(--text);
+  font-weight: 600;
+}
+.rv-ai-finding-body {
+  margin-top: 2px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.rv-ai-location {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rv-ai-location:hover { color: var(--accent-2); }
+.rv-ai-finding-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.rv-ai-finding-actions .h-link { color: var(--accent); }
 
 /* File queue (left panel) — a Pierre tree; this is just its flex host. */
 .rv-tree {
@@ -5659,6 +5746,18 @@ textarea.clone-input {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+.rv-note-source {
+  flex: none;
+  font-size: 9px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+}
+.rv-note-source.critical,
+.rv-note-source.high { color: var(--del); }
+.rv-note-source.medium { color: var(--warn); }
+.rv-note-source.low { color: var(--accent); }
 .rv-note-text {
   flex: 1;
   min-width: 0;

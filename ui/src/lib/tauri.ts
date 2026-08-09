@@ -15,6 +15,7 @@ import type {
   Commit,
   CommitSignature,
   CommitMessageSuggestion,
+  CodeReviewSuggestion,
   CommitSearchMode,
   CommitOutcome,
   CrashCheck,
@@ -196,6 +197,23 @@ export const tauri = {
   ) => invoke<AiGenerationOutcome<PullRequestSuggestion>>('repo_suggest_pull_request', {
     path,
     targetBranch,
+    provider,
+    model,
+    openaiCli: openaiCli ?? null,
+    anthropicCli: anthropicCli ?? null,
+    request,
+  }),
+  repoReviewChanges: (
+    path: string,
+    baseline: string | null,
+    provider: AiProvider,
+    model: string,
+    request: AiGenerationRequest,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) => invoke<AiGenerationOutcome<CodeReviewSuggestion>>('repo_review_changes', {
+    path,
+    baseline,
     provider,
     model,
     openaiCli: openaiCli ?? null,
@@ -495,6 +513,8 @@ export const tauri = {
   ) => invoke<CheckoutOutcome>('repo_branch_create', { path, name, startPoint, checkout }),
   repoBranchDelete: (path: string, name: string, force: boolean) =>
     invoke<void>('repo_branch_delete', { path, name, force }),
+  repoBranchDeleteAt: (path: string, name: string, expectedTarget: string) =>
+    invoke<void>('repo_branch_delete_at', { path, name, expectedTarget }),
   repoBranchRename: (path: string, oldName: string, newName: string) =>
     invoke<void>('repo_branch_rename', { path, oldName, newName }),
   repoBranchSetUpstream: (path: string, branch: string, upstream: string | null) =>

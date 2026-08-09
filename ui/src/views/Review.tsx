@@ -19,11 +19,19 @@ import {
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
+import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { useSettled } from '../lib/useSettled';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
-import { gitErrorHint } from '../lib/tauri';
-import type { FileDiff } from '../lib/types';
+import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
+import type {
+  AiInputCoverage,
+  AiProvider,
+  AiSensitiveDecision,
+  AiSensitiveFile,
+  CodeReviewFinding,
+  FileDiff,
+} from '../lib/types';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -38,9 +46,9 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  *
  * Two modes, decided by whether a baseline is pinned:
  *
- * - **Inbox** (no baseline): the review set is the *unstaged* changes.
- *   Accepting (staging) a file removes it from the inbox; diffs keep their
- *   per-hunk Stage / Discard actions.
+ * - **Inbox** (no baseline): the review set is every uncommitted change,
+ *   staged + unstaged. Staging never removes work from review; safe unstaged-
+ *   only diffs keep their per-hunk Stage / Discard actions.
  * - **Session** (baseline pinned at a commit): the review set is everything
  *   since that commit — committed + staged + unstaged — so an agent that
  *   commits as it goes can't slip work past the review. Diffs render
@@ -62,9 +70,11 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
   const reviewNotes = useRepo((s) => s.reviewNotes);
   const addReviewNote = useRepo((s) => s.addReviewNote);
   const removeReviewNote = useRepo((s) => s.removeReviewNote);
+  const addAiReviewFindings = useRepo((s) => s.addAiReviewFindings);
   const activePath = useRepo((s) => s.activePath);
   const meta = useRepo((s) => s.meta);
   const setBaseline = useRepo((s) => s.setBaseline);
+  const setBranchBaseline = useRepo((s) => s.setBranchBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
   const refreshReviewDiffs = useRepo((s) => s.refreshReviewDiffs);
   const stageReviewed = useRepo((s) => s.stageReviewed);
@@ -76,6 +86,11 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
   const setView = useRepo((s) => s.setView);
   const stagedDiffs = useRepo((s) => s.stagedDiffs);
   const diffMode = useSettings((s) => s.diffMode);
+  const aiProvider = useSettings((s) => s.aiProvider);
+  const openaiModel = useSettings((s) => s.openaiModel);
+  const anthropicModel = useSettings((s) => s.anthropicModel);
+  const openaiCli = useSettings((s) => s.openaiCli);
+  const anthropicCli = useSettings((s) => s.anthropicCli);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
   // The pool only auto-refreshes while this view is open (or a baseline is
@@ -86,6 +101,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
 
   const sessionMode = baseline != null;
   const pool: FileDiff[] = sessionMode ? baselineDiffs : reviewUnstagedDiffs;
+  const aiReviewKey = useMemo(() => reviewPoolKey(baseline?.oid ?? null, pool), [baseline, pool]);
 
   // Review state per file, derived once per pool/marks change.
   type Verdict = 'pending' | 'reviewed' | 'stale';
@@ -249,9 +265,191 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
     return () => clearTimeout(t);
   }, [notice]);
 
+  const pinBaseline = useCallback(() => {
+    const action = sessionMode ? setBaseline() : setBranchBaseline();
+    void action
+      .then((hit) => {
+        if (hit) setNotice(`Reviewing from the fork point with ${hit.name}.`);
+      })
+      .catch(fail(sessionMode ? 'Move baseline' : 'Find branch start'));
+  }, [sessionMode, setBaseline, setBranchBaseline, fail]);
+
+  // ── AI code review ───────────────────────────────────────────────────
+  const [reviewingWithAi, setReviewingWithAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiCoverage, setAiCoverage] = useState<{
+    coverage: AiInputCoverage;
+    provider: AiProvider;
+  } | null>(null);
+  // Provider output stays transient until the reviewer explicitly accepts a
+  // finding. Running AI review never edits files or persists review notes.
+  const [pendingAiFindings, setPendingAiFindings] = useState<CodeReviewFinding[]>([]);
+  const [aiSensitivePrompt, setAiSensitivePrompt] = useState<{
+    fingerprint: string;
+    files: AiSensitiveFile[];
+  } | null>(null);
+  const [aiRetryProvider, setAiRetryProvider] = useState<AiProvider | null>(null);
+  const aiRequestRef = useRef<{
+    opId: string;
+    path: string;
+    provider: AiProvider;
+    target: string;
+    model: string;
+  } | null>(null);
+  const reviewingWithAiRef = useRef(false);
+
+  const cancelAiReview = useCallback(() => {
+    const request = aiRequestRef.current;
+    aiRequestRef.current = null;
+    reviewingWithAiRef.current = false;
+    setReviewingWithAi(false);
+    if (request) void tauri.repoCancelOp(request.opId);
+  }, []);
+
+  useEffect(
+    () => cancelAiReview,
+    [
+      activePath,
+      aiProvider,
+      openaiCli,
+      anthropicCli,
+      openaiModel,
+      anthropicModel,
+      aiReviewKey,
+      cancelAiReview,
+    ],
+  );
+
+  useEffect(() => {
+    setPendingAiFindings([]);
+    setAiCoverage(null);
+  }, [aiReviewKey]);
+
+  const runAiReview = useCallback(
+    async (
+      sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
+      provider: AiProvider = aiProvider,
+    ) => {
+      const repoState = useRepo.getState();
+      const requestPool = repoState.baseline
+        ? repoState.baselineDiffs
+        : repoState.reviewUnstagedDiffs;
+      if (!repoState.activePath || reviewingWithAiRef.current) return;
+      if (requestPool.length === 0) {
+        setNotice('Nothing changed — there is no code to review.');
+        return;
+      }
+      const opId = `ai-review-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const model = provider === 'openai' ? openaiModel : anthropicModel;
+      const request = {
+        opId,
+        path: repoState.activePath,
+        provider,
+        target: currentReviewPoolKey(repoState),
+        model,
+      };
+      aiRequestRef.current = request;
+      reviewingWithAiRef.current = true;
+      setReviewingWithAi(true);
+      setAiError(null);
+      setAiCoverage(null);
+      setPendingAiFindings([]);
+      setAiSensitivePrompt(null);
+      setAiRetryProvider(null);
+      try {
+        const outcome = await tauri.repoReviewChanges(
+          request.path,
+          repoState.baseline?.oid ?? null,
+          provider,
+          model,
+          { opId, sensitiveDecision, styleInstruction: null },
+          openaiCli,
+          anthropicCli,
+        );
+        const current = useRepo.getState();
+        if (
+          aiRequestRef.current !== request
+          || !aiRequestMatches(request, {
+            path: current.activePath ?? '',
+            provider,
+            target: currentReviewPoolKey(current),
+          })
+        ) return;
+        if (outcome.status === 'needs_confirmation') {
+          setAiSensitivePrompt({
+            fingerprint: outcome.fingerprint,
+            files: outcome.sensitiveFiles,
+          });
+          return;
+        }
+        if (outcome.provider !== provider) return;
+        setPendingAiFindings(outcome.suggestion.findings);
+        setAiCoverage({ coverage: outcome.coverage, provider: outcome.provider });
+        const count = outcome.suggestion.findings.length;
+        const providerLabel = provider === 'openai' ? 'Codex' : 'Claude Code';
+        setNotice(
+          count === 0
+            ? `${providerLabel} found no actionable issues in the included changes.`
+            : `${providerLabel} found ${count} possible issue${count === 1 ? '' : 's'} for you to review.`,
+        );
+      } catch (error) {
+        if (aiRequestRef.current !== request || isCancelled(error)) return;
+        const message = gitErrorHint(error);
+        if (message.startsWith(AI_AUTH_REQUIRED)) {
+          try {
+            await tauri.aiProviderLogin(provider, openaiCli, anthropicCli);
+            setAiError('Sign-in started — complete it in the browser or CLI window, then review again.');
+          } catch (loginError) {
+            setAiError(`Sign-in failed: ${gitErrorHint(loginError)}`);
+          }
+        } else {
+          setAiError(`AI review failed: ${message}`);
+          setAiRetryProvider(otherAiProvider(provider));
+        }
+      } finally {
+        if (aiRequestRef.current === request) {
+          aiRequestRef.current = null;
+          reviewingWithAiRef.current = false;
+          setReviewingWithAi(false);
+        }
+      }
+    },
+    [
+      aiProvider,
+      openaiModel,
+      anthropicModel,
+      openaiCli,
+      anthropicCli,
+    ],
+  );
+
+  const acceptAiFindings = useCallback((findings: CodeReviewFinding[]) => {
+    if (findings.length === 0) return;
+    addAiReviewFindings(findings);
+    const accepted = new Set(findings);
+    setPendingAiFindings((current) => current.filter((finding) => !accepted.has(finding)));
+    setNotice(
+      `Added ${findings.length} AI finding${findings.length === 1 ? '' : 's'} as review ` +
+      `note${findings.length === 1 ? '' : 's'} — no files were changed.`,
+    );
+  }, [addAiReviewFindings]);
+
+  const dismissAiFindings = useCallback((findings: CodeReviewFinding[]) => {
+    const dismissed = new Set(findings);
+    setPendingAiFindings((current) => current.filter((finding) => !dismissed.has(finding)));
+  }, []);
+
+  useEffect(() => {
+    const onRequest = () => {
+      void refreshReviewDiffs().then(() => runAiReview());
+    };
+    window.addEventListener('strand:review-with-ai', onRequest);
+    return () => window.removeEventListener('strand:review-with-ai', onRequest);
+  }, [refreshReviewDiffs, runAiReview]);
+
   const displayedNotes = displayed ? (reviewNotes[displayed.path] ?? []) : [];
   // The export is the UNION of pool files with notes and noted paths that
-  // left the pool (staged away in inbox mode, …) — a stored note must never
+  // left the pool (committed/reverted in inbox mode, …) — a stored note must never
   // silently drop from the feedback. Counts follow the same union.
   const feedbackFiles = useMemo(
     () => collectFeedbackFiles(pool, reviewNotes),
@@ -529,14 +727,14 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
           when={when}
           reviewedCount={0}
           total={0}
-          onPin={() => void setBaseline()}
+          onPin={pinBaseline}
           onClear={() => void clearBaseline()}
         />
         <div className="lc-empty">
           <strong>{sessionMode ? 'Session is clean' : 'Nothing to review'}</strong>
           {sessionMode
             ? `No changes since ${baseline!.short}. Let the agent work — this view follows along live.`
-            : 'No unstaged changes. Pin a baseline before an agent session to also track what it commits.'}
+            : 'No uncommitted changes. Start a branch baseline to review its committed work too.'}
         </div>
       </div>
     );
@@ -550,10 +748,32 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
         when={when}
         reviewedCount={pool.length - pendingCount}
         total={pool.length}
-        onPin={() => void setBaseline()}
+        onPin={pinBaseline}
         onClear={() => void clearBaseline()}
         extra={
           <>
+            <button
+              type="button"
+              className="h-link rv-ai-action"
+              aria-busy={reviewingWithAi}
+              disabled={reviewingWithAi}
+              onClick={() => void runAiReview()}
+              title="Find possible issues without editing files or adding notes automatically"
+            >
+              <Icon
+                name={reviewingWithAi ? 'refresh' : 'sparkle'}
+                size={11}
+                className={reviewingWithAi ? 'spin' : undefined}
+              />
+              {reviewingWithAi
+                ? 'Reviewing…'
+                : `Review with ${aiProvider === 'openai' ? 'Codex' : 'Claude Code'}`}
+            </button>
+            {reviewingWithAi && (
+              <button type="button" className="h-link" onClick={cancelAiReview}>
+                Cancel
+              </button>
+            )}
             {noteCount > 0 && (
               <button
                 type="button"
@@ -590,6 +810,117 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
           </>
         }
       />
+
+      {(aiSensitivePrompt || aiError || aiCoverage || pendingAiFindings.length > 0) && (
+        <div className="rv-ai-review">
+          <div className="rv-ai-panel" role={aiError || aiSensitivePrompt ? 'alert' : 'status'}>
+            {aiSensitivePrompt ? (
+              <>
+                <span>
+                  Potentially sensitive files require confirmation:{' '}
+                  {aiSensitivePrompt.files.map((file) => file.path).join(', ')}
+                </span>
+                <button
+                  type="button"
+                  className="h-link"
+                  onClick={() => void runAiReview({ mode: 'exclude', fingerprint: aiSensitivePrompt.fingerprint })}
+                >
+                  Review without them
+                </button>
+                <button
+                  type="button"
+                  className="h-link"
+                  onClick={() => void runAiReview({ mode: 'include', fingerprint: aiSensitivePrompt.fingerprint })}
+                >
+                  Include and review
+                </button>
+                <button type="button" className="h-link" onClick={() => setAiSensitivePrompt(null)}>
+                  Cancel
+                </button>
+              </>
+            ) : aiError ? (
+              <>
+                <span>{aiError}</span>
+                {aiRetryProvider && (
+                  <button
+                    type="button"
+                    className="h-link"
+                    onClick={() => void runAiReview({ mode: 'scan' }, aiRetryProvider)}
+                  >
+                    Retry with {aiRetryProvider === 'openai' ? 'Codex' : 'Claude Code'}
+                  </button>
+                )}
+                <button type="button" className="h-link" onClick={() => setAiError(null)}>
+                  Dismiss
+                </button>
+              </>
+            ) : pendingAiFindings.length > 0 ? (
+              <>
+                <span>
+                  {pendingAiFindings.length} suggested issue{pendingAiFindings.length === 1 ? '' : 's'}
+                  {' · '}review before adding as notes; no files are changed
+                  {aiCoverage ? ` · ${aiCoverageLabel(aiCoverage.coverage, aiCoverage.provider)}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="h-link"
+                  onClick={() => acceptAiFindings(pendingAiFindings)}
+                >
+                  Add all as notes
+                </button>
+                <button
+                  type="button"
+                  className="h-link"
+                  onClick={() => dismissAiFindings(pendingAiFindings)}
+                >
+                  Dismiss all
+                </button>
+              </>
+            ) : aiCoverage ? (
+              <span>{aiCoverageLabel(aiCoverage.coverage, aiCoverage.provider)} · no files were changed</span>
+            ) : null}
+          </div>
+          {pendingAiFindings.length > 0 && !aiSensitivePrompt && !aiError && (
+            <div className="rv-ai-findings" aria-label="AI review suggestions">
+              {pendingAiFindings.map((finding, index) => (
+                <article
+                  key={`${finding.path}:${finding.line ?? 'file'}:${finding.title}:${index}`}
+                  className="rv-ai-finding"
+                >
+                  <span className={`rv-ai-severity ${finding.severity}`}>{finding.severity}</span>
+                  <div className="rv-ai-finding-copy">
+                    <div className="rv-ai-finding-title">{finding.title}</div>
+                    <div className="rv-ai-finding-body">{finding.body}</div>
+                    <button
+                      type="button"
+                      className="rv-ai-location"
+                      onClick={() => selectReviewFile(finding.path)}
+                    >
+                      {finding.path}{finding.line == null ? '' : `:${finding.line}`}
+                    </button>
+                  </div>
+                  <div className="rv-ai-finding-actions">
+                    <button
+                      type="button"
+                      className="h-link"
+                      onClick={() => acceptAiFindings([finding])}
+                    >
+                      Add note
+                    </button>
+                    <button
+                      type="button"
+                      className="h-link"
+                      onClick={() => dismissAiFindings([finding])}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rv-main">
         <PanelGroup direction="horizontal" autoSaveId="strand:review">
@@ -651,7 +982,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                           </button>
                         </>
                       )}
-                      {sessionMode && !unstagedSet.has(displayed.path) && stagedSet.has(displayed.path) && (
+                      {stagedSet.has(displayed.path) && (
                         <button
                           type="button"
                           className="h-link"
@@ -703,6 +1034,11 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                     <div className="rv-notes">
                       {displayedNotes.map((n) => (
                         <div key={n.id} className="rv-note">
+                          {n.source === 'ai' && (
+                            <span className={`rv-note-source ${n.severity ?? 'medium'}`}>
+                              AI · {n.severity ?? 'medium'}
+                            </span>
+                          )}
                           {n.line != null && (
                             <span
                               className="rv-note-line"
@@ -733,10 +1069,9 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                   <div className="rv-diff-body">
                     <Virtualizer className="rv-diff-scroll">
                     {displayed.binary && isImagePath(displayed.path) ? (
-                      // Old side: the session baseline, or the *index* in
-                      // inbox mode — the unstaged diff's base (HEAD would lie
-                      // for a partially staged image). Added files have no
-                      // old side. New side: worktree.
+                      // Old side: the session baseline, or HEAD in inbox mode.
+                      // The inbox combines staged + unstaged changes against
+                      // HEAD, matching the textual diff. New side: worktree.
                       <ImageDiff
                         path={displayed.path}
                         oldSrc={
@@ -744,7 +1079,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                             ? null
                             : sessionMode
                               ? { rev: baseline!.oid }
-                              : { rev: null, index: true }
+                              : { rev: 'HEAD' }
                         }
                         newSrc={displayed.status === 'deleted' ? null : { rev: null }}
                       />
@@ -752,11 +1087,11 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                       <div className="lc-file-note">
                         {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
                       </div>
-                    ) : sessionMode ? (
-                      // Session diffs span commits — render read-only. Keyed by
-                      // file + content: VirtualizedFileDiff pins the first
-                      // fileDiff it renders (`this.fileDiff ??=`), so swapping
-                      // files must remount the instance, not re-prop it.
+                    ) : sessionMode || stagedSet.has(displayed.path) ? (
+                      // Session diffs can span commits, while an inbox file
+                      // with staged content is a combined HEAD→worktree patch.
+                      // Neither is a safe per-hunk index patch, so render it
+                      // read-only and keep the explicit file-level controls.
                       <Diff
                         key={`${displayed.path}:${hashOf(displayed)}`}
                         patch={displayed.patch}
@@ -764,8 +1099,8 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                         hideFileHeader
                       />
                     ) : (
-                      // Inbox diffs are pure unstaged changes — full hunk
-                      // Stage / Discard actions apply. Same remount-on-swap key.
+                      // No staged content means HEAD = index for this file, so
+                      // the combined inbox patch is safe for hunk actions.
                       <HunkAnnotatedDiff
                         key={`${displayed.path}:${hashOf(displayed)}`}
                         diff={displayed}
@@ -857,6 +1192,15 @@ function basename(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 }
 
+function reviewPoolKey(baselineOid: string | null, pool: FileDiff[]): string {
+  return `${baselineOid ?? 'uncommitted'}\0${pool.map((diff) => `${diff.path}:${hashOf(diff)}`).join('\0')}`;
+}
+
+function currentReviewPoolKey(state: ReturnType<typeof useRepo.getState>): string {
+  const pool = state.baseline ? state.baselineDiffs : state.reviewUnstagedDiffs;
+  return reviewPoolKey(state.baseline?.oid ?? null, pool);
+}
+
 function ReviewToolbar({
   sessionMode,
   baselineShort,
@@ -887,7 +1231,7 @@ function ReviewToolbar({
             {when ? ` · ${when}` : ''}
           </>
         ) : (
-          'Unstaged changes'
+          'Uncommitted changes'
         )}
       </span>
       {total > 0 && (
@@ -907,10 +1251,10 @@ function ReviewToolbar({
           title={
             sessionMode
               ? 'Re-pin the baseline at the current HEAD'
-              : 'Track everything from this point — including commits the agent makes'
+              : 'Detect this branch\'s fork point and review every commit since it was created'
           }
         >
-          {sessionMode ? 'Move baseline to HEAD' : 'Pin baseline at HEAD'}
+          {sessionMode ? 'Move baseline to HEAD' : 'Review from branch start'}
         </button>
         {sessionMode && (
           <button type="button" className="h-link" onClick={onClear}>

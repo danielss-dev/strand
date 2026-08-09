@@ -182,6 +182,54 @@ pub struct PullRequestSuggestion {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CodeReviewSeverity {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+impl Default for CodeReviewSeverity {
+    fn default() -> Self {
+        Self::Medium
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CodeReviewSide {
+    New,
+    Old,
+}
+
+impl Default for CodeReviewSide {
+    fn default() -> Self {
+        Self::New
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeReviewFinding {
+    pub path: String,
+    #[serde(default)]
+    pub line: Option<u32>,
+    #[serde(default)]
+    pub side: CodeReviewSide,
+    #[serde(default)]
+    pub severity: CodeReviewSeverity,
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeReviewSuggestion {
+    #[serde(default)]
+    pub findings: Vec<CodeReviewFinding>,
+}
+
 pub fn provider_status(provider: AiProvider, cli_override: Option<&str>) -> AiProviderStatus {
     adapter(provider).status(cli_override)
 }
@@ -311,6 +359,134 @@ pub fn suggest_pull_request_with_request(
         coverage,
         provider,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn review_changes_with_request(
+    provider: AiProvider,
+    repo_path: &std::path::Path,
+    diffs: &[FileDiff],
+    model: Option<&str>,
+    cli_override: Option<&str>,
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+) -> Result<AiGenerationOutcome<CodeReviewSuggestion>, String> {
+    if diffs.is_empty() {
+        return Err("Nothing changed — make a change before starting AI review.".into());
+    }
+    let prepared = match input::prepare_input(diffs, AiInputScope::Review, decision)? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            mut coverage,
+            sensitive_files,
+        } => {
+            let built = prompt::build_code_review_prompt(diffs);
+            apply_prompt_coverage(&mut coverage, &built);
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            });
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_code_review_prompt(&prepared.diffs);
+    apply_prompt_coverage(&mut coverage, &built);
+    let raw = adapter(provider).suggest(repo_path, &built.text, model, cli_override, cancel)?;
+    let mut suggestion = parse::parse_code_review_suggestion(&raw)?;
+    normalize_review_findings(&mut suggestion, &prepared.diffs);
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage,
+        provider,
+    })
+}
+
+fn normalize_review_findings(suggestion: &mut CodeReviewSuggestion, diffs: &[FileDiff]) {
+    suggestion.findings.truncate(50);
+    suggestion.findings.retain_mut(|finding| {
+        let candidate = normalize_path(&finding.path);
+        let exact = |diff: &&FileDiff, candidate: &str| {
+            normalize_path(&diff.path) == candidate
+                || diff
+                    .old_path
+                    .as_deref()
+                    .is_some_and(|path| normalize_path(path) == candidate)
+        };
+        let diff = diffs.iter().find(|diff| exact(diff, &candidate)).or_else(|| {
+            candidate
+                .strip_prefix("a/")
+                .or_else(|| candidate.strip_prefix("b/"))
+                .and_then(|stripped| diffs.iter().find(|diff| exact(diff, stripped)))
+        });
+        let Some(diff) = diff else {
+            return false;
+        };
+        finding.path = diff.path.clone();
+        finding.title = truncate_utf8(finding.title.trim(), 160).to_string();
+        finding.body = truncate_utf8(finding.body.trim(), 2_000).to_string();
+        if finding.title.is_empty() {
+            return false;
+        }
+        finding.line = finding
+            .line
+            .filter(|line| *line > 0 && patch_contains_line(&diff.patch, *line, finding.side));
+        true
+    });
+}
+
+fn normalize_path(path: &str) -> String {
+    let path = path.trim().replace('\\', "/");
+    path.strip_prefix("./")
+        .unwrap_or(&path)
+        .to_string()
+}
+
+fn patch_contains_line(patch: &str, wanted: u32, side: CodeReviewSide) -> bool {
+    let mut old_line = None;
+    let mut new_line = None;
+    for row in patch.lines() {
+        if row.starts_with("@@ ") {
+            let mut parts = row.split_whitespace();
+            let _marker = parts.next();
+            old_line = parts.next().and_then(|part| patch_range_start(part, '-'));
+            new_line = parts.next().and_then(|part| patch_range_start(part, '+'));
+            continue;
+        }
+        let (Some(old), Some(new)) = (old_line, new_line) else {
+            continue;
+        };
+        match row.as_bytes().first().copied() {
+            Some(b' ') => {
+                if (side == CodeReviewSide::Old && old == wanted)
+                    || (side == CodeReviewSide::New && new == wanted)
+                {
+                    return true;
+                }
+                old_line = Some(old + 1);
+                new_line = Some(new + 1);
+            }
+            Some(b'-') => {
+                if side == CodeReviewSide::Old && old == wanted {
+                    return true;
+                }
+                old_line = Some(old + 1);
+            }
+            Some(b'+') => {
+                if side == CodeReviewSide::New && new == wanted {
+                    return true;
+                }
+                new_line = Some(new + 1);
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn patch_range_start(value: &str, prefix: char) -> Option<u32> {
+    value.strip_prefix(prefix)?.split(',').next()?.parse().ok()
 }
 
 pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
@@ -455,5 +631,57 @@ mod tests {
         let truncated = truncate_utf8(&subject, 120);
         assert_eq!(truncated.len(), 120);
         assert!(truncated.is_char_boundary(truncated.len()));
+    }
+
+    #[test]
+    fn review_findings_are_bounded_and_anchored_to_supplied_diffs() {
+        let diffs = vec![FileDiff {
+            path: "src/lib.rs".into(),
+            old_path: None,
+            status: strand_core::diff::DiffStatus::Modified,
+            adds: 1,
+            dels: 1,
+            binary: false,
+            patch:
+                "diff --git a/src/lib.rs b/src/lib.rs\n@@ -10,2 +10,2 @@\n-old\n+new\n context\n"
+                    .into(),
+        }];
+        let mut suggestion = CodeReviewSuggestion {
+            findings: vec![
+                CodeReviewFinding {
+                    path: "b/src/lib.rs".into(),
+                    line: Some(10),
+                    side: CodeReviewSide::New,
+                    severity: CodeReviewSeverity::High,
+                    title: " Race ".into(),
+                    body: " Unsynchronized write. ".into(),
+                },
+                CodeReviewFinding {
+                    path: "src/lib.rs".into(),
+                    line: Some(99),
+                    side: CodeReviewSide::New,
+                    severity: CodeReviewSeverity::Low,
+                    title: "Bad line".into(),
+                    body: String::new(),
+                },
+                CodeReviewFinding {
+                    path: "invented.rs".into(),
+                    line: Some(1),
+                    side: CodeReviewSide::New,
+                    severity: CodeReviewSeverity::Critical,
+                    title: "Hallucinated".into(),
+                    body: String::new(),
+                },
+            ],
+        };
+
+        normalize_review_findings(&mut suggestion, &diffs);
+
+        assert_eq!(suggestion.findings.len(), 2);
+        assert_eq!(suggestion.findings[0].path, "src/lib.rs");
+        assert_eq!(suggestion.findings[0].line, Some(10));
+        assert_eq!(suggestion.findings[0].title, "Race");
+        assert_eq!(suggestion.findings[0].body, "Unsynchronized write.");
+        assert_eq!(suggestion.findings[1].line, None);
     }
 }

@@ -213,6 +213,50 @@ fn request_spec(operation: Operation) -> RequestSpec {
             body: None,
             unwrap_value: false,
         },
+        Operation::ReplyToThread {
+            project,
+            repository,
+            id,
+            thread_id,
+            parent_comment_id,
+            body,
+        } => RequestSpec {
+            method: Method::POST,
+            path: git_path(
+                &project,
+                &repository,
+                &format!("pullrequests/{id}/threads/{thread_id}/comments"),
+            ),
+            query: api(),
+            body: Some(json!({
+                "parentCommentId": parent_comment_id,
+                "content": body,
+                "commentType": 1
+            })),
+            unwrap_value: false,
+        },
+        Operation::SetThreadStatus {
+            project,
+            repository,
+            id,
+            thread_id,
+            status,
+        } => RequestSpec {
+            method: Method::PATCH,
+            path: git_path(
+                &project,
+                &repository,
+                &format!("pullrequests/{id}/threads/{thread_id}"),
+            ),
+            query: api(),
+            body: Some(json!({
+                "status": match status {
+                    strand_azdo_protocol::ThreadStatus::Active => 1,
+                    strand_azdo_protocol::ThreadStatus::Fixed => 2,
+                }
+            })),
+            unwrap_value: false,
+        },
         Operation::PullRequestIterations {
             project,
             repository,
@@ -708,6 +752,42 @@ mod tests {
             inline_body["pullRequestThreadContext"]["changeTrackingId"],
             27
         );
+
+        let reply = request_spec(Operation::ReplyToThread {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            thread_id: 34,
+            parent_comment_id: 1,
+            body: "Fixed in the latest revision.".into(),
+        });
+        assert_eq!(reply.method, Method::POST);
+        assert!(reply
+            .path
+            .ends_with("pullrequests/12/threads/34/comments"));
+        let reply_body = reply.body.unwrap();
+        assert_eq!(reply_body["content"], "Fixed in the latest revision.");
+        assert_eq!(reply_body["parentCommentId"], 1);
+
+        let resolve = request_spec(Operation::SetThreadStatus {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            thread_id: 34,
+            status: strand_azdo_protocol::ThreadStatus::Fixed,
+        });
+        assert_eq!(resolve.method, Method::PATCH);
+        assert!(resolve.path.ends_with("pullrequests/12/threads/34"));
+        assert_eq!(resolve.body.unwrap()["status"], 2);
+
+        let reopen = request_spec(Operation::SetThreadStatus {
+            project: "Project".into(),
+            repository: "Repo".into(),
+            id: 12,
+            thread_id: 34,
+            status: strand_azdo_protocol::ThreadStatus::Active,
+        });
+        assert_eq!(reopen.body.unwrap()["status"], 1);
 
         let policy = request_spec(Operation::Policies {
             project: "Project".into(),

@@ -19,6 +19,8 @@ import { jsonEqual, stable } from '../lib/stable';
 import { errMessage, tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
+  BaseBranch,
+  CodeReviewFinding,
   Commit,
   BranchPushRequest,
   CommitSearchMode,
@@ -115,7 +117,8 @@ export interface RepoState {
    * Review-session baseline for the active repo: "show me everything since
    * this commit". Pinned by the user (or restored from SQLite); drives the
    * Review view's session mode and {@link RepoState.baselineDiffs}. Without
-   * a baseline the Review view falls back to the unstaged set (inbox mode).
+   * a baseline the Review view falls back to all uncommitted changes (staged
+   * + unstaged, combined against HEAD).
    */
   baseline: StoredBaseline | null;
   /**
@@ -125,9 +128,9 @@ export interface RepoState {
    */
   baselineDiffs: FileDiff[];
   /**
-   * Inbox-mode counterpart: the unstaged set with whole-file context
-   * (`diff_unstaged_full`). Only refreshed while the Review view is open (or
-   * on entry), so the regular `unstagedDiffs` hot path doesn't pay for it.
+   * Inbox-mode counterpart: all uncommitted changes with whole-file context
+   * (`diff_since_full("HEAD")`). Only refreshed while the Review view is open
+   * (or on entry), so the regular local-diff hot path doesn't pay for it.
    */
   reviewUnstagedDiffs: FileDiff[];
 
@@ -338,12 +341,14 @@ export interface RepoState {
 
   /** Pin the review baseline at `oid` (default: the current HEAD). */
   setBaseline(oid?: string): Promise<void>;
+  /** Detect the active branch's parent and pin the baseline at its fork point. */
+  setBranchBaseline(): Promise<BaseBranch>;
   /** Clear the review baseline (and its persisted record). */
   clearBaseline(): Promise<void>;
   /**
    * Refresh the Review view's diff pool (whole-file context): with a baseline
    * → `diff_since_full` into {@link RepoState.baselineDiffs}; without →
-   * `diff_unstaged_full` into {@link RepoState.reviewUnstagedDiffs}.
+   * `diff_since_full("HEAD")` into {@link RepoState.reviewUnstagedDiffs}.
    */
   refreshReviewDiffs(): Promise<void>;
   /** Load the persisted baseline + reviewed map when a repo becomes active. */
@@ -359,6 +364,8 @@ export interface RepoState {
   addReviewNote(file: string, text: string, line: number | null, side?: 'new' | 'old'): void;
   /** Remove one note from `file` by id. */
   removeReviewNote(file: string, id: string): void;
+  /** Add user-approved AI findings as notes in one persisted write. */
+  addAiReviewFindings(findings: CodeReviewFinding[]): void;
   /** Drop every note for the active repo (after a feedback export, usually). */
   clearReviewNotes(): void;
   /** Stage every unstaged file whose reviewed mark matches its current diff. */
@@ -792,6 +799,31 @@ export function makeReviewNote(
   };
 }
 
+/** Append only findings the reviewer explicitly accepted; avoid duplicates. */
+export function addAiReviewNoteSet(
+  current: Record<string, ReviewNote[]>,
+  findings: CodeReviewFinding[],
+): Record<string, ReviewNote[]> {
+  const next: Record<string, ReviewNote[]> = { ...current };
+  for (const finding of findings) {
+    const text = finding.body ? `${finding.title} — ${finding.body}` : finding.title;
+    const duplicate = (next[finding.path] ?? []).some((note) =>
+      note.source === 'ai'
+      && note.text === text
+      && note.line === finding.line
+      && (note.side ?? 'new') === finding.side
+      && note.severity === finding.severity);
+    if (duplicate) continue;
+    const note = makeReviewNote(text, finding.line, finding.side);
+    if (!note) continue;
+    next[finding.path] = [
+      ...(next[finding.path] ?? []),
+      { ...note, source: 'ai', severity: finding.severity },
+    ];
+  }
+  return next;
+}
+
 const EMPTY_ACTIVE = {
   activePath: null as string | null,
   meta: null as RepoMeta | null,
@@ -1190,6 +1222,18 @@ export const useRepo = create<RepoState>((set, get) => ({
     ]);
   },
 
+  async setBranchBaseline() {
+    const path = get().activePath;
+    const meta = get().meta;
+    if (!path || !meta) throw new Error('No repository is open');
+    if (meta.detached) throw new Error('A branch baseline is unavailable while HEAD is detached');
+    const hit = await tauri.repoDetectBaseBranch(path, meta.branch);
+    if (get().activePath !== path) throw new Error('The active repository changed');
+    if (!hit) throw new Error(`Could not detect where ${meta.branch} was created`);
+    await get().setBaseline(hit.merge_base);
+    return hit;
+  },
+
   async clearBaseline() {
     const path = get().activePath;
     const scope = activeReviewNoteScope(get(), null);
@@ -1232,11 +1276,13 @@ export const useRepo = create<RepoState>((set, get) => ({
       return;
     }
     try {
-      const diffs = await tauri.repoDiffUnstagedFull(path);
+      // HEAD → index + worktree keeps a file visible after staging and
+      // combines partially staged files into the exact on-disk result.
+      const diffs = await tauri.repoDiffSinceFull(path, 'HEAD');
       if (get().activePath !== path || get().baseline != null) return;
       set({ reviewUnstagedDiffs: diffs, diffsTick: get().diffsTick + 1 });
     } catch (e) {
-      console.warn('repoDiffUnstagedFull failed', e);
+      console.warn('repoDiffSinceFull(HEAD) failed', e);
     }
   },
 
@@ -1300,6 +1346,16 @@ export const useRepo = create<RepoState>((set, get) => ({
     const next = { ...cur };
     if (remaining.length === 0) delete next[file];
     else next[file] = remaining;
+    const scope = activeReviewNoteScope(get());
+    set({ reviewNotes: next });
+    void reviewSession.setNotes(path, next, scope).catch((e) =>
+      console.warn('review notes persist failed', e));
+  },
+
+  addAiReviewFindings(findings) {
+    const path = get().activePath;
+    if (!path || findings.length === 0) return;
+    const next = addAiReviewNoteSet(get().reviewNotes, findings);
     const scope = activeReviewNoteScope(get());
     set({ reviewNotes: next });
     void reviewSession.setNotes(path, next, scope).catch((e) =>

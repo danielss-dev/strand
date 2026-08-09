@@ -192,8 +192,8 @@ inbox query heavy or loading Code. GitHub and Azure profile images appear when
 the provider supplies a usable identity; initials remain visible if an avatar
 is absent or cannot load. Select a comment timestamp to open that comment
 directly on the provider host. File-backed comments also show **View in Code**.
-It switches to Code, selects the referenced file, and focuses the inline GitHub
-thread when the provider supplied its line coordinates.
+It switches to Code, selects the referenced file, and focuses the inline
+provider thread when line coordinates are available.
 
 Use **Write** to compose a top-level comment and **Preview** to inspect the
 rendered result before sending. The formatting toolbar supports bold, italic,
@@ -269,18 +269,19 @@ disabled until the new patch succeeds, so comments cannot be anchored to old
 coordinates. Background monitoring never reloads a patch when the head SHA is
 unchanged.
 
-Fetched GitHub review threads remain visible directly beneath their anchored
+Fetched GitHub and Azure DevOps review threads remain visible directly beneath their anchored
 line or range. Replies stay grouped in the same card, and resolved or outdated
 threads are labeled. The same review comments also appear in Timeline, so
-comments added on GitHub are visible after refreshing the pull request.
+comments added on either provider are visible after refreshing the pull request.
 
-When GitHub reports that your account can write to a thread, its card exposes
+On an open pull request, writable GitHub and Azure thread cards expose
 **Reply** and **Resolve** or **Reopen**. Replies publish immediately; use
 `Mod+Enter` to send or `Esc` to close the reply editor without losing its draft.
 Successful writes update both the inline card and Timeline without
 reloading the patch or moving your current file and scroll position. These
-actions target the existing provider thread rather than a line coordinate, so
-they remain valid when GitHub permits them on a resolved or outdated thread.
+actions target the existing provider thread rather than creating another
+line-coordinate discussion. Azure Services uses the signed-in `az` CLI, while
+Azure Server uses its configured helper profile.
 
 Submitted reviews appear in the Summary tab. When GitHub reports that your
 account may update a review, **Edit summary** changes its Markdown body. When

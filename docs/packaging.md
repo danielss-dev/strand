@@ -53,6 +53,14 @@ locally instead:
    `crates/strand-tauri/icons/`, matching the paths already listed in
    `tauri.conf.json`.
 
+On Windows, the executable resource is also the runtime taskbar source.
+`main.rs` loads `icon.ico` resource `32512` into explicit big and small HWND
+icons at `RunEvent::Ready`; this avoids relying on the executable-path icon
+cache, which can retain a generic icon after the updater replaces the binary in
+place. `scripts/check-release-security.mjs` fails if that runtime contract is
+removed. Verify a candidate with `WM_GETICON` for both `ICON_BIG` and
+`ICON_SMALL` after launch, not only by extracting the executable resource.
+
 ## 2. Apple Developer ID signing
 
 1. Enroll in the Apple Developer Program; create a **Developer ID
@@ -193,7 +201,8 @@ manifest to a draft versioned helper release, publishes it as a prerelease, and
 then promotes the identical
 artifacts to `strand-azdo-protocol-N`. Strand constructs that channel from its
 compiled protocol version, so publishing protocol N+1 cannot break reinstall
-for an older Strand release. Protocol 5 is additionally promoted to the legacy
+for an older Strand release. The current thread-lifecycle contract is protocol
+6. Protocol 5 is additionally promoted to the legacy
 `strand-azdo-latest` channel used by already-published Strand 1.2 clients. A
 post-promotion Linux smoke job downloads through the protocol channel, executes
 the published helper, and rechecks its version, protocol, archive/binary hashes,

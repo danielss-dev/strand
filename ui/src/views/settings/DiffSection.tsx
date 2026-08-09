@@ -1,5 +1,6 @@
 import { Diff } from '../../components/Diff';
 import { repoDiffMode } from '../../lib/db';
+import { DIFF_SYNTAX_THEME_OPTIONS } from '../../lib/pierreTheme';
 import { useRepo } from '../../stores/repo';
 import {
   MONO_FONT_OPTIONS,
@@ -43,6 +44,7 @@ index 83db48f..bf269f4 100644
 export function DiffSection() {
   const defaultLayout = useSettings((s) => s.defaultDiffLayout);
   const diffFont = useSettings((s) => s.diffFont);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const lineNumbers = useSettings((s) => s.diffLineNumbers);
   const indicators = useSettings((s) => s.diffIndicators);
   const wordHighlight = useSettings((s) => s.diffWordHighlight);
@@ -66,6 +68,13 @@ export function DiffSection() {
           options={LAYOUT_OPTIONS}
           value={defaultLayout}
           onChange={(id) => void setDefaultLayout(id)}
+        />
+        <SelectRow
+          label="Syntax colors"
+          hint="Paired automatically with Strand's light or dark appearance."
+          options={DIFF_SYNTAX_THEME_OPTIONS}
+          value={diffSyntaxTheme}
+          onChange={(id) => set('diffSyntaxTheme', id)}
         />
         <SelectRow
           label="Diff font"

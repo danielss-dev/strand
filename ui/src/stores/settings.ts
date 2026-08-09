@@ -15,6 +15,13 @@ export type AccentId = 'amber' | 'rose' | 'magenta' | 'violet' | 'blue' | 'cyan'
 export type Platform = 'mac' | 'win11' | 'linux';
 export type Density = 'compact' | 'default' | 'relaxed';
 export type DiffMode = 'stacked' | 'split';
+/** Pierre syntax palette family; Strand selects the matching light/dark member. */
+export type DiffSyntaxTheme =
+  | 'standard'
+  | 'soft'
+  | 'vibrant'
+  | 'protanopia-deuteranopia'
+  | 'tritanopia';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
 /** Repository space shown after Strand launches. */
 export type StartupSpace = 'work' | 'local' | 'review' | 'pull-requests' | 'commits';
@@ -113,6 +120,7 @@ export interface SettingsState {
   defaultDiffLayout: DiffMode;
   /** Font for diff/code panes; `inherit` follows `monoFont`. */
   diffFont: MonoFont | 'inherit';
+  diffSyntaxTheme: DiffSyntaxTheme;
   diffLineNumbers: boolean;
   diffIndicators: DiffIndicators;
   /** Intra-line (word-level) change emphasis in diffs. */
@@ -230,6 +238,14 @@ export const STARTUP_SPACE_OPTIONS: { id: StartupSpace; label: string }[] = [
   { id: 'commits', label: 'All Commits' },
 ];
 
+export const DIFF_SYNTAX_THEMES: readonly DiffSyntaxTheme[] = [
+  'standard',
+  'soft',
+  'vibrant',
+  'protanopia-deuteranopia',
+  'tritanopia',
+];
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -249,6 +265,7 @@ export const useSettings = create<SettingsState>()(
       monoFont: 'jetbrains',
       defaultDiffLayout: 'stacked',
       diffFont: 'inherit',
+      diffSyntaxTheme: 'standard',
       diffLineNumbers: true,
       diffIndicators: 'bars',
       diffWordHighlight: true,
@@ -295,11 +312,15 @@ export const useSettings = create<SettingsState>()(
         const terminalFont = TERMINAL_FONT_OPTIONS.some((option) => option.id === next.terminalFont)
           ? next.terminalFont
           : current.terminalFont;
+        const diffSyntaxTheme = DIFF_SYNTAX_THEMES.includes(next.diffSyntaxTheme)
+          ? next.diffSyntaxTheme
+          : current.diffSyntaxTheme;
         const storedSize = Number(next.terminalFontSize);
         return {
           ...next,
           platform: detectPlatform(),
           terminalFont,
+          diffSyntaxTheme,
           terminalFontSize: Number.isFinite(storedSize)
             ? Math.min(32, Math.max(10, Math.round(storedSize)))
             : current.terminalFontSize,

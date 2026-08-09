@@ -58,7 +58,9 @@ keyboard-first, but never keyboard-only: almost every action works from the
 keyboard alone, and the mouse stays first-class. Repository and Work tabs close
 from their close control, with Delete/Backspace while focused, or by middle-click.
 Light, dark, and system appearance apply consistently to the shell, code diffs,
-and the live Diff settings preview.
+and the live Diff settings preview. Diff syntax colors offer five paired Pierre
+palettes—including red–green and blue–yellow accessible variants—that follow
+the resolved app appearance automatically.
 
 ## Features
 
@@ -87,11 +89,15 @@ and the live Diff settings preview.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've
-  reviewed, a pinnable baseline captures everything since a commit —
+  reviewed; staged files remain visible, and the branch-start baseline
+  captures every commit since the detected fork point —
   including work the agent already staged or committed — and a change map
   beside the scrollbar shows where every edit sits in the file (click to
   jump). Inline feedback notes persist with their baseline/branch comparison,
-  so switching review targets never mixes two agents' feedback.
+  so switching review targets never mixes two agents' feedback. The selected
+  Codex or Claude Code subscription can inspect that exact review set for
+  possible defects. Findings stay pending until you explicitly add selected
+  ones as severity-labelled notes; AI review never edits repository files.
 - **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
   opening and being followed automatically even before the PR view is opened.
@@ -113,8 +119,8 @@ and the live Diff settings preview.
   and selected-file addition/deletion totals,
   track exact-head viewed/changed progress, filter unviewed files or unresolved
   threads, switch stacked/split layout in place, jump from timeline comments to their
-  file/thread, read GitHub review threads with replies directly beneath their code,
-  reply to them, resolve or reopen them, and add stale-head-guarded GitHub or
+  file/thread, read GitHub or Azure review threads with replies directly beneath
+  their code, reply to them, resolve or reopen them, and add stale-head-guarded GitHub or
   Azure comments to selected line ranges. Selected ranges can instead be queued in one preserved,
   exact-head review draft with Markdown preview and submitted as Comment,
   Approve, or Request changes; GitHub batches the pending comments atomically,
@@ -179,9 +185,10 @@ and the live Diff settings preview.
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;
   selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
-  local branches merged into the primary branch are marked in the sidebar and
-  commit graph and can be cleared in bulk with independent local/remote
-  selection; branches, tags, stashes, remotes, ordered multi-commit
+  local branches merged into the primary branch by ancestry or by an exact-tip
+  completed GitHub/Azure PR are marked in the sidebar and commit graph and can
+  be cleared in bulk with independent, guarded local/remote selection; branches,
+  tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
@@ -226,11 +233,11 @@ and the live Diff settings preview.
   terminal / diff / git / hosting / integrations / AI, consistent
   keyboard-native dropdowns, and update checks for both direct and Microsoft
   Store installations.
-- **AI commit messages** — suggest subject + body from staged changes (or all
+- **AI writing and code review** — suggest subject + body from staged changes (or all
   unstaged changes when nothing is staged) via
   your ChatGPT subscription (Codex CLI, `gpt-5.6-luna`) or Claude Code CLI
   (`claude-sonnet-5` by default); Settings → AI for focused provider sign-in,
-  per-provider model selection used by commit and PR generation, and CLI health
+  per-provider model selection used by commit, PR, and Review generation, and CLI health
   checks with a remembered connected indicator. Packaged builds resolve these
   tools and their runtimes through
   the user's recovered Unix or Windows `PATH`; custom paths remain available.
@@ -240,6 +247,9 @@ and the live Diff settings preview.
   default. Provider failures are reduced to concise, actionable hints; raw CLI
   session, prompt, and patch transcripts are never displayed. Repository-family
   writing profiles keep terminology and style consistent across worktrees.
+  Review findings are structured, path/line-validated, stale-diff guarded, and
+  require explicit acceptance before they become notes; repository files are
+  never changed by an AI review.
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in
@@ -258,7 +268,8 @@ the accepted package, and production Store signing is complete. Store installs
 check Microsoft's native package-update API on launch, notify when an update is
 available, and hand installation back to the Store. DPI-tailored unplated icon
 assets keep the Store taskbar and Start icon as sharp and background-free as
-the direct MSI. The standalone GitHub MSI remains unsigned; the
+the direct MSI, while explicit native Windows icon handles keep the taskbar
+identity intact across in-place updates. The standalone GitHub MSI remains unsigned; the
 certificate-backed offline-WebView2 MSI workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated

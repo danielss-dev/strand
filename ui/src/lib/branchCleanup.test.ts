@@ -81,6 +81,18 @@ describe('mergedBranchCleanupPlan', () => {
     expect(plan.checkedOut).toEqual(['in-use']);
   });
 
+  it('includes an exact provider-confirmed squash merge without offering an unproven remote', () => {
+    const local = branch('squashed', { merged: false });
+    const plan = mergedBranchCleanupPlan(
+      refs([local], [remote('origin', 'squashed', false)]),
+      [],
+      new Set(['squashed']),
+    );
+
+    expect(plan.candidates).toHaveLength(1);
+    expect(plan.candidates[0]).toMatchObject({ providerMerged: true, remote: null });
+  });
+
   it('uses the configured upstream even when the remote branch has another name', () => {
     const upstream = remote('fork', 'published-name');
     const local = branch('local-name', {

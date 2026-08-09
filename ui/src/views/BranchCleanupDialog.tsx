@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { mergedBranchCleanupPlan } from '../lib/branchCleanup';
+import { providerMergedBranchNames } from '../lib/branchIntegration';
+import { pathKey } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
+import { useBranchIntegration } from '../stores/branchIntegration';
 import { useRepo } from '../stores/repo';
 
 function ScopeCheckbox({
@@ -49,13 +52,31 @@ export function BranchCleanupDialog({
   const worktrees = useRepo((state) => state.worktrees);
   const refreshRefs = useRepo((state) => state.refreshRefs);
   const refreshLog = useRepo((state) => state.refreshLog);
-
-  // Freeze the plan while the dialog is open. A remote push updates the local
-  // tracking ref, and watcher refreshes must not make rows disappear mid-run.
-  const [plan] = useState(() => mergedBranchCleanupPlan(refs, worktrees));
-  const [localSelection, setLocalSelection] = useState(
-    () => new Set(plan.candidates.map((candidate) => candidate.local.name)),
+  const integration = useBranchIntegration((state) => (
+    activePath ? state.records[pathKey(activePath)] : undefined
+  ));
+  const refreshBranchIntegration = useBranchIntegration((state) => state.refresh);
+  const [refreshingProvider, setRefreshingProvider] = useState(!!activePath);
+  const providerMergedBranches = useMemo(
+    () => integration?.status === 'loaded' && integration.data
+      ? providerMergedBranchNames(refs, integration.data)
+      : new Set<string>(),
+    [integration?.data, integration?.status, refs],
   );
+  const checkingProvider = refreshingProvider || (!!activePath && (!integration || (
+    integration.status === 'loading' && !integration.data
+  )));
+
+  const computedPlan = useMemo(
+    () => mergedBranchCleanupPlan(refs, worktrees, providerMergedBranches),
+    [providerMergedBranches, refs, worktrees],
+  );
+  // Freeze the plan after the provider refresh. A push updates tracking refs,
+  // and watcher refreshes must not make rows disappear during a cleanup run.
+  const [frozenPlan, setFrozenPlan] = useState<typeof computedPlan | null>(null);
+  const plan = frozenPlan ?? computedPlan;
+  const [localSelection, setLocalSelection] = useState<Set<string>>(() => new Set());
+  const selectionInitialized = useRef(false);
   // Remote deletion is deliberately opt-in: it changes the shared repository.
   const [remoteSelection, setRemoteSelection] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -66,6 +87,26 @@ export function BranchCleanupDialog({
   if (openerRef.current === null && typeof document !== 'undefined') {
     openerRef.current = document.activeElement as HTMLElement | null;
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activePath) {
+      setRefreshingProvider(false);
+      return;
+    }
+    setRefreshingProvider(true);
+    void refreshBranchIntegration(activePath, true).finally(() => {
+      if (!cancelled) setRefreshingProvider(false);
+    });
+    return () => { cancelled = true; };
+  }, [activePath, refreshBranchIntegration]);
+
+  useEffect(() => {
+    if (checkingProvider || selectionInitialized.current) return;
+    selectionInitialized.current = true;
+    setFrozenPlan(computedPlan);
+    setLocalSelection(new Set(computedPlan.candidates.map((candidate) => candidate.local.name)));
+  }, [checkingProvider, computedPlan]);
 
   const remoteByRef = useMemo(() => {
     const remotes = new Map<string, NonNullable<(typeof plan.candidates)[number]['remote']>>();
@@ -147,7 +188,7 @@ export function BranchCleanupDialog({
   }
 
   async function clearSelected() {
-    if (!activePath || busy || total === 0) return;
+    if (!activePath || busy || checkingProvider || total === 0) return;
     setBusy(true);
     setCompleted(0);
 
@@ -186,7 +227,15 @@ export function BranchCleanupDialog({
         continue;
       }
       try {
-        await tauri.repoBranchDelete(activePath, candidate.local.name, false);
+        if (candidate.providerMerged) {
+          await tauri.repoBranchDeleteAt(
+            activePath,
+            candidate.local.name,
+            candidate.local.target,
+          );
+        } else {
+          await tauri.repoBranchDelete(activePath, candidate.local.name, false);
+        }
         localCleared += 1;
       } catch (error) {
         errors.push(`${candidate.local.name}: ${errMessage(error)}`);
@@ -249,18 +298,24 @@ export function BranchCleanupDialog({
         <div className="clone-body">
           <p id="branch-cleanup-description" className="stash-blurb">
             These branch tips are contained by{' '}
-            <code>{refs.primary_branch ?? 'the primary branch'}</code>. Choose the local refs to
-            remove and any matching remote refs that still exist.
+            <code>{refs.primary_branch ?? 'the primary branch'}</code>, or their exact current tip
+            was merged there by the hosted provider. Choose the local refs to remove and any
+            matching remote refs that still exist.
           </p>
 
-          {plan.candidates.length > 0 ? (
+          {checkingProvider ? (
+            <div className="branch-cleanup-empty" aria-live="polite">
+              <Icon name="refresh" size={15} className="spin" />
+              <span>Checking hosted pull requests for squash and rebase merges…</span>
+            </div>
+          ) : plan.candidates.length > 0 ? (
             <div className="branch-cleanup-grid" role="group" aria-label="Merged branch selections">
               <div className="branch-cleanup-grid-head">
                 <span>Branch</span>
                 <ScopeCheckbox
                   checked={allLocals}
                   partial={localCount > 0 && !allLocals}
-                  disabled={busy}
+                  disabled={busy || checkingProvider}
                   label={`Local (${plan.candidates.length})`}
                   onChange={(checked) => setLocalSelection(
                     checked
@@ -271,7 +326,7 @@ export function BranchCleanupDialog({
                 <ScopeCheckbox
                   checked={allRemotes}
                   partial={remoteCount > 0 && !allRemotes}
-                  disabled={busy || remoteKeys.length === 0}
+                  disabled={busy || checkingProvider || remoteKeys.length === 0}
                   label={`Remote (${remoteKeys.length})`}
                   onChange={(checked) => setRemoteSelection(checked ? new Set(remoteKeys) : new Set())}
                 />
@@ -287,7 +342,7 @@ export function BranchCleanupDialog({
                       <input
                         type="checkbox"
                         checked={localSelection.has(candidate.local.name)}
-                        disabled={busy}
+                        disabled={busy || checkingProvider}
                         aria-label={`Delete local branch ${candidate.local.name}`}
                         onChange={(event) => toggleLocal(candidate.local.name, event.target.checked)}
                       />
@@ -298,7 +353,7 @@ export function BranchCleanupDialog({
                         <input
                           type="checkbox"
                           checked={remoteSelection.has(candidate.remote.full_name)}
-                          disabled={busy}
+                          disabled={busy || checkingProvider}
                           aria-label={`Delete remote branch ${candidate.remote.name}`}
                           onChange={(event) => toggleRemote(
                             candidate.remote!.full_name,
@@ -331,6 +386,13 @@ export function BranchCleanupDialog({
             </div>
           ) : null}
 
+          {integration?.status === 'error' ? (
+            <div className="branch-cleanup-note">
+              <Icon name="warning" size={13} />
+              <span>Hosted merge status is unavailable; showing ancestry-only results. {integration.error}</span>
+            </div>
+          ) : null}
+
           {remoteCount > 0 ? (
             <div className="clone-error">
               Remote deletion runs <code>git push --delete</code>. Strand cannot restore a remote
@@ -344,9 +406,9 @@ export function BranchCleanupDialog({
             {busy ? `Clearing ${completed} of ${total}…` : summary}
           </span>
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            {plan.candidates.length === 0 ? 'Close' : 'Cancel'}
+            {!checkingProvider && plan.candidates.length === 0 ? 'Close' : 'Cancel'}
           </button>
-          {plan.candidates.length > 0 ? (
+          {!checkingProvider && plan.candidates.length > 0 ? (
             <button type="submit" className="btn danger" disabled={busy || total === 0}>
               {busy ? 'Clearing…' : 'Clear selected'}
             </button>

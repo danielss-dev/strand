@@ -1383,6 +1383,16 @@ pub fn repo_branch_delete(path: String, name: String, force: bool) -> CmdResult<
 }
 
 #[tauri::command(async)]
+pub fn repo_branch_delete_at(
+    path: String,
+    name: String,
+    expected_target: String,
+) -> CmdResult<()> {
+    Repo::discover(&path)?.delete_branch_at(&name, &expected_target)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub fn repo_branch_rename(path: String, old_name: String, new_name: String) -> CmdResult<()> {
     Repo::discover(&path)?.rename_branch(&old_name, &new_name)?;
     Ok(())
@@ -1965,6 +1975,46 @@ pub async fn repo_suggest_pull_request(
             &request.sensitive_decision,
             &recent_subjects,
             request.style_instruction.as_deref(),
+        )
+        .map_err(CmdError::from_msg)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub async fn repo_review_changes(
+    path: String,
+    baseline: Option<String>,
+    provider: ai::AiProvider,
+    model: Option<String>,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+    request: ai::AiGenerationRequest,
+    state: State<'_, AppState>,
+) -> CmdResult<ai::AiGenerationOutcome<ai::CodeReviewSuggestion>> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(request.op_id.clone());
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("ai review changes", move || {
+        let repo = Repo::discover(&path)?;
+        let diffs = match baseline.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            Some(baseline) => repo.diff_since(baseline)?,
+            // Review inbox is HEAD → index + worktree, so staged files stay
+            // in scope and the provider sees exactly what the UI shows.
+            None => repo.diff_since("HEAD")?,
+        };
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::review_changes_with_request(
+            provider,
+            repo.path(),
+            &diffs,
+            model.as_deref(),
+            override_path.as_deref(),
+            Some(&cancel),
+            &request.sensitive_decision,
         )
         .map_err(CmdError::from_msg)
     })

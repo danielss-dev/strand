@@ -5,6 +5,7 @@ const capability = JSON.parse(
   readFileSync('crates/strand-tauri/capabilities/default.json', 'utf8'),
 );
 const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8');
+const tauriMain = readFileSync('crates/strand-tauri/src/main.rs', 'utf8');
 
 function fail(message) {
   throw new Error(`release security check failed: ${message}`);
@@ -78,6 +79,17 @@ try {
 if (!publicKey.includes('minisign public key: 84FCBFD2A981CE5D')) {
   fail('updater public key is missing or unexpected');
 }
+for (const fragment of [
+  'const APP_ICON_RESOURCE_ID: usize = 32512',
+  'RunEvent::Ready',
+  'WM_SETICON',
+  'ICON_BIG',
+  'ICON_SMALL',
+]) {
+  if (!tauriMain.includes(fragment)) {
+    fail(`Windows updater-safe taskbar icon contract is missing: ${fragment}`);
+  }
+}
 
 const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';
 if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {
@@ -109,4 +121,4 @@ for (const fragment of [
   }
 }
 
-console.log('Release CSP, capabilities, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');
+console.log('Release CSP, capabilities, updater-safe Windows icon, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');

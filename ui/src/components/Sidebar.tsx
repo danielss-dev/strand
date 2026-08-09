@@ -12,10 +12,12 @@ import { ignorePatterns } from '../lib/ignore';
 import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
 import { applyLocalTreeMutation, retainLoadedIgnoredChildren } from '../lib/localTreeMutation';
 import { t } from '../lib/i18n';
-import { worktreeName } from '../lib/repoIdentity';
+import { pathKey, worktreeName } from '../lib/repoIdentity';
+import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
+import { useBranchIntegration } from '../stores/branchIntegration';
 import { useWork } from '../stores/work';
 import type {
   Branch,
@@ -188,6 +190,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const recents = useRepo((s) => s.recents);
   const forgetRecent = useRepo((s) => s.forgetRecent);
   const refs = useRepo((s) => s.refs);
+  const activePath = useRepo((s) => s.activePath);
+  const integration = useBranchIntegration((s) => (
+    activePath ? s.records[pathKey(activePath)] : undefined
+  ));
+  const refreshBranchIntegration = useBranchIntegration((s) => s.refresh);
   const pullMode = useRepo((s) => s.pullMode);
   const setBranchUpstream = useRepo((s) => s.setBranchUpstream);
   const checkout = useRepo((s) => s.checkout);
@@ -259,6 +266,20 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   );
 
   const [tab, setTab] = useState<SideTab>('git');
+  const providerMergedBranches = useMemo(
+    () => integration?.data ? providerMergedBranchNames(refs, integration.data) : new Set<string>(),
+    [integration?.data, refs],
+  );
+  useEffect(() => {
+    if (!activePath || integration || refs.branches.length < 2) return;
+    // Provider discovery is intentionally off the repository-open hot path.
+    // A short idle delay lets the local snapshot paint first; the session cache
+    // prevents repeated CLI/network work when switching views or repositories.
+    const timer = window.setTimeout(() => {
+      void refreshBranchIntegration(activePath);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [activePath, integration, refreshBranchIntegration, refs.branches.length]);
   useEffect(() => {
     if (view === 'work') setTab('files');
   }, [view]);
@@ -1289,6 +1310,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
 
   const renderBranchLeaf = (b: Branch, depth: number) => {
     const wt = !b.is_head ? worktreeByBranch.get(b.name) : undefined;
+    const merged = b.merged || providerMergedBranches.has(b.name);
     return (
       <SideLeaf
         key={b.full_name}
@@ -1296,11 +1318,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         icon={b.is_head ? 'check' : wt ? 'worktree' : 'branch'}
         label={b.name}
         meta={wt ? 'worktree' : undefined}
-        merged={b.merged}
+        merged={merged}
         title={
           wt
             ? `${b.name} — checked out in worktree ${wt.path}; double-click to open it`
-            : b.merged && refs.primary_branch
+            : merged && refs.primary_branch
               ? `${b.name} — merged into ${refs.primary_branch}; safe to delete`
               : undefined
         }

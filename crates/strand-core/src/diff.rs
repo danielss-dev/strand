@@ -408,6 +408,17 @@ mod tests {
         paths.sort();
         assert_eq!(paths, vec!["a.txt", "b.txt", "c.txt"]);
 
+        // Review inbox uses HEAD as its baseline: staged work must remain
+        // visible alongside loose work after the user stages it.
+        let mut uncommitted: Vec<String> = repo
+            .diff_since_full("HEAD")
+            .unwrap()
+            .into_iter()
+            .map(|d| d.path)
+            .collect();
+        uncommitted.sort();
+        assert_eq!(uncommitted, vec!["b.txt", "c.txt"]);
+
         // diff_unstaged would only see c.txt — that's the gap diff_since fills.
         let unstaged: Vec<String> =
             repo.diff_unstaged().unwrap().into_iter().map(|d| d.path).collect();

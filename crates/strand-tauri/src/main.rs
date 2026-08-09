@@ -12,6 +12,79 @@ mod terminal;
 
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+fn apply_windows_taskbar_icon() -> windows::core::Result<bool> {
+    use windows::{
+        core::{BOOL, PCWSTR},
+        Win32::{
+            Foundation::{HINSTANCE, HWND, LPARAM, WPARAM},
+            System::LibraryLoader::GetModuleHandleW,
+            UI::WindowsAndMessaging::{
+                EnumWindows, GetSystemMetrics, GetWindowThreadProcessId, IsWindowVisible,
+                LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_SHARED, SM_CXICON,
+                SM_CXSMICON, SM_CYICON, SM_CYSMICON, WM_SETICON,
+            },
+        },
+    };
+
+    unsafe extern "system" fn find_visible_process_window(hwnd: HWND, state: LPARAM) -> BOOL {
+        let mut process_id = 0;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+            if process_id == std::process::id() && IsWindowVisible(hwnd).as_bool() {
+                *(state.0 as *mut HWND) = hwnd;
+            }
+        }
+        true.into()
+    }
+
+    // tauri-winres embeds icon.ico as resource 32512. Load shared handles from
+    // the running module so Windows owns their lifetime for the whole process.
+    const APP_ICON_RESOURCE_ID: usize = 32512;
+    unsafe {
+        let mut hwnd = HWND::default();
+        EnumWindows(
+            Some(find_visible_process_window),
+            LPARAM((&mut hwnd as *mut HWND) as isize),
+        )?;
+        if hwnd.0.is_null() {
+            return Ok(false);
+        }
+        let module = GetModuleHandleW(None)?;
+        let instance = HINSTANCE(module.0);
+        let resource = PCWSTR(APP_ICON_RESOURCE_ID as *const u16);
+        let big = LoadImageW(
+            Some(instance),
+            resource,
+            IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON),
+            GetSystemMetrics(SM_CYICON),
+            LR_SHARED,
+        )?;
+        let small = LoadImageW(
+            Some(instance),
+            resource,
+            IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON),
+            GetSystemMetrics(SM_CYSMICON),
+            LR_SHARED,
+        )?;
+        SendMessageW(
+            hwnd,
+            WM_SETICON,
+            Some(WPARAM(ICON_BIG as usize)),
+            Some(LPARAM(big.0 as isize)),
+        );
+        SendMessageW(
+            hwnd,
+            WM_SETICON,
+            Some(WPARAM(ICON_SMALL as usize)),
+            Some(LPARAM(small.0 as isize)),
+        );
+    }
+    Ok(true)
+}
+
 /// Append Rust panics to a local crash log so alpha bug reports come with
 /// evidence. Local-only — nothing leaves the machine (PRD §10); opt-in
 /// remote crash reporting is separate future work. The previous hook still
@@ -189,6 +262,7 @@ fn main() {
             commands::repo_worktree_copy_include,
             commands::repo_branch_create,
             commands::repo_branch_delete,
+            commands::repo_branch_delete_at,
             commands::repo_branch_rename,
             commands::repo_branch_set_upstream,
             commands::repo_branch_delete_remote,
@@ -233,6 +307,7 @@ fn main() {
             commands::ai_provider_logout,
             commands::repo_suggest_commit_message,
             commands::repo_suggest_pull_request,
+            commands::repo_review_changes,
             commands::crash_report_check,
         ])
         .setup(|app| {
@@ -273,7 +348,21 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building strand")
         .run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
+            #[cfg(target_os = "windows")]
+            if matches!(&event, tauri::RunEvent::Ready) {
+                // Assign both HWND icon handles after Tauri finishes restoring
+                // the window. Otherwise Windows falls back to its executable-
+                // path cache, which can go generic after an in-place update.
+                match apply_windows_taskbar_icon() {
+                    Ok(true) => {}
+                    Ok(false) => tracing::warn!("no visible Windows taskbar handle was found"),
+                    Err(error) => tracing::warn!("failed to apply Windows taskbar icon: {error}"),
+                }
+            }
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
                 app.state::<state::AppState>().terminals.close_all(None);
             }
         });

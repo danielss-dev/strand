@@ -943,6 +943,7 @@ export function HunkAnnotatedDiff({
   const applyPatch = useRepo((s) => s.applyPatch);
   const discardPatch = useRepo((s) => s.discardPatch);
   const resolvedTheme = useSettings((s) => s.resolvedTheme);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const [pending, setPending] = useState<string | null>(null);
   const [lineSelection, setLineSelection] = useState<ActiveLineSelection | null>(null);
   const [linePicker, setLinePicker] = useState<string | null>(null);
@@ -1189,7 +1190,7 @@ export function HunkAnnotatedDiff({
   const fileDiffOptions = useMemo(
     () => ({
       diffStyle: layout,
-      ...pierreThemeOptions(resolvedTheme),
+      ...pierreThemeOptions(resolvedTheme, diffSyntaxTheme),
       disableBackground: true,
       disableFileHeader: true,
       ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
@@ -1197,7 +1198,7 @@ export function HunkAnnotatedDiff({
       enableLineSelection: true,
       onLineSelected,
     }),
-    [layout, resolvedTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
+    [layout, resolvedTheme, diffSyntaxTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {

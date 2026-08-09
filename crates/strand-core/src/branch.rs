@@ -212,6 +212,41 @@ impl Repo {
         Ok(())
     }
 
+    /// Delete a provider-confirmed merged branch only while it still points at
+    /// the exact source commit the provider reported. This is the squash/rebase
+    /// merge counterpart to [`delete_branch`]'s ancestry guard.
+    pub fn delete_branch_at(&self, name: &str, expected_target: &str) -> Result<()> {
+        let expected = git2::Oid::from_str(expected_target)?;
+        let repo = self.git2()?;
+        let mut branch = repo.find_branch(name, git2::BranchType::Local)?;
+        if branch.is_head() {
+            return Err(crate::Error::Other(format!(
+                "cannot delete branch {name}: it is the current branch"
+            )));
+        }
+        if let Some(worktree) = self
+            .worktrees()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|worktree| !worktree.is_current && worktree.branch.as_deref() == Some(name))
+        {
+            return Err(crate::Error::Other(format!(
+                "cannot delete branch {name}: it is checked out in worktree {}",
+                worktree.path
+            )));
+        }
+        let actual = branch.get().target().ok_or_else(|| {
+            crate::Error::Other(format!("cannot delete branch {name}: it has no commit target"))
+        })?;
+        if actual != expected {
+            return Err(crate::Error::Other(format!(
+                "cannot delete branch {name}: it moved after its pull request was checked; refresh and try again"
+            )));
+        }
+        branch.delete()?;
+        Ok(())
+    }
+
     /// Rename a local branch (`git branch -m <old> <new>`). git2 moves the
     /// branch's config section (upstream) along, and HEAD follows when the
     /// renamed branch is checked out. No force — errors if `new` exists.
@@ -411,6 +446,37 @@ mod tests {
             .branches
             .iter()
             .any(|branch| branch.name == "unmerged"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn provider_merged_delete_requires_the_exact_unchanged_tip() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+        git(&dir, &["branch", "squashed"]);
+        let target = git(&dir, &["rev-parse", "squashed"]);
+
+        let err = repo
+            .delete_branch_at("squashed", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            .unwrap_err();
+        assert!(err.to_string().contains("it moved"));
+        assert!(repo
+            .refs()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|branch| branch.name == "squashed"));
+
+        repo.delete_branch_at("squashed", &target).unwrap();
+        assert!(!repo
+            .refs()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|branch| branch.name == "squashed"));
 
         let _ = std::fs::remove_dir_all(dir);
     }
