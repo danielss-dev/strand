@@ -2473,6 +2473,12 @@ from Strand's canonical icon. Windows can select a pixel-matched taskbar or
 Start asset at every supported display scale instead of shrinking the plated
 fallback onto an accent-color backplate.
 
+**DAN-36 Store icon resource-index correction shipped (2026-08-11):** The
+1.3.0 Store package proved that copying qualified icon PNGs alone is
+insufficient. MSIX assembly now includes default, dark-shell, and light-shell
+target-size variants and runs MakePri before MakeAppx so Windows can resolve
+them through `resources.pri` instead of showing its accent-color plate.
+
 **DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend

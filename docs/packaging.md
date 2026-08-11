@@ -126,9 +126,10 @@ the production Partner Center identity, retains the unsigned `.msixupload` as
 a private workflow artifact, and submits it to Store product `9N0JG96LRC4W`
 through Microsoft's official Store Developer CLI action. The Store signs the
 accepted package during certification. The package carries exact target-size
-`unplated` and `lightunplated` app-list assets so taskbar and Start use the
-same sharp, transparent icon presentation as the direct MSI at every supported
-Windows display scale.
+default, `unplated`, and `lightunplated` app-list assets, indexed into
+`resources.pri` with MakePri, so taskbar and Start use the same sharp,
+background-free icon presentation as the direct MSI at every supported Windows
+display scale.
 
 The workflow requires four encrypted secrets on the
 `microsoft-store-production` GitHub environment:

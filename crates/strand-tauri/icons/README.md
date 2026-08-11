@@ -18,5 +18,6 @@ Then regenerate the MSIX app-list variants on Windows:
 .\scripts\generate-msix-icons.ps1
 ```
 
-These exact-size dark- and light-shell resources prevent Windows from scaling
-the plated fallback behind the Store app icon.
+These exact-size default, dark-shell, and light-shell resources are indexed by
+`MakePri` during MSIX assembly. That lets Windows resolve the unplated taskbar
+and Start variants instead of scaling the plated fallback behind the app icon.

@@ -2161,13 +2161,17 @@ browser and unpackaged development runs can verify the UI/state contract but
 not a real availability response.
 
 **MSIX shell icons need the complete target-size unplated matrix
-(2026-07-30).** A lone `Square44x44Logo.targetsize-44_altform-unplated.png`
+(2026-07-30, corrected 2026-08-11).** A lone
+`Square44x44Logo.targetsize-44_altform-unplated.png`
 does not cover Windows display scales. The shell then shrinks the plated
 manifest logo, producing blur and an accent-color backplate. Generate exact
-16/20/24/30/32/36/40/44/48/60/64/72/80/96/256 px `unplated` and
+16/20/24/30/32/36/40/44/48/60/64/72/80/96/256 px default, `unplated`, and
 `lightunplated` variants directly from canonical `strand.png`, copy every
-variant into the MSIX, and keep the cross-platform policy check aligned with
-that matrix.
+variant into the MSIX, then generate `resources.pri` with MakePri before
+MakeAppx. Qualified files copied without a package resource index are present
+on disk but invisible to shell resource resolution; Strand 1.3.0 exposed this
+failure. Keep the cross-platform policy check aligned with the full matrix and
+the MakePri step.
 
 **Pierre worker themes are global light/dark pairs (2026-08-07).** Use the
 official palette names already registered by `@pierre/diffs`, initialize the

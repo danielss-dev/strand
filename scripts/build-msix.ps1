@@ -111,9 +111,12 @@ $targetSizes = @(
     48, 60, 64, 72, 80, 96, 256
 )
 foreach ($targetSize in $targetSizes) {
-    foreach ($alternateForm in @('unplated', 'lightunplated')) {
-        $asset =
-            "Square44x44Logo.targetsize-$($targetSize)_altform-$alternateForm.png"
+    foreach ($alternateForm in @('', 'unplated', 'lightunplated')) {
+        $asset = "Square44x44Logo.targetsize-$targetSize"
+        if ($alternateForm) {
+            $asset += "_altform-$alternateForm"
+        }
+        $asset += '.png'
         Copy-Item `
             -LiteralPath (Join-Path $repoRoot "crates\strand-tauri\icons\$asset") `
             -Destination (Join-Path $layoutPath "Assets\$asset")
@@ -133,14 +136,33 @@ $manifestPath = Join-Path $layoutPath 'AppxManifest.xml'
 [IO.File]::WriteAllText($manifestPath, $manifest, [Text.UTF8Encoding]::new($false))
 
 $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\bin'
-$makeAppx = Get-ChildItem -LiteralPath $sdkRoot -Directory |
+$sdkBin = Get-ChildItem -LiteralPath $sdkRoot -Directory |
     Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
     Sort-Object { [version]$_.Name } -Descending |
-    ForEach-Object { Join-Path $_.FullName 'x64\makeappx.exe' } |
-    Where-Object { Test-Path -LiteralPath $_ } |
+    Where-Object {
+        Test-Path -LiteralPath (Join-Path $_.FullName 'x64\makeappx.exe')
+    } |
     Select-Object -First 1
-if (-not $makeAppx) {
+if (-not $sdkBin) {
     throw 'MakeAppx.exe was not found. Install the Windows SDK.'
+}
+$makeAppx = Join-Path $sdkBin.FullName 'x64\makeappx.exe'
+$makePri = Join-Path $sdkBin.FullName 'x64\makepri.exe'
+if (-not (Test-Path -LiteralPath $makePri -PathType Leaf)) {
+    throw 'MakePri.exe was not found. Install the Windows SDK.'
+}
+
+$priConfigPath = Assert-ChildPath `
+    -Root $repoRoot `
+    -Candidate (Join-Path $targetRoot 'priconfig.xml')
+$priPath = Join-Path $layoutPath 'resources.pri'
+& $makePri createconfig /cf $priConfigPath /dq en-US /pv 10.0.0 /o
+if ($LASTEXITCODE -ne 0) {
+    throw "MakePri config generation failed with exit code $LASTEXITCODE"
+}
+& $makePri new /pr $layoutPath /cf $priConfigPath /of $priPath /o
+if ($LASTEXITCODE -ne 0) {
+    throw "MakePri resource indexing failed with exit code $LASTEXITCODE"
 }
 
 & $makeAppx pack /o /v /h SHA256 /d $layoutPath /p $OutputPath

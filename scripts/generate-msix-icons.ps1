@@ -18,7 +18,7 @@ $targetSizes = @(
     16, 20, 24, 30, 32, 36, 40, 44,
     48, 60, 64, 72, 80, 96, 256
 )
-$alternateForms = @('unplated', 'lightunplated')
+$alternateForms = @('', 'unplated', 'lightunplated')
 $source = [Drawing.Image]::FromFile($sourcePath)
 
 try {
@@ -56,8 +56,11 @@ try {
                     $graphics.Dispose()
                 }
 
-                $filename =
-                    "Square44x44Logo.targetsize-$($targetSize)_altform-$alternateForm.png"
+                $filename = "Square44x44Logo.targetsize-$targetSize"
+                if ($alternateForm) {
+                    $filename += "_altform-$alternateForm"
+                }
+                $filename += '.png'
                 $bitmap.Save(
                     (Join-Path $OutputDirectory $filename),
                     [Drawing.Imaging.ImageFormat]::Png

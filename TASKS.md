@@ -2074,8 +2074,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   (`microsoft_store_update_available`, launch toast, and Settings check /
   **Open Microsoft Store** handoff; DAN-35, 2026-07-30).
 - ☑ Match Microsoft Store icon rendering to the direct MSI (exact target-size
-  `unplated` and `lightunplated` `Square44x44Logo` assets plus MSIX policy
-  coverage; DAN-36, 2026-07-30).
+  default, `unplated`, and `lightunplated` `Square44x44Logo` assets, MakePri
+  `resources.pri` generation, and MSIX policy coverage; DAN-36, corrected
+  2026-08-11 after the 1.3.0 package exposed the missing resource index).
 - ☑ Automate GitHub release submission to Microsoft Store (release-published
   trigger, production identity, official Store Developer CLI action, protected
   environment credential contract, and manual build-only recovery in

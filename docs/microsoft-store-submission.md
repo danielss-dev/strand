@@ -7,10 +7,12 @@ release executable, manifest, and Store assets with Microsoft's MakeAppx tool.
 The older MSI/EXE workflow remains available as a fallback, but it requires an
 external CA-backed Windows code-signing certificate.
 
-The `Square44x44Logo` resource includes exact target-size `unplated` and
-`lightunplated` variants generated from the canonical `strand.png`. Keep the
-full size matrix when changing the icon; otherwise Windows can resample the
-plated fallback and add an accent-color backplate on the taskbar or Start.
+The `Square44x44Logo` resource includes exact target-size default, `unplated`,
+and `lightunplated` variants generated from the canonical `strand.png`.
+`scripts/build-msix.ps1` indexes that full matrix into `resources.pri` with
+MakePri before packaging. Keep both the files and the index step when changing
+the icon; otherwise Windows can ignore the qualified assets, resample the
+plated fallback, and add an accent-color backplate on the taskbar or Start.
 
 ## Production identity
 
@@ -46,8 +48,9 @@ workflow for that exact release tag. It:
 2. validates Strand's release and MSIX policies;
 3. builds the app with the direct Tauri updater disabled in favor of
    Store-managed updates;
-4. creates an x64 packaged-classic, medium-integrity, full-trust MSIX;
-5. validates the manifest and payload with MakeAppx; and
+4. indexes the qualified app icons with MakePri and creates an x64
+   packaged-classic, medium-integrity, full-trust MSIX;
+5. validates the manifest and indexed payload with MakeAppx; and
 6. uploads both `Strand_<version>.0_x64.msix` and the recommended
    `.msixupload` wrapper as a private workflow artifact;
 7. authenticates to Partner Center with the official Microsoft Store
