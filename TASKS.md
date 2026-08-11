@@ -2086,6 +2086,10 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   retry after the conflicting portal-created draft was canceled. Partner Center
   signing completed (owner-confirmed 2026-07-29); clean-machine validation
   remains an external gate.
+- ☐ Remove GitHub Actions Node.js 20 deprecation warnings from release and
+  Microsoft Store workflows once Node.js 24-native revisions exist for the
+  affected checkout/setup/upload and Store publisher actions (runs
+  `31518879083` and `31518896675`, 2026-08-11).
 - ☑ Prepare the Microsoft Store MSI/EXE fallback path
   (`tauri.microsoftstore.conf.json`, `microsoft-store.yml`, fail-closed package
   checks, Partner Center copy, privacy and user-content policies, in-product
