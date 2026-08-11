@@ -69,6 +69,14 @@ canceled a conflicting portal-created draft. Partner Center accepted the
 `.msixupload`, and the owner confirmed production Store signing complete on
 2026-07-29. Clean-machine install/update/uninstall validation remains separate.
 
+The latest production submission is the `v1.3.1` icon-resource correction.
+Workflow run `31518896675` completed successfully on 2026-08-11, uploaded
+`Strand_1.3.1.0_x64.msixupload`, and reported the committed Partner Center
+submission in `Certification`. The duplicate release-triggered run
+`31520313939` was canceled before packaging because the manual production run
+had already succeeded. Certification, Store signing, and publication remain
+asynchronous Microsoft operations.
+
 The workflow can also be run manually with an existing tag. Its `submit`
 checkbox defaults to off, so a manual run builds a candidate without changing
 Partner Center unless the maintainer deliberately enables submission.
@@ -343,6 +351,11 @@ names, tokens, email addresses, or terminal history.
 - [ ] Owner approves the privacy and license listing text.
 - [x] Partner Center accepted the `v1.2.1` `.msixupload` and completed
   production Store signing (owner-confirmed 2026-07-29).
+- [x] Partner Center accepted the `v1.3.1` icon-fix `.msixupload` and advanced
+  it to Certification (`Microsoft Store release` run `31518896675`,
+  2026-08-11).
+- [ ] Partner Center completes certification, production signing, and
+  publication of `v1.3.1`.
 - [ ] Store-signed package passes clean install/update/uninstall.
 - [ ] Final screenshots and Store box art contain no private data.
 - [ ] Age-rating questionnaire is completed accurately.

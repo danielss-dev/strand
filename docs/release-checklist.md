@@ -206,6 +206,17 @@ That standalone MSI is not the trusted Store channel; Partner Center signing
 of the production MSIX closes the Windows signed-distribution row. Legal,
 updater-rehearsal, clean-machine, and real-platform rows remain open.
 
+After the unavailable tag-signing setup was surfaced, the owner directed the
+1.3.1 production Store deployment on 2026-08-11. The annotated `v1.3.1` tag
+object is `91ae42f172bf859dabad954ebc138a174f46003a` and peels to the validated
+candidate `64ad1d08d8dfb6d59e5b0b38aa8978c511e05c10`; `git verify-tag v1.3.1`
+reports `no signature found`. Release run `31518879083` completed successfully
+and published the desktop release. Microsoft Store production run
+`31518896675` uploaded `Strand_1.3.1.0_x64.msixupload` and Partner Center
+advanced the committed submission to Certification. This records the explicit
+unsigned-tag override and successful submission, not completion of Partner
+Center certification or the remaining platform-validation gates.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:

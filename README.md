@@ -257,15 +257,17 @@ the resolved app appearance automatically.
 
 ## Status
 
-Strand **1.3.0 is the current stable release**, with **1.3.1 preparing for
-release**, and works on large real-world repositories daily. Release CI
+Strand **1.3.1 is the current stable release** and works on large real-world
+repositories daily. Release CI
 produces updater-signed desktop artifacts,
 notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft
 Store engineering has a verified packaged-classic MSIX
 with production identity `Danielss.strand`. Publishing a GitHub release builds
 the exact tag and submits its unsigned `.msixupload` to Store product
 `9N0JG96LRC4W` through Microsoft's Store Developer CLI; Partner Center signs
-the accepted package, and production Store signing is complete. Store installs
+the accepted package. The 1.3.1 icon-fix package is in Partner Center
+certification; production Store signing is complete for the preceding package.
+Store installs
 check Microsoft's native package-update API on launch, notify when an update is
 available, and hand installation back to the Store. PRI-indexed, DPI-tailored
 icon assets keep the Store taskbar and Start icon as sharp and background-free
@@ -274,9 +276,9 @@ identity intact across in-place updates. The standalone GitHub MSI remains unsig
 certificate-backed offline-WebView2 MSI workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated
-submission was accepted by Partner Center on 2026-07-28; Store signing was
-confirmed complete on 2026-07-29. Trademark approval and clean-machine
-validation remain external gates. See the
+submission was accepted by Partner Center on 2026-07-28; the 1.3.1 update was
+accepted on 2026-08-11. Trademark approval, 1.3.1 certification, and
+clean-machine validation remain external gates. See the
 [`1.0 parity audit`](./docs/git-client-1.0-audit.md), [`ROADMAP.md`](./ROADMAP.md),
 [`release checklist`](./docs/release-checklist.md), and [`TASKS.md`](./TASKS.md).
 

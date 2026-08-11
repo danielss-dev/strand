@@ -2479,6 +2479,15 @@ insufficient. MSIX assembly now includes default, dark-shell, and light-shell
 target-size variants and runs MakePri before MakeAppx so Windows can resolve
 them through `resources.pri` instead of showing its accent-color plate.
 
+**Strand 1.3.1 released and submitted to Microsoft Store (2026-08-11):** The
+public `v1.3.1` desktop release was built by run `31518879083`. Production Store
+run `31518896675` built the exact tag with the corrected resource index,
+uploaded `Strand_1.3.1.0_x64.msixupload`, and advanced the Partner Center
+submission to Certification. The annotated tag is intentionally recorded as
+unsigned at peeled commit `64ad1d08d8dfb6d59e5b0b38aa8978c511e05c10`
+because no tag-signing identity was available and the owner directed the
+production deployment after that limitation was surfaced.
+
 **DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend

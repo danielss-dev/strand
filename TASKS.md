@@ -2100,24 +2100,21 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
-  `v1.0.0`, `v1.0.1`, `v1.1.0`, and `v1.2.1` are public; `v1.2.1` is the latest
-  stable release. The `v1.3.0` release candidate was cut from synchronized
-  desktop manifests on 2026-08-09, pending release CI and draft-asset review.
-  Release run `30380876997` passed all desktop, helper, signing,
-  notarization, Sigstore, assembly, and promotion jobs and published 18 assets.
-  Microsoft Store run `30382509727` then built the exact tag and Partner Center
-  accepted its `.msixupload` on 2026-07-28. The owner previously
-  authorized the annotated but unsigned `v1.1.0` tag at `1b015f5` on
-  2026-07-20. Release run `29755981951` passed all eight desktop, helper,
-  signing, notarization, Sigstore, assembly, and promotion jobs and published
-  18 assets. An independent download audit confirmed all five desktop updater
-  signatures plus the helper manifest use embedded key `84FCBFD2A981CE5D`; the
-  public stable manifest reports 1.1.0 and targets only `v1.1.0`. The Windows
-  trusted-distribution gate is closed by the Partner Center-signed
-  MSIX; the standalone GitHub MSI remains intentionally unsigned. This row
-  remains partial because the Git tag has no cryptographic signature and the
-  legal, updater-rehearsal, clean-machine, and real-platform checks in
-  `docs/release-checklist.md` remain open.
+  `v1.0.0` through `v1.3.1` are public; `v1.3.1` is the latest stable release.
+  Release run `31518879083` passed the desktop signing, notarization, Sigstore,
+  assembly, and publication jobs. The owner authorized the annotated but
+  unsigned `v1.3.1` tag at
+  `64ad1d08d8dfb6d59e5b0b38aa8978c511e05c10` on 2026-08-11. Microsoft Store
+  production run `31518896675` built that exact tag, uploaded
+  `Strand_1.3.1.0_x64.msixupload`, and Partner Center advanced the committed
+  submission to Certification. The duplicate release-triggered Store run
+  `31520313939` was canceled before packaging because the manual production
+  submission had already succeeded. The Windows trusted-distribution gate is
+  closed by Partner Center signing; the standalone GitHub MSI remains
+  intentionally unsigned. This row remains partial because the Git tag has no
+  cryptographic signature and the legal, updater-rehearsal, clean-machine,
+  certification, and real-platform checks in `docs/release-checklist.md`
+  remain open.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
