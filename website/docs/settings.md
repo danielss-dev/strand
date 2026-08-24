@@ -6,7 +6,7 @@ The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Ho
 
 ## Appearance
 
-- **Theme** — System ("Match the OS appearance"), Light ("Warm cream"), or Dark ("Warm charcoal"), shown as cards with live swatches. The default is System. `Mod+Shift+T` toggles between light and dark from anywhere (it skips System), and the palette has "Theme: Light / Dark / System" entries.
+- **Theme** — System ("Match the OS appearance"), Light ("Warm cream"), or Dark ("Warm charcoal"), shown as cards with live swatches. The choice also applies to read-only and editable code files in Work. The default is System. `Mod+Shift+T` toggles between light and dark from anywhere (it skips System), and the palette has "Theme: Light / Dark / System" entries.
 - **Accent** — eight color dots: Amber (default), Rose, Magenta, Violet, Blue, Cyan, Teal, and Green. The accent recolors the whole app live and works in both themes.
 - **Start in** — choose which repository space opens after launch: Work (default), Local Changes, Review, Pull Requests, or All Commits.
 - **Open repositories** — Sidebar or Tabs: show open repositories as a vertical icon rail or as a horizontal tab strip in the toolbar. The default is Tabs. See [Repositories and workspaces](repositories-and-workspaces.md).

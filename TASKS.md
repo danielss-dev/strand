@@ -1365,10 +1365,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     menu / modal `rgba(0,0,0,…)` shadows → new per-theme `--shadow-1…4`
     elevation tokens (dark values unchanged, light softened); context-menu
     danger + merge/conflict accept-checks → `--del`/`--del-bg`/`--accent-fg`;
-    Pierre diff theme follows the resolved theme (`pierre-light`/`pierre-dark`)
-    everywhere it renders (`pierreThemeOptions` now supplies Pierre's
+    Pierre diff and Work file-code themes follow the resolved theme
+    (`pierre-light`/`pierre-dark`) everywhere they render
+    (`pierreThemeOptions` now supplies Pierre's
     worker-pool `themeType`, fixing DAN-28 when Strand overrides a different OS
-    theme). (Mac/Win traffic-light chrome colors left fixed by
+    theme and DAN-46 in Work's read/edit code surface). (Mac/Win traffic-light chrome colors left fixed by
     design; three `.avatar` rules are dead CSS for unbuilt blame/detail views.)
   - ☑ Extension point for future custom themes — `THEME_OPTIONS` registry +
     `[data-theme]` token blocks; adding high-contrast / solarized is add-a-block
