@@ -7955,7 +7955,8 @@ textarea.clone-input {
   cursor: pointer;
 }
 .side-files-tools .side-files-create {
-  flex: 0 0 28px;
+  flex: 0 0 var(--trees-row-height, 30px);
+  height: var(--trees-row-height, 30px);
   padding: 0;
 }
 .side-files-tools button:hover,

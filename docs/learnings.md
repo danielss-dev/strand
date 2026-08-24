@@ -94,7 +94,9 @@ gradients and masks cannot collide inside the combined sprite.
 `FileTree` header slot and `PierreTree`'s wrapper-owned shadow CSS. Install that
 CSS when the model is created, then vary reserved width with an inherited host
 custom property; `useFileTree` captures its option object once, so toggling an
-`unsafeCSS` option later does not update the mounted model.
+`unsafeCSS` option later does not update the mounted model. Match the action to
+`--trees-row-height` and reserve that width plus 2px so resize never overlays
+the search input or opens a wider gap.
 
 **Why.** Rendering the action outside the tree adds an empty toolbar row. The
 header slot keeps the control keyboard-accessible and in the tree's composition
