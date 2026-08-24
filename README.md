@@ -57,8 +57,9 @@ agent already staged or committed. It's also a complete everyday Git client
 keyboard-first, but never keyboard-only: almost every action works from the
 keyboard alone, and the mouse stays first-class. Repository and Work tabs close
 from their close control, with Delete/Backspace while focused, or by middle-click.
-Light, dark, and system appearance apply consistently to the shell, editable
-code files, code diffs, and the live Diff settings preview. Diff syntax colors offer five paired Pierre
+Light, dark, and system appearance apply consistently to the shell, embedded
+terminals, editable code files, code diffs, and the live Diff settings preview.
+Diff syntax colors offer five paired Pierre
 palettes—including red–green and blue–yellow accessible variants—that follow
 the resolved app appearance automatically.
 

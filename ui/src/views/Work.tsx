@@ -22,6 +22,7 @@ import { embeddedShellOptions } from '../lib/embeddedShell';
 import { t } from '../lib/i18n';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
+import { terminalTheme } from '../lib/terminalTheme';
 import type { EmbeddedShellChoice, TerminalEvent } from '../lib/types';
 import {
   adjacentWorkTabId,
@@ -1082,7 +1083,7 @@ function TerminalPane({
         letterSpacing: 0,
         lineHeight: 1.2,
         scrollback: 5_000,
-        theme: terminalTheme(styles),
+        theme: terminalTheme(styles, current.resolvedTheme),
       });
       const addon = new FitAddon();
       instance.loadAddon(addon);
@@ -1128,7 +1129,7 @@ function TerminalPane({
     const instance = terminal.current;
     if (!instance) return;
     const styles = getComputedStyle(document.documentElement);
-    instance.options.theme = terminalTheme(styles);
+    instance.options.theme = terminalTheme(styles, resolvedTheme);
   }, [resolvedTheme]);
 
   useEffect(() => {
@@ -1204,24 +1205,6 @@ const TERMINAL_FONT_FACE: Record<TerminalFont, string> = {
 function terminalFontSpec(font: TerminalFont, size: number): string {
   const face = TERMINAL_FONT_FACE[font];
   return `400 ${size}px ${font === 'system' ? face : `"${face}"`}`;
-}
-
-function terminalTheme(styles: CSSStyleDeclaration) {
-  const token = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
-  return {
-    background: token('--bg-base', '#111111'),
-    foreground: token('--text', '#e5e5e5'),
-    cursor: token('--accent', '#d6a657'),
-    selectionBackground: token('--bg-sel', '#343434'),
-    black: token('--bg-os', '#111111'),
-    red: token('--del', '#e06c75'),
-    green: token('--add', '#98c379'),
-    yellow: token('--warn', '#e5c07b'),
-    blue: token('--accent', '#61afef'),
-    magenta: '#c678dd',
-    cyan: '#56b6c2',
-    white: token('--text', '#e5e5e5'),
-  };
 }
 
 function leaf(path: string): string {

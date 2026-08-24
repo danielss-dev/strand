@@ -102,6 +102,8 @@ Configure Work's embedded terminals separately from external applications.
   worktrees. **Check availability** resolves the executable without starting it.
 - **Font / Font size** — choose the embedded terminal face and a size from
   10–32px. The preview updates immediately, as do open terminal renderers.
+- Terminal backgrounds, text, and the complete normal/bright ANSI palette
+  follow the resolved Light, Dark, or System appearance.
 - The arrow beside Work's main New Terminal button creates one tab with a
   different native or WSL shell without changing either saved default.
 
