@@ -214,7 +214,7 @@ the resolved app appearance automatically.
   generated trees do not block the initial view. Selecting a commit
   re-roots it while pinning opened content to that revision. Selecting a folder
   opens its immediate contents with the same file-type icons, file/change
-  counts, and keyboard navigation. A compact **+** menu beside search creates a
+  counts, and keyboard navigation. A matched-height **+** menu beside search creates a
   file or folder at the repository root; fully ignored folders and their
   descendants stay muted without creating change dots on mixed parent folders.
   Creates, deletes, and

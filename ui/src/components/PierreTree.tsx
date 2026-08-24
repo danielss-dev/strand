@@ -684,7 +684,9 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     height: '100%',
     width: '100%',
     minHeight: 0,
-    '--strand-tree-search-action-space': searchAction ? '34px' : '0px',
+    '--strand-tree-search-action-space': searchAction
+      ? 'calc(var(--trees-row-height, 30px) + 2px)'
+      : '0px',
     ...style,
   } as CSSProperties;
 

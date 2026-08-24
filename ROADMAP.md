@@ -2238,6 +2238,11 @@ folder-add icons, aligned at the trailing edge of the tree search row without
 adding another toolbar line. The menu retains full arrow-key, Enter, Escape,
 and focus-return behavior while leaving both creation actions in Quick Launch.
 
+**DAN-49 Files toolbar alignment shipped (2026-08-24):** The create button now
+matches Pierre's search-row height and reserves exactly its own width plus a
+2px gap. Search and create remain separate controls aligned to the pane's
+trailing edge at every resizable-sidebar width.
+
 **Ignored files integrated into Files (2026-07-19):** The opt-in toolbar toggle
 is gone. Opening Files now starts the ignored-inclusive enumeration in a Tauri
 blocking task; Files waits for that local listing instead of first rendering

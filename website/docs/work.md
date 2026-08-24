@@ -10,6 +10,9 @@ Local Changes (`Mod+2`) remains the staging and commit workspace.
 
 Open the sidebar's **Files** lens and select a file or folder:
 
+The trailing **+** button beside Files search creates a file or folder at the
+repository root; it remains aligned as the sidebar is resized.
+
 - A single click or keyboard focus opens one italic preview tab. Selecting a
   different file replaces that preview in place.
 - Double-click or press `Enter` to pin the file. **Open**, file selection from
