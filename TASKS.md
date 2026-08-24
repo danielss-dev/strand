@@ -2108,9 +2108,13 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
-  `v1.0.0` through `v1.3.1` are public; `v1.3.1` is the latest stable release.
-  The `v1.4.0` release candidate was cut from synchronized desktop manifests
-  on 2026-08-24, pending release CI and draft-asset review.
+  `v1.0.0` through `v1.4.0` are public; `v1.4.0` is the latest stable release.
+  Release run `32717124785` passed the desktop signing, notarization, Sigstore,
+  assembly, and publication jobs and published 13 assets on 2026-08-24. The
+  owner authorized the annotated but unsigned `v1.4.0` tag at
+  `6e2dc805156cb26faaa12df56d4c6e8f3888f51d`. Microsoft Store production run
+  `32718774016` built that exact tag, but attempts 1 and 2 both failed at 1%
+  during Partner Center's Azure blob upload after submission creation.
   Release run `31518879083` passed the desktop signing, notarization, Sigstore,
   assembly, and publication jobs. The owner authorized the annotated but
   unsigned `v1.3.1` tag at
@@ -2125,6 +2129,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   cryptographic signature and the legal, updater-rehearsal, clean-machine,
   certification, and real-platform checks in `docs/release-checklist.md`
   remain open.
+- ☐ Retry the `v1.4.0` Microsoft Store submission after Partner Center's blob
+  upload recovers (run `32718774016` attempts 1–2; Store package build green,
+  Azure blob upload failed twice at 1% on 2026-08-24).
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

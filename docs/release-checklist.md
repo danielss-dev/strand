@@ -217,6 +217,19 @@ advanced the committed submission to Certification. This records the explicit
 unsigned-tag override and successful submission, not completion of Partner
 Center certification or the remaining platform-validation gates.
 
+The owner directed the `v1.4.0` release on 2026-08-24 with the same explicit
+annotated-but-unsigned tag override. Tag object
+`21b8b954f2a8bd92042f0b626a6cb5f1c2ea0212` peels to merge commit
+`6e2dc805156cb26faaa12df56d4c6e8f3888f51d`. Release run `32717124785`
+completed successfully across Windows, Linux, and universal macOS, including
+updater signature identity, Apple signing/notarization, and Linux Sigstore
+verification, then the 13-asset release was published as latest stable. This
+records the requested release override; the remaining external gates above
+stay open. Microsoft Store run `32718774016` built the exact tag successfully;
+publication attempts 1 and 2 each created a valid Partner Center submission
+but failed at 1% during Azure blob upload, leaving Store promotion to retry
+after the external upload path recovers.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:
