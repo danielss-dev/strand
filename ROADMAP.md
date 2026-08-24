@@ -2510,6 +2510,12 @@ unsigned at peeled commit `64ad1d08d8dfb6d59e5b0b38aa8978c511e05c10`
 because no tag-signing identity was available and the owner directed the
 production deployment after that limitation was surfaced.
 
+**Strand 1.4.0 release candidate cut (2026-08-24):** The five lockstep desktop
+app manifests and Cargo lockfile are synchronized at 1.4.0. The separately
+versioned `strand-azdo` helper remains at 1.2.1. The annotated `v1.4.0` tag
+drives the signed desktop release pipeline and opens the draft GitHub release
+for review before publication.
+
 **DAN-38 newest-first PR timeline shipped (2026-07-30):** The provider-neutral
 pull-request chronology now places the latest commit, comment, or lifecycle
 event at the top while retaining deterministic tie ordering. Focused frontend
