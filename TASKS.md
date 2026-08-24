@@ -1758,7 +1758,8 @@ tree: watch the agent work, review fast, accept or reject safely.
 ## Platform / packaging
 
 - ☑ Replace placeholder icon with a real source (canonical `strand.svg` mark,
-  rounded white-tile `strand.png` app icon, and generated desktop, Store,
+  rounded white-tile `strand.png` app icon with a solid-black, non-gradient S
+  (DAN-50), and generated desktop, Store,
   Android, and iOS bundles; DAN-40 reasserts the embedded `icon.ico` as native
   big/small HWND icons on Windows `RunEvent::Ready`, guarded by the release
   policy check, so updater replacement cannot leave a generic taskbar icon)
