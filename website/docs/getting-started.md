@@ -16,6 +16,9 @@ Download the latest release from [GitHub Releases](https://github.com/danielss-d
 | Windows | `.msi` | Windows 11; the installer is not yet code-signed; in-place updates preserve the native taskbar icon |
 | Linux | `.deb`, `.rpm`, `.AppImage` | Built on Ubuntu 22.04; AppImage includes a keyless Sigstore verification bundle |
 
+The macOS app icon uses Strand's solid-black Circuit S on its rounded white
+tile, matching the canonical mark without a gray gradient.
+
 You can also build from source with Rust stable, Node.js 20+, pnpm 9+, and the Tauri 2 platform dependencies.
 
 Strand is open source (AGPL-3.0) and free for individuals. Companies can buy a one-time commercial license as an alternative to the AGPL; nothing in the app checks or enforces it — the same build works for everyone, with no license keys or feature gating.

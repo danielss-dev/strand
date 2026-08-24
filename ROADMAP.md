@@ -2359,6 +2359,12 @@ and social preview. The supplied `strand.png`, clipped to a rounded white app
 tile, regenerates the complete desktop, Microsoft Store, Android, and iOS icon
 family without a separate reinterpretation.
 
+**DAN-50 solid-black macOS icon shipped (2026-08-24):** The raster source now
+overlays the canonical SVG's pure-black S on the existing rounded white tile,
+removing the gray gradient while preserving the mark's geometry and tile.
+Tauri regenerated and `iconutil` validated the complete `.icns` family along
+with the other platform icon sizes.
+
 **Resizable Work panes shipped (2026-07-26):** Work now supports nested
 right/down editor groups inside one repository tab. Each pane owns its active
 tab and replaceable preview, every boundary uses persisted resizable-panel
