@@ -2307,6 +2307,12 @@ and fullscreen-renderer compatibility environment, keeping the complete agent
 dashboard visible from a repository-root shell after onboarding notices have
 been consumed.
 
+**DAN-47 light terminal contrast shipped (2026-08-24):** Embedded terminals
+now provide xterm's complete normal and bright ANSI palettes from Strand's
+resolved theme tokens. PowerShell and colorized CLI output remain legible on
+the light cream surface instead of inheriting bright colors tuned for dark
+backgrounds.
+
 **Terminal repository overrides and Windows PowerShell follow-up (2026-07-20):**
 Settings → Terminal now pairs a repository selector with a shell selector so
 every open repository family remains configurable without a long override

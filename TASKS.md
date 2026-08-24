@@ -1178,7 +1178,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Fixed-width tabs wheel-scroll, auto-reveal, expose an overflow selector, and
   render `TreeFileIcon` symbols. Renderers survive view/repository/workspace
   switches. Configurable terminal font/10–32px sizing with a live Settings
-  preview, complete JetBrains Mono fallback glyphs, and `configure_terminal_environment`
+  preview, complete JetBrains Mono fallback glyphs, complete token-backed
+  light/dark 16-color ANSI palettes (`terminalTheme`; DAN-47), and `configure_terminal_environment`
   provides xterm/true-color capability and Claude Code full-dashboard/
   alternate-screen compatibility.
 - ☑ `portable-pty` native runtime and Tauri channels: direct resolved argv,
