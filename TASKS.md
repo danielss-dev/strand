@@ -2109,6 +2109,8 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
   `v1.0.0` through `v1.3.1` are public; `v1.3.1` is the latest stable release.
+  The `v1.4.0` release candidate was cut from synchronized desktop manifests
+  on 2026-08-24, pending release CI and draft-asset review.
   Release run `31518879083` passed the desktop signing, notarization, Sigstore,
   assembly, and publication jobs. The owner authorized the annotated but
   unsigned `v1.3.1` tag at
