@@ -28,6 +28,7 @@ import {
 import { t } from '../lib/i18n';
 import { renderMarkdown } from '../lib/markdown';
 import { isPreviewablePath, isSvgPath } from '../lib/preview';
+import { pierreThemeOptions } from '../lib/pierreTheme';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
@@ -429,8 +430,8 @@ function ContentTab({
   onCloseSearch: () => void;
   followWorkingTree?: boolean;
 }) {
-  const pierreTheme: HlTheme =
-    useSettings((s) => s.resolvedTheme) === 'light' ? 'pierre-light' : 'pierre-dark';
+  const resolvedTheme = useSettings((s) => s.resolvedTheme);
+  const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
   const diffsTick = useRepo((s) => s.diffsTick);
   const setFileDraft = useWork((s) => s.setFileDraft);
   const [data, setData] = useState<FileContent | null>(null);
@@ -460,8 +461,12 @@ function ContentTab({
   const [discardRefreshKey, setDiscardRefreshKey] = useState(0);
   const sourceKey = `${repoPath ?? ''}\0${path}\0${revision ?? ''}`;
   const pierreOptions = useMemo(
-    () => ({ theme: pierreTheme, disableBackground: true, disableFileHeader: true }),
-    [pierreTheme],
+    () => ({
+      ...pierreThemeOptions(resolvedTheme, diffSyntaxTheme),
+      disableBackground: true,
+      disableFileHeader: true,
+    }),
+    [diffSyntaxTheme, resolvedTheme],
   );
 
   const updateDraft = useCallback((next: string) => {

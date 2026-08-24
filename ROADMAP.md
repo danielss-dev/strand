@@ -2381,6 +2381,11 @@ the opposite appearance, while Pierre's dual-theme AST cache remains intact.
 The Settings → Diff preview and the production diff paths share the same
 mapping and a focused regression test.
 
+**DAN-46 Work code theme fix shipped (2026-08-24):** Work's read-only and
+editable code surfaces now use the same paired Pierre theme options as Local
+Changes and Review. Explicit Light, Dark, and syntax-family choices reach the
+worker renderer instead of falling back to the operating-system appearance.
+
 **DAN-27 Work pane frame removed (2026-07-27):** Active Work panes no longer
 draw an accent-tinted border around all four edges. Existing tab accents and
 keyboard focus rings continue to identify active and focused controls without
