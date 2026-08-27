@@ -3,7 +3,7 @@
     { "file": "index", "title": "Strand User Guide", "description": "Learn how to use Strand, the fast, keyboard-first Git client for Windows, macOS, and Linux." },
     { "file": "getting-started", "title": "Getting Started", "description": "Download and install the Strand Git client on Windows, macOS, or Linux, then open your first repository." },
     { "file": "work", "title": "Work: Files & Terminals", "description": "Use Strand as a Git client with an integrated file browser, lightweight editor, previews, and repository terminals." },
-    { "file": "custom-view", "title": "Custom View (Experimental)", "description": "Arrange Strand features in persistent, resizable panes with keyboard-accessible templates and controls." },
+    { "file": "custom-view", "title": "Custom View (Experimental)", "description": "Give each workspace its own persistent, resizable arrangement of live Strand features, including Files." },
     { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces", "description": "Manage multiple Git repositories, tabs, recent projects, and cross-repository workspaces in Strand." },
     { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes", "description": "Review AI coding-agent changes with whole-file diffs, baselines, notes, and reusable feedback in Strand." },
     { "file": "pull-requests", "title": "Pull Requests", "description": "Browse and review GitHub and Azure DevOps pull requests from the Strand desktop Git client." },

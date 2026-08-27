@@ -8,6 +8,7 @@
 
 export const CUSTOM_FEATURE_IDS = [
   'work',
+  'files',
   'local',
   'review',
   'commits',
@@ -146,14 +147,16 @@ export function createCustomTemplate(
     };
   }
 
-  // A developer workbench: the live Work surface gets the broad canvas while
-  // staging and history share a narrower inspector column.
+  // A developer workbench: Files owns a compact explorer, the live Work
+  // surface gets the broad canvas, and staging/history share an inspector.
+  const files = customPane(makeId(), 'files');
   const work = customPane(makeId(), 'work');
   const local = customPane(makeId(), 'local');
   const commits = customPane(makeId(), 'commits');
   const inspector = customSplit(makeId(), 'vertical', 56, local, commits);
+  const canvas = customSplit(makeId(), 'horizontal', 72, work, inspector);
   return {
-    layout: customSplit(makeId(), 'horizontal', 68, work, inspector),
+    layout: customSplit(makeId(), 'horizontal', 18, files, canvas),
     activePaneId: work.id,
   };
 }

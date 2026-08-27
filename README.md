@@ -89,13 +89,13 @@ the resolved app appearance automatically.
   overrides, and typography without changing the separate external
   **Open in terminal** action. Linked worktrees share one override.
 
-- **Custom view (⌘8, experimental)** — assemble the real Work, Local Changes,
-  Review, All Commits, Pull Requests, Reflog, Worktrees, and Workspace Review
-  surfaces into nested horizontal or vertical panes. Resize every divider,
+- **Custom view (⌘8, experimental)** — assemble the real Work, Files, Local
+  Changes, Review, All Commits, Pull Requests, Reflog, Worktrees, and Workspace
+  Review surfaces into nested horizontal or vertical panes. Resize every divider,
   switch or move the feature in each pane, and start from Blank, Focus, Review
-  station, or a VS Code-style workbench with Work beside staging and history.
-  The app-wide layout, feature choices, and pane proportions auto-save across
-  launches. Each feature mounts only once, and the live Work editor/terminal
+  station, or a VS Code-style workbench with Files, Work, staging, and history.
+  Each Strand workspace auto-saves its own layout, feature choices, and pane
+  proportions across launches. Each feature mounts only once, and the live Work editor/terminal
   runtime remains intact when its pane moves or resizes. The sidebar Labs row,
   rebindable shortcut, native View menu, command palette, F6 feature-selector
   focus, and optional startup destination keep the experiment keyboard-first.

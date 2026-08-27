@@ -207,4 +207,4 @@ Crashes are always logged locally regardless of the toggle; the section shows th
 
 ---
 
-All settings persist across launches, along with the rest of your session — open tabs, Work and Custom pane sizes, the Custom feature layout, per-repo diff layouts, and workspaces. For the full shortcut reference, see [Keyboard and palette](keyboard-and-palette.md).
+All settings persist across launches, along with the rest of your session — open tabs, Work pane sizes, each workspace's Custom pane sizes and feature layout, per-repo diff layouts, and workspaces. For the full shortcut reference, see [Keyboard and palette](keyboard-and-palette.md).

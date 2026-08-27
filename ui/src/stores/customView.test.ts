@@ -5,7 +5,8 @@ const db = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
 vi.mock('../lib/db', () => ({ settings: db }));
 
 import { createCustomTemplate, storeCustomView } from '../lib/customView';
-import { useCustomView } from './customView';
+import { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
+import { customViewStorageKey, useCustomView } from './customView';
 
 describe('Custom view persistence', () => {
   beforeEach(() => {
@@ -14,20 +15,34 @@ describe('Custom view persistence', () => {
     db.set.mockResolvedValue(undefined);
   });
 
-  it('restores a versioned tree and serializes layout mutations in order', async () => {
+  it('restores independent workspace trees and serializes each workspace in order', async () => {
     let id = 0;
-    const stored = createCustomTemplate('review', () => `saved-${++id}`);
-    db.get.mockResolvedValue(storeCustomView(stored));
+    const workspaceA = 'workspace-a';
+    const workspaceB = 'workspace-b';
+    const storedA = createCustomTemplate('review', () => `saved-a-${++id}`);
+    const storedB = createCustomTemplate('focus', () => `saved-b-${++id}`);
+    db.get.mockImplementation((key) => Promise.resolve(
+      key === customViewStorageKey(workspaceA)
+        ? storeCustomView(storedA)
+        : key === customViewStorageKey(workspaceB)
+          ? storeCustomView(storedB)
+          : null,
+    ));
 
-    await useCustomView.getState().restore();
-    expect(useCustomView.getState().layout).toEqual(stored.layout);
+    await useCustomView.getState().restore(workspaceA);
+    expect(useCustomView.getState()).toMatchObject({
+      workspaceId: workspaceA,
+      layout: storedA.layout,
+    });
 
     let releaseFirst!: () => void;
     const firstWrite = new Promise<void>((resolve) => { releaseFirst = resolve; });
     const writes: unknown[] = [];
-    db.set.mockImplementation((_key, value) => {
+    db.set.mockImplementation((key, value) => {
       writes.push(value);
-      return writes.length === 1 ? firstWrite : Promise.resolve();
+      return key === customViewStorageKey(workspaceA) && writes.length === 1
+        ? firstWrite
+        : Promise.resolve();
     });
 
     const pane = useCustomView.getState().activePaneId;
@@ -37,15 +52,78 @@ describe('Custom view persistence', () => {
     await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(1));
     expect(db.set).toHaveBeenNthCalledWith(
       1,
-      'custom-view.layout',
+      customViewStorageKey(workspaceA),
       expect.objectContaining({ version: 1, layout: expect.any(Object) }),
     );
 
-    releaseFirst();
+    // Workspace B restores and writes without waiting for A's blocked queue.
+    await useCustomView.getState().restore(workspaceB);
+    expect(useCustomView.getState().layout).toEqual(storedB.layout);
+    useCustomView.getState().applyTemplate('review');
     await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(2));
-    expect(writes[1]).toMatchObject({
+    expect(db.set.mock.calls[1][0]).toBe(customViewStorageKey(workspaceB));
+
+    releaseFirst();
+    await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(3));
+    expect(db.set.mock.calls[2][0]).toBe(customViewStorageKey(workspaceA));
+    expect(writes[2]).toMatchObject({
       version: 1,
       layout: { kind: 'split', direction: 'horizontal' },
+    });
+
+    await useCustomView.getState().restore(workspaceA);
+    expect(useCustomView.getState().layout).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+    });
+  });
+
+  it('migrates the legacy app-wide layout only into Default', async () => {
+    let id = 0;
+    const legacy = createCustomTemplate('review', () => `legacy-${++id}`);
+    db.get.mockImplementation((key) => Promise.resolve(
+      key === 'custom-view.layout' ? storeCustomView(legacy) : null,
+    ));
+
+    await useCustomView.getState().restore(DEFAULT_WORKSPACE_ID);
+
+    expect(useCustomView.getState().layout).toEqual(legacy.layout);
+    expect(db.set).toHaveBeenCalledWith(
+      customViewStorageKey(DEFAULT_WORKSPACE_ID),
+      storeCustomView(legacy),
+    );
+  });
+
+  it('does not reveal a stale layout when an earlier workspace restore finishes last', async () => {
+    let id = 0;
+    const workspaceA = 'restore-race-a';
+    const workspaceB = 'restore-race-b';
+    const storedA = createCustomTemplate('focus', () => `race-a-${++id}`);
+    const storedB = createCustomTemplate('review', () => `race-b-${++id}`);
+    let resolveA!: (value: unknown) => void;
+    let resolveB!: (value: unknown) => void;
+    db.get.mockImplementation((key) => new Promise((resolve) => {
+      if (key === customViewStorageKey(workspaceA)) resolveA = resolve;
+      else if (key === customViewStorageKey(workspaceB)) resolveB = resolve;
+      else resolve(null);
+    }));
+
+    const restoreA = useCustomView.getState().restore(workspaceA);
+    const restoreB = useCustomView.getState().restore(workspaceB);
+    resolveB(storeCustomView(storedB));
+    await restoreB;
+    expect(useCustomView.getState()).toMatchObject({
+      workspaceId: workspaceB,
+      layout: storedB.layout,
+      restored: true,
+    });
+
+    resolveA(storeCustomView(storedA));
+    await restoreA;
+    expect(useCustomView.getState()).toMatchObject({
+      workspaceId: workspaceB,
+      layout: storedB.layout,
+      restored: true,
     });
   });
 });

@@ -2145,8 +2145,8 @@ and Store certification remain external gates.
 ## 1.1+ — Post-1.0
 
 - ☑ **Experimental Custom view** — compose the real Strand feature surfaces
-  into nested, resizable panes; auto-save the layout and split proportions;
-  start from Focus, Review station, Blank, or VS Code-style workbench
+  into nested, resizable panes; auto-save a distinct layout and split
+  proportions for each workspace; start from Focus, Review station, Blank, or VS Code-style workbench
   templates; keep one live Work runtime while moving it through the layout.
 - **Remote repos over SSH** — open a repo on a remote machine (agent
   devbox, VPS) and use Strand locally against it. Headless `strandd`
@@ -2609,15 +2609,18 @@ fork-point merge base, making the complete branch history the default session
 scope. Combined staged patches remain read-only at hunk level so index writes
 cannot apply the wrong patch.
 
-**Experimental Custom view shipped (2026-08-27):** Custom composes all eight
-existing Strand feature surfaces into an app-wide, auto-saved tree of nested
-horizontal and vertical panes. A VS Code-style workbench template pairs the
-live Work surface with Local Changes and All Commits inspectors; Review,
-Focus, and Blank templates cover other starting points. Features move instead
+**Experimental Custom view shipped (2026-08-27):** Custom composes nine
+existing Strand feature surfaces into a workspace-scoped, auto-saved tree of
+nested horizontal and vertical panes. A VS Code-style workbench template pairs
+Files and the live Work surface with Local Changes and All Commits inspectors;
+Review, Focus, and Blank templates cover other starting points. Features move instead
 of mounting twice, active panes arbitrate surface-level shortcuts, and Work's
 single editor/terminal runtime stays mounted while its reserved pane is moved
 or resized. Sidebar, native menu, rebindable Mod+8, palette layout commands,
 F6 module focus, and a startup-space setting keep the experiment keyboard-first.
+The same-day workspace pass gave Default and every named workspace independent
+topology, feature assignments, and divider storage; the previous app-wide
+layout migrates only into Default.
 
 ---
 

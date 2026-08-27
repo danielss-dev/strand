@@ -1213,21 +1213,23 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   plus high-output and many-restored-descriptor performance baselines.
 
 ### Experimental Custom view
-- ☑ Versioned, defensively parsed, app-wide Custom layout with nested
+- ☑ Versioned, defensively parsed, workspace-scoped Custom layouts with nested
   horizontal/vertical panes, draggable and keyboard-resizable dividers,
-  close/collapse rules, eight-feature limit, and automatic topology/feature/
-  split-size restore (`lib/customView.ts`, `stores/customView.ts`,
-  `views/CustomView.tsx`).
-- ☑ Compose the real Work, Local Changes, Review, All Commits, Pull Requests,
-  Reflog, Worktrees, and Workspace Review surfaces without duplicate feature
-  mounts; moving Work preserves its single xterm/editor runtime. Includes
-  Blank, Focus, Review station, and VS Code workbench templates
-  (`CustomView`, stable `WorkFrame`, active-pane shortcut arbitration).
+  close/collapse rules, nine-feature limit, per-workspace write queues and
+  divider identities, Default-only legacy migration, and automatic topology/
+  feature/split-size restore (`lib/customView.ts`, `stores/customView.ts`,
+  `workspaceIdentity.ts`, `views/CustomView.tsx`).
+- ☑ Compose the real Work, Files, Local Changes, Review, All Commits, Pull
+  Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate
+  feature mounts; moving Work preserves its single xterm/editor runtime and
+  Files has one reusable sidebar/Custom owner (`RepositoryFiles`, `CustomView`,
+  stable `WorkFrame`, active-pane shortcut arbitration). Includes Blank, Focus,
+  Review station, and a four-surface VS Code workbench template.
 - ☑ Custom is reachable from the sidebar Labs row, native View menu,
   rebindable `Mod+8`, command palette, and Appearance startup setting. F6
   focuses the active pane's module selector; pane assignment, splitting,
   closing, and templates all have keyboard paths.
-- ☐ Run native Custom-view persistence and live-terminal continuity E2E on
+- ☐ Run native workspace-scoped Custom-view persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).
 

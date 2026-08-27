@@ -13,6 +13,7 @@ import { Presence } from './components/Presence';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { PullRequestMonitor } from './components/PullRequestMonitor';
 import { RepoRail } from './components/RepoRail';
+import { RepositoryFiles } from './components/RepositoryFiles';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
@@ -130,6 +131,7 @@ const STATUS_WORD: Record<StatusKind, string> = {
 
 const CUSTOM_FEATURE_LABELS: Record<CustomFeatureId, string> = {
   work: t('nav.work'),
+  files: t('nav.files'),
   local: t('nav.localChanges'),
   review: t('nav.review'),
   commits: t('nav.allCommits'),
@@ -187,6 +189,8 @@ export function App() {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const customActivePaneId = useCustomView((s) => s.activePaneId);
+  const customRestored = useCustomView((s) => s.restored);
+  const customWorkspaceId = useCustomView((s) => s.workspaceId);
   const customWorkPaneId = useCustomView((s) =>
     customPanes(s.layout).find((pane) => pane.feature === 'work')?.id ?? null);
   const openWorkFile = useWork((s) => s.openFile);
@@ -268,6 +272,8 @@ export function App() {
   // handful of user-created entries, so subscribing whole is cheap.
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
+  const customWorkspaceReady = customRestored
+    && customWorkspaceId === (activeWorkspaceId ?? DEFAULT_WORKSPACE_ID);
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
   const activePullRequestFollowed = usePullRequests((s) =>
     activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
@@ -1372,8 +1378,11 @@ export function App() {
     action: (state: ReturnType<typeof useCustomView.getState>) => void,
   ) => {
     void (async () => {
-      await useCustomView.getState().restore();
-      action(useCustomView.getState());
+      const workspaceId = useWorkspaces.getState().activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+      await useCustomView.getState().restore(workspaceId);
+      const state = useCustomView.getState();
+      if (state.workspaceId !== workspaceId) return;
+      action(state);
       setView('custom');
       selectFile(null);
     })();
@@ -1830,6 +1839,21 @@ export function App() {
     active: boolean,
   ): React.ReactNode => {
     switch (feature) {
+      case 'files':
+        return (
+          <RepositoryFiles
+            followWorkSelection
+            onOpenFileInEditor={openActiveFileInEditor}
+            onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
+            onToast={showToast}
+            onOpenWork={() => {
+              const state = useCustomView.getState();
+              const pane = customPanes(state.layout).find((candidate) => candidate.feature === 'work');
+              if (pane) state.activatePane(pane.id);
+              else setView('work');
+            }}
+          />
+        );
       case 'local':
         return <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={active} />;
       case 'review':
@@ -1870,7 +1894,7 @@ export function App() {
           />
         );
     }
-  }, [openActiveFileInEditor, openEditorTarget, showToast]);
+  }, [openActiveFileInEditor, openEditorTarget, setView, showToast]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1969,10 +1993,15 @@ export function App() {
             <Panel minSize={30}>
               <div className="workspace-host">
                 <Work
-                  visible={view === 'work' || (view === 'custom' && customWorkFrame != null)}
-                  frame={view === 'custom' ? customWorkFrame : null}
+                  visible={view === 'work' || (
+                    view === 'custom' && customWorkspaceReady && customWorkFrame != null
+                  )}
+                  frame={view === 'custom' && customWorkspaceReady ? customWorkFrame : null}
                   keyboardActive={view === 'work' || (
-                    view === 'custom' && customWorkPaneId != null && customActivePaneId === customWorkPaneId
+                    view === 'custom'
+                    && customWorkspaceReady
+                    && customWorkPaneId != null
+                    && customActivePaneId === customWorkPaneId
                   )}
                   onActivate={view === 'custom' ? activateCustomWorkPane : undefined}
                 />

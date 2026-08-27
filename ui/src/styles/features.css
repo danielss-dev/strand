@@ -7540,6 +7540,37 @@ textarea.clone-input {
   display: flex;
   flex-direction: column;
 }
+.repository-files.inactive { display: none; }
+.side-files-owner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 11px;
+}
+.side-files-owner > svg { color: var(--accent-2); }
+.side-files-owner button {
+  height: 26px;
+  padding: 0 9px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.side-files-owner button:hover,
+.side-files-owner button:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+  outline: 1px solid var(--accent);
+}
 .side-files-tools {
   flex: 0 0 auto;
   display: flex;
@@ -7875,12 +7906,21 @@ textarea.clone-input {
   white-space: nowrap;
 }
 .custom-builder-title strong { color: var(--text); font-weight: 600; }
-.custom-repo-name {
+.custom-workspace-name {
   max-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-dim);
-  font: 11px var(--font-mono);
+  font-size: 11px;
+}
+.custom-workspace-name > svg { flex: none; color: var(--accent-2); }
+.custom-workspace-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .custom-experimental {
   padding: 2px 6px;
@@ -8011,7 +8051,8 @@ textarea.clone-input {
 .custom-pane-body > .pr-view,
 .custom-pane-body > .wt-view,
 .custom-pane-body > .reflog-list,
-.custom-pane-body > .reflog-empty {
+.custom-pane-body > .reflog-empty,
+.custom-pane-body > .side-files {
   width: 100%;
   height: 100%;
   min-width: 0;

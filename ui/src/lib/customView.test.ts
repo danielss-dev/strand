@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CUSTOM_FEATURE_IDS,
   closeCustomPane,
   createCustomTemplate,
   customPanes,
@@ -38,10 +39,17 @@ describe('Custom view layout', () => {
     const local = customPanes(state.layout).find((pane) => pane.feature === 'local');
     expect(local).toBeDefined();
     state = closeCustomPane(state, local!.id);
-    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual(['work', 'commits']);
-    expect(state.activePaneId).toBe(customPanes(state.layout)[1].id);
+    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual([
+      'files',
+      'work',
+      'commits',
+    ]);
+    expect(state.activePaneId).toBe(customPanes(state.layout)[2].id);
 
     state = closeCustomPane(state, state.activePaneId);
+    const files = customPanes(state.layout).find((pane) => pane.feature === 'files');
+    expect(files).toBeDefined();
+    state = closeCustomPane(state, files!.id);
     expect(state.layout).toMatchObject({ kind: 'pane', feature: 'work' });
   });
 
@@ -54,14 +62,27 @@ describe('Custom view layout', () => {
 
   it('creates a VS Code-style workbench template with stable split identities', () => {
     const state = createCustomTemplate('vscode', ids());
-    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual(['work', 'local', 'commits']);
+    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual([
+      'files',
+      'work',
+      'local',
+      'commits',
+    ]);
     expect(state.layout).toMatchObject({
       kind: 'split',
       direction: 'horizontal',
-      ratio: 68,
+      ratio: 18,
       children: [
-        { kind: 'pane', feature: 'work' },
-        { kind: 'split', direction: 'vertical', ratio: 56 },
+        { kind: 'pane', feature: 'files' },
+        {
+          kind: 'split',
+          direction: 'horizontal',
+          ratio: 72,
+          children: [
+            { kind: 'pane', feature: 'work' },
+            { kind: 'split', direction: 'vertical', ratio: 56 },
+          ],
+        },
       ],
     });
   });
@@ -69,10 +90,10 @@ describe('Custom view layout', () => {
   it('bounds a layout to the number of unique feature surfaces', () => {
     let state = emptyCustomView();
     const makeId = ids();
-    for (let i = 1; i < 8; i += 1) {
+    for (let i = 1; i < CUSTOM_FEATURE_IDS.length; i += 1) {
       state = splitCustomPane(state, state.activePaneId, i % 2 ? 'horizontal' : 'vertical', makeId);
     }
-    expect(customPanes(state.layout)).toHaveLength(8);
+    expect(customPanes(state.layout)).toHaveLength(CUSTOM_FEATURE_IDS.length);
     expect(splitCustomPane(state, state.activePaneId, 'horizontal', makeId)).toBe(state);
   });
 

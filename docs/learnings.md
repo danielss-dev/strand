@@ -2226,3 +2226,16 @@ Keep expensive persistent renderers such as Work's xterm/editor layer at one
 stable React position and measure a reserved pane for placement; do not remount
 them as the layout tree changes. This preserves terminal processes, scrollback,
 selection, and the ordinary non-composed-view hot path.
+
+## Workspace layouts need scope on every persistence channel (2026-08-27)
+
+A layout is not workspace-specific merely because its topology uses a
+workspace-keyed SQLite row. Scope the complete persistence surface: cached
+models, in-flight restores, serialized write queues, and
+`react-resizable-panels` auto-save identities. On a workspace switch, hide the
+previous tree synchronously and ignore a stale async restore unless its scope
+is still active; otherwise a slow read can flash or overwrite another
+workspace's view. Keep per-workspace write queues independent so one slow disk
+write does not stall edits elsewhere. When migrating a former app-wide value,
+attach it only to the reserved Default workspace—copying it into every named
+workspace defeats the user's expectation that each starts independently.

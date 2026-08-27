@@ -20,9 +20,8 @@ import {
   type CustomTemplateId,
 } from '../lib/customView';
 import { t } from '../lib/i18n';
-import { repoFamilyName } from '../lib/repoIdentity';
-import { useRepo } from '../stores/repo';
 import { useCustomView } from '../stores/customView';
+import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 
 export interface CustomPaneFrame {
   left: number;
@@ -40,6 +39,7 @@ interface CustomFeatureMeta {
 
 const FEATURES: readonly CustomFeatureMeta[] = [
   { id: 'work', label: t('nav.work'), description: t('custom.feature.work.description'), icon: 'terminal' },
+  { id: 'files', label: t('nav.files'), description: t('custom.feature.files.description'), icon: 'folder' },
   { id: 'local', label: t('nav.localChanges'), description: t('custom.feature.local.description'), icon: 'changes' },
   { id: 'review', label: t('nav.review'), description: t('custom.feature.review.description'), icon: 'check' },
   { id: 'commits', label: t('nav.allCommits'), description: t('custom.feature.commits.description'), icon: 'graph' },
@@ -69,10 +69,14 @@ export function CustomView({
   renderFeature: (feature: Exclude<CustomFeatureId, 'work'>, active: boolean) => ReactNode;
   onWorkFrame: (frame: CustomPaneFrame | null) => void;
 }) {
-  const meta = useRepo((state) => state.meta);
+  const workspaces = useWorkspaces((state) => state.workspaces);
+  const activeWorkspaceId = useWorkspaces((state) => state.activeWorkspaceId);
+  const workspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+  const workspaceName = workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? 'Default';
   const layout = useCustomView((state) => state.layout);
   const activePaneId = useCustomView((state) => state.activePaneId);
   const restored = useCustomView((state) => state.restored);
+  const restoredWorkspaceId = useCustomView((state) => state.workspaceId);
   const restore = useCustomView((state) => state.restore);
   const activatePane = useCustomView((state) => state.activatePane);
   const setFeature = useCustomView((state) => state.setFeature);
@@ -86,8 +90,9 @@ export function CustomView({
     [panes],
   );
   const activeFeature = panes.find((pane) => pane.id === activePaneId)?.feature ?? null;
+  const ready = restored && restoredWorkspaceId === workspaceId;
 
-  useEffect(() => { void restore(); }, [restore]);
+  useEffect(() => { void restore(workspaceId); }, [restore, workspaceId]);
 
   // F6 mirrors Work: leave a complex embedded surface and return to the
   // active pane's module switcher without requiring pointer precision.
@@ -116,7 +121,10 @@ export function CustomView({
     <div className="custom-view">
       <header className="custom-builder-bar">
         <div className="custom-builder-title">
-          <span className="custom-repo-name">{repoFamilyName(meta)}</span>
+          <span className="custom-workspace-name" title={workspaceName}>
+            <Icon name="workspace" size={11} />
+            <span>{workspaceName}</span>
+          </span>
           <Icon name="chev-right" size={10} />
           <strong>{t('custom.title')}</strong>
           <span className="custom-experimental">{t('custom.experimental')}</span>
@@ -129,7 +137,7 @@ export function CustomView({
           <button
             type="button"
             className="btn ghost custom-toolbar-btn"
-            disabled={!restored}
+            disabled={!ready}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               setTemplateMenu({ x: rect.right - 220, y: rect.bottom + 4 });
@@ -144,7 +152,7 @@ export function CustomView({
             className="icon-btn"
             title={t('custom.splitActiveRight')}
             aria-label={t('custom.splitActiveRight')}
-            disabled={!restored || panes.length >= FEATURES.length}
+            disabled={!ready || panes.length >= FEATURES.length}
             onClick={() => splitPane(activePaneId, 'horizontal')}
           >
             <Icon name="split" size={13} />
@@ -154,7 +162,7 @@ export function CustomView({
             className="icon-btn"
             title={t('custom.splitActiveDown')}
             aria-label={t('custom.splitActiveDown')}
-            disabled={!restored || panes.length >= FEATURES.length}
+            disabled={!ready || panes.length >= FEATURES.length}
             onClick={() => splitPane(activePaneId, 'vertical')}
           >
             <Icon name="unified" size={13} />
@@ -162,13 +170,17 @@ export function CustomView({
         </div>
       </header>
 
-      {!restored ? (
+      {!ready ? (
         <div className="custom-loading" role="status">
-          <Icon name="refresh" size={16} className="spin" /> {t('custom.restoring')}
+          <Icon name="refresh" size={16} className="spin" />
+          {t('custom.restoring', { workspace: workspaceName })}
         </div>
       ) : (
         <CustomLayoutView
+          key={workspaceId}
           node={layout}
+          workspaceId={workspaceId}
+          workspaceName={workspaceName}
           paneCount={panes.length}
           activePaneId={activePaneId}
           used={used}
@@ -195,6 +207,8 @@ export function CustomView({
 }
 
 interface LayoutProps {
+  workspaceId: string;
+  workspaceName: string;
   paneCount: number;
   activePaneId: string;
   used: ReadonlyMap<CustomFeatureId, string>;
@@ -212,7 +226,7 @@ function CustomLayoutView({ node, ...props }: LayoutProps & { node: CustomLayout
   return (
     <PanelGroup
       direction={node.direction}
-      autoSaveId={`strand:custom:${node.id}`}
+      autoSaveId={`strand:custom:${props.workspaceId}:${node.id}`}
       className="custom-layout"
     >
       <Panel defaultSize={node.ratio} minSize={18}>
@@ -239,6 +253,7 @@ function CustomPaneView({
   onSplit,
   onClose,
   onTemplate,
+  workspaceName,
   renderFeature,
   onWorkFrame,
 }: LayoutProps & { pane: CustomPane }) {
@@ -332,6 +347,7 @@ function CustomPaneView({
             paneId={pane.id}
             used={used}
             firstPane={paneCount === 1}
+            workspaceName={workspaceName}
             onFeature={onFeature}
             onTemplate={onTemplate}
           />
@@ -349,12 +365,14 @@ function EmptyCustomPane({
   paneId,
   used,
   firstPane,
+  workspaceName,
   onFeature,
   onTemplate,
 }: {
   paneId: string;
   used: ReadonlyMap<CustomFeatureId, string>;
   firstPane: boolean;
+  workspaceName: string;
   onFeature(paneId: string, feature: CustomFeatureId): void;
   onTemplate(template: CustomTemplateId): void;
 }) {
@@ -379,7 +397,7 @@ function EmptyCustomPane({
       <div className="custom-empty-copy">
         <span className="custom-empty-kicker">{t('custom.buildPane')}</span>
         <strong>{t('custom.chooseStrandFeature')}</strong>
-        <span>{t('custom.followsRepository')}</span>
+        <span>{t('custom.followsRepository', { workspace: workspaceName })}</span>
       </div>
       <div ref={gridRef} className="custom-feature-grid" onKeyDown={onGridKeyDown}>
         {FEATURES.map((feature) => {

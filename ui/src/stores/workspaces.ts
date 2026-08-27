@@ -8,6 +8,7 @@ import {
 } from '../lib/codeWorkspace';
 import { recents as recentsDb, workspacesDb } from '../lib/db';
 import { pathKey, repoFamilyName, workspaceMemberSet } from '../lib/repoIdentity';
+import { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
 import { tauri } from '../lib/tauri';
 import { t } from '../lib/i18n';
 import type { Workspace } from '../lib/types';
@@ -21,7 +22,7 @@ import { useWork } from './work';
  * kept out of the named-workspace list. Active-default is stored as
  * `activeWorkspaceId === null`; this id resolves it in the list.
  */
-export const DEFAULT_WORKSPACE_ID = '__default__';
+export { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
 
 /**
  * # Model

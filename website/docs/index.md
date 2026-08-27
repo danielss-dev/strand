@@ -40,7 +40,7 @@ installs update through your package manager.
 | --- | --- |
 | [Getting started](getting-started.md) | Installing Strand, opening your first repository, the app layout, and the `Mod` key notation used throughout this guide. |
 | [Work: files and terminals](work.md) | Read-only file tabs, preview/pin behavior, embedded terminal lifecycle, focus rules, and shell settings. |
-| [Custom view (experimental)](custom-view.md) | Arrange live Strand features in persistent, resizable panes and start from focused or VS Code-style templates. |
+| [Custom view (experimental)](custom-view.md) | Give each workspace its own persistent arrangement of live Strand features, including Files and VS Code-style templates. |
 | [Repositories and workspaces](repositories-and-workspaces.md) | Opening, cloning, and switching between repositories; tabs and the icon rail; workspaces for multi-repo products. |
 | [Reviewing agent changes](reviewing-agent-changes.md) | The Review view: baselines, the review queue, notes, feedback export, and cross-repo Workspace Review. |
 | [Pull requests](pull-requests.md) | Browse, review, and manage GitHub and Azure DevOps pull requests for the active repository. |
