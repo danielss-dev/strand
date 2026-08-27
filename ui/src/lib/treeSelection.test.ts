@@ -47,6 +47,14 @@ describe('resolveTreeActionTargets', () => {
 });
 
 describe('resolveActiveTreeTargets', () => {
+  it('expands an active folder when Pierre has not populated multi-selection', () => {
+    expect(resolveActiveTreeTargets(files, [], 'src/')).toEqual([
+      'src/app.ts',
+      'src/lib/a.ts',
+      'src/lib/b.ts',
+    ]);
+  });
+
   it('keeps a mixed expanded selection for view-level shortcuts', () => {
     expect(
       resolveActiveTreeTargets(
