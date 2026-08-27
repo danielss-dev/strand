@@ -22,7 +22,7 @@ The staging loop is fully keyboard-driven:
 | `j` / `k` | Next / previous file |
 | `n` / `p` | Next / previous change block |
 | `s` | Stage or unstage the selected file |
-| `d` `d` | Discard (press twice to confirm) |
+| `d` `d` | Discard the selected file, folder descendants, or multi-selection (press twice to confirm) |
 | `c` | Jump to the commit subject field |
 | `Shift+J` / `Shift+K` | Scroll the diff pane |
 | `Mod+F` | Search within the diff |

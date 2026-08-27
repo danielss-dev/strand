@@ -523,6 +523,14 @@ Note: "expand/collapse all" in Local Changes operates on the **diff pane**
 toolbar toggle writes `useSettings.diffsCollapsed` and each `FileDiffSection`
 header folds its own body. There is intentionally no folder expand/collapse-all.
 
+**Keyboard ownership.** Pierre also consumes printable keys inside its shadow
+tree for typeahead and marks those events `defaultPrevented`. Surface-local
+shortcuts that must work while a tree row owns focus need a capture-phase
+listener and must stop propagation only after they accept the key. A bubbling
+listener that first rejects `defaultPrevented` events silently loses shortcuts
+such as Local Changes' folder `d d` discard even though selection and target
+expansion are correct.
+
 ---
 
 ## Sidebar leaf rows: single-click reveals, double-click activates

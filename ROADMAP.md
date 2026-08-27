@@ -2456,6 +2456,12 @@ overlapping selections, row context actions, and the `d d` / Delete keyboard
 paths all preserve the full intended target set while retaining one bulk IPC
 call.
 
+**Focused-tree staging shortcuts hardened (2026-08-27):** Local Changes now
+captures its staging loop before Pierre's shadow-tree typeahead can consume
+printable keys. Folder `d d` reaches the existing descendant-expanded bulk
+discard while the tree owns focus; the same boundary keeps `j`/`k`, `n`/`p`,
+`s`, and `c` predictable from a selected tree row.
+
 **Windows signed distribution closed through Microsoft Store (2026-07-29):**
 Partner Center signing of Strand's production MSIX closes the Windows leg of
 the three-platform signed-installer milestone. The preferred Windows trust

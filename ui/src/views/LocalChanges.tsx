@@ -189,13 +189,21 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
   const confirmTimer = useRef<number | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Run in capture phase: Pierre's shadow-tree keyboard handler consumes
+      // printable keys for typeahead and marks them defaultPrevented before a
+      // bubbling window listener can see them. Local Changes owns its staging
+      // loop while this view is mounted, so consume only actions we actually
+      // handle before they reach the tree.
+      const consume = () => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
       // ⌘F / Ctrl+F opens the in-diff search — checked before the mod-combo
       // guard below. Inert while a dialog/palette or the resolver is up.
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
-        const ft = e.target as HTMLElement | null;
-        if (ft?.closest('[role="dialog"], [role="combobox"], .palette-backdrop')) return;
+        if (eventInside(e, '[role="dialog"], [role="combobox"], .palette-backdrop')) return;
         if (resolverOpen.current) return;
-        e.preventDefault();
+        consume();
         setSearchOpen(true);
         focusDiffSearchInput(); // already open → refocus + select
         return;
@@ -239,30 +247,30 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
       switch (e.key) {
         case 'j':
           if (nav.length === 0) return;
-          e.preventDefault();
+          consume();
           selectIdx(curIdx === -1 ? 0 : curIdx + 1);
           break;
         case 'k':
           if (nav.length === 0) return;
-          e.preventDefault();
+          consume();
           selectIdx(curIdx === -1 ? 0 : curIdx - 1);
           break;
         case 'n':
         case 'p': {
-          e.preventDefault();
+          consume();
           stepChangeBlock(e.key === 'n' ? 1 : -1);
           break;
         }
         // Shift+J / Shift+K scroll the diff pane itself (j/k stay file nav).
         case 'J':
         case 'K': {
-          e.preventDefault();
+          consume();
           scrollDiff(e.key === 'J' ? 1 : -1);
           break;
         }
         case 's': {
           if (!sel || sel.all) return;
-          e.preventDefault();
+          consume();
           const file = sel.file;
           if (sel.staged) void state.unstageMany([file]).catch(fail('Unstage'));
           else void state.stageMany([file]).catch(fail('Stage'));
@@ -270,7 +278,7 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
         }
         case 'd': {
           if (!sel || sel.all || sel.staged) return;
-          e.preventDefault();
+          consume();
           if (confirmDiscard === sel.file) {
             if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
             setConfirmDiscard(null);
@@ -287,14 +295,14 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
         case 'Delete':
         case 'Backspace': {
           if (!sel || sel.all || sel.staged) return;
-          e.preventDefault();
+          consume();
           if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
           setConfirmDiscard(null);
           discardSelection();
           break;
         }
         case 'c': {
-          e.preventDefault();
+          consume();
           document
             .querySelector<HTMLInputElement>('.lc-commit-bar .subject')
             ?.focus();
@@ -304,8 +312,8 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
           return;
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [confirmDiscard, fail]);
 
   return (
