@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { t } from '../lib/i18n';
 import type { KeyOverrides } from '../lib/keys';
 import type { AiProvider, EmbeddedShellChoice } from '../lib/types';
 
@@ -24,7 +25,7 @@ export type DiffSyntaxTheme =
   | 'tritanopia';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
 /** Repository space shown after Strand launches. */
-export type StartupSpace = 'work' | 'local' | 'review' | 'pull-requests' | 'commits';
+export type StartupSpace = 'work' | 'custom' | 'local' | 'review' | 'pull-requests' | 'commits';
 /** How open repositories are presented: a vertical icon rail down the left
  * edge (default), or a horizontal tab strip in the toolbar. */
 export type RepoNav = 'rail' | 'tabs';
@@ -232,6 +233,7 @@ export const REPO_NAV_OPTIONS: { id: RepoNav; label: string }[] = [
 
 export const STARTUP_SPACE_OPTIONS: { id: StartupSpace; label: string }[] = [
   { id: 'work', label: 'Work' },
+  { id: 'custom', label: t('custom.settingsOption') },
   { id: 'local', label: 'Local Changes' },
   { id: 'review', label: 'Review' },
   { id: 'pull-requests', label: 'Pull Requests' },

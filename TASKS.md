@@ -1155,7 +1155,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 ### Work view + embedded terminals
 - ☑ Work is the startup/sidebar/menu/palette destination; Files becomes the
   active sidebar lens and numbered navigation is Work `Mod+1` through
-  Workspace Review `Mod+7` (`View`, `Sidebar`, `COMMANDS`, native View menu).
+  Workspace Review `Mod+7`, plus experimental Custom `Mod+8` (`View`,
+  `Sidebar`, `COMMANDS`, native View menu).
 - ☑ Per-repository mixed `WorkTab` model with one replaceable preview, pin
   promotion/deduplication, peer ordering, close fallback, path-mutation
   reconciliation, and stable Work return IDs (`stores/work.ts`,
@@ -1210,6 +1211,25 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   not stop them (`workspaces.ts`).
 - ☐ Run interactive terminal/process-tree E2E on real macOS and Linux builds,
   plus high-output and many-restored-descriptor performance baselines.
+
+### Experimental Custom view
+- ☑ Versioned, defensively parsed, app-wide Custom layout with nested
+  horizontal/vertical panes, draggable and keyboard-resizable dividers,
+  close/collapse rules, eight-feature limit, and automatic topology/feature/
+  split-size restore (`lib/customView.ts`, `stores/customView.ts`,
+  `views/CustomView.tsx`).
+- ☑ Compose the real Work, Local Changes, Review, All Commits, Pull Requests,
+  Reflog, Worktrees, and Workspace Review surfaces without duplicate feature
+  mounts; moving Work preserves its single xterm/editor runtime. Includes
+  Blank, Focus, Review station, and VS Code workbench templates
+  (`CustomView`, stable `WorkFrame`, active-pane shortcut arbitration).
+- ☑ Custom is reachable from the sidebar Labs row, native View menu,
+  rebindable `Mod+8`, command palette, and Appearance startup setting. F6
+  focuses the active pane's module selector; pane assignment, splitting,
+  closing, and templates all have keyboard paths.
+- ☐ Run native Custom-view persistence and live-terminal continuity E2E on
+  macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
+  module moves, and overflow; native SQLite/PTYS require packaged app passes).
 
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;

@@ -19,6 +19,8 @@
  * display and `toMudaAccelerator` converts one for the native desktop menu.
  */
 
+import { t } from './i18n';
+
 /** A global command id. The owning handlers live in `App.tsx`. */
 export type CommandId =
   | 'palette'
@@ -26,6 +28,7 @@ export type CommandId =
   | 'clone-repo'
   | 'settings'
   | 'view-work'
+  | 'view-custom'
   | 'view-local'
   | 'view-commits'
   | 'view-reflog'
@@ -81,9 +84,10 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'view-reflog',    label: 'Go to Reflog',         category: 'Navigation',  defaultBinding: 'Mod+4', menu: true, needsRepo: true },
   { id: 'view-review',    label: 'Go to Review',         category: 'Navigation',  defaultBinding: 'Mod+5', menu: true, needsRepo: true },
   { id: 'view-worktrees', label: 'Go to Worktrees',      category: 'Navigation',  defaultBinding: 'Mod+6', menu: true, needsRepo: true },
-  // Aggregated cross-repo review of the active workspace. JS-owned — the
-  // macOS View menu keeps the five core views.
+  // Aggregated cross-repo review of the active workspace remains JS-owned;
+  // it is intentionally absent from the native View menu.
   { id: 'view-workspace-review', label: 'Go to Workspace Review', category: 'Navigation', defaultBinding: 'Mod+7', needsRepo: true },
+  { id: 'view-custom', label: t('custom.goTo'), category: 'Navigation', defaultBinding: 'Mod+8', menu: true, needsRepo: true },
   // Cycle the active repository. Tab isn't representable as a native-menu
   // accelerator, so these stay JS-owned (no `menu: true`).
   { id: 'tab-next', label: 'Next repository',     category: 'Navigation',  defaultBinding: 'Mod+Tab',       needsRepo: true },

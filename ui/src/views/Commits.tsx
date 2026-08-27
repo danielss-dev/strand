@@ -59,10 +59,12 @@ interface CommitsProps {
   onCreateWorktree: (start: { ref: string; label: string }) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  /** Only the focused Custom-view pane owns window-level shortcuts. */
+  active?: boolean;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, active = true }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -835,6 +837,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   // `/` focuses the search field (unless the user is typing somewhere else).
   // Scoped to this view: the listener only exists while the graph is mounted.
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== '/') return;
       // `eventInside` sees through shadow DOM (Pierre's file-search box).
@@ -845,7 +848,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [active]);
 
   // Close the results dropdown on an outside click. Escape is handled by the
   // input's own keydown (which also clears the query), so this watches the

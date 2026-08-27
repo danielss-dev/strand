@@ -8,7 +8,7 @@ The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Ho
 
 - **Theme** — System ("Match the OS appearance"), Light ("Warm cream"), or Dark ("Warm charcoal"), shown as cards with live swatches. The choice also applies to read-only and editable code files in Work. The default is System. `Mod+Shift+T` toggles between light and dark from anywhere (it skips System), and the palette has "Theme: Light / Dark / System" entries.
 - **Accent** — eight color dots: Amber (default), Rose, Magenta, Violet, Blue, Cyan, Teal, and Green. The accent recolors the whole app live and works in both themes.
-- **Start in** — choose which repository space opens after launch: Work (default), Local Changes, Review, Pull Requests, or All Commits.
+- **Start in** — choose which repository space opens after launch: Work (default), Custom (experimental), Local Changes, Review, Pull Requests, or All Commits.
 - **Open repositories** — Sidebar or Tabs: show open repositories as a vertical icon rail or as a horizontal tab strip in the toolbar. The default is Tabs. See [Repositories and workspaces](repositories-and-workspaces.md).
 - **Density** — Compact, Default, or Relaxed spacing.
 - **UI font** — Geist (default), Inter, IBM Plex Sans, or System.
@@ -35,7 +35,7 @@ Every global shortcut in Strand is rebindable here. Shortcuts are grouped by cat
 - **Reset** — each row has a reset-to-default button, and a **Restore defaults** button at the top resets everything.
 - **Conflicts** — if two commands end up on the same combination, both are flagged "Shared with another command" so you can resolve it.
 
-Rebindable defaults include the command palette (`Mod+K`), views `Mod+1`–`Mod+7`, push/pull/fetch/sync, the theme toggle, the repo switcher (`Mod+E`), and the AI commit-message suggestion (`Mod+Shift+M`). The full table lives in [Keyboard and palette](keyboard-and-palette.md).
+Rebindable defaults include the command palette (`Mod+K`), views `Mod+1`–`Mod+8`, push/pull/fetch/sync, the theme toggle, the repo switcher (`Mod+E`), and the AI commit-message suggestion (`Mod+Shift+M`). The full table lives in [Keyboard and palette](keyboard-and-palette.md).
 
 Below the rebindable list, a **Context shortcuts** card documents the fixed, surface-local keys — things like `F6` to focus Work tabs, `Mod+Enter` to commit from the message box, `Mod+F` to search within the current file or diff, `/` to search commits, and `j`/`k` to step files in the Review queue and Local Changes. These are not rebindable; the card is a reference so you can look them up without leaving Settings.
 
@@ -207,4 +207,4 @@ Crashes are always logged locally regardless of the toggle; the section shows th
 
 ---
 
-All settings persist across launches, along with the rest of your session — open tabs, pane sizes, per-repo diff layouts, and workspaces. For the full shortcut reference, see [Keyboard and palette](keyboard-and-palette.md).
+All settings persist across launches, along with the rest of your session — open tabs, Work and Custom pane sizes, the Custom feature layout, per-repo diff layouts, and workspaces. For the full shortcut reference, see [Keyboard and palette](keyboard-and-palette.md).

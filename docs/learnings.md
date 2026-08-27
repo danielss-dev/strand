@@ -2214,3 +2214,15 @@ can reliably invalidate its own cache. The pre-dev/build
 optimizer `src` path and removes only `ui/node_modules/.vite` when one is
 missing. Keep this check generic; do not special-case a package or delete the
 whole dependency installation.
+
+## Composed views need one owner per live surface (2026-08-27)
+
+A configurable workspace cannot safely render a second copy of a feature whose
+store, window listeners, focus loop, or renderer assumes it is unique. Assign a
+feature to at most one pane and move it when reassigned. Only the active pane
+may own surface-level window shortcuts, and DOM queries must start from that
+surface's own root so two different diff surfaces cannot steer each other.
+Keep expensive persistent renderers such as Work's xterm/editor layer at one
+stable React position and measure a reserved pane for placement; do not remount
+them as the layout tree changes. This preserves terminal processes, scrollback,
+selection, and the ordinary non-composed-view hot path.

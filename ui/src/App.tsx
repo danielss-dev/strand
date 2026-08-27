@@ -68,6 +68,9 @@ import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
+import { useCustomView } from './stores/customView';
+import { CUSTOM_FEATURE_IDS, customPanes, type CustomFeatureId } from './lib/customView';
+import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
@@ -125,6 +128,17 @@ const STATUS_WORD: Record<StatusKind, string> = {
   CONFLICTED: 'conflicted',
 };
 
+const CUSTOM_FEATURE_LABELS: Record<CustomFeatureId, string> = {
+  work: t('nav.work'),
+  local: t('nav.localChanges'),
+  review: t('nav.review'),
+  commits: t('nav.allCommits'),
+  'pull-requests': t('nav.pullRequests'),
+  reflog: t('nav.reflog'),
+  worktrees: t('nav.worktrees'),
+  'workspace-review': t('nav.workspaceReview'),
+};
+
 /** A long-running clone/open driving the persistent progress popup. */
 interface OpProgress {
   /** Monotonic id of the owning operation — a finally only clears its own popup
@@ -172,6 +186,9 @@ export function App() {
 
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
+  const customActivePaneId = useCustomView((s) => s.activePaneId);
+  const customWorkPaneId = useCustomView((s) =>
+    customPanes(s.layout).find((pane) => pane.feature === 'work')?.id ?? null);
   const openWorkFile = useWork((s) => s.openFile);
   const addEmbeddedTerminal = useWork((s) => s.addTerminal);
   const selectFile = useRepo((s) => s.selectFile);
@@ -366,6 +383,9 @@ export function App() {
   // false = closed; 'create' opens the manager mid-create (palette "New
   // workspace…") — the dialog spawns a workspace and focuses its name field.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState<boolean | 'create'>(false);
+  // The real Work tree remains mounted once and is positioned over its slot
+  // when Custom embeds it, preserving live terminal renderers and scrollback.
+  const [customWorkFrame, setCustomWorkFrame] = useState<CustomPaneFrame | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -412,6 +432,24 @@ export function App() {
   const openSettingsAt = useCallback((section: SettingsSectionId) => {
     setSettingsSection(section);
     setSettingsOpen(true);
+  }, []);
+
+  const updateCustomWorkFrame = useCallback((next: CustomPaneFrame | null) => {
+    setCustomWorkFrame((current) => {
+      if (current === next) return current;
+      if (!current || !next) return next;
+      return current.left === next.left
+        && current.top === next.top
+        && current.width === next.width
+        && current.height === next.height
+        ? current
+        : next;
+    });
+  }, []);
+  const activateCustomWorkPane = useCallback(() => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find((candidate) => candidate.feature === 'work');
+    if (pane) state.activatePane(pane.id);
   }, []);
 
   // Launch the configured terminal / editor (Settings → Integrations) on the
@@ -873,6 +911,7 @@ export function App() {
     'clone-repo': () => setCloneOpen(true),
     'settings': () => openSettingsAt('appearance'),
     'view-work': () => { setView('work'); selectFile(null); },
+    'view-custom': () => { setView('custom'); selectFile(null); },
     'view-local': () => { setView('local'); selectFile(null); },
     'view-commits': () => { setView('commits'); selectFile(null); },
     'view-reflog': () => { setView('reflog'); selectFile(null); },
@@ -1150,7 +1189,7 @@ export function App() {
       // shortcuts app-owned; Windows/Linux keep only numbered view navigation.
       if (inEmbeddedTerminal) {
         if (osType() === 'macos' && !e.metaKey) return;
-        if (osType() !== 'macos' && !/^Mod\+[1-7]$/.test(binding)) return;
+        if (osType() !== 'macos' && !/^Mod\+[1-8]$/.test(binding)) return;
       }
       // AppKit fires native menu accelerators before the webview sees the key,
       // so defer to it on macOS. Windows/Linux keep this proven keydown path;
@@ -1329,6 +1368,17 @@ export function App() {
       createBranch, revealInGraph, selectCommit, selectFile, showToast,
       stashApply, stashPop, submoduleUpdate]);
 
+  const runCustomAction = useCallback((
+    action: (state: ReturnType<typeof useCustomView.getState>) => void,
+  ) => {
+    void (async () => {
+      await useCustomView.getState().restore();
+      action(useCustomView.getState());
+      setView('custom');
+      selectFile(null);
+    })();
+  }, [selectFile, setView]);
+
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
@@ -1382,6 +1432,65 @@ export function App() {
           useWork.getState().splitActiveTab(meta.path, 'bottom');
           setView('work'); selectFile(null);
         } },
+        { id: 'custom-view', label: t('custom.paletteShow'), group: 'Actions', shortcut: keyHint('view-custom'), keywords: 'customize layout panes modules vscode workbench labs', run: () => { setView('custom'); selectFile(null); } },
+        ...(view === 'custom' ? [
+          {
+            id: 'custom-split-right',
+            label: t('custom.paletteSplitRight'),
+            group: 'Actions',
+            keywords: 'custom layout pane horizontal side by side',
+            run: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'horizontal')),
+          } satisfies PaletteAction,
+          {
+            id: 'custom-split-down',
+            label: t('custom.paletteSplitDown'),
+            group: 'Actions',
+            keywords: 'custom layout pane vertical stacked',
+            run: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'vertical')),
+          } satisfies PaletteAction,
+          {
+            id: 'custom-close-pane',
+            label: t('custom.paletteClosePane'),
+            group: 'Actions',
+            keywords: 'custom layout pane remove clear',
+            run: () => runCustomAction((state) => state.closePane(state.activePaneId)),
+          } satisfies PaletteAction,
+          ...CUSTOM_FEATURE_IDS.map((feature) => ({
+            id: `custom-feature-${feature}`,
+            label: t('custom.paletteShowFeature', { feature: CUSTOM_FEATURE_LABELS[feature] }),
+            group: 'Actions' as const,
+            keywords: `custom layout feature module ${feature}`,
+            run: () => runCustomAction((state) => state.setFeature(state.activePaneId, feature)),
+          } satisfies PaletteAction)),
+          {
+            id: 'custom-template-vscode',
+            label: t('custom.paletteTemplateVscode'),
+            group: 'Actions',
+            keywords: 'custom layout preset editor source control history',
+            run: () => runCustomAction((state) => state.applyTemplate('vscode')),
+          } satisfies PaletteAction,
+          {
+            id: 'custom-template-review',
+            label: t('custom.paletteTemplateReview'),
+            group: 'Actions',
+            keywords: 'custom layout preset review commits',
+            run: () => runCustomAction((state) => state.applyTemplate('review')),
+          } satisfies PaletteAction,
+          {
+            id: 'custom-template-focus',
+            label: t('custom.paletteTemplateFocus'),
+            group: 'Actions',
+            keywords: 'custom layout preset work single pane',
+            run: () => runCustomAction((state) => state.applyTemplate('focus')),
+          } satisfies PaletteAction,
+          {
+            id: 'custom-template-blank',
+            label: t('custom.paletteTemplateBlank'),
+            group: 'Actions',
+            keywords: 'custom layout reset clear preset',
+            run: () => runCustomAction((state) => state.applyTemplate('blank')),
+          } satisfies PaletteAction,
+        ] : []),
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
@@ -1714,7 +1823,54 @@ export function App() {
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
-      toggleActivePullRequest]);
+      toggleActivePullRequest, runCustomAction]);
+
+  const renderCustomFeature = useCallback((
+    feature: Exclude<CustomFeatureId, 'work'>,
+    active: boolean,
+  ): React.ReactNode => {
+    switch (feature) {
+      case 'local':
+        return <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={active} />;
+      case 'review':
+        return <Review onOpenFileInEditor={openActiveFileInEditor} active={active} embedded />;
+      case 'pull-requests':
+        return (
+          <PullRequests
+            onToast={showToast}
+            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+          />
+        );
+      case 'workspace-review':
+        return <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={active} />;
+      case 'reflog':
+        return (
+          <Reflog
+            onResetTo={(target, label) => setResetDialog({ target, label })}
+            onCreateBranch={(start, label) => setBranchDialog({ start, label })}
+            onToast={showToast}
+          />
+        );
+      case 'worktrees':
+        return (
+          <Worktrees
+            onCreateWorktree={() => setWorktreeDialog({ start: null })}
+            onToast={showToast}
+          />
+        );
+      case 'commits':
+        return (
+          <Commits
+            onCreateTag={(target, label) => setTagDialog({ target, label })}
+            onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+            onResetTo={(target, label) => setResetDialog({ target, label })}
+            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+            onToast={showToast}
+            active={active}
+          />
+        );
+    }
+  }, [openActiveFileInEditor, openEditorTarget, showToast]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1811,43 +1967,64 @@ export function App() {
             </Panel>
             <PanelResizeHandle className="rs-handle vert" />
             <Panel minSize={30}>
-              <Work visible={view === 'work'} />
-              {view === 'file' && selectedFile ? (
-                <FileView path={selectedFile} />
-              ) : view !== 'work' ? (
-                <div className="main">
-                  <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
-                  <OpBanner onToast={showToast} />
-                  {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
-                  {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
-                  {view === 'pull-requests' && (
-                    <PullRequests
-                      onToast={showToast}
-                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                    />
+              <div className="workspace-host">
+                <Work
+                  visible={view === 'work' || (view === 'custom' && customWorkFrame != null)}
+                  frame={view === 'custom' ? customWorkFrame : null}
+                  keyboardActive={view === 'work' || (
+                    view === 'custom' && customWorkPaneId != null && customActivePaneId === customWorkPaneId
                   )}
-                  {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
-                  {view === 'reflog' && (
-                    <Reflog
-                      onResetTo={(target, label) => setResetDialog({ target, label })}
-                      onCreateBranch={(start, label) => setBranchDialog({ start, label })}
-                      onToast={showToast}
-                    />
-                  )}
-                  {view === 'worktrees' && (
-                    <Worktrees onCreateWorktree={() => setWorktreeDialog({ start: null })} onToast={showToast} />
-                  )}
-                  {(view === 'commits' || view === 'branch') && (
-                    <Commits
-                      onCreateTag={(target, label) => setTagDialog({ target, label })}
-                      onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
-                      onResetTo={(target, label) => setResetDialog({ target, label })}
-                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                      onToast={showToast}
-                    />
-                  )}
-                </div>
-              ) : null}
+                  onActivate={view === 'custom' ? activateCustomWorkPane : undefined}
+                />
+                {view === 'file' && selectedFile ? (
+                  <FileView path={selectedFile} />
+                ) : view !== 'work' ? (
+                  <div className="main">
+                    {view === 'custom' ? (
+                      <>
+                        <OpBanner onToast={showToast} />
+                        <CustomView
+                          renderFeature={renderCustomFeature}
+                          onWorkFrame={updateCustomWorkFrame}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
+                        <OpBanner onToast={showToast} />
+                        {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
+                        {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
+                        {view === 'pull-requests' && (
+                          <PullRequests
+                            onToast={showToast}
+                            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+                          />
+                        )}
+                        {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
+                        {view === 'reflog' && (
+                          <Reflog
+                            onResetTo={(target, label) => setResetDialog({ target, label })}
+                            onCreateBranch={(start, label) => setBranchDialog({ start, label })}
+                            onToast={showToast}
+                          />
+                        )}
+                        {view === 'worktrees' && (
+                          <Worktrees onCreateWorktree={() => setWorktreeDialog({ start: null })} onToast={showToast} />
+                        )}
+                        {(view === 'commits' || view === 'branch') && (
+                          <Commits
+                            onCreateTag={(target, label) => setTagDialog({ target, label })}
+                            onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+                            onResetTo={(target, label) => setResetDialog({ target, label })}
+                            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+                            onToast={showToast}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </Panel>
           </PanelGroup>
         </div>

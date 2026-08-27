@@ -47,7 +47,14 @@ import { ConflictLanding } from './ConflictLanding';
  * menu (to be wired) so it can't be hit by accident. Clicking a file
  * selects it; ⌘↵ in the subject field commits.
  */
-export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file: string) => void }) {
+export function LocalChanges({
+  onOpenFileInEditor,
+  active = true,
+}: {
+  onOpenFileInEditor: (file: string) => void;
+  /** Only the focused Custom-view pane owns window-level single-key actions. */
+  active?: boolean;
+}) {
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
   const status = useRepo((s) => s.status);
@@ -188,6 +195,7 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
   const confirmTimer = useRef<number | null>(null);
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       // Run in capture phase: Pierre's shadow-tree keyboard handler consumes
       // printable keys for typeahead and marks them defaultPrevented before a
@@ -314,7 +322,7 @@ export function LocalChanges({ onOpenFileInEditor }: { onOpenFileInEditor: (file
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [confirmDiscard, fail]);
+  }, [active, confirmDiscard, fail]);
 
   return (
     <div className="lc-stack">

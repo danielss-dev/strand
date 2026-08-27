@@ -20,11 +20,11 @@ test('persists startup settings and seeds the configured initial space', async (
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
     anthropic: null,
   });
-  useSettings.getState().set('startupSpace', 'review');
+  useSettings.getState().set('startupSpace', 'custom');
   useSettings.getState().set('diffSyntaxTheme', 'protanopia-deuteranopia');
 
   const persisted = JSON.parse(storage.getItem('strand.settings') ?? '{}');
-  expect(persisted.state.startupSpace).toBe('review');
+  expect(persisted.state.startupSpace).toBe('custom');
   expect(persisted.state.diffSyntaxTheme).toBe('protanopia-deuteranopia');
   expect(persisted.state.aiConnectionStatus).toEqual({
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
@@ -33,5 +33,5 @@ test('persists startup settings and seeds the configured initial space', async (
   expect(JSON.stringify(persisted.state.aiConnectionStatus)).not.toContain('account');
 
   const { useRepo } = await import('./repo');
-  expect(useRepo.getState().view).toBe('review');
+  expect(useRepo.getState().view).toBe('custom');
 });

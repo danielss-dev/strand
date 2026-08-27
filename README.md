@@ -30,7 +30,7 @@ shortcuts").
 | `Mod+K` | Command palette |
 | `Mod+O` | Open repository |
 | `Mod+,` | Settings |
-| `Mod+1…7` | Work · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review |
+| `Mod+1…8` | Work · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review · Custom |
 | `Mod+Tab` / `Mod+Shift+Tab` | Next / previous repository |
 | `Mod+E` | Switch repository (quick-switcher) |
 | `Mod+P` | Push |
@@ -47,7 +47,8 @@ Surface-local keys (not rebindable, documented in Settings → Keyboard):
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
 diff · tabs in the active Work pane `Ctrl/⌘+PageUp`/`PageDown` or
 `←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal ·
-palette `↑↓`/`↵`/`⇥`/`Esc`.
+`F6` focuses the active Custom pane's feature selector · palette
+`↑↓`/`↵`/`⇥`/`Esc`.
 
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
 a dedicated surface for reviewing an agent's changes: whole-file-context
@@ -87,6 +88,17 @@ the resolved app appearance automatically.
   a global default, paired repository and shell selectors for per-repository
   overrides, and typography without changing the separate external
   **Open in terminal** action. Linked worktrees share one override.
+
+- **Custom view (⌘8, experimental)** — assemble the real Work, Local Changes,
+  Review, All Commits, Pull Requests, Reflog, Worktrees, and Workspace Review
+  surfaces into nested horizontal or vertical panes. Resize every divider,
+  switch or move the feature in each pane, and start from Blank, Focus, Review
+  station, or a VS Code-style workbench with Work beside staging and history.
+  The app-wide layout, feature choices, and pane proportions auto-save across
+  launches. Each feature mounts only once, and the live Work editor/terminal
+  runtime remains intact when its pane moves or resizes. The sidebar Labs row,
+  rebindable shortcut, native View menu, command palette, F6 feature-selector
+  focus, and optional startup destination keep the experiment keyboard-first.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've

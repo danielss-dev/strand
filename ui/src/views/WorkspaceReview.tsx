@@ -63,10 +63,15 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * ⌘F searches every member's pool at once — each match is tagged with its
  * owning repo, and stepping through matches crosses repo boundaries.
  */
+const WORKSPACE_REVIEW_DIFF_HOST = '.rv-workspace .rv-diff-scroll';
+
 export function WorkspaceReview({
   onOpenFileInEditor,
+  active = true,
 }: {
   onOpenFileInEditor: (repoPath: string, file: string) => void;
+  /** Only the focused Custom-view pane owns window-level single-key actions. */
+  active?: boolean;
 }) {
   const members = useWorkspaceReview((s) => s.members);
   const selection = useWorkspaceReview((s) => s.selection);
@@ -181,12 +186,12 @@ export function WorkspaceReview({
       pathKey(displayed.member.path) === pathKey(pending.repo) &&
       displayed.diff.path === pending.file
     ) {
-      scrollToDiffLine('.rv-diff-scroll', pending.target, {
+      scrollToDiffLine(WORKSPACE_REVIEW_DIFF_HOST, pending.target, {
         patch: displayed.diff.patch,
         layout,
       });
     } else {
-      document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
+      document.querySelector<HTMLElement>(WORKSPACE_REVIEW_DIFF_HOST)?.scrollTo({ top: 0 });
     }
   }, [displayed, layout]);
 
@@ -384,6 +389,7 @@ export function WorkspaceReview({
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
         const ft = e.target as HTMLElement | null;
@@ -409,12 +415,12 @@ export function WorkspaceReview({
         case 'n':
         case 'p':
           e.preventDefault();
-          stepChangeBlock(e.key === 'n' ? 1 : -1, '.rv-diff-scroll');
+          stepChangeBlock(e.key === 'n' ? 1 : -1, WORKSPACE_REVIEW_DIFF_HOST);
           break;
         case 'J':
         case 'K':
           e.preventDefault();
-          scrollDiff(e.key === 'J' ? 1 : -1, '.rv-diff-scroll');
+          scrollDiff(e.key === 'J' ? 1 : -1, WORKSPACE_REVIEW_DIFF_HOST);
           break;
         case ' ':
           e.preventDefault();
@@ -455,7 +461,7 @@ export function WorkspaceReview({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, markReviewed, current, stageFiles, discardCurrent, openInRepo, fail]);
+  }, [active, step, markReviewed, current, stageFiles, discardCurrent, openInRepo, fail]);
 
   // ── Per-member section plumbing ───────────────────────────────────────
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -491,7 +497,7 @@ export function WorkspaceReview({
           pathKey(displayed.member.path) === pathKey(repo) &&
           displayed.diff.path === m.path
         ) {
-          scrollToDiffLine('.rv-diff-scroll', target, {
+          scrollToDiffLine(WORKSPACE_REVIEW_DIFF_HOST, target, {
             patch: displayed.diff.patch,
             layout,
           });
@@ -600,7 +606,7 @@ export function WorkspaceReview({
 
   if (members.length === 0) {
     return (
-      <div className="rv-wrap">
+      <div className="rv-wrap rv-workspace">
         <WorkspaceReviewToolbar
           workspaceName={workspaceName}
           repoCount={0}
@@ -617,7 +623,7 @@ export function WorkspaceReview({
   }
 
   return (
-    <div className="rv-wrap">
+    <div className="rv-wrap rv-workspace">
       <WorkspaceReviewToolbar
         workspaceName={workspaceName}
         repoCount={members.filter((m) => m.worktree == null).length}
@@ -876,7 +882,7 @@ export function WorkspaceReview({
                     <DiffMinimap
                       patch={displayed.diff.patch}
                       layout={layout}
-                      hostSelector=".rv-diff-scroll"
+                      hostSelector={WORKSPACE_REVIEW_DIFF_HOST}
                     />
                   )}
                 </div>

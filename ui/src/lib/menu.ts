@@ -31,7 +31,7 @@ import { t } from './i18n';
  * owning that combo.
  */
 
-export type MenuViewId = 'work' | 'local' | 'commits' | 'reflog' | 'review' | 'worktrees';
+export type MenuViewId = 'work' | 'local' | 'commits' | 'reflog' | 'review' | 'worktrees' | 'custom';
 
 export interface MenuHandlers {
   openRepo(): void;
@@ -145,6 +145,7 @@ export async function installAppMenu(
     { id: 'reflog', text: 'Reflog', cmd: 'view-reflog' },
     { id: 'review', text: 'Review', cmd: 'view-review' },
     { id: 'worktrees', text: 'Worktrees', cmd: 'view-worktrees' },
+    { id: 'custom', text: t('custom.settingsOption'), cmd: 'view-custom' },
   ];
   const viewMenu = await Submenu.new({
     text: 'View',

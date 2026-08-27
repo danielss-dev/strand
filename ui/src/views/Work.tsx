@@ -45,7 +45,26 @@ import { FileDocument } from './FileView';
 
 const WORK_PANE_SPLIT_EDGE_RATIO = 0.4;
 
-export function Work({ visible }: { visible: boolean }) {
+export interface WorkFrame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export function Work({
+  visible,
+  frame = null,
+  keyboardActive = visible,
+  onActivate,
+}: {
+  visible: boolean;
+  frame?: WorkFrame | null;
+  /** A visible embedded Work renderer only owns global shortcuts while its
+   * Custom pane is active. */
+  keyboardActive?: boolean;
+  onActivate?: () => void;
+}) {
   const repoPath = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
   const openRepos = useRepo((state) => state.tabs);
@@ -217,7 +236,7 @@ export function Work({ visible }: { visible: boolean }) {
   // with repository switching on Mod+Tab. Capture first so a focused xterm
   // never forwards the shortcut to the shell before Work handles it.
   useEffect(() => {
-    if (!visible || !repoPath || !repo || activePaneTabs.length === 0) return;
+    if (!keyboardActive || !repoPath || !repo || activePaneTabs.length === 0) return;
     const cycle = (event: globalThis.KeyboardEvent) => {
       const primary = platform === 'mac' ? event.metaKey : event.ctrlKey;
       if (!primary || event.altKey || event.shiftKey) return;
@@ -231,10 +250,12 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', cycle, true);
     return () => window.removeEventListener('keydown', cycle, true);
-  }, [activate, activePane?.activeTabId, activePaneTabs, platform, repo, repoPath, visible]);
+  }, [activate, activePane?.activeTabId, activePaneTabs, keyboardActive, platform, repo, repoPath]);
 
   useEffect(() => {
-    if (!visible) return;
+    // Embedded Work lets the Custom view's F6 handler focus the outer module
+    // switcher; standalone Work retains its tab-strip focus behavior.
+    if (!keyboardActive || frame) return;
     const focusTabs = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'F6' || activePaneTabs.length === 0) return;
       event.preventDefault();
@@ -242,7 +263,7 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', focusTabs);
     return () => window.removeEventListener('keydown', focusTabs);
-  }, [activePaneTabs.length, visible]);
+  }, [activePaneTabs.length, frame, keyboardActive]);
 
   const jump = useCallback((tab: WorkFileTab, hash: string) => {
     useWork.getState().activate(tab.repoPath, tab.id);
@@ -254,8 +275,16 @@ export function Work({ visible }: { visible: boolean }) {
   return (
     <div
       ref={rootRef}
-      className={'work-root' + (visible ? '' : ' work-hidden')}
+      className={'work-root' + (frame ? ' work-embedded' : '') + (visible ? '' : ' work-hidden')}
+      style={frame ? {
+        left: frame.left,
+        top: frame.top,
+        width: frame.width,
+        height: frame.height,
+      } : undefined}
       aria-hidden={!visible}
+      onPointerDownCapture={onActivate}
+      onFocusCapture={onActivate}
       onClickCapture={(event) => {
         if (!suppressTabClickRef.current) return;
         event.preventDefault();

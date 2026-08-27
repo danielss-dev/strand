@@ -57,6 +57,7 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+5` | Go to Review | Navigation |
 | `Mod+6` | Go to Worktrees | Navigation |
 | `Mod+7` | Go to Workspace Review | Navigation |
+| `Mod+8` | Go to Custom (experimental) | Navigation |
 | `Mod+Tab` | Next repository | Navigation |
 | `Mod+Shift+Tab` | Previous repository | Navigation |
 | `Mod+E` | Switch repository… | Navigation |
@@ -124,6 +125,19 @@ When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
 `Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on
 Windows and Linux the numbered view shortcuts and the fixed Work-tab
 `Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
+
+### Custom view
+
+| Key | Action |
+| --- | --- |
+| `F6` | Focus the feature selector in the active Custom pane |
+| `↑` / `↓` / `←` / `→` | Move through an empty pane's feature grid |
+| Arrow keys on a focused divider | Resize the adjacent Custom panes |
+
+Quick Launch adds Custom actions while that view is open: assign any Strand
+feature to the active pane, split it right or down, close it, or apply the
+Blank, Focus, Review station, and VS Code workbench templates. Feature menus
+and every pane control are in the normal `Tab` order.
 
 ### Repository tabs
 

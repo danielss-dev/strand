@@ -1436,6 +1436,13 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           onClick={() => { setView('work'); selectFile(null); setTab('files'); }}
         />
         <SideRow
+          icon="workspace"
+          label={t('nav.custom')}
+          badge={t('custom.labs')}
+          active={view === 'custom'}
+          onClick={() => { setView('custom'); selectFile(null); }}
+        />
+        <SideRow
           icon="changes"
           label={t('nav.localChanges')}
           badge={unstaged || undefined}
