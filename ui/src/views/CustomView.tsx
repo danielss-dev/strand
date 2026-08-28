@@ -68,11 +68,21 @@ const TEMPLATES: readonly {
 ] as const;
 
 export function CustomView({
+  editing,
   renderSurface,
   onWorkFrame,
+  onFocusWork,
+  onCustomize,
+  onDone,
+  onReset,
 }: {
+  editing: boolean;
   renderSurface: (surface: CustomSurfaceRef, active: boolean) => ReactNode;
   onWorkFrame: (frame: CustomPaneFrame | null) => void;
+  onFocusWork: () => void;
+  onCustomize: () => void;
+  onDone: () => void;
+  onReset: () => void;
 }) {
   const workspaces = useWorkspaces((state) => state.workspaces);
   const activeWorkspaceId = useWorkspaces((state) => state.activeWorkspaceId);
@@ -81,6 +91,7 @@ export function CustomView({
   const layout = useCustomView((state) => state.layout);
   const activePaneId = useCustomView((state) => state.activePaneId);
   const restored = useCustomView((state) => state.restored);
+  const configured = useCustomView((state) => state.configured);
   const restoredWorkspaceId = useCustomView((state) => state.workspaceId);
   const restore = useCustomView((state) => state.restore);
   const activatePane = useCustomView((state) => state.activatePane);
@@ -104,6 +115,9 @@ export function CustomView({
   const ready = restored && restoredWorkspaceId === workspaceId;
 
   useEffect(() => { void restore(workspaceId); }, [restore, workspaceId]);
+  useEffect(() => {
+    if (!editing) setTemplateMenu(null);
+  }, [editing]);
 
   // Flash the save indicator only for edits between restored states — the
   // restore swap itself (empty placeholder → saved layout) is not a save.
@@ -122,6 +136,7 @@ export function CustomView({
   }, []);
 
   useEffect(() => {
+    if (!editing) return;
     const undoLayout = (event: globalThis.KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return;
       const target = document.activeElement;
@@ -136,10 +151,28 @@ export function CustomView({
     };
     window.addEventListener('keydown', undoLayout);
     return () => window.removeEventListener('keydown', undoLayout);
-  }, [canUndo, undo]);
+  }, [canUndo, editing, undo]);
 
-  // Mod+[ / Mod+] walks the composed panes and leaves focus on the next
-  // pane's module switcher so cycling stays fully keyboard-operable.
+  const focusPaneControl = useCallback((paneId: string) => {
+    const pane = document.querySelector<HTMLElement>(
+      `[data-custom-pane-id="${CSS.escape(paneId)}"]`,
+    );
+    if (!pane) return false;
+    const model = panes.find((candidate) => candidate.id === paneId);
+    if (!editing && model?.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work) {
+      onFocusWork();
+      return true;
+    }
+    const target = editing
+      ? pane.querySelector<HTMLButtonElement>('.custom-feature-select')
+      : pane;
+    target?.focus();
+    return target != null;
+  }, [editing, onFocusWork, panes]);
+
+  // Mod+[ / Mod+] walks the composed panes. In customization it lands on
+  // the module switcher; in normal use it lands on the surface entry point
+  // without exposing permanent editor chrome.
   useEffect(() => {
     const cyclePane = (event: globalThis.KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return;
@@ -151,29 +184,23 @@ export function CustomView({
       const next = cycle[(index + delta + cycle.length) % cycle.length];
       event.preventDefault();
       activatePane(next.id);
-      document.querySelector<HTMLButtonElement>(
-        `[data-custom-pane-id="${CSS.escape(next.id)}"] .custom-feature-select`,
-      )?.focus();
+      focusPaneControl(next.id);
     };
     window.addEventListener('keydown', cyclePane);
     return () => window.removeEventListener('keydown', cyclePane);
-  }, [activatePane, activePaneId, layout]);
+  }, [activatePane, activePaneId, focusPaneControl, layout]);
 
-  // F6 mirrors Work: leave a complex embedded surface and return to the
-  // active pane's module switcher without requiring pointer precision.
+  // F6 leaves a complex embedded surface and returns to the active outer pane
+  // (or its module switcher while editing) without pointer precision.
   useEffect(() => {
     const focusPaneHeader = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'F6') return;
-      const target = document.querySelector<HTMLButtonElement>(
-        `[data-custom-pane-id="${CSS.escape(activePaneId)}"] .custom-feature-select`,
-      );
-      if (!target) return;
+      if (!focusPaneControl(activePaneId)) return;
       event.preventDefault();
-      target.focus();
     };
     window.addEventListener('keydown', focusPaneHeader);
     return () => window.removeEventListener('keydown', focusPaneHeader);
-  }, [activePaneId]);
+  }, [activePaneId, focusPaneControl]);
 
   const templateItems = useMemo<MenuItem[]>(() => TEMPLATES.map((template) => ({
     label: template.label,
@@ -184,8 +211,8 @@ export function CustomView({
   })), [applyTemplate, panes]);
 
   return (
-    <div className="custom-view">
-      <header className="custom-builder-bar">
+    <div className={'custom-view' + (editing ? ' editing' : '')}>
+      {editing && <header className="custom-builder-bar">
         <div className="custom-builder-title">
           <span className="custom-workspace-name" title={workspaceName}>
             <Icon name="workspace" size={11} />
@@ -193,7 +220,6 @@ export function CustomView({
           </span>
           <Icon name="chev-right" size={10} />
           <strong>{t('custom.title')}</strong>
-          <span className="custom-experimental">{t('custom.experimental')}</span>
           {saveVisible && (
             <span className="custom-save-state flash"><Icon name="check" size={10} /> {t('custom.autoSaved')}</span>
           )}
@@ -239,8 +265,19 @@ export function CustomView({
           >
             <Icon name="unified" size={13} />
           </button>
+          <button
+            type="button"
+            className="btn ghost custom-toolbar-btn"
+            disabled={!ready || !configured}
+            onClick={onReset}
+          >
+            {t('workbench.reset')}
+          </button>
+          <button type="button" className="btn primary custom-toolbar-btn" onClick={onDone}>
+            {t('workbench.done')}
+          </button>
         </div>
-      </header>
+      </header>}
 
       {!ready ? (
         <div className="custom-loading" role="status">
@@ -255,12 +292,15 @@ export function CustomView({
           workspaceName={workspaceName}
           paneCount={panes.length}
           activePaneId={activePaneId}
+          editing={editing}
           used={used}
           onActivate={activatePane}
           onSurface={setSurface}
           onSplit={splitPane}
           onClose={closePane}
           onTemplate={applyTemplate}
+          onCustomize={onCustomize}
+          onFocusWork={onFocusWork}
           renderSurface={renderSurface}
           onWorkFrame={onWorkFrame}
         />
@@ -283,12 +323,15 @@ interface LayoutProps {
   workspaceName: string;
   paneCount: number;
   activePaneId: string;
+  editing: boolean;
   used: ReadonlyMap<CustomSurfaceId, string>;
   onActivate(paneId: string): void;
   onSurface(paneId: string, surfaceId: CustomSurfaceId | null): void;
   onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
   onClose(paneId: string): void;
   onTemplate(template: CustomTemplateId): void;
+  onCustomize(): void;
+  onFocusWork(): void;
   renderSurface(surface: CustomSurfaceRef, active: boolean): ReactNode;
   onWorkFrame(frame: CustomPaneFrame | null): void;
 }
@@ -327,12 +370,14 @@ function CustomPaneView({
   pane,
   paneCount,
   activePaneId,
+  editing,
   used,
   onActivate,
   onSurface,
   onSplit,
   onClose,
   onTemplate,
+  onCustomize,
   workspaceName,
   renderSurface,
   onWorkFrame,
@@ -359,6 +404,11 @@ function CustomPaneView({
   useEffect(() => {
     if (!compactActions) setActionMenu(null);
   }, [compactActions]);
+  useEffect(() => {
+    if (editing) return;
+    setMenu(null);
+    setActionMenu(null);
+  }, [editing]);
 
   const menuItems = useMemo<MenuItem[]>(() => [
     ...SURFACES.map((item) => {
@@ -407,11 +457,12 @@ function CustomPaneView({
       ref={paneRef}
       className={'custom-pane' + (active ? ' active' : '')}
       data-custom-pane-id={pane.id}
+      tabIndex={-1}
       aria-label={surfaceLabel ? t('custom.paneLabel', { feature: surfaceLabel }) : t('custom.emptyPaneLabel')}
       onPointerDownCapture={() => onActivate(pane.id)}
       onFocusCapture={() => onActivate(pane.id)}
     >
-      <div className="custom-pane-header">
+      {editing && <div className="custom-pane-header">
         <button
           type="button"
           className="custom-feature-select"
@@ -478,13 +529,23 @@ function CustomPaneView({
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       <div className="custom-pane-body">
         {surfaceId === BUILT_IN_SURFACE_IDS.work ? (
           <WorkFrameHost onFrame={onWorkFrame} />
         ) : pane.surface ? (
           renderSurface(pane.surface, active)
+        ) : !editing ? (
+          <div className="custom-empty">
+            <div className="custom-empty-copy">
+              <strong>{t('workbench.emptyTitle')}</strong>
+              <span>{t('workbench.emptyHint')}</span>
+              <button type="button" className="btn" onClick={onCustomize}>
+                {t('workbench.customize')}
+              </button>
+            </div>
+          </div>
         ) : (
           <EmptyCustomPane
             paneId={pane.id}

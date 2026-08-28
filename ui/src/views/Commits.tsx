@@ -59,16 +59,18 @@ interface CommitsProps {
   onCreateWorktree: (start: { ref: string; label: string }) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
-  /** Override for "Review changes since this" navigation — Custom view routes
+  /** Override for "Review changes since this" navigation — Workbench routes
    * it to its embedded Review pane instead of the Review tab. Baseline pinning
    * stays here; only the jump is delegated. */
   onReviewNavigate?: () => void;
-  /** Only the focused Custom-view pane owns window-level shortcuts. */
+  /** Reveal Work when returning to a Work file from history. */
+  onWorkNavigate?: () => void;
+  /** Only the focused Workbench pane owns window-level shortcuts. */
   active?: boolean;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onReviewNavigate, active = true }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -334,7 +336,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
         {
           // Pin the review baseline here and jump to the Review view — review
           // everything (commits + working tree) done since this commit.
-          // Custom view delegates the jump to its embedded Review pane.
+          // Workbench delegates the jump to its embedded Review pane.
           label: 'Review changes since this',
           icon: 'check',
           onSelect: () => void (async () => {
@@ -968,7 +970,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
               void setActiveTab(target.repoPath).then(() => {
                 useWork.getState().activate(target.repoPath, target.tabId);
                 setWorkFileReturn(null);
-                setView('work');
+                if (onWorkNavigate) onWorkNavigate();
+                else setView('work');
               });
             }}
             title={`Back to ${workFileReturn.path}`}

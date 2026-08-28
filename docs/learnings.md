@@ -2261,3 +2261,18 @@ render hosts must consume one registry instead of growing parallel feature
 lists. Community code must stay outside Strand's privileged React/Tauri
 webview and reach app data only through versioned, permission-checked,
 quota-bounded capabilities.
+
+## Workbench configuration is an overlay on the default Work surface (2026-08-28)
+
+Work and composition are one product destination, but remain separate runtime
+responsibilities: Work owns editor/terminal panes and the Workbench owns outer
+surface placement. Absence of a saved Workbench layout must take the direct,
+full-size Work path with no loading gate or configuration chrome. Entering
+customization may compose that same stable Work renderer; Done hides editing
+controls, and Reset removes the workspace layout so the direct default returns.
+Legacy Custom layout keys and settings are one-way migration inputs, not a second
+route; remove the legacy global layout only after its per-workspace write succeeds
+so Reset cannot resurrect it. Normal composed layouts retain an outer keyboard loop:
+`F6` and `Mod+[` / `Mod+]` focus each surface's entry point without editor chrome.
+Work needs an explicit bridge because its persistent renderer is visually positioned in
+the layout but remains a DOM sibling of the Workbench placeholder.

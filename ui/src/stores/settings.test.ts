@@ -14,17 +14,23 @@ test('persists startup settings and seeds the configured initial space', async (
   vi.stubGlobal('window', { localStorage: storage });
   vi.stubGlobal('navigator', { userAgent: '' });
   vi.stubGlobal('document', { documentElement: { dataset: {} } });
+  storage.setItem('strand.settings', JSON.stringify({
+    state: { startupSpace: 'custom', keybindings: { 'view-custom': 'Mod+9' } },
+    version: 0,
+  }));
 
   const { useSettings } = await import('./settings');
+  expect(useSettings.getState().startupSpace).toBe('work');
+  expect(useSettings.getState().keybindings).toEqual({ 'customize-workbench': 'Mod+9' });
   useSettings.getState().set('aiConnectionStatus', {
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
     anthropic: null,
   });
-  useSettings.getState().set('startupSpace', 'custom');
+  useSettings.getState().set('startupSpace', 'work');
   useSettings.getState().set('diffSyntaxTheme', 'protanopia-deuteranopia');
 
   const persisted = JSON.parse(storage.getItem('strand.settings') ?? '{}');
-  expect(persisted.state.startupSpace).toBe('custom');
+  expect(persisted.state.startupSpace).toBe('work');
   expect(persisted.state.diffSyntaxTheme).toBe('protanopia-deuteranopia');
   expect(persisted.state.aiConnectionStatus).toEqual({
     openai: { installed: true, loggedIn: true, checkedAt: 123 },
@@ -33,5 +39,5 @@ test('persists startup settings and seeds the configured initial space', async (
   expect(JSON.stringify(persisted.state.aiConnectionStatus)).not.toContain('account');
 
   const { useRepo } = await import('./repo');
-  expect(useRepo.getState().view).toBe('custom');
+  expect(useRepo.getState().view).toBe('work');
 });

@@ -32,7 +32,7 @@ interface RepositoryFilesProps {
 }
 
 /**
- * The live repository Files surface shared by the sidebar and Custom view.
+ * The live repository Files surface shared by the sidebar and Workbench.
  * Parents ensure only one active instance is rendered while Custom owns it.
  */
 export function RepositoryFiles({

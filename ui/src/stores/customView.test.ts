@@ -1,21 +1,56 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const db = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
+const db = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), remove: vi.fn() }));
 
 vi.mock('../lib/db', () => ({ settings: db }));
 
-import { createCustomTemplate, customPanes, emptyCustomView, storeCustomView } from '../lib/customView';
+import {
+  createCustomTemplate,
+  customPanes,
+  defaultWorkbenchView,
+  emptyCustomView,
+  storeCustomView,
+} from '../lib/customView';
 import { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
 import { surfaceIdForLegacyFeature } from '../workbench/builtInSurfaces';
 import { customViewStorageKey, useCustomView } from './customView';
 
 const surface = surfaceIdForLegacyFeature;
 
-describe('Custom view persistence', () => {
+describe('Workbench layout persistence', () => {
   beforeEach(() => {
     db.get.mockReset();
     db.set.mockReset();
     db.set.mockResolvedValue(undefined);
+    db.remove.mockReset();
+    db.remove.mockResolvedValue(undefined);
+  });
+
+  it('uses the existing Work surface until the workspace is customized', async () => {
+    const workspace = 'default-workbench';
+    db.get.mockResolvedValue(null);
+
+    await useCustomView.getState().restore(workspace);
+
+    expect(useCustomView.getState()).toMatchObject({
+      ...defaultWorkbenchView(),
+      workspaceId: workspace,
+      restored: true,
+      configured: false,
+    });
+    expect(db.set).not.toHaveBeenCalled();
+    expect(db.remove).not.toHaveBeenCalled();
+
+    useCustomView.getState().applyTemplate('review');
+    expect(useCustomView.getState().configured).toBe(true);
+    await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(1));
+
+    useCustomView.getState().resetWorkbench();
+    expect(useCustomView.getState()).toMatchObject({
+      ...defaultWorkbenchView(),
+      configured: false,
+    });
+    await vi.waitFor(() => expect(db.remove).toHaveBeenCalledWith(customViewStorageKey(workspace)));
   });
 
   it('restores independent workspace trees and serializes each workspace in order', async () => {
@@ -81,12 +116,21 @@ describe('Custom view persistence', () => {
     });
   });
 
-  it('migrates the legacy app-wide layout only into Default', async () => {
+  it('migrates the legacy layout once and does not resurrect it after reset', async () => {
     let id = 0;
     const legacy = createCustomTemplate('review', () => `legacy-${++id}`);
-    db.get.mockImplementation((key) => Promise.resolve(
-      key === 'custom-view.layout' ? storeCustomView(legacy) : null,
-    ));
+    const storage = new Map<string, unknown>([
+      ['custom-view.layout', storeCustomView(legacy)],
+    ]);
+    db.get.mockImplementation((key) => Promise.resolve(storage.get(key) ?? null));
+    db.set.mockImplementation((key, value) => {
+      storage.set(key, value);
+      return Promise.resolve();
+    });
+    db.remove.mockImplementation((key) => {
+      storage.delete(key);
+      return Promise.resolve();
+    });
 
     await useCustomView.getState().restore(DEFAULT_WORKSPACE_ID);
 
@@ -95,6 +139,19 @@ describe('Custom view persistence', () => {
       customViewStorageKey(DEFAULT_WORKSPACE_ID),
       storeCustomView(legacy),
     );
+    expect(db.remove).toHaveBeenCalledWith('custom-view.layout');
+
+    useCustomView.getState().resetWorkbench();
+    await vi.waitFor(() => expect(storage.has(customViewStorageKey(DEFAULT_WORKSPACE_ID))).toBe(false));
+
+    // A fresh module has empty in-memory caches, matching an app restart.
+    vi.resetModules();
+    const { useCustomView: freshStore } = await import('./customView');
+    await freshStore.getState().restore(DEFAULT_WORKSPACE_ID);
+    expect(freshStore.getState()).toMatchObject({
+      ...defaultWorkbenchView(),
+      configured: false,
+    });
   });
 
   it('does not reveal a stale layout when an earlier workspace restore finishes last', async () => {

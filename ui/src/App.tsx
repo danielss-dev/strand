@@ -218,6 +218,8 @@ export function App() {
   const customActivePaneId = useCustomView((s) => s.activePaneId);
   const customRestored = useCustomView((s) => s.restored);
   const customWorkspaceId = useCustomView((s) => s.workspaceId);
+  const customConfigured = useCustomView((s) => s.configured);
+  const restoreWorkbench = useCustomView((s) => s.restore);
   const customWorkPaneId = useCustomView((s) =>
     customPanes(s.layout).find((pane) => pane.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work)?.id ?? null);
   const openWorkFile = useWork((s) => s.openFile);
@@ -299,8 +301,9 @@ export function App() {
   // handful of user-created entries, so subscribing whole is cheap.
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
+  const workbenchWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
   const customWorkspaceReady = customRestored
-    && customWorkspaceId === (activeWorkspaceId ?? DEFAULT_WORKSPACE_ID);
+    && customWorkspaceId === workbenchWorkspaceId;
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
   const activePullRequestFollowed = usePullRequests((s) =>
     activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
@@ -310,6 +313,7 @@ export function App() {
   const toggleActivePullRequest = usePullRequests((s) => s.toggleActive);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [workbenchEditing, setWorkbenchEditing] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
@@ -416,9 +420,10 @@ export function App() {
   // false = closed; 'create' opens the manager mid-create (palette "New
   // workspace…") — the dialog spawns a workspace and focuses its name field.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState<boolean | 'create'>(false);
-  // The real Work tree remains mounted once and is positioned over its slot
-  // when Custom embeds it, preserving live terminal renderers and scrollback.
+  // The real Work tree remains mounted once and is positioned over its
+  // Workbench slot, preserving live terminal renderers and scrollback.
   const [customWorkFrame, setCustomWorkFrame] = useState<CustomPaneFrame | null>(null);
+  const [customWorkFocusRequest, setCustomWorkFocusRequest] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -467,6 +472,33 @@ export function App() {
     setSettingsOpen(true);
   }, []);
 
+  useEffect(() => {
+    void restoreWorkbench(workbenchWorkspaceId);
+    setWorkbenchEditing(false);
+  }, [restoreWorkbench, workbenchWorkspaceId]);
+
+  useEffect(() => {
+    if (view !== 'work') setWorkbenchEditing(false);
+  }, [view]);
+
+  const customizeWorkbench = useCallback(() => {
+    setView('work');
+    selectFile(null);
+    setWorkbenchEditing(true);
+    void restoreWorkbench(workbenchWorkspaceId);
+  }, [restoreWorkbench, selectFile, setView, workbenchWorkspaceId]);
+
+  const openWorkbench = useCallback(() => {
+    setWorkbenchEditing(false);
+    setView('work');
+    selectFile(null);
+  }, [selectFile, setView]);
+
+  const resetWorkbench = useCallback(() => {
+    if (!window.confirm(t('workbench.resetConfirm'))) return;
+    useCustomView.getState().resetWorkbench();
+  }, []);
+
   const updateCustomWorkFrame = useCallback((next: CustomPaneFrame | null) => {
     setCustomWorkFrame((current) => {
       if (current === next) return current;
@@ -486,6 +518,31 @@ export function App() {
     );
     if (pane) state.activatePane(pane.id);
   }, []);
+  const focusCustomWork = useCallback(() => {
+    setCustomWorkFocusRequest((request) => request + 1);
+  }, []);
+  const revealWorkbenchWork = useCallback(() => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+    );
+    if (pane) {
+      state.activatePane(pane.id);
+      return;
+    }
+    // Preserve the current surface when navigation needs Work: add a sibling
+    // pane when the defensive pane cap allows it.
+    const previousPaneId = state.activePaneId;
+    state.splitPane(previousPaneId, 'horizontal');
+    const next = useCustomView.getState();
+    next.setSurface(next.activePaneId, BUILT_IN_SURFACE_IDS.work);
+  }, []);
+  const showWorkbenchWork = useCallback(() => {
+    revealWorkbenchWork();
+    setWorkbenchEditing(false);
+    setView('work');
+    selectFile(null);
+  }, [revealWorkbenchWork, selectFile, setView]);
   // The Changes explorer hands each clicked file to the Work pane's whole-file
   // Changes tab. A pinned tab for the path may already exist in another mode —
   // openFile would only activate it, so force the mode afterwards.
@@ -498,16 +555,11 @@ export function App() {
       (candidate) => candidate.kind === 'file' && candidate.path === path && !candidate.revision,
     );
     if (tab) work.setFileMode(repoPath, tab.id, 'changes');
-    const custom = useCustomView.getState();
-    const pane = customPanes(custom.layout).find(
-      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
-    );
-    if (pane) custom.activatePane(pane.id);
-    else setView('work');
-  }, [setView]);
+    showWorkbenchWork();
+  }, [showWorkbenchWork]);
   // "Review changes since this" from an embedded All Commits pane: Commits
   // pins the baseline; this routes the jump to the layout's Review pane when
-  // one exists instead of leaving Custom for the dedicated Review tab.
+  // one exists instead of leaving Workbench for the dedicated Review tab.
   const openReviewInCustom = useCallback(() => {
     selectFile(null);
     const custom = useCustomView.getState();
@@ -976,8 +1028,8 @@ export function App() {
     'open-repo': () => { void openViaDialog(); },
     'clone-repo': () => setCloneOpen(true),
     'settings': () => openSettingsAt('appearance'),
-    'view-work': () => { setView('work'); selectFile(null); },
-    'view-custom': () => { setView('custom'); selectFile(null); },
+    'view-work': openWorkbench,
+    'customize-workbench': customizeWorkbench,
     'view-local': () => { setView('local'); selectFile(null); },
     'view-commits': () => { setView('commits'); selectFile(null); },
     'view-reflog': () => { setView('reflog'); selectFile(null); },
@@ -1000,7 +1052,7 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
-  }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast, toggleSidebar,
+  }), [openViaDialog, openSettingsAt, setView, selectFile, openWorkbench, customizeWorkbench, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
        requestSuggestCommitMessage]);
   const commandHandlersRef = useRef(commandHandlers);
@@ -1039,7 +1091,12 @@ export function App() {
       void useUpdates.getState().check();
     },
     openPalette: () => setPaletteOpen((o) => !o),
-    showView: (v) => { setView(v); selectFile(null); },
+    showView: (v) => {
+      if (v === 'work') setWorkbenchEditing(false);
+      setView(v);
+      selectFile(null);
+    },
+    customizeWorkbench,
     cycleTheme: () => {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
@@ -1362,8 +1419,7 @@ export function App() {
         run: () => {
           if (!meta) return;
           openWorkFile(meta.path, f.path, null, false, 'pinned');
-          setView('work');
-          selectFile(null);
+          showWorkbenchWork();
         },
       });
     }
@@ -1433,7 +1489,7 @@ export function App() {
 
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
-      createBranch, revealInGraph, selectCommit, selectFile, showToast,
+      createBranch, revealInGraph, selectCommit, selectFile, showToast, showWorkbenchWork,
       stashApply, stashPop, submoduleUpdate]);
 
   const runCustomAction = useCallback((
@@ -1445,39 +1501,40 @@ export function App() {
       const state = useCustomView.getState();
       if (state.workspaceId !== workspaceId) return;
       action(state);
-      setView('custom');
+      setView('work');
       selectFile(null);
+      setWorkbenchEditing(true);
     })();
   }, [selectFile, setView]);
 
   const customCommands = useMemo(() => {
     const registry = new WorkbenchCommandRegistry();
     registry.register({
-      id: 'strand.custom.splitRight',
+      id: 'strand.workbench.splitRight',
       title: t('custom.paletteSplitRight'),
-      category: 'Custom',
+      category: 'Workbench',
       keywords: ['layout', 'pane', 'horizontal', 'split'],
       execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'horizontal')),
     });
     registry.register({
-      id: 'strand.custom.splitDown',
+      id: 'strand.workbench.splitDown',
       title: t('custom.paletteSplitDown'),
-      category: 'Custom',
+      category: 'Workbench',
       keywords: ['layout', 'pane', 'vertical', 'split'],
       execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'vertical')),
     });
     registry.register({
-      id: 'strand.custom.closePane',
+      id: 'strand.workbench.closePane',
       title: t('custom.paletteClosePane'),
-      category: 'Custom',
+      category: 'Workbench',
       keywords: ['layout', 'pane', 'remove', 'clear'],
       execute: () => runCustomAction((state) => state.closePane(state.activePaneId)),
     });
     for (const surface of builtInSurfaceRegistry.listForHost('panel')) {
       registry.register({
-        id: `strand.custom.show.${surface.id}`,
+        id: `strand.workbench.show.${surface.id}`,
         title: t('custom.paletteShowFeature', { feature: surface.title }),
-        category: 'Custom',
+        category: 'Workbench',
         keywords: ['layout', 'surface', 'module', surface.id],
         execute: () => runCustomAction((state) => state.setSurface(state.activePaneId, surface.id)),
       });
@@ -1490,9 +1547,9 @@ export function App() {
     ] as const;
     for (const [template, title, keywords] of templates) {
       registry.register({
-        id: `strand.custom.template.${template}`,
+        id: `strand.workbench.template.${template}`,
         title,
-        category: 'Custom',
+        category: 'Workbench',
         keywords: ['layout', 'preset', ...keywords],
         execute: () => runCustomAction((state) => state.applyTemplate(template)),
       });
@@ -1505,8 +1562,8 @@ export function App() {
     const pane = customPanes(state.layout).find((candidate) => candidate.id === state.activePaneId);
     return {
       surface: {
-        id: pane?.surface?.surfaceId ?? 'strand.custom.layout',
-        instanceId: pane?.surface?.instanceId ?? pane?.id ?? 'custom-layout',
+        id: pane?.surface?.surfaceId ?? 'strand.workbench.layout',
+        instanceId: pane?.surface?.instanceId ?? pane?.id ?? 'workbench-layout',
       },
       workspaceId: useWorkspaces.getState().activeWorkspaceId ?? DEFAULT_WORKSPACE_ID,
       repositoryId: useRepo.getState().activePath ?? undefined,
@@ -1528,50 +1585,50 @@ export function App() {
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
-        { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: () => { setView('work'); selectFile(null); } },
-        { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); setView('work'); selectFile(null); } },
+        { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: openWorkbench },
+        { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); showWorkbenchWork(); } },
         { id: 'work-split-right', label: t('work.splitRight'), group: 'Actions', keywords: 'work pane editor group side by side', run: () => {
           const work = useWork.getState();
           const repoWork = work.repos[meta.path];
           if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'horizontal');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-split-down', label: t('work.splitDown'), group: 'Actions', keywords: 'work pane editor group stacked below', run: () => {
           const work = useWork.getState();
           const repoWork = work.repos[meta.path];
           if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'vertical');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-previous-pane', label: t('work.moveTabPreviousPane'), group: 'Actions', keywords: 'work tab move editor group previous', run: () => {
           useWork.getState().moveActiveTabToAdjacentPane(meta.path, -1);
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-next-pane', label: t('work.moveTabNextPane'), group: 'Actions', keywords: 'work tab move editor group next', run: () => {
           useWork.getState().moveActiveTabToAdjacentPane(meta.path, 1);
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-left', label: t('work.moveTabNewLeft'), group: 'Actions', keywords: 'work tab move split editor group left', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'left');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-right', label: t('work.moveTabNewRight'), group: 'Actions', keywords: 'work tab move split editor group right', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'right');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-top', label: t('work.moveTabNewTop'), group: 'Actions', keywords: 'work tab move split editor group above top', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'top');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-bottom', label: t('work.moveTabNewBottom'), group: 'Actions', keywords: 'work tab move split editor group below bottom', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'bottom');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
-        { id: 'custom-view', label: t('custom.paletteShow'), group: 'Actions', shortcut: keyHint('view-custom'), keywords: 'customize layout panes modules vscode workbench labs', run: () => { setView('custom'); selectFile(null); } },
-        ...(view === 'custom' ? customCommands.list().map((command) => ({
+        { id: 'customize-workbench', label: t('custom.paletteShow'), group: 'Actions', shortcut: keyHint('customize-workbench'), keywords: 'customize layout panes modules vscode workbench', run: customizeWorkbench },
+        ...(view === 'work' && workbenchEditing ? customCommands.list().map((command) => ({
           id: command.id,
           label: command.title,
           group: 'Actions' as const,
-          keywords: ['custom', ...(command.keywords ?? [])].join(' '),
+          keywords: ['workbench', 'customize', ...(command.keywords ?? [])].join(' '),
           run: () => { void customCommands.execute(command.id, customCommandContext()); },
         } satisfies PaletteAction)) : []),
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
@@ -1907,7 +1964,8 @@ export function App() {
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
-      toggleActivePullRequest, customCommands, customCommandContext]);
+      toggleActivePullRequest, customCommands, customCommandContext,
+      customizeWorkbench, openWorkbench, showWorkbenchWork, workbenchEditing]);
 
   const surfaceRenderers = useMemo(() => new Map<CustomSurfaceId, (
     request: SurfaceRenderRequest,
@@ -1918,14 +1976,7 @@ export function App() {
             onOpenFileInEditor={openActiveFileInEditor}
             onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
             onToast={showToast}
-            onOpenWork={() => {
-              const state = useCustomView.getState();
-              const pane = customPanes(state.layout).find(
-                (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
-              );
-              if (pane) state.activatePane(pane.id);
-              else setView('work');
-            }}
+            onOpenWork={showWorkbenchWork}
           />
     )],
     [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
@@ -1975,11 +2026,13 @@ export function App() {
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
             onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
+            onWorkNavigate={showWorkbenchWork}
             onToast={showToast}
             active={lifecycle.focused}
           />
     )],
-  ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom, setView, showToast]);
+  ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom,
+    showWorkbenchWork, showToast]);
 
   const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => (
     surfaceRenderers.get(request.contribution.id)?.(request) ?? null
@@ -1998,6 +2051,9 @@ export function App() {
   ), [renderSurfaceContribution]);
 
   const mainSurfaceId = MAIN_SURFACE_BY_VIEW[view];
+  const workbenchComposed = view === 'work'
+    && customWorkspaceReady
+    && (customConfigured || workbenchEditing);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -2076,6 +2132,8 @@ export function App() {
               collapsedSize={0}
             >
               <Sidebar
+                onOpenWorkbench={openWorkbench}
+                onOpenWorkSurface={showWorkbenchWork}
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
@@ -2106,49 +2164,49 @@ export function App() {
             <Panel minSize={30}>
               <div className="workspace-host">
                 <Work
-                  visible={view === 'work' || (
-                    view === 'custom' && customWorkspaceReady && customWorkFrame != null
+                  visible={view === 'work' && (!workbenchComposed || customWorkFrame != null)}
+                  frame={workbenchComposed ? customWorkFrame : null}
+                  keyboardActive={view === 'work' && (
+                    !workbenchComposed
+                    || (customWorkPaneId != null && customActivePaneId === customWorkPaneId)
                   )}
-                  frame={view === 'custom' && customWorkspaceReady ? customWorkFrame : null}
-                  keyboardActive={view === 'work' || (
-                    view === 'custom'
-                    && customWorkspaceReady
-                    && customWorkPaneId != null
-                    && customActivePaneId === customWorkPaneId
-                  )}
-                  onActivate={view === 'custom' ? activateCustomWorkPane : undefined}
+                  focusRequest={customWorkFocusRequest}
+                  onActivate={workbenchComposed ? activateCustomWorkPane : undefined}
                 />
                 {view === 'file' && selectedFile ? (
                   <FileView path={selectedFile} />
-                ) : view !== 'work' ? (
+                ) : view === 'work' ? (
+                  workbenchComposed ? (
+                    <div className="main">
+                      <OpBanner onToast={showToast} />
+                      <CustomView
+                        editing={workbenchEditing}
+                        renderSurface={renderCustomSurface}
+                        onWorkFrame={updateCustomWorkFrame}
+                        onFocusWork={focusCustomWork}
+                        onCustomize={customizeWorkbench}
+                        onDone={() => setWorkbenchEditing(false)}
+                        onReset={resetWorkbench}
+                      />
+                    </div>
+                  ) : null
+                ) : (
                   <div className="main">
-                    {view === 'custom' ? (
-                      <>
-                        <OpBanner onToast={showToast} />
-                        <CustomView
-                          renderSurface={renderCustomSurface}
-                          onWorkFrame={updateCustomWorkFrame}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
-                        <OpBanner onToast={showToast} />
-                        {mainSurfaceId && (
-                          <SurfaceHost
-                            registry={builtInSurfaceRegistry}
-                            surfaceId={mainSurfaceId}
-                            instanceId={`main-surface-${mainSurfaceId}`}
-                            binding={{ kind: 'follow-active' }}
-                            host="main"
-                            lifecycle={{ mounted: true, visible: true, focused: true }}
-                            render={renderSurfaceContribution}
-                          />
-                        )}
-                      </>
+                    <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
+                    <OpBanner onToast={showToast} />
+                    {mainSurfaceId && (
+                      <SurfaceHost
+                        registry={builtInSurfaceRegistry}
+                        surfaceId={mainSurfaceId}
+                        instanceId={`main-surface-${mainSurfaceId}`}
+                        binding={{ kind: 'follow-active' }}
+                        host="main"
+                        lifecycle={{ mounted: true, visible: true, focused: true }}
+                        render={renderSurfaceContribution}
+                      />
                     )}
                   </div>
-                ) : null}
+                )}
               </div>
             </Panel>
           </PanelGroup>

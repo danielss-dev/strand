@@ -56,7 +56,7 @@ export function LocalChanges({
   onOpenFileInEditor: (file: string) => void;
   /** Only the focused Custom-view pane owns window-level single-key actions. */
   active?: boolean;
-  /** Custom view's Changes explorer: just the Unstaged/Staged trees — row
+  /** Workbench's Changes explorer: just the Unstaged/Staged trees — row
    * clicks hand the file to Work's whole-file Changes tab via
    * `onOpenFileChanges` instead of feeding the in-pane diff. */
   explorerOnly?: boolean;

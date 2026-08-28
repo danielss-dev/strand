@@ -50,14 +50,14 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+O` | Open repository… | General |
 | — | Clone repository… | General |
 | `Mod+,` | Settings | General |
-| `Mod+1` | Go to Work | Navigation |
+| `Mod+1` | Go to Workbench | Navigation |
 | `Mod+2` | Go to Local Changes | Navigation |
 | `Mod+3` | Go to All Commits | Navigation |
 | `Mod+4` | Go to Reflog | Navigation |
 | `Mod+5` | Go to Review | Navigation |
 | `Mod+6` | Go to Worktrees | Navigation |
 | `Mod+7` | Go to Workspace Review | Navigation |
-| `Mod+8` | Go to Custom (experimental) | Navigation |
+| `Mod+8` | Customize Workbench | Navigation |
 | `Mod+Tab` | Next repository | Navigation |
 | `Mod+Shift+Tab` | Previous repository | Navigation |
 | `Mod+E` | Switch repository… | Navigation |
@@ -127,18 +127,20 @@ When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
 Windows and Linux the numbered view shortcuts and the fixed Work-tab
 `Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
 
-### Custom view
+### Composed Workbench
 
 | Key | Action |
 | --- | --- |
-| `F6` | Focus the feature selector in the active Custom pane |
+| `F6` | Focus the active surface entry point, or its selector while customizing |
+| `Mod+[` / `Mod+]` | Cycle Workbench panes and focus each surface's entry point |
 | `↑` / `↓` / `←` / `→` | Move through an empty pane's feature grid |
-| Arrow keys on a focused divider | Resize the adjacent Custom panes |
+| Arrow keys on a focused divider | Resize the adjacent Workbench panes |
 
-Quick Launch adds Custom actions while that view is open: assign any Strand
-feature to the active pane, split it right or down, close it, or apply the
+Quick Launch adds Workbench layout actions while customization is open: assign
+any Strand surface to the active pane, split it right or down, close it, or apply the
 Blank, Focus, Review station, and VS Code workbench templates. Feature menus
-and every pane control are in the normal `Tab` order.
+and every pane control are in the normal `Tab` order. Choose **Done** to hide
+editing controls without closing the configured surfaces.
 
 ### Repository tabs
 

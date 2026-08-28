@@ -1,7 +1,8 @@
-# Work: files and embedded terminals
+# Workbench: files and embedded terminals
 
-Work (`Mod+1`) is Strand's default startup view. You can instead start in
-Custom, Local Changes, Review, Pull Requests, or All Commits from Settings →
+Workbench (`Mod+1`) is Strand's default startup view. With no saved outer
+layout it shows the full-size Work surface described here. You can instead
+start in Local Changes, Review, Pull Requests, or All Commits from Settings →
 Appearance. Work is a place to inspect and make lightweight edits to
 repository files and run shells without replacing a full code editor.
 Local Changes (`Mod+2`) remains the staging and commit workspace.

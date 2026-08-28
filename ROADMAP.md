@@ -2144,10 +2144,10 @@ and Store certification remain external gates.
 
 ## 1.1+ — Post-1.0
 
-- ☑ **Experimental Custom view** — compose the real Strand feature surfaces
-  into nested, resizable panes; auto-save a distinct layout and split
-  proportions for each workspace; start from Focus, Review station, Blank, or VS Code-style workbench
-  templates; keep one live Work runtime while moving it through the layout.
+- ☑ **Configurable Workbench** — Work and the former Custom experiment are one
+  destination. With no saved layout it is the existing full-size Work surface;
+  customization composes registered Strand surfaces into nested panes with
+  per-workspace persistence, templates, and one stable live Work runtime.
 - **Remote repos over SSH** — open a repo on a remote machine (agent
   devbox, VPS) and use Strand locally against it. Headless `strandd`
   daemon over JSON-RPC/stdio, system `ssh` for auth/transport (Strand
@@ -2638,7 +2638,7 @@ persists across launches, and the hidden panel stays mounted without bleeding
 into the workspace.
 
 **Extensible workbench foundation shipped (2026-08-28):** Built-in features
-now register namespaced surface metadata and Custom commands through ordered
+now register namespaced surface metadata and Workbench commands through ordered
 registries, while dedicated and composed placements resolve through one
 `SurfaceHost` contract. Custom layout v2 stores surface and instance identity
 separately, migrates v1 layouts, and preserves unavailable namespaced
@@ -2646,6 +2646,14 @@ contributions as placeholders instead of resetting the workspace. The
 architecture decision in `docs/extensibility-architecture.md` keeps community
 plugins behind a future declarative, permission-checked, isolated boundary;
 no third-party runtime ships in this phase.
+
+**Work and Custom unified as Workbench (2026-08-28):** The separate Labs
+destination is gone. Workbench opens on the existing full-size Work surface
+when a workspace has no saved composition, while Mod+8, the View menu, and
+Quick Launch enter an explicit customization mode for surfaces, splits, and
+templates. Done removes editing chrome; Reset deletes that workspace's saved
+layout. Existing Custom layouts, startup preferences, and shortcut overrides
+migrate to Workbench without duplicating or remounting the live Work runtime.
 
 ---
 

@@ -1,18 +1,18 @@
-# Custom view (experimental)
+# Customize the Workbench
 
-Custom (`Mod+8`) lets you assemble a personal layout for each Strand workspace
-from the app's existing features. It is intended for arrangements such as a
-VS Code-style workbench: Files beside a broad Work pane and narrower Local
-Changes and All Commits inspectors. This is a Strand layout template, not an
-embedded copy of VS Code.
+Workbench (`Mod+1`) is Strand's primary workspace. With no saved
+configuration it is exactly the familiar full-size Work surface: file and
+terminal tabs, internal Work splits, and no outer layout controls.
 
-Open **Custom** from the sidebar's Labs row, the native View menu, or Quick
-Launch (`Mod+K`). You can also choose **Custom (experimental)** under Settings
-→ Appearance → Start in.
+Use `Mod+8`, **View → Customize Workbench…**, or **Customize Workbench…** in
+Quick Launch (`Mod+K`) to arrange more Strand features around Work. Existing
+layouts from the former experimental Custom view migrate automatically.
 
 ## Build a layout
 
-The first visit starts with one empty pane. Choose any of these live surfaces:
+Customization starts from the current Workbench. Choose surfaces, split the
+active pane right or down, drag or keyboard-resize dividers, or apply a
+template. The available built-in surfaces are:
 
 - Work
 - Files
@@ -25,24 +25,20 @@ The first visit starts with one empty pane. Choose any of these live surfaces:
 - Worktrees
 - Workspace Review
 
-The feature grid in an empty pane fills the available pane width.
+Open a pane's surface selector to change its contents. A stateful Strand
+surface can appear only once; choosing one that is already open moves it by
+swapping the two panes. This prevents duplicate focus loops, listeners, or
+background work.
 
 The **Changes explorer** is Local Changes reduced to its Unstaged and Staged
-trees. Clicking a file there opens it in the Work pane's **Changes** tab — the
-whole file rendered as a Review-style full-file diff.
+trees. Clicking a file there opens its whole-file Changes tab in Work. With
+both **All Commits** and **Review** in the layout, “Review changes since this”
+on a commit routes to the Workbench Review pane.
 
-With both **All Commits** and **Review** in the layout, "Review changes since
-this" on a commit routes to the embedded Review pane instead of leaving Custom.
-
-Use the two split buttons in a pane header to add a pane to the right or below.
-Splits can nest in either direction. Drag a divider to resize it, or focus the
-divider with `Tab` and use the arrow keys. The × button closes a pane and
-expands its neighbor; with only one pane left, it clears that pane instead.
-
-Open the feature selector in any pane to change its contents. A Strand feature
-can appear only once in the layout. Choosing one that is already open swaps the
-two panes' features. This prevents two copies of a stateful surface from
-competing over selection and keyboard commands.
+Choose **Done** to hide surface selectors and other layout-editing controls.
+The configured surfaces remain live, and dividers remain resizable. Use
+**Reset to default** to remove the workspace's saved composition and return to
+the direct full-size Work surface.
 
 ## Templates
 
@@ -54,53 +50,39 @@ The **Templates** menu provides four starting points:
 - **Focus** — one full-size Work pane.
 - **Blank layout** — one empty pane.
 
-Applying a template replaces the current pane layout. Blank asks for
-confirmation when the current layout contains features.
+Applying a template replaces the current outer layout. Work's own file and
+terminal tabs—and its internal editor splits—are independent and stay intact.
 
 ## Saving and repository behavior
 
-Changes auto-save as you assign, split, close, resize, or apply a template.
-The save indicator flashes after each layout change.
-The pane tree, feature choices, and divider proportions belong to the active
-Strand workspace and return after the next launch. Switch to another named
-workspace—or Default—and Custom restores that workspace's independent layout.
-Existing app-wide layouts from the first experimental version migrate to
-Default. Every feature pane still follows the active repository inside the
-workspace; Workspace Review is the cross-repository surface.
+Assignments, splits, closes, templates, and divider proportions auto-save per
+Strand workspace. Switching between Default and named workspaces restores each
+workspace's independent layout. Panes follow the active repository;
+Workspace Review is the cross-repository surface.
 
 Saved layouts use namespaced surface and instance identities. If a referenced
-surface is unavailable, Custom keeps the rest of the layout and shows a stable
-placeholder for that pane instead of resetting the workspace.
+surface is unavailable, Workbench keeps the rest of the layout and shows a
+stable placeholder instead of resetting the workspace.
 
-Files uses the same live repository tree as the sidebar. While Files owns a
-Custom pane, the sidebar points back to that pane instead of mounting a second
-tree. Opening a file stays in Custom when the layout also contains Work;
-otherwise it opens the normal Work view.
-
-Work remains one live surface even when Custom moves or resizes its pane, so
-open file editors and embedded terminals keep their process, output,
-scrollback, and selection. Other features use their normal Strand state and
-actions. An action that intentionally opens a dedicated view can leave Custom;
-your saved layout is unchanged when you return.
+Files uses the same live repository tree as the sidebar. When a Workbench pane
+owns Files, the sidebar points to that pane instead of mounting another tree.
+Work also remains one live renderer when its outer pane moves or resizes, so
+open editors, terminal processes, output, scrollback, and selection survive.
 
 ## Keyboard access
 
-- `Mod+8` opens Custom; all global bindings remain rebindable in Settings →
-  Keyboard.
-- `F6` focuses the active pane's feature selector from a complex embedded
-  surface.
-- `Mod+Z` (`Cmd+Z` on macOS) undoes the last layout change while Custom is
-  open.
-- `Mod+[` / `Mod+]` cycle to the previous / next pane, wrapping at the ends.
-- Arrow keys move through the feature cards in an empty pane.
-- The feature selector, templates, split controls, close control, and resize
-  dividers are keyboard-operable.
-- While Custom is open, Quick Launch includes actions to assign every feature,
-  split or close the active pane, and apply every template.
+- `Mod+1` opens Workbench in normal mode.
+- `Mod+8` enters Workbench customization. Both bindings are rebindable in
+  Settings → Keyboard.
+- `F6` focuses the active surface's entry point in normal mode (Work's active
+  tab when Work is selected) and its surface selector while customizing.
+- `Mod+Z` undoes the last layout change while customization is open.
+- `Mod+[` / `Mod+]` cycle panes in both normal and customization modes.
+- Arrow keys navigate the surface grid and resize focused dividers.
+- Quick Launch exposes surface assignment, split, close, and template actions
+  while customization is open.
 
-Custom is experimental. It currently supports ten built-in Strand surfaces, a
-32-pane defensive limit, one saved layout per Strand workspace, and no
-arbitrary web views or third-party extensions. The namespaced registry and
-shared host are internal foundations for future extensions, not a community
-plugin runtime. Those boundaries keep the feature predictable while the
-composition model is tested across platforms.
+Workbench currently supports ten built-in Strand surfaces and a 32-pane
+defensive limit. Arbitrary web views and third-party extensions are not enabled
+yet. The namespaced registry and shared host are internal foundations for a
+future permission-checked plugin API, not a community plugin runtime.

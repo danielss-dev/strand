@@ -77,6 +77,8 @@ function SideSection({ label, collapsed, onToggle, count, action }: SectionProps
 }
 
 interface SidebarProps {
+  onOpenWorkbench: () => void;
+  onOpenWorkSurface: () => void;
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
   /** Open the Save-snapshot / Stash dialog. */
@@ -172,7 +174,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -182,9 +184,11 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     )?.id ?? null);
   const customRestored = useCustomView((state) => state.restored);
   const customWorkspaceId = useCustomView((state) => state.workspaceId);
+  const customConfigured = useCustomView((state) => state.configured);
   const activeWorkspaceId = useWorkspaces((state) => state.activeWorkspaceId);
-  const customOwnsFiles = view === 'custom'
+  const customOwnsFiles = view === 'work'
     && customRestored
+    && customConfigured
     && customWorkspaceId === (activeWorkspaceId ?? DEFAULT_WORKSPACE_ID)
     && customFilesPaneId != null;
   const status = useRepo((s) => s.status);
@@ -1011,16 +1015,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       <div className="side-primary">
         <SideRow
           icon="terminal"
-          label={t('nav.work')}
+          label={t('nav.workbench')}
           active={view === 'work'}
-          onClick={() => { setView('work'); selectFile(null); setTab('files'); }}
-        />
-        <SideRow
-          icon="workspace"
-          label={t('nav.custom')}
-          badge={t('custom.labs')}
-          active={view === 'custom'}
-          onClick={() => { setView('custom'); selectFile(null); }}
+          onClick={() => { onOpenWorkbench(); setTab('files'); }}
         />
         <SideRow
           icon="changes"
@@ -1187,6 +1184,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
           {!customOwnsFiles ? (
             <RepositoryFiles
               active={tab === 'files'}
+              onOpenWork={onOpenWorkSurface}
               onOpenFileInEditor={onOpenFileInEditor}
               onCreateFileEntry={onCreateFileEntry}
               onToast={onToast}
@@ -1199,9 +1197,12 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 type="button"
                 onClick={() => {
                   useCustomView.getState().activatePane(customFilesPaneId);
-                  document.querySelector<HTMLButtonElement>(
-                    `[data-custom-pane-id="${CSS.escape(customFilesPaneId)}"] .custom-feature-select`,
-                  )?.focus();
+                  const pane = document.querySelector<HTMLElement>(
+                    `[data-custom-pane-id="${CSS.escape(customFilesPaneId)}"]`,
+                  );
+                  const selector = pane?.querySelector<HTMLButtonElement>('.custom-feature-select');
+                  if (selector) selector.focus();
+                  else pane?.focus();
                 }}
               >
                 {t('custom.focusFilesPane')}

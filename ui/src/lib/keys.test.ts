@@ -85,7 +85,7 @@ describe('resolveBindings', () => {
     const { byCommand } = resolveBindings();
     expect(byCommand.get('push')).toBe('Mod+P');
     expect(byCommand.get('pull')).toBe('Mod+Shift+P');
-    expect(byCommand.get('view-custom')).toBe('Mod+8');
+    expect(byCommand.get('customize-workbench')).toBe('Mod+8');
   });
 
   it('applies an override and unbinds with null', () => {

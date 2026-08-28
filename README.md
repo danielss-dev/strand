@@ -30,7 +30,8 @@ shortcuts").
 | `Mod+K` | Command palette |
 | `Mod+O` | Open repository |
 | `Mod+,` | Settings |
-| `Mod+1…8` | Work · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review · Custom |
+| `Mod+1…7` | Workbench · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review |
+| `Mod+8` | Customize Workbench |
 | `Mod+Tab` / `Mod+Shift+Tab` | Next / previous repository |
 | `Mod+E` | Switch repository (quick-switcher) |
 | `Mod+P` | Push |
@@ -42,15 +43,15 @@ shortcuts").
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
 | `Mod+B` | Toggle sidebar |
-| `Mod+Z` | Undo last Custom layout change (Custom-view-local) |
-| `Mod+[` / `Mod+]` | Cycle Custom panes, previous / next (Custom-view-local) |
+| `Mod+Z` | Undo last Workbench layout change while customizing |
+| `Mod+[` / `Mod+]` | Cycle panes in a composed Workbench |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
 `Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
 diff · tabs in the active Work pane `Ctrl/⌘+PageUp`/`PageDown` or
-`←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal ·
-`F6` focuses the active Custom pane's feature selector · palette
+`←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal · in a composed
+Workbench, `F6` focuses the active surface entry point (or its selector while customizing) · palette
 `↑↓`/`↵`/`⇥`/`Esc`.
 
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
@@ -69,7 +70,7 @@ the resolved app appearance automatically.
 
 ## Features
 
-- **Work view (⌘1)** — Strand's default startup workspace combines editable
+- **Workbench (⌘1)** — Strand's default workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane
   edge to create a left/right/top/bottom split; each pane keeps its own tabs
@@ -90,24 +91,16 @@ the resolved app appearance automatically.
   can launch a one-off native or WSL shell, while Settings → Terminal provides
   a global default, paired repository and shell selectors for per-repository
   overrides, and typography without changing the separate external
-  **Open in terminal** action. Linked worktrees share one override.
-
-- **Custom view (⌘8, experimental)** — assemble the real Work, Files, Local
-  Changes, Review, All Commits, Pull Requests, Reflog, Worktrees, and Workspace
-  Review surfaces into nested horizontal or vertical panes. Resize every divider,
-  switch or move the feature in each pane, and start from Blank, Focus, Review
-  station, or a VS Code-style workbench with Files, Work, staging, and history.
-  Each Strand workspace auto-saves its own layout, feature choices, and pane
-  proportions across launches. Built-in surfaces are resolved through a
-  namespaced workbench registry shared with their dedicated views, and saved
-  layouts preserve an unavailable contribution as a placeholder instead of
-  discarding the rest of the workspace. Each stateful feature mounts only
-  once, and the live Work editor/terminal runtime remains intact when its pane
-  moves or resizes. The sidebar Labs row,
-  rebindable shortcut, native View menu, command palette, F6 feature-selector
-  focus, and optional startup destination keep the experiment keyboard-first.
-  Community plugin loading is not enabled yet; the registry and host are the
-  internal foundation for a later permission-checked plugin API.
+  **Open in terminal** action. Linked worktrees share one override. With no
+  saved configuration, Workbench is exactly this full-size Work surface.
+  `Mod+8`, View → Customize Workbench, or Quick Launch enters layout editing:
+  add Files, Local Changes, Review, history, pull requests, worktrees, and
+  workspace review in nested panes, or start from a template. Each workspace
+  auto-saves its layout; Reset to default returns to full-size Work. Existing
+  Custom layouts migrate automatically. Each stateful surface mounts once and
+  Work's live editor/terminal runtime survives layout moves and resizes.
+  Community plugin loading is not enabled yet; the namespaced registry and
+  shared host are the foundation for a later permission-checked plugin API.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've

@@ -8,7 +8,8 @@
 
 ## Context
 
-The experimental Custom view proves that Strand features can be composed into
+The configurable Workbench (originally the experimental Custom view) proves
+that Strand features can be composed into
 nested, resizable, workspace-persisted layouts. It also exposes the coupling
 that prevents composition from scaling:
 
@@ -56,13 +57,13 @@ The first internal slice is implemented:
 - `SurfaceRegistry` is the ordered source of truth for the ten namespaced
   built-in surface contributions, including host compatibility, scope,
   instance policy, lifecycle policy, size metadata, and legacy-ID migration.
-- `SurfaceHost` resolves both dedicated and Custom placements, supplies the
+- `SurfaceHost` resolves both dedicated and Workbench placements, supplies the
   surface runtime contract, rejects incompatible hosts, and renders a stable
   placeholder when a contribution is unavailable.
 - `WorkbenchCommandRegistry` provides ordered, namespaced, context-aware
-  command registration and execution; Custom's generated layout commands use
+  command registration and execution; Workbench's generated layout commands use
   it before entering the existing global palette.
-- Custom layout v2 separates `surfaceId` from `instanceId` and context binding,
+- Workbench layout v2 separates `surfaceId` from `instanceId` and context binding,
   enforces bounded topology and known singleton policies, migrates v1, and
   preserves structurally valid unknown contribution IDs.
 - Existing built-ins resolve through one renderer map. Work intentionally
@@ -73,6 +74,30 @@ This does **not** make third-party plugins executable. Most built-ins still
 read active repository state from existing stores, and typed services,
 resource leases, extension slots, permission brokering, and isolation remain
 future phases.
+
+### Workbench destination model (2026-08-28)
+
+Work and the former Custom route are one product destination:
+
+```text
+Workbench (Mod+1)
+  ├─ no saved workspace layout → direct full-size Work renderer
+  └─ saved layout             → SurfaceHost tree
+                                  ├─ Work frame (same stable renderer)
+                                  └─ other registered surfaces
+```
+
+`Mod+8` and **Customize Workbench…** enable editing controls on the same
+destination; they do not navigate to a second view. Done hides surface
+selectors and pane actions. Reset removes the workspace layout so the next
+normal render takes the direct Work path. The direct path is intentional for
+startup performance and preserves the established Work DOM, focus, and
+terminal ownership when composition has never been configured.
+
+The SQLite keys and several internal `custom*` identifiers remain as migration
+compatibility details. Persisted `custom` startup values and `view-custom`
+shortcut overrides map to Workbench, while existing layout v1/v2 data loads
+unchanged. They must not be reintroduced as a public route.
 
 ```text
 built-in modules              community plugins (later)
@@ -408,9 +433,9 @@ requiring the plugin to cooperate.
 Each phase must preserve current behavior and land with focused tests. Do not
 start community execution before built-ins prove the contract.
 
-1. **Internal foundation — complete.** Register built-in surface and Custom
+1. **Internal foundation — complete.** Register built-in surface and Workbench
    command contributions, introduce `SurfaceHost`, share the existing renderer
-   map across dedicated and Custom placements, and migrate persisted layouts
+   map across dedicated and Workbench placements, and migrate persisted layouts
    to bounded v2 surface references with a fail-safe v1 reader.
 2. **Services vertical slice.** Add typed command, dialog, and navigation
    services at the runtime boundary. Migrate Files and both Local Changes

@@ -56,7 +56,7 @@ const SESSION_KEY = 'session.tabs';
 
 export type View =
   | 'work' | 'local' | 'commits' | 'file' | 'branch' | 'reflog' | 'review' | 'worktrees'
-  | 'workspace-review' | 'pull-requests' | 'custom';
+  | 'workspace-review' | 'pull-requests';
 
 /** Active tab within the file view ('preview' only offered for renderable
  *  files — SVG / markdown). */

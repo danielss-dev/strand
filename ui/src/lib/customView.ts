@@ -74,6 +74,22 @@ export function emptyCustomView(): CustomViewModel {
   };
 }
 
+/** Zero-configuration Workbench: the existing Work surface, full size. */
+export function defaultWorkbenchView(): CustomViewModel {
+  return {
+    activePaneId: CUSTOM_ROOT_PANE_ID,
+    layout: {
+      kind: 'pane',
+      id: CUSTOM_ROOT_PANE_ID,
+      surface: {
+        surfaceId: surfaceIdForLegacyFeature('work'),
+        instanceId: 'workbench-default-work',
+        binding: FOLLOW_ACTIVE,
+      },
+    },
+  };
+}
+
 export function customPanes(layout: CustomLayout): CustomPane[] {
   if (layout.kind === 'pane') return [layout];
   return [...customPanes(layout.children[0]), ...customPanes(layout.children[1])];

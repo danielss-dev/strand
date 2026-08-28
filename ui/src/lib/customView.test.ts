@@ -5,6 +5,7 @@ import {
   closeCustomPane,
   createCustomTemplate,
   customPanes,
+  defaultWorkbenchView,
   emptyCustomView,
   parseStoredCustomView,
   setCustomPaneSurface,
@@ -30,7 +31,15 @@ function legacySurfaces(state: ReturnType<typeof emptyCustomView>) {
 
 const surface = (legacy: LegacyCustomFeatureId) => surfaceIdForLegacyFeature(legacy);
 
-describe('Custom view layout', () => {
+describe('Workbench layout', () => {
+  it('defines the zero-configuration Workbench as one full-size Work surface', () => {
+    expect(legacySurfaces(defaultWorkbenchView())).toEqual(['work']);
+    expect(defaultWorkbenchView().layout).toMatchObject({
+      kind: 'pane',
+      id: 'custom-pane-root',
+    });
+  });
+
   it('splits a pane and collapses it into its neighbor', () => {
     const makeId = ids();
     let state = setCustomPaneSurface(emptyCustomView(), 'custom-pane-root', surface('work'), makeId);

@@ -28,7 +28,7 @@ export type CommandId =
   | 'clone-repo'
   | 'settings'
   | 'view-work'
-  | 'view-custom'
+  | 'customize-workbench'
   | 'view-local'
   | 'view-commits'
   | 'view-reflog'
@@ -79,7 +79,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'clone-repo',   label: 'Clone repository…',      category: 'General',     defaultBinding: null },
   { id: 'settings',     label: 'Settings',               category: 'General',     defaultBinding: 'Mod+,',       menu: true },
 
-  { id: 'view-work',      label: 'Go to Work',           category: 'Navigation',  defaultBinding: 'Mod+1', menu: true, needsRepo: true },
+  { id: 'view-work',      label: 'Go to Workbench',      category: 'Navigation',  defaultBinding: 'Mod+1', menu: true, needsRepo: true },
   { id: 'view-local',     label: 'Go to Local Changes',  category: 'Navigation',  defaultBinding: 'Mod+2', menu: true, needsRepo: true },
   { id: 'view-commits',   label: 'Go to All Commits',    category: 'Navigation',  defaultBinding: 'Mod+3', menu: true, needsRepo: true },
   { id: 'view-reflog',    label: 'Go to Reflog',         category: 'Navigation',  defaultBinding: 'Mod+4', menu: true, needsRepo: true },
@@ -88,7 +88,7 @@ export const COMMANDS: readonly CommandDef[] = [
   // Aggregated cross-repo review of the active workspace remains JS-owned;
   // it is intentionally absent from the native View menu.
   { id: 'view-workspace-review', label: 'Go to Workspace Review', category: 'Navigation', defaultBinding: 'Mod+7', needsRepo: true },
-  { id: 'view-custom', label: t('custom.goTo'), category: 'Navigation', defaultBinding: 'Mod+8', menu: true, needsRepo: true },
+  { id: 'customize-workbench', label: t('workbench.customize'), category: 'Navigation', defaultBinding: 'Mod+8', menu: true, needsRepo: true },
   // Cycle the active repository. Tab isn't representable as a native-menu
   // accelerator, so these stay JS-owned (no `menu: true`).
   { id: 'tab-next', label: 'Next repository',     category: 'Navigation',  defaultBinding: 'Mod+Tab',       needsRepo: true },

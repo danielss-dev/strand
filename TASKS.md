@@ -1170,11 +1170,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   merge dialog's base picker; consider preferring the branch another worktree
   has checked out, or main-ish names, on exact rank ties.
 
-### Work view + embedded terminals
-- ☑ Work is the startup/sidebar/menu/palette destination; Files becomes the
-  active sidebar lens and numbered navigation is Work `Mod+1` through
-  Workspace Review `Mod+7`, plus experimental Custom `Mod+8` (`View`,
-  `Sidebar`, `COMMANDS`, native View menu).
+### Workbench Work surface + embedded terminals
+- ☑ Workbench is the startup/sidebar/menu/palette destination; Files becomes
+  the active sidebar lens and numbered navigation is Workbench `Mod+1`
+  through Workspace Review `Mod+7`; `Mod+8` enters Workbench customization
+  (`View`, `Sidebar`, `COMMANDS`, native View menu).
 - ☑ Per-repository mixed `WorkTab` model with one replaceable preview, pin
   promotion/deduplication, peer ordering, close fallback, path-mutation
   reconciliation, and stable Work return IDs (`stores/work.ts`,
@@ -1230,8 +1230,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ Run interactive terminal/process-tree E2E on real macOS and Linux builds,
   plus high-output and many-restored-descriptor performance baselines.
 
-### Experimental Custom view
-- ☑ Versioned, defensively parsed, workspace-scoped Custom layouts with nested
+### Workbench composition
+- ☑ Versioned, defensively parsed, workspace-scoped Workbench layouts with nested
   horizontal/vertical panes, draggable and keyboard-resizable dividers,
   close/collapse rules, a 32-pane defensive limit, per-workspace write queues
   and divider identities, Default-only legacy migration, and automatic
@@ -1240,15 +1240,16 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Compose the real Work, Files, Local Changes, Review, All Commits, Pull
   Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate
   feature mounts; moving Work preserves its single xterm/editor runtime and
-  Files has one reusable sidebar/Custom owner (`RepositoryFiles`, `CustomView`,
+  Files has one reusable sidebar/Workbench owner (`RepositoryFiles`, `CustomView`,
   stable `WorkFrame`, active-pane shortcut arbitration). Includes Blank, Focus,
   Review station, and a four-surface VS Code workbench template.
-- ☑ Custom is reachable from the sidebar Labs row, native View menu,
-  rebindable `Mod+8`, command palette, and Appearance startup setting. F6
-  focuses the active pane's module selector; pane assignment, splitting,
-  closing, and templates all have keyboard paths.
+- ☑ Work and Custom are one Workbench destination: an unconfigured workspace
+  renders the existing full-size Work surface with no composition chrome;
+  `Mod+8`, View, and Quick Launch enter customization, Done returns to normal
+  use, Reset removes the saved layout, and legacy Custom startup/shortcut/layout
+  state migrates without data loss (`App`, `CustomView`, `useCustomView`).
 - ☑ Extensible-workbench foundation: namespaced surface and command registries,
-  one `SurfaceHost` contract for dedicated and Custom placements, explicit
+  one `SurfaceHost` contract for dedicated and Workbench placements, explicit
   instance/lifecycle/context metadata, and Custom layout v2 surface refs with
   fail-safe v1 migration and unavailable-contribution placeholders
   (`workbench/`, `lib/customView.ts`, `docs/extensibility-architecture.md`).
@@ -1259,11 +1260,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ Design and implement the declarative community-plugin manifest,
   permission broker, quotas, diagnostics, and isolated execution boundary;
   do not load third-party code into Strand's privileged webview.
-- ☐ Run native workspace-scoped Custom-view persistence and live-terminal continuity E2E on
+- ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).
 
-#### Custom view UX pass
+#### Workbench customization UX
 
 - ☑ Swap surfaces when assigning one that is already open
   (`setCustomPaneSurface`).

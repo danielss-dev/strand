@@ -25,7 +25,7 @@ export type DiffSyntaxTheme =
   | 'tritanopia';
 export type GraphStyle = 'classic' | 'bold' | 'mono';
 /** Repository space shown after Strand launches. */
-export type StartupSpace = 'work' | 'custom' | 'local' | 'review' | 'pull-requests' | 'commits';
+export type StartupSpace = 'work' | 'local' | 'review' | 'pull-requests' | 'commits';
 /** How open repositories are presented: a vertical icon rail down the left
  * edge (default), or a horizontal tab strip in the toolbar. */
 export type RepoNav = 'rail' | 'tabs';
@@ -236,8 +236,7 @@ export const REPO_NAV_OPTIONS: { id: RepoNav; label: string }[] = [
 ];
 
 export const STARTUP_SPACE_OPTIONS: { id: StartupSpace; label: string }[] = [
-  { id: 'work', label: 'Work' },
-  { id: 'custom', label: t('custom.settingsOption') },
+  { id: 'work', label: t('nav.workbench') },
   { id: 'local', label: 'Local Changes' },
   { id: 'review', label: 'Review' },
   { id: 'pull-requests', label: 'Pull Requests' },
@@ -315,7 +314,25 @@ export const useSettings = create<SettingsState>()(
         return rest;
       },
       merge: (persisted, current) => {
-        const next = { ...current, ...(persisted as Partial<SettingsState>) };
+        const legacy = persisted as Partial<Omit<SettingsState, 'startupSpace' | 'keybindings'>> & {
+          startupSpace?: StartupSpace | 'custom';
+          keybindings?: Record<string, string | null>;
+        };
+        const { ['view-custom']: legacyCustomBinding, ...storedBindings } = legacy.keybindings ?? {};
+        const keybindings: KeyOverrides = legacyCustomBinding !== undefined
+          && storedBindings['customize-workbench'] === undefined
+          ? { ...storedBindings, 'customize-workbench': legacyCustomBinding }
+          : storedBindings;
+        const next = {
+          ...current,
+          ...legacy,
+          // Custom and Work are now one destination. Preserve existing user
+          // settings without retaining a route that no longer exists.
+          startupSpace: legacy.startupSpace === 'custom'
+            ? 'work'
+            : legacy.startupSpace ?? current.startupSpace,
+          keybindings,
+        };
         const terminalFont = TERMINAL_FONT_OPTIONS.some((option) => option.id === next.terminalFont)
           ? next.terminalFont
           : current.terminalFont;

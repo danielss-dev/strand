@@ -88,6 +88,12 @@ export const settings = {
       [key, JSON.stringify(value)],
     );
   },
+
+  async remove(key: string): Promise<void> {
+    if (!isTauri()) return;
+    const d = await db();
+    await d.execute('DELETE FROM settings WHERE key = $1', [key]);
+  },
 };
 
 /**

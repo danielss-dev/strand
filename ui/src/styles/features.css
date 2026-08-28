@@ -7875,7 +7875,7 @@ textarea.clone-input {
 .work-empty strong { color: var(--text); font-size: 13px; }
 .work-empty > span { max-width: 520px; font-size: 12px; }
 
-/* Experimental Custom view — a persistent tree of live Strand surfaces. */
+/* Workbench composition — a persistent tree of live Strand surfaces. */
 .custom-view {
   position: relative;
   width: 100%;
@@ -7998,6 +7998,11 @@ textarea.clone-input {
 }
 .custom-pane.active {
   outline: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
+  outline-offset: -1px;
+}
+.custom-view:not(.editing) .custom-pane.active { outline: 0; }
+.custom-view:not(.editing) .custom-pane:focus-visible {
+  outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 .custom-pane-header {

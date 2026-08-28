@@ -31,7 +31,7 @@ import { t } from './i18n';
  * owning that combo.
  */
 
-export type MenuViewId = 'work' | 'local' | 'commits' | 'reflog' | 'review' | 'worktrees' | 'custom';
+export type MenuViewId = 'work' | 'local' | 'commits' | 'reflog' | 'review' | 'worktrees';
 
 export interface MenuHandlers {
   openRepo(): void;
@@ -40,6 +40,7 @@ export interface MenuHandlers {
   checkUpdates(): void;
   openPalette(): void;
   showView(view: MenuViewId): void;
+  customizeWorkbench(): void;
   cycleTheme(): void;
   toggleSidebar(): void;
   sync(): void;
@@ -140,13 +141,12 @@ export async function installAppMenu(
   });
 
   const views: { id: MenuViewId; text: string; cmd: CommandId }[] = [
-    { id: 'work', text: t('nav.work'), cmd: 'view-work' },
+    { id: 'work', text: t('nav.workbench'), cmd: 'view-work' },
     { id: 'local', text: 'Local Changes', cmd: 'view-local' },
     { id: 'commits', text: 'All Commits', cmd: 'view-commits' },
     { id: 'reflog', text: 'Reflog', cmd: 'view-reflog' },
     { id: 'review', text: 'Review', cmd: 'view-review' },
     { id: 'worktrees', text: 'Worktrees', cmd: 'view-worktrees' },
-    { id: 'custom', text: t('custom.settingsOption'), cmd: 'view-custom' },
   ];
   const viewMenu = await Submenu.new({
     text: 'View',
@@ -169,6 +169,13 @@ export async function installAppMenu(
           }),
         ),
       )),
+      await item({
+        id: 'customize-workbench',
+        text: t('workbench.customizeEllipsis'),
+        cmd: 'customize-workbench',
+        enabled: hasRepo,
+        action: () => handlers().customizeWorkbench(),
+      }),
       await sep(),
       await item({
         id: 'cycle-theme',
