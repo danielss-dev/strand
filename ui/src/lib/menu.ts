@@ -41,6 +41,7 @@ export interface MenuHandlers {
   openPalette(): void;
   showView(view: MenuViewId): void;
   cycleTheme(): void;
+  toggleSidebar(): void;
   sync(): void;
   pull(): void;
   push(): void;
@@ -174,6 +175,12 @@ export async function installAppMenu(
         text: 'Toggle Light/Dark Theme',
         cmd: 'theme-toggle',
         action: () => handlers().cycleTheme(),
+      }),
+      await item({
+        id: 'toggle-sidebar',
+        text: 'Toggle Sidebar',
+        cmd: 'toggle-sidebar',
+        action: () => handlers().toggleSidebar(),
       }),
     ],
   });

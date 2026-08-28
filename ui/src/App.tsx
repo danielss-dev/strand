@@ -3,7 +3,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
 
 import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { ReviewModeToggle } from './components/ReviewModeToggle';
@@ -186,6 +186,26 @@ export function App() {
   // Theme preference → resolved theme; `useTheme` applies `data-theme` on
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
   const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
+
+  const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
+  const setAppSetting = useSettings((s) => s.set);
+  const toggleSidebar = useCallback(
+    () => setAppSetting('sidebarCollapsed', !sidebarCollapsed),
+    [setAppSetting, sidebarCollapsed],
+  );
+  // The sidebar Panel collapses to zero; the imperative handle applies the
+  // persisted preference on mount and whenever it flips (expand() restores the
+  // pre-collapse size the panel library remembers).
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  useEffect(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (sidebarCollapsed) {
+      if (!panel.isCollapsed()) panel.collapse();
+    } else if (!panel.isExpanded()) {
+      panel.expand();
+    }
+  }, [sidebarCollapsed]);
 
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
@@ -959,6 +979,7 @@ export function App() {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
     },
+    'toggle-sidebar': toggleSidebar,
     'fetch': () => { void onFetch(); },
     'pull': () => { void onPull(); },
     'push': () => { void onPush(); },
@@ -967,7 +988,7 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
-  }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
+  }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
        requestSuggestCommitMessage]);
   const commandHandlersRef = useRef(commandHandlers);
@@ -1011,6 +1032,7 @@ export function App() {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
     },
+    toggleSidebar,
     sync: () => { void onSync(); },
     pull: () => { void onPull(); },
     push: () => { void onPush(); },
@@ -1801,6 +1823,7 @@ export function App() {
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: keyHint('theme-toggle'), run: () => setTheme('system') },
+      { id: 'toggle-sidebar', label: sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', group: 'Actions', shortcut: keyHint('toggle-sidebar'), keywords: 'sidebar collapse expand hide show panel', run: toggleSidebar },
     );
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
@@ -1974,6 +1997,8 @@ export function App() {
           pushDone={pushDone}
           onToast={showToast}
           onSaveSnapshot={() => setStashDialog({ snapshot: true, keepIndex: false })}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
           onStash={(opts) => setStashDialog({ snapshot: opts?.snapshot ?? false, keepIndex: opts?.keepIndex ?? false })}
           onOpenRepo={openViaDialog}
           onInitRepo={() => setInitRepoOpen(true)}
@@ -1999,7 +2024,15 @@ export function App() {
             />
           )}
           <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
-            <Panel defaultSize={20} minSize={12} maxSize={40}>
+            <Panel
+              ref={sidebarPanelRef}
+              className="sidebar-panel"
+              defaultSize={20}
+              minSize={12}
+              maxSize={40}
+              collapsible
+              collapsedSize={0}
+            >
               <Sidebar
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
@@ -2027,7 +2060,7 @@ export function App() {
                 onToast={showToast}
               />
             </Panel>
-            <PanelResizeHandle className="rs-handle vert" />
+            {!sidebarCollapsed && <PanelResizeHandle className="rs-handle vert" />}
             <Panel minSize={30}>
               <div className="workspace-host">
                 <Work

@@ -41,6 +41,7 @@ shortcuts").
 | `Mod+Shift+C` | Open in terminal |
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
+| `Mod+B` | Toggle sidebar |
 | `Mod+Z` | Undo last Custom layout change (Custom-view-local) |
 | `Mod+[` / `Mod+]` | Cycle Custom panes, previous / next (Custom-view-local) |
 

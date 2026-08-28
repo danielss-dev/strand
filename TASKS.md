@@ -725,6 +725,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `BranchSwitcherButton`.)
 
 ### Sidebar
+- ☑ Collapse/expand the sidebar panel (`sidebarCollapsed` in settings,
+  `ImperativePanelHandle.collapse/expand` in `App.tsx`; topbar chevron,
+  `Mod+B`, palette, and View menu — persisted across launches).
 - ☑ Local Changes + All Commits primary rows
 - ☑ Git / Files tab toggle
 - ☑ Per-row actions via a right-click **`ContextMenu`** (`components/ContextMenu.tsx`):

@@ -70,6 +70,7 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+Shift+C` | Open in terminal | Repository |
 | `Mod+R` | Refresh | Repository |
 | `Mod+Shift+T` | Toggle light/dark theme | Appearance |
+| `Mod+B` | Toggle sidebar | Appearance |
 
 Push is deliberately on `Mod+P` and pull on `Mod+Shift+P`. The Git shortcuts act only on the currently open repository, and most Navigation/Git/Repository commands need a repository open — `Mod+E` is the exception and lists recents even with nothing open.
 

@@ -39,6 +39,7 @@ export type CommandId =
   | 'tab-prev'
   | 'switch-repo'
   | 'theme-toggle'
+  | 'toggle-sidebar'
   | 'fetch'
   | 'pull'
   | 'push'
@@ -107,6 +108,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'refresh',       label: 'Refresh',               category: 'Repository', defaultBinding: 'Mod+R',       needsRepo: true },
 
   { id: 'theme-toggle', label: 'Toggle light/dark theme', category: 'Appearance', defaultBinding: 'Mod+Shift+T', menu: true },
+  { id: 'toggle-sidebar', label: 'Toggle sidebar', category: 'Appearance', defaultBinding: 'Mod+B', menu: true },
 ] as const;
 
 export const CATEGORY_ORDER: readonly CommandCategory[] =

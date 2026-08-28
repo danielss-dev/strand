@@ -103,6 +103,10 @@ export interface SettingsState {
   startupSpace: StartupSpace;
   /** Open-repository presentation — vertical rail vs. horizontal tabs. */
   repoNav: RepoNav;
+  /** Whether the sidebar panel is collapsed to zero width. Persisted so the
+   * choice survives launches; toggled with `Mod+B`, the topbar button, the
+   * palette, or the native View menu. */
+  sidebarCollapsed: boolean;
   /** Whole-UI zoom factor (1 = 100%). Driven by the Ctrl/⌘ +/− shortcuts and
    * applied as CSS `zoom` on `<html>` in App. Persisted across launches. */
   zoom: number;
@@ -258,6 +262,7 @@ export const useSettings = create<SettingsState>()(
       density: 'default',
       startupSpace: 'work',
       repoNav: 'tabs',
+      sidebarCollapsed: false,
       zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,

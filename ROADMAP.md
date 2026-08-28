@@ -2628,6 +2628,12 @@ repository are omitted instead of leaving a dead error section in the merged
 queue. Refresh revalidates those paths so a restored or re-cloned repository
 rejoins automatically without removing it from workspace membership.
 
+**Collapsible sidebar shipped (2026-08-28):** The main repository sidebar now
+collapses to zero width and restores its prior size through a topbar chevron,
+rebindable Mod+B command, command palette, or native View menu. The preference
+persists across launches, and the hidden panel stays mounted without bleeding
+into the workspace.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
