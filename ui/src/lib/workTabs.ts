@@ -1,6 +1,6 @@
 import type { EmbeddedShellChoice, FilesTreeMutationChange } from './types';
 
-export type WorkFileMode = 'content' | 'preview' | 'history' | 'compare' | 'blame';
+export type WorkFileMode = 'content' | 'preview' | 'changes' | 'history' | 'compare' | 'blame';
 
 export type WorkFileTab = {
   kind: 'file';

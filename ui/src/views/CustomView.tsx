@@ -41,6 +41,7 @@ const FEATURES: readonly CustomFeatureMeta[] = [
   { id: 'work', label: t('nav.work'), description: t('custom.feature.work.description'), icon: 'terminal' },
   { id: 'files', label: t('nav.files'), description: t('custom.feature.files.description'), icon: 'folder' },
   { id: 'local', label: t('nav.localChanges'), description: t('custom.feature.local.description'), icon: 'changes' },
+  { id: 'local-explorer', label: t('nav.localExplorer'), description: t('custom.feature.localExplorer.description'), icon: 'changes' },
   { id: 'review', label: t('nav.review'), description: t('custom.feature.review.description'), icon: 'check' },
   { id: 'commits', label: t('nav.allCommits'), description: t('custom.feature.commits.description'), icon: 'graph' },
   { id: 'pull-requests', label: t('nav.pullRequests'), description: t('custom.feature.pullRequests.description'), icon: 'remote' },
@@ -55,11 +56,32 @@ const TEMPLATES: readonly {
   id: CustomTemplateId;
   label: string;
   icon: IconName;
+  thumb: ReactNode;
 }[] = [
-  { id: 'vscode', label: t('custom.template.vscode'), icon: 'workspace' },
-  { id: 'review', label: t('custom.template.review'), icon: 'check' },
-  { id: 'focus', label: t('custom.template.focus'), icon: 'terminal' },
-  { id: 'blank', label: t('custom.template.blank'), icon: 'x' },
+  {
+    id: 'vscode',
+    label: t('custom.template.vscode'),
+    icon: 'workspace',
+    thumb: <span className="custom-template-thumb" aria-hidden="true"><i /><i /><i /></span>,
+  },
+  {
+    id: 'review',
+    label: t('custom.template.review'),
+    icon: 'check',
+    thumb: <span className="custom-template-thumb" aria-hidden="true"><i /><i /></span>,
+  },
+  {
+    id: 'focus',
+    label: t('custom.template.focus'),
+    icon: 'terminal',
+    thumb: <span className="custom-template-thumb" aria-hidden="true"><i /></span>,
+  },
+  {
+    id: 'blank',
+    label: t('custom.template.blank'),
+    icon: 'x',
+    thumb: <span className="custom-template-thumb" aria-hidden="true" />,
+  },
 ] as const;
 
 export function CustomView({
@@ -83,7 +105,10 @@ export function CustomView({
   const splitPane = useCustomView((state) => state.splitPane);
   const closePane = useCustomView((state) => state.closePane);
   const applyTemplate = useCustomView((state) => state.applyTemplate);
+  const canUndo = useCustomView((state) => state.canUndo);
+  const undo = useCustomView((state) => state.undo);
   const [templateMenu, setTemplateMenu] = useState<{ x: number; y: number } | null>(null);
+  const [saveVisible, setSaveVisible] = useState(false);
   const panes = useMemo(() => customPanes(layout), [layout]);
   const used = useMemo(
     () => new Map(panes.flatMap((pane) => pane.feature ? [[pane.feature, pane.id] as const] : [])),
@@ -93,6 +118,60 @@ export function CustomView({
   const ready = restored && restoredWorkspaceId === workspaceId;
 
   useEffect(() => { void restore(workspaceId); }, [restore, workspaceId]);
+
+  // Flash the save indicator only for edits between restored states — the
+  // restore swap itself (empty placeholder → saved layout) is not a save.
+  useEffect(() => {
+    let timeout: number | undefined;
+    const unsubscribe = useCustomView.subscribe((state, prev) => {
+      if (state.layout === prev.layout || !state.restored || !prev.restored) return;
+      setSaveVisible(true);
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => setSaveVisible(false), 1600);
+    });
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    const undoLayout = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return;
+      const target = document.activeElement;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) return;
+      if (!canUndo) return;
+      event.preventDefault();
+      undo();
+    };
+    window.addEventListener('keydown', undoLayout);
+    return () => window.removeEventListener('keydown', undoLayout);
+  }, [canUndo, undo]);
+
+  // Mod+[ / Mod+] walks the composed panes and leaves focus on the next
+  // pane's module switcher so cycling stays fully keyboard-operable.
+  useEffect(() => {
+    const cyclePane = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return;
+      const delta = event.key === '[' ? -1 : event.key === ']' ? 1 : 0;
+      if (!delta) return;
+      const cycle = customPanes(layout);
+      const index = cycle.findIndex((pane) => pane.id === activePaneId);
+      if (index < 0 || cycle.length === 0) return;
+      const next = cycle[(index + delta + cycle.length) % cycle.length];
+      event.preventDefault();
+      activatePane(next.id);
+      document.querySelector<HTMLButtonElement>(
+        `[data-custom-pane-id="${CSS.escape(next.id)}"] .custom-feature-select`,
+      )?.focus();
+    };
+    window.addEventListener('keydown', cyclePane);
+    return () => window.removeEventListener('keydown', cyclePane);
+  }, [activatePane, activePaneId, layout]);
 
   // F6 mirrors Work: leave a complex embedded surface and return to the
   // active pane's module switcher without requiring pointer precision.
@@ -112,6 +191,7 @@ export function CustomView({
 
   const templateItems = useMemo<MenuItem[]>(() => TEMPLATES.map((template) => ({
     label: template.label,
+    thumb: template.thumb,
     icon: template.icon,
     confirm: template.id === 'blank' && panes.some((pane) => pane.feature != null),
     onSelect: () => applyTemplate(template.id),
@@ -128,7 +208,9 @@ export function CustomView({
           <Icon name="chev-right" size={10} />
           <strong>{t('custom.title')}</strong>
           <span className="custom-experimental">{t('custom.experimental')}</span>
-          <span className="custom-save-state"><Icon name="check" size={10} /> {t('custom.autoSaved')}</span>
+          {saveVisible && (
+            <span className="custom-save-state flash"><Icon name="check" size={10} /> {t('custom.autoSaved')}</span>
+          )}
         </div>
         <div className="custom-builder-actions">
           <span className="custom-active-label">
@@ -150,7 +232,9 @@ export function CustomView({
           <button
             type="button"
             className="icon-btn"
-            title={t('custom.splitActiveRight')}
+            title={panes.length >= FEATURES.length
+              ? t('custom.paneCap', { count: FEATURES.length })
+              : t('custom.splitActiveRight')}
             aria-label={t('custom.splitActiveRight')}
             disabled={!ready || panes.length >= FEATURES.length}
             onClick={() => splitPane(activePaneId, 'horizontal')}
@@ -160,7 +244,9 @@ export function CustomView({
           <button
             type="button"
             className="icon-btn"
-            title={t('custom.splitActiveDown')}
+            title={panes.length >= FEATURES.length
+              ? t('custom.paneCap', { count: FEATURES.length })
+              : t('custom.splitActiveDown')}
             aria-label={t('custom.splitActiveDown')}
             disabled={!ready || panes.length >= FEATURES.length}
             onClick={() => splitPane(activePaneId, 'vertical')}
@@ -223,6 +309,10 @@ interface LayoutProps {
 
 function CustomLayoutView({ node, ...props }: LayoutProps & { node: CustomLayout }) {
   if (node.kind === 'pane') return <CustomPaneView pane={node} {...props} />;
+  const firstFeature = customPanes(node.children[0])[0]?.feature;
+  const secondFeature = customPanes(node.children[1])[0]?.feature;
+  const firstLabel = (firstFeature && FEATURE_BY_ID.get(firstFeature)?.label) ?? t('custom.empty');
+  const secondLabel = (secondFeature && FEATURE_BY_ID.get(secondFeature)?.label) ?? t('custom.empty');
   return (
     <PanelGroup
       direction={node.direction}
@@ -234,7 +324,7 @@ function CustomLayoutView({ node, ...props }: LayoutProps & { node: CustomLayout
       </Panel>
       <PanelResizeHandle
         className={`rs-handle ${node.direction === 'horizontal' ? 'vert' : 'horiz'}`}
-        aria-label={t('custom.resizePanes')}
+        aria-label={t('custom.resizeBetween', { first: firstLabel, second: secondLabel })}
       />
       <Panel defaultSize={100 - node.ratio} minSize={18}>
         <CustomLayoutView node={node.children[1]} {...props} />
@@ -259,7 +349,25 @@ function CustomPaneView({
 }: LayoutProps & { pane: CustomPane }) {
   const active = pane.id === activePaneId;
   const feature = pane.feature ? FEATURE_BY_ID.get(pane.feature) ?? null : null;
+  const paneRef = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [actionMenu, setActionMenu] = useState<{ x: number; y: number } | null>(null);
+  const [compactActions, setCompactActions] = useState(false);
+
+  useLayoutEffect(() => {
+    const node = paneRef.current;
+    if (!node) return;
+    const measure = () => setCompactActions(node.getBoundingClientRect().width < 380);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!compactActions) setActionMenu(null);
+  }, [compactActions]);
+
   const menuItems = useMemo<MenuItem[]>(() => [
     ...FEATURES.map((item) => {
       const owner = used.get(item.id);
@@ -276,6 +384,26 @@ function CustomPaneView({
       onSelect: () => onFeature(pane.id, null),
     },
   ], [onFeature, pane.feature, pane.id, used]);
+  const actionMenuItems = useMemo<MenuItem[]>(() => [
+    {
+      label: t('custom.splitRight'),
+      icon: 'split',
+      disabled: paneCount >= FEATURES.length,
+      onSelect: () => onSplit(pane.id, 'horizontal'),
+    },
+    {
+      label: t('custom.splitDown'),
+      icon: 'unified',
+      disabled: paneCount >= FEATURES.length,
+      onSelect: () => onSplit(pane.id, 'vertical'),
+    },
+    {
+      label: paneCount === 1 ? t('custom.clearPane') : t('custom.closePane'),
+      icon: 'x',
+      disabled: paneCount === 1 && pane.feature == null,
+      onSelect: () => onClose(pane.id),
+    },
+  ], [onClose, onSplit, pane.feature, pane.id, paneCount]);
 
   const openMenu = (button: HTMLButtonElement) => {
     const rect = button.getBoundingClientRect();
@@ -284,6 +412,7 @@ function CustomPaneView({
 
   return (
     <section
+      ref={paneRef}
       className={'custom-pane' + (active ? ' active' : '')}
       data-custom-pane-id={pane.id}
       aria-label={feature ? t('custom.paneLabel', { feature: feature.label }) : t('custom.emptyPaneLabel')}
@@ -303,37 +432,59 @@ function CustomPaneView({
           <span>{feature?.label ?? t('custom.chooseFeature')}</span>
           <Icon name="chev-down" size={9} />
         </button>
-        <span className="custom-pane-grip" aria-hidden />
-        <div className="custom-pane-actions">
-          <button
-            type="button"
-            title={t('custom.splitRight')}
-            aria-label={t('custom.splitFeatureRight', { feature: feature?.label ?? t('custom.empty') })}
-            disabled={paneCount >= FEATURES.length}
-            onClick={() => onSplit(pane.id, 'horizontal')}
-          >
-            <Icon name="split" size={12} />
-          </button>
-          <button
-            type="button"
-            title={t('custom.splitDown')}
-            aria-label={t('custom.splitFeatureDown', { feature: feature?.label ?? t('custom.empty') })}
-            disabled={paneCount >= FEATURES.length}
-            onClick={() => onSplit(pane.id, 'vertical')}
-          >
-            <Icon name="unified" size={12} />
-          </button>
-          <button
-            type="button"
-            title={paneCount === 1 ? t('custom.clearPane') : t('custom.closePane')}
-            aria-label={paneCount === 1
-              ? t('custom.clearPaneLabel')
-              : t('custom.closeFeaturePane', { feature: feature?.label ?? t('custom.empty') })}
-            disabled={paneCount === 1 && feature == null}
-            onClick={() => onClose(pane.id)}
-          >
-            <Icon name="x" size={12} />
-          </button>
+        <div className="custom-pane-actions" style={{ marginLeft: 'auto' }}>
+          {compactActions ? (
+            <button
+              type="button"
+              className="icon-btn custom-pane-more"
+              title={t('custom.moreActions')}
+              aria-label={t('custom.moreActions')}
+              aria-haspopup="menu"
+              aria-expanded={actionMenu != null}
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setActionMenu({ x: rect.right - 180, y: rect.bottom + 3 });
+              }}
+            >
+              <Icon name="more" size={12} />
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                title={paneCount >= FEATURES.length
+                  ? t('custom.paneCap', { count: FEATURES.length })
+                  : t('custom.splitRight')}
+                aria-label={t('custom.splitFeatureRight', { feature: feature?.label ?? t('custom.empty') })}
+                disabled={paneCount >= FEATURES.length}
+                onClick={() => onSplit(pane.id, 'horizontal')}
+              >
+                <Icon name="split" size={12} />
+              </button>
+              <button
+                type="button"
+                title={paneCount >= FEATURES.length
+                  ? t('custom.paneCap', { count: FEATURES.length })
+                  : t('custom.splitDown')}
+                aria-label={t('custom.splitFeatureDown', { feature: feature?.label ?? t('custom.empty') })}
+                disabled={paneCount >= FEATURES.length}
+                onClick={() => onSplit(pane.id, 'vertical')}
+              >
+                <Icon name="unified" size={12} />
+              </button>
+              <button
+                type="button"
+                title={paneCount === 1 ? t('custom.clearPane') : t('custom.closePane')}
+                aria-label={paneCount === 1
+                  ? t('custom.clearPaneLabel')
+                  : t('custom.closeFeaturePane', { feature: feature?.label ?? t('custom.empty') })}
+                disabled={paneCount === 1 && feature == null}
+                onClick={() => onClose(pane.id)}
+              >
+                <Icon name="x" size={12} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -356,6 +507,14 @@ function CustomPaneView({
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+      )}
+      {actionMenu && (
+        <ContextMenu
+          x={actionMenu.x}
+          y={actionMenu.y}
+          items={actionMenuItems}
+          onClose={() => setActionMenu(null)}
+        />
       )}
     </section>
   );

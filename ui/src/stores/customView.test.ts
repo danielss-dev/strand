@@ -4,7 +4,7 @@ const db = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
 
 vi.mock('../lib/db', () => ({ settings: db }));
 
-import { createCustomTemplate, storeCustomView } from '../lib/customView';
+import { createCustomTemplate, customPanes, emptyCustomView, storeCustomView } from '../lib/customView';
 import { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
 import { customViewStorageKey, useCustomView } from './customView';
 
@@ -125,5 +125,91 @@ describe('Custom view persistence', () => {
       layout: storedB.layout,
       restored: true,
     });
+  });
+
+  it('pushes every layout mutation and restores layout and active pane on undo', async () => {
+    let id = 0;
+    const workspace = 'undo-mutations';
+    const stored = createCustomTemplate('review', () => `undo-${++id}`);
+    db.get.mockResolvedValue(storeCustomView(stored));
+    await useCustomView.getState().restore(workspace);
+
+    const [first, second] = customPanes(stored.layout);
+    useCustomView.getState().activatePane(second.id);
+    useCustomView.getState().setFeature(first.id, 'work');
+    expect(useCustomView.getState().canUndo).toBe(true);
+    useCustomView.getState().undo();
+    expect(useCustomView.getState()).toMatchObject({
+      layout: stored.layout,
+      activePaneId: second.id,
+      canUndo: false,
+    });
+
+    useCustomView.getState().splitPane(first.id, 'vertical');
+    expect(useCustomView.getState().canUndo).toBe(true);
+    useCustomView.getState().undo();
+    expect(useCustomView.getState()).toMatchObject({
+      layout: stored.layout,
+      activePaneId: second.id,
+      canUndo: false,
+    });
+
+    useCustomView.getState().activatePane(first.id);
+    useCustomView.getState().closePane(first.id);
+    expect(useCustomView.getState().canUndo).toBe(true);
+    useCustomView.getState().undo();
+    expect(useCustomView.getState()).toMatchObject({
+      layout: stored.layout,
+      activePaneId: first.id,
+      canUndo: false,
+    });
+
+    useCustomView.getState().applyTemplate('focus');
+    expect(useCustomView.getState().canUndo).toBe(true);
+    useCustomView.getState().undo();
+    expect(useCustomView.getState()).toMatchObject({
+      layout: stored.layout,
+      activePaneId: first.id,
+      canUndo: false,
+    });
+
+    await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(8));
+  });
+
+  it('caps undo history at 50 entries', async () => {
+    const workspace = 'undo-cap';
+    db.get.mockResolvedValue(storeCustomView(emptyCustomView()));
+    await useCustomView.getState().restore(workspace);
+
+    for (let index = 0; index < 51; index += 1) {
+      useCustomView.getState().setFeature(
+        'custom-pane-root',
+        index % 2 === 0 ? 'work' : 'local',
+      );
+    }
+    for (let index = 0; index < 50; index += 1) useCustomView.getState().undo();
+
+    expect(useCustomView.getState()).toMatchObject({
+      layout: { kind: 'pane', id: 'custom-pane-root', feature: 'work' },
+      activePaneId: 'custom-pane-root',
+      canUndo: false,
+    });
+    const afterCap = useCustomView.getState();
+    useCustomView.getState().undo();
+    expect(useCustomView.getState()).toBe(afterCap);
+    await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(101));
+  });
+
+  it('does nothing when there is no layout to undo', async () => {
+    const workspace = 'undo-empty';
+    db.get.mockResolvedValue(storeCustomView(emptyCustomView()));
+    await useCustomView.getState().restore(workspace);
+    const before = useCustomView.getState();
+
+    useCustomView.getState().undo();
+
+    expect(useCustomView.getState()).toBe(before);
+    expect(useCustomView.getState().canUndo).toBe(false);
+    expect(db.set).not.toHaveBeenCalled();
   });
 });

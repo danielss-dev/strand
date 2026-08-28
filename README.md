@@ -41,6 +41,8 @@ shortcuts").
 | `Mod+Shift+C` | Open in terminal |
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
+| `Mod+Z` | Undo last Custom layout change (Custom-view-local) |
+| `Mod+[` / `Mod+]` | Cycle Custom panes, previous / next (Custom-view-local) |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
 `Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`

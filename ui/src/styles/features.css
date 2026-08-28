@@ -340,6 +340,9 @@
   min-height: 0;
   min-width: 0;
 }
+/* Explorer mode (Custom's Changes explorer) mounts .lc-files directly under
+ * .lc-main without the horizontal split, so it owns the full pane. */
+.lc-main > .lc-files { flex: 1; min-width: 0; }
 .lc-files {
   display: flex;
   flex-direction: column;
@@ -1580,6 +1583,9 @@
   min-height: 0;
   display: flex;
 }
+/* The Changes tab mounts the Local Changes diff renderer directly; let it own
+ * the pane instead of shrinking to its content's intrinsic width. */
+.fv-body > .lc-diff { flex: 1; min-width: 0; }
 .fv-content {
   flex: 1;
   overflow: auto;
@@ -7939,8 +7945,29 @@ textarea.clone-input {
   gap: 3px;
   color: var(--text-dim);
   font-size: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
 }
+.custom-save-state.flash { opacity: 1; }
 .custom-builder-actions { flex: none; }
+.custom-template-thumb {
+  flex: none;
+  width: 34px;
+  height: 22px;
+  display: flex;
+  gap: 1px;
+  overflow: hidden;
+  border: 0.5px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-base);
+}
+.custom-template-thumb i {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  background: color-mix(in oklch, var(--text-dim) 18%, transparent);
+}
 .custom-active-label {
   max-width: 150px;
   overflow: hidden;
@@ -7969,6 +7996,10 @@ textarea.clone-input {
   overflow: hidden;
   background: var(--bg-base);
 }
+.custom-pane.active {
+  outline: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
+  outline-offset: -1px;
+}
 .custom-pane-header {
   flex: 0 0 31px;
   min-width: 0;
@@ -7978,7 +8009,10 @@ textarea.clone-input {
   background: var(--bg-panel);
   box-shadow: inset 0 2px transparent;
 }
-.custom-pane.active > .custom-pane-header { box-shadow: inset 0 2px var(--accent); }
+.custom-pane.active > .custom-pane-header {
+  background: color-mix(in oklch, var(--accent) 7%, var(--bg-panel));
+  box-shadow: inset 0 2px var(--accent);
+}
 .custom-feature-select {
   min-width: 0;
   max-width: min(260px, calc(100% - 90px));
@@ -8014,7 +8048,6 @@ textarea.clone-input {
   border: 1px dashed var(--text-dim);
   border-radius: 50%;
 }
-.custom-pane-grip { flex: 1; min-width: 4px; }
 .custom-pane-actions {
   flex: 0 0 auto;
   display: flex;
@@ -8095,9 +8128,8 @@ textarea.clone-input {
 .custom-empty-copy > span:last-child { color: var(--text-muted); font-size: 11px; }
 .custom-feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 7px;
-  max-width: 760px;
 }
 .custom-feature-grid button {
   position: relative;
@@ -8178,11 +8210,10 @@ textarea.clone-input {
 }
 .custom-empty-templates button:hover { background: var(--bg-hover); color: var(--text); }
 @media (max-width: 980px) {
-  .custom-save-state,
   .custom-active-label { display: none; }
-  .custom-feature-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .custom-save-state,
   .custom-feature-grid button { transition: none; }
 }
 .terminal-runtime-layer {

@@ -133,6 +133,7 @@ const CUSTOM_FEATURE_LABELS: Record<CustomFeatureId, string> = {
   work: t('nav.work'),
   files: t('nav.files'),
   local: t('nav.localChanges'),
+  'local-explorer': t('nav.localExplorer'),
   review: t('nav.review'),
   commits: t('nav.allCommits'),
   'pull-requests': t('nav.pullRequests'),
@@ -457,6 +458,33 @@ export function App() {
     const pane = customPanes(state.layout).find((candidate) => candidate.feature === 'work');
     if (pane) state.activatePane(pane.id);
   }, []);
+  // The Changes explorer hands each clicked file to the Work pane's whole-file
+  // Changes tab. A pinned tab for the path may already exist in another mode —
+  // openFile would only activate it, so force the mode afterwards.
+  const openChangesInWork = useCallback((path: string) => {
+    const repoPath = useRepo.getState().meta?.path;
+    if (!repoPath) return;
+    const work = useWork.getState();
+    work.openFile(repoPath, path, null, false, 'pinned', 'changes');
+    const tab = useWork.getState().repos[repoPath]?.tabs.find(
+      (candidate) => candidate.kind === 'file' && candidate.path === path && !candidate.revision,
+    );
+    if (tab) work.setFileMode(repoPath, tab.id, 'changes');
+    const custom = useCustomView.getState();
+    const pane = customPanes(custom.layout).find((candidate) => candidate.feature === 'work');
+    if (pane) custom.activatePane(pane.id);
+    else setView('work');
+  }, [setView]);
+  // "Review changes since this" from an embedded All Commits pane: Commits
+  // pins the baseline; this routes the jump to the layout's Review pane when
+  // one exists instead of leaving Custom for the dedicated Review tab.
+  const openReviewInCustom = useCallback(() => {
+    selectFile(null);
+    const custom = useCustomView.getState();
+    const pane = customPanes(custom.layout).find((candidate) => candidate.feature === 'review');
+    if (pane) custom.activatePane(pane.id);
+    else setView('review');
+  }, [selectFile, setView]);
 
   // Launch the configured terminal / editor (Settings → Integrations) on the
   // active repo. Unconfigured routes to Settings instead of silently no-oping.
@@ -1856,6 +1884,15 @@ export function App() {
         );
       case 'local':
         return <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={active} />;
+      case 'local-explorer':
+        return (
+          <LocalChanges
+            onOpenFileInEditor={openActiveFileInEditor}
+            active={active}
+            explorerOnly
+            onOpenFileChanges={openChangesInWork}
+          />
+        );
       case 'review':
         return <Review onOpenFileInEditor={openActiveFileInEditor} active={active} embedded />;
       case 'pull-requests':
@@ -1889,12 +1926,13 @@ export function App() {
             onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
+            onReviewNavigate={openReviewInCustom}
             onToast={showToast}
             active={active}
           />
         );
     }
-  }, [openActiveFileInEditor, openEditorTarget, setView, showToast]);
+  }, [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom, setView, showToast]);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],

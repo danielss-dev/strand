@@ -21,21 +21,32 @@ const LEGACY_STORAGE_KEY = 'custom-view.layout';
 export const customViewStorageKey = (workspaceId: string) =>
   `custom-view.layout:${workspaceId}`;
 const makeId = () => crypto.randomUUID();
+const MAX_UNDO_HISTORY = 50;
 
 interface CustomViewState extends CustomViewModel {
   workspaceId: string | null;
   restored: boolean;
+  canUndo: boolean;
   restore(workspaceId: string): Promise<void>;
   activatePane(paneId: string): void;
   setFeature(paneId: string, feature: CustomFeatureId | null): void;
   splitPane(paneId: string, direction: CustomSplitDirection): void;
   closePane(paneId: string): void;
   applyTemplate(template: CustomTemplateId): void;
+  undo(): void;
 }
 
 const models = new Map<string, CustomViewModel>();
+const past = new Map<string, CustomViewModel[]>();
 const restorePromises = new Map<string, Promise<CustomViewModel>>();
 const persistenceTails = new Map<string, Promise<void>>();
+
+function pushPast(workspaceId: string, model: CustomViewModel): void {
+  const history = past.get(workspaceId) ?? [];
+  history.push({ layout: model.layout, activePaneId: model.activePaneId });
+  if (history.length > MAX_UNDO_HISTORY) history.shift();
+  past.set(workspaceId, history);
+}
 
 function persist(workspaceId: string, model: CustomViewModel): void {
   const stored = storeCustomView(model);
@@ -72,6 +83,7 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
   ...emptyCustomView(),
   workspaceId: null,
   restored: false,
+  canUndo: false,
 
   async restore(workspaceId) {
     const current = get();
@@ -79,13 +91,18 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
 
     const cached = models.get(workspaceId);
     if (cached) {
-      set({ ...cached, workspaceId, restored: true });
+      set({
+        ...cached,
+        workspaceId,
+        restored: true,
+        canUndo: (past.get(workspaceId)?.length ?? 0) > 0,
+      });
       return;
     }
 
     // Hide the previous workspace's tree immediately. Its layout must never
     // flash or accept edits while this workspace's SQLite read is pending.
-    set({ ...emptyCustomView(), workspaceId, restored: false });
+    set({ ...emptyCustomView(), workspaceId, restored: false, canUndo: false });
     let promise = restorePromises.get(workspaceId);
     if (!promise) {
       promise = load(workspaceId).finally(() => { restorePromises.delete(workspaceId); });
@@ -93,7 +110,9 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
     }
     const model = await promise;
     models.set(workspaceId, model);
-    if (get().workspaceId === workspaceId) set({ ...model, restored: true });
+    if (get().workspaceId === workspaceId) {
+      set({ ...model, restored: true, canUndo: (past.get(workspaceId)?.length ?? 0) > 0 });
+    }
   },
 
   activatePane(activePaneId) {
@@ -110,9 +129,10 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
       if (!state.restored || !state.workspaceId) return state;
       const next = setCustomPaneFeature(state, paneId, feature);
       if (next.layout === state.layout) return state;
+      pushPast(state.workspaceId, state);
       models.set(state.workspaceId, next);
       persist(state.workspaceId, next);
-      return next;
+      return { ...next, canUndo: true };
     });
   },
 
@@ -121,9 +141,10 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
       if (!state.restored || !state.workspaceId) return state;
       const next = splitCustomPane(state, paneId, direction, makeId);
       if (next.layout === state.layout) return state;
+      pushPast(state.workspaceId, state);
       models.set(state.workspaceId, next);
       persist(state.workspaceId, next);
-      return next;
+      return { ...next, canUndo: true };
     });
   },
 
@@ -132,19 +153,33 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
       if (!state.restored || !state.workspaceId) return state;
       const next = closeCustomPane(state, paneId);
       if (next.layout === state.layout) return state;
+      pushPast(state.workspaceId, state);
       models.set(state.workspaceId, next);
       persist(state.workspaceId, next);
-      return next;
+      return { ...next, canUndo: true };
     });
   },
 
   applyTemplate(template) {
     const workspaceId = get().workspaceId;
     if (!get().restored || !workspaceId) return;
+    const current = get();
     const next = createCustomTemplate(template, makeId);
-    set(next);
+    pushPast(workspaceId, current);
+    set({ ...next, canUndo: true });
     models.set(workspaceId, next);
     persist(workspaceId, next);
+  },
+
+  undo() {
+    const state = get();
+    if (!state.restored || !state.workspaceId) return;
+    const history = past.get(state.workspaceId);
+    if (!history?.length) return;
+    const previous = history.pop()!;
+    models.set(state.workspaceId, previous);
+    persist(state.workspaceId, previous);
+    set({ ...previous, canUndo: history.length > 0 });
   },
 }));
 

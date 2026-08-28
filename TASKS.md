@@ -1233,9 +1233,33 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).
 
+#### Custom view UX pass
+
+- ☑ Swap features when assigning one that is already open
+  (`setCustomPaneFeature`).
+- ☑ Undo the last layout mutation with `Mod+Z` (`useCustomView.undo`,
+  `CustomView`).
+- ☑ Cycle the active pane with wrapping `Mod+[` / `Mod+]` (`CustomView`).
+- ☑ Show a persistent active-pane treatment (`.custom-pane.active`).
+- ☑ Move secondary pane actions into a header overflow menu
+  (`.custom-pane-more`, `ContextMenu`).
+- ☑ Show wireframe previews beside layout templates
+  (`.custom-template-thumb`).
+- ☑ Flash the save indicator only after layout changes
+  (`.custom-save-state.flash`).
+- ☑ Fill empty panes with an auto-filling feature grid
+  (`.custom-feature-grid`).
+- ☑ Label pane dividers by their adjacent features (`CustomLayoutView`).
+- ☑ Changes explorer feature — Local Changes reduced to its Unstaged/Staged
+  trees (`explorerOnly` on `LocalChanges`); clicking a file opens it in the
+  Work pane's whole-file Changes tab (`openChangesInWork` in `App.tsx`).
+
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
+- ☑ Changes tab — whole-file working-tree diff for files that differ from HEAD
+  (`WholeFileDiff` in `LocalChanges.tsx`, `WorkFileMode 'changes'`); the
+  Custom Changes explorer opens files directly on it.
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`.
   Existing complete UTF-8 working-tree files edit through Pierre's lazy-loaded
   `<File edit>` surface and save through stale-checked `repo_file_write`; revisions,

@@ -10,6 +10,7 @@ export const CUSTOM_FEATURE_IDS = [
   'work',
   'files',
   'local',
+  'local-explorer',
   'review',
   'commits',
   'pull-requests',
@@ -74,18 +75,19 @@ export function findCustomPane(layout: CustomLayout, paneId: string): CustomPane
   return findCustomPane(layout.children[0], paneId) ?? findCustomPane(layout.children[1], paneId);
 }
 
-/** Assigning an already-used feature moves it to the target pane. A feature
- * mounts at most once, preventing duplicated global listeners and shared
- * selection state from fighting each other. */
+/** Assigning an already-used feature swaps it with the target pane's current
+ * feature. An empty target still moves the feature and leaves its previous
+ * owner empty, so every live surface mounts at most once. */
 export function setCustomPaneFeature(
   state: CustomViewModel,
   paneId: string,
   feature: CustomFeatureId | null,
 ): CustomViewModel {
-  if (!findCustomPane(state.layout, paneId)) return state;
+  const target = findCustomPane(state.layout, paneId);
+  if (!target) return state;
   const layout = mapCustomPanes(state.layout, (pane) => {
     if (pane.id === paneId) return pane.feature === feature ? pane : { ...pane, feature };
-    return feature != null && pane.feature === feature ? { ...pane, feature: null } : pane;
+    return feature != null && pane.feature === feature ? { ...pane, feature: target.feature } : pane;
   });
   return layout === state.layout
     ? state
@@ -100,10 +102,11 @@ export function splitCustomPane(
 ): CustomViewModel {
   const pane = findCustomPane(state.layout, paneId);
   if (!pane || customPanes(state.layout).length >= MAX_CUSTOM_PANES) return state;
-  const newPane: CustomPane = { kind: 'pane', id: makeId(), feature: null };
+  const id = makeId();
+  const newPane = customPane(id, null);
   const split: CustomSplit = {
     kind: 'split',
-    id: `custom-split-${newPane.id}`,
+    id: `custom-split-${id}`,
     direction,
     ratio: 50,
     children: [pane, newPane],

@@ -26,12 +26,12 @@ describe('Custom view layout', () => {
       direction: 'horizontal',
       children: [
         { kind: 'pane', feature: 'work' },
-        { kind: 'pane', id: 'id-1', feature: null },
+        { kind: 'pane', id: 'custom-pane-id-1', feature: null },
       ],
     });
     state = setCustomPaneFeature(state, state.activePaneId, 'commits');
     state = closeCustomPane(state, 'custom-pane-root');
-    expect(state.layout).toMatchObject({ kind: 'pane', id: 'id-1', feature: 'commits' });
+    expect(state.layout).toMatchObject({ kind: 'pane', id: 'custom-pane-id-1', feature: 'commits' });
   });
 
   it('collapses nested template panes without disturbing surviving features', () => {
@@ -53,11 +53,39 @@ describe('Custom view layout', () => {
     expect(state.layout).toMatchObject({ kind: 'pane', feature: 'work' });
   });
 
-  it('moves a feature instead of mounting the same surface twice', () => {
+  it('swaps features when the chosen feature belongs to another populated pane', () => {
+    let state = createCustomTemplate('review', ids());
+    const [review, commits] = customPanes(state.layout);
+    state = setCustomPaneFeature(state, review.id, 'commits');
+    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual(['commits', 'review']);
+    expect(state.activePaneId).toBe(review.id);
+    expect(commits.feature).toBe('commits');
+  });
+
+  it('swaps null into the previous owner when the target pane is empty', () => {
     let state = setCustomPaneFeature(emptyCustomView(), 'custom-pane-root', 'review');
     state = splitCustomPane(state, 'custom-pane-root', 'vertical', ids());
     state = setCustomPaneFeature(state, state.activePaneId, 'review');
     expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual([null, 'review']);
+  });
+
+  it('assigns an unused feature to an empty pane without changing other panes', () => {
+    let state = setCustomPaneFeature(emptyCustomView(), 'custom-pane-root', 'review');
+    state = splitCustomPane(state, 'custom-pane-root', 'vertical', ids());
+    state = setCustomPaneFeature(state, state.activePaneId, 'work');
+    expect(customPanes(state.layout).map((pane) => pane.feature)).toEqual(['review', 'work']);
+  });
+
+  it('keeps every feature owned by at most one pane across swaps', () => {
+    let state = createCustomTemplate('vscode', ids());
+    const panes = customPanes(state.layout);
+    state = setCustomPaneFeature(state, panes[0].id, 'work');
+    state = setCustomPaneFeature(state, panes[2].id, 'files');
+    state = setCustomPaneFeature(state, panes[3].id, 'work');
+    const features = customPanes(state.layout)
+      .map((pane) => pane.feature)
+      .filter((feature) => feature != null);
+    expect(new Set(features).size).toBe(features.length);
   });
 
   it('creates a VS Code-style workbench template with stable split identities', () => {

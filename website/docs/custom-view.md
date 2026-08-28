@@ -17,6 +17,7 @@ The first visit starts with one empty pane. Choose any of these live surfaces:
 - Work
 - Files
 - Local Changes
+- Changes explorer
 - Review
 - All Commits
 - Pull Requests
@@ -24,15 +25,24 @@ The first visit starts with one empty pane. Choose any of these live surfaces:
 - Worktrees
 - Workspace Review
 
+The feature grid in an empty pane fills the available pane width.
+
+The **Changes explorer** is Local Changes reduced to its Unstaged and Staged
+trees. Clicking a file there opens it in the Work pane's **Changes** tab — the
+whole file rendered as a Review-style full-file diff.
+
+With both **All Commits** and **Review** in the layout, "Review changes since
+this" on a commit routes to the embedded Review pane instead of leaving Custom.
+
 Use the two split buttons in a pane header to add a pane to the right or below.
 Splits can nest in either direction. Drag a divider to resize it, or focus the
 divider with `Tab` and use the arrow keys. The × button closes a pane and
 expands its neighbor; with only one pane left, it clears that pane instead.
 
 Open the feature selector in any pane to change its contents. A Strand feature
-can appear only once in the layout. Choosing one that is already open moves it
-to the active pane and leaves its previous pane empty. This prevents two copies
-of a stateful surface from competing over selection and keyboard commands.
+can appear only once in the layout. Choosing one that is already open swaps the
+two panes' features. This prevents two copies of a stateful surface from
+competing over selection and keyboard commands.
 
 ## Templates
 
@@ -50,6 +60,7 @@ confirmation when the current layout contains features.
 ## Saving and repository behavior
 
 Changes auto-save as you assign, split, close, resize, or apply a template.
+The save indicator flashes after each layout change.
 The pane tree, feature choices, and divider proportions belong to the active
 Strand workspace and return after the next launch. Switch to another named
 workspace—or Default—and Custom restores that workspace's independent layout.
@@ -74,13 +85,16 @@ your saved layout is unchanged when you return.
   Keyboard.
 - `F6` focuses the active pane's feature selector from a complex embedded
   surface.
+- `Mod+Z` (`Cmd+Z` on macOS) undoes the last layout change while Custom is
+  open.
+- `Mod+[` / `Mod+]` cycle to the previous / next pane, wrapping at the ends.
 - Arrow keys move through the feature cards in an empty pane.
 - The feature selector, templates, split controls, close control, and resize
   dividers are keyboard-operable.
 - While Custom is open, Quick Launch includes actions to assign every feature,
   split or close the active pane, and apply every template.
 
-Custom is experimental. It currently supports nine built-in Strand surfaces,
-at most nine panes, one saved layout per Strand workspace, and no arbitrary web
+Custom is experimental. It currently supports ten built-in Strand surfaces,
+at most ten panes, one saved layout per Strand workspace, and no arbitrary web
 views or third-party extensions. Those boundaries keep the feature predictable
 while the composition model is tested across platforms.

@@ -50,10 +50,17 @@ import { ConflictLanding } from './ConflictLanding';
 export function LocalChanges({
   onOpenFileInEditor,
   active = true,
+  explorerOnly = false,
+  onOpenFileChanges,
 }: {
   onOpenFileInEditor: (file: string) => void;
   /** Only the focused Custom-view pane owns window-level single-key actions. */
   active?: boolean;
+  /** Custom view's Changes explorer: just the Unstaged/Staged trees — row
+   * clicks hand the file to Work's whole-file Changes tab via
+   * `onOpenFileChanges` instead of feeding the in-pane diff. */
+  explorerOnly?: boolean;
+  onOpenFileChanges?: (path: string) => void;
 }) {
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
@@ -109,6 +116,16 @@ export function LocalChanges({
     (sel: LocalSelection | null) => { setActiveConflict(null); selectLocalFile(sel); },
     [selectLocalFile],
   );
+
+  // Explorer mode keeps the shared selection state (stage shortcuts, multi-
+  // select) and additionally hands each file row to Work's Changes tab.
+  // Folder rows (trailing slash) have no single diff to open.
+  const selectRow = useCallback((sel: LocalSelection | null) => {
+    selectFileRow(sel);
+    if (!explorerOnly || !onOpenFileChanges || !sel?.file || sel.all) return;
+    if (sel.file.endsWith('/')) return;
+    onOpenFileChanges(sel.file);
+  }, [selectFileRow, explorerOnly, onOpenFileChanges]);
 
   // The conflicted file open in the full-screen merge editor, if any.
   const [resolverFile, setResolverFile] = useState<string | null>(null);
@@ -349,7 +366,50 @@ export function LocalChanges({
         </div>
       )}
       <div className="lc-main">
-        <PanelGroup direction="horizontal" autoSaveId="strand:lc-main">
+        {explorerOnly ? (
+          <div className="lc-files">
+            <PanelGroup direction="vertical" autoSaveId="strand:lc-files">
+              <Panel defaultSize={50} minSize={10}>
+                <FileSection
+                  title="Unstaged"
+                  files={unstagedView}
+                  staged={false}
+                  selection={selection}
+                  onSelect={selectRow}
+                  onMultiSelectionChange={(paths) => setLocalTreeSelection(false, paths)}
+                  onStash={() => requestStashDialog({ snapshot: false })}
+                  onAction={(files) => void stageMany(files).catch(fail('Stage'))}
+                  actionLabel="Stage"
+                  onOpenFileInEditor={onOpenFileInEditor}
+                  onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
+                  isUntracked={(p) => untracked.has(p)}
+                  onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
+                  onIgnoreCustom={openIgnoreDialog}
+                  onBulk={() => void stageAll().catch(fail('Stage all'))}
+                  bulkLabel="Stage all"
+                />
+              </Panel>
+              <PanelResizeHandle className="rs-handle horiz" />
+              <Panel defaultSize={50} minSize={10}>
+                <FileSection
+                  title="Staged"
+                  files={stagedView}
+                  staged={true}
+                  selection={selection}
+                  onSelect={selectRow}
+                  onMultiSelectionChange={(paths) => setLocalTreeSelection(true, paths)}
+                  onStash={() => requestStashDialog({ snapshot: false })}
+                  onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
+                  actionLabel="Unstage"
+                  onOpenFileInEditor={onOpenFileInEditor}
+                  onBulk={() => void unstageAll().catch(fail('Unstage all'))}
+                  bulkLabel="Unstage all"
+                />
+              </Panel>
+            </PanelGroup>
+          </div>
+        ) : (
+          <PanelGroup direction="horizontal" autoSaveId="strand:lc-main">
           <Panel defaultSize={28} minSize={15} maxSize={60}>
             <div className="lc-files">
               <PanelGroup direction="vertical" autoSaveId="strand:lc-files">
@@ -435,9 +495,12 @@ export function LocalChanges({
             </div>
           </Panel>
         </PanelGroup>
+        )}
       </div>
 
-      <CommitBar canCommit={staged.length > 0} hasChanges={staged.length > 0 || unstaged.length > 0} />
+      {!explorerOnly && (
+        <CommitBar canCommit={staged.length > 0} hasChanges={staged.length > 0 || unstaged.length > 0} />
+      )}
 
       {resolverFile && (
         <MergeResolver path={resolverFile} onClose={() => setResolverFile(null)} />
@@ -766,6 +829,32 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
       )}
     </div>
   );
+}
+
+/**
+ * Whole-file working-tree diff for one path — the Review-style full-file
+ * rendering, mounted by Work's file "Changes" tab. Prefers the unstaged copy
+ * and falls back to staged, so a fully-staged path still renders.
+ */
+export function WholeFileDiff({ path }: { path: string }) {
+  const unstaged = useRepo((s) => s.unstagedDiffs);
+  const staged = useRepo((s) => s.stagedDiffs);
+  const unstagedDiff = unstaged.find((d) => d.path === path);
+  const stagedDiff = staged.find((d) => d.path === path);
+  const diff = unstagedDiff ?? stagedDiff;
+  if (!diff) {
+    return (
+      <div className="lc-diff">
+        <div className="lc-diff-scroll">
+          <div className="lc-empty">
+            <strong>No working-tree changes</strong>
+            This file currently matches HEAD.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <DiffPane diffs={[diff]} staged={!unstagedDiff && !!stagedDiff} />;
 }
 
 /**

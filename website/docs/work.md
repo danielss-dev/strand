@@ -18,6 +18,10 @@ repository root; it remains aligned as the sidebar is resized.
 - Double-click or press `Enter` to pin the file. **Open**, file selection from
   the command palette, History, and Blame also open pinned tabs.
 - Opening an already pinned file activates it instead of creating a duplicate.
+- A working-tree file that differs from HEAD gains a **Changes** tab: the whole
+  file rendered as a full-file diff (unstaged first, staged otherwise), the
+  same whole-file view the Review surface uses. The Changes explorer in Custom
+  opens files directly on this tab.
 - File and terminal tabs share the active pane's peer strip. Tabs keep their
   width instead of compressing; scroll the strip with the mouse wheel, or use
   its overflow selector to jump directly to any tab in that pane. File tabs use
