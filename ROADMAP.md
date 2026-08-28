@@ -2172,7 +2172,10 @@ and Store certification remain external gates.
   as the IPC layer). Read-only by design — no push/pull, no writes.
   Same static binary as the remote-SSH `strandd` (`--stdio` mode). Designed 2026-06-12:
   `docs/strand-cli.md` + task breakdown in TASKS.md.
-- Plugin / extension surface
+- ◐ **Plugin / extension surface** — internal namespaced surface/command
+  registries, shared hosts, and resilient layout-v2 references shipped
+  2026-08-28; typed services/resource leases, declarative manifests,
+  permissions, quotas, and isolated community execution remain open.
 - AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs, or all unstaged changes
     when nothing is staged (Codex / Claude Code CLIs)
@@ -2633,6 +2636,16 @@ collapses to zero width and restores its prior size through a topbar chevron,
 rebindable Mod+B command, command palette, or native View menu. The preference
 persists across launches, and the hidden panel stays mounted without bleeding
 into the workspace.
+
+**Extensible workbench foundation shipped (2026-08-28):** Built-in features
+now register namespaced surface metadata and Custom commands through ordered
+registries, while dedicated and composed placements resolve through one
+`SurfaceHost` contract. Custom layout v2 stores surface and instance identity
+separately, migrates v1 layouts, and preserves unavailable namespaced
+contributions as placeholders instead of resetting the workspace. The
+architecture decision in `docs/extensibility-architecture.md` keeps community
+plugins behind a future declarative, permission-checked, isolated boundary;
+no third-party runtime ships in this phase.
 
 ---
 

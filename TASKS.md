@@ -1233,10 +1233,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 ### Experimental Custom view
 - ☑ Versioned, defensively parsed, workspace-scoped Custom layouts with nested
   horizontal/vertical panes, draggable and keyboard-resizable dividers,
-  close/collapse rules, nine-feature limit, per-workspace write queues and
-  divider identities, Default-only legacy migration, and automatic topology/
-  feature/split-size restore (`lib/customView.ts`, `stores/customView.ts`,
-  `workspaceIdentity.ts`, `views/CustomView.tsx`).
+  close/collapse rules, a 32-pane defensive limit, per-workspace write queues
+  and divider identities, Default-only legacy migration, and automatic
+  topology/surface/split-size restore (`lib/customView.ts`,
+  `stores/customView.ts`, `workspaceIdentity.ts`, `views/CustomView.tsx`).
 - ☑ Compose the real Work, Files, Local Changes, Review, All Commits, Pull
   Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate
   feature mounts; moving Work preserves its single xterm/editor runtime and
@@ -1247,14 +1247,26 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   rebindable `Mod+8`, command palette, and Appearance startup setting. F6
   focuses the active pane's module selector; pane assignment, splitting,
   closing, and templates all have keyboard paths.
+- ☑ Extensible-workbench foundation: namespaced surface and command registries,
+  one `SurfaceHost` contract for dedicated and Custom placements, explicit
+  instance/lifecycle/context metadata, and Custom layout v2 surface refs with
+  fail-safe v1 migration and unavailable-contribution placeholders
+  (`workbench/`, `lib/customView.ts`, `docs/extensibility-architecture.md`).
+- ☐ Move route-gated loading and implicit active-repository reads behind
+  explicit surface context sessions and reference-counted resource leases.
+- ☐ Add typed navigation/dialog services and workbench-owned extension slots
+  for actions, menus, tree decorations, detail panels, and status items.
+- ☐ Design and implement the declarative community-plugin manifest,
+  permission broker, quotas, diagnostics, and isolated execution boundary;
+  do not load third-party code into Strand's privileged webview.
 - ☐ Run native workspace-scoped Custom-view persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).
 
 #### Custom view UX pass
 
-- ☑ Swap features when assigning one that is already open
-  (`setCustomPaneFeature`).
+- ☑ Swap surfaces when assigning one that is already open
+  (`setCustomPaneSurface`).
 - ☑ Undo the last layout mutation with `Mod+Z` (`useCustomView.undo`,
   `CustomView`).
 - ☑ Cycle the active pane with wrapping `Mod+[` / `Mod+]` (`CustomView`).

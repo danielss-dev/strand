@@ -12,6 +12,7 @@ import { defaultRemote, useRepo } from '../stores/repo';
 import { useBranchIntegration } from '../stores/branchIntegration';
 import { useCustomView } from '../stores/customView';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
+import { BUILT_IN_SURFACE_IDS } from '../workbench';
 import type {
   Branch,
   PullMode,
@@ -176,7 +177,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
   const customFilesPaneId = useCustomView((state) =>
-    customPanes(state.layout).find((pane) => pane.feature === 'files')?.id ?? null);
+    customPanes(state.layout).find(
+      (pane) => pane.surface?.surfaceId === BUILT_IN_SURFACE_IDS.files,
+    )?.id ?? null);
   const customRestored = useCustomView((state) => state.restored);
   const customWorkspaceId = useCustomView((state) => state.workspaceId);
   const activeWorkspaceId = useWorkspaces((state) => state.activeWorkspaceId);

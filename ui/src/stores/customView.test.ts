@@ -6,7 +6,10 @@ vi.mock('../lib/db', () => ({ settings: db }));
 
 import { createCustomTemplate, customPanes, emptyCustomView, storeCustomView } from '../lib/customView';
 import { DEFAULT_WORKSPACE_ID } from '../lib/workspaceIdentity';
+import { surfaceIdForLegacyFeature } from '../workbench/builtInSurfaces';
 import { customViewStorageKey, useCustomView } from './customView';
+
+const surface = surfaceIdForLegacyFeature;
 
 describe('Custom view persistence', () => {
   beforeEach(() => {
@@ -46,14 +49,14 @@ describe('Custom view persistence', () => {
     });
 
     const pane = useCustomView.getState().activePaneId;
-    useCustomView.getState().setFeature(pane, 'work');
+    useCustomView.getState().setSurface(pane, surface('work'));
     useCustomView.getState().splitPane(pane, 'horizontal');
 
     await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(1));
     expect(db.set).toHaveBeenNthCalledWith(
       1,
       customViewStorageKey(workspaceA),
-      expect.objectContaining({ version: 1, layout: expect.any(Object) }),
+      expect.objectContaining({ version: 2, layout: expect.any(Object) }),
     );
 
     // Workspace B restores and writes without waiting for A's blocked queue.
@@ -67,7 +70,7 @@ describe('Custom view persistence', () => {
     await vi.waitFor(() => expect(db.set).toHaveBeenCalledTimes(3));
     expect(db.set.mock.calls[2][0]).toBe(customViewStorageKey(workspaceA));
     expect(writes[2]).toMatchObject({
-      version: 1,
+      version: 2,
       layout: { kind: 'split', direction: 'horizontal' },
     });
 
@@ -136,7 +139,7 @@ describe('Custom view persistence', () => {
 
     const [first, second] = customPanes(stored.layout);
     useCustomView.getState().activatePane(second.id);
-    useCustomView.getState().setFeature(first.id, 'work');
+    useCustomView.getState().setSurface(first.id, surface('work'));
     expect(useCustomView.getState().canUndo).toBe(true);
     useCustomView.getState().undo();
     expect(useCustomView.getState()).toMatchObject({
@@ -182,15 +185,19 @@ describe('Custom view persistence', () => {
     await useCustomView.getState().restore(workspace);
 
     for (let index = 0; index < 51; index += 1) {
-      useCustomView.getState().setFeature(
+      useCustomView.getState().setSurface(
         'custom-pane-root',
-        index % 2 === 0 ? 'work' : 'local',
+        surface(index % 2 === 0 ? 'work' : 'local'),
       );
     }
     for (let index = 0; index < 50; index += 1) useCustomView.getState().undo();
 
     expect(useCustomView.getState()).toMatchObject({
-      layout: { kind: 'pane', id: 'custom-pane-root', feature: 'work' },
+      layout: {
+        kind: 'pane',
+        id: 'custom-pane-root',
+        surface: { surfaceId: surface('work') },
+      },
       activePaneId: 'custom-pane-root',
       canUndo: false,
     });

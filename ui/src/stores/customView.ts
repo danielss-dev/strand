@@ -5,10 +5,10 @@ import {
   createCustomTemplate,
   emptyCustomView,
   parseStoredCustomView,
-  setCustomPaneFeature,
+  setCustomPaneSurface,
   splitCustomPane,
   storeCustomView,
-  type CustomFeatureId,
+  type CustomSurfaceId,
   type CustomLayout,
   type CustomSplitDirection,
   type CustomTemplateId,
@@ -29,7 +29,7 @@ interface CustomViewState extends CustomViewModel {
   canUndo: boolean;
   restore(workspaceId: string): Promise<void>;
   activatePane(paneId: string): void;
-  setFeature(paneId: string, feature: CustomFeatureId | null): void;
+  setSurface(paneId: string, surfaceId: CustomSurfaceId | null): void;
   splitPane(paneId: string, direction: CustomSplitDirection): void;
   closePane(paneId: string): void;
   applyTemplate(template: CustomTemplateId): void;
@@ -124,10 +124,10 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
     }
   },
 
-  setFeature(paneId, feature) {
+  setSurface(paneId, surfaceId) {
     set((state) => {
       if (!state.restored || !state.workspaceId) return state;
-      const next = setCustomPaneFeature(state, paneId, feature);
+      const next = setCustomPaneSurface(state, paneId, surfaceId, makeId);
       if (next.layout === state.layout) return state;
       pushPast(state.workspaceId, state);
       models.set(state.workspaceId, next);
@@ -183,4 +183,4 @@ export const useCustomView = create<CustomViewState>((set, get) => ({
   },
 }));
 
-export type { CustomFeatureId, CustomLayout, CustomSplitDirection, CustomTemplateId };
+export type { CustomLayout, CustomSplitDirection, CustomSurfaceId, CustomTemplateId };

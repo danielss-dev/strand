@@ -13,15 +13,18 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon, type IconName } from '../components/Icon';
 import {
+  MAX_CUSTOM_PANES,
   customPanes,
-  type CustomFeatureId,
   type CustomLayout,
   type CustomPane,
+  type CustomSurfaceRef,
+  type CustomSurfaceId,
   type CustomTemplateId,
 } from '../lib/customView';
 import { t } from '../lib/i18n';
 import { useCustomView } from '../stores/customView';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
+import { BUILT_IN_SURFACE_IDS, builtInSurfaceRegistry } from '../workbench';
 
 export interface CustomPaneFrame {
   left: number;
@@ -30,27 +33,7 @@ export interface CustomPaneFrame {
   height: number;
 }
 
-interface CustomFeatureMeta {
-  id: CustomFeatureId;
-  label: string;
-  description: string;
-  icon: IconName;
-}
-
-const FEATURES: readonly CustomFeatureMeta[] = [
-  { id: 'work', label: t('nav.work'), description: t('custom.feature.work.description'), icon: 'terminal' },
-  { id: 'files', label: t('nav.files'), description: t('custom.feature.files.description'), icon: 'folder' },
-  { id: 'local', label: t('nav.localChanges'), description: t('custom.feature.local.description'), icon: 'changes' },
-  { id: 'local-explorer', label: t('nav.localExplorer'), description: t('custom.feature.localExplorer.description'), icon: 'changes' },
-  { id: 'review', label: t('nav.review'), description: t('custom.feature.review.description'), icon: 'check' },
-  { id: 'commits', label: t('nav.allCommits'), description: t('custom.feature.commits.description'), icon: 'graph' },
-  { id: 'pull-requests', label: t('nav.pullRequests'), description: t('custom.feature.pullRequests.description'), icon: 'remote' },
-  { id: 'reflog', label: t('nav.reflog'), description: t('custom.feature.reflog.description'), icon: 'history' },
-  { id: 'worktrees', label: t('nav.worktrees'), description: t('custom.feature.worktrees.description'), icon: 'worktree' },
-  { id: 'workspace-review', label: t('nav.workspaceReview'), description: t('custom.feature.workspaceReview.description'), icon: 'workspace' },
-] as const;
-
-const FEATURE_BY_ID = new Map(FEATURES.map((feature) => [feature.id, feature]));
+const SURFACES = builtInSurfaceRegistry.listForHost('panel');
 
 const TEMPLATES: readonly {
   id: CustomTemplateId;
@@ -85,10 +68,10 @@ const TEMPLATES: readonly {
 ] as const;
 
 export function CustomView({
-  renderFeature,
+  renderSurface,
   onWorkFrame,
 }: {
-  renderFeature: (feature: Exclude<CustomFeatureId, 'work'>, active: boolean) => ReactNode;
+  renderSurface: (surface: CustomSurfaceRef, active: boolean) => ReactNode;
   onWorkFrame: (frame: CustomPaneFrame | null) => void;
 }) {
   const workspaces = useWorkspaces((state) => state.workspaces);
@@ -101,7 +84,7 @@ export function CustomView({
   const restoredWorkspaceId = useCustomView((state) => state.workspaceId);
   const restore = useCustomView((state) => state.restore);
   const activatePane = useCustomView((state) => state.activatePane);
-  const setFeature = useCustomView((state) => state.setFeature);
+  const setSurface = useCustomView((state) => state.setSurface);
   const splitPane = useCustomView((state) => state.splitPane);
   const closePane = useCustomView((state) => state.closePane);
   const applyTemplate = useCustomView((state) => state.applyTemplate);
@@ -111,10 +94,13 @@ export function CustomView({
   const [saveVisible, setSaveVisible] = useState(false);
   const panes = useMemo(() => customPanes(layout), [layout]);
   const used = useMemo(
-    () => new Map(panes.flatMap((pane) => pane.feature ? [[pane.feature, pane.id] as const] : [])),
+    () => new Map(panes.flatMap((pane) => (
+      pane.surface ? [[pane.surface.surfaceId, pane.id] as const] : []
+    ))),
     [panes],
   );
-  const activeFeature = panes.find((pane) => pane.id === activePaneId)?.feature ?? null;
+  const activeSurfaceId = panes.find((pane) => pane.id === activePaneId)?.surface?.surfaceId ?? null;
+  const activeSurface = activeSurfaceId ? builtInSurfaceRegistry.get(activeSurfaceId) : null;
   const ready = restored && restoredWorkspaceId === workspaceId;
 
   useEffect(() => { void restore(workspaceId); }, [restore, workspaceId]);
@@ -193,7 +179,7 @@ export function CustomView({
     label: template.label,
     thumb: template.thumb,
     icon: template.icon,
-    confirm: template.id === 'blank' && panes.some((pane) => pane.feature != null),
+    confirm: template.id === 'blank' && panes.some((pane) => pane.surface != null),
     onSelect: () => applyTemplate(template.id),
   })), [applyTemplate, panes]);
 
@@ -214,7 +200,7 @@ export function CustomView({
         </div>
         <div className="custom-builder-actions">
           <span className="custom-active-label">
-            {activeFeature ? FEATURE_BY_ID.get(activeFeature)?.label : t('custom.emptyPane')}
+            {activeSurface?.title ?? activeSurfaceId ?? t('custom.emptyPane')}
           </span>
           <button
             type="button"
@@ -232,11 +218,11 @@ export function CustomView({
           <button
             type="button"
             className="icon-btn"
-            title={panes.length >= FEATURES.length
-              ? t('custom.paneCap', { count: FEATURES.length })
+            title={panes.length >= MAX_CUSTOM_PANES
+              ? t('custom.paneCap', { count: MAX_CUSTOM_PANES })
               : t('custom.splitActiveRight')}
             aria-label={t('custom.splitActiveRight')}
-            disabled={!ready || panes.length >= FEATURES.length}
+            disabled={!ready || panes.length >= MAX_CUSTOM_PANES}
             onClick={() => splitPane(activePaneId, 'horizontal')}
           >
             <Icon name="split" size={13} />
@@ -244,11 +230,11 @@ export function CustomView({
           <button
             type="button"
             className="icon-btn"
-            title={panes.length >= FEATURES.length
-              ? t('custom.paneCap', { count: FEATURES.length })
+            title={panes.length >= MAX_CUSTOM_PANES
+              ? t('custom.paneCap', { count: MAX_CUSTOM_PANES })
               : t('custom.splitActiveDown')}
             aria-label={t('custom.splitActiveDown')}
-            disabled={!ready || panes.length >= FEATURES.length}
+            disabled={!ready || panes.length >= MAX_CUSTOM_PANES}
             onClick={() => splitPane(activePaneId, 'vertical')}
           >
             <Icon name="unified" size={13} />
@@ -271,11 +257,11 @@ export function CustomView({
           activePaneId={activePaneId}
           used={used}
           onActivate={activatePane}
-          onFeature={setFeature}
+          onSurface={setSurface}
           onSplit={splitPane}
           onClose={closePane}
           onTemplate={applyTemplate}
-          renderFeature={renderFeature}
+          renderSurface={renderSurface}
           onWorkFrame={onWorkFrame}
         />
       )}
@@ -297,22 +283,26 @@ interface LayoutProps {
   workspaceName: string;
   paneCount: number;
   activePaneId: string;
-  used: ReadonlyMap<CustomFeatureId, string>;
+  used: ReadonlyMap<CustomSurfaceId, string>;
   onActivate(paneId: string): void;
-  onFeature(paneId: string, feature: CustomFeatureId | null): void;
+  onSurface(paneId: string, surfaceId: CustomSurfaceId | null): void;
   onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
   onClose(paneId: string): void;
   onTemplate(template: CustomTemplateId): void;
-  renderFeature(feature: Exclude<CustomFeatureId, 'work'>, active: boolean): ReactNode;
+  renderSurface(surface: CustomSurfaceRef, active: boolean): ReactNode;
   onWorkFrame(frame: CustomPaneFrame | null): void;
 }
 
 function CustomLayoutView({ node, ...props }: LayoutProps & { node: CustomLayout }) {
   if (node.kind === 'pane') return <CustomPaneView pane={node} {...props} />;
-  const firstFeature = customPanes(node.children[0])[0]?.feature;
-  const secondFeature = customPanes(node.children[1])[0]?.feature;
-  const firstLabel = (firstFeature && FEATURE_BY_ID.get(firstFeature)?.label) ?? t('custom.empty');
-  const secondLabel = (secondFeature && FEATURE_BY_ID.get(secondFeature)?.label) ?? t('custom.empty');
+  const firstSurfaceId = customPanes(node.children[0])[0]?.surface?.surfaceId;
+  const secondSurfaceId = customPanes(node.children[1])[0]?.surface?.surfaceId;
+  const firstLabel = (firstSurfaceId && builtInSurfaceRegistry.get(firstSurfaceId)?.title)
+    ?? firstSurfaceId
+    ?? t('custom.empty');
+  const secondLabel = (secondSurfaceId && builtInSurfaceRegistry.get(secondSurfaceId)?.title)
+    ?? secondSurfaceId
+    ?? t('custom.empty');
   return (
     <PanelGroup
       direction={node.direction}
@@ -339,16 +329,18 @@ function CustomPaneView({
   activePaneId,
   used,
   onActivate,
-  onFeature,
+  onSurface,
   onSplit,
   onClose,
   onTemplate,
   workspaceName,
-  renderFeature,
+  renderSurface,
   onWorkFrame,
 }: LayoutProps & { pane: CustomPane }) {
   const active = pane.id === activePaneId;
-  const feature = pane.feature ? FEATURE_BY_ID.get(pane.feature) ?? null : null;
+  const surfaceId = pane.surface?.surfaceId ?? null;
+  const surface = surfaceId ? builtInSurfaceRegistry.get(surfaceId) ?? null : null;
+  const surfaceLabel = surface?.title ?? surfaceId;
   const paneRef = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [actionMenu, setActionMenu] = useState<{ x: number; y: number } | null>(null);
@@ -369,41 +361,41 @@ function CustomPaneView({
   }, [compactActions]);
 
   const menuItems = useMemo<MenuItem[]>(() => [
-    ...FEATURES.map((item) => {
+    ...SURFACES.map((item) => {
       const owner = used.get(item.id);
       return {
-        label: item.label + (owner && owner !== pane.id ? ` · ${t('custom.moveHere')}` : ''),
-        icon: pane.feature === item.id ? 'check' as const : item.icon,
-        onSelect: () => onFeature(pane.id, item.id),
+        label: item.title + (owner && owner !== pane.id ? ` · ${t('custom.moveHere')}` : ''),
+        icon: surfaceId === item.id ? 'check' as const : item.icon,
+        onSelect: () => onSurface(pane.id, item.id),
       };
     }),
     {
       label: t('custom.emptyPane'),
       icon: 'x' as const,
-      disabled: pane.feature == null,
-      onSelect: () => onFeature(pane.id, null),
+      disabled: pane.surface == null,
+      onSelect: () => onSurface(pane.id, null),
     },
-  ], [onFeature, pane.feature, pane.id, used]);
+  ], [onSurface, pane.id, pane.surface, surfaceId, used]);
   const actionMenuItems = useMemo<MenuItem[]>(() => [
     {
       label: t('custom.splitRight'),
       icon: 'split',
-      disabled: paneCount >= FEATURES.length,
+      disabled: paneCount >= MAX_CUSTOM_PANES,
       onSelect: () => onSplit(pane.id, 'horizontal'),
     },
     {
       label: t('custom.splitDown'),
       icon: 'unified',
-      disabled: paneCount >= FEATURES.length,
+      disabled: paneCount >= MAX_CUSTOM_PANES,
       onSelect: () => onSplit(pane.id, 'vertical'),
     },
     {
       label: paneCount === 1 ? t('custom.clearPane') : t('custom.closePane'),
       icon: 'x',
-      disabled: paneCount === 1 && pane.feature == null,
+      disabled: paneCount === 1 && pane.surface == null,
       onSelect: () => onClose(pane.id),
     },
-  ], [onClose, onSplit, pane.feature, pane.id, paneCount]);
+  ], [onClose, onSplit, pane.id, pane.surface, paneCount]);
 
   const openMenu = (button: HTMLButtonElement) => {
     const rect = button.getBoundingClientRect();
@@ -415,7 +407,7 @@ function CustomPaneView({
       ref={paneRef}
       className={'custom-pane' + (active ? ' active' : '')}
       data-custom-pane-id={pane.id}
-      aria-label={feature ? t('custom.paneLabel', { feature: feature.label }) : t('custom.emptyPaneLabel')}
+      aria-label={surfaceLabel ? t('custom.paneLabel', { feature: surfaceLabel }) : t('custom.emptyPaneLabel')}
       onPointerDownCapture={() => onActivate(pane.id)}
       onFocusCapture={() => onActivate(pane.id)}
     >
@@ -428,8 +420,8 @@ function CustomPaneView({
           onClick={(event) => openMenu(event.currentTarget)}
           title={t('custom.chooseFeatureTitle')}
         >
-          {feature ? <Icon name={feature.icon} size={13} /> : <span className="custom-empty-dot" />}
-          <span>{feature?.label ?? t('custom.chooseFeature')}</span>
+          {surface ? <Icon name={surface.icon} size={13} /> : <span className="custom-empty-dot" />}
+          <span>{surfaceLabel ?? t('custom.chooseFeature')}</span>
           <Icon name="chev-down" size={9} />
         </button>
         <div className="custom-pane-actions" style={{ marginLeft: 'auto' }}>
@@ -452,22 +444,22 @@ function CustomPaneView({
             <>
               <button
                 type="button"
-                title={paneCount >= FEATURES.length
-                  ? t('custom.paneCap', { count: FEATURES.length })
+                title={paneCount >= MAX_CUSTOM_PANES
+                  ? t('custom.paneCap', { count: MAX_CUSTOM_PANES })
                   : t('custom.splitRight')}
-                aria-label={t('custom.splitFeatureRight', { feature: feature?.label ?? t('custom.empty') })}
-                disabled={paneCount >= FEATURES.length}
+                aria-label={t('custom.splitFeatureRight', { feature: surfaceLabel ?? t('custom.empty') })}
+                disabled={paneCount >= MAX_CUSTOM_PANES}
                 onClick={() => onSplit(pane.id, 'horizontal')}
               >
                 <Icon name="split" size={12} />
               </button>
               <button
                 type="button"
-                title={paneCount >= FEATURES.length
-                  ? t('custom.paneCap', { count: FEATURES.length })
+                title={paneCount >= MAX_CUSTOM_PANES
+                  ? t('custom.paneCap', { count: MAX_CUSTOM_PANES })
                   : t('custom.splitDown')}
-                aria-label={t('custom.splitFeatureDown', { feature: feature?.label ?? t('custom.empty') })}
-                disabled={paneCount >= FEATURES.length}
+                aria-label={t('custom.splitFeatureDown', { feature: surfaceLabel ?? t('custom.empty') })}
+                disabled={paneCount >= MAX_CUSTOM_PANES}
                 onClick={() => onSplit(pane.id, 'vertical')}
               >
                 <Icon name="unified" size={12} />
@@ -477,8 +469,8 @@ function CustomPaneView({
                 title={paneCount === 1 ? t('custom.clearPane') : t('custom.closePane')}
                 aria-label={paneCount === 1
                   ? t('custom.clearPaneLabel')
-                  : t('custom.closeFeaturePane', { feature: feature?.label ?? t('custom.empty') })}
-                disabled={paneCount === 1 && feature == null}
+                  : t('custom.closeFeaturePane', { feature: surfaceLabel ?? t('custom.empty') })}
+                disabled={paneCount === 1 && surfaceId == null}
                 onClick={() => onClose(pane.id)}
               >
                 <Icon name="x" size={12} />
@@ -489,17 +481,17 @@ function CustomPaneView({
       </div>
 
       <div className="custom-pane-body">
-        {pane.feature === 'work' ? (
+        {surfaceId === BUILT_IN_SURFACE_IDS.work ? (
           <WorkFrameHost onFrame={onWorkFrame} />
-        ) : pane.feature ? (
-          renderFeature(pane.feature, active)
+        ) : pane.surface ? (
+          renderSurface(pane.surface, active)
         ) : (
           <EmptyCustomPane
             paneId={pane.id}
             used={used}
             firstPane={paneCount === 1}
             workspaceName={workspaceName}
-            onFeature={onFeature}
+            onSurface={onSurface}
             onTemplate={onTemplate}
           />
         )}
@@ -525,14 +517,14 @@ function EmptyCustomPane({
   used,
   firstPane,
   workspaceName,
-  onFeature,
+  onSurface,
   onTemplate,
 }: {
   paneId: string;
-  used: ReadonlyMap<CustomFeatureId, string>;
+  used: ReadonlyMap<CustomSurfaceId, string>;
   firstPane: boolean;
   workspaceName: string;
-  onFeature(paneId: string, feature: CustomFeatureId): void;
+  onSurface(paneId: string, surfaceId: CustomSurfaceId): void;
   onTemplate(template: CustomTemplateId): void;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
@@ -559,19 +551,19 @@ function EmptyCustomPane({
         <span>{t('custom.followsRepository', { workspace: workspaceName })}</span>
       </div>
       <div ref={gridRef} className="custom-feature-grid" onKeyDown={onGridKeyDown}>
-        {FEATURES.map((feature) => {
-          const inUse = used.has(feature.id);
+        {SURFACES.map((surface) => {
+          const inUse = used.has(surface.id);
           return (
             <button
-              key={feature.id}
+              key={surface.id}
               type="button"
-              onClick={() => onFeature(paneId, feature.id)}
-              title={inUse ? t('custom.featureAlreadyOpen', { feature: feature.label }) : undefined}
+              onClick={() => onSurface(paneId, surface.id)}
+              title={inUse ? t('custom.featureAlreadyOpen', { feature: surface.title }) : undefined}
             >
-              <span className="custom-feature-icon"><Icon name={feature.icon} size={15} /></span>
+              <span className="custom-feature-icon"><Icon name={surface.icon} size={15} /></span>
               <span className="custom-feature-copy">
-                <strong>{feature.label}</strong>
-                <small>{feature.description}</small>
+                <strong>{surface.title}</strong>
+                <small>{surface.description}</small>
               </span>
               {inUse && <span className="custom-feature-used">{t('custom.move')}</span>}
             </button>

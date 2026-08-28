@@ -2249,3 +2249,15 @@ prop also drives transient hover tint: the first hovered range otherwise
 becomes persistent and the blue tint stops following later hovers. Use
 `onLineSelectionEnd` for pointer-only drag commits; programmatic hover updates
 do not emit that lifecycle event.
+
+## Extensible layouts must preserve identity before resolving code (2026-08-28)
+
+Persisted workbench layouts store namespaced surface identity, instance
+identity, and context binding; they must validate bounded structure without
+requiring the contribution to be installed. Unknown or disabled IDs survive
+as stable placeholders, so one missing plugin can never reset an otherwise
+valid workspace. Contribution metadata, pickers, command generation, and
+render hosts must consume one registry instead of growing parallel feature
+lists. Community code must stay outside Strand's privileged React/Tauri
+webview and reach app data only through versioned, permission-checked,
+quota-bounded capabilities.

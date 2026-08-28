@@ -20,7 +20,7 @@ import { Topbar } from './components/Topbar';
 import { ToastViewport, type ToastMessage } from './components/ToastViewport';
 import { FONTS, useSettings } from './stores/settings';
 import { usePullRequests } from './stores/pullRequests';
-import { useRepo } from './stores/repo';
+import { useRepo, type View } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
@@ -70,7 +70,15 @@ import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
 import { useCustomView } from './stores/customView';
-import { CUSTOM_FEATURE_IDS, customPanes, type CustomFeatureId } from './lib/customView';
+import { customPanes, type CustomSurfaceId, type CustomSurfaceRef } from './lib/customView';
+import {
+  BUILT_IN_SURFACE_IDS,
+  builtInSurfaceRegistry,
+  SurfaceHost,
+  WorkbenchCommandRegistry,
+  type SurfaceRenderRequest,
+  type WorkbenchCommandContext,
+} from './workbench';
 import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
@@ -129,19 +137,6 @@ const STATUS_WORD: Record<StatusKind, string> = {
   CONFLICTED: 'conflicted',
 };
 
-const CUSTOM_FEATURE_LABELS: Record<CustomFeatureId, string> = {
-  work: t('nav.work'),
-  files: t('nav.files'),
-  local: t('nav.localChanges'),
-  'local-explorer': t('nav.localExplorer'),
-  review: t('nav.review'),
-  commits: t('nav.allCommits'),
-  'pull-requests': t('nav.pullRequests'),
-  reflog: t('nav.reflog'),
-  worktrees: t('nav.worktrees'),
-  'workspace-review': t('nav.workspaceReview'),
-};
-
 /** A long-running clone/open driving the persistent progress popup. */
 interface OpProgress {
   /** Monotonic id of the owning operation — a finally only clears its own popup
@@ -169,6 +164,17 @@ function basename(p: string): string {
   const parts = p.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? p;
 }
+
+const MAIN_SURFACE_BY_VIEW: Partial<Record<View, CustomSurfaceId>> = {
+  local: BUILT_IN_SURFACE_IDS.localChanges,
+  review: BUILT_IN_SURFACE_IDS.review,
+  'pull-requests': BUILT_IN_SURFACE_IDS.pullRequests,
+  'workspace-review': BUILT_IN_SURFACE_IDS.workspaceReview,
+  reflog: BUILT_IN_SURFACE_IDS.reflog,
+  worktrees: BUILT_IN_SURFACE_IDS.worktrees,
+  commits: BUILT_IN_SURFACE_IDS.commits,
+  branch: BUILT_IN_SURFACE_IDS.commits,
+};
 
 export function App() {
   // Per-field selectors (not a bare `useSettings()`) so App only re-renders
@@ -213,7 +219,7 @@ export function App() {
   const customRestored = useCustomView((s) => s.restored);
   const customWorkspaceId = useCustomView((s) => s.workspaceId);
   const customWorkPaneId = useCustomView((s) =>
-    customPanes(s.layout).find((pane) => pane.feature === 'work')?.id ?? null);
+    customPanes(s.layout).find((pane) => pane.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work)?.id ?? null);
   const openWorkFile = useWork((s) => s.openFile);
   const addEmbeddedTerminal = useWork((s) => s.addTerminal);
   const selectFile = useRepo((s) => s.selectFile);
@@ -475,7 +481,9 @@ export function App() {
   }, []);
   const activateCustomWorkPane = useCallback(() => {
     const state = useCustomView.getState();
-    const pane = customPanes(state.layout).find((candidate) => candidate.feature === 'work');
+    const pane = customPanes(state.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+    );
     if (pane) state.activatePane(pane.id);
   }, []);
   // The Changes explorer hands each clicked file to the Work pane's whole-file
@@ -491,7 +499,9 @@ export function App() {
     );
     if (tab) work.setFileMode(repoPath, tab.id, 'changes');
     const custom = useCustomView.getState();
-    const pane = customPanes(custom.layout).find((candidate) => candidate.feature === 'work');
+    const pane = customPanes(custom.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+    );
     if (pane) custom.activatePane(pane.id);
     else setView('work');
   }, [setView]);
@@ -501,7 +511,9 @@ export function App() {
   const openReviewInCustom = useCallback(() => {
     selectFile(null);
     const custom = useCustomView.getState();
-    const pane = customPanes(custom.layout).find((candidate) => candidate.feature === 'review');
+    const pane = customPanes(custom.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.review,
+    );
     if (pane) custom.activatePane(pane.id);
     else setView('review');
   }, [selectFile, setView]);
@@ -1438,6 +1450,69 @@ export function App() {
     })();
   }, [selectFile, setView]);
 
+  const customCommands = useMemo(() => {
+    const registry = new WorkbenchCommandRegistry();
+    registry.register({
+      id: 'strand.custom.splitRight',
+      title: t('custom.paletteSplitRight'),
+      category: 'Custom',
+      keywords: ['layout', 'pane', 'horizontal', 'split'],
+      execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'horizontal')),
+    });
+    registry.register({
+      id: 'strand.custom.splitDown',
+      title: t('custom.paletteSplitDown'),
+      category: 'Custom',
+      keywords: ['layout', 'pane', 'vertical', 'split'],
+      execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'vertical')),
+    });
+    registry.register({
+      id: 'strand.custom.closePane',
+      title: t('custom.paletteClosePane'),
+      category: 'Custom',
+      keywords: ['layout', 'pane', 'remove', 'clear'],
+      execute: () => runCustomAction((state) => state.closePane(state.activePaneId)),
+    });
+    for (const surface of builtInSurfaceRegistry.listForHost('panel')) {
+      registry.register({
+        id: `strand.custom.show.${surface.id}`,
+        title: t('custom.paletteShowFeature', { feature: surface.title }),
+        category: 'Custom',
+        keywords: ['layout', 'surface', 'module', surface.id],
+        execute: () => runCustomAction((state) => state.setSurface(state.activePaneId, surface.id)),
+      });
+    }
+    const templates = [
+      ['vscode', t('custom.paletteTemplateVscode'), ['editor', 'source control', 'history']],
+      ['review', t('custom.paletteTemplateReview'), ['review', 'commits']],
+      ['focus', t('custom.paletteTemplateFocus'), ['work', 'single pane']],
+      ['blank', t('custom.paletteTemplateBlank'), ['reset', 'clear']],
+    ] as const;
+    for (const [template, title, keywords] of templates) {
+      registry.register({
+        id: `strand.custom.template.${template}`,
+        title,
+        category: 'Custom',
+        keywords: ['layout', 'preset', ...keywords],
+        execute: () => runCustomAction((state) => state.applyTemplate(template)),
+      });
+    }
+    return registry;
+  }, [runCustomAction]);
+
+  const customCommandContext = useCallback((): WorkbenchCommandContext => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find((candidate) => candidate.id === state.activePaneId);
+    return {
+      surface: {
+        id: pane?.surface?.surfaceId ?? 'strand.custom.layout',
+        instanceId: pane?.surface?.instanceId ?? pane?.id ?? 'custom-layout',
+      },
+      workspaceId: useWorkspaces.getState().activeWorkspaceId ?? DEFAULT_WORKSPACE_ID,
+      repositoryId: useRepo.getState().activePath ?? undefined,
+    };
+  }, []);
+
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
@@ -1492,64 +1567,13 @@ export function App() {
           setView('work'); selectFile(null);
         } },
         { id: 'custom-view', label: t('custom.paletteShow'), group: 'Actions', shortcut: keyHint('view-custom'), keywords: 'customize layout panes modules vscode workbench labs', run: () => { setView('custom'); selectFile(null); } },
-        ...(view === 'custom' ? [
-          {
-            id: 'custom-split-right',
-            label: t('custom.paletteSplitRight'),
-            group: 'Actions',
-            keywords: 'custom layout pane horizontal side by side',
-            run: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'horizontal')),
-          } satisfies PaletteAction,
-          {
-            id: 'custom-split-down',
-            label: t('custom.paletteSplitDown'),
-            group: 'Actions',
-            keywords: 'custom layout pane vertical stacked',
-            run: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'vertical')),
-          } satisfies PaletteAction,
-          {
-            id: 'custom-close-pane',
-            label: t('custom.paletteClosePane'),
-            group: 'Actions',
-            keywords: 'custom layout pane remove clear',
-            run: () => runCustomAction((state) => state.closePane(state.activePaneId)),
-          } satisfies PaletteAction,
-          ...CUSTOM_FEATURE_IDS.map((feature) => ({
-            id: `custom-feature-${feature}`,
-            label: t('custom.paletteShowFeature', { feature: CUSTOM_FEATURE_LABELS[feature] }),
-            group: 'Actions' as const,
-            keywords: `custom layout feature module ${feature}`,
-            run: () => runCustomAction((state) => state.setFeature(state.activePaneId, feature)),
-          } satisfies PaletteAction)),
-          {
-            id: 'custom-template-vscode',
-            label: t('custom.paletteTemplateVscode'),
-            group: 'Actions',
-            keywords: 'custom layout preset editor source control history',
-            run: () => runCustomAction((state) => state.applyTemplate('vscode')),
-          } satisfies PaletteAction,
-          {
-            id: 'custom-template-review',
-            label: t('custom.paletteTemplateReview'),
-            group: 'Actions',
-            keywords: 'custom layout preset review commits',
-            run: () => runCustomAction((state) => state.applyTemplate('review')),
-          } satisfies PaletteAction,
-          {
-            id: 'custom-template-focus',
-            label: t('custom.paletteTemplateFocus'),
-            group: 'Actions',
-            keywords: 'custom layout preset work single pane',
-            run: () => runCustomAction((state) => state.applyTemplate('focus')),
-          } satisfies PaletteAction,
-          {
-            id: 'custom-template-blank',
-            label: t('custom.paletteTemplateBlank'),
-            group: 'Actions',
-            keywords: 'custom layout reset clear preset',
-            run: () => runCustomAction((state) => state.applyTemplate('blank')),
-          } satisfies PaletteAction,
-        ] : []),
+        ...(view === 'custom' ? customCommands.list().map((command) => ({
+          id: command.id,
+          label: command.title,
+          group: 'Actions' as const,
+          keywords: ['custom', ...(command.keywords ?? [])].join(' '),
+          run: () => { void customCommands.execute(command.id, customCommandContext()); },
+        } satisfies PaletteAction)) : []),
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
@@ -1883,15 +1907,12 @@ export function App() {
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
-      toggleActivePullRequest, runCustomAction]);
+      toggleActivePullRequest, customCommands, customCommandContext]);
 
-  const renderCustomFeature = useCallback((
-    feature: Exclude<CustomFeatureId, 'work'>,
-    active: boolean,
-  ): React.ReactNode => {
-    switch (feature) {
-      case 'files':
-        return (
+  const surfaceRenderers = useMemo(() => new Map<CustomSurfaceId, (
+    request: SurfaceRenderRequest,
+  ) => React.ReactNode>([
+    [BUILT_IN_SURFACE_IDS.files, () => (
           <RepositoryFiles
             followWorkSelection
             onOpenFileInEditor={openActiveFileInEditor}
@@ -1899,63 +1920,84 @@ export function App() {
             onToast={showToast}
             onOpenWork={() => {
               const state = useCustomView.getState();
-              const pane = customPanes(state.layout).find((candidate) => candidate.feature === 'work');
+              const pane = customPanes(state.layout).find(
+                (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+              );
               if (pane) state.activatePane(pane.id);
               else setView('work');
             }}
           />
-        );
-      case 'local':
-        return <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={active} />;
-      case 'local-explorer':
-        return (
+    )],
+    [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
+      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={lifecycle.focused} />
+    )],
+    [BUILT_IN_SURFACE_IDS.changesExplorer, ({ lifecycle }) => (
           <LocalChanges
             onOpenFileInEditor={openActiveFileInEditor}
-            active={active}
+            active={lifecycle.focused}
             explorerOnly
             onOpenFileChanges={openChangesInWork}
           />
-        );
-      case 'review':
-        return <Review onOpenFileInEditor={openActiveFileInEditor} active={active} embedded />;
-      case 'pull-requests':
-        return (
+    )],
+    [BUILT_IN_SURFACE_IDS.review, ({ lifecycle, host }) => (
+      <Review
+        onOpenFileInEditor={openActiveFileInEditor}
+        active={lifecycle.focused}
+        embedded={host !== 'main'}
+      />
+    )],
+    [BUILT_IN_SURFACE_IDS.pullRequests, () => (
           <PullRequests
             onToast={showToast}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
           />
-        );
-      case 'workspace-review':
-        return <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={active} />;
-      case 'reflog':
-        return (
+    )],
+    [BUILT_IN_SURFACE_IDS.workspaceReview, ({ lifecycle }) => (
+      <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={lifecycle.focused} />
+    )],
+    [BUILT_IN_SURFACE_IDS.reflog, () => (
           <Reflog
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateBranch={(start, label) => setBranchDialog({ start, label })}
             onToast={showToast}
           />
-        );
-      case 'worktrees':
-        return (
+    )],
+    [BUILT_IN_SURFACE_IDS.worktrees, () => (
           <Worktrees
             onCreateWorktree={() => setWorktreeDialog({ start: null })}
             onToast={showToast}
           />
-        );
-      case 'commits':
-        return (
+    )],
+    [BUILT_IN_SURFACE_IDS.commits, ({ lifecycle, host }) => (
           <Commits
             onCreateTag={(target, label) => setTagDialog({ target, label })}
             onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
-            onReviewNavigate={openReviewInCustom}
+            onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
             onToast={showToast}
-            active={active}
+            active={lifecycle.focused}
           />
-        );
-    }
-  }, [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom, setView, showToast]);
+    )],
+  ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom, setView, showToast]);
+
+  const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => (
+    surfaceRenderers.get(request.contribution.id)?.(request) ?? null
+  ), [surfaceRenderers]);
+
+  const renderCustomSurface = useCallback((surface: CustomSurfaceRef, active: boolean) => (
+    <SurfaceHost
+      registry={builtInSurfaceRegistry}
+      surfaceId={surface.surfaceId}
+      instanceId={surface.instanceId}
+      binding={surface.binding}
+      host="panel"
+      lifecycle={{ mounted: true, visible: true, focused: active }}
+      render={renderSurfaceContribution}
+    />
+  ), [renderSurfaceContribution]);
+
+  const mainSurfaceId = MAIN_SURFACE_BY_VIEW[view];
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -2084,7 +2126,7 @@ export function App() {
                       <>
                         <OpBanner onToast={showToast} />
                         <CustomView
-                          renderFeature={renderCustomFeature}
+                          renderSurface={renderCustomSurface}
                           onWorkFrame={updateCustomWorkFrame}
                         />
                       </>
@@ -2092,32 +2134,15 @@ export function App() {
                       <>
                         <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                         <OpBanner onToast={showToast} />
-                        {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
-                        {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
-                        {view === 'pull-requests' && (
-                          <PullRequests
-                            onToast={showToast}
-                            onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                          />
-                        )}
-                        {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
-                        {view === 'reflog' && (
-                          <Reflog
-                            onResetTo={(target, label) => setResetDialog({ target, label })}
-                            onCreateBranch={(start, label) => setBranchDialog({ start, label })}
-                            onToast={showToast}
-                          />
-                        )}
-                        {view === 'worktrees' && (
-                          <Worktrees onCreateWorktree={() => setWorktreeDialog({ start: null })} onToast={showToast} />
-                        )}
-                        {(view === 'commits' || view === 'branch') && (
-                          <Commits
-                            onCreateTag={(target, label) => setTagDialog({ target, label })}
-                            onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
-                            onResetTo={(target, label) => setResetDialog({ target, label })}
-                            onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                            onToast={showToast}
+                        {mainSurfaceId && (
+                          <SurfaceHost
+                            registry={builtInSurfaceRegistry}
+                            surfaceId={mainSurfaceId}
+                            instanceId={`main-surface-${mainSurfaceId}`}
+                            binding={{ kind: 'follow-active' }}
+                            host="main"
+                            lifecycle={{ mounted: true, visible: true, focused: true }}
+                            render={renderSurfaceContribution}
                           />
                         )}
                       </>

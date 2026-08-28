@@ -68,6 +68,10 @@ Existing app-wide layouts from the first experimental version migrate to
 Default. Every feature pane still follows the active repository inside the
 workspace; Workspace Review is the cross-repository surface.
 
+Saved layouts use namespaced surface and instance identities. If a referenced
+surface is unavailable, Custom keeps the rest of the layout and shows a stable
+placeholder for that pane instead of resetting the workspace.
+
 Files uses the same live repository tree as the sidebar. While Files owns a
 Custom pane, the sidebar points back to that pane instead of mounting a second
 tree. Opening a file stays in Custom when the layout also contains Work;
@@ -94,7 +98,9 @@ your saved layout is unchanged when you return.
 - While Custom is open, Quick Launch includes actions to assign every feature,
   split or close the active pane, and apply every template.
 
-Custom is experimental. It currently supports ten built-in Strand surfaces,
-at most ten panes, one saved layout per Strand workspace, and no arbitrary web
-views or third-party extensions. Those boundaries keep the feature predictable
-while the composition model is tested across platforms.
+Custom is experimental. It currently supports ten built-in Strand surfaces, a
+32-pane defensive limit, one saved layout per Strand workspace, and no
+arbitrary web views or third-party extensions. The namespaced registry and
+shared host are internal foundations for future extensions, not a community
+plugin runtime. Those boundaries keep the feature predictable while the
+composition model is tested across platforms.

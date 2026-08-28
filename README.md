@@ -98,10 +98,16 @@ the resolved app appearance automatically.
   switch or move the feature in each pane, and start from Blank, Focus, Review
   station, or a VS Code-style workbench with Files, Work, staging, and history.
   Each Strand workspace auto-saves its own layout, feature choices, and pane
-  proportions across launches. Each feature mounts only once, and the live Work editor/terminal
-  runtime remains intact when its pane moves or resizes. The sidebar Labs row,
+  proportions across launches. Built-in surfaces are resolved through a
+  namespaced workbench registry shared with their dedicated views, and saved
+  layouts preserve an unavailable contribution as a placeholder instead of
+  discarding the rest of the workspace. Each stateful feature mounts only
+  once, and the live Work editor/terminal runtime remains intact when its pane
+  moves or resizes. The sidebar Labs row,
   rebindable shortcut, native View menu, command palette, F6 feature-selector
   focus, and optional startup destination keep the experiment keyboard-first.
+  Community plugin loading is not enabled yet; the registry and host are the
+  internal foundation for a later permission-checked plugin API.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've
