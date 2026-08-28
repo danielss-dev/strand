@@ -98,7 +98,8 @@ the resolved app appearance automatically.
   workspace review in nested panes, or start from a template. Each workspace
   auto-saves its layout; Reset to default returns to full-size Work. Existing
   Custom layouts migrate automatically. Each stateful surface mounts once and
-  Work's live editor/terminal runtime survives layout moves and resizes.
+  Work's live editor/terminal runtime survives layout moves and resizes. When
+  Workbench owns Files, the duplicate repository-sidebar Files tab is hidden.
   Community plugin loading is not enabled yet; the namespaced registry and
   shared host are the foundation for a later permission-checked plugin API.
 

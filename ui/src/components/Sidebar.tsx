@@ -261,6 +261,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
   );
 
   const [tab, setTab] = useState<SideTab>('git');
+  const activeTab = customOwnsFiles ? 'git' : tab;
   const providerMergedBranches = useMemo(
     () => integration?.data ? providerMergedBranchNames(refs, integration.data) : new Set<string>(),
     [integration?.data, refs],
@@ -1047,17 +1048,19 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
       </div>
 
       <div className="side-tabs">
-        <button type="button" className={'side-tab' + (tab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
+        <button type="button" className={'side-tab' + (activeTab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
           <Icon name="branch" size={12} />
           <span>{t('nav.git')}</span>
         </button>
-        <button type="button" className={'side-tab' + (tab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
-          <Icon name="folder" size={12} />
-          <span>{t('nav.files')}</span>
-        </button>
+        {!customOwnsFiles && (
+          <button type="button" className={'side-tab' + (activeTab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
+            <Icon name="folder" size={12} />
+            <span>{t('nav.files')}</span>
+          </button>
+        )}
       </div>
 
-      {tab === 'git' && (
+      {activeTab === 'git' && (
         <div className="side-filter">
           <Icon name="search" size={11} />
           <input
@@ -1075,7 +1078,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
         </div>
       ) : (
         <>
-          {tab === 'git' && <div className="side-scroll">
+          {activeTab === 'git' && <div className="side-scroll">
           <SideSection
             label="Worktrees"
             collapsed={!sections.worktrees}
@@ -1181,34 +1184,15 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
               />
             ))}
           </div>}
-          {!customOwnsFiles ? (
+          {!customOwnsFiles && (
             <RepositoryFiles
-              active={tab === 'files'}
+              active={activeTab === 'files'}
               onOpenWork={onOpenWorkSurface}
               onOpenFileInEditor={onOpenFileInEditor}
               onCreateFileEntry={onCreateFileEntry}
               onToast={onToast}
             />
-          ) : tab === 'files' ? (
-            <div className="side-files-owner">
-              <Icon name="folder" size={16} />
-              <span>{t('custom.filesOpenInPane')}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  useCustomView.getState().activatePane(customFilesPaneId);
-                  const pane = document.querySelector<HTMLElement>(
-                    `[data-custom-pane-id="${CSS.escape(customFilesPaneId)}"]`,
-                  );
-                  const selector = pane?.querySelector<HTMLButtonElement>('.custom-feature-select');
-                  if (selector) selector.focus();
-                  else pane?.focus();
-                }}
-              >
-                {t('custom.focusFilesPane')}
-              </button>
-            </div>
-          ) : null}
+          )}
         </>
       )}
 

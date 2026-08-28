@@ -65,9 +65,10 @@ surface is unavailable, Workbench keeps the rest of the layout and shows a
 stable placeholder instead of resetting the workspace.
 
 Files uses the same live repository tree as the sidebar. When a Workbench pane
-owns Files, the sidebar points to that pane instead of mounting another tree.
-Work also remains one live renderer when its outer pane moves or resizes, so
-open editors, terminal processes, output, scrollback, and selection survive.
+owns Files, the repository sidebar hides its Files tab instead of mounting a
+second tree. Work also remains one live renderer when its outer pane moves or
+resizes, so open editors, terminal processes, output, scrollback, and selection
+survive.
 
 ## Keyboard access
 

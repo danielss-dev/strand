@@ -1241,7 +1241,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate
   feature mounts; moving Work preserves its single xterm/editor runtime and
   Files has one reusable sidebar/Workbench owner (`RepositoryFiles`, `CustomView`,
-  stable `WorkFrame`, active-pane shortcut arbitration). Includes Blank, Focus,
+  stable `WorkFrame`, active-pane shortcut arbitration), with the repository
+  Files tab hidden while Workbench owns that surface. Includes Blank, Focus,
   Review station, and a four-surface VS Code workbench template.
 - ☑ Work and Custom are one Workbench destination: an unconfigured workspace
   renders the existing full-size Work surface with no composition chrome;

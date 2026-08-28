@@ -62,8 +62,6 @@ export const en = {
   'custom.feature.reflog.description': 'Recover and inspect local HEAD movements.',
   'custom.feature.worktrees.description': 'Track parallel branches and agent work.',
   'custom.feature.workspaceReview.description': 'Review changes across repository groups.',
-  'custom.filesOpenInPane': 'Files is open in the Workbench layout.',
-  'custom.focusFilesPane': 'Focus Files pane',
   'custom.template.vscode': 'VS Code workbench',
   'custom.template.review': 'Review station',
   'custom.template.focus': 'Focus',
