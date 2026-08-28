@@ -2239,3 +2239,13 @@ workspace's view. Keep per-workspace write queues independent so one slow disk
 write does not stall edits elsewhere. When migrating a former app-wide value,
 attach it only to the reserved Default workspace—copying it into every named
 workspace defeats the user's expectation that each starts independently.
+
+## Pierre controlled selections echo through `onLineSelected` (2026-08-28)
+
+Pierre's React wrapper calls `setSelectedLines` when Strand changes the
+controlled `selectedLines` prop, and that programmatic update can invoke
+`onLineSelected`. Do not use that callback to persist a selection when the same
+prop also drives transient hover tint: the first hovered range otherwise
+becomes persistent and the blue tint stops following later hovers. Use
+`onLineSelectionEnd` for pointer-only drag commits; programmatic hover updates
+do not emit that lifecycle event.

@@ -883,7 +883,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   inline Stage / Discard pair on each change block — Unstage on the
   staged side. `sliceChangeBlock` carves the synthetic single-hunk patch
   routed through `useRepo.applyPatch`; line-number drag selection and the
-  keyboard-operable `LinePicker` route through `sliceSelectedLines`.)
+  keyboard-operable `LinePicker` route through `sliceSelectedLines`; hover
+  tint tracks the active block because `HunkAnnotatedDiff` accepts persistent
+  line picks only from Pierre's pointer-only `onLineSelectionEnd` event.)
 - ☑ Copy diff as patch / Markdown (`concatPatches` / `patchesToMarkdown` in
   `lib/patchExport.ts` — raw multi-file patch with trailing-newline
   normalization, or `### path` + ```` ```diff ```` fences with CommonMark

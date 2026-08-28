@@ -1176,11 +1176,10 @@ export function HunkAnnotatedDiff({
     return { annotations: list, metaById: byId, lineToId: lineMap };
   }, [fileDiff]);
 
-  const onLineSelected = useCallback(
+  const onLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
-      // The picker owns selection while it is open. Pierre may emit the last
-      // drag range when controlled `selectedLines` changes to null; accepting
-      // that callback would silently re-check lines the user just cleared.
+      // The picker owns selection while it is open; ignore pointer-selection
+      // completion so it cannot silently re-check lines the user just cleared.
       if (linePickerOpenRef.current) return;
       if (!range) {
         setLineSelection(null);
@@ -1301,9 +1300,12 @@ export function HunkAnnotatedDiff({
       ...diffAppearanceOptions({ diffIndicators, diffLineNumbers, diffWordHighlight }),
       onLineEnter,
       enableLineSelection: true,
-      onLineSelected,
+      // Pierre also fires `onLineSelected` when this controlled selection is
+      // changed programmatically for hover. Listen for the end of an actual
+      // pointer selection so a hover range never becomes a persistent pick.
+      onLineSelectionEnd,
     }),
-    [layout, resolvedTheme, diffSyntaxTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelected],
+    [layout, resolvedTheme, diffSyntaxTheme, diffIndicators, diffLineNumbers, diffWordHighlight, onLineEnter, onLineSelectionEnd],
   );
 
   async function run(meta: BlockMeta, direction: SliceDirection, target: ApplyTarget) {
