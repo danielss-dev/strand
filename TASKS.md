@@ -1235,7 +1235,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   horizontal/vertical panes, draggable and keyboard-resizable dividers,
   close/collapse rules, a 32-pane defensive limit, per-workspace write queues
   and divider identities, Default-only legacy migration, and automatic
-  topology/surface/split-size restore (`lib/customView.ts`,
+  topology/surface/split-size restore, with shared 9px mouse hit targets kept
+  above pane content (`.rs-handle`, `lib/customView.ts`,
   `stores/customView.ts`, `workspaceIdentity.ts`, `views/CustomView.tsx`).
 - ☑ Compose the real Work, Files, Local Changes, Review, All Commits, Pull
   Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate

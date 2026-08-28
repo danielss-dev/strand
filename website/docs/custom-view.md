@@ -12,7 +12,9 @@ layouts from the former experimental Custom view migrate automatically.
 
 Customization starts from the current Workbench. Choose surfaces, split the
 active pane right or down, drag or keyboard-resize dividers, or apply a
-template. The available built-in surfaces are:
+template. Divider rules stay visually thin but expose a wider highlighted
+mouse target when hovered, so every split can be resized without pixel-perfect
+aim. The available built-in surfaces are:
 
 - Work
 - Files

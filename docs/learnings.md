@@ -159,7 +159,11 @@ screen, whatever that screen is.
   resized into uselessness. Sidebars: roughly 12–40%. Diff pane: never
   below 30% (Pierre needs room to render).
 - Use the shared `.rs-handle.vert` / `.rs-handle.horiz` classes for resize
-  handles so the hover/drag affordance is consistent everywhere.
+  handles so the hover/drag affordance is consistent everywhere. Keep their
+  full 9px mouse target above pane content while the pseudo-element draws the
+  thin visible rule. The negative margins deliberately overlap both panes, so
+  dropping the handle's stacking layer lets surfaces—especially Work's stable
+  embedded renderer—cover most or all of the draggable area.
 - When adding a new pane: also check that its content reflows. Long file
   paths truncate (`text-overflow: ellipsis`), code lines wrap or scroll —
   never push the layout wider.

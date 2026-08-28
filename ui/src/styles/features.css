@@ -3276,6 +3276,7 @@ button {
  */
 .rs-handle {
   position: relative;
+  z-index: 5;
   background: transparent;
   flex-shrink: 0;
   transition: background 0.12s ease;
@@ -3298,26 +3299,26 @@ button {
 }
 
 .rs-handle.vert {
-  width: 5px;
-  margin: 0 -2px;
+  width: 9px;
+  margin: 0 -4px;
   cursor: col-resize;
 }
 .rs-handle.vert::before {
   top: 0;
   bottom: 0;
-  left: 2px;
+  left: 4px;
   width: 0.5px;
 }
 
 .rs-handle.horiz {
-  height: 5px;
-  margin: -2px 0;
+  height: 9px;
+  margin: -4px 0;
   cursor: row-resize;
 }
 .rs-handle.horiz::before {
   left: 0;
   right: 0;
-  top: 2px;
+  top: 4px;
   height: 0.5px;
 }
 

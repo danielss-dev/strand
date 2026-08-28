@@ -99,7 +99,8 @@ the resolved app appearance automatically.
   auto-saves its layout; Reset to default returns to full-size Work. Existing
   Custom layouts migrate automatically. Each stateful surface mounts once and
   Work's live editor/terminal runtime survives layout moves and resizes. When
-  Workbench owns Files, the duplicate repository-sidebar Files tab is hidden.
+  Workbench owns Files, the duplicate repository-sidebar Files tab is hidden;
+  every thin pane divider retains a wider mouse target for reliable resizing.
   Community plugin loading is not enabled yet; the namespaced registry and
   shared host are the foundation for a later permission-checked plugin API.
 
