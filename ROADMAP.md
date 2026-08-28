@@ -2622,6 +2622,12 @@ The same-day workspace pass gave Default and every named workspace independent
 topology, feature assignments, and divider storage; the previous app-wide
 layout migrates only into Default.
 
+**Workspace Review missing-member recovery shipped (2026-08-28):** Workspace
+members whose repository path was deleted, moved, or stopped being a Git
+repository are omitted instead of leaving a dead error section in the merged
+queue. Refresh revalidates those paths so a restored or re-cloned repository
+rejoins automatically without removing it from workspace membership.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

@@ -689,6 +689,19 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     slice, ⌘F preview "web · feat-auth · src/auth.ts", note → export heading
     `## web · feat-auth (branch feat-auth)`, toggle appearing at 1 repo +
     1 worktree).
+  - ☑ Workspace Review skips members deleted from disk (2026-08-28): a
+    member whose discovery (`repoMeta`) fails — directory deleted, moved,
+    or no longer a repository — is dropped from the member list instead of
+    rendering a dead "Couldn't load changes — Could not find a git
+    repository…" section (stale open-tab metas included; the tab fallback
+    in `loadMember` is gone). The path is remembered in a module-level
+    `missing` map so refreshes skip it without flashing, `refreshAll`
+    revalidates cached paths (cheap discovers) so a re-cloned path rejoins,
+    and `refreshMember` drops mid-session deletions the same way. Workspace
+    membership itself is untouched (non-destructive — a temporarily
+    unavailable drive heals instead of silently losing curation). Verified:
+    `tsc`, `vitest` (366, +3 new store tests in
+    `stores/workspaceReview.test.ts`).
 
 ### Topbar
 - ☑ Layout + native-chrome alignment
