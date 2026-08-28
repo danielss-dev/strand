@@ -8317,9 +8317,12 @@ textarea.clone-input {
   cursor: pointer;
 }
 .side-files-tools .side-files-create {
+  /* Match Pierre's content-box search input, including its native block padding. */
+  box-sizing: content-box;
   flex: 0 0 var(--trees-row-height, 30px);
   height: var(--trees-row-height, 30px);
-  padding: 0;
+  padding: 1px;
+  border: 1px solid transparent;
 }
 .side-files-tools button:hover,
 .side-files-tools button:focus-visible {
