@@ -11,7 +11,9 @@ the trust boundary this format implements.
 - Namespaced surface contributions merged into the Workbench `SurfaceRegistry`
 - Permission-checked capability broker (`repository.read`, `ai.invoke`, `network.fetch`)
 - Declarative surfaces rendered by Strand (`markdown`, `status`)
-- One built-in dogfood plugin: **T3Code** (`daniels.t3code`) with a Strand-owned renderer
+- One built-in dogfood plugin: **Heroi** (`daniels.heroi`) — Daniels' local AI
+  agent orchestrator as a Strand Workbench surface (Claude Code, Codex, Gemini,
+  Aider, Shell; plan turns + Run in Work)
 
 Community plugins cannot load arbitrary React, touch Zustand, call Tauri directly,
 or access the DOM. Those capabilities require future isolated runtimes.
@@ -105,7 +107,7 @@ Strand renders both view types with first-party components and theme tokens.
 ### Built-in renderers (Strand-maintained only)
 
 Only Strand may ship `render.kind = "builtin"`. Today the allowed module is
-`daniels.t3code.workspace` for the T3Code dogfood plugin. Third-party manifests
+`daniels.heroi.workspace` for the Heroi dogfood plugin. Third-party manifests
 that declare `builtin` are rejected at validation time.
 
 ## Validation checklist
@@ -174,7 +176,7 @@ pnpm --filter ./ui test
 | `ui/src/plugins/capabilities.ts` | Permission broker |
 | `ui/src/plugins/marketplace.ts` | Bundled catalog |
 | `ui/src/plugins/renderSurface.tsx` | Declarative + builtin render routing |
-| `ui/src/plugins/builtins/t3code/` | T3Code dogfood plugin |
+| `ui/src/plugins/builtins/heroi/` | Heroi dogfood plugin |
 | `ui/src/workbench/SurfaceHost.tsx` | Host lifecycle contract |
 
 ## Non-goals (this phase)

@@ -102,10 +102,10 @@ the resolved app appearance automatically.
   Workbench owns Files, the duplicate repository-sidebar Files tab is hidden;
   every thin pane divider retains a wider mouse target for reliable resizing.
   **Experimental plugins:** install surfaces from Settings → Plugins (bundled
-  marketplace), add them to Workbench panes, and use T3Code as a dogfood agent
-  harness view. Declarative plugins render from validated manifests; third-party
-  JavaScript does not execute in the privileged webview. See
-  `docs/plugin-creation.md`.
+  marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
+  local agent-orchestrator view. Declarative plugins render from validated
+  manifests; third-party JavaScript does not execute in the privileged webview.
+  See `docs/plugin-creation.md`.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've

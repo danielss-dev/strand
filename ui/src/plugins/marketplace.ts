@@ -1,5 +1,5 @@
 import type { PluginManifest } from './manifest';
-import { t3codeManifest } from './builtins/t3code/manifest';
+import { heroiManifest } from './builtins/heroi/manifest';
 
 export interface MarketplaceEntry {
   manifest: PluginManifest;
@@ -11,9 +11,9 @@ export interface MarketplaceEntry {
 /** Bundled catalog — no remote fetch until signing and isolation are proven. */
 export const MARKETPLACE_CATALOG: readonly MarketplaceEntry[] = [
   {
-    manifest: t3codeManifest,
+    manifest: heroiManifest,
     builtin: true,
-    tags: ['agents', 'ai', 'experimental'],
+    tags: ['agents', 'orchestrator', 'experimental'],
   },
   {
     manifest: {

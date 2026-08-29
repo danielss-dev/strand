@@ -1,12 +1,11 @@
-import type { ReactNode } from 'react';
-
-import { t } from '../lib/i18n';
-import type { SurfaceRenderRequest } from '../workbench/SurfaceHost';
-import { PluginCapabilityBroker } from './capabilities';
-import { T3CodeView } from './builtins/t3code/T3CodeView';
-import { T3CODE_SURFACE_ID } from './builtins/t3code/manifest';
+import { HeroiView } from './builtins/heroi/HeroiView';
+import { HEROI_SURFACE_ID } from './builtins/heroi/manifest';
 import type { DeclarativeView } from './manifest';
 import { pluginRegistry } from './registry';
+import type { PluginCapabilityBroker } from './capabilities';
+import type { SurfaceRenderRequest } from '../workbench/SurfaceHost';
+import { t } from '../lib/i18n';
+import type { ReactNode } from 'react';
 
 function DeclarativePluginView({
   view,
@@ -70,13 +69,8 @@ export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
   const render = binding.surface.render;
 
   if (render.kind === 'builtin') {
-    if (request.contribution.id === T3CODE_SURFACE_ID) {
-      return (
-        <T3CodeView
-          request={request}
-          broker={broker}
-        />
-      );
+    if (request.contribution.id === HEROI_SURFACE_ID) {
+      return <HeroiView request={request} broker={broker} />;
     }
     return (
       <div className="custom-empty" role="status">

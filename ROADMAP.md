@@ -2175,7 +2175,7 @@ and Store certification remain external gates.
 - ◐ **Plugin / extension surface** — internal namespaced surface/command
   registries, shared hosts, and resilient layout-v2 references shipped
   2026-08-28; declarative manifest validation, permission broker, bundled
-  marketplace, T3Code dogfood plugin, and `docs/plugin-creation.md` shipped
+  marketplace, Heroi dogfood plugin, and `docs/plugin-creation.md` shipped
   2026-08-29. Typed services/resource leases, quotas, remote install, and
   isolated community execution remain open.
 - AI features (writing suggestions, conflict hints) — PRD Q3
@@ -2653,7 +2653,7 @@ no third-party runtime ships in this phase.
 lists a bundled marketplace. Installing a plugin registers its namespaced
 Workbench surfaces into the combined registry without remounting Work's live
 editor/PTY runtime. Declarative plugins render markdown/status views from
-validated manifests; the T3Code dogfood plugin mounts through `SurfaceHost`
+validated manifests; the Heroi dogfood plugin mounts through `SurfaceHost`
 with a Strand-owned renderer and permission-checked `repository.read` /
 `ai.invoke` broker calls. Authoring guide: `docs/plugin-creation.md`.
 

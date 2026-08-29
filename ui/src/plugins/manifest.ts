@@ -38,7 +38,7 @@ export interface PluginSurfaceManifest {
   lifecycle: SurfaceLifecyclePolicy;
   render:
     | { kind: 'declarative'; view: DeclarativeView }
-    | { kind: 'builtin'; module: 'daniels.t3code.workspace' };
+    | { kind: 'builtin'; module: 'daniels.heroi.workspace' };
 }
 
 export interface PluginCommandManifest {
@@ -155,11 +155,11 @@ function validateSurfaceManifest(manifest: PluginManifest, surface: PluginSurfac
   if (surface.render.kind === 'declarative') {
     validateDeclarativeView(surface.render.view);
   } else if (surface.render.kind === 'builtin') {
-    if (surface.render.module !== 'daniels.t3code.workspace') {
+    if (surface.render.module !== 'daniels.heroi.workspace') {
       throw new PluginManifestError(`Unknown builtin module "${String(surface.render.module)}".`);
     }
-    if (manifest.id !== 'daniels.t3code') {
-      throw new PluginManifestError('The T3Code builtin module is reserved for daniels.t3code.');
+    if (manifest.id !== 'daniels.heroi') {
+      throw new PluginManifestError('The Heroi builtin module is reserved for daniels.heroi.');
     }
   } else {
     throw new PluginManifestError(`Surface "${surface.id}" has an invalid render kind.`);

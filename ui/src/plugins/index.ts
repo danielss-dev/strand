@@ -28,4 +28,4 @@ export {
   type InstalledPluginRecord,
 } from './registry';
 export { renderPluginSurface, isPluginSurface } from './renderSurface';
-export { T3CODE_SURFACE_ID, t3codeManifest } from './builtins/t3code/manifest';
+export { HEROI_SURFACE_ID, heroiManifest } from './builtins/heroi/manifest';

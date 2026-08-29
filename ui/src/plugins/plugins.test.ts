@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { PluginCapabilityBroker, PluginPermissionError } from './capabilities';
 import { validatePluginManifest, PLUGIN_API_VERSION } from './manifest';
+import { MARKETPLACE_CATALOG } from './marketplace';
 import { PluginRegistry } from './registry';
-import { t3codeManifest } from './builtins/t3code/manifest';
+import { heroiManifest } from './builtins/heroi/manifest';
 
 describe('validatePluginManifest', () => {
   it('accepts a valid declarative plugin manifest', () => {
@@ -49,13 +50,24 @@ describe('validatePluginManifest', () => {
   });
 });
 
+describe('MARKETPLACE_CATALOG', () => {
+  it('ships Heroi as the dogfood builtin and never lists T3Code', () => {
+    const ids = MARKETPLACE_CATALOG.map((entry) => entry.manifest.id);
+    expect(ids).toContain('daniels.heroi');
+    expect(ids).not.toContain('daniels.t3code');
+    const heroi = MARKETPLACE_CATALOG.find((entry) => entry.manifest.id === 'daniels.heroi');
+    expect(heroi?.builtin).toBe(true);
+    expect(heroi?.manifest.name).toBe('Heroi');
+  });
+});
+
 describe('PluginRegistry', () => {
   it('registers plugin surfaces into the combined workbench registry', () => {
     const registry = new PluginRegistry();
-    registry.install(t3codeManifest);
-    expect(registry.getSurfaceRegistry().get('daniels.t3code.workspace')?.title).toBe('T3Code');
-    registry.uninstall('daniels.t3code');
-    expect(registry.getSurfaceRegistry().get('daniels.t3code.workspace')).toBeUndefined();
+    registry.install(heroiManifest);
+    expect(registry.getSurfaceRegistry().get('daniels.heroi.workspace')?.title).toBe('Heroi');
+    registry.uninstall('daniels.heroi');
+    expect(registry.getSurfaceRegistry().get('daniels.heroi.workspace')).toBeUndefined();
   });
 });
 

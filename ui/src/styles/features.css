@@ -9093,28 +9093,65 @@ select.clone-input {
 .plugin-status-row dd {
   margin: 0;
 }
-.plugin-t3code {
+
+.plugin-heroi {
   flex-direction: row;
   min-height: 0;
 }
-.plugin-t3code-sidebar {
-  width: 240px;
-  min-width: 200px;
+.plugin-heroi-sidebar {
+  width: 260px;
+  min-width: 220px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--bg-panel);
 }
-.plugin-t3code-sidebar-head {
+.plugin-heroi-brand {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-heroi-brand strong { display: block; }
+.plugin-heroi-brand span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.plugin-heroi-project {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+}
+.plugin-heroi-project header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.plugin-heroi-project-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.plugin-heroi-sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.plugin-t3code-thread-list {
+.plugin-heroi-session-list {
   list-style: none;
   margin: 0;
   padding: 8px;
@@ -9122,71 +9159,94 @@ select.clone-input {
   display: grid;
   gap: 4px;
 }
-.plugin-t3code-thread {
+.plugin-heroi-session {
   width: 100%;
   text-align: left;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   background: transparent;
+  color: inherit;
   padding: 8px 10px;
   display: grid;
   gap: 2px;
 }
-.plugin-t3code-thread.active {
+.plugin-heroi-session.active {
   border-color: var(--border-strong);
   background: var(--bg-elevated);
 }
-.plugin-t3code-thread-title {
-  font-size: 13px;
-}
-.plugin-t3code-thread-meta {
+.plugin-heroi-session-title { font-size: 13px; }
+.plugin-heroi-session-meta {
   font-size: 11px;
   color: var(--text-muted);
 }
-.plugin-t3code-main {
+.plugin-heroi-main {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto auto;
 }
-.plugin-t3code-toolbar {
+.plugin-heroi-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-heroi-toolbar label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.plugin-heroi-toolbar .settings-select { min-width: 160px; }
+.plugin-heroi-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.plugin-heroi-status-bar {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
-.plugin-t3code-repo,
-.plugin-t3code-provider {
+.plugin-heroi-status-bar > span:first-child {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.plugin-t3code-branch {
+.plugin-heroi-chip {
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--bg-elevated);
+  font-size: 11px;
 }
-.plugin-t3code-transcript {
+.plugin-heroi-chip.dirty { color: var(--accent); }
+.plugin-heroi-transcript {
   overflow: auto;
   padding: 12px 14px;
   display: grid;
   gap: 10px;
   align-content: start;
 }
-.plugin-t3code-message {
+.plugin-heroi-message {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 10px 12px;
   background: var(--bg-panel);
 }
-.plugin-t3code-message.user {
-  border-color: var(--border-strong);
+.plugin-heroi-message.user { border-color: var(--border-strong); }
+.plugin-heroi-message.system {
+  background: transparent;
+  color: var(--text-muted);
 }
-.plugin-t3code-message-role {
+.plugin-heroi-message-role {
   display: block;
   font-size: 11px;
   text-transform: uppercase;
@@ -9194,24 +9254,33 @@ select.clone-input {
   color: var(--text-muted);
   margin-bottom: 6px;
 }
-.plugin-t3code-message p {
+.plugin-heroi-message p {
   margin: 0;
   white-space: pre-wrap;
 }
-.plugin-t3code-composer {
+.plugin-heroi-composer {
   display: grid;
-  grid-template-columns: 1fr auto;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--border);
 }
-.plugin-t3code-input {
-  min-height: 72px;
+.plugin-heroi-input {
+  min-height: 84px;
   resize: vertical;
 }
-.plugin-t3code-error {
+.plugin-heroi-composer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-heroi-composer-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.plugin-heroi-error {
   margin: 0;
   padding: 0 12px 10px;
-  color: var(--danger);
+  color: var(--accent);
   font-size: 12px;
 }

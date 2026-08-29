@@ -86,6 +86,7 @@ survive.
   while customization is open.
 
 Workbench currently supports built-in Strand surfaces, installed plugin
-surfaces from Settings → Plugins, and a 32-pane defensive limit. Declarative
-plugins render from validated manifests; third-party JavaScript does not run
-inside the privileged webview. See `docs/plugin-creation.md` for authoring.
+surfaces from Settings → Plugins (including the Heroi local agent-orchestrator
+dogfood plugin), and a 32-pane defensive limit. Declarative plugins render from
+validated manifests; third-party JavaScript does not run inside the privileged
+webview. See `docs/plugin-creation.md` for authoring.

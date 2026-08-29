@@ -1262,12 +1262,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ◐ Design and implement the declarative community-plugin manifest,
   permission broker, quotas, diagnostics, and isolated execution boundary;
   do not load third-party code into Strand's privileged webview.
-  (manifest validation, capability broker, bundled marketplace, T3Code
+  (manifest validation, capability broker, bundled marketplace, Heroi
   builtin plugin, `docs/plugin-creation.md` — 2026-08-29; quotas,
   remote install, and isolated custom UI remain open.)
 - ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
   persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
-- ☑ T3Code Workbench surface (`daniels.t3code.workspace`, `T3CodeView`).
+- ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
