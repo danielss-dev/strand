@@ -2,26 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
 import { Icon } from '../../../components/Icon';
-import { Select } from '../../../components/Select';
-import { errMessage, isTauri, tauri } from '../../../lib/tauri';
+import { errMessage } from '../../../lib/tauri';
 import { t } from '../../../lib/i18n';
-import type { AiProvider, AiProviderStatus } from '../../../lib/types';
 import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
 import { useRepo } from '../../../stores/repo';
-import { useSettings } from '../../../stores/settings';
 import { useWork } from '../../../stores/work';
 import type { PluginCapabilityBroker } from '../../capabilities';
 import { pluginStateKey, usePlugins } from '../../../stores/plugins';
 
 export type HeroiAgent = 'claude' | 'codex' | 'gemini' | 'aider' | 'shell';
 
-interface HeroiSession {
+interface HeroiTab {
   id: string;
-  title: string;
   agent: HeroiAgent;
-  updatedAt: number;
-  messages: readonly { role: 'user' | 'assistant' | 'system'; text: string }[];
+  label: string;
+  running: boolean;
 }
+
+type RightPanel = 'git' | 'files';
 
 const AGENTS: readonly { id: HeroiAgent; label: string; command: string }[] = [
   { id: 'claude', label: 'Claude Code', command: 'claude' },
@@ -41,20 +39,18 @@ function launchCommand(agent: HeroiAgent): string {
   return AGENTS.find((entry) => entry.id === agent)?.command ?? '';
 }
 
-function welcomeSession(agent: HeroiAgent): HeroiSession {
-  return {
-    id: 'welcome',
-    title: 'Getting started',
-    agent,
-    updatedAt: Date.now(),
-    messages: [{ role: 'system', text: t('plugins.heroi.welcome') }],
-  };
+function defaultTabs(): HeroiTab[] {
+  return [{
+    id: 'shell-default',
+    agent: 'shell',
+    label: 'Shell',
+    running: false,
+  }];
 }
 
-function providerForAgent(agent: HeroiAgent): AiProvider | null {
-  if (agent === 'codex') return 'openai';
-  if (agent === 'claude') return 'anthropic';
-  return null;
+function pathLeaf(path: string): string {
+  const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/);
+  return parts[parts.length - 1] || path;
 }
 
 export function HeroiView({
@@ -65,50 +61,48 @@ export function HeroiView({
   broker: PluginCapabilityBroker;
 }) {
   const meta = useRepo((state) => state.meta);
-  const unstagedCount = useRepo((state) => state.unstagedDiffs.length);
-  const stagedCount = useRepo((state) => state.stagedDiffs.length);
+  const tabs = useRepo((state) => state.tabs);
+  const activeTabPath = useRepo((state) => state.activeTabPath);
+  const setActiveTab = useRepo((state) => state.setActiveTab);
+  const unstagedDiffs = useRepo((state) => state.unstagedDiffs);
+  const stagedDiffs = useRepo((state) => state.stagedDiffs);
   const setView = useRepo((state) => state.setView);
-  const openaiModel = useSettings((state) => state.openaiModel);
-  const anthropicModel = useSettings((state) => state.anthropicModel);
-  const openaiCli = useSettings((state) => state.openaiCli);
-  const anthropicCli = useSettings((state) => state.anthropicCli);
+  const selectFile = useRepo((state) => state.selectFile);
   const addTerminal = useWork((state) => state.addTerminal);
   const loadPluginState = usePlugins((state) => state.loadState);
   const savePluginState = usePlugins((state) => state.saveState);
 
-  const [agent, setAgent] = useState<HeroiAgent>('claude');
-  const [sessions, setSessions] = useState<HeroiSession[]>(() => [welcomeSession('claude')]);
-  const [activeSessionId, setActiveSessionId] = useState('welcome');
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [agentTabs, setAgentTabs] = useState<HeroiTab[]>(defaultTabs);
+  const [activeTabId, setActiveTabId] = useState('shell-default');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [rightPanel, setRightPanel] = useState<RightPanel>('git');
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
-  const [providerStatus, setProviderStatus] = useState<Partial<Record<AiProvider, AiProviderStatus>>>({});
+  const [statusNote, setStatusNote] = useState<string | null>(null);
 
   const stateKey = pluginStateKey('daniels.heroi', request.instanceId);
-  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
-  const provider = providerForAgent(agent);
+  const activeAgentTab = agentTabs.find((tab) => tab.id === activeTabId) ?? agentTabs[0];
+  const command = activeAgentTab ? launchCommand(activeAgentTab.agent) : '';
 
   const project = useMemo(() => ({
     path: meta?.path ?? '',
     name: meta?.name ?? null,
     branch: meta?.branch ?? null,
-    head: meta?.head_oid ?? null,
-    dirty: unstagedCount + stagedCount > 0,
+    dirty: unstagedDiffs.length + stagedDiffs.length > 0,
     linked: meta?.is_linked_worktree ?? false,
-  }), [meta?.branch, meta?.head_oid, meta?.is_linked_worktree, meta?.name, meta?.path, stagedCount, unstagedCount]);
+  }), [meta?.branch, meta?.is_linked_worktree, meta?.name, meta?.path, stagedDiffs.length, unstagedDiffs.length]);
 
   useEffect(() => {
     let current = true;
     void loadPluginState<{
-      sessions?: HeroiSession[];
-      activeSessionId?: string;
-      agent?: HeroiAgent;
+      agentTabs?: HeroiTab[];
+      activeTabId?: string;
+      rightPanel?: RightPanel;
     }>(stateKey).then((stored) => {
       if (!current) return;
-      if (stored?.sessions?.length) setSessions(stored.sessions);
-      if (stored?.activeSessionId) setActiveSessionId(stored.activeSessionId);
-      if (stored?.agent) setAgent(stored.agent);
+      if (stored?.agentTabs?.length) setAgentTabs(stored.agentTabs.map((tab) => ({ ...tab, running: false })));
+      if (stored?.activeTabId) setActiveTabId(stored.activeTabId);
+      if (stored?.rightPanel) setRightPanel(stored.rightPanel);
       setRestored(true);
     });
     return () => { current = false; };
@@ -116,29 +110,48 @@ export function HeroiView({
 
   useEffect(() => {
     if (!restored) return;
-    void savePluginState(stateKey, { sessions, activeSessionId, agent });
-  }, [activeSessionId, agent, restored, savePluginState, sessions, stateKey]);
+    void savePluginState(stateKey, {
+      agentTabs: agentTabs.map(({ id, agent, label }) => ({ id, agent, label, running: false })),
+      activeTabId,
+      rightPanel,
+    });
+  }, [activeTabId, agentTabs, restored, rightPanel, savePluginState, stateKey]);
 
   useEffect(() => {
-    if (!request.lifecycle.visible || !isTauri() || !provider) return;
-    void tauri.aiProviderStatus(provider, openaiCli, anthropicCli)
-      .then((status) => setProviderStatus((current) => ({ ...current, [provider]: status })))
-      .catch(() => undefined);
-  }, [anthropicCli, openaiCli, provider, request.lifecycle.visible]);
-
-  const createSession = useCallback(() => {
-    const session: HeroiSession = {
-      id: crypto.randomUUID(),
-      title: t('plugins.heroi.newSession'),
-      agent,
-      updatedAt: Date.now(),
-      messages: [{ role: 'system', text: t('plugins.heroi.sessionReady', { agent: agentLabel(agent) }) }],
+    if (!pickerOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.plugin-heroi-tab-picker')) setPickerOpen(false);
     };
-    setSessions((current) => [session, ...current]);
-    setActiveSessionId(session.id);
-    setDraft('');
+    window.addEventListener('mousedown', onPointer);
+    return () => window.removeEventListener('mousedown', onPointer);
+  }, [pickerOpen]);
+
+  const addAgentTab = useCallback((agent: HeroiAgent) => {
+    const tab: HeroiTab = {
+      id: crypto.randomUUID(),
+      agent,
+      label: agentLabel(agent),
+      running: false,
+    };
+    setAgentTabs((current) => [...current, tab]);
+    setActiveTabId(tab.id);
+    setPickerOpen(false);
     setError(null);
-  }, [agent]);
+    setStatusNote(null);
+  }, []);
+
+  const closeAgentTab = useCallback((tabId: string) => {
+    setAgentTabs((current) => {
+      const next = current.filter((tab) => tab.id !== tabId);
+      const resolved = next.length === 0 ? defaultTabs() : next;
+      setActiveTabId((active) => {
+        if (active !== tabId) return active;
+        return resolved[resolved.length - 1]?.id ?? 'shell-default';
+      });
+      return resolved;
+    });
+  }, []);
 
   const openHeroiRepo = useCallback(async () => {
     try {
@@ -148,130 +161,50 @@ export function HeroiView({
     }
   }, []);
 
-  const runInWork = useCallback(() => {
-    if (!meta?.path) {
+  const runActiveAgent = useCallback(() => {
+    if (!meta?.path || !activeAgentTab) {
       setError(t('plugins.heroi.noRepository'));
       return;
     }
-    addTerminal(meta.path);
+    void broker.readRepository(
+      project.path,
+      project.branch,
+      meta.head_oid,
+      project.dirty,
+    ).catch(() => undefined);
+
+    addTerminal(meta.path, null, activeAgentTab.label);
+    setAgentTabs((current) => current.map((tab) => (
+      tab.id === activeAgentTab.id ? { ...tab, running: true } : tab
+    )));
     setView('work');
-    const command = launchCommand(agent);
     const note = command
-      ? t('plugins.heroi.launchedWithCommand', { agent: agentLabel(agent), command })
-      : t('plugins.heroi.launchedShell', { agent: agentLabel(agent) });
-    setSessions((current) => current.map((session) => (
-      session.id === activeSessionId
-        ? {
-            ...session,
-            title: session.messages.filter((m) => m.role !== 'system').length === 0
-              ? `Run ${agentLabel(agent)}`
-              : session.title,
-            agent,
-            updatedAt: Date.now(),
-            messages: [
-              ...session.messages,
-              { role: 'assistant', text: note },
-            ],
-          }
-        : session
-    )));
+      ? t('plugins.heroi.launchedWithCommand', { agent: activeAgentTab.label, command })
+      : t('plugins.heroi.launchedShell', { agent: activeAgentTab.label });
+    setStatusNote(note);
     setError(null);
-  }, [activeSessionId, addTerminal, agent, meta?.path, setView]);
+  }, [activeAgentTab, addTerminal, broker, command, meta, project, setView]);
 
-  const sendPlan = useCallback(async () => {
-    const prompt = draft.trim();
-    if (!prompt || busy) return;
-    if (!meta?.path) {
-      setError(t('plugins.heroi.noRepository'));
-      return;
-    }
-    if (!provider) {
-      setError(t('plugins.heroi.planNeedsProvider'));
-      return;
-    }
-    if (!broker.has('ai.invoke')) {
-      setError(t('plugins.heroi.noAiPermission'));
-      return;
-    }
+  const openChangedFile = useCallback((path: string) => {
+    selectFile(path);
+    setView('local');
+  }, [selectFile, setView]);
 
-    setBusy(true);
-    setError(null);
-    setSessions((current) => current.map((session) => (
-      session.id === activeSessionId
-        ? {
-            ...session,
-            title: session.messages.filter((m) => m.role !== 'system').length === 0
-              ? prompt.slice(0, 48)
-              : session.title,
-            agent,
-            updatedAt: Date.now(),
-            messages: [...session.messages, { role: 'user', text: prompt }],
-          }
-        : session
-    )));
-    setDraft('');
-
-    try {
-      const snapshot = await broker.readRepository(
-        project.path,
-        project.branch,
-        project.head,
-        project.dirty,
-      );
-      const model = provider === 'openai' ? openaiModel : anthropicModel;
-      const outcome = await broker.invokeAi(
-        meta.path,
-        provider,
-        model,
-        {
-          opId: `heroi-${Date.now()}`,
-          sensitiveDecision: { mode: 'scan' },
-          styleInstruction: [
-            'You are Heroi, Daniels\' local AI agent orchestrator embedded in Strand.',
-            `Selected agent: ${agentLabel(agent)}.`,
-            'Reply with a concise plan for what that agent should do next in this repository.',
-            snapshot
-              ? `Project: ${snapshot.name} @ ${snapshot.branch ?? 'detached'} (${snapshot.dirty ? 'dirty' : 'clean'})`
-              : '',
-            `Path: ${meta.path}`,
-            `User: ${prompt}`,
-          ].filter(Boolean).join('\n'),
-        },
-        openaiCli,
-        anthropicCli,
-      );
-      const text = [outcome.subject, outcome.body].filter(Boolean).join('\n\n');
-      setSessions((current) => current.map((session) => (
-        session.id === activeSessionId
-          ? {
-              ...session,
-              updatedAt: Date.now(),
-              messages: [...session.messages, { role: 'assistant', text }],
-            }
-          : session
-      )));
-    } catch (e) {
-      setError(errMessage(e));
-    } finally {
-      setBusy(false);
+  const changedFiles = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: { path: string; kind: 'staged' | 'unstaged'; adds: number; dels: number }[] = [];
+    for (const diff of stagedDiffs) {
+      if (seen.has(diff.path)) continue;
+      seen.add(diff.path);
+      rows.push({ path: diff.path, kind: 'staged', adds: diff.adds, dels: diff.dels });
     }
-  }, [
-    activeSessionId,
-    agent,
-    anthropicCli,
-    anthropicModel,
-    broker,
-    busy,
-    draft,
-    meta?.path,
-    openaiCli,
-    openaiModel,
-    project,
-    provider,
-  ]);
-
-  const liveStatus = provider ? providerStatus[provider] : null;
-  const command = launchCommand(agent);
+    for (const diff of unstagedDiffs) {
+      if (seen.has(diff.path)) continue;
+      seen.add(diff.path);
+      rows.push({ path: diff.path, kind: 'unstaged', adds: diff.adds, dels: diff.dels });
+    }
+    return rows;
+  }, [stagedDiffs, unstagedDiffs]);
 
   return (
     <div
@@ -279,155 +212,244 @@ export function HeroiView({
       data-surface-id={request.contribution.id}
       data-focused={request.lifecycle.focused || undefined}
     >
-      <aside className="plugin-heroi-sidebar" aria-label={t('plugins.heroi.sidebar')}>
+      <aside className="plugin-heroi-left" aria-label={t('plugins.heroi.sidebar')}>
         <div className="plugin-heroi-brand">
-          <Icon name="sparkle" size={14} />
-          <div>
-            <strong>{t('plugins.heroi.title')}</strong>
-            <span>{t('plugins.heroi.subtitle')}</span>
-          </div>
+          <img src="/heroilogo.png" alt="" width={16} height={16} className="plugin-heroi-logo" />
+          <span>{t('plugins.heroi.title')}</span>
         </div>
 
-        <section className="plugin-heroi-project" aria-label={t('plugins.heroi.project')}>
-          <header>
-            <Icon name="folder" size={12} />
-            <span>{t('plugins.heroi.project')}</span>
-          </header>
-          <div className="plugin-heroi-project-card">
-            <strong>{project.name ?? t('plugins.heroi.noRepositoryShort')}</strong>
-            {project.branch && <span className="plugin-heroi-chip">{project.branch}</span>}
-            {project.linked && <span className="plugin-heroi-chip">{t('plugins.heroi.worktree')}</span>}
-            {project.dirty && <span className="plugin-heroi-chip dirty">{t('plugins.heroi.dirty')}</span>}
-          </div>
-        </section>
+        <div className="plugin-heroi-repo-list">
+          {tabs.length === 0 ? (
+            <div className="plugin-heroi-empty">
+              <p>{t('plugins.heroi.emptyRepos')}</p>
+              <p>{t('plugins.heroi.emptyReposHint')}</p>
+            </div>
+          ) : (
+            <ul role="listbox" aria-label={t('plugins.heroi.project')}>
+              {tabs.map((tab) => {
+                const selected = tab.path === (activeTabPath ?? meta?.path);
+                return (
+                  <li key={tab.path}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className={'plugin-heroi-repo' + (selected ? ' active' : '')}
+                      onClick={() => { void setActiveTab(tab.path); }}
+                    >
+                      <Icon name="folder" size={13} />
+                      <span className="plugin-heroi-repo-name">{tab.meta?.name ?? pathLeaf(tab.path)}</span>
+                      {tab.meta?.branch && (
+                        <span className="plugin-heroi-repo-branch">{tab.meta.branch}</span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-        <div className="plugin-heroi-sidebar-head">
-          <span>{t('plugins.heroi.sessions')}</span>
-          <button type="button" className="btn ghost" onClick={createSession}>
-            <Icon name="plus" size={12} /> {t('plugins.heroi.newSession')}
+        <div className="plugin-heroi-left-foot">
+          <button type="button" className="btn ghost plugin-heroi-foot-btn" onClick={() => void openHeroiRepo()}>
+            <Icon name="external" size={12} />
+            {t('plugins.heroi.openProject')}
           </button>
         </div>
-        <ul className="plugin-heroi-session-list" role="listbox" aria-label={t('plugins.heroi.sessions')}>
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={session.id === activeSessionId}
-                className={'plugin-heroi-session' + (session.id === activeSessionId ? ' active' : '')}
-                onClick={() => {
-                  setActiveSessionId(session.id);
-                  setAgent(session.agent);
-                }}
-              >
-                <span className="plugin-heroi-session-title">{session.title}</span>
-                <span className="plugin-heroi-session-meta">{agentLabel(session.agent)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
       </aside>
 
-      <div className="plugin-heroi-main">
-        <header className="plugin-heroi-toolbar">
-          <label>
-            <span>{t('plugins.heroi.agent')}</span>
-            <Select
-              className="settings-select"
-              aria-label={t('plugins.heroi.agent')}
-              value={agent}
-              onChange={(event) => setAgent(event.target.value as HeroiAgent)}
-            >
-              {AGENTS.map((entry) => (
-                <option key={entry.id} value={entry.id}>{entry.label}</option>
-              ))}
-            </Select>
-          </label>
-          <div className="plugin-heroi-toolbar-actions">
-            <button type="button" className="btn primary" disabled={!meta?.path} onClick={runInWork}>
-              <Icon name="terminal" size={12} /> {t('plugins.heroi.runInWork')}
-            </button>
-            <button type="button" className="btn ghost" onClick={() => void openHeroiRepo()}>
-              {t('plugins.heroi.openProject')}
-            </button>
-          </div>
+      <section className="plugin-heroi-center" aria-label={t('plugins.heroi.title')}>
+        <header className="plugin-heroi-topbar">
+          {project.path ? (
+            <>
+              <Icon name="folder-open" size={13} />
+              <span className="plugin-heroi-path">/{pathLeaf(project.path)}</span>
+              {project.branch && <span className="plugin-heroi-chip">{project.branch}</span>}
+              {project.linked && <span className="plugin-heroi-chip">{t('plugins.heroi.worktree')}</span>}
+              {project.dirty && <span className="plugin-heroi-chip dirty">{t('plugins.heroi.dirty')}</span>}
+              <div className="plugin-heroi-topbar-spacer" />
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!meta?.path || !request.lifecycle.visible}
+                onClick={runActiveAgent}
+              >
+                <Icon name="terminal" size={12} />
+                {t('plugins.heroi.run')}
+              </button>
+            </>
+          ) : (
+            <span className="plugin-heroi-muted">{t('plugins.heroi.selectWorkspace')}</span>
+          )}
         </header>
 
-        <div className="plugin-heroi-status-bar">
-          <span>
-            <Icon name="sparkle" size={11} />
-            {agentLabel(agent)}
-            {command ? ` · ${command}` : ''}
-            {provider && (
-              <>
-                {' · '}
-                {liveStatus?.logged_in
-                  ? (liveStatus.account_hint ?? t('plugins.heroi.providerReady'))
-                  : liveStatus?.installed
-                    ? t('plugins.heroi.providerNeedsLogin')
-                    : t('plugins.heroi.providerMissing')}
-              </>
-            )}
-          </span>
-          <span>{t('plugins.heroi.bridgeHint')}</span>
-        </div>
+        {project.path ? (
+          <>
+            <div className="plugin-heroi-tabbar" aria-label={t('plugins.heroi.agentTabs')}>
+              <div className="plugin-heroi-tab-strip">
+                {agentTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={'plugin-heroi-agent-tab' + (tab.id === activeTabId ? ' active' : '')}
+                    onClick={() => setActiveTabId(tab.id)}
+                  >
+                    {tab.running ? (
+                      <span className="plugin-heroi-running" aria-hidden />
+                    ) : (
+                      <Icon name={tab.agent === 'shell' ? 'terminal' : 'sparkle'} size={11} />
+                    )}
+                    <span>{tab.label}</span>
+                    <span
+                      className="plugin-heroi-tab-close"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t('plugins.heroi.closeTab')}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeAgentTab(tab.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          closeAgentTab(tab.id);
+                        }
+                      }}
+                    >
+                      <Icon name="x" size={10} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="plugin-heroi-tab-picker">
+                <button
+                  type="button"
+                  className="plugin-heroi-add-tab"
+                  aria-label={t('plugins.heroi.newTab')}
+                  aria-expanded={pickerOpen}
+                  onClick={() => setPickerOpen((open) => !open)}
+                >
+                  <Icon name="plus" size={13} />
+                </button>
+                {pickerOpen && (
+                  <div className="plugin-heroi-picker-menu" role="menu">
+                    {AGENTS.map((agent) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => addAgentTab(agent.id)}
+                      >
+                        <Icon name={agent.id === 'shell' ? 'terminal' : 'sparkle'} size={12} />
+                        {agent.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
-        <div className="plugin-heroi-transcript" aria-live="polite">
-          {activeSession.messages.map((message, index) => (
-            <article
-              key={`${activeSession.id}-${index}`}
-              className={`plugin-heroi-message ${message.role}`}
-            >
-              <span className="plugin-heroi-message-role">
-                {message.role === 'user'
-                  ? t('plugins.heroi.you')
-                  : message.role === 'system'
-                    ? t('plugins.heroi.system')
-                    : t('plugins.heroi.agentRole')}
-              </span>
-              <p>{message.text}</p>
-            </article>
-          ))}
-        </div>
-
-        <form
-          className="plugin-heroi-composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendPlan();
-          }}
-        >
-          <textarea
-            className="clone-input plugin-heroi-input"
-            aria-label={t('plugins.heroi.prompt')}
-            placeholder={provider
-              ? t('plugins.heroi.planPlaceholder')
-              : t('plugins.heroi.runPlaceholder')}
-            value={draft}
-            disabled={busy || !request.lifecycle.visible || !provider}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && provider) {
-                event.preventDefault();
-                void sendPlan();
-              }
-            }}
-          />
-          <div className="plugin-heroi-composer-actions">
-            <span className="plugin-heroi-composer-meta">
-              {provider ? t('plugins.heroi.planMode') : t('plugins.heroi.terminalMode')}
-            </span>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={busy || !provider || draft.trim().length === 0}
-            >
-              {busy ? t('plugins.heroi.sending') : t('plugins.heroi.plan')}
-            </button>
+            <div className="plugin-heroi-terminal">
+              <div className="plugin-heroi-terminal-copy">
+                <Icon name={activeAgentTab?.agent === 'shell' ? 'terminal' : 'sparkle'} size={22} />
+                <strong>{activeAgentTab?.label ?? t('plugins.heroi.agent')}</strong>
+                <p>
+                  {command
+                    ? t('plugins.heroi.terminalHintCommand', { command })
+                    : t('plugins.heroi.terminalHintShell')}
+                </p>
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={!meta?.path || !request.lifecycle.visible}
+                  onClick={runActiveAgent}
+                >
+                  <Icon name="terminal" size={12} />
+                  {t('plugins.heroi.runInWork')}
+                </button>
+                {statusNote && <p className="plugin-heroi-status-note">{statusNote}</p>}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="plugin-heroi-terminal plugin-heroi-terminal-empty">
+            <p>{t('plugins.heroi.selectWorkspace')}</p>
           </div>
-        </form>
+        )}
         {error && <p className="plugin-heroi-error" role="alert">{error}</p>}
-      </div>
+      </section>
+
+      <aside className="plugin-heroi-right" aria-label={t('plugins.heroi.inspector')}>
+        <div className="plugin-heroi-right-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rightPanel === 'git'}
+            className={rightPanel === 'git' ? 'active' : undefined}
+            onClick={() => setRightPanel('git')}
+          >
+            <Icon name="branch" size={12} />
+            {t('plugins.heroi.git')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rightPanel === 'files'}
+            className={rightPanel === 'files' ? 'active' : undefined}
+            onClick={() => setRightPanel('files')}
+          >
+            <Icon name="folder" size={12} />
+            {t('plugins.heroi.files')}
+          </button>
+        </div>
+
+        {rightPanel === 'git' ? (
+          <div className="plugin-heroi-right-body">
+            <header className="plugin-heroi-right-head">
+              <Icon name="branch" size={13} />
+              <span>{t('plugins.heroi.git')}</span>
+            </header>
+            {!project.path ? (
+              <p className="plugin-heroi-empty-inline">{t('plugins.heroi.gitEmpty')}</p>
+            ) : changedFiles.length === 0 ? (
+              <p className="plugin-heroi-empty-inline">{t('plugins.heroi.gitClean')}</p>
+            ) : (
+              <ul className="plugin-heroi-file-list">
+                {changedFiles.map((file) => (
+                  <li key={`${file.kind}:${file.path}`}>
+                    <button type="button" onClick={() => openChangedFile(file.path)}>
+                      <span className={'plugin-heroi-file-kind ' + file.kind}>{file.kind}</span>
+                      <span className="plugin-heroi-file-path">{file.path}</span>
+                      <span className="plugin-heroi-file-stats">
+                        +{file.adds} −{file.dels}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="plugin-heroi-right-body">
+            <header className="plugin-heroi-right-head">
+              <Icon name="folder" size={13} />
+              <span>{t('plugins.heroi.files')}</span>
+            </header>
+            {!project.path ? (
+              <p className="plugin-heroi-empty-inline">{t('plugins.heroi.filesEmpty')}</p>
+            ) : (
+              <div className="plugin-heroi-files-hint">
+                <p>{t('plugins.heroi.filesHint')}</p>
+                <button type="button" className="btn ghost" onClick={() => setView('work')}>
+                  <Icon name="folder-open" size={12} />
+                  {t('plugins.heroi.openFilesInWork')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }
