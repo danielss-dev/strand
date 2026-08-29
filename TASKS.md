@@ -1267,7 +1267,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   remote install, and isolated custom UI remain open.)
 - ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
   persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
-- ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`).
+- ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView` — UI
+  mirrored from danielss-dev/heroi: sidebar, agent tabs, git inspector).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,

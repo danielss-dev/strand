@@ -2654,8 +2654,9 @@ lists a bundled marketplace. Installing a plugin registers its namespaced
 Workbench surfaces into the combined registry without remounting Work's live
 editor/PTY runtime. Declarative plugins render markdown/status views from
 validated manifests; the Heroi dogfood plugin mounts through `SurfaceHost`
-with a Strand-owned renderer and permission-checked `repository.read` /
-`ai.invoke` broker calls. Authoring guide: `docs/plugin-creation.md`.
+with a Strand-owned renderer that mirrors Daniels' Heroi desktop UI (repo
+sidebar, agent tabs, git inspector) and permission-checked `repository.read`
+broker calls. Authoring guide: `docs/plugin-creation.md`.
 
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
