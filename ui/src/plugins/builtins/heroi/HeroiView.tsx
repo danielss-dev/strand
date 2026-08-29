@@ -84,13 +84,29 @@ export function HeroiView({
   const activeAgentTab = agentTabs.find((tab) => tab.id === activeTabId) ?? agentTabs[0];
   const command = activeAgentTab ? launchCommand(activeAgentTab.agent) : '';
 
-  const project = useMemo(() => ({
-    path: meta?.path ?? '',
-    name: meta?.name ?? null,
-    branch: meta?.branch ?? null,
-    dirty: unstagedDiffs.length + stagedDiffs.length > 0,
-    linked: meta?.is_linked_worktree ?? false,
-  }), [meta?.branch, meta?.is_linked_worktree, meta?.name, meta?.path, stagedDiffs.length, unstagedDiffs.length]);
+  const activeTab = tabs.find((tab) => tab.path === (activeTabPath ?? meta?.path)) ?? tabs[0] ?? null;
+  const project = useMemo(() => {
+    const path = meta?.path ?? activeTab?.path ?? activeTabPath ?? '';
+    const name = meta?.name ?? activeTab?.meta?.name ?? (path ? pathLeaf(path) : null);
+    const branch = meta?.branch ?? activeTab?.meta?.branch ?? null;
+    const linked = meta?.is_linked_worktree ?? activeTab?.meta?.is_linked_worktree ?? false;
+    return {
+      path,
+      name,
+      branch,
+      dirty: unstagedDiffs.length + stagedDiffs.length > 0,
+      linked,
+    };
+  }, [
+    activeTab,
+    activeTabPath,
+    meta?.branch,
+    meta?.is_linked_worktree,
+    meta?.name,
+    meta?.path,
+    stagedDiffs.length,
+    unstagedDiffs.length,
+  ]);
 
   useEffect(() => {
     let current = true;
@@ -162,18 +178,18 @@ export function HeroiView({
   }, []);
 
   const runActiveAgent = useCallback(() => {
-    if (!meta?.path || !activeAgentTab) {
+    if (!project.path || !activeAgentTab) {
       setError(t('plugins.heroi.noRepository'));
       return;
     }
     void broker.readRepository(
       project.path,
       project.branch,
-      meta.head_oid,
+      meta?.head_oid ?? activeTab?.meta?.head_oid ?? null,
       project.dirty,
     ).catch(() => undefined);
 
-    addTerminal(meta.path, null, activeAgentTab.label);
+    addTerminal(project.path, null, activeAgentTab.label);
     setAgentTabs((current) => current.map((tab) => (
       tab.id === activeAgentTab.id ? { ...tab, running: true } : tab
     )));
@@ -183,7 +199,7 @@ export function HeroiView({
       : t('plugins.heroi.launchedShell', { agent: activeAgentTab.label });
     setStatusNote(note);
     setError(null);
-  }, [activeAgentTab, addTerminal, broker, command, meta, project, setView]);
+  }, [activeAgentTab, activeTab?.meta?.head_oid, addTerminal, broker, command, meta?.head_oid, project, setView]);
 
   const openChangedFile = useCallback((path: string) => {
     selectFile(path);
@@ -271,7 +287,7 @@ export function HeroiView({
               <button
                 type="button"
                 className="btn primary"
-                disabled={!meta?.path || !request.lifecycle.visible}
+                disabled={!project.path || !request.lifecycle.visible}
                 onClick={runActiveAgent}
               >
                 <Icon name="terminal" size={12} />
@@ -362,7 +378,7 @@ export function HeroiView({
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={!meta?.path || !request.lifecycle.visible}
+                  disabled={!project.path || !request.lifecycle.visible}
                   onClick={runActiveAgent}
                 >
                   <Icon name="terminal" size={12} />
