@@ -35,3 +35,4 @@ export {
   type SurfaceRenderer,
   type SurfaceRenderRequest,
 } from './SurfaceHost';
+export { pluginRegistry } from '../plugins/registry';

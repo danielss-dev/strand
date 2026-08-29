@@ -70,15 +70,17 @@ import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
 import { useCustomView } from './stores/customView';
+import { usePlugins } from './stores/plugins';
 import { customPanes, type CustomSurfaceId, type CustomSurfaceRef } from './lib/customView';
 import {
   BUILT_IN_SURFACE_IDS,
-  builtInSurfaceRegistry,
+  pluginRegistry,
   SurfaceHost,
   WorkbenchCommandRegistry,
   type SurfaceRenderRequest,
   type WorkbenchCommandContext,
 } from './workbench';
+import { isPluginSurface, renderPluginSurface } from './plugins/renderSurface';
 import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
@@ -302,6 +304,11 @@ export function App() {
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
   const workbenchWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+  const pluginVersion = usePlugins((state) => state.version);
+  const workbenchSurfaceRegistry = useMemo(
+    () => pluginRegistry.getSurfaceRegistry(),
+    [pluginVersion],
+  );
   const customWorkspaceReady = customRestored
     && customWorkspaceId === workbenchWorkspaceId;
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
@@ -476,6 +483,10 @@ export function App() {
     void restoreWorkbench(workbenchWorkspaceId);
     setWorkbenchEditing(false);
   }, [restoreWorkbench, workbenchWorkspaceId]);
+
+  useEffect(() => {
+    void usePlugins.getState().restore();
+  }, []);
 
   useEffect(() => {
     if (view !== 'work') setWorkbenchEditing(false);
@@ -1530,7 +1541,7 @@ export function App() {
       keywords: ['layout', 'pane', 'remove', 'clear'],
       execute: () => runCustomAction((state) => state.closePane(state.activePaneId)),
     });
-    for (const surface of builtInSurfaceRegistry.listForHost('panel')) {
+    for (const surface of workbenchSurfaceRegistry.listForHost('panel')) {
       registry.register({
         id: `strand.workbench.show.${surface.id}`,
         title: t('custom.paletteShowFeature', { feature: surface.title }),
@@ -1555,7 +1566,7 @@ export function App() {
       });
     }
     return registry;
-  }, [runCustomAction]);
+  }, [runCustomAction, workbenchSurfaceRegistry]);
 
   const customCommandContext = useCallback((): WorkbenchCommandContext => {
     const state = useCustomView.getState();
@@ -1884,6 +1895,7 @@ export function App() {
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
+      { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
       {
         id: 'report-inappropriate-content',
         label: 'Report inappropriate content…',
@@ -2034,13 +2046,16 @@ export function App() {
   ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom,
     showWorkbenchWork, showToast]);
 
-  const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => (
-    surfaceRenderers.get(request.contribution.id)?.(request) ?? null
-  ), [surfaceRenderers]);
+  const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => {
+    if (isPluginSurface(request.contribution.id)) {
+      return renderPluginSurface(request);
+    }
+    return surfaceRenderers.get(request.contribution.id)?.(request) ?? null;
+  }, [surfaceRenderers]);
 
   const renderCustomSurface = useCallback((surface: CustomSurfaceRef, active: boolean) => (
     <SurfaceHost
-      registry={builtInSurfaceRegistry}
+      registry={workbenchSurfaceRegistry}
       surfaceId={surface.surfaceId}
       instanceId={surface.instanceId}
       binding={surface.binding}
@@ -2048,7 +2063,7 @@ export function App() {
       lifecycle={{ mounted: true, visible: true, focused: active }}
       render={renderSurfaceContribution}
     />
-  ), [renderSurfaceContribution]);
+  ), [renderSurfaceContribution, workbenchSurfaceRegistry]);
 
   const mainSurfaceId = MAIN_SURFACE_BY_VIEW[view];
   const workbenchComposed = view === 'work'
@@ -2196,7 +2211,7 @@ export function App() {
                     <OpBanner onToast={showToast} />
                     {mainSurfaceId && (
                       <SurfaceHost
-                        registry={builtInSurfaceRegistry}
+                        registry={workbenchSurfaceRegistry}
                         surfaceId={mainSurfaceId}
                         instanceId={`main-surface-${mainSurfaceId}`}
                         binding={{ kind: 'follow-active' }}

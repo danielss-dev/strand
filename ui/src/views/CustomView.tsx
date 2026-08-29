@@ -23,8 +23,10 @@ import {
 } from '../lib/customView';
 import { t } from '../lib/i18n';
 import { useCustomView } from '../stores/customView';
+import { usePlugins } from '../stores/plugins';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
-import { BUILT_IN_SURFACE_IDS, builtInSurfaceRegistry } from '../workbench';
+import { BUILT_IN_SURFACE_IDS, pluginRegistry } from '../workbench';
+import type { SurfaceContribution, SurfaceRegistry } from '../workbench/surfaces';
 
 export interface CustomPaneFrame {
   left: number;
@@ -32,8 +34,6 @@ export interface CustomPaneFrame {
   width: number;
   height: number;
 }
-
-const SURFACES = builtInSurfaceRegistry.listForHost('panel');
 
 const TEMPLATES: readonly {
   id: CustomTemplateId;
@@ -111,8 +111,17 @@ export function CustomView({
     [panes],
   );
   const activeSurfaceId = panes.find((pane) => pane.id === activePaneId)?.surface?.surfaceId ?? null;
-  const activeSurface = activeSurfaceId ? builtInSurfaceRegistry.get(activeSurfaceId) : null;
   const ready = restored && restoredWorkspaceId === workspaceId;
+  const pluginVersion = usePlugins((state) => state.version);
+  const surfaceRegistry = useMemo(
+    () => pluginRegistry.getSurfaceRegistry(),
+    [pluginVersion],
+  );
+  const surfaces = useMemo(
+    () => surfaceRegistry.listForHost('panel'),
+    [surfaceRegistry],
+  );
+  const activeSurface = activeSurfaceId ? surfaceRegistry.get(activeSurfaceId) : null;
 
   useEffect(() => { void restore(workspaceId); }, [restore, workspaceId]);
   useEffect(() => {
@@ -294,6 +303,8 @@ export function CustomView({
           activePaneId={activePaneId}
           editing={editing}
           used={used}
+          surfaces={surfaces}
+          surfaceRegistry={surfaceRegistry}
           onActivate={activatePane}
           onSurface={setSurface}
           onSplit={splitPane}
@@ -325,6 +336,8 @@ interface LayoutProps {
   activePaneId: string;
   editing: boolean;
   used: ReadonlyMap<CustomSurfaceId, string>;
+  surfaces: readonly SurfaceContribution[];
+  surfaceRegistry: SurfaceRegistry;
   onActivate(paneId: string): void;
   onSurface(paneId: string, surfaceId: CustomSurfaceId | null): void;
   onSplit(paneId: string, direction: 'horizontal' | 'vertical'): void;
@@ -340,10 +353,10 @@ function CustomLayoutView({ node, ...props }: LayoutProps & { node: CustomLayout
   if (node.kind === 'pane') return <CustomPaneView pane={node} {...props} />;
   const firstSurfaceId = customPanes(node.children[0])[0]?.surface?.surfaceId;
   const secondSurfaceId = customPanes(node.children[1])[0]?.surface?.surfaceId;
-  const firstLabel = (firstSurfaceId && builtInSurfaceRegistry.get(firstSurfaceId)?.title)
+  const firstLabel = (firstSurfaceId && props.surfaceRegistry.get(firstSurfaceId)?.title)
     ?? firstSurfaceId
     ?? t('custom.empty');
-  const secondLabel = (secondSurfaceId && builtInSurfaceRegistry.get(secondSurfaceId)?.title)
+  const secondLabel = (secondSurfaceId && props.surfaceRegistry.get(secondSurfaceId)?.title)
     ?? secondSurfaceId
     ?? t('custom.empty');
   return (
@@ -372,6 +385,8 @@ function CustomPaneView({
   activePaneId,
   editing,
   used,
+  surfaces,
+  surfaceRegistry,
   onActivate,
   onSurface,
   onSplit,
@@ -384,7 +399,7 @@ function CustomPaneView({
 }: LayoutProps & { pane: CustomPane }) {
   const active = pane.id === activePaneId;
   const surfaceId = pane.surface?.surfaceId ?? null;
-  const surface = surfaceId ? builtInSurfaceRegistry.get(surfaceId) ?? null : null;
+  const surface = surfaceId ? surfaceRegistry.get(surfaceId) ?? null : null;
   const surfaceLabel = surface?.title ?? surfaceId;
   const paneRef = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -411,7 +426,7 @@ function CustomPaneView({
   }, [editing]);
 
   const menuItems = useMemo<MenuItem[]>(() => [
-    ...SURFACES.map((item) => {
+    ...surfaces.map((item) => {
       const owner = used.get(item.id);
       return {
         label: item.title + (owner && owner !== pane.id ? ` · ${t('custom.moveHere')}` : ''),
@@ -425,7 +440,7 @@ function CustomPaneView({
       disabled: pane.surface == null,
       onSelect: () => onSurface(pane.id, null),
     },
-  ], [onSurface, pane.id, pane.surface, surfaceId, used]);
+  ], [onSurface, pane.id, pane.surface, surfaceId, surfaces, used]);
   const actionMenuItems = useMemo<MenuItem[]>(() => [
     {
       label: t('custom.splitRight'),
@@ -550,6 +565,7 @@ function CustomPaneView({
           <EmptyCustomPane
             paneId={pane.id}
             used={used}
+            surfaces={surfaces}
             firstPane={paneCount === 1}
             workspaceName={workspaceName}
             onSurface={onSurface}
@@ -576,6 +592,7 @@ function CustomPaneView({
 function EmptyCustomPane({
   paneId,
   used,
+  surfaces,
   firstPane,
   workspaceName,
   onSurface,
@@ -583,6 +600,7 @@ function EmptyCustomPane({
 }: {
   paneId: string;
   used: ReadonlyMap<CustomSurfaceId, string>;
+  surfaces: readonly SurfaceContribution[];
   firstPane: boolean;
   workspaceName: string;
   onSurface(paneId: string, surfaceId: CustomSurfaceId): void;
@@ -612,7 +630,7 @@ function EmptyCustomPane({
         <span>{t('custom.followsRepository', { workspace: workspaceName })}</span>
       </div>
       <div ref={gridRef} className="custom-feature-grid" onKeyDown={onGridKeyDown}>
-        {SURFACES.map((surface) => {
+        {surfaces.map((surface) => {
           const inUse = used.has(surface.id);
           return (
             <button

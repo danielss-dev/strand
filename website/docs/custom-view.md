@@ -85,7 +85,7 @@ survive.
 - Quick Launch exposes surface assignment, split, close, and template actions
   while customization is open.
 
-Workbench currently supports ten built-in Strand surfaces and a 32-pane
-defensive limit. Arbitrary web views and third-party extensions are not enabled
-yet. The namespaced registry and shared host are internal foundations for a
-future permission-checked plugin API, not a community plugin runtime.
+Workbench currently supports built-in Strand surfaces, installed plugin
+surfaces from Settings → Plugins, and a 32-pane defensive limit. Declarative
+plugins render from validated manifests; third-party JavaScript does not run
+inside the privileged webview. See `docs/plugin-creation.md` for authoring.

@@ -1259,9 +1259,16 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   explicit surface context sessions and reference-counted resource leases.
 - ☐ Add typed navigation/dialog services and workbench-owned extension slots
   for actions, menus, tree decorations, detail panels, and status items.
-- ☐ Design and implement the declarative community-plugin manifest,
+- ◐ Design and implement the declarative community-plugin manifest,
   permission broker, quotas, diagnostics, and isolated execution boundary;
   do not load third-party code into Strand's privileged webview.
+  (manifest validation, capability broker, bundled marketplace, T3Code
+  builtin plugin, `docs/plugin-creation.md` — 2026-08-29; quotas,
+  remote install, and isolated custom UI remain open.)
+- ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
+  persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
+- ☑ T3Code Workbench surface (`daniels.t3code.workspace`, `T3CodeView`).
+- ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).

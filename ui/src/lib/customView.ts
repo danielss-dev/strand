@@ -12,6 +12,7 @@ import {
   surfaceIdForLegacyFeature,
   type LegacyCustomFeatureId,
 } from '../workbench/builtInSurfaces';
+import { pluginRegistry } from '../plugins/registry';
 import type {
   SurfaceContextBinding,
   SurfaceId,
@@ -106,7 +107,7 @@ export function setCustomPaneSurface(
   paneId: string,
   surfaceId: CustomSurfaceId | null,
   makeId: () => string,
-  registry: SurfaceRegistry = builtInSurfaceRegistry,
+  registry: SurfaceRegistry = pluginRegistry.getSurfaceRegistry(),
   binding: SurfaceContextBinding = FOLLOW_ACTIVE,
 ): CustomViewModel {
   const target = findCustomPane(state.layout, paneId);

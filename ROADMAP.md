@@ -2174,8 +2174,10 @@ and Store certification remain external gates.
   `docs/strand-cli.md` + task breakdown in TASKS.md.
 - ◐ **Plugin / extension surface** — internal namespaced surface/command
   registries, shared hosts, and resilient layout-v2 references shipped
-  2026-08-28; typed services/resource leases, declarative manifests,
-  permissions, quotas, and isolated community execution remain open.
+  2026-08-28; declarative manifest validation, permission broker, bundled
+  marketplace, T3Code dogfood plugin, and `docs/plugin-creation.md` shipped
+  2026-08-29. Typed services/resource leases, quotas, remote install, and
+  isolated community execution remain open.
 - AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs, or all unstaged changes
     when nothing is staged (Codex / Claude Code CLIs)
@@ -2646,6 +2648,14 @@ contributions as placeholders instead of resetting the workspace. The
 architecture decision in `docs/extensibility-architecture.md` keeps community
 plugins behind a future declarative, permission-checked, isolated boundary;
 no third-party runtime ships in this phase.
+
+**Experimental plugin marketplace shipped (2026-08-29):** Settings → Plugins
+lists a bundled marketplace. Installing a plugin registers its namespaced
+Workbench surfaces into the combined registry without remounting Work's live
+editor/PTY runtime. Declarative plugins render markdown/status views from
+validated manifests; the T3Code dogfood plugin mounts through `SurfaceHost`
+with a Strand-owned renderer and permission-checked `repository.read` /
+`ai.invoke` broker calls. Authoring guide: `docs/plugin-creation.md`.
 
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface

@@ -8976,3 +8976,242 @@ select.clone-input {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Plugin surfaces + marketplace */
+.plugins-settings-intro p,
+.plugins-marketplace-card p {
+  color: var(--text-muted);
+  margin: 0;
+}
+.plugins-marketplace-list {
+  display: grid;
+  gap: 12px;
+}
+.plugins-marketplace-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  background: var(--bg-panel);
+}
+.plugins-marketplace-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.plugins-marketplace-title {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.plugins-marketplace-title strong {
+  display: block;
+}
+.plugins-marketplace-title span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.plugins-marketplace-tags,
+.plugins-permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+.plugins-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+.plugins-permissions dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.plugins-permissions dd {
+  margin: 0;
+  font-size: 12px;
+}
+.plugin-surface {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.plugin-surface-markdown {
+  overflow: auto;
+  padding: 16px 18px;
+}
+.plugin-markdown h1,
+.plugin-markdown h2 {
+  margin: 0 0 8px;
+}
+.plugin-markdown p {
+  margin: 0 0 8px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.plugin-markdown-gap {
+  height: 8px;
+}
+.plugin-surface-status {
+  padding: 16px 18px;
+  gap: 12px;
+}
+.plugin-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-status-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.plugin-status-list {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.plugin-status-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  font-size: 13px;
+}
+.plugin-status-row dt {
+  color: var(--text-muted);
+}
+.plugin-status-row dd {
+  margin: 0;
+}
+.plugin-t3code {
+  flex-direction: row;
+  min-height: 0;
+}
+.plugin-t3code-sidebar {
+  width: 240px;
+  min-width: 200px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+.plugin-t3code-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-t3code-thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+}
+.plugin-t3code-thread {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+}
+.plugin-t3code-thread.active {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+}
+.plugin-t3code-thread-title {
+  font-size: 13px;
+}
+.plugin-t3code-thread-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.plugin-t3code-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+}
+.plugin-t3code-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.plugin-t3code-repo,
+.plugin-t3code-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.plugin-t3code-branch {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+}
+.plugin-t3code-transcript {
+  overflow: auto;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.plugin-t3code-message {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  background: var(--bg-panel);
+}
+.plugin-t3code-message.user {
+  border-color: var(--border-strong);
+}
+.plugin-t3code-message-role {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.plugin-t3code-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.plugin-t3code-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.plugin-t3code-input {
+  min-height: 72px;
+  resize: vertical;
+}
+.plugin-t3code-error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--danger);
+  font-size: 12px;
+}

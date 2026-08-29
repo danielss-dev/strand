@@ -9,6 +9,7 @@ import { GitSection } from './settings/GitSection';
 import { HostingSection } from './settings/HostingSection';
 import { IntegrationsSection } from './settings/IntegrationsSection';
 import { KeyboardSection } from './settings/KeyboardSection';
+import { PluginsSection } from './settings/PluginsSection';
 import { PrivacySection } from './settings/PrivacySection';
 import { TerminalSection } from './settings/TerminalSection';
 import { UpdatesSection } from './settings/UpdatesSection';
@@ -28,7 +29,7 @@ import { UpdatesSection } from './settings/UpdatesSection';
  */
 
 export type SettingsSectionId =
-  | 'appearance' | 'terminal' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'updates' | 'privacy';
+  | 'appearance' | 'terminal' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'plugins' | 'updates' | 'privacy';
 
 const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] = [
   { id: 'appearance', label: 'settings.appearance', icon: 'eye' },
@@ -39,6 +40,7 @@ const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] =
   { id: 'hosting', label: 'settings.hosting', icon: 'remote' },
   { id: 'integrations', label: 'settings.integrations', icon: 'external' },
   { id: 'ai', label: 'settings.ai', icon: 'sparkle' },
+  { id: 'plugins', label: 'settings.plugins', icon: 'workspace' },
   { id: 'updates', label: 'settings.updates', icon: 'sync' },
   { id: 'privacy', label: 'settings.privacy', icon: 'lock' },
 ];
@@ -172,6 +174,7 @@ export function SettingsDialog({
             {section === 'hosting' && <HostingSection />}
             {section === 'integrations' && <IntegrationsSection />}
             {section === 'ai' && <AiSection />}
+            {section === 'plugins' && <PluginsSection />}
             {section === 'updates' && <UpdatesSection />}
             {section === 'privacy' && <PrivacySection />}
           </div>
