@@ -98,3 +98,9 @@ Heroi reuses the authenticated CLIs already installed on your machine. Sign in
 with `claude`, `codex`, or `cursor-agent` before starting a chat. Custom Claude
 and Codex executable paths come from Settings → AI; Cursor Agent must be on
 `PATH`.
+
+Heroi's Threads rail lists only conversations for the active repository. The
+header shows the current agent, model, and branch; execution activity appears
+inside the transcript while an agent works. Use **Open review** to activate a
+Review pane in the current Workbench layout, or to open Strand's Review view
+when the layout has none.

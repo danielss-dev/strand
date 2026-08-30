@@ -1270,7 +1270,8 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`,
   `heroi_agent_send` — active-repository-only chat with streaming,
   resumable, cancellable Claude/Codex/Cursor Agent background sessions; no
-  duplicate Files, git, diff, or kanban chrome).
+  duplicate Files, git, diff, or kanban chrome; compact Threads rail, flat
+  transcript/activity rows, command-deck composer, and Open review bridge).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,

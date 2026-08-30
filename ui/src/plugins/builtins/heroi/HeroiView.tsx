@@ -9,7 +9,7 @@ import {
 
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
-import { plural, t } from '../../../lib/i18n';
+import { t } from '../../../lib/i18n';
 import { errMessage, tauri } from '../../../lib/tauri';
 import type { HeroiAgentEvent, HeroiAgentRequest } from '../../../lib/types';
 import { useRepo } from '../../../stores/repo';
@@ -17,7 +17,7 @@ import { useSettings } from '../../../stores/settings';
 import { pluginStateKey, usePlugins } from '../../../stores/plugins';
 import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
 import type { PluginCapabilityBroker } from '../../capabilities';
-import { HEROI_NEW_CONVERSATION_EVENT } from './events';
+import { HEROI_NEW_CONVERSATION_EVENT, HEROI_OPEN_REVIEW_EVENT } from './events';
 import { HeroiLogo } from './HeroiLogo';
 
 export type HeroiProvider = 'claude' | 'codex' | 'cursor';
@@ -25,6 +25,14 @@ type AgentMode = 'plan' | 'build';
 type PermissionMode = 'read' | 'build' | 'full';
 type ThinkingLevel = 'default' | 'low' | 'medium' | 'high';
 type MessageState = 'running' | 'complete' | 'stopped' | 'error';
+type ActivityState = 'running' | 'done' | 'stopped' | 'error';
+type ThreadFilter = 'all' | 'running';
+
+interface HeroiActivity {
+  id: string;
+  label: string;
+  state: ActivityState;
+}
 
 interface HeroiMessage {
   id: string;
@@ -32,6 +40,7 @@ interface HeroiMessage {
   text: string;
   createdAt: number;
   state?: MessageState;
+  activities?: HeroiActivity[];
 }
 
 interface HeroiConversation {
@@ -95,8 +104,23 @@ function titleFromText(text: string): string {
   return text.trim().split('\n')[0]?.slice(0, 52) || t('plugins.heroi.untitled');
 }
 
+function relativeTime(timestamp: number): string {
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  if (elapsed < 60_000) return t('plugins.heroi.time.now');
+  if (elapsed < 3_600_000) return t('plugins.heroi.time.minutes', { count: Math.floor(elapsed / 60_000) });
+  if (elapsed < 86_400_000) return t('plugins.heroi.time.hours', { count: Math.floor(elapsed / 3_600_000) });
+  if (elapsed < 172_800_000) return t('plugins.heroi.time.yesterday');
+  return t('plugins.heroi.time.days', { count: Math.floor(elapsed / 86_400_000) });
+}
+
 function providerLabel(provider: HeroiProvider): string {
   return PROVIDERS.find((entry) => entry.id === provider)?.label ?? provider;
+}
+
+function activityStateLabel(state: Exclude<ActivityState, 'running'>): string {
+  if (state === 'done') return t('plugins.heroi.activity.done');
+  if (state === 'stopped') return t('plugins.heroi.activity.stopped');
+  return t('plugins.heroi.activity.error');
 }
 
 function cliOverride(
@@ -133,6 +157,7 @@ export function HeroiView({
   const [draftAgentMode, setDraftAgentMode] = useState<AgentMode>('build');
   const [draftPermission, setDraftPermission] = useState<PermissionMode>('build');
   const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
 
@@ -147,6 +172,9 @@ export function HeroiView({
       .sort((a, b) => b.updatedAt - a.updatedAt),
     [activePath, conversations],
   );
+  const visibleConversations = threadFilter === 'running'
+    ? repoConversations.filter(({ id }) => id === activeRun?.conversationId)
+    : repoConversations;
   const activeConversation = composingNew
     ? null
     : repoConversations.find((conversation) => conversation.id === activeConversationId) ?? null;
@@ -164,9 +192,13 @@ export function HeroiView({
       const restoredConversations = (stored?.conversations ?? []).map((conversation) => ({
         ...conversation,
         updatedAt: conversation.updatedAt ?? conversation.createdAt,
-        messages: conversation.messages.map((message) => (
-          message.state === 'running' ? { ...message, state: 'stopped' as const } : message
-        )),
+        messages: conversation.messages.map((message) => ({
+          ...message,
+          state: message.state === 'running' ? 'stopped' as const : message.state,
+          activities: message.activities?.map((activity) => (
+            activity.state === 'running' ? { ...activity, state: 'stopped' as const } : activity
+          )),
+        })),
       }));
       setConversations(restoredConversations);
       setActiveConversationId(stored?.activeConversationId ?? null);
@@ -273,6 +305,39 @@ export function HeroiView({
       return;
     }
     const activity = event.type === 'activity' ? event.label : event.message;
+    if (event.type === 'activity') {
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        updatedAt: Date.now(),
+        messages: conversation.messages.map((message) => {
+          if (message.id !== assistantMessageId) return message;
+          const activities = (message.activities ?? []).map((entry) => (
+            entry.state === 'running' ? { ...entry, state: 'done' as const } : entry
+          ));
+          const previous = activities[activities.length - 1];
+          return {
+            ...message,
+            activities: previous?.label === event.label
+              ? [...activities.slice(0, -1), { ...previous, state: 'running' }]
+              : [...activities, { id: mintId('a'), label: event.label, state: 'running' }],
+          };
+        }),
+      }));
+    } else if (event.message === 'Ready') {
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        messages: conversation.messages.map((message) => (
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                activities: message.activities?.map((entry) => (
+                  entry.state === 'running' ? { ...entry, state: 'done' as const } : entry
+                )),
+              }
+            : message
+        )),
+      }));
+    }
     setActiveRun((current) => (
       current?.conversationId === conversationId ? { ...current, activity } : current
     ));
@@ -370,6 +435,9 @@ export function HeroiView({
                 ...message,
                 text: message.text || t('plugins.heroi.emptyReply'),
                 state: 'complete',
+                activities: message.activities?.map((entry) => (
+                  entry.state === 'running' ? { ...entry, state: 'done' as const } : entry
+                )),
               }
             : message
         )),
@@ -386,6 +454,11 @@ export function HeroiView({
                 ...row,
                 text: row.text || (stopped ? t('plugins.heroi.stopped') : message),
                 state: stopped ? 'stopped' : 'error',
+                activities: row.activities?.map((entry) => (
+                  entry.state === 'running'
+                    ? { ...entry, state: stopped ? 'stopped' as const : 'error' as const }
+                    : entry
+                )),
               }
             : row
         )),
@@ -440,6 +513,11 @@ export function HeroiView({
   }, [agentMode, patchSettings, sendMessage]);
 
   const repoName = activePath ? pathLeaf(activePath) : t('plugins.heroi.noRepositoryShort');
+  const activeIsRunning = activeRun?.conversationId === activeConversation?.id;
+  const activeThreadState = activeIsRunning
+    ? 'running'
+    : activeConversation?.messages.at(-1)?.state ?? 'stopped';
+  const branchLabel = meta?.branch ?? repoName;
 
   return (
     <div
@@ -449,16 +527,6 @@ export function HeroiView({
       data-focused={request.lifecycle.focused || undefined}
       tabIndex={-1}
     >
-      <header className="plugin-heroi-titlebar">
-        <div className="plugin-heroi-title-brand">
-          <HeroiLogo size={14} className="plugin-heroi-logo" />
-          <span>heroi</span>
-          <span className="plugin-heroi-dot">/</span>
-          <span className="plugin-heroi-repo-name" title={activePath}>{repoName}</span>
-        </div>
-        <span className="plugin-heroi-scope-label">{t('plugins.heroi.repoChatsOnly')}</span>
-      </header>
-
       {!activePath ? (
         <div className="plugin-heroi-no-repo" role="status">
           <HeroiLogo size={32} className="plugin-heroi-logo" />
@@ -469,75 +537,110 @@ export function HeroiView({
         <div className="plugin-heroi-chat-layout">
           <aside className="plugin-heroi-chat-rail" aria-label={t('plugins.heroi.chatsForRepo', { repo: repoName })}>
             <div className="plugin-heroi-chat-rail-head">
-              <span>{t('plugins.heroi.chats')}</span>
-              <span>{repoConversations.length}</span>
+              <strong>{t('plugins.heroi.threads')}</strong>
+              <button
+                type="button"
+                aria-label={t('plugins.heroi.newConversation')}
+                disabled={Boolean(activeRun)}
+                onClick={() => {
+                  setComposingNew(true);
+                  setActiveConversationId(null);
+                  setComposerText('');
+                  setError(null);
+                  queueMicrotask(() => composerRef.current?.focus());
+                }}
+              >
+                <Icon name="plus" size={13} />
+              </button>
             </div>
-            <button
-              type="button"
-              className="plugin-heroi-new-chat"
-              disabled={Boolean(activeRun)}
-              onClick={() => {
-                setComposingNew(true);
-                setActiveConversationId(null);
-                setComposerText('');
-                setError(null);
-                queueMicrotask(() => composerRef.current?.focus());
-              }}
-            >
-              <Icon name="plus" size={13} />
-              {t('plugins.heroi.newConversation')}
-            </button>
+            <div className="plugin-heroi-thread-filters" aria-label={t('plugins.heroi.threadFilters')}>
+              <button
+                type="button"
+                className={threadFilter === 'all' ? 'active' : undefined}
+                aria-pressed={threadFilter === 'all'}
+                onClick={() => setThreadFilter('all')}
+              >
+                {t('plugins.heroi.all')}
+              </button>
+              <button
+                type="button"
+                className={threadFilter === 'running' ? 'active' : undefined}
+                aria-pressed={threadFilter === 'running'}
+                onClick={() => setThreadFilter('running')}
+              >
+                {t('plugins.heroi.running')}
+              </button>
+            </div>
             <div className="plugin-heroi-chat-list">
-              {repoConversations.length === 0 ? (
-                <p className="plugin-heroi-chat-list-empty">{t('plugins.heroi.noRepoChats')}</p>
-              ) : repoConversations.map((conversation) => (
-                <div
-                  key={conversation.id}
-                  className={'plugin-heroi-chat-row' + (conversation.id === activeConversationId ? ' active' : '')}
-                >
-                  <button
-                    type="button"
-                    className="plugin-heroi-chat-open"
-                    onClick={() => {
-                      setComposingNew(false);
-                      setActiveConversationId(conversation.id);
-                      setError(null);
-                    }}
+              {visibleConversations.length === 0 ? (
+                <p className="plugin-heroi-chat-list-empty">
+                  {threadFilter === 'running'
+                    ? t('plugins.heroi.noRunningThreads')
+                    : t('plugins.heroi.noRepoChats')}
+                </p>
+              ) : visibleConversations.map((conversation) => {
+                const isRunning = activeRun?.conversationId === conversation.id;
+                const lastState = conversation.messages.at(-1)?.state;
+                return (
+                  <div
+                    key={conversation.id}
+                    className={'plugin-heroi-chat-row' + (conversation.id === activeConversationId ? ' active' : '')}
                   >
-                    <span className="plugin-heroi-chat-provider">{providerLabel(conversation.provider)}</span>
-                    <span>{conversation.title}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="plugin-heroi-chat-delete"
-                    aria-label={t('plugins.heroi.deleteConversation', { title: conversation.title })}
-                    disabled={activeRun?.conversationId === conversation.id}
-                    onClick={() => deleteConversation(conversation)}
-                  >
-                    <Icon name="trash" size={12} />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      className="plugin-heroi-chat-open"
+                      onClick={() => {
+                        setComposingNew(false);
+                        setActiveConversationId(conversation.id);
+                        setError(null);
+                      }}
+                    >
+                      <span className={`plugin-heroi-thread-dot ${isRunning ? 'running' : lastState ?? 'complete'}`} />
+                      <span className="plugin-heroi-chat-copy">
+                        <strong>{conversation.title}</strong>
+                        <small>{providerLabel(conversation.provider)} · {conversation.model}</small>
+                      </span>
+                      <time>{relativeTime(conversation.updatedAt)}</time>
+                    </button>
+                    <button
+                      type="button"
+                      className="plugin-heroi-chat-delete"
+                      aria-label={t('plugins.heroi.deleteConversation', { title: conversation.title })}
+                      disabled={activeRun?.conversationId === conversation.id}
+                      onClick={() => deleteConversation(conversation)}
+                    >
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </aside>
 
           <main className="plugin-heroi-thread">
             <header className="plugin-heroi-thread-head">
-              <div>
+              <div className="plugin-heroi-thread-context">
+                <span className={`plugin-heroi-thread-dot ${activeThreadState}`} />
                 <strong>{activeConversation?.title ?? t('plugins.heroi.newConversationTitle')}</strong>
-                <span>{activeConversation
-                  ? plural(activeConversation.messages.length, {
-                      one: 'plugins.heroi.messageCount.one',
-                      other: 'plugins.heroi.messageCount.other',
-                    })
-                  : t('plugins.heroi.newConversationHint')}</span>
+                <span className="plugin-heroi-context-separator" />
+                <span>{providerLabel(provider)} · {model}</span>
+                <span className="plugin-heroi-context-separator" />
+                <code title={activePath}>{branchLabel}</code>
               </div>
-              {activeRun && (
-                <div className="plugin-heroi-run-state" role="status" aria-live="polite">
-                  <span className="plugin-heroi-run-pulse" />
-                  <span>{activeRun.activity}</span>
-                </div>
-              )}
+              <div className="plugin-heroi-thread-actions">
+                {activeIsRunning && (
+                  <button type="button" className="plugin-heroi-header-stop" onClick={stopRun}>
+                    {t('plugins.heroi.stop')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="plugin-heroi-open-review"
+                  onClick={() => window.dispatchEvent(new CustomEvent(HEROI_OPEN_REVIEW_EVENT))}
+                >
+                  {t('plugins.heroi.openReview')}
+                </button>
+              </div>
             </header>
 
             <div ref={messagesRef} className="plugin-heroi-messages" aria-live="polite">
@@ -550,7 +653,9 @@ export function HeroiView({
               ) : activeConversation.messages.map((message) => (
                 <article key={message.id} className={`plugin-heroi-message ${message.role}`}>
                   <header>
-                    <span>{message.role === 'user' ? t('plugins.heroi.you') : providerLabel(activeConversation.provider)}</span>
+                    <span>{message.role === 'user'
+                      ? t('plugins.heroi.you')
+                      : `Heroi · ${providerLabel(activeConversation.provider)}`}</span>
                     {message.state && message.state !== 'complete' && (
                       <span className={`plugin-heroi-message-state ${message.state}`}>
                         {message.state === 'running'
@@ -562,6 +667,19 @@ export function HeroiView({
                     )}
                   </header>
                   {message.text && <div className="plugin-heroi-message-body">{message.text}</div>}
+                  {message.activities && message.activities.length > 0 && (
+                    <div className="plugin-heroi-activities">
+                      {message.activities.map((activity) => (
+                        <div key={activity.id} className={`plugin-heroi-activity ${activity.state}`}>
+                          <Icon name={activity.state === 'running' ? 'chev-down' : 'chev-right'} size={11} />
+                          <span>{activity.label}</span>
+                          <small>{activity.state === 'running'
+                            ? t('plugins.heroi.running')
+                            : activityStateLabel(activity.state)}</small>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
@@ -569,6 +687,25 @@ export function HeroiView({
             <div className="plugin-heroi-composer-wrap">
               {error && <div className="plugin-heroi-error" role="alert">{error}</div>}
               <div className="plugin-heroi-composer">
+                <div className="plugin-heroi-mode-tabs" role="group" aria-label={t('plugins.heroi.mode')}>
+                  <button
+                    type="button"
+                    className={agentMode === 'plan' ? 'active' : undefined}
+                    disabled={Boolean(activeRun)}
+                    onClick={() => patchSettings({ agentMode: 'plan', permissionMode: 'read' })}
+                  >
+                    {t('plugins.heroi.plan')}
+                  </button>
+                  <button
+                    type="button"
+                    className={agentMode === 'build' ? 'active' : undefined}
+                    disabled={Boolean(activeRun)}
+                    onClick={() => patchSettings({ agentMode: 'build', permissionMode: 'build' })}
+                  >
+                    {t('plugins.heroi.build')}
+                  </button>
+                  <kbd>Shift+Tab</kbd>
+                </div>
                 <textarea
                   ref={composerRef}
                   rows={3}
@@ -582,76 +719,66 @@ export function HeroiView({
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={onComposerKeyDown}
                 />
-                {activeRun ? (
-                  <button
-                    type="button"
-                    className="plugin-heroi-stop"
-                    aria-label={t('plugins.heroi.stop')}
-                    onClick={stopRun}
-                  >
-                    <Icon name="x" size={13} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="plugin-heroi-send"
-                    aria-label={t('plugins.heroi.send')}
-                    disabled={!composerText.trim()}
-                    onClick={() => void sendMessage()}
-                  >
-                    <Icon name="arrow-up" size={14} />
-                  </button>
-                )}
-              </div>
-              <div className="plugin-heroi-config">
-                <Select
-                  className="plugin-heroi-native-select"
-                  aria-label={t('plugins.heroi.provider')}
-                  value={provider}
-                  disabled={Boolean(activeRun || activeConversation)}
-                  onChange={(event) => patchSettings({ provider: event.target.value as HeroiProvider })}
-                >
-                  {PROVIDERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-                </Select>
-                <Select
-                  className="plugin-heroi-native-select"
-                  aria-label={t('plugins.heroi.model')}
-                  value={model}
-                  disabled={Boolean(activeRun)}
-                  onChange={(event) => patchSettings({ model: event.target.value })}
-                >
-                  {MODELS[provider].map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                </Select>
-                <Select
-                  className="plugin-heroi-native-select"
-                  aria-label={t('plugins.heroi.thinking')}
-                  value={thinking}
-                  disabled={Boolean(activeRun)}
-                  onChange={(event) => patchSettings({ thinking: event.target.value as ThinkingLevel })}
-                >
-                  {THINKING.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                </Select>
-                <Select
-                  className="plugin-heroi-native-select"
-                  aria-label={t('plugins.heroi.mode')}
-                  value={agentMode}
-                  disabled={Boolean(activeRun)}
-                  onChange={(event) => patchSettings({ agentMode: event.target.value as AgentMode })}
-                >
-                  <option value="build">Build</option>
-                  <option value="plan">Plan</option>
-                </Select>
-                <Select
-                  className="plugin-heroi-native-select"
-                  aria-label={t('plugins.heroi.permission')}
-                  value={permissionMode}
-                  disabled={Boolean(activeRun)}
-                  onChange={(event) => patchSettings({ permissionMode: event.target.value as PermissionMode })}
-                >
-                  <option value="read">{t('plugins.heroi.permissionRead')}</option>
-                  <option value="build">Build</option>
-                  <option value="full">Full access</option>
-                </Select>
+                <div className="plugin-heroi-composer-footer">
+                  <div className="plugin-heroi-composer-context" title={activePath}>
+                    <Icon name="folder" size={11} />
+                    <code>{branchLabel}</code>
+                  </div>
+                  <div className="plugin-heroi-config">
+                    <Select
+                      className="plugin-heroi-native-select"
+                      aria-label={t('plugins.heroi.provider')}
+                      value={provider}
+                      disabled={Boolean(activeRun || activeConversation)}
+                      onChange={(event) => patchSettings({ provider: event.target.value as HeroiProvider })}
+                    >
+                      {PROVIDERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                    </Select>
+                    <Select
+                      className="plugin-heroi-native-select"
+                      aria-label={t('plugins.heroi.model')}
+                      value={model}
+                      disabled={Boolean(activeRun)}
+                      onChange={(event) => patchSettings({ model: event.target.value })}
+                    >
+                      {MODELS[provider].map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                    </Select>
+                    <Select
+                      className="plugin-heroi-native-select"
+                      aria-label={t('plugins.heroi.thinking')}
+                      value={thinking}
+                      disabled={Boolean(activeRun)}
+                      onChange={(event) => patchSettings({ thinking: event.target.value as ThinkingLevel })}
+                    >
+                      {THINKING.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                    </Select>
+                    <Select
+                      className="plugin-heroi-native-select"
+                      aria-label={t('plugins.heroi.permission')}
+                      value={permissionMode}
+                      disabled={Boolean(activeRun)}
+                      onChange={(event) => patchSettings({ permissionMode: event.target.value as PermissionMode })}
+                    >
+                      <option value="read">{t('plugins.heroi.permissionRead')}</option>
+                      <option value="build">{t('plugins.heroi.build')}</option>
+                      <option value="full">{t('plugins.heroi.fullAccess')}</option>
+                    </Select>
+                    {activeRun ? (
+                      <button type="button" className="plugin-heroi-stop" onClick={stopRun}>
+                        {t('plugins.heroi.stop')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="plugin-heroi-send"
+                        disabled={!composerText.trim()}
+                        onClick={() => void sendMessage()}
+                      >
+                        {t('plugins.heroi.send')} <kbd>{navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl'}+Enter</kbd>
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </main>

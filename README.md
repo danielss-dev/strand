@@ -105,7 +105,9 @@ the resolved app appearance automatically.
   marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
   repository-scoped chat for background Claude, Codex, and Cursor Agent
   sessions. Heroi only shows chats for the active repository; Files, diffs,
-  and other tools remain separate Workbench panes. Declarative plugins render
+  and other tools remain separate Workbench panes. Its compact thread rail,
+  execution activity rows, and bottom command deck keep chat primary, with
+  **Open review** routing to Strand's Review surface. Declarative plugins render
   from validated manifests; third-party JavaScript does not execute in the privileged webview.
   See `docs/plugin-creation.md`.
 

@@ -2666,6 +2666,13 @@ Claude, Codex, or Cursor Agent CLI sessions off the UI thread, streams bounded
 JSONL events into the conversation, persists provider session IDs for resume,
 and supports process-tree cancellation.
 
+**Heroi agent-console UI shipped (2026-08-30):** The chat surface now follows
+the focused agent-console design: a compact repository thread rail and filters,
+a context/action header, flat readable turns with persisted execution activity,
+and a bottom-anchored Plan/Build command deck. **Open review** activates an
+existing Review pane when available and otherwise opens Strand's Review view;
+Heroi still does not duplicate file or diff rendering.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and

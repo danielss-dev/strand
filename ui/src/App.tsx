@@ -81,7 +81,7 @@ import {
   type WorkbenchCommandContext,
 } from './workbench';
 import { isPluginSurface, renderPluginSurface } from './plugins/renderSurface';
-import { HEROI_NEW_CONVERSATION_EVENT } from './plugins/builtins/heroi/events';
+import { HEROI_NEW_CONVERSATION_EVENT, HEROI_OPEN_REVIEW_EVENT } from './plugins/builtins/heroi/events';
 import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
@@ -581,6 +581,12 @@ export function App() {
     if (pane) custom.activatePane(pane.id);
     else setView('review');
   }, [selectFile, setView]);
+
+  useEffect(() => {
+    const openReview = () => openReviewInCustom();
+    window.addEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
+    return () => window.removeEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
+  }, [openReviewInCustom]);
 
   // Launch the configured terminal / editor (Settings → Integrations) on the
   // active repo. Unconfigured routes to Settings instead of silently no-oping.

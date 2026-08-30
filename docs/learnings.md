@@ -2297,6 +2297,14 @@ output and never expose raw vendor stderr or transcript paths.
 IDE. Duplicating surrounding tools wastes pane space, creates competing state,
 and obscures the repository boundary that must isolate chat history.
 
+**Visual contract.** Heroi uses a compact Threads rail, a one-line repository
+context/action bar, flat left-aligned turns, persisted execution activity rows,
+and a bottom-anchored command deck. Avoid conventional chat bubbles and large
+centered cards. **Open review** routes to Strand's existing Review surface; it
+must never grow an inline diff viewer. Derive the near-black/amber treatment
+from Strand theme tokens so repository accenting, focus rings, and contrast
+remain coherent.
+
 ---
 
 ## Perf hook exposes plugins for CDP (2026-08-30)
