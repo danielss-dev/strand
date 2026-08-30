@@ -58,6 +58,12 @@ describe('MARKETPLACE_CATALOG', () => {
     const heroi = MARKETPLACE_CATALOG.find((entry) => entry.manifest.id === 'daniels.heroi');
     expect(heroi?.builtin).toBe(true);
     expect(heroi?.manifest.name).toBe('Heroi');
+    expect(heroi?.manifest.description).toMatch(/Claude/);
+    expect(heroi?.manifest.description).toMatch(/Codex/);
+    expect(heroi?.manifest.description).toMatch(/Cursor/);
+    expect(heroi?.manifest.description).not.toMatch(/Gemini/);
+    expect(heroi?.manifest.description).not.toMatch(/Aider/);
+    expect(heroiManifest.contributes.commands?.[0]?.id).toBe('new-conversation');
   });
 });
 

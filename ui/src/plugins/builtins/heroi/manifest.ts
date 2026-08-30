@@ -7,7 +7,7 @@ export const heroiManifest: PluginManifest = {
   name: 'Heroi',
   version: '0.1.0',
   apiVersion: '1',
-  description: 'Local AI agent orchestrator UI (Daniels\' Heroi) — repo sidebar, agent tabs, and git inspector for Claude Code, Codex, Gemini CLI, Aider, or Shell.',
+  description: 'Agentic IDE chrome from heroi_aide — workspaces, chats, Claude/Codex/Cursor composer, kanban, and diffs hosted as a Strand Workbench surface.',
   author: 'Daniels',
   permissions: ['repository.read'],
   contributes: {
@@ -15,7 +15,7 @@ export const heroiManifest: PluginManifest = {
       {
         id: 'workspace',
         title: 'Heroi',
-        description: 'Heroi-style agent launcher for the active Strand repository or worktree.',
+        description: 'heroi_aide layout: project sidebar, conversations, and a diff panel for the active Strand repository.',
         icon: 'sparkle',
         scope: 'repository',
         hosts: ['main', 'panel', 'sidebar', 'bottom'],
@@ -25,7 +25,7 @@ export const heroiManifest: PluginManifest = {
       },
     ],
     commands: [
-      { id: 'new-tab', title: 'Heroi: New agent tab', category: 'Heroi' },
+      { id: 'new-conversation', title: 'Heroi: New conversation', category: 'Heroi' },
     ],
   },
 };

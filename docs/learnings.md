@@ -2280,3 +2280,16 @@ so Reset cannot resurrect it. Normal composed layouts retain an outer keyboard l
 `F6` and `Mod+[` / `Mod+]` focus each surface's entry point without editor chrome.
 Work needs an explicit bridge because its persistent renderer is visually positioned in
 the layout but remains a DOM sibling of the Workbench placeholder.
+
+## Heroi dogfood UI comes from heroi_aide, not public heroi (2026-08-30)
+
+**Rule.** The Strand-hosted Heroi plugin (`daniels.heroi`) mirrors
+`danielss-dev/heroi_aide`: an Electron agentic IDE with workspaces, per-project
+chats, a Claude/Codex/Cursor composer, kanban, and a diff side panel. Do not
+restyle it after the public Tauri `danielss-dev/heroi` repo (agent tabs, Gemini,
+Aider, Shell, Run-in-Work chrome). Scoped `--heroi-*` tokens on `.plugin-heroi`
+are allowed so the orange/near-black heroi_aide look stays inside the plugin.
+
+**Why.** Those are different products. Copying the public heroi layout shipped
+the wrong UX once already.
+

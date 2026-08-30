@@ -103,7 +103,7 @@ the resolved app appearance automatically.
   every thin pane divider retains a wider mouse target for reliable resizing.
   **Experimental plugins:** install surfaces from Settings → Plugins (bundled
   marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
-  local agent-orchestrator view. Declarative plugins render from validated
+  heroi_aide workspace (chats, composer, kanban, diffs). Declarative plugins render from validated
   manifests; third-party JavaScript does not execute in the privileged webview.
   See `docs/plugin-creation.md`.
 

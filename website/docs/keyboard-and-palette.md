@@ -13,7 +13,7 @@ Open the palette with `Mod+K`. It is a single fuzzy-matched search over commands
 
 Results are grouped, in this order:
 
-- **Actions** — every command Strand exposes: initialize/open/clone/switch repository, show any view, fetch/pull/push/sync, stash and snapshot, create branch/tag/remote, clear merged local and matching remote branches, interactive rebase, review actions (AI review, pin/move/clear baseline, copy feedback as prompt), worktree cleanup, settings and theme, and "Abort <operation>" while a merge or rebase is paused.
+- **Actions** — every command Strand exposes: initialize/open/clone/switch repository, show any view, fetch/pull/push/sync, stash and snapshot, create branch/tag/remote, clear merged local and matching remote branches, interactive rebase, review actions (AI review, pin/move/clear baseline, copy feedback as prompt), worktree cleanup, settings and theme, **Heroi: New conversation**, and "Abort <operation>" while a merge or rebase is paused.
 - **Branches** — checkout a local branch. Remote branches without a local counterpart appear too; running one creates a local tracking branch. The current branch reveals its tip in the graph instead.
 - **Tags** — reveal the tagged commit in the graph (non-destructive).
 - **Stashes** — "Apply stash: …", "Pop stash: …", and "Create branch from stash: …" rows per stash.
@@ -141,6 +141,19 @@ any Strand surface to the active pane, split it right or down, close it, or appl
 Blank, Focus, Review station, and VS Code workbench templates. Feature menus
 and every pane control are in the normal `Tab` order. Choose **Done** to hide
 editing controls without closing the configured surfaces.
+
+### Heroi plugin surface
+
+When a Workbench pane hosts Heroi (the heroi_aide dogfood plugin):
+
+| Key | Action |
+| --- | --- |
+| `Mod+Enter` | Send the composer message |
+| `Shift+Tab` | Toggle Plan / Build in the composer |
+| `Ctrl/⌘+\`` | Toggle the terminal strip |
+| `Escape` | Close a chip menu, marketplace overlay, or draft |
+
+Quick Launch also has **Heroi: New conversation**.
 
 ### Repository tabs
 
