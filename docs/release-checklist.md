@@ -241,6 +241,13 @@ created a valid Partner Center submission and failed at 1% during Azure blob
 upload. Store promotion remains pending recovery of Microsoft's external
 upload path.
 
+Investigation identified Microsoft Store CLI v0.4.0–v0.4.1's omitted
+`--uploadTimeout` regression rather than a package or service failure. Strand
+now passes `--uploadTimeout 300` explicitly and enforces it in
+`scripts/check-msix.mjs`. Replacement production run `33326040162` uploaded
+the exact `v1.5.0` package, reached `CommitStarted`, and Partner Center reported
+`Certification`, closing the Store submission retry on 2026-08-30.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:
