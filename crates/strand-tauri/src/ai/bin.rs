@@ -610,23 +610,23 @@ fn output_limit_error(program: &Path, stdout: &CapturedOutput, stderr: &Captured
 }
 
 #[cfg(unix)]
-fn kill_process_tree(child: &mut Child) {
+pub(crate) fn kill_process_tree(child: &mut Child) {
     // SAFETY: the child was created as the leader of its own process group.
     unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
 }
 
 #[cfg(windows)]
-fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
+pub(crate) fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
     job.terminate();
     let _ = child.kill();
 }
 
 #[cfg(windows)]
-struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
+pub(crate) struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl WindowsJob {
-    fn assign(child: &Child) -> Result<Self, String> {
+    pub(crate) fn assign(child: &Child) -> Result<Self, String> {
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
         use windows_sys::Win32::System::Threading::{

@@ -9,6 +9,12 @@ import { workTreeGitStatus } from '../lib/workTreeGitStatus';
 import { useRepo } from '../stores/repo';
 import { useWork } from '../stores/work';
 import { RenameFileDialog } from '../views/RenameFileDialog';
+import {
+  HEROI_FILES_DROPPED_EVENT,
+  HEROI_FILE_DRAG_EVENT,
+  type HeroiFileDragDetail,
+  type HeroiFilesDroppedDetail,
+} from '../plugins/builtins/heroi/events';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
 import {
@@ -475,6 +481,18 @@ export function RepositoryFiles({
         paths={filePaths}
         gitStatus={fileGitStatus}
         onMove={selectedCommit ? undefined : moveTo}
+        onExternalDrop={(paths) => {
+          if (!meta) return;
+          window.dispatchEvent(new CustomEvent<HeroiFilesDroppedDetail>(HEROI_FILES_DROPPED_EVENT, {
+            detail: { projectPath: meta.path, paths },
+          }));
+        }}
+        onExternalDragChange={(dragActive) => {
+          if (!meta) return;
+          window.dispatchEvent(new CustomEvent<HeroiFileDragDetail>(HEROI_FILE_DRAG_EVENT, {
+            detail: { projectPath: meta.path, active: dragActive },
+          }));
+        }}
         selectedPath={selectedTreePath}
         onSelect={(path, kind) => {
           if (!path || !meta) return;

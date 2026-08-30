@@ -801,6 +801,30 @@ export type AiProvider = 'openai' | 'anthropic';
 
 export type HeroiAgentProvider = 'claude' | 'codex' | 'cursor';
 
+export interface HeroiReasoningOption {
+  id: string;
+  label: string;
+  isDefault: boolean;
+}
+
+export interface HeroiModel {
+  slug: string;
+  name: string;
+  isDefault: boolean;
+  reasoning: HeroiReasoningOption[];
+}
+
+export interface HeroiModelCatalog {
+  provider: HeroiAgentProvider;
+  models: HeroiModel[];
+}
+
+export interface HeroiSkill {
+  name: string;
+  description: string | null;
+  scope: 'user' | 'project';
+}
+
 export interface HeroiAgentRequest {
   path: string;
   provider: HeroiAgentProvider;
@@ -817,7 +841,7 @@ export type HeroiAgentEvent =
   | { type: 'status'; message: string }
   | { type: 'session'; sessionId: string }
   | { type: 'text'; text: string }
-  | { type: 'activity'; label: string };
+  | { type: 'activity'; id: string; label: string; detail: string | null; done: boolean };
 
 export interface HeroiAgentOutcome {
   sessionId: string | null;

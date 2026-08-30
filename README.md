@@ -105,7 +105,12 @@ the resolved app appearance automatically.
   marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
   repository-scoped chat for background Claude, Codex, and Cursor Agent
   sessions. Heroi only shows chats for the active repository; Files, diffs,
-  and other tools remain separate Workbench panes. Its compact thread rail,
+  and other tools remain separate Workbench panes. Model and reasoning menus
+  come from the selected provider. Multiple threads can run at once; `@`
+  searches repository files, `/` searches installed/project skills, and files
+  can be dragged from a Files pane into the composer with live drop feedback.
+  Command/tool rows expand to show what the agent ran and the captured output.
+  Its compact thread rail,
   execution activity rows, and bottom command deck keep chat primary, with
   **Open review** routing to Strand's Review surface. Declarative plugins render
   from validated manifests; third-party JavaScript does not execute in the privileged webview.

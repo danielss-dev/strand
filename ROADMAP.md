@@ -2673,6 +2673,21 @@ and a bottom-anchored Plan/Build command deck. **Open review** activates an
 existing Review pane when available and otherwise opens Strand's Review view;
 Heroi still does not duplicate file or diff rendering.
 
+**Heroi provider model catalogs (2026-08-30):** Heroi's model and reasoning
+pickers now follow the same source as T3 Code: Claude's version-gated catalog
+with per-model effort levels, Codex `model/list` from `codex app-server`
+(including advertised reasoning), and Cursor `cursor/list_available_models`
+over ACP. Fallback catalogs keep the composer usable when a CLI probe fails.
+
+**Heroi parallel threads and composer context (2026-08-30):** Heroi can now
+run multiple repository conversations concurrently with per-thread stop and
+activity state. Typing `@` searches working-tree paths, typing `/` searches
+provider/project skills and inserts the provider-native `$skill` reference,
+and dragging entries from Strand's Files tree into the composer adds file
+mentions without opening or moving them. File suggestions reuse Strand's
+language/file icons, the composer visibly acknowledges a valid drag target,
+and command/tool activity rows expand to bounded provider details and output.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and

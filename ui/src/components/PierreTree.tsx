@@ -118,6 +118,10 @@ interface PierreTreeProps {
    * that folder. Omit to disable dragging entirely.
    */
   onMove?: (sources: string[], targetDir: string) => void;
+  /** Drop files outside the tree onto another Strand surface. */
+  onExternalDrop?: (sources: string[], target: Element) => void;
+  /** Reports whether the current pointer drag is over an external drop target. */
+  onExternalDragChange?: (active: boolean) => void;
   /**
    * Per-row decoration (e.g. the Review view's reviewed ✓). Called for every
    * visible row; return `null` for none. Pair with {@link rowDecorationKey} —
@@ -232,6 +236,8 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     menuItems,
     onDiscard,
     onMove,
+    onExternalDrop,
+    onExternalDragChange,
     search,
     searchAction,
     followFocus = false,
@@ -520,6 +526,10 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   // not re-render the tree.
   const onMoveRef = useRef(onMove);
   onMoveRef.current = onMove;
+  const onExternalDropRef = useRef(onExternalDrop);
+  onExternalDropRef.current = onExternalDrop;
+  const onExternalDragChangeRef = useRef(onExternalDragChange);
+  onExternalDragChangeRef.current = onExternalDragChange;
   const wrapRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     sources: string[];
@@ -531,19 +541,24 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     targetDir: string | null;
     targetRow: HTMLElement | null;
     targetRowBg: string;
+    externalActive: boolean;
     detach: () => void;
   } | null>(null);
 
-  const endDrag = useCallback((commit: boolean) => {
+  const endDrag = useCallback((commit: boolean, clientX?: number, clientY?: number) => {
     const d = dragRef.current;
     if (!d) return;
     dragRef.current = null;
     d.detach();
     d.ghost?.remove();
+    if (d.externalActive) onExternalDragChangeRef.current?.(false);
     if (d.targetRow) d.targetRow.style.background = d.targetRowBg;
     document.body.style.userSelect = '';
     if (commit && d.active && d.targetDir != null) {
       onMoveRef.current?.(d.sources, d.targetDir);
+    } else if (commit && d.active && clientX != null && clientY != null) {
+      const target = document.elementFromPoint(clientX, clientY)?.closest('[data-heroi-file-drop]');
+      if (target) onExternalDropRef.current?.(d.sources, target);
     }
   }, []);
   useEffect(() => () => endDrag(false), [endDrag]);
@@ -607,6 +622,12 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
           if (!movable) dir = null;
         }
         d.targetDir = dir;
+        const externalActive = dir == null
+          && document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-heroi-file-drop]') != null;
+        if (externalActive !== d.externalActive) {
+          d.externalActive = externalActive;
+          onExternalDragChangeRef.current?.(externalActive);
+        }
         // Row wash on the hovered folder row only — a file row's parent isn't
         // the row under the cursor, so those drops read from the ghost label.
         const highlight = dir != null && overIsDir ? over : null;
@@ -622,11 +643,11 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
           d.ghost.style.left = `${ev.clientX + 14}px`;
           d.ghost.style.top = `${ev.clientY + 10}px`;
           d.ghost.textContent =
-            dir == null ? d.label : `${d.label} → ${dir === '' ? '/' : dir + '/'}`;
-          d.ghost.classList.toggle('invalid', dir == null);
+            externalActive ? `${d.label} → Heroi` : dir == null ? d.label : `${d.label} → ${dir === '' ? '/' : dir + '/'}`;
+          d.ghost.classList.toggle('invalid', dir == null && !externalActive);
         }
       };
-      const onMouseUp = () => endDrag(true);
+      const onMouseUp = (ev: MouseEvent) => endDrag(true, ev.clientX, ev.clientY);
       const onKeyDown = (ev: KeyboardEvent) => {
         if (ev.key === 'Escape') endDrag(false);
       };
@@ -643,6 +664,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
         targetDir: null,
         targetRow: null,
         targetRowBg: '',
+        externalActive: false,
         detach: () => {
           window.removeEventListener('mousemove', onMouseMove, true);
           window.removeEventListener('mouseup', onMouseUp, true);

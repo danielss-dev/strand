@@ -2290,7 +2290,10 @@ repository. Do not duplicate workspaces, Files, git changes, diffs, kanban, or
 terminal chrome inside Heroi; those belong to independently composable
 Workbench panes. Heroi launches authenticated Claude, Codex, and Cursor Agent
 CLIs off the UI thread, consumes their streaming JSONL, retains provider session
-IDs for resume, and cancels the complete child process tree. Bound captured
+IDs for resume, and cancels the complete child process tree. Model and
+reasoning pickers are provider-owned: Claude uses the version-gated catalog
+with per-model effort levels, Codex is probed via `app-server` `model/list`,
+and Cursor Agent is probed via ACP `cursor/list_available_models`. Bound captured
 output and never expose raw vendor stderr or transcript paths.
 
 **Why.** Heroi is embedded in Strand's Workbench rather than acting as a second
@@ -2304,6 +2307,18 @@ centered cards. **Open review** routes to Strand's existing Review surface; it
 must never grow an inline diff viewer. Derive the near-black/amber treatment
 from Strand theme tokens so repository accenting, focus rings, and contrast
 remain coherent.
+
+**Composer and concurrency contract.** A running conversation must only lock
+its own composer and settings; it must not prevent creating, opening, sending,
+or stopping other repository conversations. Track runs by conversation id and
+keep cancellation keyed by each unique operation id. `@` references canonical
+repository-relative paths. The `/` picker discovers the selected provider's
+user and project skill roots but inserts `$skill-name`, matching the native CLI
+prompt syntax. Files-tree drops must become mentions and must not also trigger
+the tree's move/open behavior. Report drag-hover entry/exit separately from the
+drop so the composer can acknowledge a valid target before release. Activity
+rows are disclosures when provider detail exists; retain bounded command/tool
+arguments and output, never unbounded vendor transcripts or stderr.
 
 ---
 

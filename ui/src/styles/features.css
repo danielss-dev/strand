@@ -9368,25 +9368,51 @@ select.clone-input {
   gap: 3px;
 }
 .plugin-heroi-activity {
+  border: 1px solid var(--heroi-border);
+  border-radius: var(--r-sm);
+  background: var(--heroi-raised);
+  color: var(--heroi-muted);
+  font: 9.5px var(--font-mono);
+  overflow: hidden;
+}
+.plugin-heroi-activity > button {
+  width: 100%;
   min-height: 27px;
   padding: 0 9px;
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--heroi-border);
-  border-radius: var(--r-sm);
-  background: var(--heroi-raised);
-  color: var(--heroi-muted);
-  font: 9.5px var(--font-mono);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
+.plugin-heroi-activity > button:not(:disabled) { cursor: pointer; }
+.plugin-heroi-activity > button:not(:disabled):hover { background: var(--heroi-hover); }
+.plugin-heroi-activity > button:focus-visible { outline: 1px solid var(--heroi-accent); outline-offset: -1px; }
+.plugin-heroi-activity > button:disabled { opacity: 1; }
 .plugin-heroi-activity span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-heroi-activity small { color: var(--add); font: 9px var(--font-ui); }
 .plugin-heroi-activity.running small { color: var(--heroi-accent); }
 .plugin-heroi-activity.error small { color: var(--del); }
 .plugin-heroi-activity.stopped small { color: var(--heroi-dim); }
+.plugin-heroi-activity pre {
+  max-height: 260px;
+  margin: 0;
+  padding: 9px 11px;
+  overflow: auto;
+  border-top: 1px solid var(--heroi-border);
+  background: var(--heroi-bg);
+  color: var(--heroi-fg);
+  font: 9.5px/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .plugin-heroi-chat-only .plugin-heroi-composer-wrap {
+  position: relative;
   width: 100%;
   flex: none;
   padding: 10px;
@@ -9456,6 +9482,66 @@ select.clone-input {
   color: var(--heroi-fg);
   font: 11px/1.5 var(--font-ui);
 }
+.plugin-heroi-chat-only .plugin-heroi-composer-wrap.file-drop-active {
+  background: color-mix(in oklab, var(--heroi-accent) 9%, var(--heroi-rail));
+}
+.plugin-heroi-chat-only .plugin-heroi-composer-wrap.file-drop-active .plugin-heroi-composer {
+  border-color: var(--heroi-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--heroi-accent) 22%, transparent),
+    0 0 22px color-mix(in oklab, var(--heroi-accent) 16%, transparent);
+}
+.plugin-heroi-file-drop-callout {
+  position: absolute;
+  z-index: 4;
+  inset: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px dashed var(--heroi-accent);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--heroi-bg) 88%, transparent);
+  color: var(--heroi-accent);
+  font: 10px var(--font-ui);
+  pointer-events: none;
+}
+.plugin-heroi-composer-editor { position: relative; }
+.plugin-heroi-suggestions {
+  position: absolute;
+  z-index: 5;
+  inset-inline: 8px;
+  bottom: calc(100% + 5px);
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--heroi-border-strong);
+  border-radius: 5px;
+  background: var(--heroi-raised);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--bg-base) 72%, transparent);
+}
+.plugin-heroi-suggestions button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px minmax(100px, auto) 1fr;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--heroi-muted);
+  text-align: left;
+}
+.plugin-heroi-suggestions button.active,
+.plugin-heroi-suggestions button:hover { background: var(--heroi-hover); color: var(--heroi-fg); }
+.plugin-heroi-suggestions button span,
+.plugin-heroi-suggestions button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-heroi-suggestions button span { font: 10px var(--font-mono); }
+.plugin-heroi-suggestions button small { color: var(--heroi-dim); font-size: 9px; }
+.plugin-heroi-composer-wrap[data-heroi-file-drop],
+.plugin-heroi-composer { transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease; }
 .plugin-heroi-chat-only .plugin-heroi-composer textarea::placeholder { color: var(--heroi-dim); }
 .plugin-heroi-chat-only .plugin-heroi-composer textarea:disabled { opacity: .6; }
 .plugin-heroi-composer-footer {
@@ -9533,6 +9619,6 @@ select.clone-input {
   .plugin-heroi-thread-context > span:not(.plugin-heroi-thread-dot) { display: none; }
   .plugin-heroi-open-review { padding-inline: 6px; }
   .plugin-heroi-chat-only .plugin-heroi-messages { padding-inline: 14px; }
-  .plugin-heroi-config .select-control:nth-of-type(3),
-  .plugin-heroi-config .select-control:nth-of-type(4) { display: none; }
+  .plugin-heroi-select-thinking,
+  .plugin-heroi-select-permission { display: none; }
 }

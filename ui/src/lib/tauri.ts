@@ -28,7 +28,10 @@ import type {
   HostingConnectionStatus,
   HeroiAgentEvent,
   HeroiAgentOutcome,
+  HeroiAgentProvider,
   HeroiAgentRequest,
+  HeroiModelCatalog,
+  HeroiSkill,
   InitOutcome,
   MaintenanceOutcome,
   MaintenanceTask,
@@ -172,6 +175,13 @@ export const tauri = {
     channel.onmessage = onEvent;
     return invoke<HeroiAgentOutcome>('heroi_agent_send', { runId, request, onEvent: channel });
   },
+  heroiProviderModels: (provider: HeroiAgentProvider, cliPath?: string | null) =>
+    invoke<HeroiModelCatalog>('heroi_provider_models', {
+      provider,
+      cliPath: cliPath ?? null,
+    }),
+  heroiSkills: (path: string, provider: HeroiAgentProvider) =>
+    invoke<HeroiSkill[]>('heroi_skills', { path, provider }),
   // `headOnly` walks HEAD's ancestry instead of every ref — for per-worktree
   // "last commit" answers (worktrees share the family's refs).
   repoLog: (path: string, limit?: number, headOnly?: boolean) =>

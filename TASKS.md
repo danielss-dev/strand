@@ -1268,10 +1268,15 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
   persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
 - ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`,
-  `heroi_agent_send` — active-repository-only chat with streaming,
-  resumable, cancellable Claude/Codex/Cursor Agent background sessions; no
-  duplicate Files, git, diff, or kanban chrome; compact Threads rail, flat
-  transcript/activity rows, command-deck composer, and Open review bridge).
+  `heroi_agent_send`, `heroi_provider_models` — active-repository-only chat
+  with streaming, resumable, cancellable Claude/Codex/Cursor Agent sessions;
+  live provider model catalogs and per-model reasoning levels; no duplicate
+  Files, git, diff, or kanban chrome; compact Threads rail, flat
+  transcript/activity rows, command-deck composer, concurrent conversation
+  runs, `@` repository-file mentions, `/` skill picker, Files-tree mention
+  drops with live composer feedback, expandable command/tool activity details,
+  and Open review bridge (`HeroiView`, `heroi_skills`,
+  `PierreTree.onExternalDrop`, `HeroiAgentEvent::Activity`)).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,

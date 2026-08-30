@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::{collections::BTreeMap, fs, path::PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -9,10 +10,86 @@ use crate::ai::bin::{
     resolve_claude, resolve_codex, resolve_cursor, run_streaming_lines, AiCancelHandle,
 };
 
+mod models;
+mod rpc;
+
+pub use models::{list_models, HeroiModelCatalog};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeroiSkill {
+    name: String,
+    description: Option<String>,
+    scope: &'static str,
+}
+
+pub fn list_skills(path: &Path, provider: HeroiProvider) -> Vec<HeroiSkill> {
+    let mut roots: Vec<(PathBuf, &'static str)> = Vec::new();
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        let home = PathBuf::from(home);
+        roots.push((home.join(match provider {
+            HeroiProvider::Claude => ".claude/skills",
+            HeroiProvider::Codex => ".codex/skills",
+            HeroiProvider::Cursor => ".cursor/skills",
+        }), "user"));
+    }
+    roots.push((path.join(".agents/skills"), "project"));
+    roots.push((path.join(match provider {
+        HeroiProvider::Claude => ".claude/skills",
+        HeroiProvider::Codex => ".codex/skills",
+        HeroiProvider::Cursor => ".cursor/skills",
+    }), "project"));
+
+    let mut skills = BTreeMap::new();
+    for (root, scope) in roots {
+        let Ok(entries) = fs::read_dir(root) else { continue };
+        let mut entries = entries.flatten().collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let skill_path = entry.path().join("SKILL.md");
+            let Ok(contents) = fs::read_to_string(skill_path) else { continue };
+            let fallback = entry.file_name().to_string_lossy().trim().to_owned();
+            let (name, description) = skill_frontmatter(&contents);
+            let name = name.unwrap_or(fallback);
+            if name.is_empty() { continue }
+            skills.insert(name.clone(), HeroiSkill { name, description, scope });
+        }
+    }
+    skills.into_values().collect()
+}
+
+fn skill_frontmatter(contents: &str) -> (Option<String>, Option<String>) {
+    let normalized = contents.replace("\r\n", "\n");
+    let Some(rest) = normalized.strip_prefix("---\n") else { return (None, None) };
+    let Some((frontmatter, _)) = rest.split_once("\n---") else { return (None, None) };
+    let field = |key: &str| frontmatter.lines().find_map(|line| {
+        let (candidate, value) = line.split_once(':')?;
+        (candidate.trim() == key).then(|| value.trim().trim_matches(['\'', '"']).to_owned())
+    }).filter(|value| !value.is_empty());
+    (field("name"), field("description"))
+}
+
+#[cfg(test)]
+mod skill_tests {
+    use super::skill_frontmatter;
+
+    #[test]
+    fn reads_skill_name_and_description() {
+        assert_eq!(
+            skill_frontmatter("---\r\nname: verify\r\ndescription: Drive the app\r\n---\r\n# Verify"),
+            (Some("verify".into()), Some("Drive the app".into()))
+        );
+    }
+
+    #[test]
+    fn ignores_documents_without_frontmatter() {
+        assert_eq!(skill_frontmatter("# Verify"), (None, None));
+    }
+}
+
 const AGENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MAX_PROMPT_BYTES: usize = 128 * 1024;
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum HeroiProvider {
     Claude,
@@ -64,7 +141,10 @@ pub enum HeroiAgentEvent {
         text: String,
     },
     Activity {
+        id: String,
         label: String,
+        detail: Option<String>,
+        done: bool,
     },
 }
 
@@ -75,11 +155,17 @@ struct ParseState {
 }
 
 pub fn run_agent(
-    request: HeroiAgentRequest,
+    mut request: HeroiAgentRequest,
     cancel: &AiCancelHandle,
     on_event: Channel<HeroiAgentEvent>,
 ) -> Result<HeroiAgentOutcome, String> {
     validate_request(&request)?;
+    if request.provider == HeroiProvider::Claude {
+        request.prompt = models::apply_claude_prompt_effort(
+            &request.prompt,
+            selected(request.thinking.as_deref()),
+        );
+    }
     let program = match request.provider {
         HeroiProvider::Claude => resolve_claude(request.cli_path.as_deref()),
         HeroiProvider::Codex => resolve_codex(request.cli_path.as_deref()),
@@ -130,14 +216,26 @@ fn validate_request(request: &HeroiAgentRequest) -> Result<(), String> {
     }
     if !matches!(request.agent_mode.as_str(), "plan" | "build")
         || !matches!(request.permission_mode.as_str(), "read" | "build" | "full")
-        || !matches!(
-            request.thinking.as_deref(),
-            None | Some("default" | "low" | "medium" | "high")
-        )
+        || !valid_setting(request.model.as_deref(), 128)
+        || !valid_setting(request.thinking.as_deref(), 32)
     {
         return Err("The selected agent settings are invalid.".into());
     }
     Ok(())
+}
+
+fn valid_setting(value: Option<&str>, max_len: usize) -> bool {
+    match value {
+        None => true,
+        Some(value) if value.trim().is_empty() || value.eq_ignore_ascii_case("default") => true,
+        Some(value) => {
+            let trimmed = value.trim();
+            trimmed.len() <= max_len
+                && trimmed
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        }
+    }
 }
 
 fn invalid_id(value: &str) -> bool {
@@ -166,11 +264,13 @@ fn claude_args(request: &HeroiAgentRequest) -> Vec<String> {
     if let Some(session_id) = request.session_id.as_deref() {
         args.extend(["--resume".into(), session_id.into()]);
     }
-    if let Some(model) = selected(request.model.as_deref()) {
-        args.extend(["--model".into(), model.into()]);
+    if let Some(model) = resolved_model(request) {
+        args.extend(["--model".into(), model]);
     }
-    if let Some(effort) = selected(request.thinking.as_deref()) {
-        args.extend(["--effort".into(), effort.into()]);
+    if let Some(effort) = selected(request.thinking.as_deref()).and_then(|effort| {
+        models::normalize_claude_cli_effort(effort, resolved_model(request).as_deref())
+    }) {
+        args.extend(["--effort".into(), effort]);
     }
     if request.permission_mode == "full" {
         args.push("--dangerously-skip-permissions".into());
@@ -226,9 +326,14 @@ fn add_codex_access(args: &mut Vec<String>, request: &HeroiAgentRequest) {
     }
 }
 
+fn resolved_model(request: &HeroiAgentRequest) -> Option<String> {
+    selected(request.model.as_deref())
+        .map(|model| models::canonicalize_model(request.provider, model))
+}
+
 fn add_codex_options(args: &mut Vec<String>, request: &HeroiAgentRequest) {
-    if let Some(model) = selected(request.model.as_deref()) {
-        args.extend(["--model".into(), model.into()]);
+    if let Some(model) = resolved_model(request) {
+        args.extend(["--model".into(), model]);
     }
     if let Some(effort) = selected(request.thinking.as_deref()) {
         args.extend([
@@ -248,8 +353,8 @@ fn cursor_args(request: &HeroiAgentRequest) -> Vec<String> {
     if let Some(session_id) = request.session_id.as_deref() {
         args.extend(["--resume".into(), session_id.into()]);
     }
-    if let Some(model) = selected(request.model.as_deref()) {
-        args.extend(["--model".into(), model.into()]);
+    if let Some(model) = resolved_model(request) {
+        args.extend(["--model".into(), model]);
     }
     if request.agent_mode == "plan" || request.permission_mode == "read" {
         args.extend(["--mode".into(), "plan".into()]);
@@ -276,8 +381,13 @@ fn parse_line(
             });
         }
     }
-    if let Some(label) = activity_label(provider, &value) {
-        let _ = on_event.send(HeroiAgentEvent::Activity { label });
+    if let Some(activity) = activity_data(provider, &value) {
+        let _ = on_event.send(HeroiAgentEvent::Activity {
+            id: activity.id,
+            label: activity.label,
+            detail: activity.detail,
+            done: activity.done,
+        });
     }
     if let Some(text) = assistant_text(provider, &value, state.emitted_text) {
         if !text.trim().is_empty() {
@@ -334,19 +444,56 @@ fn assistant_text(provider: HeroiProvider, value: &Value, emitted: bool) -> Opti
     None
 }
 
-fn activity_label(provider: HeroiProvider, value: &Value) -> Option<String> {
+struct ActivityData {
+    id: String,
+    label: String,
+    detail: Option<String>,
+    done: bool,
+}
+
+fn activity_data(provider: HeroiProvider, value: &Value) -> Option<ActivityData> {
     let event_type = value.get("type").and_then(Value::as_str)?;
-    if provider == HeroiProvider::Codex && event_type == "item.started" {
-        let item_type = value.get("item")?.get("type")?.as_str()?;
-        return match item_type {
-            "command_execution" => Some("Running a command".into()),
-            "mcp_tool_call" => Some("Using a tool".into()),
-            "file_change" => Some("Editing files".into()),
-            _ => None,
+    if provider == HeroiProvider::Codex
+        && matches!(event_type, "item.started" | "item.completed")
+    {
+        let item = value.get("item")?;
+        let item_type = item.get("type")?.as_str()?;
+        let label = match item_type {
+            "command_execution" => "Running a command",
+            "mcp_tool_call" => "Using a tool",
+            "file_change" => "Editing files",
+            _ => return None,
         };
+        let mut detail = item
+            .get("command")
+            .or_else(|| item.get("arguments"))
+            .or_else(|| item.get("changes"))
+            .map(format_activity_value);
+        if let Some(output) = item
+            .get("aggregated_output")
+            .or_else(|| item.get("output"))
+            .map(format_activity_value)
+            .filter(|output| !output.is_empty())
+        {
+            detail = Some(match detail {
+                Some(command) if !command.is_empty() => format!("{command}\n\n{output}"),
+                _ => output,
+            });
+        }
+        return Some(ActivityData {
+            id: item
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or(label)
+                .to_owned(),
+            label: label.into(),
+            detail,
+            done: event_type == "item.completed",
+        });
     }
     if provider == HeroiProvider::Cursor && event_type == "tool_call" {
-        let call = value.get("tool_call")?.as_object()?;
+        let call_value = value.get("tool_call")?;
+        let call = call_value.as_object()?;
         let kind = call.keys().next()?.as_str();
         let label = if kind.to_ascii_lowercase().contains("write") {
             "Editing files"
@@ -355,20 +502,57 @@ fn activity_label(provider: HeroiProvider, value: &Value) -> Option<String> {
         } else {
             "Using a tool"
         };
-        return Some(label.into());
+        return Some(ActivityData {
+            id: value
+                .get("id")
+                .or_else(|| call_value.get("id"))
+                .and_then(Value::as_str)
+                .unwrap_or(kind)
+                .to_owned(),
+            label: label.into(),
+            detail: Some(format_activity_value(call_value)),
+            done: value
+                .get("status")
+                .and_then(Value::as_str)
+                .is_some_and(|status| matches!(status, "completed" | "done")),
+        });
     }
     if event_type == "assistant" {
-        let name = value
+        let block = value
             .get("message")?
             .get("content")?
             .as_array()?
             .iter()
-            .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))?
-            .get("name")?
-            .as_str()?;
-        return Some(format!("Using {name}"));
+            .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))?;
+        let name = block.get("name")?.as_str()?;
+        return Some(ActivityData {
+            id: block
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or(name)
+                .to_owned(),
+            label: format!("Using {name}"),
+            detail: block.get("input").map(format_activity_value),
+            done: false,
+        });
     }
     None
+}
+
+fn format_activity_value(value: &Value) -> String {
+    const MAX_DETAIL_BYTES: usize = 16 * 1024;
+    let text = value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| serde_json::to_string_pretty(value).unwrap_or_default());
+    if text.len() <= MAX_DETAIL_BYTES {
+        return text;
+    }
+    let mut end = MAX_DETAIL_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n… output truncated by Heroi", &text[..end])
 }
 
 fn friendly_error(provider: HeroiProvider, raw: &str) -> String {
@@ -438,6 +622,30 @@ mod tests {
     }
 
     #[test]
+    fn claude_expands_legacy_model_aliases_and_maps_effort() {
+        let mut input = request(HeroiProvider::Claude);
+        input.model = Some("opus".into());
+        input.thinking = Some("ultrathink".into());
+        let args = build_args(&input);
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--model", "claude-opus-5"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--effort", "ultrathink"]));
+
+        input.thinking = Some("xhigh".into());
+        let args = build_args(&input);
+        assert!(args.windows(2).any(|pair| pair == ["--effort", "xhigh"]));
+    }
+
+    #[test]
+    fn accepts_provider_advertised_reasoning_tokens() {
+        let mut input = request(HeroiProvider::Codex);
+        input.thinking = Some("xhigh".into());
+        input.model = Some("gpt-5.6-sol".into());
+        assert!(validate_request(&input).is_ok());
+    }
+
+    #[test]
     fn cursor_plan_mode_is_explicitly_read_only() {
         let mut input = request(HeroiProvider::Cursor);
         input.agent_mode = "plan".into();
@@ -460,6 +668,31 @@ mod tests {
             assistant_text(HeroiProvider::Claude, &claude, false).as_deref(),
             Some("Done")
         );
+    }
+
+    #[test]
+    fn captures_expandable_codex_command_and_output() {
+        let started = serde_json::json!({
+            "type": "item.started",
+            "item": { "id": "cmd-1", "type": "command_execution", "command": "cargo check" }
+        });
+        let activity = activity_data(HeroiProvider::Codex, &started).unwrap();
+        assert_eq!(activity.id, "cmd-1");
+        assert_eq!(activity.detail.as_deref(), Some("cargo check"));
+        assert!(!activity.done);
+
+        let completed = serde_json::json!({
+            "type": "item.completed",
+            "item": {
+                "id": "cmd-1",
+                "type": "command_execution",
+                "command": "cargo check",
+                "aggregated_output": "Finished successfully"
+            }
+        });
+        let activity = activity_data(HeroiProvider::Codex, &completed).unwrap();
+        assert_eq!(activity.detail.as_deref(), Some("cargo check\n\nFinished successfully"));
+        assert!(activity.done);
     }
 
     #[test]

@@ -103,7 +103,7 @@ export const en = {
   'plugins.heroi.send': 'Send',
   'plugins.heroi.provider': 'Provider',
   'plugins.heroi.model': 'Model',
-  'plugins.heroi.thinking': 'Thinking',
+  'plugins.heroi.thinking': 'Reasoning',
   'plugins.heroi.mode': 'Mode',
   'plugins.heroi.permission': 'Permission',
   'plugins.heroi.permissionRead': 'Read-only',

@@ -308,6 +308,8 @@ fn main() {
             commands::ai_provider_logout,
             commands::repo_suggest_commit_message,
             commands::heroi_agent_send,
+            commands::heroi_provider_models,
+            commands::heroi_skills,
             commands::repo_suggest_pull_request,
             commands::repo_review_changes,
             commands::crash_report_check,

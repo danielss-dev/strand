@@ -151,7 +151,14 @@ to the active repository:
 | --- | --- |
 | `Mod+Enter` | Send the composer message |
 | `Shift+Tab` | Toggle Plan / Build in the composer |
+| `@` | Search and insert a repository-file mention |
+| `/` | Search and insert an available agent skill |
+| `↑` / `↓`, `Enter` | Navigate and choose an open mention/skill result |
 
+Files can also be dragged from a Files pane into the Heroi composer. Running
+threads continue in parallel when another conversation is opened or started.
+Focus a command/tool activity row and press `Enter` or `Space` to expand its
+available command details and output.
 Quick Launch also has **Heroi: New conversation**.
 
 ### Repository tabs

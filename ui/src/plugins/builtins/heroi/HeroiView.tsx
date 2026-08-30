@@ -5,25 +5,40 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ChangeEvent,
 } from 'react';
 
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
+import { TreeFileIcon, TreeIconSprite } from '../../../components/TreeFileIcon';
 import { t } from '../../../lib/i18n';
 import { errMessage, tauri } from '../../../lib/tauri';
-import type { HeroiAgentEvent, HeroiAgentRequest } from '../../../lib/types';
+import type { HeroiAgentEvent, HeroiAgentRequest, HeroiModel, HeroiSkill } from '../../../lib/types';
 import { useRepo } from '../../../stores/repo';
 import { useSettings } from '../../../stores/settings';
 import { pluginStateKey, usePlugins } from '../../../stores/plugins';
 import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
 import type { PluginCapabilityBroker } from '../../capabilities';
-import { HEROI_NEW_CONVERSATION_EVENT, HEROI_OPEN_REVIEW_EVENT } from './events';
+import {
+  HEROI_FILES_DROPPED_EVENT,
+  HEROI_FILE_DRAG_EVENT,
+  HEROI_NEW_CONVERSATION_EVENT,
+  HEROI_OPEN_REVIEW_EVENT,
+  type HeroiFilesDroppedDetail,
+  type HeroiFileDragDetail,
+} from './events';
 import { HeroiLogo } from './HeroiLogo';
+import {
+  appendFileMentions,
+  composerTrigger,
+  filterSuggestions,
+  replaceComposerTrigger,
+  type HeroiComposerSuggestion,
+} from './composer';
 
 export type HeroiProvider = 'claude' | 'codex' | 'cursor';
 type AgentMode = 'plan' | 'build';
 type PermissionMode = 'read' | 'build' | 'full';
-type ThinkingLevel = 'default' | 'low' | 'medium' | 'high';
 type MessageState = 'running' | 'complete' | 'stopped' | 'error';
 type ActivityState = 'running' | 'done' | 'stopped' | 'error';
 type ThreadFilter = 'all' | 'running';
@@ -31,6 +46,7 @@ type ThreadFilter = 'all' | 'running';
 interface HeroiActivity {
   id: string;
   label: string;
+  detail?: string;
   state: ActivityState;
 }
 
@@ -49,7 +65,7 @@ interface HeroiConversation {
   title: string;
   provider: HeroiProvider;
   model: string;
-  thinking: ThinkingLevel;
+  thinking: string;
   agentMode: AgentMode;
   permissionMode: PermissionMode;
   sessionId?: string;
@@ -76,13 +92,43 @@ const PROVIDERS: readonly { id: HeroiProvider; label: string }[] = [
   { id: 'cursor', label: 'Cursor Agent' },
 ];
 
-const MODELS: Record<HeroiProvider, readonly string[]> = {
-  claude: ['default', 'opus', 'sonnet'],
-  codex: ['default', 'gpt-5.6-codex', 'gpt-5.4'],
-  cursor: ['default', 'auto'],
+const MODEL_ALIASES: Record<HeroiProvider, Record<string, string>> = {
+  claude: {
+    default: 'claude-sonnet-5',
+    opus: 'claude-opus-5',
+    sonnet: 'claude-sonnet-5',
+    haiku: 'claude-haiku-4-5',
+  },
+  codex: {
+    default: 'gpt-5.6-sol',
+    'gpt-5.6-codex': 'gpt-5.6-sol',
+    'gpt-5-codex': 'gpt-5.4',
+  },
+  cursor: {
+    default: 'auto',
+    composer: 'composer-2',
+  },
 };
 
-const THINKING: readonly ThinkingLevel[] = ['default', 'low', 'medium', 'high'];
+function resolveCatalogModel(
+  provider: HeroiProvider,
+  stored: string,
+  models: readonly HeroiModel[],
+): string {
+  const aliased = MODEL_ALIASES[provider][stored] ?? stored;
+  if (models.some((model) => model.slug === aliased)) return aliased;
+  return models.find((model) => model.isDefault)?.slug
+    ?? models[0]?.slug
+    ?? aliased;
+}
+
+function resolveReasoning(model: HeroiModel | undefined, stored: string): string {
+  if (!model || model.reasoning.length === 0) return stored === 'default' ? '' : stored;
+  if (stored && stored !== 'default' && model.reasoning.some((option) => option.id === stored)) {
+    return stored;
+  }
+  return model.reasoning.find((option) => option.isDefault)?.id ?? model.reasoning[0]?.id ?? '';
+}
 
 function mintId(prefix: string): string {
   try {
@@ -153,13 +199,20 @@ export function HeroiView({
   const [composerText, setComposerText] = useState('');
   const [draftProvider, setDraftProvider] = useState<HeroiProvider>('claude');
   const [draftModel, setDraftModel] = useState('default');
-  const [draftThinking, setDraftThinking] = useState<ThinkingLevel>('default');
+  const [draftThinking, setDraftThinking] = useState('default');
   const [draftAgentMode, setDraftAgentMode] = useState<AgentMode>('build');
   const [draftPermission, setDraftPermission] = useState<PermissionMode>('build');
-  const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
+  const [activeRuns, setActiveRuns] = useState<Record<string, ActiveRun>>({});
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  const [catalog, setCatalog] = useState<{ provider: HeroiProvider; models: HeroiModel[] } | null>(null);
+  const [skills, setSkills] = useState<HeroiSkill[]>([]);
+  const [repoFiles, setRepoFiles] = useState<string[]>([]);
+  const [composerCursor, setComposerCursor] = useState(0);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [fileDropActive, setFileDropActive] = useState(false);
+  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
 
   const rootRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -173,7 +226,7 @@ export function HeroiView({
     [activePath, conversations],
   );
   const visibleConversations = threadFilter === 'running'
-    ? repoConversations.filter(({ id }) => id === activeRun?.conversationId)
+    ? repoConversations.filter(({ id }) => Boolean(activeRuns[id]))
     : repoConversations;
   const activeConversation = composingNew
     ? null
@@ -184,6 +237,34 @@ export function HeroiView({
   const thinking = activeConversation?.thinking ?? draftThinking;
   const agentMode = activeConversation?.agentMode ?? draftAgentMode;
   const permissionMode = activeConversation?.permissionMode ?? draftPermission;
+  const models = catalog?.provider === provider ? catalog.models : [];
+  const selectedModel = resolveCatalogModel(provider, model, models);
+  const selectedCatalogModel = models.find((entry) => entry.slug === selectedModel);
+  const selectedThinking = resolveReasoning(selectedCatalogModel, thinking);
+  const modelOptions = useMemo(() => {
+    if (models.length === 0) {
+      return selectedModel
+        ? [{ slug: selectedModel, name: selectedModel, isDefault: true, reasoning: [] }]
+        : [];
+    }
+    if (models.some((entry) => entry.slug === selectedModel)) return models;
+    return [{ slug: selectedModel, name: selectedModel, isDefault: false, reasoning: [] }, ...models];
+  }, [models, selectedModel]);
+  const thinkingOptions = selectedCatalogModel?.reasoning ?? [];
+  const trigger = composerTrigger(composerText, composerCursor);
+  const suggestions = trigger
+    ? filterSuggestions(
+        trigger.marker === '@'
+          ? repoFiles.map((path) => ({ kind: 'file' as const, value: path, detail: path }))
+          : skills.map((skill) => ({
+              kind: 'skill' as const,
+              value: skill.name,
+              detail: skill.description ?? `${skill.scope} skill`,
+            })),
+        trigger.query,
+      )
+    : [];
+  const activeRun = activeConversation ? activeRuns[activeConversation.id] ?? null : null;
 
   useEffect(() => {
     let current = true;
@@ -231,7 +312,6 @@ export function HeroiView({
 
   useEffect(() => {
     const onNew = () => {
-      if (activeRun) return;
       setComposingNew(true);
       setActiveConversationId(null);
       setComposerText('');
@@ -240,12 +320,73 @@ export function HeroiView({
     };
     window.addEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
     return () => window.removeEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
-  }, [activeRun]);
+  }, []);
 
   useEffect(() => {
     const element = messagesRef.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [activeConversation?.messages, activeRun?.activity]);
+
+  useEffect(() => {
+    if (!activePath) {
+      setRepoFiles([]);
+      setSkills([]);
+      return;
+    }
+    let current = true;
+    void Promise.all([
+      tauri.repoTree(activePath),
+      tauri.heroiSkills(activePath, provider),
+    ]).then(([tree, discoveredSkills]) => {
+      if (!current) return;
+      setRepoFiles(tree.filter((entry) => !entry.path.endsWith('/')).map((entry) => entry.path));
+      setSkills(discoveredSkills);
+    }).catch(() => {
+      if (!current) return;
+      setRepoFiles(useRepo.getState().workTree.map((entry) => entry.path));
+      setSkills([]);
+    });
+    return () => { current = false; };
+  }, [activePath, provider]);
+
+  useEffect(() => {
+    const onFilesDropped = (event: Event) => {
+      const detail = (event as CustomEvent<HeroiFilesDroppedDetail>).detail;
+      if (detail.projectPath !== activePath) return;
+      setComposerText((current) => {
+        const next = appendFileMentions(current, detail.paths);
+        setComposerCursor(next.length);
+        return next;
+      });
+      setFileDropActive(false);
+      requestAnimationFrame(() => composerRef.current?.focus());
+    };
+    const onFileDrag = (event: Event) => {
+      const detail = (event as CustomEvent<HeroiFileDragDetail>).detail;
+      if (detail.projectPath === activePath) setFileDropActive(detail.active);
+    };
+    window.addEventListener(HEROI_FILES_DROPPED_EVENT, onFilesDropped);
+    window.addEventListener(HEROI_FILE_DRAG_EVENT, onFileDrag);
+    return () => {
+      window.removeEventListener(HEROI_FILES_DROPPED_EVENT, onFilesDropped);
+      window.removeEventListener(HEROI_FILE_DRAG_EVENT, onFileDrag);
+    };
+  }, [activePath]);
+
+  useEffect(() => {
+    let current = true;
+    void tauri.heroiProviderModels(
+      provider,
+      cliOverride(provider, openaiCli, anthropicCli),
+    ).then((result) => {
+      if (!current) return;
+      setCatalog(result);
+    }).catch(() => {
+      if (!current) return;
+      setCatalog({ provider, models: [] });
+    });
+    return () => { current = false; };
+  }, [anthropicCli, openaiCli, provider]);
 
   const updateConversation = useCallback((
     conversationId: string,
@@ -265,6 +406,7 @@ export function HeroiView({
         ...conversation,
         ...patch,
         model: patch.provider ? 'default' : (patch.model ?? conversation.model),
+        thinking: patch.provider || patch.model ? 'default' : (patch.thinking ?? conversation.thinking),
         updatedAt: Date.now(),
       }));
       return;
@@ -272,8 +414,12 @@ export function HeroiView({
     if (patch.provider) {
       setDraftProvider(patch.provider);
       setDraftModel('default');
+      setDraftThinking('default');
     }
-    if (patch.model) setDraftModel(patch.model);
+    if (patch.model) {
+      setDraftModel(patch.model);
+      if (!patch.thinking) setDraftThinking('default');
+    }
     if (patch.thinking) setDraftThinking(patch.thinking);
     if (patch.agentMode) setDraftAgentMode(patch.agentMode);
     if (patch.permissionMode) setDraftPermission(patch.permissionMode);
@@ -311,15 +457,24 @@ export function HeroiView({
         updatedAt: Date.now(),
         messages: conversation.messages.map((message) => {
           if (message.id !== assistantMessageId) return message;
-          const activities = (message.activities ?? []).map((entry) => (
-            entry.state === 'running' ? { ...entry, state: 'done' as const } : entry
-          ));
-          const previous = activities[activities.length - 1];
+          const activities = message.activities ?? [];
+          const existing = activities.findIndex((entry) => entry.id === event.id);
+          const nextActivity: HeroiActivity = {
+            id: event.id,
+            label: event.label,
+            detail: event.detail ?? activities[existing]?.detail,
+            state: event.done ? 'done' : 'running',
+          };
           return {
             ...message,
-            activities: previous?.label === event.label
-              ? [...activities.slice(0, -1), { ...previous, state: 'running' }]
-              : [...activities, { id: mintId('a'), label: event.label, state: 'running' }],
+            activities: existing >= 0
+              ? activities.map((entry, index) => index === existing ? nextActivity : entry)
+              : [
+                  ...activities.map((entry) => entry.state === 'running'
+                    ? { ...entry, state: 'done' as const }
+                    : entry),
+                  nextActivity,
+                ],
           };
         }),
       }));
@@ -338,9 +493,10 @@ export function HeroiView({
         )),
       }));
     }
-    setActiveRun((current) => (
-      current?.conversationId === conversationId ? { ...current, activity } : current
-    ));
+    setActiveRuns((current) => {
+      const run = current[conversationId];
+      return run ? { ...current, [conversationId]: { ...run, activity } } : current;
+    });
   }, [updateConversation]);
 
   const sendMessage = useCallback(async () => {
@@ -375,8 +531,8 @@ export function HeroiView({
       projectPath: activePath,
       title: titleFromText(text),
       provider,
-      model,
-      thinking,
+      model: selectedModel,
+      thinking: selectedThinking,
       agentMode,
       permissionMode,
       messages: [],
@@ -401,20 +557,23 @@ export function HeroiView({
     }
     setComposerText('');
     setError(null);
-    setActiveRun({
-      runId,
-      conversationId,
-      assistantMessageId,
-      activity: t('plugins.heroi.startingAgent', { agent: providerLabel(provider) }),
-    });
+    setActiveRuns((current) => ({
+      ...current,
+      [conversationId]: {
+        runId,
+        conversationId,
+        assistantMessageId,
+        activity: t('plugins.heroi.startingAgent', { agent: providerLabel(provider) }),
+      },
+    }));
 
     const agentRequest: HeroiAgentRequest = {
       path: activePath,
       provider,
       prompt: text,
       sessionId: sessionId ?? null,
-      model,
-      thinking,
+      model: selectedModel,
+      thinking: selectedThinking || 'default',
       agentMode,
       permissionMode,
       cliPath: cliOverride(provider, openaiCli, anthropicCli),
@@ -465,7 +624,12 @@ export function HeroiView({
       }));
       if (!stopped) setError(message);
     } finally {
-      setActiveRun((current) => current?.runId === runId ? null : current);
+      setActiveRuns((current) => {
+        if (current[conversationId]?.runId !== runId) return current;
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
       queueMicrotask(() => composerRef.current?.focus());
     }
   }, [
@@ -479,28 +643,78 @@ export function HeroiView({
     handleAgentEvent,
     meta?.branch,
     meta?.head_oid,
-    model,
     openaiCli,
     permissionMode,
     provider,
-    thinking,
+    selectedModel,
+    selectedThinking,
     updateConversation,
   ]);
 
   const stopRun = useCallback(() => {
     if (!activeRun) return;
-    setActiveRun((current) => current ? { ...current, activity: t('plugins.heroi.stopping') } : current);
+    setActiveRuns((current) => ({
+      ...current,
+      [activeRun.conversationId]: { ...activeRun, activity: t('plugins.heroi.stopping') },
+    }));
     void tauri.repoCancelOp(activeRun.runId);
   }, [activeRun]);
 
   const deleteConversation = useCallback((conversation: HeroiConversation) => {
-    if (activeRun?.conversationId === conversation.id) return;
+    if (activeRuns[conversation.id]) return;
     if (!window.confirm(t('plugins.heroi.deleteConfirm', { title: conversation.title }))) return;
     setConversations((current) => current.filter(({ id }) => id !== conversation.id));
     if (activeConversationId === conversation.id) setActiveConversationId(null);
-  }, [activeConversationId, activeRun?.conversationId]);
+  }, [activeConversationId, activeRuns]);
+
+  const chooseSuggestion = useCallback((suggestion: HeroiComposerSuggestion) => {
+    const currentTrigger = composerTrigger(composerText, composerCursor);
+    if (!currentTrigger) return;
+    const next = replaceComposerTrigger(composerText, currentTrigger, suggestion);
+    setComposerText(next.text);
+    setComposerCursor(next.cursor);
+    setSuggestionIndex(0);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(next.cursor, next.cursor);
+    });
+  }, [composerCursor, composerText]);
+
+  const toggleActivity = useCallback((activityId: string) => {
+    setExpandedActivities((current) => {
+      const next = new Set(current);
+      if (next.has(activityId)) next.delete(activityId);
+      else next.add(activityId);
+      return next;
+    });
+  }, []);
+
+  const onComposerChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    setComposerText(event.target.value);
+    setComposerCursor(event.target.selectionStart);
+    setSuggestionIndex(0);
+  }, []);
 
   const onComposerKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      setSuggestionIndex((current) => (
+        event.key === 'ArrowDown'
+          ? (current + 1) % suggestions.length
+          : (current - 1 + suggestions.length) % suggestions.length
+      ));
+      return;
+    }
+    if (suggestions.length > 0 && (event.key === 'Tab' || event.key === 'Enter')) {
+      event.preventDefault();
+      chooseSuggestion(suggestions[suggestionIndex] ?? suggestions[0]);
+      return;
+    }
+    if (event.key === 'Escape' && suggestions.length > 0) {
+      event.preventDefault();
+      setComposerCursor(-1);
+      return;
+    }
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       void sendMessage();
@@ -510,10 +724,10 @@ export function HeroiView({
       event.preventDefault();
       patchSettings({ agentMode: agentMode === 'build' ? 'plan' : 'build' });
     }
-  }, [agentMode, patchSettings, sendMessage]);
+  }, [agentMode, chooseSuggestion, patchSettings, sendMessage, suggestionIndex, suggestions]);
 
   const repoName = activePath ? pathLeaf(activePath) : t('plugins.heroi.noRepositoryShort');
-  const activeIsRunning = activeRun?.conversationId === activeConversation?.id;
+  const activeIsRunning = Boolean(activeRun);
   const activeThreadState = activeIsRunning
     ? 'running'
     : activeConversation?.messages.at(-1)?.state ?? 'stopped';
@@ -541,7 +755,6 @@ export function HeroiView({
               <button
                 type="button"
                 aria-label={t('plugins.heroi.newConversation')}
-                disabled={Boolean(activeRun)}
                 onClick={() => {
                   setComposingNew(true);
                   setActiveConversationId(null);
@@ -579,7 +792,7 @@ export function HeroiView({
                     : t('plugins.heroi.noRepoChats')}
                 </p>
               ) : visibleConversations.map((conversation) => {
-                const isRunning = activeRun?.conversationId === conversation.id;
+                const isRunning = Boolean(activeRuns[conversation.id]);
                 const lastState = conversation.messages.at(-1)?.state;
                 return (
                   <div
@@ -606,7 +819,7 @@ export function HeroiView({
                       type="button"
                       className="plugin-heroi-chat-delete"
                       aria-label={t('plugins.heroi.deleteConversation', { title: conversation.title })}
-                      disabled={activeRun?.conversationId === conversation.id}
+                      disabled={Boolean(activeRuns[conversation.id])}
                       onClick={() => deleteConversation(conversation)}
                     >
                       <Icon name="trash" size={12} />
@@ -623,7 +836,7 @@ export function HeroiView({
                 <span className={`plugin-heroi-thread-dot ${activeThreadState}`} />
                 <strong>{activeConversation?.title ?? t('plugins.heroi.newConversationTitle')}</strong>
                 <span className="plugin-heroi-context-separator" />
-                <span>{providerLabel(provider)} · {model}</span>
+                <span>{providerLabel(provider)} · {selectedCatalogModel?.name ?? selectedModel}</span>
                 <span className="plugin-heroi-context-separator" />
                 <code title={activePath}>{branchLabel}</code>
               </div>
@@ -659,7 +872,7 @@ export function HeroiView({
                     {message.state && message.state !== 'complete' && (
                       <span className={`plugin-heroi-message-state ${message.state}`}>
                         {message.state === 'running'
-                          ? activeRun?.activity
+                          ? activeRuns[activeConversation.id]?.activity
                           : t(message.state === 'stopped'
                             ? 'plugins.heroi.state.stopped'
                             : 'plugins.heroi.state.error')}
@@ -671,11 +884,28 @@ export function HeroiView({
                     <div className="plugin-heroi-activities">
                       {message.activities.map((activity) => (
                         <div key={activity.id} className={`plugin-heroi-activity ${activity.state}`}>
-                          <Icon name={activity.state === 'running' ? 'chev-down' : 'chev-right'} size={11} />
-                          <span>{activity.label}</span>
-                          <small>{activity.state === 'running'
-                            ? t('plugins.heroi.running')
-                            : activityStateLabel(activity.state)}</small>
+                          <button
+                            type="button"
+                            disabled={!activity.detail}
+                            aria-expanded={activity.detail
+                              ? expandedActivities.has(`${message.id}:${activity.id}`)
+                              : undefined}
+                            onClick={() => toggleActivity(`${message.id}:${activity.id}`)}
+                          >
+                            <Icon
+                              name={activity.detail && expandedActivities.has(`${message.id}:${activity.id}`)
+                                ? 'chev-down'
+                                : 'chev-right'}
+                              size={11}
+                            />
+                            <span>{activity.label}</span>
+                            <small>{activity.state === 'running'
+                              ? t('plugins.heroi.running')
+                              : activityStateLabel(activity.state)}</small>
+                          </button>
+                          {activity.detail && expandedActivities.has(`${message.id}:${activity.id}`) && (
+                            <pre>{activity.detail}</pre>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -684,7 +914,16 @@ export function HeroiView({
               ))}
             </div>
 
-            <div className="plugin-heroi-composer-wrap">
+            <div
+              className={'plugin-heroi-composer-wrap' + (fileDropActive ? ' file-drop-active' : '')}
+              data-heroi-file-drop="true"
+            >
+              {fileDropActive && (
+                <div className="plugin-heroi-file-drop-callout" role="status">
+                  <Icon name="file-plus" size={14} />
+                  Drop to reference in this message
+                </div>
+              )}
               {error && <div className="plugin-heroi-error" role="alert">{error}</div>}
               <div className="plugin-heroi-composer">
                 <div className="plugin-heroi-mode-tabs" role="group" aria-label={t('plugins.heroi.mode')}>
@@ -706,19 +945,45 @@ export function HeroiView({
                   </button>
                   <kbd>Shift+Tab</kbd>
                 </div>
-                <textarea
-                  ref={composerRef}
-                  rows={3}
-                  value={composerText}
-                  disabled={Boolean(activeRun)}
-                  placeholder={t('plugins.heroi.composerPlaceholder', {
-                    mode: agentMode === 'build' ? 'Build' : 'Plan',
-                    shortcut: navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl',
-                  })}
-                  aria-label={t('plugins.heroi.composerLabel')}
-                  onChange={(event) => setComposerText(event.target.value)}
-                  onKeyDown={onComposerKeyDown}
-                />
+                <div className="plugin-heroi-composer-editor">
+                  {suggestions.length > 0 && (
+                    <div id="heroi-composer-suggestions" className="plugin-heroi-suggestions" role="listbox" aria-label={trigger?.marker === '@' ? 'Repository files' : 'Skills'}>
+                      <TreeIconSprite />
+                      {suggestions.map((suggestion, index) => (
+                        <button
+                          key={`${suggestion.kind}:${suggestion.value}`}
+                          type="button"
+                          role="option"
+                          aria-selected={index === suggestionIndex}
+                          className={index === suggestionIndex ? 'active' : undefined}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => chooseSuggestion(suggestion)}
+                        >
+                          {suggestion.kind === 'file'
+                            ? <TreeFileIcon path={suggestion.value} size={15} />
+                            : <Icon name="sparkle" size={12} />}
+                          <span>{suggestion.kind === 'file' ? `@${suggestion.value}` : `/${suggestion.value}`}</span>
+                          <small>{suggestion.detail}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <textarea
+                    ref={composerRef}
+                    rows={3}
+                    value={composerText}
+                    disabled={Boolean(activeRun)}
+                    placeholder={t('plugins.heroi.composerPlaceholder', {
+                      mode: agentMode === 'build' ? 'Build' : 'Plan',
+                      shortcut: navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl',
+                    })}
+                    aria-label={t('plugins.heroi.composerLabel')}
+                    aria-controls={suggestions.length > 0 ? 'heroi-composer-suggestions' : undefined}
+                    onChange={onComposerChange}
+                    onSelect={(event) => setComposerCursor(event.currentTarget.selectionStart)}
+                    onKeyDown={onComposerKeyDown}
+                  />
+                </div>
                 <div className="plugin-heroi-composer-footer">
                   <div className="plugin-heroi-composer-context" title={activePath}>
                     <Icon name="folder" size={11} />
@@ -727,6 +992,7 @@ export function HeroiView({
                   <div className="plugin-heroi-config">
                     <Select
                       className="plugin-heroi-native-select"
+                      containerClassName="plugin-heroi-select-provider"
                       aria-label={t('plugins.heroi.provider')}
                       value={provider}
                       disabled={Boolean(activeRun || activeConversation)}
@@ -736,24 +1002,33 @@ export function HeroiView({
                     </Select>
                     <Select
                       className="plugin-heroi-native-select"
+                      containerClassName="plugin-heroi-select-model"
                       aria-label={t('plugins.heroi.model')}
-                      value={model}
-                      disabled={Boolean(activeRun)}
+                      value={selectedModel}
+                      disabled={Boolean(activeRun) || modelOptions.length === 0}
                       onChange={(event) => patchSettings({ model: event.target.value })}
                     >
-                      {MODELS[provider].map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                      {modelOptions.map((entry) => (
+                        <option key={entry.slug} value={entry.slug}>{entry.name}</option>
+                      ))}
                     </Select>
+                    {thinkingOptions.length > 0 && (
+                      <Select
+                        className="plugin-heroi-native-select"
+                        containerClassName="plugin-heroi-select-thinking"
+                        aria-label={t('plugins.heroi.thinking')}
+                        value={selectedThinking}
+                        disabled={Boolean(activeRun)}
+                        onChange={(event) => patchSettings({ thinking: event.target.value })}
+                      >
+                        {thinkingOptions.map((entry) => (
+                          <option key={entry.id} value={entry.id}>{entry.label}</option>
+                        ))}
+                      </Select>
+                    )}
                     <Select
                       className="plugin-heroi-native-select"
-                      aria-label={t('plugins.heroi.thinking')}
-                      value={thinking}
-                      disabled={Boolean(activeRun)}
-                      onChange={(event) => patchSettings({ thinking: event.target.value as ThinkingLevel })}
-                    >
-                      {THINKING.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-                    </Select>
-                    <Select
-                      className="plugin-heroi-native-select"
+                      containerClassName="plugin-heroi-select-permission"
                       aria-label={t('plugins.heroi.permission')}
                       value={permissionMode}
                       disabled={Boolean(activeRun)}
