@@ -2293,3 +2293,17 @@ are allowed so the orange/near-black heroi_aide look stays inside the plugin.
 **Why.** Those are different products. Copying the public heroi layout shipped
 the wrong UX once already.
 
+---
+
+## Perf hook exposes plugins for CDP (2026-08-30)
+
+**Rule.** When driving Strand over CDP in Vite DEV, use `window.__strand.*`
+stores only. Dynamic `import('/src/...')` from `Runtime.evaluate` can resolve a
+**second** module graph, so installs and layout writes look successful but the
+React tree never updates. `window.__strand.plugins` is part of the perf hook
+(`strand:perf=1`) for the same reason as `repo` / `customView`. Workbench
+workspace id must be `__default__`, never `"default"`.
+
+**Why.** A Heroi install against the duplicate registry left the App surface
+registry empty and the main pane blank until the real store was used.
+
