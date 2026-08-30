@@ -60,7 +60,20 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * *stays on the file*, `s` stages, `d`-`d` discards, `n`/`p` step change
  * blocks, `c` jumps to the commit form.
  */
-export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: string) => void }) {
+const REVIEW_DIFF_HOST = '.rv-single .rv-diff-scroll';
+
+export function Review({
+  onOpenFileInEditor,
+  active = true,
+  embedded = false,
+}: {
+  onOpenFileInEditor: (file: string) => void;
+  /** Only the focused Custom-view pane owns window-level single-key actions. */
+  active?: boolean;
+  /** Custom stays mounted under a different global view id, so follow ordinary
+   * local-diff refreshes explicitly while this surface is embedded. */
+  embedded?: boolean;
+}) {
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const reviewUnstagedDiffs = useRepo((s) => s.reviewUnstagedDiffs);
@@ -98,6 +111,13 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
   useEffect(() => {
     void refreshReviewDiffs();
   }, [baseline, refreshReviewDiffs]);
+
+  const embeddedUnstagedRef = useRef(unstagedDiffs);
+  useEffect(() => {
+    const changed = embeddedUnstagedRef.current !== unstagedDiffs;
+    embeddedUnstagedRef.current = unstagedDiffs;
+    if (embedded && baseline == null && changed) void refreshReviewDiffs();
+  }, [baseline, embedded, refreshReviewDiffs, unstagedDiffs]);
 
   const sessionMode = baseline != null;
   const pool: FileDiff[] = sessionMode ? baselineDiffs : reviewUnstagedDiffs;
@@ -157,9 +177,9 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
     const pending = pendingJumpRef.current;
     pendingJumpRef.current = null;
     if (pending && displayed && displayed.path === pending.path) {
-      scrollToDiffLine('.rv-diff-scroll', pending.target, { patch: displayed.patch, layout });
+      scrollToDiffLine(REVIEW_DIFF_HOST, pending.target, { patch: displayed.patch, layout });
     } else {
-      document.querySelector<HTMLElement>('.rv-diff-scroll')?.scrollTo({ top: 0 });
+      document.querySelector<HTMLElement>(REVIEW_DIFF_HOST)?.scrollTo({ top: 0 });
     }
   }, [displayed, layout]);
 
@@ -623,6 +643,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       // ⌘F / Ctrl+F opens the in-diff search — checked before the mod-combo
       // guard below. Inert while a dialog or the palette is up.
@@ -652,13 +673,13 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
         case 'n':
         case 'p':
           e.preventDefault();
-          stepChangeBlock(e.key === 'n' ? 1 : -1, '.rv-diff-scroll');
+          stepChangeBlock(e.key === 'n' ? 1 : -1, REVIEW_DIFF_HOST);
           break;
         // Shift+J / Shift+K scroll the diff pane (j/k stay queue nav).
         case 'J':
         case 'K':
           e.preventDefault();
-          scrollDiff(e.key === 'J' ? 1 : -1, '.rv-diff-scroll');
+          scrollDiff(e.key === 'J' ? 1 : -1, REVIEW_DIFF_HOST);
           break;
         case ' ':
           e.preventDefault();
@@ -695,7 +716,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, markReviewed, current, unstagedSet, stageMany, discardCurrent, setView]);
+  }, [active, step, markReviewed, current, unstagedSet, stageMany, discardCurrent, setView]);
 
   // Marks hash the pool's whole-file patches; both bulk actions only touch
   // files that are actually unstaged right now.
@@ -720,7 +741,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
 
   if (pool.length === 0) {
     return (
-      <div className="rv-wrap">
+      <div className="rv-wrap rv-single">
         <ReviewToolbar
           sessionMode={sessionMode}
           baselineShort={baseline?.short ?? null}
@@ -741,7 +762,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
   }
 
   return (
-    <div className="rv-wrap">
+    <div className="rv-wrap rv-single">
       <ReviewToolbar
         sessionMode={sessionMode}
         baselineShort={baseline?.short ?? null}
@@ -1123,7 +1144,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                       <DiffMinimap
                         patch={displayed.patch}
                         layout={layout}
-                        hostSelector=".rv-diff-scroll"
+                        hostSelector={REVIEW_DIFF_HOST}
                       />
                     )}
                   </div>
@@ -1141,7 +1162,7 @@ export function Review({ onOpenFileInEditor }: { onOpenFileInEditor: (file: stri
                     const target = matchTarget(m);
                     if (target && displayed?.path === m.path) {
                       // Same file: the pane won't remount, scroll right away.
-                      scrollToDiffLine('.rv-diff-scroll', target, {
+                      scrollToDiffLine(REVIEW_DIFF_HOST, target, {
                         patch: displayed.patch,
                         layout,
                       });

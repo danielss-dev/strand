@@ -30,7 +30,8 @@ shortcuts").
 | `Mod+K` | Command palette |
 | `Mod+O` | Open repository |
 | `Mod+,` | Settings |
-| `Mod+1…7` | Work · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review |
+| `Mod+1…7` | Workbench · Local Changes · All Commits · Reflog · Review · Worktrees · Workspace Review |
+| `Mod+8` | Customize Workbench |
 | `Mod+Tab` / `Mod+Shift+Tab` | Next / previous repository |
 | `Mod+E` | Switch repository (quick-switcher) |
 | `Mod+P` | Push |
@@ -41,13 +42,17 @@ shortcuts").
 | `Mod+Shift+C` | Open in terminal |
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
+| `Mod+B` | Toggle sidebar |
+| `Mod+Z` | Undo last Workbench layout change while customizing |
+| `Mod+[` / `Mod+]` | Cycle panes in a composed Workbench |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
 `Mod+Enter` commit · `Mod+F` search in file or diff · `/` search commits · `j`/`k`
 walk the file list · `n`/`p` step change blocks · `Shift+J`/`Shift+K` scroll the
 diff · tabs in the active Work pane `Ctrl/⌘+PageUp`/`PageDown` or
-`←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal ·
-palette `↑↓`/`↵`/`⇥`/`Esc`.
+`←→`/`Home`/`End`/`Delete`, with `F6` to leave a terminal · in a composed
+Workbench, `F6` focuses the active surface entry point (or its selector while customizing) · palette
+`↑↓`/`↵`/`⇥`/`Esc`.
 
 Strand is a native, cross-platform Git client (Tauri 2 + Rust + React) with
 a dedicated surface for reviewing an agent's changes: whole-file-context
@@ -65,7 +70,7 @@ the resolved app appearance automatically.
 
 ## Features
 
-- **Work view (⌘1)** — Strand's default startup workspace combines editable
+- **Workbench (⌘1)** — Strand's default workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane
   edge to create a left/right/top/bottom split; each pane keeps its own tabs
@@ -86,7 +91,32 @@ the resolved app appearance automatically.
   can launch a one-off native or WSL shell, while Settings → Terminal provides
   a global default, paired repository and shell selectors for per-repository
   overrides, and typography without changing the separate external
-  **Open in terminal** action. Linked worktrees share one override.
+  **Open in terminal** action. Linked worktrees share one override. With no
+  saved configuration, Workbench is exactly this full-size Work surface.
+  `Mod+8`, View → Customize Workbench, or Quick Launch enters layout editing:
+  add Files, Local Changes, Review, history, pull requests, worktrees, and
+  workspace review in nested panes, or start from a template. Each workspace
+  auto-saves its layout; Reset to default returns to full-size Work. Existing
+  Custom layouts migrate automatically. Each stateful surface mounts once and
+  Work's live editor/terminal runtime survives layout moves and resizes. When
+  Workbench owns Files, the duplicate repository-sidebar Files tab is hidden;
+  every thin pane divider retains a wider mouse target for reliable resizing.
+  **Experimental plugins:** install surfaces from Settings → Plugins (bundled
+  marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
+  repository-scoped chat for background Claude, Codex, and Cursor Agent
+  sessions. Heroi only shows chats for the active repository; Files, diffs,
+  and other tools remain separate Workbench panes. Model and reasoning menus
+  come from the selected provider. Multiple threads can run at once; `@`
+  searches repository files, `/` searches installed/project skills, and files
+  can be dragged from a Files pane into the composer with live drop feedback.
+  Command/tool rows expand to show what the agent ran and the captured output.
+  Its compact thread rail,
+  execution activity rows, and bottom command deck keep chat primary, with
+  **Open review** routing to Strand's Review surface. Declarative plugins render
+  from validated manifests; third-party JavaScript does not execute in the privileged webview.
+  The bundled **Quick Notes** plugin provides an editable scratchpad for each
+  repository and saves it in Strand's app database rather than the repository.
+  See `docs/plugin-creation.md`.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the
   edits inline, not isolated hunks. A file-tree queue tracks what you've

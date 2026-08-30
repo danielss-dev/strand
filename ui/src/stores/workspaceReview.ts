@@ -128,6 +128,15 @@ interface WorkspaceReviewState {
 /** Stale-response guard: bumped on every {@link WorkspaceReviewState.refreshAll}. */
 let generation = 0;
 
+/**
+ * Member paths whose discovery failed — the directory is gone (deleted,
+ * moved, or no longer a repository), so there is nothing to review. Their
+ * slices are dropped instead of rendering a dead error section, and
+ * {@link WorkspaceReviewState.refreshAll} revalidates them so a path that
+ * comes back rejoins the review.
+ */
+const missing = new Map<string, string>();
+
 /** The active workspace's members resolved against the current tab set. */
 function resolveMembers(): MemberResolution[] {
   const { workspaces, activeWorkspaceId } = useWorkspaces.getState();
@@ -163,19 +172,25 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
   const loadMember = async (res: MemberResolution, gen: number): Promise<void> => {
     const { path } = res;
     // Always read fresh meta — a background member's tab meta is frozen at
-    // open time, so its branch label would lie after an agent checkout. The
-    // tab meta is only the fallback when the read fails (repo moved/deleted:
-    // fall through to the diff error), and the IPC is path-parameterized so
-    // a member that isn't open at all still resolves.
+    // open time, so its branch label would lie after an agent checkout. A
+    // failed read means the directory is gone (dropped below); the IPC is
+    // path-parameterized so a member that isn't open at all still resolves.
     let meta = res.meta;
     try {
       meta = await tauri.repoMeta(path);
-    } catch (e) {
-      if (!meta) {
-        if (gen !== generation) return;
-        patchMember(path, { loading: false, error: errMessage(e) });
-        return;
-      }
+    } catch {
+      // Discovery failed: the member's directory is gone, so even a stale
+      // tab meta has nothing behind it to review. Drop the slice (and
+      // remember the path so refreshes skip it) rather than rendering a
+      // dead error section.
+      missing.set(pathKey(path), path);
+      if (gen !== generation) return;
+      const key = pathKey(path);
+      set((s) => ({
+        members: s.members.filter((m) => pathKey(m.path) !== key),
+        tick: s.tick + 1,
+      }));
+      return;
     }
 
     const baseline = await reviewSession.getBaseline(path).catch(() => null);
@@ -256,7 +271,23 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
 
     async refreshAll() {
       const gen = ++generation;
-      const resolved = resolveMembers();
+      let resolved = resolveMembers();
+      // Revalidate previously-vanished member paths (cheap discovers): one
+      // that resolves again leaves the cache and rejoins the review; the
+      // rest stay out of the seeded list entirely.
+      if (missing.size > 0) {
+        await Promise.all(
+          [...missing].map(async ([key, path]) => {
+            try {
+              await tauri.repoMeta(path);
+              missing.delete(key);
+            } catch {
+              // still gone
+            }
+          }),
+        );
+        resolved = resolved.filter((r) => !missing.has(pathKey(r.path)));
+      }
       // Seed the next member list immediately (so the view lays out its
       // sections), carrying over the previous slice's data where the member
       // survives — a refresh repaints in place instead of flashing empty.

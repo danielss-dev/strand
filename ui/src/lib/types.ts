@@ -799,6 +799,54 @@ export interface Snapshot {
 /** AI provider for writing suggestions (matches Rust `AiProvider`). */
 export type AiProvider = 'openai' | 'anthropic';
 
+export type HeroiAgentProvider = 'claude' | 'codex' | 'cursor';
+
+export interface HeroiReasoningOption {
+  id: string;
+  label: string;
+  isDefault: boolean;
+}
+
+export interface HeroiModel {
+  slug: string;
+  name: string;
+  isDefault: boolean;
+  reasoning: HeroiReasoningOption[];
+}
+
+export interface HeroiModelCatalog {
+  provider: HeroiAgentProvider;
+  models: HeroiModel[];
+}
+
+export interface HeroiSkill {
+  name: string;
+  description: string | null;
+  scope: 'user' | 'project';
+}
+
+export interface HeroiAgentRequest {
+  path: string;
+  provider: HeroiAgentProvider;
+  prompt: string;
+  sessionId: string | null;
+  model: string;
+  thinking: string;
+  agentMode: 'plan' | 'build';
+  permissionMode: 'read' | 'build' | 'full';
+  cliPath: string | null;
+}
+
+export type HeroiAgentEvent =
+  | { type: 'status'; message: string }
+  | { type: 'session'; sessionId: string }
+  | { type: 'text'; text: string }
+  | { type: 'activity'; id: string; label: string; detail: string | null; done: boolean };
+
+export interface HeroiAgentOutcome {
+  sessionId: string | null;
+}
+
 /** Status of a vendor CLI + login session (Settings → AI). */
 export interface AiProviderStatus {
   provider: AiProvider;

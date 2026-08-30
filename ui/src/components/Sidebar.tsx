@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon, type IconName } from './Icon';
-import {
-  copyToClipboard,
-  PierreTree,
-  type PierreTreeHandle,
-  type TreeMenuContext,
-  type TreeMenuItem,
-} from './PierreTree';
-import { ignorePatterns } from '../lib/ignore';
-import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
-import { applyLocalTreeMutation, retainLoadedIgnoredChildren } from '../lib/localTreeMutation';
+import { copyToClipboard } from './PierreTree';
+import { RepositoryFiles } from './RepositoryFiles';
 import { t } from '../lib/i18n';
+import { customPanes } from '../lib/customView';
 import { pathKey, worktreeName } from '../lib/repoIdentity';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
-import { workTreeGitStatus } from '../lib/workTreeGitStatus';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
 import { useBranchIntegration } from '../stores/branchIntegration';
-import { useWork } from '../stores/work';
+import { useCustomView } from '../stores/customView';
+import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
+import { BUILT_IN_SURFACE_IDS } from '../workbench';
 import type {
   Branch,
   PullMode,
@@ -33,7 +27,6 @@ import type {
 } from '../lib/types';
 import type { RemoteDialogMode } from '../views/RemoteDialog';
 import type { BranchNetworkDialogMode } from '../views/BranchNetworkDialog';
-import { RenameFileDialog } from '../views/RenameFileDialog';
 import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
 import { CompareRefsDialog, type CompareChoice } from '../views/CompareRefsDialog';
 
@@ -84,6 +77,8 @@ function SideSection({ label, collapsed, onToggle, count, action }: SectionProps
 }
 
 interface SidebarProps {
+  onOpenWorkbench: () => void;
+  onOpenWorkSurface: () => void;
   onOpenRepo: () => void;
   onOpenRecent: (path: string) => void;
   /** Open the Save-snapshot / Stash dialog. */
@@ -179,12 +174,23 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
-  const selectedFile = useRepo((s) => s.selectedFile);
-  const selectedFileIsDirectory = useRepo((s) => s.selectedFileIsDirectory);
+  const customFilesPaneId = useCustomView((state) =>
+    customPanes(state.layout).find(
+      (pane) => pane.surface?.surfaceId === BUILT_IN_SURFACE_IDS.files,
+    )?.id ?? null);
+  const customRestored = useCustomView((state) => state.restored);
+  const customWorkspaceId = useCustomView((state) => state.workspaceId);
+  const customConfigured = useCustomView((state) => state.configured);
+  const activeWorkspaceId = useWorkspaces((state) => state.activeWorkspaceId);
+  const customOwnsFiles = view === 'work'
+    && customRestored
+    && customConfigured
+    && customWorkspaceId === (activeWorkspaceId ?? DEFAULT_WORKSPACE_ID)
+    && customFilesPaneId != null;
   const status = useRepo((s) => s.status);
   const meta = useRepo((s) => s.meta);
   const recents = useRepo((s) => s.recents);
@@ -211,17 +217,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   const deleteRemoteTag = useRepo((s) => s.deleteRemoteTag);
   const remoteTags = useRepo((s) => s.remoteTags);
   const refreshRemoteTags = useRepo((s) => s.refreshRemoteTags);
-  const workTree = useRepo((s) => s.workTree);
-  const filesTreeRevision = useRepo((s) => s.filesTreeRevision);
-  const filesTreeMutation = useRepo((s) => s.filesTreeMutation);
-  const selectedCommit = useRepo((s) => s.selectedCommit);
-  const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
-  const markFilesTreeChanged = useRepo((s) => s.markFilesTreeChanged);
-  const gitignoreAdd = useRepo((s) => s.gitignoreAdd);
-  const moveEntries = useRepo((s) => s.moveEntries);
-  const openIgnoreDialog = useRepo((s) => s.openIgnoreDialog);
-  const workRepos = useWork((s) => s.repos);
-  const openWorkFile = useWork((s) => s.openFile);
   const stashes = useRepo((s) => s.stashes);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
@@ -266,6 +261,7 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
   );
 
   const [tab, setTab] = useState<SideTab>('git');
+  const activeTab = customOwnsFiles ? 'git' : tab;
   const providerMergedBranches = useMemo(
     () => integration?.data ? providerMergedBranchNames(refs, integration.data) : new Set<string>(),
     [integration?.data, refs],
@@ -303,24 +299,8 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     x: number;
     y: number;
     items: MenuItem[];
-    source: 'context' | 'file-create';
   } | null>(null);
-  const openMenu = (
-    x: number,
-    y: number,
-    items: MenuItem[],
-    source: 'context' | 'file-create' = 'context',
-  ) => setMenu({ x, y, items, source });
-  const fileCreateButtonRef = useRef<HTMLButtonElement>(null);
-
-  const openFileCreateMenu = () => {
-    const rect = fileCreateButtonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    openMenu(rect.left, rect.bottom + 4, [
-      { label: t('files.newFile'), icon: 'file-plus', onSelect: () => onCreateFileEntry('', false) },
-      { label: t('files.newFolder'), icon: 'folder-plus', onSelect: () => onCreateFileEntry('', true) },
-    ], 'file-create');
-  };
+  const openMenu = (x: number, y: number, items: MenuItem[]) => setMenu({ x, y, items });
 
   const unstaged = status.filter((s) => !s.staged).length;
   const toggle = (k: keyof typeof sections) => setSections((s) => ({ ...s, [k]: !s[k] }));
@@ -430,380 +410,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       (s) => s.path.toLowerCase().includes(q) || s.name.toLowerCase().includes(q),
     );
   }, [submodules, filter]);
-
-  // Files tab: lazily fetch the selected commit's immutable tree, or the
-  // working-tree listing when no commit detail is open. Path-changing actions
-  // advance `filesTreeRevision`; ordinary status/stage updates deliberately do
-  // not, because recursively re-walking ignored directories is expensive.
-  const [treeLoading, setTreeLoading] = useState(false);
-  const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
-  const [localTreeCache, setLocalTreeCache] = useState<{
-    repoPath: string;
-    entries: typeof workTree;
-  } | null>(null);
-  const filesTreeRef = useRef<PierreTreeHandle>(null);
-  const loadedIgnoredDirectoriesRef = useRef(new Set<string>());
-  const loadingIgnoredDirectoriesRef = useRef(new Map<string, number>());
-  const ignoredLoadGenerationRef = useRef(0);
-  const pendingIgnoredExpansionRef = useRef<string | null>(null);
-  const [emptyDirectories, setEmptyDirectories] = useState<Set<string>>(new Set());
-  const [treeError, setTreeError] = useState<string | null>(null);
-  const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
-  const workingTreeRevision = selectedCommit || !mutationTargetsRepo ? 0 : filesTreeRevision;
-  // `repo_snapshot` already carries the authoritative tracked/untracked
-  // listing after commits, checkouts, and watcher events. Fold that cheap list
-  // into the ignored-inclusive Files cache instead of waiting for a tab switch
-  // (or paying for another recursive ignored scan).
-  useEffect(() => {
-    const repoPath = meta?.path;
-    if (!repoPath) return;
-    setLocalTreeCache((current) => {
-      if (!current || current.repoPath !== repoPath) return current;
-      const entries = new Map(
-        current.entries.filter((entry) => entry.ignored).map((entry) => [entry.path, entry]),
-      );
-      for (const entry of workTree) entries.set(entry.path, entry);
-      const next = [...entries.values()].sort((a, b) => a.path.localeCompare(b.path));
-      const unchanged =
-        next.length === current.entries.length &&
-        next.every((entry, i) => {
-          const prev = current.entries[i];
-          return (
-            prev?.path === entry.path &&
-            prev.status === entry.status &&
-            prev.ignored === entry.ignored
-          );
-        });
-      return unchanged ? current : { ...current, entries: next };
-    });
-  }, [meta?.path, workTree]);
-  useEffect(() => {
-    setEmptyDirectories(new Set());
-    loadedIgnoredDirectoriesRef.current.clear();
-    loadingIgnoredDirectoriesRef.current.clear();
-    pendingIgnoredExpansionRef.current = null;
-    ignoredLoadGenerationRef.current++;
-  }, [meta?.path]);
-  useEffect(() => {
-    if (!filesTreeMutation || !mutationTargetsRepo) return;
-    loadedIgnoredDirectoriesRef.current.clear();
-    loadingIgnoredDirectoriesRef.current.clear();
-    pendingIgnoredExpansionRef.current = null;
-    ignoredLoadGenerationRef.current++;
-    setEmptyDirectories((current) => applyEmptyDirectoryMutation(current, filesTreeMutation));
-    setLocalTreeCache((current) => {
-      if (!current || current.repoPath !== filesTreeMutation.repoPath) return current;
-      return {
-        ...current,
-        entries: applyLocalTreeMutation(
-          current.entries,
-          filesTreeMutation,
-          useRepo.getState().workTree,
-        ),
-      };
-    });
-  }, [filesTreeMutation, mutationTargetsRepo]);
-  useEffect(() => {
-    if (tab !== 'files' || !meta?.path) return;
-    let cancelled = false;
-    setTreeLoading(true);
-    setTreeError(null);
-    if (selectedCommit) setRevisionTree(null);
-    const load = selectedCommit
-      ? tauri.repoTreeAt(meta.path, selectedCommit).then((tree) => {
-          if (!cancelled) setRevisionTree(tree);
-        })
-      : tauri.repoTree(meta.path, true).then((tree) => {
-          if (!cancelled) {
-            setLocalTreeCache((current) => ({
-              repoPath: meta.path,
-              entries: current?.repoPath === meta.path
-                ? retainLoadedIgnoredChildren(
-                    tree,
-                    current.entries,
-                    loadedIgnoredDirectoriesRef.current,
-                  )
-                : tree,
-            }));
-          }
-        });
-    void load
-      .catch((e) => {
-        if (!cancelled) {
-          setRevisionTree(null);
-          setTreeError(errMessage(e));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setTreeLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, meta?.path, selectedCommit, workingTreeRevision]);
-
-  // Files tab — Pierre receives either the selected revision or working tree.
-  // Filtering is Pierre's own in-tree search box, so the shared filter box
-  // (git tab only) no longer touches this list.
-  const localTree = localTreeCache && localTreeCache.repoPath === meta?.path
-    ? localTreeCache.entries
-    : null;
-  const displayedTree = selectedCommit
-    ? (revisionTree ?? [])
-    : (localTree ?? []);
-  const filePaths = useMemo(
-    () => [
-      ...displayedTree.map((e) => e.path),
-      ...(selectedCommit ? [] : emptyDirectories),
-    ],
-    [displayedTree, emptyDirectories, selectedCommit],
-  );
-  const activeWorkTab = meta
-    ? workRepos[meta.path]?.tabs.find((item) => item.id === workRepos[meta.path]?.activeTabId)
-    : null;
-  const workFile = activeWorkTab?.kind === 'file' ? activeWorkTab : null;
-  const selectedTreeFile = view === 'work' ? workFile?.path ?? null : selectedFile;
-  const selectedTreeDirectory = view === 'work' ? workFile?.isDirectory ?? false : selectedFileIsDirectory;
-  const selectedTreePath = selectedTreeFile && selectedTreeDirectory
-    ? `${selectedTreeFile.replace(/\/+$/, '')}/`
-    : selectedTreeFile;
-  const fileGitStatus = useMemo(
-    () => workTreeGitStatus(displayedTree, selectedCommit ? displayedTree : workTree),
-    [displayedTree, selectedCommit, workTree],
-  );
-  const ignoredDirectoryPaths = useMemo(
-    () => new Set(displayedTree
-      .filter((entry) => entry.ignored && entry.path.endsWith('/'))
-      .map((entry) => entry.path.replace(/\/+$/, ''))),
-    [displayedTree],
-  );
-  const loadIgnoredDirectory = useCallback((directory: string) => {
-    const repoPath = meta?.path;
-    if (selectedCommit || !repoPath || !ignoredDirectoryPaths.has(directory)) return;
-    if (loadedIgnoredDirectoriesRef.current.has(directory)) return;
-    if (loadingIgnoredDirectoriesRef.current.has(directory)) return;
-
-    const generation = ignoredLoadGenerationRef.current;
-    loadingIgnoredDirectoriesRef.current.set(directory, generation);
-    void tauri.repoTreeIgnoredChildren(repoPath, directory)
-      .then((children) => {
-        if (ignoredLoadGenerationRef.current !== generation) return;
-        loadedIgnoredDirectoriesRef.current.add(directory);
-        if (children.length > 0) pendingIgnoredExpansionRef.current = directory;
-        setLocalTreeCache((current) => {
-          if (!current || current.repoPath !== repoPath) return current;
-          const entries = new Map(current.entries.map((entry) => [entry.path, entry]));
-          for (const child of children) entries.set(child.path, child);
-          return {
-            ...current,
-            entries: [...entries.values()].sort((a, b) => a.path.localeCompare(b.path)),
-          };
-        });
-      })
-      .catch((cause) => {
-        if (ignoredLoadGenerationRef.current === generation) {
-          onToast(`Could not load ${directory}: ${errMessage(cause)}`, 'error');
-        }
-      })
-      .finally(() => {
-        if (loadingIgnoredDirectoriesRef.current.get(directory) === generation) {
-          loadingIgnoredDirectoriesRef.current.delete(directory);
-        }
-      });
-  }, [ignoredDirectoryPaths, meta?.path, onToast, selectedCommit]);
-  useEffect(() => {
-    const directory = pendingIgnoredExpansionRef.current;
-    if (!directory || !filePaths.some((path) => path.startsWith(`${directory}/`))) return;
-    pendingIgnoredExpansionRef.current = null;
-    const frame = requestAnimationFrame(() => filesTreeRef.current?.expandPath(directory));
-    return () => cancelAnimationFrame(frame);
-  }, [filePaths]);
-  // Rename / move — the drop handler for drag-to-move in the tree, and the
-  // dialog behind the context menu's keyboard-operable equivalent.
-  const [renameTarget, setRenameTarget] = useState<string | null>(null);
-  const moveTo = useCallback(
-    (sources: string[], dir: string) => {
-      const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
-      const parent = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
-      // The tree validated the drop as a whole; per-source, skip entries the
-      // move wouldn't change (already in the target dir, folder into itself).
-      const moves = sources
-        .filter((s) => parent(s) !== dir && dir !== s && !dir.startsWith(s + '/'))
-        .map((s) => ({ from: s, to: dir ? `${dir}/${base(s)}` : base(s) }));
-      if (moves.length === 0) return;
-      void moveEntries(moves).then((failures) => {
-        if (failures.length) {
-          const more = failures.length > 1 ? ` (+${failures.length - 1} more)` : '';
-          onToast(`Move failed: ${failures[0]}${more}`, 'error');
-        }
-      });
-    },
-    [moveEntries, onToast],
-  );
-
-  const fileMenu = useCallback(
-    (targets: string[], context: TreeMenuContext): TreeMenuItem[] => {
-      const rowPath = context.path;
-      const rowIsDirectory = context.kind === 'directory';
-      const actionPaths = rowIsDirectory ? [rowPath] : targets;
-      const items: TreeMenuItem[] = [
-        {
-          label: 'Open',
-          icon: 'content',
-          onSelect: () => {
-            if (!meta) return;
-            openWorkFile(meta.path, rowPath, selectedCommit, rowIsDirectory, 'pinned');
-            setView('work');
-          },
-        },
-      ];
-      if (!selectedCommit && actionPaths.length === 1) {
-        items.push(
-          {
-            label: 'Open in editor',
-            icon: 'external',
-            onSelect: () => onOpenFileInEditor(rowPath),
-          },
-          {
-            label: 'Reveal in file manager',
-            icon: 'folder-open',
-            onSelect: () => {
-              if (!meta) return;
-              void tauri.repoFileReveal(meta.path, rowPath).catch((cause) =>
-                onToast(`Reveal failed: ${errMessage(cause)}`, 'error'));
-            },
-          },
-        );
-      }
-      if (!selectedCommit && !rowIsDirectory && actionPaths.length === 1) {
-        items.push(
-          {
-            label: 'Open file history',
-            icon: 'history',
-            onSelect: () => {
-              if (!meta) return;
-              openWorkFile(meta.path, rowPath, null, false, 'pinned', 'history');
-              setView('work');
-            },
-          },
-          {
-            label: 'Open blame',
-            icon: 'blame',
-            onSelect: () => {
-              if (!meta) return;
-              openWorkFile(meta.path, rowPath, null, false, 'pinned', 'blame');
-              setView('work');
-            },
-          },
-        );
-      }
-      if (!selectedCommit && actionPaths.length === 1) {
-        items.push({
-          label: 'Rename / move…',
-          icon: 'file',
-          onSelect: () => setRenameTarget(rowPath),
-        });
-        const dir = rowIsDirectory ? rowPath : parentPath(rowPath);
-        items.push(
-          { label: 'New file here…', icon: 'file', onSelect: () => onCreateFileEntry(dir, false) },
-          { label: 'New folder here…', icon: 'folder', onSelect: () => onCreateFileEntry(dir, true) },
-        );
-      }
-      // .gitignore quick actions for a single untracked file.
-      if (
-        !selectedCommit &&
-        !rowIsDirectory &&
-        actionPaths.length === 1 &&
-        workTree.some((e) => e.path === rowPath && e.status === 'UNTRACKED')
-      ) {
-        const ignore = (pattern: string) =>
-          void gitignoreAdd(pattern).catch((e) => onToast(`Ignore failed: ${errMessage(e)}`, 'error'));
-        const base = leafName(rowPath);
-        const { exact, extension } = ignorePatterns(rowPath);
-        const submenu: MenuItem[] = [
-          { label: `Ignore “${base}”`, onSelect: () => ignore(exact) },
-        ];
-        if (extension) {
-          submenu.push({ label: `Ignore all ${extension} files`, onSelect: () => ignore(extension) });
-        }
-        submenu.push({ label: 'Custom pattern…', onSelect: () => openIgnoreDialog(rowPath) });
-        items.push({ label: 'Ignore', icon: 'file', submenu });
-      }
-      items.push({
-        label: actionPaths.length > 1 ? 'Copy relative paths' : 'Copy relative path',
-        icon: 'file',
-        onSelect: () => {
-          copyToClipboard(actionPaths.join('\n'));
-          onToast(actionPaths.length > 1 ? 'Relative paths copied' : 'Relative path copied');
-        },
-      });
-      if (!selectedCommit && meta) {
-        items.push({
-          label: actionPaths.length > 1 ? 'Copy absolute paths' : 'Copy absolute path',
-          icon: 'file',
-          onSelect: () => {
-            void tauri.repoFileAbsolutePaths(meta.path, actionPaths).then(
-              (paths) => {
-                copyToClipboard(paths.join('\n'));
-                onToast(paths.length > 1 ? 'Absolute paths copied' : 'Absolute path copied');
-              },
-              (cause) => onToast(`Copy failed: ${errMessage(cause)}`, 'error'),
-            );
-          },
-        });
-        items.push({
-          label: rowIsDirectory
-            ? 'Delete folder'
-            : actionPaths.length > 1
-              ? `Delete ${actionPaths.length} files`
-              : 'Delete file',
-          icon: 'trash',
-          danger: true,
-          confirm: true,
-          onSelect: () => {
-            void tauri.repoFileDelete(meta.path, actionPaths).then(
-              async () => {
-                if (selectedFile && actionPaths.some((path) =>
-                  selectedFile === path || selectedFile.startsWith(`${path}/`))) {
-                  setView('local');
-                  selectFile(null);
-                }
-                await refreshLocalChanges();
-                markFilesTreeChanged(meta.path, { kind: 'delete', paths: actionPaths });
-                onToast(actionPaths.length > 1 ? `Deleted ${actionPaths.length} entries` : `Deleted ${actionPaths[0]}`);
-              },
-              (cause) => onToast(`Delete failed: ${errMessage(cause)}`, 'error'),
-            );
-          },
-        });
-      }
-      return items;
-    },
-    [
-      gitignoreAdd,
-      meta,
-      markFilesTreeChanged,
-      onCreateFileEntry,
-      onOpenFileInEditor,
-      openWorkFile,
-      onToast,
-      openIgnoreDialog,
-      refreshLocalChanges,
-      selectFile,
-      selectedCommit,
-      selectedFile,
-      setView,
-      workTree,
-    ],
-  );
-
-  const renameDialog = renameTarget ? (
-    <RenameFileDialog
-      from={renameTarget}
-      onClose={() => setRenameTarget(null)}
-      onToast={onToast}
-    />
-  ) : null;
 
   // Branch/tag ops don't toast on success (the sidebar itself updates), but
   // failures must be loud — a silently refused checkout reads as the app
@@ -1386,27 +992,6 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
     />
   );
 
-  const fileCreateToolbar = (
-    <div
-      className={'side-files-tools' + (filePaths.length === 0 ? ' standalone' : '')}
-      role="toolbar"
-      aria-label="Working-tree file actions"
-    >
-      <button
-        ref={fileCreateButtonRef}
-        type="button"
-        className="side-files-create"
-        title={t('files.createEntry')}
-        aria-label={t('files.createEntry')}
-        aria-haspopup="menu"
-        aria-expanded={menu?.source === 'file-create'}
-        onClick={openFileCreateMenu}
-      >
-        <Icon name="plus" size={14} stroke={2} />
-      </button>
-    </div>
-  );
-
   return (
     <div className="sidebar">
       {wtMerge && (
@@ -1431,9 +1016,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       <div className="side-primary">
         <SideRow
           icon="terminal"
-          label={t('nav.work')}
+          label={t('nav.workbench')}
           active={view === 'work'}
-          onClick={() => { setView('work'); selectFile(null); setTab('files'); }}
+          onClick={() => { onOpenWorkbench(); setTab('files'); }}
         />
         <SideRow
           icon="changes"
@@ -1463,17 +1048,19 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
       </div>
 
       <div className="side-tabs">
-        <button type="button" className={'side-tab' + (tab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
+        <button type="button" className={'side-tab' + (activeTab === 'git' ? ' on' : '')} onClick={() => setTab('git')}>
           <Icon name="branch" size={12} />
           <span>{t('nav.git')}</span>
         </button>
-        <button type="button" className={'side-tab' + (tab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
-          <Icon name="folder" size={12} />
-          <span>{t('nav.files')}</span>
-        </button>
+        {!customOwnsFiles && (
+          <button type="button" className={'side-tab' + (activeTab === 'files' ? ' on' : '')} onClick={() => setTab('files')}>
+            <Icon name="folder" size={12} />
+            <span>{t('nav.files')}</span>
+          </button>
+        )}
       </div>
 
-      {tab === 'git' && (
+      {activeTab === 'git' && (
         <div className="side-filter">
           <Icon name="search" size={11} />
           <input
@@ -1489,8 +1076,9 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
         <div className="side-scroll">
           <EmptyRepoState recents={recents} onOpenRepo={onOpenRepo} onOpenRecent={onOpenRecent} onForget={forgetRecent} />
         </div>
-      ) : tab === 'git' ? (
-        <div className="side-scroll">
+      ) : (
+        <>
+          {activeTab === 'git' && <div className="side-scroll">
           <SideSection
             label="Worktrees"
             collapsed={!sections.worktrees}
@@ -1595,44 +1183,17 @@ export function Sidebar({ onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, 
                 onMenu={(x, y) => openMenu(x, y, submoduleMenu(sub))}
               />
             ))}
-        </div>
-      ) : (
-        <div className="side-files">
-          {renameDialog}
-          {!selectedCommit && localTree && filePaths.length === 0 && fileCreateToolbar}
-          {selectedCommit && (
-            <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
-              Files at <code>{selectedCommit.slice(0, 7)}</code>
-            </div>
+          </div>}
+          {!customOwnsFiles && (
+            <RepositoryFiles
+              active={activeTab === 'files'}
+              onOpenWork={onOpenWorkSurface}
+              onOpenFileInEditor={onOpenFileInEditor}
+              onCreateFileEntry={onCreateFileEntry}
+              onToast={onToast}
+            />
           )}
-          <PierreTree
-            ref={filesTreeRef}
-            paths={filePaths}
-            gitStatus={fileGitStatus}
-            onMove={selectedCommit ? undefined : moveTo}
-            selectedPath={selectedTreePath}
-            onSelect={(p, kind) => {
-              if (!p || !meta) return;
-              openWorkFile(meta.path, p, selectedCommit, kind === 'directory', 'preview');
-              setView('work');
-            }}
-            onActivate={(_paths, context) => {
-              if (!meta) return;
-              openWorkFile(meta.path, context.path, selectedCommit, context.kind === 'directory', 'pinned');
-              setView('work');
-            }}
-            onDirectoryExpand={loadIgnoredDirectory}
-            menuItems={fileMenu}
-            search
-            searchAction={!selectedCommit && localTree && filePaths.length > 0 ? fileCreateToolbar : undefined}
-            initialExpansion="closed"
-            emptyLabel={
-              treeLoading || (!selectedCommit && !localTree)
-                ? selectedCommit ? 'Loading commit tree…' : 'Loading working tree…'
-                : treeError ?? (selectedCommit ? 'No files at this commit.' : 'No files in the working tree.')
-            }
-          />
-        </div>
+        </>
       )}
 
       {menu && (
@@ -1692,11 +1253,6 @@ function renderTreeChildren<T>(
 function leafName(fullName: string): string {
   const i = fullName.lastIndexOf('/');
   return i === -1 ? fullName : fullName.slice(i + 1);
-}
-
-function parentPath(path: string): string {
-  const i = path.lastIndexOf('/');
-  return i === -1 ? '' : path.slice(0, i);
 }
 
 /** Muted trailing label for a submodule row; clean (up-to-date) shows nothing. */

@@ -14,6 +14,7 @@
 //! Quick writes (stage, branch, tag, …) stay plain sync bodies.
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
@@ -37,6 +38,7 @@ use zeroize::Zeroize;
 use crate::ai;
 use crate::azdo_helper;
 use crate::hosting;
+use crate::heroi;
 use crate::pull_requests::{self, PullRequestList};
 use crate::state::{AppState, OperationCancelHandle};
 
@@ -1808,6 +1810,65 @@ pub fn repo_stash_drop(path: String, index: usize) -> CmdResult<()> {
 }
 
 // ─── AI writing suggestions ────────────────────────────────────────────────
+
+#[tauri::command(async)]
+pub async fn heroi_agent_send(
+    run_id: String,
+    mut request: heroi::HeroiAgentRequest,
+    on_event: Channel<heroi::HeroiAgentEvent>,
+    state: State<'_, AppState>,
+) -> CmdResult<heroi::HeroiAgentOutcome> {
+    let canonical_path = Repo::discover(&request.path)?.meta()?.path;
+    let is_open = state
+        .open_paths
+        .lock()
+        .map_err(|_| CmdError::from_msg("open repository registry poisoned".into()))?
+        .contains(&canonical_path);
+    if !is_open {
+        return Err(CmdError::from_msg(
+            "Heroi can only run against an open Strand repository.".into(),
+        ));
+    }
+    request.path = canonical_path;
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(run_id);
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("Heroi agent", move || {
+        heroi::run_agent(request, &cancel, on_event).map_err(CmdError::from_msg)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn heroi_provider_models(
+    provider: heroi::HeroiProvider,
+    cli_path: Option<String>,
+) -> CmdResult<heroi::HeroiModelCatalog> {
+    run_blocking("Heroi models", move || {
+        Ok(heroi::list_models(provider, cli_path.as_deref()))
+    })
+    .await
+}
+
+#[tauri::command(async)]
+pub async fn heroi_skills(
+    path: String,
+    provider: heroi::HeroiProvider,
+    state: State<'_, AppState>,
+) -> CmdResult<Vec<heroi::HeroiSkill>> {
+    let canonical_path = Repo::discover(&path)?.meta()?.path;
+    let is_open = state
+        .open_paths
+        .lock()
+        .map_err(|_| CmdError::from_msg("open repository registry poisoned".into()))?
+        .contains(&canonical_path);
+    if !is_open {
+        return Err(CmdError::from_msg("Heroi can only inspect an open Strand repository.".into()));
+    }
+    run_blocking("Heroi skills", move || Ok(heroi::list_skills(Path::new(&canonical_path), provider))).await
+}
 
 fn ai_cli_override(provider: ai::AiProvider, openai: Option<String>, anthropic: Option<String>) -> Option<String> {
     match provider {

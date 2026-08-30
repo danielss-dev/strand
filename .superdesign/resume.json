@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/": {
+      "targetKind": "existing-ui",
+      "projectId": "d329ad48-669f-4369-b9a9-a1e9fe40948b",
+      "activeDraftId": "d1e7cdb3-41c6-44f5-abbc-c687956109b3",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "website-favicon.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "website-favicon.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/d329ad48-669f-4369-b9a9-a1e9fe40948b/brand-assets/website-favicon.svg/favicon.svg",
+          "sourcePath": "website/favicon.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "website/index.html:79:150",
+        "website/index.html:137:230",
+        "website/index.html:430:831",
+        "website/style.css:1:250",
+        "website/style.css:250:520",
+        "website/style.css:790:1000",
+        "website/style.css:1001:1225"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "99b3b82714b5efc5cb18f36bc82271a1d2c06f736847f79e8b53796d333aece2",
+        "website/index.html": "2cf76229b9440775aa45acd8043727349b3f920dd0c378b9b2e87e26a0dc3285",
+        "website/style.css": "67efad2f4802a540b8708ad929d7e9a11cffa86e9115bd90e5402d95af73ba61"
+      },
+      "components": [],
+      "drafts": {
+        "d1e7cdb3-41c6-44f5-abbc-c687956109b3": {
+          "title": "Strand — living release map",
+          "visualDirection": "Paper-inspired dark editorial blueprint with a Git-lane roadmap",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-22T10:44:55.454Z"
+    }
+  }
+}

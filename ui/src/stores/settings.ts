@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { t } from '../lib/i18n';
 import type { KeyOverrides } from '../lib/keys';
 import type { AiProvider, EmbeddedShellChoice } from '../lib/types';
 
@@ -102,6 +103,10 @@ export interface SettingsState {
   startupSpace: StartupSpace;
   /** Open-repository presentation — vertical rail vs. horizontal tabs. */
   repoNav: RepoNav;
+  /** Whether the sidebar panel is collapsed to zero width. Persisted so the
+   * choice survives launches; toggled with `Mod+B`, the topbar button, the
+   * palette, or the native View menu. */
+  sidebarCollapsed: boolean;
   /** Whole-UI zoom factor (1 = 100%). Driven by the Ctrl/⌘ +/− shortcuts and
    * applied as CSS `zoom` on `<html>` in App. Persisted across launches. */
   zoom: number;
@@ -231,7 +236,7 @@ export const REPO_NAV_OPTIONS: { id: RepoNav; label: string }[] = [
 ];
 
 export const STARTUP_SPACE_OPTIONS: { id: StartupSpace; label: string }[] = [
-  { id: 'work', label: 'Work' },
+  { id: 'work', label: t('nav.workbench') },
   { id: 'local', label: 'Local Changes' },
   { id: 'review', label: 'Review' },
   { id: 'pull-requests', label: 'Pull Requests' },
@@ -256,6 +261,7 @@ export const useSettings = create<SettingsState>()(
       density: 'default',
       startupSpace: 'work',
       repoNav: 'tabs',
+      sidebarCollapsed: false,
       zoom: 1,
       diffMode: 'stacked',
       diffsCollapsed: false,
@@ -308,7 +314,25 @@ export const useSettings = create<SettingsState>()(
         return rest;
       },
       merge: (persisted, current) => {
-        const next = { ...current, ...(persisted as Partial<SettingsState>) };
+        const legacy = persisted as Partial<Omit<SettingsState, 'startupSpace' | 'keybindings'>> & {
+          startupSpace?: StartupSpace | 'custom';
+          keybindings?: Record<string, string | null>;
+        };
+        const { ['view-custom']: legacyCustomBinding, ...storedBindings } = legacy.keybindings ?? {};
+        const keybindings: KeyOverrides = legacyCustomBinding !== undefined
+          && storedBindings['customize-workbench'] === undefined
+          ? { ...storedBindings, 'customize-workbench': legacyCustomBinding }
+          : storedBindings;
+        const next = {
+          ...current,
+          ...legacy,
+          // Custom and Work are now one destination. Preserve existing user
+          // settings without retaining a route that no longer exists.
+          startupSpace: legacy.startupSpace === 'custom'
+            ? 'work'
+            : legacy.startupSpace ?? current.startupSpace,
+          keybindings,
+        };
         const terminalFont = TERMINAL_FONT_OPTIONS.some((option) => option.id === next.terminalFont)
           ? next.terminalFont
           : current.terminalFont;

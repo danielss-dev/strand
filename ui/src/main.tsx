@@ -6,6 +6,8 @@ import { DiffWorkerPool } from './components/DiffWorkerPool';
 import { perfEnabled } from './lib/perf';
 import { isTauri } from './lib/tauri';
 import { useRepo } from './stores/repo';
+import { useCustomView } from './stores/customView';
+import { usePlugins } from './stores/plugins';
 import { useSettings } from './stores/settings';
 import { useWork } from './stores/work';
 import { useWorkspaceReview } from './stores/workspaceReview';
@@ -25,6 +27,8 @@ if (isTauri()) document.documentElement.classList.add('tauri');
 if (perfEnabled()) {
   (window as unknown as { __strand?: unknown }).__strand = {
     repo: useRepo,
+    customView: useCustomView,
+    plugins: usePlugins,
     settings: useSettings,
     work: useWork,
     workspaces: useWorkspaces,

@@ -26,6 +26,12 @@ import type {
   FileStatus,
   GlobalIdentity,
   HostingConnectionStatus,
+  HeroiAgentEvent,
+  HeroiAgentOutcome,
+  HeroiAgentProvider,
+  HeroiAgentRequest,
+  HeroiModelCatalog,
+  HeroiSkill,
   InitOutcome,
   MaintenanceOutcome,
   MaintenanceTask,
@@ -160,6 +166,22 @@ export const tauri = {
   repoWatch: (path: string) => invoke<void>('repo_watch', { path }),
   repoUnwatch: (path: string) => invoke<void>('repo_unwatch', { path }),
   repoCancelOp: (opId: string) => invoke<void>('repo_cancel_op', { opId }),
+  heroiAgentSend: (
+    runId: string,
+    request: HeroiAgentRequest,
+    onEvent: (event: HeroiAgentEvent) => void,
+  ) => {
+    const channel = new Channel<HeroiAgentEvent>();
+    channel.onmessage = onEvent;
+    return invoke<HeroiAgentOutcome>('heroi_agent_send', { runId, request, onEvent: channel });
+  },
+  heroiProviderModels: (provider: HeroiAgentProvider, cliPath?: string | null) =>
+    invoke<HeroiModelCatalog>('heroi_provider_models', {
+      provider,
+      cliPath: cliPath ?? null,
+    }),
+  heroiSkills: (path: string, provider: HeroiAgentProvider) =>
+    invoke<HeroiSkill[]>('heroi_skills', { path, provider }),
   // `headOnly` walks HEAD's ancestry instead of every ref — for per-worktree
   // "last commit" answers (worktrees share the family's refs).
   repoLog: (path: string, limit?: number, headOnly?: boolean) =>

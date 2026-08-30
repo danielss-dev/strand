@@ -70,7 +70,7 @@ All of these are rebindable in Settings → Keyboard; "Next repository" and "Pre
 
 Strand restores your session across launches: window size, position, and
 maximized state; open tabs and the active repository; pane sizes; per-repo diff
-layout; and workspaces all come back as you left them. A recents list is kept
+layout; each workspace's Custom layout; and workspaces all come back as you left them. A recents list is kept
 automatically and surfaces in the empty state, the `+` menu, the quick switcher,
 and the palette.
 

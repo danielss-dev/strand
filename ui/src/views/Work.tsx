@@ -45,7 +45,34 @@ import { FileDocument } from './FileView';
 
 const WORK_PANE_SPLIT_EDGE_RATIO = 0.4;
 
-export function Work({ visible }: { visible: boolean }) {
+export interface WorkFrame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export function Work({
+  visible,
+  frame = null,
+  keyboardActive = visible,
+  focusTabsOnF6,
+  focusRequest = 0,
+  onActivate,
+}: {
+  visible: boolean;
+  frame?: WorkFrame | null;
+  /** A visible embedded Work renderer only owns global shortcuts while its
+   * Workbench pane is active. */
+  keyboardActive?: boolean;
+  /** Normal Workbench mode has no outer surface selector, so F6 returns to
+   * Work's tabs even though the renderer is positioned inside a layout. */
+  focusTabsOnF6?: boolean;
+  /** Incremented by the outer Workbench when keyboard navigation enters the
+   * visually embedded Work surface (whose stable DOM remains a sibling). */
+  focusRequest?: number;
+  onActivate?: () => void;
+}) {
   const repoPath = useRepo((state) => state.activePath);
   const meta = useRepo((state) => state.meta);
   const openRepos = useRepo((state) => state.tabs);
@@ -66,6 +93,7 @@ export function Work({ visible }: { visible: boolean }) {
   const repo = repoPath ? repos[repoPath] : undefined;
   const platform = useSettings((state) => state.platform);
   const rootRef = useRef<HTMLDivElement>(null);
+  const handledFocusRequestRef = useRef(0);
   const paneHosts = useRef(new Map<string, HTMLDivElement>());
   const [paneHostVersion, setPaneHostVersion] = useState(0);
   const [paneRects, setPaneRects] = useState<Record<string, PaneRect>>({});
@@ -90,6 +118,7 @@ export function Work({ visible }: { visible: boolean }) {
     () => activePane?.tabIds.flatMap((id) => repo?.tabs.find((tab) => tab.id === id) ?? []) ?? [],
     [activePane, repo?.tabs],
   );
+  const ownsF6 = focusTabsOnF6 ?? frame == null;
 
   const endTabDrag = useCallback((commit: boolean) => {
     const drag = dragSessionRef.current;
@@ -217,7 +246,7 @@ export function Work({ visible }: { visible: boolean }) {
   // with repository switching on Mod+Tab. Capture first so a focused xterm
   // never forwards the shortcut to the shell before Work handles it.
   useEffect(() => {
-    if (!visible || !repoPath || !repo || activePaneTabs.length === 0) return;
+    if (!keyboardActive || !repoPath || !repo || activePaneTabs.length === 0) return;
     const cycle = (event: globalThis.KeyboardEvent) => {
       const primary = platform === 'mac' ? event.metaKey : event.ctrlKey;
       if (!primary || event.altKey || event.shiftKey) return;
@@ -231,10 +260,12 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', cycle, true);
     return () => window.removeEventListener('keydown', cycle, true);
-  }, [activate, activePane?.activeTabId, activePaneTabs, platform, repo, repoPath, visible]);
+  }, [activate, activePane?.activeTabId, activePaneTabs, keyboardActive, platform, repo, repoPath]);
 
   useEffect(() => {
-    if (!visible) return;
+    // Workbench customization owns F6 for the outer surface selector. In
+    // normal mode Work keeps its familiar tab-strip focus behavior.
+    if (!keyboardActive || !ownsF6) return;
     const focusTabs = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'F6' || activePaneTabs.length === 0) return;
       event.preventDefault();
@@ -242,7 +273,24 @@ export function Work({ visible }: { visible: boolean }) {
     };
     window.addEventListener('keydown', focusTabs);
     return () => window.removeEventListener('keydown', focusTabs);
-  }, [activePaneTabs.length, visible]);
+  }, [activePaneTabs.length, keyboardActive, ownsF6]);
+
+  useEffect(() => {
+    if (
+      !focusRequest
+      || handledFocusRequestRef.current >= focusRequest
+      || !keyboardActive
+    ) return;
+    handledFocusRequestRef.current = focusRequest;
+    if (!repo) return;
+    const pane = rootRef.current?.querySelector<HTMLElement>(
+      `[data-work-pane-id="${CSS.escape(repo.activePaneId)}"]`,
+    );
+    const target = pane?.querySelector<HTMLElement>('.work-tab[aria-selected="true"]')
+      ?? pane?.querySelector<HTMLElement>('.work-tab')
+      ?? pane?.querySelector<HTMLElement>('.work-new-terminal');
+    target?.focus();
+  }, [focusRequest, keyboardActive, repo?.activePaneId]);
 
   const jump = useCallback((tab: WorkFileTab, hash: string) => {
     useWork.getState().activate(tab.repoPath, tab.id);
@@ -254,8 +302,16 @@ export function Work({ visible }: { visible: boolean }) {
   return (
     <div
       ref={rootRef}
-      className={'work-root' + (visible ? '' : ' work-hidden')}
+      className={'work-root' + (frame ? ' work-embedded' : '') + (visible ? '' : ' work-hidden')}
+      style={frame ? {
+        left: frame.left,
+        top: frame.top,
+        width: frame.width,
+        height: frame.height,
+      } : undefined}
       aria-hidden={!visible}
+      onPointerDownCapture={onActivate}
+      onFocusCapture={onActivate}
       onClickCapture={(event) => {
         if (!suppressTabClickRef.current) return;
         event.preventDefault();

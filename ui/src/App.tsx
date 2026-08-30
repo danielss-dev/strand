@@ -3,7 +3,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
 
 import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { ReviewModeToggle } from './components/ReviewModeToggle';
@@ -13,13 +13,14 @@ import { Presence } from './components/Presence';
 import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { PullRequestMonitor } from './components/PullRequestMonitor';
 import { RepoRail } from './components/RepoRail';
+import { RepositoryFiles } from './components/RepositoryFiles';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
 import { ToastViewport, type ToastMessage } from './components/ToastViewport';
 import { FONTS, useSettings } from './stores/settings';
 import { usePullRequests } from './stores/pullRequests';
-import { useRepo } from './stores/repo';
+import { useRepo, type View } from './stores/repo';
 import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
@@ -68,6 +69,20 @@ import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
+import { useCustomView } from './stores/customView';
+import { usePlugins } from './stores/plugins';
+import { customPanes, type CustomSurfaceId, type CustomSurfaceRef } from './lib/customView';
+import {
+  BUILT_IN_SURFACE_IDS,
+  pluginRegistry,
+  SurfaceHost,
+  WorkbenchCommandRegistry,
+  type SurfaceRenderRequest,
+  type WorkbenchCommandContext,
+} from './workbench';
+import { isPluginSurface, renderPluginSurface } from './plugins/renderSurface';
+import { HEROI_NEW_CONVERSATION_EVENT, HEROI_OPEN_REVIEW_EVENT } from './plugins/builtins/heroi/events';
+import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
@@ -153,6 +168,17 @@ function basename(p: string): string {
   return parts[parts.length - 1] ?? p;
 }
 
+const MAIN_SURFACE_BY_VIEW: Partial<Record<View, CustomSurfaceId>> = {
+  local: BUILT_IN_SURFACE_IDS.localChanges,
+  review: BUILT_IN_SURFACE_IDS.review,
+  'pull-requests': BUILT_IN_SURFACE_IDS.pullRequests,
+  'workspace-review': BUILT_IN_SURFACE_IDS.workspaceReview,
+  reflog: BUILT_IN_SURFACE_IDS.reflog,
+  worktrees: BUILT_IN_SURFACE_IDS.worktrees,
+  commits: BUILT_IN_SURFACE_IDS.commits,
+  branch: BUILT_IN_SURFACE_IDS.commits,
+};
+
 export function App() {
   // Per-field selectors (not a bare `useSettings()`) so App only re-renders
   // when one of the five fields it actually reads changes — not on every
@@ -170,8 +196,35 @@ export function App() {
   // <html>, subscribes to the OS, and exposes setters for the picker/palette.
   const { resolved: theme, setPref: setTheme, cycle: cycleTheme } = useTheme();
 
+  const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
+  const setAppSetting = useSettings((s) => s.set);
+  const toggleSidebar = useCallback(
+    () => setAppSetting('sidebarCollapsed', !sidebarCollapsed),
+    [setAppSetting, sidebarCollapsed],
+  );
+  // The sidebar Panel collapses to zero; the imperative handle applies the
+  // persisted preference on mount and whenever it flips (expand() restores the
+  // pre-collapse size the panel library remembers).
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  useEffect(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (sidebarCollapsed) {
+      if (!panel.isCollapsed()) panel.collapse();
+    } else if (!panel.isExpanded()) {
+      panel.expand();
+    }
+  }, [sidebarCollapsed]);
+
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
+  const customActivePaneId = useCustomView((s) => s.activePaneId);
+  const customRestored = useCustomView((s) => s.restored);
+  const customWorkspaceId = useCustomView((s) => s.workspaceId);
+  const customConfigured = useCustomView((s) => s.configured);
+  const restoreWorkbench = useCustomView((s) => s.restore);
+  const customWorkPaneId = useCustomView((s) =>
+    customPanes(s.layout).find((pane) => pane.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work)?.id ?? null);
   const openWorkFile = useWork((s) => s.openFile);
   const addEmbeddedTerminal = useWork((s) => s.addTerminal);
   const selectFile = useRepo((s) => s.selectFile);
@@ -251,6 +304,14 @@ export function App() {
   // handful of user-created entries, so subscribing whole is cheap.
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
+  const workbenchWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+  const pluginVersion = usePlugins((state) => state.version);
+  const workbenchSurfaceRegistry = useMemo(
+    () => pluginRegistry.getSurfaceRegistry(),
+    [pluginVersion],
+  );
+  const customWorkspaceReady = customRestored
+    && customWorkspaceId === workbenchWorkspaceId;
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
   const activePullRequestFollowed = usePullRequests((s) =>
     activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
@@ -260,6 +321,7 @@ export function App() {
   const toggleActivePullRequest = usePullRequests((s) => s.toggleActive);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [workbenchEditing, setWorkbenchEditing] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
@@ -366,6 +428,10 @@ export function App() {
   // false = closed; 'create' opens the manager mid-create (palette "New
   // workspace…") — the dialog spawns a workspace and focuses its name field.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState<boolean | 'create'>(false);
+  // The real Work tree remains mounted once and is positioned over its
+  // Workbench slot, preserving live terminal renderers and scrollback.
+  const [customWorkFrame, setCustomWorkFrame] = useState<CustomPaneFrame | null>(null);
+  const [customWorkFocusRequest, setCustomWorkFocusRequest] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -413,6 +479,114 @@ export function App() {
     setSettingsSection(section);
     setSettingsOpen(true);
   }, []);
+
+  useEffect(() => {
+    void restoreWorkbench(workbenchWorkspaceId);
+    setWorkbenchEditing(false);
+  }, [restoreWorkbench, workbenchWorkspaceId]);
+
+  useEffect(() => {
+    void usePlugins.getState().restore();
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'work') setWorkbenchEditing(false);
+  }, [view]);
+
+  const customizeWorkbench = useCallback(() => {
+    setView('work');
+    selectFile(null);
+    setWorkbenchEditing(true);
+    void restoreWorkbench(workbenchWorkspaceId);
+  }, [restoreWorkbench, selectFile, setView, workbenchWorkspaceId]);
+
+  const openWorkbench = useCallback(() => {
+    setWorkbenchEditing(false);
+    setView('work');
+    selectFile(null);
+  }, [selectFile, setView]);
+
+  const resetWorkbench = useCallback(() => {
+    if (!window.confirm(t('workbench.resetConfirm'))) return;
+    useCustomView.getState().resetWorkbench();
+  }, []);
+
+  const updateCustomWorkFrame = useCallback((next: CustomPaneFrame | null) => {
+    setCustomWorkFrame((current) => {
+      if (current === next) return current;
+      if (!current || !next) return next;
+      return current.left === next.left
+        && current.top === next.top
+        && current.width === next.width
+        && current.height === next.height
+        ? current
+        : next;
+    });
+  }, []);
+  const activateCustomWorkPane = useCallback(() => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+    );
+    if (pane) state.activatePane(pane.id);
+  }, []);
+  const focusCustomWork = useCallback(() => {
+    setCustomWorkFocusRequest((request) => request + 1);
+  }, []);
+  const revealWorkbenchWork = useCallback(() => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.work,
+    );
+    if (pane) {
+      state.activatePane(pane.id);
+      return;
+    }
+    // Preserve the current surface when navigation needs Work: add a sibling
+    // pane when the defensive pane cap allows it.
+    const previousPaneId = state.activePaneId;
+    state.splitPane(previousPaneId, 'horizontal');
+    const next = useCustomView.getState();
+    next.setSurface(next.activePaneId, BUILT_IN_SURFACE_IDS.work);
+  }, []);
+  const showWorkbenchWork = useCallback(() => {
+    revealWorkbenchWork();
+    setWorkbenchEditing(false);
+    setView('work');
+    selectFile(null);
+  }, [revealWorkbenchWork, selectFile, setView]);
+  // The Changes explorer hands each clicked file to the Work pane's whole-file
+  // Changes tab. A pinned tab for the path may already exist in another mode —
+  // openFile would only activate it, so force the mode afterwards.
+  const openChangesInWork = useCallback((path: string) => {
+    const repoPath = useRepo.getState().meta?.path;
+    if (!repoPath) return;
+    const work = useWork.getState();
+    work.openFile(repoPath, path, null, false, 'pinned', 'changes');
+    const tab = useWork.getState().repos[repoPath]?.tabs.find(
+      (candidate) => candidate.kind === 'file' && candidate.path === path && !candidate.revision,
+    );
+    if (tab) work.setFileMode(repoPath, tab.id, 'changes');
+    showWorkbenchWork();
+  }, [showWorkbenchWork]);
+  // "Review changes since this" from an embedded All Commits pane: Commits
+  // pins the baseline; this routes the jump to the layout's Review pane when
+  // one exists instead of leaving Workbench for the dedicated Review tab.
+  const openReviewInCustom = useCallback(() => {
+    selectFile(null);
+    const custom = useCustomView.getState();
+    const pane = customPanes(custom.layout).find(
+      (candidate) => candidate.surface?.surfaceId === BUILT_IN_SURFACE_IDS.review,
+    );
+    if (pane) custom.activatePane(pane.id);
+    else setView('review');
+  }, [selectFile, setView]);
+
+  useEffect(() => {
+    const openReview = () => openReviewInCustom();
+    window.addEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
+    return () => window.removeEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
+  }, [openReviewInCustom]);
 
   // Launch the configured terminal / editor (Settings → Integrations) on the
   // active repo. Unconfigured routes to Settings instead of silently no-oping.
@@ -872,7 +1046,8 @@ export function App() {
     'open-repo': () => { void openViaDialog(); },
     'clone-repo': () => setCloneOpen(true),
     'settings': () => openSettingsAt('appearance'),
-    'view-work': () => { setView('work'); selectFile(null); },
+    'view-work': openWorkbench,
+    'customize-workbench': customizeWorkbench,
     'view-local': () => { setView('local'); selectFile(null); },
     'view-commits': () => { setView('commits'); selectFile(null); },
     'view-reflog': () => { setView('reflog'); selectFile(null); },
@@ -886,6 +1061,7 @@ export function App() {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
     },
+    'toggle-sidebar': toggleSidebar,
     'fetch': () => { void onFetch(); },
     'pull': () => { void onPull(); },
     'push': () => { void onPush(); },
@@ -894,7 +1070,7 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
-  }), [openViaDialog, openSettingsAt, setView, selectFile, cycleTheme, showToast,
+  }), [openViaDialog, openSettingsAt, setView, selectFile, openWorkbench, customizeWorkbench, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
        requestSuggestCommitMessage]);
   const commandHandlersRef = useRef(commandHandlers);
@@ -933,11 +1109,17 @@ export function App() {
       void useUpdates.getState().check();
     },
     openPalette: () => setPaletteOpen((o) => !o),
-    showView: (v) => { setView(v); selectFile(null); },
+    showView: (v) => {
+      if (v === 'work') setWorkbenchEditing(false);
+      setView(v);
+      selectFile(null);
+    },
+    customizeWorkbench,
     cycleTheme: () => {
       const next = cycleTheme();
       showToast(`Theme: ${next[0].toUpperCase()}${next.slice(1)}`);
     },
+    toggleSidebar,
     sync: () => { void onSync(); },
     pull: () => { void onPull(); },
     push: () => { void onPush(); },
@@ -1150,7 +1332,7 @@ export function App() {
       // shortcuts app-owned; Windows/Linux keep only numbered view navigation.
       if (inEmbeddedTerminal) {
         if (osType() === 'macos' && !e.metaKey) return;
-        if (osType() !== 'macos' && !/^Mod\+[1-7]$/.test(binding)) return;
+        if (osType() !== 'macos' && !/^Mod\+[1-8]$/.test(binding)) return;
       }
       // AppKit fires native menu accelerators before the webview sees the key,
       // so defer to it on macOS. Windows/Linux keep this proven keydown path;
@@ -1255,8 +1437,7 @@ export function App() {
         run: () => {
           if (!meta) return;
           openWorkFile(meta.path, f.path, null, false, 'pinned');
-          setView('work');
-          selectFile(null);
+          showWorkbenchWork();
         },
       });
     }
@@ -1326,8 +1507,86 @@ export function App() {
 
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
-      createBranch, revealInGraph, selectCommit, selectFile, showToast,
+      createBranch, revealInGraph, selectCommit, selectFile, showToast, showWorkbenchWork,
       stashApply, stashPop, submoduleUpdate]);
+
+  const runCustomAction = useCallback((
+    action: (state: ReturnType<typeof useCustomView.getState>) => void,
+  ) => {
+    void (async () => {
+      const workspaceId = useWorkspaces.getState().activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+      await useCustomView.getState().restore(workspaceId);
+      const state = useCustomView.getState();
+      if (state.workspaceId !== workspaceId) return;
+      action(state);
+      setView('work');
+      selectFile(null);
+      setWorkbenchEditing(true);
+    })();
+  }, [selectFile, setView]);
+
+  const customCommands = useMemo(() => {
+    const registry = new WorkbenchCommandRegistry();
+    registry.register({
+      id: 'strand.workbench.splitRight',
+      title: t('custom.paletteSplitRight'),
+      category: 'Workbench',
+      keywords: ['layout', 'pane', 'horizontal', 'split'],
+      execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'horizontal')),
+    });
+    registry.register({
+      id: 'strand.workbench.splitDown',
+      title: t('custom.paletteSplitDown'),
+      category: 'Workbench',
+      keywords: ['layout', 'pane', 'vertical', 'split'],
+      execute: () => runCustomAction((state) => state.splitPane(state.activePaneId, 'vertical')),
+    });
+    registry.register({
+      id: 'strand.workbench.closePane',
+      title: t('custom.paletteClosePane'),
+      category: 'Workbench',
+      keywords: ['layout', 'pane', 'remove', 'clear'],
+      execute: () => runCustomAction((state) => state.closePane(state.activePaneId)),
+    });
+    for (const surface of workbenchSurfaceRegistry.listForHost('panel')) {
+      registry.register({
+        id: `strand.workbench.show.${surface.id}`,
+        title: t('custom.paletteShowFeature', { feature: surface.title }),
+        category: 'Workbench',
+        keywords: ['layout', 'surface', 'module', surface.id],
+        execute: () => runCustomAction((state) => state.setSurface(state.activePaneId, surface.id)),
+      });
+    }
+    const templates = [
+      ['vscode', t('custom.paletteTemplateVscode'), ['editor', 'source control', 'history']],
+      ['review', t('custom.paletteTemplateReview'), ['review', 'commits']],
+      ['focus', t('custom.paletteTemplateFocus'), ['work', 'single pane']],
+      ['blank', t('custom.paletteTemplateBlank'), ['reset', 'clear']],
+    ] as const;
+    for (const [template, title, keywords] of templates) {
+      registry.register({
+        id: `strand.workbench.template.${template}`,
+        title,
+        category: 'Workbench',
+        keywords: ['layout', 'preset', ...keywords],
+        execute: () => runCustomAction((state) => state.applyTemplate(template)),
+      });
+    }
+    return registry;
+  }, [runCustomAction, workbenchSurfaceRegistry]);
+
+  const customCommandContext = useCallback((): WorkbenchCommandContext => {
+    const state = useCustomView.getState();
+    const pane = customPanes(state.layout).find((candidate) => candidate.id === state.activePaneId);
+    return {
+      surface: {
+        id: pane?.surface?.surfaceId ?? 'strand.workbench.layout',
+        instanceId: pane?.surface?.instanceId ?? pane?.id ?? 'workbench-layout',
+      },
+      workspaceId: useWorkspaces.getState().activeWorkspaceId ?? DEFAULT_WORKSPACE_ID,
+      repositoryId: useRepo.getState().activePath ?? undefined,
+    };
+  }, []);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     // Repo-independent — always available.
@@ -1344,44 +1603,52 @@ export function App() {
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
-        { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: () => { setView('work'); selectFile(null); } },
-        { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); setView('work'); selectFile(null); } },
+        { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: openWorkbench },
+        { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); showWorkbenchWork(); } },
         { id: 'work-split-right', label: t('work.splitRight'), group: 'Actions', keywords: 'work pane editor group side by side', run: () => {
           const work = useWork.getState();
           const repoWork = work.repos[meta.path];
           if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'horizontal');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-split-down', label: t('work.splitDown'), group: 'Actions', keywords: 'work pane editor group stacked below', run: () => {
           const work = useWork.getState();
           const repoWork = work.repos[meta.path];
           if (repoWork) work.splitPane(meta.path, repoWork.activePaneId, 'vertical');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-previous-pane', label: t('work.moveTabPreviousPane'), group: 'Actions', keywords: 'work tab move editor group previous', run: () => {
           useWork.getState().moveActiveTabToAdjacentPane(meta.path, -1);
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-next-pane', label: t('work.moveTabNextPane'), group: 'Actions', keywords: 'work tab move editor group next', run: () => {
           useWork.getState().moveActiveTabToAdjacentPane(meta.path, 1);
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-left', label: t('work.moveTabNewLeft'), group: 'Actions', keywords: 'work tab move split editor group left', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'left');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-right', label: t('work.moveTabNewRight'), group: 'Actions', keywords: 'work tab move split editor group right', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'right');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-top', label: t('work.moveTabNewTop'), group: 'Actions', keywords: 'work tab move split editor group above top', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'top');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
         { id: 'work-tab-move-new-bottom', label: t('work.moveTabNewBottom'), group: 'Actions', keywords: 'work tab move split editor group below bottom', run: () => {
           useWork.getState().splitActiveTab(meta.path, 'bottom');
-          setView('work'); selectFile(null);
+          showWorkbenchWork();
         } },
+        { id: 'customize-workbench', label: t('custom.paletteShow'), group: 'Actions', shortcut: keyHint('customize-workbench'), keywords: 'customize layout panes modules vscode workbench', run: customizeWorkbench },
+        ...(view === 'work' && workbenchEditing ? customCommands.list().map((command) => ({
+          id: command.id,
+          label: command.title,
+          group: 'Actions' as const,
+          keywords: ['workbench', 'customize', ...(command.keywords ?? [])].join(' '),
+          run: () => { void customCommands.execute(command.id, customCommandContext()); },
+        } satisfies PaletteAction)) : []),
         { id: 'local',   label: 'Show: Local Changes', group: 'Actions', shortcut: keyHint('view-local'), run: () => { setView('local'); selectFile(null); } },
         { id: 'commits', label: 'Show: All Commits',  group: 'Actions', shortcut: keyHint('view-commits'), run: () => { setView('commits'); selectFile(null); } },
         { id: 'reflog',  label: 'Show: Reflog',       group: 'Actions', shortcut: keyHint('view-reflog'), keywords: 'history head recover lost orphan', run: () => { setView('reflog'); selectFile(null); } },
@@ -1635,6 +1902,8 @@ export function App() {
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
+      { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
+      { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },
       {
         id: 'report-inappropriate-content',
         label: 'Report inappropriate content…',
@@ -1655,6 +1924,7 @@ export function App() {
       { id: 'theme-light',  label: 'Theme: Light',  group: 'Actions', run: () => setTheme('light') },
       { id: 'theme-dark',   label: 'Theme: Dark',   group: 'Actions', run: () => setTheme('dark') },
       { id: 'theme-system', label: 'Theme: System', group: 'Actions', shortcut: keyHint('theme-toggle'), run: () => setTheme('system') },
+      { id: 'toggle-sidebar', label: sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', group: 'Actions', shortcut: keyHint('toggle-sidebar'), keywords: 'sidebar collapse expand hide show panel', run: toggleSidebar },
     );
     // Surface "Abort" in the palette only while an op is actually paused.
     if (meta?.operation) {
@@ -1714,7 +1984,99 @@ export function App() {
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
-      toggleActivePullRequest]);
+      toggleActivePullRequest, customCommands, customCommandContext,
+      customizeWorkbench, openWorkbench, showWorkbenchWork, workbenchEditing]);
+
+  const surfaceRenderers = useMemo(() => new Map<CustomSurfaceId, (
+    request: SurfaceRenderRequest,
+  ) => React.ReactNode>([
+    [BUILT_IN_SURFACE_IDS.files, () => (
+          <RepositoryFiles
+            followWorkSelection
+            onOpenFileInEditor={openActiveFileInEditor}
+            onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
+            onToast={showToast}
+            onOpenWork={showWorkbenchWork}
+          />
+    )],
+    [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
+      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={lifecycle.focused} />
+    )],
+    [BUILT_IN_SURFACE_IDS.changesExplorer, ({ lifecycle }) => (
+          <LocalChanges
+            onOpenFileInEditor={openActiveFileInEditor}
+            active={lifecycle.focused}
+            explorerOnly
+            onOpenFileChanges={openChangesInWork}
+          />
+    )],
+    [BUILT_IN_SURFACE_IDS.review, ({ lifecycle, host }) => (
+      <Review
+        onOpenFileInEditor={openActiveFileInEditor}
+        active={lifecycle.focused}
+        embedded={host !== 'main'}
+      />
+    )],
+    [BUILT_IN_SURFACE_IDS.pullRequests, () => (
+          <PullRequests
+            onToast={showToast}
+            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+          />
+    )],
+    [BUILT_IN_SURFACE_IDS.workspaceReview, ({ lifecycle }) => (
+      <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={lifecycle.focused} />
+    )],
+    [BUILT_IN_SURFACE_IDS.reflog, () => (
+          <Reflog
+            onResetTo={(target, label) => setResetDialog({ target, label })}
+            onCreateBranch={(start, label) => setBranchDialog({ start, label })}
+            onToast={showToast}
+          />
+    )],
+    [BUILT_IN_SURFACE_IDS.worktrees, () => (
+          <Worktrees
+            onCreateWorktree={() => setWorktreeDialog({ start: null })}
+            onToast={showToast}
+          />
+    )],
+    [BUILT_IN_SURFACE_IDS.commits, ({ lifecycle, host }) => (
+          <Commits
+            onCreateTag={(target, label) => setTagDialog({ target, label })}
+            onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+            onResetTo={(target, label) => setResetDialog({ target, label })}
+            onCreateWorktree={(start) => setWorktreeDialog({ start })}
+            onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
+            onWorkNavigate={showWorkbenchWork}
+            onToast={showToast}
+            active={lifecycle.focused}
+          />
+    )],
+  ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom,
+    showWorkbenchWork, showToast]);
+
+  const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => {
+    if (isPluginSurface(request.contribution.id)) {
+      return renderPluginSurface(request);
+    }
+    return surfaceRenderers.get(request.contribution.id)?.(request) ?? null;
+  }, [surfaceRenderers]);
+
+  const renderCustomSurface = useCallback((surface: CustomSurfaceRef, active: boolean) => (
+    <SurfaceHost
+      registry={workbenchSurfaceRegistry}
+      surfaceId={surface.surfaceId}
+      instanceId={surface.instanceId}
+      binding={surface.binding}
+      host="panel"
+      lifecycle={{ mounted: true, visible: true, focused: active }}
+      render={renderSurfaceContribution}
+    />
+  ), [renderSurfaceContribution, workbenchSurfaceRegistry]);
+
+  const mainSurfaceId = MAIN_SURFACE_BY_VIEW[view];
+  const workbenchComposed = view === 'work'
+    && customWorkspaceReady
+    && (customConfigured || workbenchEditing);
 
   const rootStyle = {
     '--font-ui': FONTS.ui[uiFont],
@@ -1756,6 +2118,8 @@ export function App() {
           pushDone={pushDone}
           onToast={showToast}
           onSaveSnapshot={() => setStashDialog({ snapshot: true, keepIndex: false })}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
           onStash={(opts) => setStashDialog({ snapshot: opts?.snapshot ?? false, keepIndex: opts?.keepIndex ?? false })}
           onOpenRepo={openViaDialog}
           onInitRepo={() => setInitRepoOpen(true)}
@@ -1781,8 +2145,18 @@ export function App() {
             />
           )}
           <PanelGroup direction="horizontal" autoSaveId="strand:body" className="body-panels">
-            <Panel defaultSize={20} minSize={12} maxSize={40}>
+            <Panel
+              ref={sidebarPanelRef}
+              className="sidebar-panel"
+              defaultSize={20}
+              minSize={12}
+              maxSize={40}
+              collapsible
+              collapsedSize={0}
+            >
               <Sidebar
+                onOpenWorkbench={openWorkbench}
+                onOpenWorkSurface={showWorkbenchWork}
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
@@ -1809,45 +2183,54 @@ export function App() {
                 onToast={showToast}
               />
             </Panel>
-            <PanelResizeHandle className="rs-handle vert" />
+            {!sidebarCollapsed && <PanelResizeHandle className="rs-handle vert" />}
             <Panel minSize={30}>
-              <Work visible={view === 'work'} />
-              {view === 'file' && selectedFile ? (
-                <FileView path={selectedFile} />
-              ) : view !== 'work' ? (
-                <div className="main">
-                  <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
-                  <OpBanner onToast={showToast} />
-                  {view === 'local' && <LocalChanges onOpenFileInEditor={openActiveFileInEditor} />}
-                  {view === 'review' && <Review onOpenFileInEditor={openActiveFileInEditor} />}
-                  {view === 'pull-requests' && (
-                    <PullRequests
-                      onToast={showToast}
-                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                    />
+              <div className="workspace-host">
+                <Work
+                  visible={view === 'work' && (!workbenchComposed || customWorkFrame != null)}
+                  frame={workbenchComposed ? customWorkFrame : null}
+                  keyboardActive={view === 'work' && (
+                    !workbenchComposed
+                    || (customWorkPaneId != null && customActivePaneId === customWorkPaneId)
                   )}
-                  {view === 'workspace-review' && <WorkspaceReview onOpenFileInEditor={openEditorTarget} />}
-                  {view === 'reflog' && (
-                    <Reflog
-                      onResetTo={(target, label) => setResetDialog({ target, label })}
-                      onCreateBranch={(start, label) => setBranchDialog({ start, label })}
-                      onToast={showToast}
-                    />
-                  )}
-                  {view === 'worktrees' && (
-                    <Worktrees onCreateWorktree={() => setWorktreeDialog({ start: null })} onToast={showToast} />
-                  )}
-                  {(view === 'commits' || view === 'branch') && (
-                    <Commits
-                      onCreateTag={(target, label) => setTagDialog({ target, label })}
-                      onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
-                      onResetTo={(target, label) => setResetDialog({ target, label })}
-                      onCreateWorktree={(start) => setWorktreeDialog({ start })}
-                      onToast={showToast}
-                    />
-                  )}
-                </div>
-              ) : null}
+                  focusRequest={customWorkFocusRequest}
+                  onActivate={workbenchComposed ? activateCustomWorkPane : undefined}
+                />
+                {view === 'file' && selectedFile ? (
+                  <FileView path={selectedFile} />
+                ) : view === 'work' ? (
+                  workbenchComposed ? (
+                    <div className="main">
+                      <OpBanner onToast={showToast} />
+                      <CustomView
+                        editing={workbenchEditing}
+                        renderSurface={renderCustomSurface}
+                        onWorkFrame={updateCustomWorkFrame}
+                        onFocusWork={focusCustomWork}
+                        onCustomize={customizeWorkbench}
+                        onDone={() => setWorkbenchEditing(false)}
+                        onReset={resetWorkbench}
+                      />
+                    </div>
+                  ) : null
+                ) : (
+                  <div className="main">
+                    <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
+                    <OpBanner onToast={showToast} />
+                    {mainSurfaceId && (
+                      <SurfaceHost
+                        registry={workbenchSurfaceRegistry}
+                        surfaceId={mainSurfaceId}
+                        instanceId={`main-surface-${mainSurfaceId}`}
+                        binding={{ kind: 'follow-active' }}
+                        host="main"
+                        lifecycle={{ mounted: true, visible: true, focused: true }}
+                        render={renderSurfaceContribution}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </Panel>
           </PanelGroup>
         </div>

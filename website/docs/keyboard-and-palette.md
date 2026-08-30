@@ -13,7 +13,7 @@ Open the palette with `Mod+K`. It is a single fuzzy-matched search over commands
 
 Results are grouped, in this order:
 
-- **Actions** — every command Strand exposes: initialize/open/clone/switch repository, show any view, fetch/pull/push/sync, stash and snapshot, create branch/tag/remote, clear merged local and matching remote branches, interactive rebase, review actions (AI review, pin/move/clear baseline, copy feedback as prompt), worktree cleanup, settings and theme, and "Abort <operation>" while a merge or rebase is paused.
+- **Actions** — every command Strand exposes: initialize/open/clone/switch repository, show any view, fetch/pull/push/sync, stash and snapshot, create branch/tag/remote, clear merged local and matching remote branches, interactive rebase, review actions (AI review, pin/move/clear baseline, copy feedback as prompt), worktree cleanup, settings and theme, **Heroi: New conversation**, and "Abort <operation>" while a merge or rebase is paused.
 - **Branches** — checkout a local branch. Remote branches without a local counterpart appear too; running one creates a local tracking branch. The current branch reveals its tip in the graph instead.
 - **Tags** — reveal the tagged commit in the graph (non-destructive).
 - **Stashes** — "Apply stash: …", "Pop stash: …", and "Create branch from stash: …" rows per stash.
@@ -50,13 +50,14 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+O` | Open repository… | General |
 | — | Clone repository… | General |
 | `Mod+,` | Settings | General |
-| `Mod+1` | Go to Work | Navigation |
+| `Mod+1` | Go to Workbench | Navigation |
 | `Mod+2` | Go to Local Changes | Navigation |
 | `Mod+3` | Go to All Commits | Navigation |
 | `Mod+4` | Go to Reflog | Navigation |
 | `Mod+5` | Go to Review | Navigation |
 | `Mod+6` | Go to Worktrees | Navigation |
 | `Mod+7` | Go to Workspace Review | Navigation |
+| `Mod+8` | Customize Workbench | Navigation |
 | `Mod+Tab` | Next repository | Navigation |
 | `Mod+Shift+Tab` | Previous repository | Navigation |
 | `Mod+E` | Switch repository… | Navigation |
@@ -69,6 +70,7 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+Shift+C` | Open in terminal | Repository |
 | `Mod+R` | Refresh | Repository |
 | `Mod+Shift+T` | Toggle light/dark theme | Appearance |
+| `Mod+B` | Toggle sidebar | Appearance |
 
 Push is deliberately on `Mod+P` and pull on `Mod+Shift+P`. The Git shortcuts act only on the currently open repository, and most Navigation/Git/Repository commands need a repository open — `Mod+E` is the exception and lists recents even with nothing open.
 
@@ -124,6 +126,40 @@ When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
 `Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on
 Windows and Linux the numbered view shortcuts and the fixed Work-tab
 `Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
+
+### Composed Workbench
+
+| Key | Action |
+| --- | --- |
+| `F6` | Focus the active surface entry point, or its selector while customizing |
+| `Mod+[` / `Mod+]` | Cycle Workbench panes and focus each surface's entry point |
+| `↑` / `↓` / `←` / `→` | Move through an empty pane's feature grid |
+| Arrow keys on a focused divider | Resize the adjacent Workbench panes |
+
+Quick Launch adds Workbench layout actions while customization is open: assign
+any Strand surface to the active pane, split it right or down, close it, or apply the
+Blank, Focus, Review station, and VS Code workbench templates. Feature menus
+and every pane control are in the normal `Tab` order. Choose **Done** to hide
+editing controls without closing the configured surfaces.
+
+### Heroi plugin surface
+
+When a Workbench pane hosts Heroi, the chat list and agent sessions are scoped
+to the active repository:
+
+| Key | Action |
+| --- | --- |
+| `Mod+Enter` | Send the composer message |
+| `Shift+Tab` | Toggle Plan / Build in the composer |
+| `@` | Search and insert a repository-file mention |
+| `/` | Search and insert an available agent skill |
+| `↑` / `↓`, `Enter` | Navigate and choose an open mention/skill result |
+
+Files can also be dragged from a Files pane into the Heroi composer. Running
+threads continue in parallel when another conversation is opened or started.
+Focus a command/tool activity row and press `Enter` or `Space` to expand its
+available command details and output.
+Quick Launch also has **Heroi: New conversation**.
 
 ### Repository tabs
 

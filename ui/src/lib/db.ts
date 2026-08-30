@@ -88,6 +88,12 @@ export const settings = {
       [key, JSON.stringify(value)],
     );
   },
+
+  async remove(key: string): Promise<void> {
+    if (!isTauri()) return;
+    const d = await db();
+    await d.execute('DELETE FROM settings WHERE key = $1', [key]);
+  },
 };
 
 /**
@@ -103,6 +109,16 @@ export const remoteTagsCache = {
   },
   set(repoPath: string, tags: string[]): Promise<void> {
     return settings.set(`remote-tags:${repoPath}`, tags);
+  },
+};
+
+/** Repository-scoped scratchpad content stored in Strand's app database. */
+export const quickNotes = {
+  get(repoPath: string): Promise<string | null> {
+    return settings.get<string>(`quick-notes:${repoPath}`);
+  },
+  set(repoPath: string, note: string): Promise<void> {
+    return settings.set(`quick-notes:${repoPath}`, note);
   },
 };
 

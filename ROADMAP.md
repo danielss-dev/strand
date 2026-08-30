@@ -2144,6 +2144,10 @@ and Store certification remain external gates.
 
 ## 1.1+ — Post-1.0
 
+- ☑ **Configurable Workbench** — Work and the former Custom experiment are one
+  destination. With no saved layout it is the existing full-size Work surface;
+  customization composes registered Strand surfaces into nested panes with
+  per-workspace persistence, templates, and one stable live Work runtime.
 - **Remote repos over SSH** — open a repo on a remote machine (agent
   devbox, VPS) and use Strand locally against it. Headless `strandd`
   daemon over JSON-RPC/stdio, system `ssh` for auth/transport (Strand
@@ -2168,7 +2172,12 @@ and Store certification remain external gates.
   as the IPC layer). Read-only by design — no push/pull, no writes.
   Same static binary as the remote-SSH `strandd` (`--stdio` mode). Designed 2026-06-12:
   `docs/strand-cli.md` + task breakdown in TASKS.md.
-- Plugin / extension surface
+- ◐ **Plugin / extension surface** — internal namespaced surface/command
+  registries, shared hosts, and resilient layout-v2 references shipped
+  2026-08-28; declarative manifest validation, permission broker, bundled
+  marketplace, Heroi dogfood plugin, and `docs/plugin-creation.md` shipped
+  2026-08-29. Typed services/resource leases, quotas, remote install, and
+  isolated community execution remain open.
 - AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs, or all unstaged changes
     when nothing is staged (Codex / Claude Code CLIs)
@@ -2604,6 +2613,93 @@ The initial baseline action detects the current branch's parent and pins the
 fork-point merge base, making the complete branch history the default session
 scope. Combined staged patches remain read-only at hunk level so index writes
 cannot apply the wrong patch.
+
+**Experimental Custom view shipped (2026-08-27):** Custom composes nine
+existing Strand feature surfaces into a workspace-scoped, auto-saved tree of
+nested horizontal and vertical panes. A VS Code-style workbench template pairs
+Files and the live Work surface with Local Changes and All Commits inspectors;
+Review, Focus, and Blank templates cover other starting points. Features move instead
+of mounting twice, active panes arbitrate surface-level shortcuts, and Work's
+single editor/terminal runtime stays mounted while its reserved pane is moved
+or resized. Sidebar, native menu, rebindable Mod+8, palette layout commands,
+F6 module focus, and a startup-space setting keep the experiment keyboard-first.
+The same-day workspace pass gave Default and every named workspace independent
+topology, feature assignments, and divider storage; the previous app-wide
+layout migrates only into Default.
+
+**Workspace Review missing-member recovery shipped (2026-08-28):** Workspace
+members whose repository path was deleted, moved, or stopped being a Git
+repository are omitted instead of leaving a dead error section in the merged
+queue. Refresh revalidates those paths so a restored or re-cloned repository
+rejoins automatically without removing it from workspace membership.
+
+**Collapsible sidebar shipped (2026-08-28):** The main repository sidebar now
+collapses to zero width and restores its prior size through a topbar chevron,
+rebindable Mod+B command, command palette, or native View menu. The preference
+persists across launches, and the hidden panel stays mounted without bleeding
+into the workspace.
+
+**Extensible workbench foundation shipped (2026-08-28):** Built-in features
+now register namespaced surface metadata and Workbench commands through ordered
+registries, while dedicated and composed placements resolve through one
+`SurfaceHost` contract. Custom layout v2 stores surface and instance identity
+separately, migrates v1 layouts, and preserves unavailable namespaced
+contributions as placeholders instead of resetting the workspace. The
+architecture decision in `docs/extensibility-architecture.md` keeps community
+plugins behind a future declarative, permission-checked, isolated boundary;
+no third-party runtime ships in this phase.
+
+**Experimental plugin marketplace shipped (2026-08-29):** Settings → Plugins
+lists a bundled marketplace. Installing a plugin registers its namespaced
+Workbench surfaces into the combined registry without remounting Work's live
+editor/PTY runtime. Declarative plugins render markdown/status views from
+validated manifests; the Heroi dogfood plugin mounts through `SurfaceHost`
+with a Strand-owned repository-scoped chat renderer and permission-checked
+`repository.read` / `ai.invoke` broker calls. Authoring guide:
+`docs/plugin-creation.md`.
+
+**Repository Quick Notes shipped (2026-08-30):** the former static Quick Notes
+sample is now an editable repository-scoped Workbench plugin. Notes are saved
+under a repository-path key in Strand's app-config `strand.db`, never in the
+working tree. The placeholder Repo Status marketplace plugin was removed.
+
+**Heroi repository agent chat shipped (2026-08-30):** Heroi is now a focused
+Workbench chat surface: it filters persisted conversations to the active
+repository and leaves Files, git changes, diffs, and other tools to composable
+Workbench panes. Its native `heroi_agent_send` bridge launches authenticated
+Claude, Codex, or Cursor Agent CLI sessions off the UI thread, streams bounded
+JSONL events into the conversation, persists provider session IDs for resume,
+and supports process-tree cancellation.
+
+**Heroi agent-console UI shipped (2026-08-30):** The chat surface now follows
+the focused agent-console design: a compact repository thread rail and filters,
+a context/action header, flat readable turns with persisted execution activity,
+and a bottom-anchored Plan/Build command deck. **Open review** activates an
+existing Review pane when available and otherwise opens Strand's Review view;
+Heroi still does not duplicate file or diff rendering.
+
+**Heroi provider model catalogs (2026-08-30):** Heroi's model and reasoning
+pickers now follow the same source as T3 Code: Claude's version-gated catalog
+with per-model effort levels, Codex `model/list` from `codex app-server`
+(including advertised reasoning), and Cursor `cursor/list_available_models`
+over ACP. Fallback catalogs keep the composer usable when a CLI probe fails.
+
+**Heroi parallel threads and composer context (2026-08-30):** Heroi can now
+run multiple repository conversations concurrently with per-thread stop and
+activity state. Typing `@` searches working-tree paths, typing `/` searches
+provider/project skills and inserts the provider-native `$skill` reference,
+and dragging entries from Strand's Files tree into the composer adds file
+mentions without opening or moving them. File suggestions reuse Strand's
+language/file icons, the composer visibly acknowledges a valid drag target,
+and command/tool activity rows expand to bounded provider details and output.
+
+**Work and Custom unified as Workbench (2026-08-28):** The separate Labs
+destination is gone. Workbench opens on the existing full-size Work surface
+when a workspace has no saved composition, while Mod+8, the View menu, and
+Quick Launch enter an explicit customization mode for surfaces, splits, and
+templates. Done removes editing chrome; Reset deletes that workspace's saved
+layout. Existing Custom layouts, startup preferences, and shortcut overrides
+migrate to Workbench without duplicating or remounting the live Work runtime.
 
 ---
 

@@ -159,7 +159,11 @@ screen, whatever that screen is.
   resized into uselessness. Sidebars: roughly 12–40%. Diff pane: never
   below 30% (Pierre needs room to render).
 - Use the shared `.rs-handle.vert` / `.rs-handle.horiz` classes for resize
-  handles so the hover/drag affordance is consistent everywhere.
+  handles so the hover/drag affordance is consistent everywhere. Keep their
+  full 9px mouse target above pane content while the pseudo-element draws the
+  thin visible rule. The negative margins deliberately overlap both panes, so
+  dropping the handle's stacking layer lets surfaces—especially Work's stable
+  embedded renderer—cover most or all of the draggable area.
 - When adding a new pane: also check that its content reflows. Long file
   paths truncate (`text-overflow: ellipsis`), code lines wrap or scroll —
   never push the layout wider.
@@ -2214,3 +2218,119 @@ can reliably invalidate its own cache. The pre-dev/build
 optimizer `src` path and removes only `ui/node_modules/.vite` when one is
 missing. Keep this check generic; do not special-case a package or delete the
 whole dependency installation.
+
+## Composed views need one owner per live surface (2026-08-27)
+
+A configurable workspace cannot safely render a second copy of a feature whose
+store, window listeners, focus loop, or renderer assumes it is unique. Assign a
+feature to at most one pane and move it when reassigned. Only the active pane
+may own surface-level window shortcuts, and DOM queries must start from that
+surface's own root so two different diff surfaces cannot steer each other.
+Keep expensive persistent renderers such as Work's xterm/editor layer at one
+stable React position and measure a reserved pane for placement; do not remount
+them as the layout tree changes. This preserves terminal processes, scrollback,
+selection, and the ordinary non-composed-view hot path.
+
+## Workspace layouts need scope on every persistence channel (2026-08-27)
+
+A layout is not workspace-specific merely because its topology uses a
+workspace-keyed SQLite row. Scope the complete persistence surface: cached
+models, in-flight restores, serialized write queues, and
+`react-resizable-panels` auto-save identities. On a workspace switch, hide the
+previous tree synchronously and ignore a stale async restore unless its scope
+is still active; otherwise a slow read can flash or overwrite another
+workspace's view. Keep per-workspace write queues independent so one slow disk
+write does not stall edits elsewhere. When migrating a former app-wide value,
+attach it only to the reserved Default workspace—copying it into every named
+workspace defeats the user's expectation that each starts independently.
+
+## Pierre controlled selections echo through `onLineSelected` (2026-08-28)
+
+Pierre's React wrapper calls `setSelectedLines` when Strand changes the
+controlled `selectedLines` prop, and that programmatic update can invoke
+`onLineSelected`. Do not use that callback to persist a selection when the same
+prop also drives transient hover tint: the first hovered range otherwise
+becomes persistent and the blue tint stops following later hovers. Use
+`onLineSelectionEnd` for pointer-only drag commits; programmatic hover updates
+do not emit that lifecycle event.
+
+## Extensible layouts must preserve identity before resolving code (2026-08-28)
+
+Persisted workbench layouts store namespaced surface identity, instance
+identity, and context binding; they must validate bounded structure without
+requiring the contribution to be installed. Unknown or disabled IDs survive
+as stable placeholders, so one missing plugin can never reset an otherwise
+valid workspace. Contribution metadata, pickers, command generation, and
+render hosts must consume one registry instead of growing parallel feature
+lists. Community code must stay outside Strand's privileged React/Tauri
+webview and reach app data only through versioned, permission-checked,
+quota-bounded capabilities.
+
+## Workbench configuration is an overlay on the default Work surface (2026-08-28)
+
+Work and composition are one product destination, but remain separate runtime
+responsibilities: Work owns editor/terminal panes and the Workbench owns outer
+surface placement. Absence of a saved Workbench layout must take the direct,
+full-size Work path with no loading gate or configuration chrome. Entering
+customization may compose that same stable Work renderer; Done hides editing
+controls, and Reset removes the workspace layout so the direct default returns.
+Legacy Custom layout keys and settings are one-way migration inputs, not a second
+route; remove the legacy global layout only after its per-workspace write succeeds
+so Reset cannot resurrect it. Normal composed layouts retain an outer keyboard loop:
+`F6` and `Mod+[` / `Mod+]` focus each surface's entry point without editor chrome.
+Work needs an explicit bridge because its persistent renderer is visually positioned in
+the layout but remains a DOM sibling of the Workbench placeholder.
+
+## Heroi is an active-repository-only chat surface (2026-08-30)
+
+**Rule.** The Strand-hosted Heroi plugin (`daniels.heroi`) contributes only a
+coding-agent chat. Render and persist conversations by repository, and display
+only conversations whose canonical project path matches Strand's active
+repository. Do not duplicate workspaces, Files, git changes, diffs, kanban, or
+terminal chrome inside Heroi; those belong to independently composable
+Workbench panes. Heroi launches authenticated Claude, Codex, and Cursor Agent
+CLIs off the UI thread, consumes their streaming JSONL, retains provider session
+IDs for resume, and cancels the complete child process tree. Model and
+reasoning pickers are provider-owned: Claude uses the version-gated catalog
+with per-model effort levels, Codex is probed via `app-server` `model/list`,
+and Cursor Agent is probed via ACP `cursor/list_available_models`. Bound captured
+output and never expose raw vendor stderr or transcript paths.
+
+**Why.** Heroi is embedded in Strand's Workbench rather than acting as a second
+IDE. Duplicating surrounding tools wastes pane space, creates competing state,
+and obscures the repository boundary that must isolate chat history.
+
+**Visual contract.** Heroi uses a compact Threads rail, a one-line repository
+context/action bar, flat left-aligned turns, persisted execution activity rows,
+and a bottom-anchored command deck. Avoid conventional chat bubbles and large
+centered cards. **Open review** routes to Strand's existing Review surface; it
+must never grow an inline diff viewer. Derive the near-black/amber treatment
+from Strand theme tokens so repository accenting, focus rings, and contrast
+remain coherent.
+
+**Composer and concurrency contract.** A running conversation must only lock
+its own composer and settings; it must not prevent creating, opening, sending,
+or stopping other repository conversations. Track runs by conversation id and
+keep cancellation keyed by each unique operation id. `@` references canonical
+repository-relative paths. The `/` picker discovers the selected provider's
+user and project skill roots but inserts `$skill-name`, matching the native CLI
+prompt syntax. Files-tree drops must become mentions and must not also trigger
+the tree's move/open behavior. Report drag-hover entry/exit separately from the
+drop so the composer can acknowledge a valid target before release. Activity
+rows are disclosures when provider detail exists; retain bounded command/tool
+arguments and output, never unbounded vendor transcripts or stderr.
+
+---
+
+## Perf hook exposes plugins for CDP (2026-08-30)
+
+**Rule.** When driving Strand over CDP in Vite DEV, use `window.__strand.*`
+stores only. Dynamic `import('/src/...')` from `Runtime.evaluate` can resolve a
+**second** module graph, so installs and layout writes look successful but the
+React tree never updates. `window.__strand.plugins` is part of the perf hook
+(`strand:perf=1`) for the same reason as `repo` / `customView`. Workbench
+workspace id must be `__default__`, never `"default"`.
+
+**Why.** A Heroi install against the duplicate registry left the App surface
+registry empty and the main pane blank until the real store was used.
+

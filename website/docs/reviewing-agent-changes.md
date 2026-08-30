@@ -105,4 +105,4 @@ See [Worktrees](worktrees.md) for creating worktrees, comparing multiple attempt
 
 ## Reviewing across repositories
 
-If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+7`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. See [Repositories and workspaces](repositories-and-workspaces.md).
+If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+7`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. Members whose folder was deleted or moved are skipped until the path is a repository again. See [Repositories and workspaces](repositories-and-workspaces.md).

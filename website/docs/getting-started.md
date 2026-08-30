@@ -64,7 +64,7 @@ Open repositories appear either as a vertical icon rail or a horizontal tab stri
 
 ### Sidebar
 
-The sidebar has five primary rows — **Work**, **Local Changes** (with an
+The sidebar has five primary rows — **Workbench**, **Local Changes** (with an
 unstaged-count badge), **Review**, **Pull Requests**, and **All Commits** — and
 two tabs below them. Entering Work selects Files immediately.
 

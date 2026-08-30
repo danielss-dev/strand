@@ -35,6 +35,7 @@ import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
+import { WholeFileDiff } from './LocalChanges';
 import type { PierreEditorHistory } from '../components/PierreFileEditor';
 import type {
   BlameLine,
@@ -46,7 +47,7 @@ import type {
 } from '../lib/types';
 import type { WorkFileMode } from '../lib/workTabs';
 
-type Tab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
+type Tab = 'content' | 'preview' | 'changes' | 'history' | 'compare' | 'blame';
 
 /** Sentinel "revision" for the working-tree (uncommitted) entry in History.
  *  Any non-hex string works — it never reaches git (the working-tree branch
@@ -69,6 +70,7 @@ const EMPTY_EDITOR_HISTORY: EditorHistoryState = {
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'content', label: 'Content', icon: 'content' },
   { id: 'preview', label: 'Preview', icon: 'eye' },
+  { id: 'changes', label: 'Changes', icon: 'changes' },
   { id: 'history', label: 'History', icon: 'history' },
   { id: 'compare', label: 'Compare', icon: 'compare' },
   { id: 'blame',   label: 'Blame',   icon: 'blame' },
@@ -153,15 +155,25 @@ export function FileDocument({
   const [searchOpen, setSearchOpen] = useState(false);
 
   const previewable = !isDirectory && isPreviewablePath(path);
-  const tabs = isDirectory
+  // The Changes tab lenses the working tree, so it only exists for working-
+  // tree files that actually differ from HEAD. Reads the active repo's diff
+  // lists — a background tab of another repo re-evaluates once that repo
+  // activates and refreshes them.
+  const hasWorkTreeChanges = useRepo((s) => !revision && (
+    s.unstagedDiffs.some((d) => d.path === path) || s.stagedDiffs.some((d) => d.path === path)
+  ));
+  const tabs = (isDirectory
     ? [{ ...TABS[0], label: 'Contents', icon: 'folder-open' as const }]
     : previewable
       ? TABS
-      : TABS.filter((t) => t.id !== 'preview');
+      : TABS.filter((t) => t.id !== 'preview')
+  ).filter((t) => t.id !== 'changes' || hasWorkTreeChanges);
   // Defensive: the store can only hold 'preview' while a previewable file is
   // open (selectFile only picks it for previewable paths), but fall back
   // rather than render an empty body if that ever changes.
-  const active = isDirectory || (tab === 'preview' && !previewable) ? 'content' : tab;
+  const active = isDirectory || (tab === 'preview' && !previewable) || (tab === 'changes' && !hasWorkTreeChanges)
+    ? 'content'
+    : tab;
 
   const openSearch = useCallback(() => {
     if (isDirectory) return;
@@ -258,6 +270,7 @@ export function FileDocument({
         {!isDirectory && active === 'preview' && (
           <PreviewTab key={path} path={path} repoPath={repoPath} revision={revision} onOpenPath={onOpenPath} />
         )}
+        {!isDirectory && active === 'changes' && <WholeFileDiff key={path} path={path} />}
         {!isDirectory && active === 'history' && <HistoryTab key={path} path={path} repoPath={repoPath} onJump={jumpToCommit} />}
         {!isDirectory && active === 'compare' && <CompareTab key={path} path={path} repoPath={repoPath} />}
         {!isDirectory && active === 'blame' && <BlameTab key={path} path={path} repoPath={repoPath} onJump={jumpToCommit} />}

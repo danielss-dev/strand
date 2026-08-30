@@ -40,7 +40,9 @@ export interface MenuHandlers {
   checkUpdates(): void;
   openPalette(): void;
   showView(view: MenuViewId): void;
+  customizeWorkbench(): void;
   cycleTheme(): void;
+  toggleSidebar(): void;
   sync(): void;
   pull(): void;
   push(): void;
@@ -139,7 +141,7 @@ export async function installAppMenu(
   });
 
   const views: { id: MenuViewId; text: string; cmd: CommandId }[] = [
-    { id: 'work', text: t('nav.work'), cmd: 'view-work' },
+    { id: 'work', text: t('nav.workbench'), cmd: 'view-work' },
     { id: 'local', text: 'Local Changes', cmd: 'view-local' },
     { id: 'commits', text: 'All Commits', cmd: 'view-commits' },
     { id: 'reflog', text: 'Reflog', cmd: 'view-reflog' },
@@ -167,12 +169,25 @@ export async function installAppMenu(
           }),
         ),
       )),
+      await item({
+        id: 'customize-workbench',
+        text: t('workbench.customizeEllipsis'),
+        cmd: 'customize-workbench',
+        enabled: hasRepo,
+        action: () => handlers().customizeWorkbench(),
+      }),
       await sep(),
       await item({
         id: 'cycle-theme',
         text: 'Toggle Light/Dark Theme',
         cmd: 'theme-toggle',
         action: () => handlers().cycleTheme(),
+      }),
+      await item({
+        id: 'toggle-sidebar',
+        text: 'Toggle Sidebar',
+        cmd: 'toggle-sidebar',
+        action: () => handlers().toggleSidebar(),
       }),
     ],
   });

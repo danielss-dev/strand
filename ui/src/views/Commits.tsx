@@ -59,10 +59,18 @@ interface CommitsProps {
   onCreateWorktree: (start: { ref: string; label: string }) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  /** Override for "Review changes since this" navigation — Workbench routes
+   * it to its embedded Review pane instead of the Review tab. Baseline pinning
+   * stays here; only the jump is delegated. */
+  onReviewNavigate?: () => void;
+  /** Reveal Work when returning to a Work file from history. */
+  onWorkNavigate?: () => void;
+  /** Only the focused Workbench pane owns window-level shortcuts. */
+  active?: boolean;
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -328,13 +336,14 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
         {
           // Pin the review baseline here and jump to the Review view — review
           // everything (commits + working tree) done since this commit.
+          // Workbench delegates the jump to its embedded Review pane.
           label: 'Review changes since this',
           icon: 'check',
           onSelect: () => void (async () => {
             try {
               await setBaseline(c.hash);
-              setView('review');
-              selectFile(null);
+              if (onReviewNavigate) onReviewNavigate();
+              else { setView('review'); selectFile(null); }
             } catch (e) { fail('Set baseline', e); }
           })(),
         },
@@ -365,7 +374,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     },
     [bulkBusy, bulkSelection, cherryPick, checkoutCommit, commit, exportCommits,
       hasStaged, meta, multi, onCreateTag, onCreateWorktree, onInteractiveRebase,
-      onResetTo, onToast, revert, runBulkCherryPick, selectFile, setBaseline, setView],
+      onResetTo, onReviewNavigate, onToast, revert, runBulkCherryPick, selectFile,
+      setBaseline, setView],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail
@@ -835,6 +845,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   // `/` focuses the search field (unless the user is typing somewhere else).
   // Scoped to this view: the listener only exists while the graph is mounted.
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== '/') return;
       // `eventInside` sees through shadow DOM (Pierre's file-search box).
@@ -845,7 +856,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [active]);
 
   // Close the results dropdown on an outside click. Escape is handled by the
   // input's own keydown (which also clears the query), so this watches the
@@ -959,7 +970,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
               void setActiveTab(target.repoPath).then(() => {
                 useWork.getState().activate(target.repoPath, target.tabId);
                 setWorkFileReturn(null);
-                setView('work');
+                if (onWorkNavigate) onWorkNavigate();
+                else setView('work');
               });
             }}
             title={`Back to ${workFileReturn.path}`}

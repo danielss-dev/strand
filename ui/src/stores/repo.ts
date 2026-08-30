@@ -60,7 +60,7 @@ export type View =
 
 /** Active tab within the file view ('preview' only offered for renderable
  *  files — SVG / markdown). */
-export type FileTab = 'content' | 'preview' | 'history' | 'compare' | 'blame';
+export type FileTab = 'content' | 'preview' | 'changes' | 'history' | 'compare' | 'blame';
 
 /** One open repository in the topbar tab strip. */
 export interface RepoTab {

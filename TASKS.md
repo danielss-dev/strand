@@ -689,6 +689,19 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
     slice, ⌘F preview "web · feat-auth · src/auth.ts", note → export heading
     `## web · feat-auth (branch feat-auth)`, toggle appearing at 1 repo +
     1 worktree).
+  - ☑ Workspace Review skips members deleted from disk (2026-08-28): a
+    member whose discovery (`repoMeta`) fails — directory deleted, moved,
+    or no longer a repository — is dropped from the member list instead of
+    rendering a dead "Couldn't load changes — Could not find a git
+    repository…" section (stale open-tab metas included; the tab fallback
+    in `loadMember` is gone). The path is remembered in a module-level
+    `missing` map so refreshes skip it without flashing, `refreshAll`
+    revalidates cached paths (cheap discovers) so a re-cloned path rejoins,
+    and `refreshMember` drops mid-session deletions the same way. Workspace
+    membership itself is untouched (non-destructive — a temporarily
+    unavailable drive heals instead of silently losing curation). Verified:
+    `tsc`, `vitest` (366, +3 new store tests in
+    `stores/workspaceReview.test.ts`).
 
 ### Topbar
 - ☑ Layout + native-chrome alignment
@@ -712,6 +725,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `BranchSwitcherButton`.)
 
 ### Sidebar
+- ☑ Collapse/expand the sidebar panel (`sidebarCollapsed` in settings,
+  `ImperativePanelHandle.collapse/expand` in `App.tsx`; topbar chevron,
+  `Mod+B`, palette, and View menu — persisted across launches).
 - ☑ Local Changes + All Commits primary rows
 - ☑ Git / Files tab toggle
 - ☑ Per-row actions via a right-click **`ContextMenu`** (`components/ContextMenu.tsx`):
@@ -883,7 +899,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   inline Stage / Discard pair on each change block — Unstage on the
   staged side. `sliceChangeBlock` carves the synthetic single-hunk patch
   routed through `useRepo.applyPatch`; line-number drag selection and the
-  keyboard-operable `LinePicker` route through `sliceSelectedLines`.)
+  keyboard-operable `LinePicker` route through `sliceSelectedLines`; hover
+  tint tracks the active block because `HunkAnnotatedDiff` accepts persistent
+  line picks only from Pierre's pointer-only `onLineSelectionEnd` event.)
 - ☑ Copy diff as patch / Markdown (`concatPatches` / `patchesToMarkdown` in
   `lib/patchExport.ts` — raw multi-file patch with trailing-newline
   normalization, or `### path` + ```` ```diff ```` fences with CommonMark
@@ -1152,10 +1170,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   merge dialog's base picker; consider preferring the branch another worktree
   has checked out, or main-ish names, on exact rank ties.
 
-### Work view + embedded terminals
-- ☑ Work is the startup/sidebar/menu/palette destination; Files becomes the
-  active sidebar lens and numbered navigation is Work `Mod+1` through
-  Workspace Review `Mod+7` (`View`, `Sidebar`, `COMMANDS`, native View menu).
+### Workbench Work surface + embedded terminals
+- ☑ Workbench is the startup/sidebar/menu/palette destination; Files becomes
+  the active sidebar lens and numbered navigation is Workbench `Mod+1`
+  through Workspace Review `Mod+7`; `Mod+8` enters Workbench customization
+  (`View`, `Sidebar`, `COMMANDS`, native View menu).
 - ☑ Per-repository mixed `WorkTab` model with one replaceable preview, pin
   promotion/deduplication, peer ordering, close fallback, path-mutation
   reconciliation, and stable Work return IDs (`stores/work.ts`,
@@ -1211,9 +1230,88 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ Run interactive terminal/process-tree E2E on real macOS and Linux builds,
   plus high-output and many-restored-descriptor performance baselines.
 
+### Workbench composition
+- ☑ Versioned, defensively parsed, workspace-scoped Workbench layouts with nested
+  horizontal/vertical panes, draggable and keyboard-resizable dividers,
+  close/collapse rules, a 32-pane defensive limit, per-workspace write queues
+  and divider identities, Default-only legacy migration, and automatic
+  topology/surface/split-size restore, with shared 9px mouse hit targets kept
+  above pane content (`.rs-handle`, `lib/customView.ts`,
+  `stores/customView.ts`, `workspaceIdentity.ts`, `views/CustomView.tsx`).
+- ☑ Compose the real Work, Files, Local Changes, Review, All Commits, Pull
+  Requests, Reflog, Worktrees, and Workspace Review surfaces without duplicate
+  feature mounts; moving Work preserves its single xterm/editor runtime and
+  Files has one reusable sidebar/Workbench owner (`RepositoryFiles`, `CustomView`,
+  stable `WorkFrame`, active-pane shortcut arbitration), with the repository
+  Files tab hidden while Workbench owns that surface. Includes Blank, Focus,
+  Review station, and a four-surface VS Code workbench template.
+- ☑ Work and Custom are one Workbench destination: an unconfigured workspace
+  renders the existing full-size Work surface with no composition chrome;
+  `Mod+8`, View, and Quick Launch enter customization, Done returns to normal
+  use, Reset removes the saved layout, and legacy Custom startup/shortcut/layout
+  state migrates without data loss (`App`, `CustomView`, `useCustomView`).
+- ☑ Extensible-workbench foundation: namespaced surface and command registries,
+  one `SurfaceHost` contract for dedicated and Workbench placements, explicit
+  instance/lifecycle/context metadata, and Custom layout v2 surface refs with
+  fail-safe v1 migration and unavailable-contribution placeholders
+  (`workbench/`, `lib/customView.ts`, `docs/extensibility-architecture.md`).
+- ☐ Move route-gated loading and implicit active-repository reads behind
+  explicit surface context sessions and reference-counted resource leases.
+- ☐ Add typed navigation/dialog services and workbench-owned extension slots
+  for actions, menus, tree decorations, detail panels, and status items.
+- ◐ Design and implement the declarative community-plugin manifest,
+  permission broker, quotas, diagnostics, and isolated execution boundary;
+  do not load third-party code into Strand's privileged webview.
+  (manifest validation, capability broker, bundled marketplace, Heroi
+  builtin plugin, `docs/plugin-creation.md` — 2026-08-29; quotas,
+  remote install, and isolated custom UI remain open.)
+- ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
+  persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
+- ☑ Repository-scoped Quick Notes plugin with debounced persistence in
+  Strand's app database; removed the Repo Status sample plugin
+  (`QuickNotesView`, `quick-notes:<repo-path>` — 2026-08-30).
+- ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`,
+  `heroi_agent_send`, `heroi_provider_models` — active-repository-only chat
+  with streaming, resumable, cancellable Claude/Codex/Cursor Agent sessions;
+  live provider model catalogs and per-model reasoning levels; no duplicate
+  Files, git, diff, or kanban chrome; compact Threads rail, flat
+  transcript/activity rows, command-deck composer, concurrent conversation
+  runs, `@` repository-file mentions, `/` skill picker, Files-tree mention
+  drops with live composer feedback, expandable command/tool activity details,
+  and Open review bridge (`HeroiView`, `heroi_skills`,
+  `PierreTree.onExternalDrop`, `HeroiAgentEvent::Activity`)).
+- ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
+- ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
+  macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
+  module moves, and overflow; native SQLite/PTYS require packaged app passes).
+
+#### Workbench customization UX
+
+- ☑ Swap surfaces when assigning one that is already open
+  (`setCustomPaneSurface`).
+- ☑ Undo the last layout mutation with `Mod+Z` (`useCustomView.undo`,
+  `CustomView`).
+- ☑ Cycle the active pane with wrapping `Mod+[` / `Mod+]` (`CustomView`).
+- ☑ Show a persistent active-pane treatment (`.custom-pane.active`).
+- ☑ Move secondary pane actions into a header overflow menu
+  (`.custom-pane-more`, `ContextMenu`).
+- ☑ Show wireframe previews beside layout templates
+  (`.custom-template-thumb`).
+- ☑ Flash the save indicator only after layout changes
+  (`.custom-save-state.flash`).
+- ☑ Fill empty panes with an auto-filling feature grid
+  (`.custom-feature-grid`).
+- ☑ Label pane dividers by their adjacent features (`CustomLayoutView`).
+- ☑ Changes explorer feature — Local Changes reduced to its Unstaged/Staged
+  trees (`explorerOnly` on `LocalChanges`); clicking a file opens it in the
+  Work pane's whole-file Changes tab (`openChangesInWork` in `App.tsx`).
+
 ### File view (4-tab)
 - ☑ Tab strip + header (opened via `selectFile` from the Files tab / palette;
   a Close action returns to Local Changes)
+- ☑ Changes tab — whole-file working-tree diff for files that differ from HEAD
+  (`WholeFileDiff` in `LocalChanges.tsx`, `WorkFileMode 'changes'`); the
+  Custom Changes explorer opens files directly on it.
 - ☑ Content tab — working-tree (or revision) content via `repo_file_content`.
   Existing complete UTF-8 working-tree files edit through Pierre's lazy-loaded
   `<File edit>` surface and save through stale-checked `repo_file_write`; revisions,

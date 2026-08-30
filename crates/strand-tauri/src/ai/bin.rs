@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{
@@ -28,7 +28,7 @@ impl AiCancelHandle {
         self.0.store(true, Ordering::Release);
     }
 
-    fn is_cancelled(&self) -> bool {
+    pub(crate) fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::Acquire)
     }
 }
@@ -41,6 +41,11 @@ pub fn resolve_codex(override_path: Option<&str>) -> Option<PathBuf> {
 /// Resolve the Claude Code CLI binary: user override, then `claude` on PATH.
 pub fn resolve_claude(override_path: Option<&str>) -> Option<PathBuf> {
     resolve_cli("claude", override_path)
+}
+
+/// Resolve the Cursor Agent CLI binary: user PATH only for now.
+pub fn resolve_cursor() -> Option<PathBuf> {
+    resolve_cli("cursor-agent", None)
 }
 
 pub(crate) fn resolve_cli(default_name: &str, override_path: Option<&str>) -> Option<PathBuf> {
@@ -234,7 +239,14 @@ pub fn run_capture_cancellable(
         .spawn()
         .map_err(|e| spawn_error(program, &e.to_string()))?;
     #[cfg(windows)]
-    let job = WindowsJob::assign(&child)?;
+    let job = match WindowsJob::assign(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
 
     // Feed stdin and drain both output pipes on threads: a full pipe buffer
     // (or a child that never reads stdin) must not deadlock the wait loop.
@@ -302,6 +314,188 @@ pub fn run_capture_cancellable(
             detail
         })
     }
+}
+
+/// Run a CLI while delivering each stdout line as it arrives. Agent CLIs use
+/// JSONL for non-interactive sessions; draining on a reader thread keeps
+/// cancellation responsive even when a provider is thinking and emits no
+/// output for a while.
+pub fn run_streaming_lines(
+    program: &Path,
+    args: &[String],
+    cwd: &Path,
+    stdin_data: &str,
+    timeout: Duration,
+    cancel: &AiCancelHandle,
+    mut on_line: impl FnMut(&str),
+) -> Result<(), String> {
+    let mut cmd = base_command(program, true);
+    cmd.args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| spawn_error(program, &e.to_string()))?;
+    #[cfg(windows)]
+    let job = WindowsJob::assign(&child)?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let data = stdin_data.as_bytes().to_vec();
+        std::thread::spawn(move || {
+            let _ = stdin.write_all(&data);
+        });
+    }
+
+    let output_exceeded = Arc::new(AtomicBool::new(false));
+    let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
+    let stdout_exceeded = output_exceeded.clone();
+    let stdout_thread = child.stdout.take().map(|stdout| {
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stdout).take((MAX_STDOUT_BYTES + 1) as u64);
+            let mut retained = 0usize;
+            loop {
+                let mut bytes = Vec::new();
+                let Ok(read) = reader.read_until(b'\n', &mut bytes) else {
+                    break;
+                };
+                if read == 0 {
+                    break;
+                }
+                retained = retained.saturating_add(read);
+                if retained > MAX_STDOUT_BYTES {
+                    stdout_exceeded.store(true, Ordering::Release);
+                    break;
+                }
+                while bytes
+                    .last()
+                    .is_some_and(|byte| matches!(byte, b'\r' | b'\n'))
+                {
+                    bytes.pop();
+                }
+                let line = String::from_utf8_lossy(&bytes).into_owned();
+                if line_tx.send(line).is_err() {
+                    break;
+                }
+            }
+            retained
+        })
+    });
+    let stderr_thread = child
+        .stderr
+        .take()
+        .map(|pipe| drain_pipe(pipe, MAX_STDERR_BYTES, output_exceeded.clone()));
+    let deadline = Instant::now() + timeout;
+
+    let status = loop {
+        match line_rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(line) => on_line(&line),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {}
+        }
+        if cancel.is_cancelled() {
+            #[cfg(unix)]
+            kill_process_tree(&mut child);
+            #[cfg(windows)]
+            kill_process_tree(&mut child, &job);
+            let _ = child.wait();
+            join_stream_thread(stdout_thread);
+            let _ = join_pipe(stderr_thread);
+            return Err("cancelled".into());
+        }
+        if output_exceeded.load(Ordering::Acquire) {
+            #[cfg(unix)]
+            kill_process_tree(&mut child);
+            #[cfg(windows)]
+            kill_process_tree(&mut child, &job);
+            let _ = child.wait();
+            let stdout_bytes = join_stream_thread(stdout_thread);
+            let stderr = join_pipe(stderr_thread);
+            return Err(if stdout_bytes > MAX_STDOUT_BYTES {
+                format!("`{}` produced more than 1 MB on stdout", program.display())
+            } else if stderr.exceeded {
+                format!(
+                    "`{}` produced more than 256 KB on stderr",
+                    program.display()
+                )
+            } else {
+                format!("`{}` exceeded Strand's output limit", program.display())
+            });
+        }
+        if Instant::now() >= deadline {
+            #[cfg(unix)]
+            kill_process_tree(&mut child);
+            #[cfg(windows)]
+            kill_process_tree(&mut child, &job);
+            let _ = child.wait();
+            join_stream_thread(stdout_thread);
+            let _ = join_pipe(stderr_thread);
+            return Err(format!(
+                "`{}` timed out after {}s",
+                program.display(),
+                timeout.as_secs()
+            ));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(error) => {
+                #[cfg(unix)]
+                kill_process_tree(&mut child);
+                #[cfg(windows)]
+                kill_process_tree(&mut child, &job);
+                let _ = child.wait();
+                join_stream_thread(stdout_thread);
+                let _ = join_pipe(stderr_thread);
+                return Err(format!(
+                    "Could not wait for `{}`: {error}",
+                    program.display()
+                ));
+            }
+        }
+    };
+
+    // The process can exit before the pipe reader has forwarded its final
+    // line. Join it, then drain the channel before reporting completion.
+    let stdout_bytes = join_stream_thread(stdout_thread);
+    while let Ok(line) = line_rx.try_recv() {
+        on_line(&line);
+    }
+    let stderr = join_pipe(stderr_thread);
+    if stdout_bytes > MAX_STDOUT_BYTES {
+        return Err(format!(
+            "`{}` produced more than 1 MB on stdout",
+            program.display()
+        ));
+    }
+    if stderr.exceeded {
+        return Err(format!(
+            "`{}` produced more than 256 KB on stderr",
+            program.display()
+        ));
+    }
+    if status.success() {
+        Ok(())
+    } else if stderr.text.is_empty() {
+        Err(format!(
+            "`{}` exited with status {status}",
+            program.display()
+        ))
+    } else {
+        Err(stderr.text)
+    }
+}
+
+fn join_stream_thread(handle: Option<std::thread::JoinHandle<usize>>) -> usize {
+    handle.and_then(|thread| thread.join().ok()).unwrap_or(0)
 }
 
 struct CapturedOutput {
@@ -416,23 +610,23 @@ fn output_limit_error(program: &Path, stdout: &CapturedOutput, stderr: &Captured
 }
 
 #[cfg(unix)]
-fn kill_process_tree(child: &mut Child) {
+pub(crate) fn kill_process_tree(child: &mut Child) {
     // SAFETY: the child was created as the leader of its own process group.
     unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
 }
 
 #[cfg(windows)]
-fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
+pub(crate) fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
     job.terminate();
     let _ = child.kill();
 }
 
 #[cfg(windows)]
-struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
+pub(crate) struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl WindowsJob {
-    fn assign(child: &Child) -> Result<Self, String> {
+    pub(crate) fn assign(child: &Child) -> Result<Self, String> {
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
         use windows_sys::Win32::System::Threading::{

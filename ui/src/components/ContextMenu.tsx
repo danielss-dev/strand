@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon, type IconName } from './Icon';
 
 export interface MenuItem {
   label: string;
+  thumb?: ReactNode;
   icon?: IconName;
   /** Red styling for destructive actions. */
   danger?: boolean;
@@ -168,6 +169,7 @@ export function ContextMenu({
             }}
             onClick={() => choose(i)}
           >
+            {it.thumb}
             {it.icon && (
               <span className="ico">
                 <Icon name={isConfirm ? 'check' : it.icon} size={13} />

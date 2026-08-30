@@ -50,6 +50,9 @@ interface Props {
   onWorktreeReview: (path: string) => void;
   /** "Merge & clean up…" for a worktree tab (tabs-mode context menu). */
   onWorktreeMerge: (path: string) => void;
+  /** Collapse/expand the sidebar panel; the chevron flips with the state. */
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
 }
 
 export function Topbar({
@@ -82,6 +85,8 @@ export function Topbar({
   onManageWorkspaces,
   onWorktreeReview,
   onWorktreeMerge,
+  sidebarCollapsed,
+  onToggleSidebar,
 }: Props) {
   const platform = useSettings((s) => s.platform);
   const repoNav = useSettings((s) => s.repoNav);
@@ -189,6 +194,17 @@ export function Topbar({
           <div className="dot max" />
         </div>
       )}
+
+      <button
+        type="button"
+        className="sync-btn topbar-sidebar-toggle"
+        onClick={onToggleSidebar}
+        title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+        aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+        aria-pressed={sidebarCollapsed}
+      >
+        <Icon name={sidebarCollapsed ? 'chev-right' : 'chev-left'} size={13} />
+      </button>
 
       {repoNav === 'tabs' ? (
         <RepoTabs

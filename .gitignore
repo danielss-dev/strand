@@ -32,3 +32,4 @@ ui/src/**/*.js
 /Strand_extracted/
 /Strand.zip
 .playwright-mcp
+/.superdesign/tmp/

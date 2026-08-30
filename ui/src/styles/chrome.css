@@ -417,6 +417,12 @@
     background: var(--bg-hover);
     color: var(--text);
 }
+/* Sidebar collapse toggle — leftmost topbar button; no divider on its right. */
+.topbar-sidebar-toggle {
+    flex-shrink: 0;
+    padding: 0 8px;
+    border-right: 0;
+}
 .sync-btn .count {
     font-family: var(--font-mono);
     font-size: 10.5px;
@@ -626,6 +632,12 @@
 .body-panels {
     flex: 1;
     min-width: 0;
+}
+/* The sidebar Panel collapses to zero width (Mod+B / topbar chevron); clip
+ * its mounted content so it never bleeds into the main pane. */
+.sidebar-panel {
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* ─── Repo rail ─── */
@@ -1198,6 +1210,14 @@
 }
 
 /* ─── Main pane ─── */
+.workspace-host {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
 .main {
     /* Lives inside a react-resizable-panels Panel (block-display by default),
    * so flex:1 alone won't stretch us — height:100% does. Both are kept so

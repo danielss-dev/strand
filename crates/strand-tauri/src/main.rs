@@ -4,6 +4,7 @@ mod ai;
 mod azdo_helper;
 mod commands;
 mod hosting;
+mod heroi;
 mod microsoft_store;
 mod path_env;
 mod pull_requests;
@@ -306,6 +307,9 @@ fn main() {
             commands::ai_provider_login,
             commands::ai_provider_logout,
             commands::repo_suggest_commit_message,
+            commands::heroi_agent_send,
+            commands::heroi_provider_models,
+            commands::heroi_skills,
             commands::repo_suggest_pull_request,
             commands::repo_review_changes,
             commands::crash_report_check,
