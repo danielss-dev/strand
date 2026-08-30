@@ -230,6 +230,17 @@ publication attempts 1 and 2 each created a valid Partner Center submission
 but failed at 1% during Azure blob upload, leaving Store promotion to retry
 after the external upload path recovers.
 
+The owner directed the `v1.5.0` release on 2026-08-30 with the established
+annotated-but-unsigned tag override. Tag object
+`af6296e5417351e7f07be7b2bc503ce3d3de8c7e` peels to validated candidate
+`4058c97a78c63ce67610c84b5cdd7c1cafc2d9d6`. Release run `33323894309`
+completed successfully across Windows, Linux, and universal macOS and
+published 13 assets as the latest stable release. Microsoft Store production
+run `33324693953` built the exact tag successfully, but attempts 1–3 each
+created a valid Partner Center submission and failed at 1% during Azure blob
+upload. Store promotion remains pending recovery of Microsoft's external
+upload path.
+
 ## Desktop smoke pass
 
 On every platform, use a disposable repository and cover:

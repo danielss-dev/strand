@@ -2698,6 +2698,12 @@ manifests and Cargo lockfile are synchronized at 1.5.0. The signed desktop
 release and Microsoft Store submission workflows are the remaining promotion
 steps.
 
+**Strand 1.5.0 released (2026-08-30):** Release run `33323894309` completed
+Windows, Linux, and universal macOS successfully and published 13 assets as
+the latest stable release. Microsoft Store run `33324693953` built the exact
+tag successfully; all three publish attempts created a Partner Center
+submission but failed at 1% in Microsoft's Azure blob upload path.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and

@@ -2230,9 +2230,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   cryptographic signature and the legal, updater-rehearsal, clean-machine,
   certification, and real-platform checks in `docs/release-checklist.md`
   remain open.
-- ◐ Publish `v1.5.0` through GitHub Releases and Microsoft Store (lockstep app
-  manifests and Cargo lockfile bumped to 1.5.0; release and Partner Center
-  workflow evidence pending).
+- ◐ Publish `v1.5.0` through GitHub Releases and Microsoft Store. Release run
+  `33323894309` passed all desktop signing and packaging jobs and published 13
+  assets. Store run `33324693953` built the exact tag, but attempts 1–3 each
+  created a Partner Center submission and failed at 1% during Azure blob
+  upload; retry after Microsoft's external upload path recovers.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system
