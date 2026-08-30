@@ -397,7 +397,7 @@ fn parse_line(
     }
 }
 
-fn session_id<'a>(provider: HeroiProvider, value: &'a Value) -> Option<&'a str> {
+fn session_id(provider: HeroiProvider, value: &Value) -> Option<&str> {
     let event_type = value
         .get("type")
         .and_then(Value::as_str)
