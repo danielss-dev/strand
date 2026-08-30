@@ -288,7 +288,7 @@ the resolved app appearance automatically.
 
 ## Status
 
-Strand **1.4.0 is the current stable release** and works on large real-world
+Strand **1.5.0 is the current stable release** and works on large real-world
 repositories daily. Release CI
 produces updater-signed desktop artifacts,
 notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft

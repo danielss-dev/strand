@@ -2209,7 +2209,7 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   made public 2026-06-12 — AGPL-3.0 LICENSE + COMMERCIAL.md at root)
 - ☐ Social handles (X, Mastodon)
 - ◐ Promote stable GitHub releases and close external distribution gates —
-  `v1.0.0` through `v1.4.0` are public; `v1.4.0` is the latest stable release.
+  `v1.0.0` through `v1.5.0` are public; `v1.5.0` is the latest stable release.
   Release run `32717124785` passed the desktop signing, notarization, Sigstore,
   assembly, and publication jobs and published 13 assets on 2026-08-24. The
   owner authorized the annotated but unsigned `v1.4.0` tag at
@@ -2230,9 +2230,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   cryptographic signature and the legal, updater-rehearsal, clean-machine,
   certification, and real-platform checks in `docs/release-checklist.md`
   remain open.
-- ☐ Retry the `v1.4.0` Microsoft Store submission after Partner Center's blob
-  upload recovers (run `32718774016` attempts 1–2; Store package build green,
-  Azure blob upload failed twice at 1% on 2026-08-24).
+- ◐ Publish `v1.5.0` through GitHub Releases and Microsoft Store (lockstep app
+  manifests and Cargo lockfile bumped to 1.5.0; release and Partner Center
+  workflow evidence pending).
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

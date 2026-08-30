@@ -2693,6 +2693,11 @@ mentions without opening or moving them. File suggestions reuse Strand's
 language/file icons, the composer visibly acknowledges a valid drag target,
 and command/tool activity rows expand to bounded provider details and output.
 
+**Strand 1.5.0 release kick (2026-08-30):** The five lockstep desktop app
+manifests and Cargo lockfile are synchronized at 1.5.0. The signed desktop
+release and Microsoft Store submission workflows are the remaining promotion
+steps.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and
