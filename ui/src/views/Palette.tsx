@@ -88,6 +88,14 @@ export function CommandPalette({ actions, onClose }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Cmd+K is dispatched by the native menu on macOS. AppKit may restore
+  // WebView focus after React's `autoFocus` runs, so focus once more on the
+  // next frame to ensure the palette is ready for immediate typing.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   // Restore focus to whoever opened the palette when it closes — captured on
   // first render, before the input's autoFocus moves focus (matches the
   // focus-return convention the other dialogs follow).
