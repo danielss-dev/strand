@@ -143,6 +143,7 @@ for (const fragment of [
   'AZURE_AD_TENANT_ID',
   'SELLER_ID',
   'msstore publish',
+  '--uploadTimeout 300',
   'environment: microsoft-store-production',
 ]) {
   if (!workflow.includes(fragment)) {

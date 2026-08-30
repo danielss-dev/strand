@@ -2334,3 +2334,13 @@ workspace id must be `__default__`, never `"default"`.
 **Why.** A Heroi install against the duplicate registry left the App surface
 registry empty and the main pane blank until the real store was used.
 
+## Microsoft Store uploads require an explicit timeout (2026-08-30)
+
+**Rule.** Every `msstore publish` invocation must pass `--uploadTimeout 300`,
+and `scripts/check-msix.mjs` must enforce it. Do not rely on the CLI default.
+
+**Why.** Microsoft Store CLI v0.4.0 and v0.4.1 map an omitted timeout to zero,
+so valid Partner Center submissions fail consistently at the Azure blob upload
+after package preparation. The upstream fix was merged after v0.4.1 but was not
+yet released when Strand 1.5.0 was submitted.
+

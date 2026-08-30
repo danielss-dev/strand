@@ -55,7 +55,9 @@ workflow for that exact release tag. It:
    `.msixupload` wrapper as a private workflow artifact;
 7. authenticates to Partner Center with the official Microsoft Store
    Developer CLI GitHub Action; and
-8. submits the `.msixupload` to Store product `9N0JG96LRC4W`.
+8. submits the `.msixupload` to Store product `9N0JG96LRC4W`, with an explicit
+   300-second Azure blob network timeout. Keep the timeout explicit: Microsoft
+   Store CLI v0.4.0–v0.4.1 otherwise default it to zero and cancel every upload.
 
 The resulting package is intentionally unsigned. Partner Center signs it after
 certification. Certification and publication are asynchronous Microsoft
