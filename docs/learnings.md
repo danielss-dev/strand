@@ -2281,17 +2281,21 @@ so Reset cannot resurrect it. Normal composed layouts retain an outer keyboard l
 Work needs an explicit bridge because its persistent renderer is visually positioned in
 the layout but remains a DOM sibling of the Workbench placeholder.
 
-## Heroi dogfood UI comes from heroi_aide, not public heroi (2026-08-30)
+## Heroi is an active-repository-only chat surface (2026-08-30)
 
-**Rule.** The Strand-hosted Heroi plugin (`daniels.heroi`) mirrors
-`danielss-dev/heroi_aide`: an Electron agentic IDE with workspaces, per-project
-chats, a Claude/Codex/Cursor composer, kanban, and a diff side panel. Do not
-restyle it after the public Tauri `danielss-dev/heroi` repo (agent tabs, Gemini,
-Aider, Shell, Run-in-Work chrome). Scoped `--heroi-*` tokens on `.plugin-heroi`
-are allowed so the orange/near-black heroi_aide look stays inside the plugin.
+**Rule.** The Strand-hosted Heroi plugin (`daniels.heroi`) contributes only a
+coding-agent chat. Render and persist conversations by repository, and display
+only conversations whose canonical project path matches Strand's active
+repository. Do not duplicate workspaces, Files, git changes, diffs, kanban, or
+terminal chrome inside Heroi; those belong to independently composable
+Workbench panes. Heroi launches authenticated Claude, Codex, and Cursor Agent
+CLIs off the UI thread, consumes their streaming JSONL, retains provider session
+IDs for resume, and cancels the complete child process tree. Bound captured
+output and never expose raw vendor stderr or transcript paths.
 
-**Why.** Those are different products. Copying the public heroi layout shipped
-the wrong UX once already.
+**Why.** Heroi is embedded in Strand's Workbench rather than acting as a second
+IDE. Duplicating surrounding tools wastes pane space, creates competing state,
+and obscures the repository boundary that must isolate chat history.
 
 ---
 

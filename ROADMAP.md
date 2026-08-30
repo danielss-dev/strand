@@ -2654,10 +2654,17 @@ lists a bundled marketplace. Installing a plugin registers its namespaced
 Workbench surfaces into the combined registry without remounting Work's live
 editor/PTY runtime. Declarative plugins render markdown/status views from
 validated manifests; the Heroi dogfood plugin mounts through `SurfaceHost`
-with a Strand-owned renderer that mirrors Daniels' **heroi_aide** Electron IDE
-(workspaces + chats, Claude/Codex/Cursor composer, kanban, diffs) and
-permission-checked `repository.read` broker calls. Authoring guide:
+with a Strand-owned repository-scoped chat renderer and permission-checked
+`repository.read` / `ai.invoke` broker calls. Authoring guide:
 `docs/plugin-creation.md`.
+
+**Heroi repository agent chat shipped (2026-08-30):** Heroi is now a focused
+Workbench chat surface: it filters persisted conversations to the active
+repository and leaves Files, git changes, diffs, and other tools to composable
+Workbench panes. Its native `heroi_agent_send` bridge launches authenticated
+Claude, Codex, or Cursor Agent CLI sessions off the UI thread, streams bounded
+JSONL events into the conversation, persists provider session IDs for resume,
+and supports process-tree cancellation.
 
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface

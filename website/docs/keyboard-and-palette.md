@@ -144,14 +144,13 @@ editing controls without closing the configured surfaces.
 
 ### Heroi plugin surface
 
-When a Workbench pane hosts Heroi (the heroi_aide dogfood plugin):
+When a Workbench pane hosts Heroi, the chat list and agent sessions are scoped
+to the active repository:
 
 | Key | Action |
 | --- | --- |
 | `Mod+Enter` | Send the composer message |
 | `Shift+Tab` | Toggle Plan / Build in the composer |
-| `Ctrl/⌘+\`` | Toggle the terminal strip |
-| `Escape` | Close a chip menu, marketplace overlay, or draft |
 
 Quick Launch also has **Heroi: New conversation**.
 

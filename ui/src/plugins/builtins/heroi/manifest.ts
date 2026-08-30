@@ -7,15 +7,15 @@ export const heroiManifest: PluginManifest = {
   name: 'Heroi',
   version: '0.1.0',
   apiVersion: '1',
-  description: 'Agentic IDE chrome from heroi_aide — workspaces, chats, Claude/Codex/Cursor composer, kanban, and diffs hosted as a Strand Workbench surface.',
+  description: 'Repository-scoped coding-agent chat for Claude, Codex, and Cursor Agent inside the Strand Workbench.',
   author: 'Daniels',
-  permissions: ['repository.read'],
+  permissions: ['repository.read', 'ai.invoke'],
   contributes: {
     surfaces: [
       {
         id: 'workspace',
         title: 'Heroi',
-        description: 'heroi_aide layout: project sidebar, conversations, and a diff panel for the active Strand repository.',
+        description: 'Chats scoped to the active repository with background Claude, Codex, and Cursor Agent sessions.',
         icon: 'sparkle',
         scope: 'repository',
         hosts: ['main', 'panel', 'sidebar', 'bottom'],

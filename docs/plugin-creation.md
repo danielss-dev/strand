@@ -12,9 +12,9 @@ the trust boundary this format implements.
 - Permission-checked capability broker (`repository.read`, `ai.invoke`, `network.fetch`)
 - Declarative surfaces rendered by Strand (`markdown`, `status`)
 - One built-in dogfood plugin: **Heroi** (`daniels.heroi`) — Strand-hosted
-  chrome from Daniels' **heroi_aide** agentic IDE (workspaces + chats,
-  Claude/Codex/Cursor composer, kanban, diffs). Not the public Tauri `heroi`
-  repo.
+  repository-scoped coding-agent chat with native, streaming Claude, Codex,
+  and Cursor Agent sessions. Files, diffs, git changes, and other tooling stay
+  in their own Workbench surfaces.
 
 Community plugins cannot load arbitrary React, touch Zustand, call Tauri directly,
 or access the DOM. Those capabilities require future isolated runtimes.

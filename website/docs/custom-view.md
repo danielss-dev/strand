@@ -87,7 +87,14 @@ survive.
 
 Workbench currently supports built-in Strand surfaces, installed plugin
 surfaces from Settings → Plugins (including the Heroi dogfood plugin, which
-mirrors heroi_aide’s workspace/chat/diff chrome), and a 32-pane defensive
-limit. Declarative plugins render from
+provides chats scoped to the active repository and runs Claude, Codex, or
+Cursor Agent in the background), and a 32-pane defensive limit. Heroi does not
+duplicate Files, git changes, or diffs; add those as separate Workbench panes.
+Declarative plugins render from
 validated manifests; third-party JavaScript does not run inside the privileged
 webview. See `docs/plugin-creation.md` for authoring.
+
+Heroi reuses the authenticated CLIs already installed on your machine. Sign in
+with `claude`, `codex`, or `cursor-agent` before starting a chat. Custom Claude
+and Codex executable paths come from Settings → AI; Cursor Agent must be on
+`PATH`.

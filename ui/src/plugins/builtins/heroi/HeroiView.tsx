@@ -1,31 +1,37 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 
 import { Icon } from '../../../components/Icon';
-import { pickRepoDirectories } from '../../../lib/dialog';
-import { errMessage } from '../../../lib/tauri';
+import { Select } from '../../../components/Select';
 import { plural, t } from '../../../lib/i18n';
-import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
+import { errMessage, tauri } from '../../../lib/tauri';
+import type { HeroiAgentEvent, HeroiAgentRequest } from '../../../lib/types';
 import { useRepo } from '../../../stores/repo';
-import { useWork } from '../../../stores/work';
-import { useWorkspaces } from '../../../stores/workspaces';
-import { MARKETPLACE_CATALOG } from '../../marketplace';
-import type { PluginCapabilityBroker } from '../../capabilities';
+import { useSettings } from '../../../stores/settings';
 import { pluginStateKey, usePlugins } from '../../../stores/plugins';
+import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
+import type { PluginCapabilityBroker } from '../../capabilities';
+import { HEROI_NEW_CONVERSATION_EVENT } from './events';
 import { HeroiLogo } from './HeroiLogo';
-import { HEROI_NEW_CONVERSATION_EVENT, STRAND_OPEN_SETTINGS_EVENT } from './events';
 
 export type HeroiProvider = 'claude' | 'codex' | 'cursor';
 type AgentMode = 'plan' | 'build';
 type PermissionMode = 'read' | 'build' | 'full';
 type ThinkingLevel = 'default' | 'low' | 'medium' | 'high';
-type Overlay = 'none' | 'marketplace';
-type ChipMenu = 'provider' | 'model' | 'thinking' | 'mode' | 'permission' | null;
+type MessageState = 'running' | 'complete' | 'stopped' | 'error';
 
 interface HeroiMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   createdAt: number;
+  state?: MessageState;
 }
 
 interface HeroiConversation {
@@ -37,85 +43,37 @@ interface HeroiConversation {
   thinking: ThinkingLevel;
   agentMode: AgentMode;
   permissionMode: PermissionMode;
+  sessionId?: string;
   messages: HeroiMessage[];
   createdAt: number;
-}
-
-interface HeroiDraft {
-  projectPath: string;
-  provider: HeroiProvider;
-  model: string;
-  thinking: ThinkingLevel;
-  agentMode: AgentMode;
-  permissionMode: PermissionMode;
-}
-
-interface KanbanColumn {
-  id: string;
-  name: string;
-}
-
-interface KanbanCard {
-  id: string;
-  title: string;
-  columnId: string;
-}
-
-interface KanbanBoard {
-  columns: KanbanColumn[];
-  cards: KanbanCard[];
+  updatedAt: number;
 }
 
 interface PersistedHeroiState {
   conversations?: HeroiConversation[];
   activeConversationId?: string | null;
-  draft?: HeroiDraft | null;
-  expanded?: string[];
-  kanbanProjectPath?: string | null;
-  kanbanByProject?: Record<string, KanbanBoard>;
-  overlay?: Overlay;
-  diffVisible?: boolean;
-  terminalVisible?: boolean;
 }
 
-const PROVIDERS: readonly { id: HeroiProvider; label: string; command: string }[] = [
-  { id: 'claude', label: 'Claude', command: 'claude' },
-  { id: 'codex', label: 'Codex', command: 'codex' },
-  { id: 'cursor', label: 'Cursor', command: 'cursor' },
+interface ActiveRun {
+  runId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  activity: string;
+}
+
+const PROVIDERS: readonly { id: HeroiProvider; label: string }[] = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'cursor', label: 'Cursor Agent' },
 ];
 
 const MODELS: Record<HeroiProvider, readonly string[]> = {
   claude: ['default', 'opus', 'sonnet'],
-  codex: ['default', 'gpt-5'],
-  cursor: ['default', 'composer'],
+  codex: ['default', 'gpt-5.6-codex', 'gpt-5.4'],
+  cursor: ['default', 'auto'],
 };
 
 const THINKING: readonly ThinkingLevel[] = ['default', 'low', 'medium', 'high'];
-const MODES: readonly AgentMode[] = ['plan', 'build'];
-const PERMISSIONS: readonly PermissionMode[] = ['read', 'build', 'full'];
-const COLLAPSED_CHAT_LIMIT = 5;
-
-const DEFAULT_COLUMNS: KanbanColumn[] = [
-  { id: 'backlog', name: 'Backlog' },
-  { id: 'progress', name: 'In Progress' },
-  { id: 'done', name: 'Done' },
-];
-
-function modLabel(): string {
-  try {
-    const platform = (typeof navigator !== 'undefined' && navigator.platform) || '';
-    if (platform.toLowerCase().includes('mac')) return '⌘';
-    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
-    return /macintosh|mac os x/i.test(ua) ? '⌘' : 'Ctrl';
-  } catch {
-    return 'Ctrl';
-  }
-}
-
-function pathLeaf(path: string): string {
-  const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/);
-  return parts[parts.length - 1] || path;
-}
 
 function mintId(prefix: string): string {
   try {
@@ -123,26 +81,32 @@ function mintId(prefix: string): string {
       return `${prefix}-${crypto.randomUUID()}`;
     }
   } catch {
-    // fall through
+    // Fall through for test/browser shims without Web Crypto.
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function providerMeta(id: HeroiProvider) {
-  return PROVIDERS.find((entry) => entry.id === id) ?? PROVIDERS[0];
+function pathLeaf(path: string): string {
+  const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/);
+  return parts[parts.length - 1] || path;
 }
 
 function titleFromText(text: string): string {
-  const line = text.trim().split('\n')[0] ?? '';
-  return line.slice(0, 48) || t('plugins.heroi.untitled');
+  return text.trim().split('\n')[0]?.slice(0, 52) || t('plugins.heroi.untitled');
 }
 
-function capitalize(value: string): string {
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+function providerLabel(provider: HeroiProvider): string {
+  return PROVIDERS.find((entry) => entry.id === provider)?.label ?? provider;
 }
 
-function emptyBoard(): KanbanBoard {
-  return { columns: DEFAULT_COLUMNS.map((column) => ({ ...column })), cards: [] };
+function cliOverride(
+  provider: HeroiProvider,
+  openaiCli: string | null,
+  anthropicCli: string | null,
+): string | null {
+  if (provider === 'codex') return openaiCli;
+  if (provider === 'claude') return anthropicCli;
+  return null;
 }
 
 export function HeroiView({
@@ -153,986 +117,546 @@ export function HeroiView({
   broker: PluginCapabilityBroker;
 }) {
   const meta = useRepo((state) => state.meta);
-  const tabs = useRepo((state) => state.tabs);
   const activeTabPath = useRepo((state) => state.activeTabPath);
-  const setActiveTab = useRepo((state) => state.setActiveTab);
-  const unstagedDiffs = useRepo((state) => state.unstagedDiffs);
-  const stagedDiffs = useRepo((state) => state.stagedDiffs);
-  const selectFile = useRepo((state) => state.selectFile);
-  const addTerminal = useWork((state) => state.addTerminal);
+  const openaiCli = useSettings((state) => state.openaiCli);
+  const anthropicCli = useSettings((state) => state.anthropicCli);
   const loadPluginState = usePlugins((state) => state.loadState);
   const savePluginState = usePlugins((state) => state.saveState);
-  const installedIds = usePlugins((state) => state.installedIds);
-  const installPlugin = usePlugins((state) => state.install);
-  const uninstallPlugin = usePlugins((state) => state.uninstall);
-  const pluginsReady = usePlugins((state) => state.ready);
 
   const [conversations, setConversations] = useState<HeroiConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<HeroiDraft | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [showAll, setShowAll] = useState<Set<string>>(new Set());
-  const [kanbanProjectPath, setKanbanProjectPath] = useState<string | null>(null);
-  const [kanbanByProject, setKanbanByProject] = useState<Record<string, KanbanBoard>>({});
-  const [overlay, setOverlay] = useState<Overlay>('none');
-  const [diffVisible, setDiffVisible] = useState(true);
-  const [terminalVisible, setTerminalVisible] = useState(false);
-  const [chipMenu, setChipMenu] = useState<ChipMenu>(null);
+  const [composingNew, setComposingNew] = useState(false);
   const [composerText, setComposerText] = useState('');
+  const [draftProvider, setDraftProvider] = useState<HeroiProvider>('claude');
+  const [draftModel, setDraftModel] = useState('default');
+  const [draftThinking, setDraftThinking] = useState<ThinkingLevel>('default');
+  const [draftAgentMode, setDraftAgentMode] = useState<AgentMode>('build');
+  const [draftPermission, setDraftPermission] = useState<PermissionMode>('build');
+  const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statusNote, setStatusNote] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
-  const [newCardColumn, setNewCardColumn] = useState<string | null>(null);
-  const [newCardTitle, setNewCardTitle] = useState('');
 
   const rootRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const stateKey = pluginStateKey('daniels.heroi', request.instanceId);
-  const activePath = activeTabPath ?? meta?.path ?? tabs[0]?.path ?? '';
-  const hasProjects = tabs.length > 0;
-  const activeConversation = conversations.find((row) => row.id === activeConversationId) ?? null;
-  const settings = draft ?? activeConversation;
+  const activePath = activeTabPath ?? '';
+  const repoConversations = useMemo(
+    () => conversations
+      .filter((conversation) => conversation.projectPath === activePath)
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    [activePath, conversations],
+  );
+  const activeConversation = composingNew
+    ? null
+    : repoConversations.find((conversation) => conversation.id === activeConversationId) ?? null;
 
-  const changedFiles = useMemo(() => {
-    const seen = new Set<string>();
-    const rows: { path: string; kind: 'staged' | 'unstaged'; adds: number; dels: number }[] = [];
-    for (const diff of stagedDiffs) {
-      if (seen.has(diff.path)) continue;
-      seen.add(diff.path);
-      rows.push({ path: diff.path, kind: 'staged', adds: diff.adds, dels: diff.dels });
-    }
-    for (const diff of unstagedDiffs) {
-      if (seen.has(diff.path)) continue;
-      seen.add(diff.path);
-      rows.push({ path: diff.path, kind: 'unstaged', adds: diff.adds, dels: diff.dels });
-    }
-    return rows;
-  }, [stagedDiffs, unstagedDiffs]);
+  const provider = activeConversation?.provider ?? draftProvider;
+  const model = activeConversation?.model ?? draftModel;
+  const thinking = activeConversation?.thinking ?? draftThinking;
+  const agentMode = activeConversation?.agentMode ?? draftAgentMode;
+  const permissionMode = activeConversation?.permissionMode ?? draftPermission;
 
   useEffect(() => {
     let current = true;
     void loadPluginState<PersistedHeroiState>(stateKey).then((stored) => {
       if (!current) return;
-      if (stored?.conversations) setConversations(stored.conversations);
-      if (stored?.activeConversationId !== undefined) setActiveConversationId(stored.activeConversationId);
-      if (stored?.draft) setDraft(stored.draft);
-      if (stored?.expanded?.length) setExpanded(new Set(stored.expanded));
-      else if (activePath) setExpanded(new Set([activePath]));
-      if (stored?.kanbanProjectPath) setKanbanProjectPath(stored.kanbanProjectPath);
-      if (stored?.kanbanByProject) setKanbanByProject(stored.kanbanByProject);
-      if (stored?.overlay) setOverlay(stored.overlay);
-      if (typeof stored?.diffVisible === 'boolean') setDiffVisible(stored.diffVisible);
-      if (typeof stored?.terminalVisible === 'boolean') setTerminalVisible(stored.terminalVisible);
+      const restoredConversations = (stored?.conversations ?? []).map((conversation) => ({
+        ...conversation,
+        updatedAt: conversation.updatedAt ?? conversation.createdAt,
+        messages: conversation.messages.map((message) => (
+          message.state === 'running' ? { ...message, state: 'stopped' as const } : message
+        )),
+      }));
+      setConversations(restoredConversations);
+      setActiveConversationId(stored?.activeConversationId ?? null);
       setRestored(true);
     });
     return () => { current = false; };
-  }, [activePath, loadPluginState, stateKey]);
+  }, [loadPluginState, stateKey]);
 
   useEffect(() => {
     if (!restored) return;
-    void savePluginState(stateKey, {
-      conversations,
-      activeConversationId,
-      draft,
-      expanded: [...expanded],
-      kanbanProjectPath,
-      kanbanByProject,
-      overlay,
-      diffVisible,
-      terminalVisible,
-    } satisfies PersistedHeroiState);
-  }, [
-    activeConversationId,
-    conversations,
-    diffVisible,
-    draft,
-    expanded,
-    kanbanByProject,
-    kanbanProjectPath,
-    overlay,
-    restored,
-    savePluginState,
-    stateKey,
-    terminalVisible,
-  ]);
+    void savePluginState(stateKey, { conversations, activeConversationId } satisfies PersistedHeroiState);
+  }, [activeConversationId, conversations, restored, savePluginState, stateKey]);
 
   useEffect(() => {
-    if (!chipMenu) return;
-    const onPointer = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest('.plugin-heroi-chip-wrap')) setChipMenu(null);
-    };
-    window.addEventListener('mousedown', onPointer);
-    return () => window.removeEventListener('mousedown', onPointer);
-  }, [chipMenu]);
-
-  const startDraft = useCallback((projectPath: string) => {
-    if (!projectPath) {
-      setError(t('plugins.heroi.noRepository'));
-      return;
-    }
-    setDraft({
-      projectPath,
-      provider: 'claude',
-      model: 'default',
-      thinking: 'default',
-      agentMode: 'build',
-      permissionMode: 'build',
-    });
-    setComposerText('');
-    setActiveConversationId(null);
-    setKanbanProjectPath(null);
-    setExpanded((current) => new Set(current).add(projectPath));
-    setOverlay('none');
-    setError(null);
-    setStatusNote(null);
-    queueMicrotask(() => composerRef.current?.focus());
-  }, []);
+    if (!restored) return;
+    if (composingNew) return;
+    if (activeConversationId && repoConversations.some(({ id }) => id === activeConversationId)) return;
+    setActiveConversationId(repoConversations[0]?.id ?? null);
+  }, [activeConversationId, composingNew, repoConversations, restored]);
 
   useEffect(() => {
-    const onNew = () => startDraft(activePath || tabs[0]?.path || '');
-    window.addEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
-    return () => window.removeEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
-  }, [activePath, startDraft, tabs]);
+    setComposingNew(false);
+  }, [activePath]);
 
   useEffect(() => {
     if (!request.lifecycle.focused) return;
     rootRef.current?.focus({ preventScroll: true });
-    if (draft || activeConversation) composerRef.current?.focus();
-  }, [activeConversation, draft, request.lifecycle.focused]);
+    composerRef.current?.focus({ preventScroll: true });
+  }, [request.lifecycle.focused]);
 
-  const patchSettings = useCallback((patch: Partial<HeroiDraft>) => {
-    if (draft) {
-      setDraft({ ...draft, ...patch });
+  useEffect(() => {
+    const onNew = () => {
+      if (activeRun) return;
+      setComposingNew(true);
+      setActiveConversationId(null);
+      setComposerText('');
+      setError(null);
+      queueMicrotask(() => composerRef.current?.focus());
+    };
+    window.addEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
+    return () => window.removeEventListener(HEROI_NEW_CONVERSATION_EVENT, onNew);
+  }, [activeRun]);
+
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [activeConversation?.messages, activeRun?.activity]);
+
+  const updateConversation = useCallback((
+    conversationId: string,
+    update: (conversation: HeroiConversation) => HeroiConversation,
+  ) => {
+    setConversations((current) => current.map((conversation) => (
+      conversation.id === conversationId ? update(conversation) : conversation
+    )));
+  }, []);
+
+  const patchSettings = useCallback((patch: Partial<Pick<
+    HeroiConversation,
+    'provider' | 'model' | 'thinking' | 'agentMode' | 'permissionMode'
+  >>) => {
+    if (activeConversation) {
+      updateConversation(activeConversation.id, (conversation) => ({
+        ...conversation,
+        ...patch,
+        model: patch.provider ? 'default' : (patch.model ?? conversation.model),
+        updatedAt: Date.now(),
+      }));
       return;
     }
-    if (!activeConversationId) return;
-    setConversations((current) => current.map((row) => (
-      row.id === activeConversationId ? { ...row, ...patch } : row
-    )));
-  }, [activeConversationId, draft]);
+    if (patch.provider) {
+      setDraftProvider(patch.provider);
+      setDraftModel('default');
+    }
+    if (patch.model) setDraftModel(patch.model);
+    if (patch.thinking) setDraftThinking(patch.thinking);
+    if (patch.agentMode) setDraftAgentMode(patch.agentMode);
+    if (patch.permissionMode) setDraftPermission(patch.permissionMode);
+  }, [activeConversation, updateConversation]);
 
-  const addProject = useCallback(async () => {
+  const handleAgentEvent = useCallback((
+    conversationId: string,
+    assistantMessageId: string,
+    event: HeroiAgentEvent,
+  ) => {
+    if (event.type === 'session') {
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        sessionId: event.sessionId,
+        updatedAt: Date.now(),
+      }));
+      return;
+    }
+    if (event.type === 'text') {
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        updatedAt: Date.now(),
+        messages: conversation.messages.map((message) => (
+          message.id === assistantMessageId
+            ? { ...message, text: message.text ? `${message.text}\n\n${event.text}` : event.text }
+            : message
+        )),
+      }));
+      return;
+    }
+    const activity = event.type === 'activity' ? event.label : event.message;
+    setActiveRun((current) => (
+      current?.conversationId === conversationId ? { ...current, activity } : current
+    ));
+  }, [updateConversation]);
+
+  const sendMessage = useCallback(async () => {
+    const text = composerText.trim();
+    if (!text || !activePath || activeRun) return;
     try {
-      const paths = await pickRepoDirectories();
-      for (const path of paths) {
-        await useWorkspaces.getState().openRepoInActive(path);
-        setExpanded((current) => new Set(current).add(path));
-      }
-      if (paths.length === 0) setError(t('plugins.heroi.addProjectHint'));
-      else setError(null);
+      broker.require('repository.read');
+      broker.require('ai.invoke');
+      await broker.readRepository(
+        activePath,
+        meta?.branch ?? null,
+        meta?.head_oid ?? null,
+        false,
+      );
     } catch (caught) {
       setError(errMessage(caught));
-    }
-  }, []);
-
-  const runInWork = useCallback((projectPath: string, provider: HeroiProvider) => {
-    if (!projectPath) {
-      setError(t('plugins.heroi.noRepository'));
       return;
     }
-    const agent = providerMeta(provider);
-    void broker.readRepository(
-      projectPath,
-      meta?.branch ?? null,
-      meta?.head_oid ?? null,
-      unstagedDiffs.length + stagedDiffs.length > 0,
-    ).catch(() => undefined);
-    addTerminal(projectPath, null, agent.label);
-    setStatusNote(t('plugins.heroi.launchedWithCommand', { agent: agent.label, command: agent.command }));
-    setError(null);
-  }, [addTerminal, broker, meta?.branch, meta?.head_oid, stagedDiffs.length, unstagedDiffs.length]);
 
-  const sendMessage = useCallback(() => {
-    const text = composerText.trim();
-    if (!text) return;
-    const projectPath = draft?.projectPath ?? activeConversation?.projectPath ?? activePath;
-    if (!projectPath) {
-      setError(t('plugins.heroi.noRepository'));
-      return;
-    }
-    const provider = draft?.provider ?? activeConversation?.provider ?? 'claude';
-    const agent = providerMeta(provider);
     const now = Date.now();
-    const userMessage: HeroiMessage = { id: mintId('m'), role: 'user', text, createdAt: now };
-    const assistantMessage: HeroiMessage = {
-      id: mintId('m'),
-      role: 'assistant',
-      text: t('plugins.heroi.hostReply', { agent: agent.label, command: agent.command, path: projectPath }),
-      createdAt: now + 1,
+    const conversationId = activeConversation?.id ?? mintId('c');
+    const assistantMessageId = mintId('m');
+    const runId = mintId('heroi-run');
+    const userMessage: HeroiMessage = {
+      id: mintId('m'), role: 'user', text, createdAt: now, state: 'complete',
     };
+    const assistantMessage: HeroiMessage = {
+      id: assistantMessageId, role: 'assistant', text: '', createdAt: now + 1, state: 'running',
+    };
+    const conversation = activeConversation ?? {
+      id: conversationId,
+      projectPath: activePath,
+      title: titleFromText(text),
+      provider,
+      model,
+      thinking,
+      agentMode,
+      permissionMode,
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const sessionId = conversation.sessionId;
 
-    if (draft || !activeConversation) {
-      const conversation: HeroiConversation = {
-        id: mintId('c'),
-        projectPath,
-        title: titleFromText(text),
-        provider,
-        model: draft?.model ?? 'default',
-        thinking: draft?.thinking ?? 'default',
-        agentMode: draft?.agentMode ?? 'build',
-        permissionMode: draft?.permissionMode ?? 'build',
-        messages: [userMessage, assistantMessage],
-        createdAt: now,
-      };
-      setConversations((current) => [conversation, ...current]);
-      setActiveConversationId(conversation.id);
-      setDraft(null);
+    if (activeConversation) {
+      updateConversation(conversationId, (current) => ({
+        ...current,
+        messages: [...current.messages, userMessage, assistantMessage],
+        updatedAt: now,
+      }));
     } else {
-      setConversations((current) => current.map((row) => (
-        row.id === activeConversation.id
-          ? { ...row, messages: [...row.messages, userMessage, assistantMessage] }
-          : row
-      )));
+      setConversations((current) => [{
+        ...conversation,
+        messages: [userMessage, assistantMessage],
+      }, ...current]);
+      setActiveConversationId(conversationId);
+      setComposingNew(false);
     }
     setComposerText('');
-    runInWork(projectPath, provider);
-  }, [activeConversation, activePath, composerText, draft, runInWork]);
+    setError(null);
+    setActiveRun({
+      runId,
+      conversationId,
+      assistantMessageId,
+      activity: t('plugins.heroi.startingAgent', { agent: providerLabel(provider) }),
+    });
+
+    const agentRequest: HeroiAgentRequest = {
+      path: activePath,
+      provider,
+      prompt: text,
+      sessionId: sessionId ?? null,
+      model,
+      thinking,
+      agentMode,
+      permissionMode,
+      cliPath: cliOverride(provider, openaiCli, anthropicCli),
+    };
+    try {
+      const outcome = await tauri.heroiAgentSend(
+        runId,
+        agentRequest,
+        (event) => handleAgentEvent(conversationId, assistantMessageId, event),
+      );
+      updateConversation(conversationId, (current) => ({
+        ...current,
+        sessionId: outcome.sessionId ?? current.sessionId,
+        updatedAt: Date.now(),
+        messages: current.messages.map((message) => (
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                text: message.text || t('plugins.heroi.emptyReply'),
+                state: 'complete',
+              }
+            : message
+        )),
+      }));
+    } catch (caught) {
+      const message = errMessage(caught);
+      const stopped = message === 'cancelled';
+      updateConversation(conversationId, (current) => ({
+        ...current,
+        updatedAt: Date.now(),
+        messages: current.messages.map((row) => (
+          row.id === assistantMessageId
+            ? {
+                ...row,
+                text: row.text || (stopped ? t('plugins.heroi.stopped') : message),
+                state: stopped ? 'stopped' : 'error',
+              }
+            : row
+        )),
+      }));
+      if (!stopped) setError(message);
+    } finally {
+      setActiveRun((current) => current?.runId === runId ? null : current);
+      queueMicrotask(() => composerRef.current?.focus());
+    }
+  }, [
+    activeConversation,
+    activePath,
+    activeRun,
+    agentMode,
+    anthropicCli,
+    broker,
+    composerText,
+    handleAgentEvent,
+    meta?.branch,
+    meta?.head_oid,
+    model,
+    openaiCli,
+    permissionMode,
+    provider,
+    thinking,
+    updateConversation,
+  ]);
+
+  const stopRun = useCallback(() => {
+    if (!activeRun) return;
+    setActiveRun((current) => current ? { ...current, activity: t('plugins.heroi.stopping') } : current);
+    void tauri.repoCancelOp(activeRun.runId);
+  }, [activeRun]);
 
   const deleteConversation = useCallback((conversation: HeroiConversation) => {
+    if (activeRun?.conversationId === conversation.id) return;
     if (!window.confirm(t('plugins.heroi.deleteConfirm', { title: conversation.title }))) return;
-    setConversations((current) => current.filter((row) => row.id !== conversation.id));
+    setConversations((current) => current.filter(({ id }) => id !== conversation.id));
     if (activeConversationId === conversation.id) setActiveConversationId(null);
-  }, [activeConversationId]);
+  }, [activeConversationId, activeRun?.conversationId]);
 
-  const toggleExpanded = useCallback((path: string) => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
-
-  const openKanban = useCallback((path: string) => {
-    setKanbanProjectPath(path);
-    setActiveConversationId(null);
-    setDraft(null);
-    setKanbanByProject((current) => current[path] ? current : { ...current, [path]: emptyBoard() });
-    void setActiveTab(path);
-  }, [setActiveTab]);
-
-  const addKanbanCard = useCallback((columnId: string, title: string) => {
-    if (!kanbanProjectPath) return;
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setKanbanByProject((current) => {
-      const board = current[kanbanProjectPath] ?? emptyBoard();
-      return {
-        ...current,
-        [kanbanProjectPath]: {
-          ...board,
-          cards: [...board.cards, { id: mintId('k'), title: trimmed, columnId }],
-        },
-      };
-    });
-    setNewCardColumn(null);
-    setNewCardTitle('');
-  }, [kanbanProjectPath]);
-
-  const moveKanbanCard = useCallback((cardId: string, columnId: string) => {
-    if (!kanbanProjectPath) return;
-    setKanbanByProject((current) => {
-      const board = current[kanbanProjectPath];
-      if (!board) return current;
-      return {
-        ...current,
-        [kanbanProjectPath]: {
-          ...board,
-          cards: board.cards.map((card) => card.id === cardId ? { ...card, columnId } : card),
-        },
-      };
-    });
-  }, [kanbanProjectPath]);
-
-  const onSurfaceKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === '`' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+  const onComposerKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      setTerminalVisible((value) => !value);
+      void sendMessage();
       return;
     }
-    if (event.key === 'Escape') {
-      if (chipMenu) { setChipMenu(null); event.preventDefault(); return; }
-      if (overlay !== 'none') { setOverlay('none'); event.preventDefault(); return; }
-      if (draft) { setDraft(null); event.preventDefault(); }
+    if (event.key === 'Tab' && event.shiftKey) {
+      event.preventDefault();
+      patchSettings({ agentMode: agentMode === 'build' ? 'plan' : 'build' });
     }
-  }, [chipMenu, draft, overlay]);
+  }, [agentMode, patchSettings, sendMessage]);
 
-  const kanbanBoard = kanbanProjectPath ? (kanbanByProject[kanbanProjectPath] ?? emptyBoard()) : null;
-  const ping = hasProjects ? t('plugins.heroi.connected') : t('plugins.heroi.waiting');
-  const shortcut = modLabel();
+  const repoName = activePath ? pathLeaf(activePath) : t('plugins.heroi.noRepositoryShort');
 
   return (
     <div
       ref={rootRef}
-      className="plugin-surface plugin-heroi"
+      className="plugin-surface plugin-heroi plugin-heroi-chat-only"
       data-surface-id={request.contribution.id}
       data-focused={request.lifecycle.focused || undefined}
       tabIndex={-1}
-      onKeyDown={onSurfaceKeyDown}
     >
       <header className="plugin-heroi-titlebar">
         <div className="plugin-heroi-title-brand">
           <HeroiLogo size={14} className="plugin-heroi-logo" />
           <span>heroi</span>
-          <span className="plugin-heroi-dot">·</span>
-          <span>{ping}</span>
+          <span className="plugin-heroi-dot">/</span>
+          <span className="plugin-heroi-repo-name" title={activePath}>{repoName}</span>
         </div>
-        {hasProjects && kanbanProjectPath === null && (
-          <div className="plugin-heroi-title-actions">
-            <button
-              type="button"
-              className={'plugin-heroi-icon-btn' + (diffVisible ? ' active' : '')}
-              aria-pressed={diffVisible}
-              aria-label={t('plugins.heroi.toggleDiff')}
-              onClick={() => setDiffVisible((value) => !value)}
-            >
-              <Icon name="compare" size={12} />
-            </button>
-            <button
-              type="button"
-              className={'plugin-heroi-icon-btn' + (terminalVisible ? ' active' : '')}
-              aria-pressed={terminalVisible}
-              aria-label={t('plugins.heroi.toggleTerminal')}
-              onClick={() => setTerminalVisible((value) => !value)}
-            >
-              <Icon name="terminal" size={12} />
-            </button>
-          </div>
-        )}
+        <span className="plugin-heroi-scope-label">{t('plugins.heroi.repoChatsOnly')}</span>
       </header>
 
-      <div className="plugin-heroi-body">
-        {overlay === 'marketplace' ? (
-          <MarketplaceOverlay
-            ready={pluginsReady}
-            installed={installedIds}
-            onInstall={(id) => void installPlugin(id)}
-            onUninstall={(id) => void uninstallPlugin(id)}
-            onClose={() => setOverlay('none')}
-          />
-        ) : (
-          <>
-            <aside className="plugin-heroi-left" aria-label={t('plugins.heroi.sidebar')}>
-              <header className="plugin-heroi-workspaces-head">
-                <span>{t('plugins.heroi.workspaces')}</span>
-                <button
-                  type="button"
-                  className="plugin-heroi-icon-btn"
-                  aria-label={t('plugins.heroi.addProject')}
-                  onClick={() => void addProject()}
-                >
-                  <Icon name="folder-plus" size={14} />
-                </button>
-              </header>
-
-              <div className="plugin-heroi-workspace-list">
-                {!hasProjects ? (
-                  <div className="plugin-heroi-empty">
-                    <p>{t('plugins.heroi.emptyRepos')}</p>
-                    <p>{t('plugins.heroi.emptyReposHint')}</p>
-                  </div>
-                ) : tabs.map((tab) => {
-                  const path = tab.path;
-                  const isExpanded = expanded.has(path);
-                  const projectChats = conversations.filter((row) => row.projectPath === path);
-                  const visibleChats = showAll.has(path) ? projectChats : projectChats.slice(0, COLLAPSED_CHAT_LIMIT);
-                  const hiddenCount = projectChats.length - visibleChats.length;
-                  const kanbanFocused = kanbanProjectPath === path;
-                  return (
-                    <div key={path} className="plugin-heroi-project">
-                      <div className="plugin-heroi-project-row">
-                        <button
-                          type="button"
-                          className="plugin-heroi-project-toggle"
-                          aria-expanded={isExpanded}
-                          onClick={() => {
-                            toggleExpanded(path);
-                            void setActiveTab(path);
-                          }}
-                        >
-                          <Icon name={isExpanded ? 'chev-down' : 'chev-right'} size={12} />
-                          <Icon name="folder" size={12} />
-                          <span className="plugin-heroi-project-name">{tab.meta?.name ?? pathLeaf(path)}</span>
-                          <span className="plugin-heroi-project-count">{projectChats.length}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={'plugin-heroi-icon-btn' + (kanbanFocused ? ' active' : '')}
-                          aria-label={t('plugins.heroi.openKanban')}
-                          onClick={() => openKanban(path)}
-                        >
-                          <Icon name="workspace" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="plugin-heroi-icon-btn"
-                          aria-label={t('plugins.heroi.newConversation')}
-                          onClick={() => {
-                            void setActiveTab(path);
-                            startDraft(path);
-                          }}
-                        >
-                          <Icon name="plus" size={12} />
-                        </button>
-                      </div>
-                      {isExpanded && (
-                        <div className="plugin-heroi-chats">
-                          {projectChats.length === 0 && (
-                            <div className="plugin-heroi-chats-empty">{t('plugins.heroi.noConversations')}</div>
-                          )}
-                          {visibleChats.map((chat) => {
-                            const active = chat.id === activeConversationId && !draft;
-                            return (
-                              <button
-                                key={chat.id}
-                                type="button"
-                                className={'plugin-heroi-chat' + (active ? ' active' : '')}
-                                onClick={() => {
-                                  setActiveConversationId(chat.id);
-                                  setDraft(null);
-                                  setKanbanProjectPath(null);
-                                  setComposerText('');
-                                  void setActiveTab(path);
-                                }}
-                                onContextMenu={(event) => {
-                                  event.preventDefault();
-                                  deleteConversation(chat);
-                                }}
-                              >
-                                <span className="plugin-heroi-chat-dot" aria-hidden />
-                                <span className="plugin-heroi-chat-title">{capitalize(chat.title)}</span>
-                                {tab.meta?.branch && (
-                                  <span className="plugin-heroi-branch">
-                                    <Icon name="branch" size={8} />
-                                    {tab.meta.branch}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                          {(hiddenCount > 0 || showAll.has(path)) && (
-                            <button
-                              type="button"
-                              className="plugin-heroi-show-more"
-                              onClick={() => setShowAll((current) => {
-                                const next = new Set(current);
-                                if (next.has(path)) next.delete(path);
-                                else next.add(path);
-                                return next;
-                              })}
-                            >
-                              {showAll.has(path) ? t('plugins.heroi.showLess') : t('plugins.heroi.showMore', { count: hiddenCount })}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <footer className="plugin-heroi-left-foot">
-                <button type="button" className="plugin-heroi-foot-btn" onClick={() => setOverlay('marketplace')}>
-                  <Icon name="sparkle" size={14} />
-                  {t('plugins.heroi.marketplace')}
-                </button>
-                <button
-                  type="button"
-                  className="plugin-heroi-foot-btn"
-                  onClick={() => window.dispatchEvent(new CustomEvent(STRAND_OPEN_SETTINGS_EVENT, { detail: { section: 'plugins' } }))}
-                >
-                  <Icon name="settings" size={14} />
-                  {t('plugins.heroi.settings')}
-                </button>
-              </footer>
-            </aside>
-
-            <main className="plugin-heroi-center">
-              {!hasProjects ? (
-                <Welcome ping={ping} />
-              ) : kanbanBoard && kanbanProjectPath ? (
-                <KanbanView
-                  name={pathLeaf(kanbanProjectPath)}
-                  board={kanbanBoard}
-                  newCardColumn={newCardColumn}
-                  newCardTitle={newCardTitle}
-                  onNewTask={() => {
-                    setNewCardColumn('backlog');
-                    setNewCardTitle('');
-                  }}
-                  onNewCardColumn={setNewCardColumn}
-                  onNewCardTitle={setNewCardTitle}
-                  onAddCard={addKanbanCard}
-                  onMoveCard={moveKanbanCard}
-                />
-              ) : draft || activeConversation ? (
-                <ConversationView
-                  title={draft ? t('plugins.heroi.newConversationTitle') : capitalize(activeConversation?.title ?? t('plugins.heroi.untitled'))}
-                  cwd={draft?.projectPath ?? activeConversation?.projectPath ?? ''}
-                  branch={meta?.branch ?? null}
-                  messages={activeConversation && !draft ? activeConversation.messages : []}
-                  composerText={composerText}
-                  onComposerChange={setComposerText}
-                  composerRef={composerRef}
-                  shortcut={shortcut}
-                  settings={settings}
-                  chipMenu={chipMenu}
-                  onChipMenu={setChipMenu}
-                  onPatch={patchSettings}
-                  onSend={sendMessage}
-                  onRun={() => runInWork(
-                    draft?.projectPath ?? activeConversation?.projectPath ?? '',
-                    draft?.provider ?? activeConversation?.provider ?? 'claude',
-                  )}
-                  visible={request.lifecycle.visible}
-                />
-              ) : (
-                <div className="plugin-heroi-select">{t('plugins.heroi.selectConversation')}</div>
-              )}
-              {hasProjects && kanbanProjectPath === null && terminalVisible && (
-                <div className="plugin-heroi-terminal-strip">
-                  <span>{t('plugins.heroi.terminalHintCommand', {
-                    command: providerMeta(settings?.provider ?? 'claude').command,
-                  })}</span>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    disabled={!activePath || !request.lifecycle.visible}
-                    onClick={() => runInWork(activePath, settings?.provider ?? 'claude')}
-                  >
-                    <Icon name="terminal" size={12} />
-                    {t('plugins.heroi.runInWork')}
-                  </button>
-                </div>
-              )}
-              {statusNote && <p className="plugin-heroi-status-note">{statusNote}</p>}
-              {error && <p className="plugin-heroi-error" role="alert">{error}</p>}
-            </main>
-
-            {kanbanProjectPath === null && diffVisible && (
-              <aside className="plugin-heroi-right" aria-label={t('plugins.heroi.diff')}>
-                <header className="plugin-heroi-right-head">
-                  <Icon name="compare" size={13} />
-                  <span>{t('plugins.heroi.diff')}</span>
-                </header>
-                {!activePath ? (
-                  <p className="plugin-heroi-empty-inline">{t('plugins.heroi.gitEmpty')}</p>
-                ) : changedFiles.length === 0 ? (
-                  <p className="plugin-heroi-empty-inline">{t('plugins.heroi.gitClean')}</p>
-                ) : (
-                  <ul className="plugin-heroi-file-list">
-                    {changedFiles.map((file) => (
-                      <li key={`${file.kind}:${file.path}`}>
-                        <button type="button" onClick={() => selectFile(file.path)}>
-                          <span className={'plugin-heroi-file-kind ' + file.kind}>{file.kind}</span>
-                          <span className="plugin-heroi-file-path">{file.path}</span>
-                          <span className="plugin-heroi-file-stats">+{file.adds} −{file.dels}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </aside>
-            )}
-          </>
-        )}
-      </div>
-
-      <footer className="plugin-heroi-status">
-        <span>{plural(tabs.length, {
-          one: 'plugins.heroi.projectCount.one',
-          other: 'plugins.heroi.projectCount.other',
-        })}</span>
-        <span>{t('plugins.heroi.bridgeOk')}</span>
-      </footer>
-    </div>
-  );
-}
-
-function Welcome({ ping }: { ping: string }) {
-  return (
-    <div className="plugin-heroi-welcome">
-      <div className="plugin-heroi-welcome-card">
-        <HeroiLogo size={56} className="plugin-heroi-logo" title="heroi" />
-        <h1>{t('plugins.heroi.welcomeTitle')}</h1>
-        <p>{t('plugins.heroi.welcomeBody')}</p>
-        <div className="plugin-heroi-welcome-ping">
-          {t('plugins.heroi.welcomePing')} <span>{ping}</span>
-        </div>
-        <p className="plugin-heroi-welcome-hint">{t('plugins.heroi.welcomeHint')}</p>
-      </div>
-    </div>
-  );
-}
-
-function ConversationView({
-  title,
-  cwd,
-  branch,
-  messages,
-  composerText,
-  onComposerChange,
-  composerRef,
-  shortcut,
-  settings,
-  chipMenu,
-  onChipMenu,
-  onPatch,
-  onSend,
-  onRun,
-  visible,
-}: {
-  title: string;
-  cwd: string;
-  branch: string | null;
-  messages: HeroiMessage[];
-  composerText: string;
-  onComposerChange: (value: string) => void;
-  composerRef: Ref<HTMLTextAreaElement>;
-  shortcut: string;
-  settings: Pick<HeroiDraft, 'provider' | 'model' | 'thinking' | 'agentMode' | 'permissionMode'> | null;
-  chipMenu: ChipMenu;
-  onChipMenu: (menu: ChipMenu) => void;
-  onPatch: (patch: Partial<HeroiDraft>) => void;
-  onSend: () => void;
-  onRun: () => void;
-  visible: boolean;
-}) {
-  const empty = messages.length === 0;
-  const provider = settings?.provider ?? 'claude';
-  const mode = settings?.agentMode ?? 'build';
-  return (
-    <div className="plugin-heroi-conversation">
-      <header className="plugin-heroi-conversation-head">
-        <span className="plugin-heroi-conversation-title">{title}</span>
-        <span className="plugin-heroi-dot">·</span>
-        <span className="plugin-heroi-path" title={cwd}>{cwd}</span>
-        {branch && (
-          <>
-            <span className="plugin-heroi-dot">·</span>
-            <span>{branch}</span>
-          </>
-        )}
-        <div className="plugin-heroi-topbar-spacer" />
-        <button type="button" className="plugin-heroi-icon-btn" aria-label={t('plugins.heroi.runInWork')} disabled={!cwd || !visible} onClick={onRun}>
-          <Icon name="terminal" size={12} />
-        </button>
-      </header>
-
-      {empty ? (
-        <div className="plugin-heroi-draft-copy">
-          {t('plugins.heroi.draftHint')}
-          <code>{cwd}</code>
+      {!activePath ? (
+        <div className="plugin-heroi-no-repo" role="status">
+          <HeroiLogo size={32} className="plugin-heroi-logo" />
+          <strong>{t('plugins.heroi.noRepository')}</strong>
+          <span>{t('plugins.heroi.noRepositoryHint')}</span>
         </div>
       ) : (
-        <div className="plugin-heroi-messages">
-          {messages.map((message) => (
-            <div key={message.id} className={'plugin-heroi-message ' + message.role}>
-              <div className="plugin-heroi-message-body">{message.text}</div>
+        <div className="plugin-heroi-chat-layout">
+          <aside className="plugin-heroi-chat-rail" aria-label={t('plugins.heroi.chatsForRepo', { repo: repoName })}>
+            <div className="plugin-heroi-chat-rail-head">
+              <span>{t('plugins.heroi.chats')}</span>
+              <span>{repoConversations.length}</span>
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className={'plugin-heroi-composer-wrap' + (empty ? ' centered' : '')}>
-        <div className="plugin-heroi-composer">
-          <div className="plugin-heroi-composer-row">
-            <textarea
-              ref={composerRef}
-              value={composerText}
-              rows={2}
-              placeholder={t('plugins.heroi.composerPlaceholder', { mode: capitalize(mode), shortcut })}
-              onChange={(event) => onComposerChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Tab' && event.shiftKey) {
-                  event.preventDefault();
-                  onPatch({ agentMode: mode === 'plan' ? 'build' : 'plan' });
-                }
-                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  event.preventDefault();
-                  onSend();
-                }
-              }}
-            />
             <button
               type="button"
-              className="btn primary plugin-heroi-send"
-              aria-label={t('plugins.heroi.send')}
-              disabled={!composerText.trim() || !visible}
-              onClick={onSend}
+              className="plugin-heroi-new-chat"
+              disabled={Boolean(activeRun)}
+              onClick={() => {
+                setComposingNew(true);
+                setActiveConversationId(null);
+                setComposerText('');
+                setError(null);
+                queueMicrotask(() => composerRef.current?.focus());
+              }}
             >
-              <Icon name="arrow-up" size={12} />
+              <Icon name="plus" size={13} />
+              {t('plugins.heroi.newConversation')}
             </button>
-          </div>
-          <div className="plugin-heroi-config">
-            <Chip
-              open={chipMenu === 'provider'}
-              label={providerMeta(provider).label}
-              ariaLabel={t('plugins.heroi.provider')}
-              onToggle={() => onChipMenu(chipMenu === 'provider' ? null : 'provider')}
-            >
-              {PROVIDERS.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={entry.id === provider}
-                  onClick={() => {
-                    onPatch({ provider: entry.id, model: MODELS[entry.id][0] });
-                    onChipMenu(null);
-                  }}
+            <div className="plugin-heroi-chat-list">
+              {repoConversations.length === 0 ? (
+                <p className="plugin-heroi-chat-list-empty">{t('plugins.heroi.noRepoChats')}</p>
+              ) : repoConversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={'plugin-heroi-chat-row' + (conversation.id === activeConversationId ? ' active' : '')}
                 >
-                  {entry.label}
-                </button>
-              ))}
-            </Chip>
-            <span className="plugin-heroi-sep">·</span>
-            <Chip
-              open={chipMenu === 'model'}
-              label={capitalize(settings?.model ?? 'default')}
-              ariaLabel={t('plugins.heroi.model')}
-              onToggle={() => onChipMenu(chipMenu === 'model' ? null : 'model')}
-            >
-              {MODELS[provider].map((model) => (
-                <button
-                  key={model}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={model === (settings?.model ?? 'default')}
-                  onClick={() => { onPatch({ model }); onChipMenu(null); }}
-                >
-                  {capitalize(model)}
-                </button>
-              ))}
-            </Chip>
-            <span className="plugin-heroi-sep">·</span>
-            <Chip
-              open={chipMenu === 'thinking'}
-              label={capitalize(settings?.thinking ?? 'default')}
-              ariaLabel={t('plugins.heroi.thinking')}
-              onToggle={() => onChipMenu(chipMenu === 'thinking' ? null : 'thinking')}
-            >
-              {THINKING.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={level === (settings?.thinking ?? 'default')}
-                  onClick={() => { onPatch({ thinking: level }); onChipMenu(null); }}
-                >
-                  {capitalize(level)}
-                </button>
-              ))}
-            </Chip>
-            <span className="plugin-heroi-sep">·</span>
-            <Chip
-              open={chipMenu === 'mode'}
-              label={capitalize(mode)}
-              ariaLabel={t('plugins.heroi.mode')}
-              onToggle={() => onChipMenu(chipMenu === 'mode' ? null : 'mode')}
-            >
-              {MODES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={value === mode}
-                  onClick={() => { onPatch({ agentMode: value }); onChipMenu(null); }}
-                >
-                  {capitalize(value)}
-                </button>
-              ))}
-            </Chip>
-            <span className="plugin-heroi-sep">·</span>
-            <Chip
-              open={chipMenu === 'permission'}
-              label={settings?.permissionMode === 'read' ? t('plugins.heroi.permissionRead') : capitalize(settings?.permissionMode ?? 'build')}
-              ariaLabel={t('plugins.heroi.permission')}
-              onToggle={() => onChipMenu(chipMenu === 'permission' ? null : 'permission')}
-            >
-              {PERMISSIONS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={value === (settings?.permissionMode ?? 'build')}
-                  onClick={() => { onPatch({ permissionMode: value }); onChipMenu(null); }}
-                >
-                  {value === 'read' ? t('plugins.heroi.permissionRead') : capitalize(value)}
-                </button>
-              ))}
-            </Chip>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Chip({
-  open,
-  label,
-  ariaLabel,
-  onToggle,
-  children,
-}: {
-  open: boolean;
-  label: string;
-  ariaLabel: string;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="plugin-heroi-chip-wrap">
-      <button type="button" className="plugin-heroi-chip-btn" aria-label={ariaLabel} aria-expanded={open} onClick={onToggle}>
-        {label}
-        <Icon name="chev-down" size={10} />
-      </button>
-      {open && <div className="plugin-heroi-chip-menu" role="menu">{children}</div>}
-    </div>
-  );
-}
-
-function KanbanView({
-  name,
-  board,
-  newCardColumn,
-  newCardTitle,
-  onNewTask,
-  onNewCardColumn,
-  onNewCardTitle,
-  onAddCard,
-  onMoveCard,
-}: {
-  name: string;
-  board: KanbanBoard;
-  newCardColumn: string | null;
-  newCardTitle: string;
-  onNewTask: () => void;
-  onNewCardColumn: (id: string | null) => void;
-  onNewCardTitle: (value: string) => void;
-  onAddCard: (columnId: string, title: string) => void;
-  onMoveCard: (cardId: string, columnId: string) => void;
-}) {
-  return (
-    <div className="plugin-heroi-kanban">
-      <header className="plugin-heroi-conversation-head">
-        <Icon name="workspace" size={12} />
-        <span className="plugin-heroi-conversation-title">{name} · Kanban</span>
-        <span className="plugin-heroi-dot">·</span>
-        <span>{t('plugins.heroi.kanbanCounts', { columns: board.columns.length, cards: board.cards.length })}</span>
-        <div className="plugin-heroi-topbar-spacer" />
-        <button type="button" className="btn primary plugin-heroi-new-task" onClick={onNewTask}>
-          <Icon name="plus" size={11} />
-          {t('plugins.heroi.newTask')}
-        </button>
-      </header>
-      <div className="plugin-heroi-kanban-board">
-        {board.columns.map((column) => {
-          const cards = board.cards.filter((card) => card.columnId === column.id);
-          return (
-            <section key={column.id} className="plugin-heroi-kanban-col">
-              <header>
-                <span>{column.name}</span>
-                <span>{cards.length}</span>
-              </header>
-              {cards.map((card) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  className="plugin-heroi-kanban-card"
-                  onClick={() => {
-                    const index = board.columns.findIndex((entry) => entry.id === column.id);
-                    const next = board.columns[(index + 1) % board.columns.length];
-                    if (next) onMoveCard(card.id, next.id);
-                  }}
-                >
-                  {card.title}
-                </button>
-              ))}
-              {newCardColumn === column.id ? (
-                <form
-                  className="plugin-heroi-kanban-new"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    onAddCard(column.id, newCardTitle);
-                  }}
-                >
-                  <input
-                    value={newCardTitle}
-                    autoFocus
-                    placeholder={t('plugins.heroi.cardTitle')}
-                    onChange={(event) => onNewCardTitle(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') onNewCardColumn(null);
+                  <button
+                    type="button"
+                    className="plugin-heroi-chat-open"
+                    onClick={() => {
+                      setComposingNew(false);
+                      setActiveConversationId(conversation.id);
+                      setError(null);
                     }}
-                  />
-                </form>
-              ) : (
-                <button type="button" className="plugin-heroi-add-card" onClick={() => { onNewCardColumn(column.id); onNewCardTitle(''); }}>
-                  <Icon name="plus" size={10} />
-                  {t('plugins.heroi.addCard')}
-                </button>
-              )}
-            </section>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function MarketplaceOverlay({
-  ready,
-  installed,
-  onInstall,
-  onUninstall,
-  onClose,
-}: {
-  ready: boolean;
-  installed: readonly string[];
-  onInstall: (id: string) => void;
-  onUninstall: (id: string) => void;
-  onClose: () => void;
-}) {
-  const installedSet = new Set(installed);
-  return (
-    <div className="plugin-heroi-overlay">
-      <header className="plugin-heroi-conversation-head">
-        <span className="plugin-heroi-conversation-title">{t('plugins.heroi.marketplace')}</span>
-        <div className="plugin-heroi-topbar-spacer" />
-        <button type="button" className="plugin-heroi-icon-btn" aria-label={t('common.close')} onClick={onClose}>
-          <Icon name="x" size={12} />
-        </button>
-      </header>
-      <div className="plugin-heroi-market-list">
-        {MARKETPLACE_CATALOG.map(({ manifest, builtin, tags }) => {
-          const isInstalled = installedSet.has(manifest.id);
-          return (
-            <article key={manifest.id} className="plugin-heroi-market-card">
-              <div>
-                <strong>{manifest.name}</strong>
-                <span>{manifest.id} · v{manifest.version}</span>
-                <p>{manifest.description}</p>
-                <div className="plugin-heroi-market-tags">
-                  {builtin && <span>{t('plugins.builtin')}</span>}
-                  {tags.map((tag) => <span key={tag}>{tag}</span>)}
+                  >
+                    <span className="plugin-heroi-chat-provider">{providerLabel(conversation.provider)}</span>
+                    <span>{conversation.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="plugin-heroi-chat-delete"
+                    aria-label={t('plugins.heroi.deleteConversation', { title: conversation.title })}
+                    disabled={activeRun?.conversationId === conversation.id}
+                    onClick={() => deleteConversation(conversation)}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
                 </div>
+              ))}
+            </div>
+          </aside>
+
+          <main className="plugin-heroi-thread">
+            <header className="plugin-heroi-thread-head">
+              <div>
+                <strong>{activeConversation?.title ?? t('plugins.heroi.newConversationTitle')}</strong>
+                <span>{activeConversation
+                  ? plural(activeConversation.messages.length, {
+                      one: 'plugins.heroi.messageCount.one',
+                      other: 'plugins.heroi.messageCount.other',
+                    })
+                  : t('plugins.heroi.newConversationHint')}</span>
               </div>
-              {isInstalled ? (
-                <button type="button" className="btn" disabled={!ready} onClick={() => onUninstall(manifest.id)}>
-                  {t('plugins.uninstall')}
-                </button>
-              ) : (
-                <button type="button" className="btn primary" disabled={!ready} onClick={() => onInstall(manifest.id)}>
-                  {t('plugins.install')}
-                </button>
+              {activeRun && (
+                <div className="plugin-heroi-run-state" role="status" aria-live="polite">
+                  <span className="plugin-heroi-run-pulse" />
+                  <span>{activeRun.activity}</span>
+                </div>
               )}
-            </article>
-          );
-        })}
-      </div>
+            </header>
+
+            <div ref={messagesRef} className="plugin-heroi-messages" aria-live="polite">
+              {!activeConversation ? (
+                <div className="plugin-heroi-thread-empty">
+                  <HeroiLogo size={30} className="plugin-heroi-logo" />
+                  <strong>{t('plugins.heroi.askAgent', { repo: repoName })}</strong>
+                  <span>{t('plugins.heroi.askAgentHint')}</span>
+                </div>
+              ) : activeConversation.messages.map((message) => (
+                <article key={message.id} className={`plugin-heroi-message ${message.role}`}>
+                  <header>
+                    <span>{message.role === 'user' ? t('plugins.heroi.you') : providerLabel(activeConversation.provider)}</span>
+                    {message.state && message.state !== 'complete' && (
+                      <span className={`plugin-heroi-message-state ${message.state}`}>
+                        {message.state === 'running'
+                          ? activeRun?.activity
+                          : t(message.state === 'stopped'
+                            ? 'plugins.heroi.state.stopped'
+                            : 'plugins.heroi.state.error')}
+                      </span>
+                    )}
+                  </header>
+                  {message.text && <div className="plugin-heroi-message-body">{message.text}</div>}
+                </article>
+              ))}
+            </div>
+
+            <div className="plugin-heroi-composer-wrap">
+              {error && <div className="plugin-heroi-error" role="alert">{error}</div>}
+              <div className="plugin-heroi-composer">
+                <textarea
+                  ref={composerRef}
+                  rows={3}
+                  value={composerText}
+                  disabled={Boolean(activeRun)}
+                  placeholder={t('plugins.heroi.composerPlaceholder', {
+                    mode: agentMode === 'build' ? 'Build' : 'Plan',
+                    shortcut: navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl',
+                  })}
+                  aria-label={t('plugins.heroi.composerLabel')}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  onKeyDown={onComposerKeyDown}
+                />
+                {activeRun ? (
+                  <button
+                    type="button"
+                    className="plugin-heroi-stop"
+                    aria-label={t('plugins.heroi.stop')}
+                    onClick={stopRun}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="plugin-heroi-send"
+                    aria-label={t('plugins.heroi.send')}
+                    disabled={!composerText.trim()}
+                    onClick={() => void sendMessage()}
+                  >
+                    <Icon name="arrow-up" size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="plugin-heroi-config">
+                <Select
+                  className="plugin-heroi-native-select"
+                  aria-label={t('plugins.heroi.provider')}
+                  value={provider}
+                  disabled={Boolean(activeRun || activeConversation)}
+                  onChange={(event) => patchSettings({ provider: event.target.value as HeroiProvider })}
+                >
+                  {PROVIDERS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                </Select>
+                <Select
+                  className="plugin-heroi-native-select"
+                  aria-label={t('plugins.heroi.model')}
+                  value={model}
+                  disabled={Boolean(activeRun)}
+                  onChange={(event) => patchSettings({ model: event.target.value })}
+                >
+                  {MODELS[provider].map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                </Select>
+                <Select
+                  className="plugin-heroi-native-select"
+                  aria-label={t('plugins.heroi.thinking')}
+                  value={thinking}
+                  disabled={Boolean(activeRun)}
+                  onChange={(event) => patchSettings({ thinking: event.target.value as ThinkingLevel })}
+                >
+                  {THINKING.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                </Select>
+                <Select
+                  className="plugin-heroi-native-select"
+                  aria-label={t('plugins.heroi.mode')}
+                  value={agentMode}
+                  disabled={Boolean(activeRun)}
+                  onChange={(event) => patchSettings({ agentMode: event.target.value as AgentMode })}
+                >
+                  <option value="build">Build</option>
+                  <option value="plan">Plan</option>
+                </Select>
+                <Select
+                  className="plugin-heroi-native-select"
+                  aria-label={t('plugins.heroi.permission')}
+                  value={permissionMode}
+                  disabled={Boolean(activeRun)}
+                  onChange={(event) => patchSettings({ permissionMode: event.target.value as PermissionMode })}
+                >
+                  <option value="read">{t('plugins.heroi.permissionRead')}</option>
+                  <option value="build">Build</option>
+                  <option value="full">Full access</option>
+                </Select>
+              </div>
+            </div>
+          </main>
+        </div>
+      )}
     </div>
   );
 }

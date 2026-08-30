@@ -1,3 +1,2 @@
-/** Window events used by the Strand-hosted heroi_aide dogfood surface. */
+/** Window event used by Heroi's command-palette contribution. */
 export const HEROI_NEW_CONVERSATION_EVENT = 'heroi:new-conversation';
-export const STRAND_OPEN_SETTINGS_EVENT = 'strand:open-settings';

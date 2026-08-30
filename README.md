@@ -103,8 +103,10 @@ the resolved app appearance automatically.
   every thin pane divider retains a wider mouse target for reliable resizing.
   **Experimental plugins:** install surfaces from Settings → Plugins (bundled
   marketplace), add them to Workbench panes, and use **Heroi** as a dogfood
-  heroi_aide workspace (chats, composer, kanban, diffs). Declarative plugins render from validated
-  manifests; third-party JavaScript does not execute in the privileged webview.
+  repository-scoped chat for background Claude, Codex, and Cursor Agent
+  sessions. Heroi only shows chats for the active repository; Files, diffs,
+  and other tools remain separate Workbench panes. Declarative plugins render
+  from validated manifests; third-party JavaScript does not execute in the privileged webview.
   See `docs/plugin-creation.md`.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the

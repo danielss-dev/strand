@@ -81,7 +81,7 @@ import {
   type WorkbenchCommandContext,
 } from './workbench';
 import { isPluginSurface, renderPluginSurface } from './plugins/renderSurface';
-import { HEROI_NEW_CONVERSATION_EVENT, STRAND_OPEN_SETTINGS_EVENT } from './plugins/builtins/heroi/events';
+import { HEROI_NEW_CONVERSATION_EVENT } from './plugins/builtins/heroi/events';
 import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
@@ -479,15 +479,6 @@ export function App() {
     setSettingsSection(section);
     setSettingsOpen(true);
   }, []);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: SettingsSectionId }>).detail?.section ?? 'plugins';
-      openSettingsAt(section);
-    };
-    window.addEventListener(STRAND_OPEN_SETTINGS_EVENT, handler);
-    return () => window.removeEventListener(STRAND_OPEN_SETTINGS_EVENT, handler);
-  }, [openSettingsAt]);
 
   useEffect(() => {
     void restoreWorkbench(workbenchWorkspaceId);
@@ -1906,7 +1897,7 @@ export function App() {
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
-      { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi_aide agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },
+      { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },
       {
         id: 'report-inappropriate-content',
         label: 'Report inappropriate content…',
