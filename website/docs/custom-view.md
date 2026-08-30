@@ -88,7 +88,9 @@ survive.
 Workbench currently supports built-in Strand surfaces, installed plugin
 surfaces from Settings → Plugins (including the Heroi dogfood plugin, which
 provides chats scoped to the active repository and runs Claude, Codex, or
-Cursor Agent in the background), and a 32-pane defensive limit. Heroi does not
+Cursor Agent in the background, and Quick Notes, which saves a separate
+scratchpad for each repository in Strand's app data), and a 32-pane defensive
+limit. Heroi does not
 duplicate Files, git changes, or diffs; add those as separate Workbench panes.
 Declarative plugins render from
 validated manifests; third-party JavaScript does not run inside the privileged

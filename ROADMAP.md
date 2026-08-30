@@ -2658,6 +2658,11 @@ with a Strand-owned repository-scoped chat renderer and permission-checked
 `repository.read` / `ai.invoke` broker calls. Authoring guide:
 `docs/plugin-creation.md`.
 
+**Repository Quick Notes shipped (2026-08-30):** the former static Quick Notes
+sample is now an editable repository-scoped Workbench plugin. Notes are saved
+under a repository-path key in Strand's app-config `strand.db`, never in the
+working tree. The placeholder Repo Status marketplace plugin was removed.
+
 **Heroi repository agent chat shipped (2026-08-30):** Heroi is now a focused
 Workbench chat surface: it filters persisted conversations to the active
 repository and leaves Files, git changes, diffs, and other tools to composable

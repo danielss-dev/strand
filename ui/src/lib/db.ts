@@ -112,6 +112,16 @@ export const remoteTagsCache = {
   },
 };
 
+/** Repository-scoped scratchpad content stored in Strand's app database. */
+export const quickNotes = {
+  get(repoPath: string): Promise<string | null> {
+    return settings.get<string>(`quick-notes:${repoPath}`);
+  },
+  set(repoPath: string, note: string): Promise<void> {
+    return settings.set(`quick-notes:${repoPath}`, note);
+  },
+};
+
 /** A pinned review baseline: "show me everything since this commit". */
 export interface StoredBaseline {
   /** Full OID of the baseline commit. */

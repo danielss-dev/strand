@@ -1,5 +1,7 @@
 import { HeroiView } from './builtins/heroi/HeroiView';
 import { HEROI_SURFACE_ID } from './builtins/heroi/manifest';
+import { QuickNotesView } from './builtins/quickNotes/QuickNotesView';
+import { QUICK_NOTES_SURFACE_ID } from './builtins/quickNotes/manifest';
 import type { DeclarativeView } from './manifest';
 import { pluginRegistry } from './registry';
 import type { PluginCapabilityBroker } from './capabilities';
@@ -71,6 +73,9 @@ export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
   if (render.kind === 'builtin') {
     if (request.contribution.id === HEROI_SURFACE_ID) {
       return <HeroiView request={request} broker={broker} />;
+    }
+    if (request.contribution.id === QUICK_NOTES_SURFACE_ID) {
+      return <QuickNotesView />;
     }
     return (
       <div className="custom-empty" role="status">

@@ -1267,6 +1267,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   remote install, and isolated custom UI remain open.)
 - ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
   persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
+- ☑ Repository-scoped Quick Notes plugin with debounced persistence in
+  Strand's app database; removed the Repo Status sample plugin
+  (`QuickNotesView`, `quick-notes:<repo-path>` — 2026-08-30).
 - ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`,
   `heroi_agent_send`, `heroi_provider_models` — active-repository-only chat
   with streaming, resumable, cancellable Claude/Codex/Cursor Agent sessions;

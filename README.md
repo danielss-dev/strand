@@ -114,6 +114,8 @@ the resolved app appearance automatically.
   execution activity rows, and bottom command deck keep chat primary, with
   **Open review** routing to Strand's Review surface. Declarative plugins render
   from validated manifests; third-party JavaScript does not execute in the privileged webview.
+  The bundled **Quick Notes** plugin provides an editable scratchpad for each
+  repository and saves it in Strand's app database rather than the repository.
   See `docs/plugin-creation.md`.
 
 - **Review view (⌘5)** — read an agent's changes as whole files with the

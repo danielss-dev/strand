@@ -5,6 +5,7 @@ import { validatePluginManifest, PLUGIN_API_VERSION } from './manifest';
 import { MARKETPLACE_CATALOG } from './marketplace';
 import { PluginRegistry } from './registry';
 import { heroiManifest } from './builtins/heroi/manifest';
+import { quickNotesManifest } from './builtins/quickNotes/manifest';
 
 describe('validatePluginManifest', () => {
   it('accepts a valid declarative plugin manifest', () => {
@@ -64,6 +65,10 @@ describe('MARKETPLACE_CATALOG', () => {
     expect(heroi?.manifest.description).not.toMatch(/Gemini/);
     expect(heroi?.manifest.description).not.toMatch(/Aider/);
     expect(heroiManifest.contributes.commands?.[0]?.id).toBe('new-conversation');
+    expect(ids).toContain('example.quick-notes');
+    expect(ids).not.toContain('example.repo-status');
+    expect(MARKETPLACE_CATALOG.find((entry) => entry.manifest.id === 'example.quick-notes')?.builtin).toBe(true);
+    expect(quickNotesManifest.contributes.surfaces[0]?.scope).toBe('repository');
   });
 });
 
