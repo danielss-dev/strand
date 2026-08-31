@@ -109,11 +109,12 @@ the resolved app appearance automatically.
   come from the selected provider. Multiple threads can run at once; `@`
   searches repository files, `/` searches installed/project skills, and files
   can be dragged from a Files pane into the composer with live drop feedback.
-  Command/tool rows expand to show what the agent ran and the captured output.
-  Its compact thread rail,
-  execution activity rows, and bottom command deck keep chat primary, with
-  **Open review** routing to Strand's Review surface. Declarative plugins render
-  from validated manifests; third-party JavaScript does not execute in the privileged webview.
+  Assistant replies render as Markdown; each turn lists files it added, changed,
+  or deleted; and tool calls collapse into one grouped control (expand a row for
+  bounded output). Its compact thread rail and bottom command deck keep chat
+  primary, with **Open review** routing to Strand's Review surface. Declarative
+  plugins render from validated manifests; third-party JavaScript does not
+  execute in the privileged webview.
   The bundled **Quick Notes** plugin provides an editable scratchpad for each
   repository and saves it in Strand's app database rather than the repository.
   See `docs/plugin-creation.md`.

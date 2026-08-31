@@ -2693,6 +2693,12 @@ mentions without opening or moving them. File suggestions reuse Strand's
 language/file icons, the composer visibly acknowledges a valid drag target,
 and command/tool activity rows expand to bounded provider details and output.
 
+**Heroi readable turns shipped (2026-08-31):** Assistant (and user) message
+bodies render through Strand's first-party Markdown path. Each turn derives
+added/changed/deleted paths from that turn's mutating tool/activity payloads
+and opens a clicked path in Work's Changes view. Tool calls for a turn live in
+one collapsible group so the transcript stays chat-first.
+
 **Strand 1.5.0 release kick (2026-08-30):** The five lockstep desktop app
 manifests and Cargo lockfile are synchronized at 1.5.0. The signed desktop
 release and Microsoft Store submission workflows are the remaining promotion

@@ -2301,12 +2301,19 @@ IDE. Duplicating surrounding tools wastes pane space, creates competing state,
 and obscures the repository boundary that must isolate chat history.
 
 **Visual contract.** Heroi uses a compact Threads rail, a one-line repository
-context/action bar, flat left-aligned turns, persisted execution activity rows,
-and a bottom-anchored command deck. Avoid conventional chat bubbles and large
-centered cards. **Open review** routes to Strand's existing Review surface; it
-must never grow an inline diff viewer. Derive the near-black/amber treatment
-from Strand theme tokens so repository accenting, focus rings, and contrast
-remain coherent.
+context/action bar, flat left-aligned turns, and a bottom-anchored command deck.
+Avoid conventional chat bubbles and large centered cards. Render message bodies
+with Strand's first-party `renderMarkdown` (React elements only — no HTML
+execution). Keep tool calls for a turn in **one** collapsible group at the
+**start** of the assistant turn (before the markdown body); do not stack a
+growing list of activity rows as the primary transcript chrome, and do not put
+the group under the files list or at the bottom of the bubble. Show
+added/changed/deleted paths after the prose, attributed to the turn's mutating
+tool payloads, and open a clicked path through Workbench navigation (Work
+Changes) rather than an inline diff viewer. **Open review** routes to Strand's
+existing Review surface; it must never grow an inline diff viewer. Derive the
+near-black/amber treatment from Strand theme tokens so repository accenting,
+focus rings, and contrast remain coherent.
 
 **Composer and concurrency contract.** A running conversation must only lock
 its own composer and settings; it must not prevent creating, opening, sending,
@@ -2316,9 +2323,9 @@ repository-relative paths. The `/` picker discovers the selected provider's
 user and project skill roots but inserts `$skill-name`, matching the native CLI
 prompt syntax. Files-tree drops must become mentions and must not also trigger
 the tree's move/open behavior. Report drag-hover entry/exit separately from the
-drop so the composer can acknowledge a valid target before release. Activity
-rows are disclosures when provider detail exists; retain bounded command/tool
-arguments and output, never unbounded vendor transcripts or stderr.
+drop so the composer can acknowledge a valid target before release. Tool calls for a turn belong in one grouped disclosure; individual rows expand
+when provider detail exists. Retain bounded command/tool arguments and output,
+never unbounded vendor transcripts or stderr.
 
 ---
 

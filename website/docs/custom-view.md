@@ -102,17 +102,17 @@ and Codex executable paths come from Settings → AI; Cursor Agent must be on
 `PATH`.
 
 Heroi's Threads rail lists only conversations for the active repository. The
-header shows the current agent, model, and branch; execution activity appears
-inside the transcript while an agent works. Model and reasoning menus come from
-the selected provider — Claude's catalog, Codex's live model list, or Cursor
-Agent's available models — including that model's advertised reasoning levels.
-Threads run independently, so starting a new conversation does not stop or
-block an agent already working. Type `@` to attach a repository path, type `/`
+header shows the current agent, model, and branch; each assistant turn starts
+with one grouped Tool calls control, then the Markdown reply (headings, lists,
+fenced code, links), then any added/changed/deleted paths for that turn — click
+a path to open it in Work's Changes view. Expand the tool group (and a row) to
+inspect bounded command, argument, and output detail. Model and reasoning menus
+come from the selected provider — Claude's catalog, Codex's live model list, or
+Cursor Agent's available models — including that model's advertised reasoning
+levels. Threads run independently, so starting a new conversation does not stop
+or block an agent already working. Type `@` to attach a repository path, type `/`
 to choose an installed or project skill, or drag one or more entries from a
 Files pane into the composer. A chosen skill is sent using the provider-native
 `$skill-name` prompt form. The composer glows while a Files-tree drag is over a
-valid target. Command and tool activity rows with available details can be
-expanded to inspect the command, arguments, changes, and bounded output.
-Use **Open review** to activate a
-Review pane in the current Workbench layout, or to open Strand's Review view
-when the layout has none.
+valid target. Use **Open review** to activate a Review pane in the current
+Workbench layout, or to open Strand's Review view when the layout has none.

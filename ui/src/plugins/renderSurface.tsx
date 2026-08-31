@@ -6,6 +6,7 @@ import type { DeclarativeView } from './manifest';
 import { pluginRegistry } from './registry';
 import type { PluginCapabilityBroker } from './capabilities';
 import type { SurfaceRenderRequest } from '../workbench/SurfaceHost';
+import { renderMarkdown } from '../lib/markdown';
 import { t } from '../lib/i18n';
 import type { ReactNode } from 'react';
 
@@ -21,15 +22,9 @@ function DeclarativePluginView({
   if (view.type === 'markdown') {
     return (
       <div className="plugin-surface plugin-surface-markdown" data-surface-id={request.contribution.id}>
-        <article className="plugin-markdown">{view.content.split('\n').map((line, index) => (
-          line.startsWith('# ')
-            ? <h1 key={index}>{line.slice(2)}</h1>
-            : line.startsWith('## ')
-              ? <h2 key={index}>{line.slice(3)}</h2>
-              : line.length === 0
-                ? <p key={index} className="plugin-markdown-gap" />
-                : <p key={index}>{renderInlineMarkdown(line)}</p>
-        ))}</article>
+        <article className="plugin-markdown markdown">
+          {renderMarkdown(view.content)}
+        </article>
       </div>
     );
   }
@@ -52,16 +47,6 @@ function DeclarativePluginView({
       </dl>
     </div>
   );
-}
-
-function renderInlineMarkdown(line: string): ReactNode {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    return part;
-  });
 }
 
 export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
