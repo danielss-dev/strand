@@ -1280,6 +1280,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   drops with live composer feedback, expandable command/tool activity details,
   and Open review bridge (`HeroiView`, `heroi_skills`,
   `PierreTree.onExternalDrop`, `HeroiAgentEvent::Activity`)).
+- ☑ Heroi readable turns: Markdown replies, per-turn added/changed/deleted
+  file list, and grouped tool calls (`MessageMarkdown`, `turnArtifacts`,
+  `TurnPanels`, `HEROI_OPEN_FILE_EVENT` — DAN-61).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,

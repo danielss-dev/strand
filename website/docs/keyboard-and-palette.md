@@ -157,8 +157,10 @@ to the active repository:
 
 Files can also be dragged from a Files pane into the Heroi composer. Running
 threads continue in parallel when another conversation is opened or started.
-Focus a command/tool activity row and press `Enter` or `Space` to expand its
-available command details and output.
+Assistant replies render as Markdown. Each turn's tool calls live in one
+grouped control — expand the group, then a row, to inspect bounded command
+details and output. Click a path in that turn's added/changed/deleted file
+list to open it in Work's Changes view.
 Quick Launch also has **Heroi: New conversation**.
 
 ### Repository tabs

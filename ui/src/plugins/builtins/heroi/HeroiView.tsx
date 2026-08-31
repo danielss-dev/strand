@@ -23,11 +23,14 @@ import {
   HEROI_FILES_DROPPED_EVENT,
   HEROI_FILE_DRAG_EVENT,
   HEROI_NEW_CONVERSATION_EVENT,
+  HEROI_OPEN_FILE_EVENT,
   HEROI_OPEN_REVIEW_EVENT,
   type HeroiFilesDroppedDetail,
   type HeroiFileDragDetail,
 } from './events';
 import { HeroiLogo } from './HeroiLogo';
+import { MessageMarkdown } from './MessageMarkdown';
+import { TurnFileChanges, TurnToolCalls } from './TurnPanels';
 import {
   appendFileMentions,
   composerTrigger,
@@ -163,12 +166,6 @@ function providerLabel(provider: HeroiProvider): string {
   return PROVIDERS.find((entry) => entry.id === provider)?.label ?? provider;
 }
 
-function activityStateLabel(state: Exclude<ActivityState, 'running'>): string {
-  if (state === 'done') return t('plugins.heroi.activity.done');
-  if (state === 'stopped') return t('plugins.heroi.activity.stopped');
-  return t('plugins.heroi.activity.error');
-}
-
 function cliOverride(
   provider: HeroiProvider,
   openaiCli: string | null,
@@ -213,6 +210,8 @@ export function HeroiView({
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [fileDropActive, setFileDropActive] = useState(false);
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+  /** Explicit open/closed override per assistant message; default is open while running. */
+  const [toolGroupOpen, setToolGroupOpen] = useState<Record<string, boolean>>({});
 
   const rootRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -689,6 +688,13 @@ export function HeroiView({
     });
   }, []);
 
+  const openTurnPath = useCallback((path: string) => {
+    if (!activePath) return;
+    window.dispatchEvent(new CustomEvent(HEROI_OPEN_FILE_EVENT, {
+      detail: { projectPath: activePath, path },
+    }));
+  }, [activePath]);
+
   const onComposerChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     setComposerText(event.target.value);
     setComposerCursor(event.target.selectionStart);
@@ -863,55 +869,51 @@ export function HeroiView({
                   <strong>{t('plugins.heroi.askAgent', { repo: repoName })}</strong>
                   <span>{t('plugins.heroi.askAgentHint')}</span>
                 </div>
-              ) : activeConversation.messages.map((message) => (
-                <article key={message.id} className={`plugin-heroi-message ${message.role}`}>
-                  <header>
-                    <span>{message.role === 'user'
-                      ? t('plugins.heroi.you')
-                      : `Heroi · ${providerLabel(activeConversation.provider)}`}</span>
-                    {message.state && message.state !== 'complete' && (
-                      <span className={`plugin-heroi-message-state ${message.state}`}>
-                        {message.state === 'running'
-                          ? activeRuns[activeConversation.id]?.activity
-                          : t(message.state === 'stopped'
-                            ? 'plugins.heroi.state.stopped'
-                            : 'plugins.heroi.state.error')}
-                      </span>
+              ) : activeConversation.messages.map((message) => {
+                const activities = message.activities ?? [];
+                const toolsRunning = message.state === 'running'
+                  || activities.some((entry) => entry.state === 'running');
+                const toolsExpanded = toolGroupOpen[message.id] ?? toolsRunning;
+                return (
+                  <article key={message.id} className={`plugin-heroi-message ${message.role}`}>
+                    <header>
+                      <span>{message.role === 'user'
+                        ? t('plugins.heroi.you')
+                        : `Heroi · ${providerLabel(activeConversation.provider)}`}</span>
+                      {message.state && message.state !== 'complete' && (
+                        <span className={`plugin-heroi-message-state ${message.state}`}>
+                          {message.state === 'running'
+                            ? activeRuns[activeConversation.id]?.activity
+                            : t(message.state === 'stopped'
+                              ? 'plugins.heroi.state.stopped'
+                              : 'plugins.heroi.state.error')}
+                        </span>
+                      )}
+                    </header>
+                    {message.text && <MessageMarkdown text={message.text} />}
+                    {message.role === 'assistant' && activities.length > 0 && (
+                      <>
+                        <TurnFileChanges
+                          activities={activities}
+                          projectPath={activeConversation.projectPath}
+                          onOpenPath={openTurnPath}
+                        />
+                        <TurnToolCalls
+                          messageId={message.id}
+                          activities={activities}
+                          expanded={toolsExpanded}
+                          onToggleGroup={() => setToolGroupOpen((current) => ({
+                            ...current,
+                            [message.id]: !toolsExpanded,
+                          }))}
+                          expandedActivities={expandedActivities}
+                          onToggleActivity={toggleActivity}
+                        />
+                      </>
                     )}
-                  </header>
-                  {message.text && <div className="plugin-heroi-message-body">{message.text}</div>}
-                  {message.activities && message.activities.length > 0 && (
-                    <div className="plugin-heroi-activities">
-                      {message.activities.map((activity) => (
-                        <div key={activity.id} className={`plugin-heroi-activity ${activity.state}`}>
-                          <button
-                            type="button"
-                            disabled={!activity.detail}
-                            aria-expanded={activity.detail
-                              ? expandedActivities.has(`${message.id}:${activity.id}`)
-                              : undefined}
-                            onClick={() => toggleActivity(`${message.id}:${activity.id}`)}
-                          >
-                            <Icon
-                              name={activity.detail && expandedActivities.has(`${message.id}:${activity.id}`)
-                                ? 'chev-down'
-                                : 'chev-right'}
-                              size={11}
-                            />
-                            <span>{activity.label}</span>
-                            <small>{activity.state === 'running'
-                              ? t('plugins.heroi.running')
-                              : activityStateLabel(activity.state)}</small>
-                          </button>
-                          {activity.detail && expandedActivities.has(`${message.id}:${activity.id}`) && (
-                            <pre>{activity.detail}</pre>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
 
             <div

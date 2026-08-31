@@ -81,7 +81,12 @@ import {
   type WorkbenchCommandContext,
 } from './workbench';
 import { isPluginSurface, renderPluginSurface } from './plugins/renderSurface';
-import { HEROI_NEW_CONVERSATION_EVENT, HEROI_OPEN_REVIEW_EVENT } from './plugins/builtins/heroi/events';
+import {
+  HEROI_NEW_CONVERSATION_EVENT,
+  HEROI_OPEN_FILE_EVENT,
+  HEROI_OPEN_REVIEW_EVENT,
+  type HeroiOpenFileDetail,
+} from './plugins/builtins/heroi/events';
 import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
@@ -587,6 +592,17 @@ export function App() {
     window.addEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
     return () => window.removeEventListener(HEROI_OPEN_REVIEW_EVENT, openReview);
   }, [openReviewInCustom]);
+
+  useEffect(() => {
+    const openFile = (event: Event) => {
+      const detail = (event as CustomEvent<HeroiOpenFileDetail>).detail;
+      const repoPath = useRepo.getState().meta?.path;
+      if (!detail?.path || !repoPath || detail.projectPath !== repoPath) return;
+      openChangesInWork(detail.path);
+    };
+    window.addEventListener(HEROI_OPEN_FILE_EVENT, openFile);
+    return () => window.removeEventListener(HEROI_OPEN_FILE_EVENT, openFile);
+  }, [openChangesInWork]);
 
   // Launch the configured terminal / editor (Settings → Integrations) on the
   // active repo. Unconfigured routes to Settings instead of silently no-oping.

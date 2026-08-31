@@ -9048,18 +9048,12 @@ select.clone-input {
   overflow: auto;
   padding: 16px 18px;
 }
-.plugin-markdown h1,
-.plugin-markdown h2 {
-  margin: 0 0 8px;
+.plugin-markdown.markdown {
+  font-size: 12px;
+  line-height: 1.55;
 }
-.plugin-markdown p {
-  margin: 0 0 8px;
-  color: var(--text);
-  line-height: 1.5;
-}
-.plugin-markdown-gap {
-  height: 8px;
-}
+.plugin-markdown.markdown > :first-child { margin-top: 0; }
+.plugin-markdown.markdown > :last-child { margin-bottom: 0; }
 .plugin-surface-status {
   padding: 16px 18px;
   gap: 12px;
@@ -9394,7 +9388,27 @@ select.clone-input {
   font-size: 11px;
   line-height: 1.65;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+}
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown > :first-child { margin-top: 0; }
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown > :last-child { margin-bottom: 0; }
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h1,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h2,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h3,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h4,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h5,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown h6 {
+  color: var(--heroi-fg);
+  border-color: var(--heroi-border);
+}
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown pre,
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown pre.md-pre {
+  border: 1px solid var(--heroi-border);
+  border-radius: var(--r-sm);
+  background: var(--heroi-raised);
+}
+.plugin-heroi-chat-only .plugin-heroi-message-body.markdown code {
+  background: var(--heroi-raised);
+  color: var(--heroi-fg);
 }
 .plugin-heroi-chat-only .plugin-heroi-message.user {
   padding-left: 11px;
@@ -9402,19 +9416,103 @@ select.clone-input {
 }
 .plugin-heroi-message-state { color: var(--heroi-dim); font-weight: 500; text-transform: none; }
 .plugin-heroi-message-state.error { color: var(--del); }
-.plugin-heroi-activities {
+.plugin-heroi-file-changes {
   width: min(100%, 720px);
-  margin-top: 14px;
+  margin-top: 12px;
+  padding: 9px 11px;
   display: grid;
-  gap: 3px;
-}
-.plugin-heroi-activity {
+  gap: 8px;
   border: 1px solid var(--heroi-border);
   border-radius: var(--r-sm);
   background: var(--heroi-raised);
+}
+.plugin-heroi-file-changes > header {
+  color: var(--heroi-dim);
+  font: 9px var(--font-ui);
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.plugin-heroi-file-change-group { display: grid; gap: 4px; }
+.plugin-heroi-file-change-group > strong {
+  font: 9.5px var(--font-ui);
+  font-weight: 650;
+}
+.plugin-heroi-file-change-group.added > strong { color: var(--add); }
+.plugin-heroi-file-change-group.changed > strong { color: var(--heroi-accent); }
+.plugin-heroi-file-change-group.deleted > strong { color: var(--del); }
+.plugin-heroi-file-change-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.plugin-heroi-file-change-path {
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--heroi-fg);
+  font: 10px/1.4 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.plugin-heroi-file-change-path:hover { background: var(--heroi-hover); color: var(--heroi-accent); }
+.plugin-heroi-file-change-path:focus-visible { outline: 1px solid var(--heroi-accent); outline-offset: -1px; }
+.plugin-heroi-file-change-path code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
+}
+.plugin-heroi-tool-group {
+  width: min(100%, 720px);
+  margin-top: 10px;
+  border: 1px solid var(--heroi-border);
+  border-radius: var(--r-sm);
+  background: var(--heroi-raised);
+  overflow: hidden;
+}
+.plugin-heroi-tool-group-toggle {
+  width: 100%;
+  min-height: 29px;
+  padding: 0 9px;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--heroi-muted);
+  font: 9.5px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.plugin-heroi-tool-group-toggle:hover { background: var(--heroi-hover); color: var(--heroi-fg); }
+.plugin-heroi-tool-group-toggle:focus-visible { outline: 1px solid var(--heroi-accent); outline-offset: -1px; }
+.plugin-heroi-tool-group-toggle span { font-weight: 600; }
+.plugin-heroi-tool-group-toggle small { color: var(--add); font: 9px var(--font-ui); }
+.plugin-heroi-tool-group-toggle small.running { color: var(--heroi-accent); }
+.plugin-heroi-tool-group-toggle small.error { color: var(--del); }
+.plugin-heroi-activities {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--heroi-border);
+}
+.plugin-heroi-activity {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--heroi-muted);
   font: 9.5px var(--font-mono);
   overflow: hidden;
+}
+.plugin-heroi-activity + .plugin-heroi-activity {
+  border-top: 1px solid var(--heroi-border);
 }
 .plugin-heroi-activity > button {
   width: 100%;
