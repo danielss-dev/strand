@@ -2304,9 +2304,11 @@ and obscures the repository boundary that must isolate chat history.
 context/action bar, flat left-aligned turns, and a bottom-anchored command deck.
 Avoid conventional chat bubbles and large centered cards. Render message bodies
 with Strand's first-party `renderMarkdown` (React elements only — no HTML
-execution). Keep tool calls for a turn in **one** collapsible group under that
-turn; do not stack a growing list of activity rows as the primary transcript
-chrome. Show added/changed/deleted paths attributed to the turn's mutating
+execution). Keep tool calls for a turn in **one** collapsible group at the
+**start** of the assistant turn (before the markdown body); do not stack a
+growing list of activity rows as the primary transcript chrome, and do not put
+the group under the files list or at the bottom of the bubble. Show
+added/changed/deleted paths after the prose, attributed to the turn's mutating
 tool payloads, and open a clicked path through Workbench navigation (Work
 Changes) rather than an inline diff viewer. **Open review** routes to Strand's
 existing Review surface; it must never grow an inline diff viewer. Derive the

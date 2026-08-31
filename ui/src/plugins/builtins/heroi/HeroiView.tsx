@@ -29,8 +29,8 @@ import {
   type HeroiFileDragDetail,
 } from './events';
 import { HeroiLogo } from './HeroiLogo';
+import { AssistantTurnBody } from './AssistantTurnBody';
 import { MessageMarkdown } from './MessageMarkdown';
-import { TurnFileChanges, TurnToolCalls } from './TurnPanels';
 import {
   appendFileMentions,
   composerTrigger,
@@ -890,26 +890,23 @@ export function HeroiView({
                         </span>
                       )}
                     </header>
-                    {message.text && <MessageMarkdown text={message.text} />}
-                    {message.role === 'assistant' && activities.length > 0 && (
-                      <>
-                        <TurnFileChanges
-                          activities={activities}
-                          projectPath={activeConversation.projectPath}
-                          onOpenPath={openTurnPath}
-                        />
-                        <TurnToolCalls
-                          messageId={message.id}
-                          activities={activities}
-                          expanded={toolsExpanded}
-                          onToggleGroup={() => setToolGroupOpen((current) => ({
-                            ...current,
-                            [message.id]: !toolsExpanded,
-                          }))}
-                          expandedActivities={expandedActivities}
-                          onToggleActivity={toggleActivity}
-                        />
-                      </>
+                    {message.role === 'assistant' ? (
+                      <AssistantTurnBody
+                        messageId={message.id}
+                        text={message.text}
+                        activities={activities}
+                        projectPath={activeConversation.projectPath}
+                        toolsExpanded={toolsExpanded}
+                        onToggleGroup={() => setToolGroupOpen((current) => ({
+                          ...current,
+                          [message.id]: !toolsExpanded,
+                        }))}
+                        expandedActivities={expandedActivities}
+                        onToggleActivity={toggleActivity}
+                        onOpenPath={openTurnPath}
+                      />
+                    ) : (
+                      message.text ? <MessageMarkdown text={message.text} /> : null
                     )}
                   </article>
                 );

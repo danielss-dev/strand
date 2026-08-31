@@ -102,11 +102,10 @@ and Codex executable paths come from Settings → AI; Cursor Agent must be on
 `PATH`.
 
 Heroi's Threads rail lists only conversations for the active repository. The
-header shows the current agent, model, and branch; assistant replies render as
-Markdown (headings, lists, fenced code, links). When a turn edits files, Heroi
-lists the added, changed, and deleted paths for that turn — click a path to open
-it in Work's Changes view. Tool calls for a turn collapse into one grouped
-control so the transcript stays chat-first; expand the group (and a row) to
+header shows the current agent, model, and branch; each assistant turn starts
+with one grouped Tool calls control, then the Markdown reply (headings, lists,
+fenced code, links), then any added/changed/deleted paths for that turn — click
+a path to open it in Work's Changes view. Expand the tool group (and a row) to
 inspect bounded command, argument, and output detail. Model and reasoning menus
 come from the selected provider — Claude's catalog, Codex's live model list, or
 Cursor Agent's available models — including that model's advertised reasoning

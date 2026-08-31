@@ -9471,7 +9471,7 @@ select.clone-input {
 }
 .plugin-heroi-tool-group {
   width: min(100%, 720px);
-  margin-top: 10px;
+  margin: 0 0 12px;
   border: 1px solid var(--heroi-border);
   border-radius: var(--r-sm);
   background: var(--heroi-raised);
