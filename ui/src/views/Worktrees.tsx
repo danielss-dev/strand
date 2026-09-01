@@ -410,11 +410,11 @@ export function Worktrees({
     <div className="wt-view">
       <div className="wt-hero">
         <div className="wt-hero-copy">
-          <span className="wt-kicker">Agent workspaces</span>
+          <span className="wt-kicker">Worktrees</span>
           <h2>{repoName}</h2>
           <p>
-            Keep one AI task per worktree, then review each branch against its fork
-            point without disturbing your main checkout.
+            Parallel checkouts of this repository. Review a branch against its
+            fork point without disturbing the main working tree.
           </p>
         </div>
         <div className="wt-hero-stats" aria-label="Worktree summary">
@@ -468,8 +468,8 @@ export function Worktrees({
           <Icon name="worktree" size={22} />
           <p>No worktrees yet.</p>
           <span>
-            Start a feature or bugfix branch in its own directory so an agent can
-            work there while your main tree stays review-ready.
+            Start a feature or bugfix branch in its own directory so you can
+            work there while the main tree stays review-ready.
           </span>
           <button type="button" className="btn primary" onClick={onCreateWorktree}>
             Create your first worktree

@@ -65,6 +65,14 @@ export function diffAppearanceOptions(
   };
 }
 
+/** Warm-charcoal Pierre surface — maps Pierre's cold defaults onto tokens. */
+export const DIFF_SURFACE_STYLE: CSSProperties = {
+  ['--diffs-bg' as string]: 'var(--bg-base)',
+  ['--diffs-gutter-bg' as string]: 'var(--gutter)',
+  ['--diffs-hover' as string]: 'var(--selection)',
+  ['--diffs-selection-bg' as string]: 'var(--selection)',
+};
+
 /**
  * Parse a single-file patch and stamp it with the worker pool's `cacheKey`
  * (content hash). Without the key the pool's highlight LRU never hits, and
@@ -127,10 +135,11 @@ export function Diff({
   } as const;
   // Parse failure → fall back to Pierre's own patch handling (pre-cacheKey
   // behavior), so anything it tolerated still renders.
+  const surface = { ...DIFF_SURFACE_STYLE, ...style };
   return fileDiff ? (
-    <PierreFileDiff fileDiff={fileDiff} options={options} className={className} style={style} />
+    <PierreFileDiff fileDiff={fileDiff} options={options} className={className} style={surface} />
   ) : (
-    <PatchDiff patch={patch} options={options} className={className} style={style} />
+    <PatchDiff patch={patch} options={options} className={className} style={surface} />
   );
 }
 
@@ -172,7 +181,7 @@ export function ParsedDiff<LAnnotation = undefined>({
       lineAnnotations={lineAnnotations}
       renderAnnotation={renderAnnotation}
       className={className}
-      style={style}
+      style={{ ...DIFF_SURFACE_STYLE, ...style }}
     />
   );
 }

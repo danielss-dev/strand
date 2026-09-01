@@ -2724,6 +2724,13 @@ v0.4.0–v0.4.1 zero-timeout regression is guarded by an explicit
 `33326040162` uploaded the exact `v1.5.0` package, committed the submission,
 and Partner Center advanced it to Certification.
 
+**UI audit applied (2026-09-01):** Shared `Dialog` / `EmptyState` / `PaneHeader`
+/ `DiffLayoutToggle` primitives; Pierre diffs use the warm `--bg-base` surface;
+density tokens now move chrome and the commit graph; topbar hides zero
+ahead/behind counts; status bar is the drift home; commit-detail actions sit
+under a `…` menu; worktree disk size skips `node_modules`/`target`; shortcuts
+and pluralization are platform-correct.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and

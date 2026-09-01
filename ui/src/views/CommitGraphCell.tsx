@@ -8,18 +8,27 @@ import { laneColorVar } from '../lib/graph';
 export const LANE_W = 14;
 export const NODE_R = 4;
 const STROKE = 1.5;
-const VB_H = 32;
+const DEFAULT_VB_H = 26;
 
 export function graphColWidth(laneCount: number): number {
   return Math.max(40, laneCount * LANE_W + 8);
 }
 
-export function CommitGraphCell({ row, laneCount }: { row: GraphRow; laneCount: number }) {
+export function CommitGraphCell({
+  row,
+  laneCount,
+  rowH = DEFAULT_VB_H,
+}: {
+  row: GraphRow;
+  laneCount: number;
+  rowH?: number;
+}) {
   // viewBox width matches the actual rendered cell width so horizontal
   // scale stays 1:1. Without this, when laneCount=1 the min-width cell
   // (40px) stretches a 14-wide viewBox ~2.86×, flattening the node into
   // a wide ellipse.
   const vbW = graphColWidth(laneCount);
+  const VB_H = rowH;
   const cy = VB_H / 2;
   const lx = (k: number) => k * LANE_W + LANE_W / 2;
 

@@ -13,11 +13,23 @@
   --type-ui-sm: 11px;
   --type-mono: 12.5px;
 
+  /* chrome heights — density-scaled so compact/relaxed actually move the shell */
+  --chrome-topbar-h: 44px;
+  --chrome-control-h: 28px;
+  --chrome-status-h: 24px;
+  --pane-head-h: 32px;
+
   /* radii */
   --r-sm: 4px;
   --r-md: 6px;
   --r-lg: 10px;
   --r-xl: 14px;
+
+  /* OS caption colours — light theme can retune these */
+  --os-close: #ff5f57;
+  --os-min: #febc2e;
+  --os-max: #28c840;
+  --os-win-close-hover: #e81123;
 
   /* font stacks (overridden by settings store) */
   --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -32,6 +44,10 @@
   --type-ui: 12px;
   --type-ui-sm: 10.5px;
   --type-mono: 11.5px;
+  --chrome-topbar-h: 36px;
+  --chrome-control-h: 24px;
+  --chrome-status-h: 22px;
+  --pane-head-h: 28px;
 }
 [data-density="relaxed"] {
   --row-h: 32px;
@@ -41,6 +57,10 @@
   --type-ui: 13px;
   --type-ui-sm: 11.5px;
   --type-mono: 13px;
+  --chrome-topbar-h: 48px;
+  --chrome-control-h: 32px;
+  --chrome-status-h: 26px;
+  --pane-head-h: 36px;
 }
 
 /* ─── Dark theme (default) — warm charcoal ─── */
@@ -55,6 +75,7 @@
   --border: oklch(0.30 0.008 65);
   --border-strong: oklch(0.42 0.01 65);
   --text: oklch(0.96 0.005 80);
+  --text-1: oklch(0.90 0.005 80);
   --text-2: oklch(0.82 0.005 80);
   --text-muted: oklch(0.65 0.005 80);
   --text-dim: oklch(0.50 0.005 80);
@@ -123,6 +144,7 @@
   --border: oklch(0.88 0.009 80);
   --border-strong: oklch(0.78 0.011 80);
   --text: oklch(0.22 0.012 60);
+  --text-1: oklch(0.30 0.011 60);
   --text-2: oklch(0.38 0.011 60);
   --text-muted: oklch(0.52 0.009 60);
   --text-dim: oklch(0.65 0.008 60);

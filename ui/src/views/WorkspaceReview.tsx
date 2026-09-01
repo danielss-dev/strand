@@ -931,7 +931,7 @@ export function WorkspaceReview({
 
       {opError ? (
         <div className="toast" role="alert">
-          <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="x" size={13} stroke={2} /></span>
+          <span style={{ color: 'var(--del)' }}><Icon name="x" size={13} stroke={2} /></span>
           <span>{opError}</span>
           <button type="button" className="toast-action" onClick={() => setOpError(null)}>
             Dismiss
@@ -939,7 +939,7 @@ export function WorkspaceReview({
         </div>
       ) : notice ? (
         <div className="toast" role="status">
-          <span style={{ color: 'var(--add, #57ab5a)' }}><Icon name="check" size={13} stroke={2} /></span>
+          <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2} /></span>
           <span>{notice}</span>
         </div>
       ) : null}

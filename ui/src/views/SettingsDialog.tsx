@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon, type IconName } from '../components/Icon';
 import { t, type MessageKey } from '../lib/i18n';
 import { AiSection } from './settings/AiSection';
@@ -54,43 +55,7 @@ export function SettingsDialog({
 }) {
   const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
-  const dialogRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
-
-  // Restore focus to whatever opened the dialog when it closes, so keyboard
-  // flow returns to the status bar / palette instead of falling to <body>.
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-
-  // Focus trap — same aria-modal contract as TagDialog / StashDialog.
-  function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusables = Array.from(
-      dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   // Sidebar roving nav: ↑/↓ move + select, Home/End jump.
   function onNavKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -110,28 +75,18 @@ export function SettingsDialog({
   }
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Dialog
+      title={t('settings.title')}
+      icon="settings"
+      size="xl"
+      blockEscapeWhileBusy={false}
+      onClose={onClose}
+      footer={
+        <button type="button" className="btn primary" onClick={onClose}>
+          {t('settings.done')}
+        </button>
+      }
     >
-      <div
-        className="clone-dialog settings-dialog settings-dialog-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('settings.title')}
-        ref={dialogRef}
-        onKeyDown={onTrapKeyDown}
-      >
-        <div className="clone-head">
-          <Icon name="settings" size={15} />
-          <span className="title">{t('settings.title')}</span>
-          <button type="button" className="cd-close" aria-label={t('common.close')} onClick={onClose}>
-            ×
-          </button>
-        </div>
-
         <div className="settings-layout">
           <div
             className="settings-nav"
@@ -179,13 +134,6 @@ export function SettingsDialog({
             {section === 'privacy' && <PrivacySection />}
           </div>
         </div>
-
-        <div className="clone-foot">
-          <button type="button" className="btn primary" onClick={onClose}>
-            {t('settings.done')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

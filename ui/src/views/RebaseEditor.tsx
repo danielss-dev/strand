@@ -320,7 +320,7 @@ export function RebaseEditor({
           {loadError ? (
             <div className="clone-error">{loadError}</div>
           ) : !rows ? (
-            <p className="stash-blurb">Loading commits…</p>
+            <p className="stash-blurb">Loading the commits to rebase…</p>
           ) : rows.length === 0 ? (
             <p className="stash-blurb">
               No commits to rebase — nothing sits after <code>{label}</code>.

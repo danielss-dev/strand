@@ -5,6 +5,7 @@ import type { GitStatusEntry } from '@pierre/trees';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { ParsedDiff } from '../components/Diff';
+import { DiffLayoutToggle, toPierreLayout } from '../components/DiffChrome';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon, type IconName } from '../components/Icon';
 import { PierreTree } from '../components/PierreTree';
@@ -404,7 +405,7 @@ function PullRequestSummary({
         <div><dt><Icon name="changes" size={14} /> Comments</dt><dd>{pr.comment_count || 'No comments'}</dd></div>
         <div><dt><Icon name="history" size={14} /> Commits</dt><dd>{pr.commit_count || pr.commits.length || 'No commits reported'}</dd></div>
         <div><dt><Icon name="changes" size={14} /> Code</dt><dd>{[
-          pr.changed_files != null ? `${pr.changed_files} files` : null,
+          pr.changed_files != null ? `${pr.changed_files} file${pr.changed_files === 1 ? '' : 's'}` : null,
           pr.additions != null ? `+${pr.additions}` : null,
           pr.deletions != null ? `−${pr.deletions}` : null,
         ].filter(Boolean).join(' · ') || 'Change totals unavailable'}</dd></div>
@@ -853,7 +854,6 @@ function PullRequestChanges({
 }) {
   const diffMode = useSettings((state) => state.diffMode);
   const platform = useSettings((state) => state.platform);
-  const setDiffMode = useRepo((state) => state.setDiffMode);
   const [patch, setPatch] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1623,26 +1623,7 @@ function PullRequestChanges({
                       <Icon name="check" size={12} />
                       {verdicts.get(selectedFile.name) === 'viewed' ? 'Viewed' : verdicts.get(selectedFile.name) === 'changed' ? 'Changed' : 'Mark viewed'}
                     </button>
-                    <button
-                      type="button"
-                      className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
-                      onClick={() => setDiffMode('stacked')}
-                      title="Stacked (unified)"
-                      aria-label="Stacked (unified) diff view"
-                      aria-pressed={diffMode === 'stacked'}
-                    >
-                      <Icon name="unified" size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
-                      onClick={() => setDiffMode('split')}
-                      title="Split (side-by-side)"
-                      aria-label="Split (side-by-side) diff view"
-                      aria-pressed={diffMode === 'split'}
-                    >
-                      <Icon name="split" size={13} />
-                    </button>
+                    <DiffLayoutToggle />
                   </div>
                 </div>
                 {commentMessage && (
@@ -1653,7 +1634,7 @@ function PullRequestChanges({
                 {!collapsed && (
                   <ParsedDiff<InlineCommentAnnotation>
                     fileDiff={selectedFile}
-                    layout={diffMode === 'split' ? 'split' : 'unified'}
+                    layout={toPierreLayout(diffMode)}
                     hideFileHeader
                     className="pr-review-diff"
                     selectedLines={selectedLines}

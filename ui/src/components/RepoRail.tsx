@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { formatBinding } from '../lib/keys';
 import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
 import { useRepoIcons } from '../stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
 import { useOutsideClose } from '../lib/useOutsideClose';
@@ -251,6 +253,7 @@ function RailAddButton({
 }) {
   const recents = useRepo((s) => s.recents);
   const forgetRecent = useRepo((s) => s.forgetRecent);
+  const platform = useSettings((s) => s.platform);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -291,7 +294,7 @@ function RailAddButton({
           >
             <span className="ico"><Icon name="folder-open" size={13} /></span>
             <span className="label">Open repository…</span>
-            <span className="meta">⌘O</span>
+            <span className="meta">{formatBinding('Mod+O', platform)}</span>
           </button>
           <button
             type="button"

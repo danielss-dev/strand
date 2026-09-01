@@ -61,7 +61,7 @@
 
 /* ─── Topbar ─── */
 .topbar {
-    height: 44px;
+    height: var(--chrome-topbar-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -125,13 +125,13 @@
     cursor: pointer;
 }
 .dot.close {
-    background: #ff5f57;
+    background: var(--os-close);
 }
 .dot.min {
-    background: #febc2e;
+    background: var(--os-min);
 }
 .dot.max {
-    background: #28c840;
+    background: var(--os-max);
 }
 
 /* Windows 11 chrome variant */
@@ -167,7 +167,7 @@
     background: var(--bg-hover);
 }
 .win-controls .wc.close:hover {
-    background: #e81123;
+    background: var(--os-win-close-hover);
     color: #fff;
 }
 
@@ -391,7 +391,7 @@
     background: var(--bg-elev);
     border-radius: 7px;
     box-shadow: 0 0 0 0.5px var(--border) inset;
-    height: 28px;
+    height: var(--chrome-control-h);
     overflow: hidden;
     -webkit-app-region: no-drag;
     flex-shrink: 0;
@@ -417,6 +417,23 @@
     background: var(--bg-hover);
     color: var(--text);
 }
+.sync-btn:disabled {
+    opacity: 0.45;
+}
+.sync-btn:focus-visible,
+.branch-btn:focus-visible,
+.cmd-pill:focus-visible,
+.topbar-sidebar-toggle:focus-visible,
+.tab-add:focus-visible,
+.ws-switch:focus-visible,
+.rail-tile:focus-visible,
+.side-tab:focus-visible,
+.side-row:focus-visible,
+.side-section .ss-toggle:focus-visible,
+.statusbar .sb-item:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
 /* Sidebar collapse toggle — leftmost topbar button; no divider on its right. */
 .topbar-sidebar-toggle {
     flex-shrink: 0;
@@ -429,9 +446,6 @@
     color: var(--text-muted);
     font-weight: 500;
     padding-left: 4px;
-}
-.sync-btn.primary {
-    color: var(--accent);
 }
 .sync-btn > span {
     display: inline-flex;
@@ -532,7 +546,7 @@
     align-items: center;
     gap: 7px;
     padding: 0 10px;
-    height: 28px;
+    height: var(--chrome-control-h);
     border-radius: 7px;
     background: var(--bg-elev);
     box-shadow: 0 0 0 0.5px var(--border) inset;
@@ -584,8 +598,8 @@
     align-items: center;
     gap: 8px;
     padding: 0 8px 0 10px;
-    height: 28px;
-    border-radius: 7px;
+    height: var(--chrome-control-h);
+    border-radius: var(--r-md);
     background: var(--bg-elev);
     box-shadow: 0 0 0 0.5px var(--border) inset;
     cursor: pointer;
@@ -991,11 +1005,6 @@
     color: var(--accent-fg);
     margin-left: auto;
 }
-.side-row .badge.muted {
-    background: var(--bg-active);
-    color: var(--text-muted);
-}
-
 .side-section {
     display: flex;
     align-items: center;
@@ -1003,7 +1012,7 @@
     padding: 12px 18px 4px;
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--text-dim);
     user-select: none;
@@ -1065,10 +1074,10 @@
     font-weight: 500;
 }
 
-.side-divider {
-    height: 0.5px;
-    background: var(--border);
-    margin: 8px 14px;
+.side-empty {
+    padding: 2px 18px 10px 32px;
+    font-size: var(--type-ui-sm);
+    color: var(--text-dim);
 }
 
 /* Branch / tag rows show drift counts or the upstream name on the right,
@@ -1232,7 +1241,7 @@
 }
 
 .main-header {
-    height: 38px;
+    height: var(--pane-head-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -1267,14 +1276,20 @@
     flex-shrink: 0;
 }
 .icon-btn {
-    width: 26px;
+    min-width: 26px;
     height: 26px;
-    border-radius: 6px;
+    padding: 0 6px;
+    border-radius: var(--r-md);
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     color: var(--text-muted);
     cursor: pointer;
+}
+.icon-btn-label {
+    font-size: var(--type-ui-sm);
+    font-weight: 500;
 }
 
 .icon-btn > span {
@@ -1347,7 +1362,7 @@
 
 /* Status bar */
 .statusbar {
-    height: 24px;
+    height: var(--chrome-status-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -1378,7 +1393,12 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-2);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+.statusbar .sb-ahead { color: var(--add); }
+.statusbar .sb-behind { color: var(--del); }
 .statusbar .sep {
     color: var(--border-strong);
 }
@@ -1406,9 +1426,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
+    height: var(--chrome-control-h);
     padding: 0 12px;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     font-size: var(--type-ui);
     font-weight: 500;
     cursor: pointer;
@@ -1440,7 +1460,17 @@
     color: var(--text);
 }
 .btn.danger {
+    background: var(--del);
+    color: var(--bg-base);
+    box-shadow: 0 0 0 0.5px oklch(0 0 0 / 0.15) inset;
+}
+.btn.danger:hover {
+    filter: brightness(1.08);
+}
+.btn.danger.ghost {
+    background: transparent;
     color: var(--del);
+    box-shadow: none;
 }
 
 .kbd {

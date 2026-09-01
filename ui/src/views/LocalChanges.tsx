@@ -8,6 +8,7 @@ import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, diffAppearanceOptions, parseCacheablePatch } from '../components/Diff';
+import { toPierreLayout } from '../components/DiffChrome';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
@@ -352,13 +353,13 @@ export function LocalChanges({
       )}
       {confirmDiscard && (
         <div className="toast" role="status">
-          <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="trash" size={13} /></span>
+          <span style={{ color: 'var(--del)' }}><Icon name="trash" size={13} /></span>
           <span>Press <strong>d</strong> again to discard {confirmDiscard.split('/').pop()}</span>
         </div>
       )}
       {opError && (
         <div className="toast" role="alert">
-          <span style={{ color: 'var(--del, #e5534b)' }}><Icon name="x" size={13} stroke={2} /></span>
+          <span style={{ color: 'var(--del)' }}><Icon name="x" size={13} stroke={2} /></span>
           <span>{opError}</span>
           <button type="button" className="toast-action" onClick={() => setOpError(null)}>
             Dismiss
@@ -481,7 +482,7 @@ export function LocalChanges({
                       (d) => d.path === m.path && d.tag === (m.tag === true),
                     );
                     const layout =
-                      useSettings.getState().diffMode === 'split' ? 'split' : 'unified';
+                      toPierreLayout(useSettings.getState().diffMode);
                     scrollToDiffLine(
                       '.lc-diff-scroll',
                       target,
@@ -764,7 +765,7 @@ function FileSection({
         menuItems={menuItems}
         onDiscard={onDiscard}
         toggleDirOnRowClick={false}
-        emptyLabel={staged ? 'Nothing staged.' : 'No unstaged changes.'}
+        emptyLabel={staged ? 'Nothing staged. Stage a file from the list below.' : 'No unstaged changes. The working tree matches the index.'}
       />
     </div>
   );
@@ -777,7 +778,7 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
   // and writes to `useSettings.diffMode`. Pierre talks 'unified' | 'split',
   // our setting is 'stacked' | 'split' — map at the boundary.
   const diffMode = useSettings((s) => s.diffMode);
-  const layout = diffMode === 'split' ? 'split' : 'unified';
+  const layout = toPierreLayout(diffMode);
 
   // `diffsCollapsed` (the header toggle) is the bulk default; `overrides` holds
   // the files the user has individually flipped away from it via their header.

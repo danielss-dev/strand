@@ -1,6 +1,6 @@
 # Worktrees
 
-Git worktrees let you check out several branches of one repository into separate directories at the same time — which makes them the natural unit for parallel AI-agent work: one task, one branch, one worktree. Strand treats worktrees as first-class, with a dedicated dashboard (`Mod+6`) for creating, monitoring, reviewing, comparing, merging, and cleaning them up.
+Git worktrees let you check out several branches of one repository into separate directories at the same time — one task, one branch, one working tree. Strand treats them as first-class, with a dedicated dashboard (`Mod+6`) for creating, monitoring, reviewing, comparing, merging, and cleaning them up. Agent tooling that already uses worktrees (for example Claude Code or Vibe Kanban) shows up with a creator badge; the dashboard itself is for any parallel checkout.
 
 ## The Worktrees dashboard
 

@@ -124,7 +124,7 @@ manager.
 
 ## Settings
 
-Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; global Git identity and Azure DevOps Server profiles use explicit save actions. See [Settings](settings.md) for the full walkthrough.
+Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has eleven sections — Appearance, Terminal, Diff, Keyboard, Git, Hosting, Integrations, AI, Plugins, Updates, and Privacy. Most changes apply live; global Git identity and Azure DevOps Server profiles use explicit save actions. See [Settings](settings.md) for the full walkthrough.
 
 ## Where to go next
 
@@ -132,7 +132,7 @@ Open Settings with `Mod+,`, the status-bar gear, or the palette. The dialog has 
 - [Work](work.md) — editable working-tree file tabs and repository-scoped embedded terminals.
 - [Commits and history](commits-and-history.md) — the commit graph, search, interactive rebase, and the reflog.
 - [Reviewing agent changes](reviewing-agent-changes.md) — the Review view, baselines, notes, and feedback export.
-- [Worktrees](worktrees.md) — one worktree per agent task, comparison, and merge-and-clean-up.
+- [Worktrees](worktrees.md) — parallel checkouts, comparison, and merge-and-clean-up.
 - [Repositories and workspaces](repositories-and-workspaces.md) — multi-repo tabs and workspace groups.
 - [Keyboard and palette](keyboard-and-palette.md) — every shortcut and the command palette.
 - [Settings](settings.md) — every option, explained.

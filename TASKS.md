@@ -434,6 +434,29 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ## Frontend — components & wiring
 
+### 2026-09-01 UI/UX audit
+- ☑ Shared pane header, empty state, dialog shell, and diff layout toggle
+  (`PaneHeader`, `EmptyState`, `Dialog`, `DiffLayoutToggle`, `toPierreLayout`).
+- ☑ Pierre diff surface mapped onto `--bg-base` / `--gutter` / `--selection`
+  (`DIFF_SURFACE_STYLE` in `Diff.tsx`).
+- ☑ Density tokens drive chrome heights and the commit graph (`--row-h`,
+  `--chrome-*`, `--pane-head-h`; `CommitGraphCell` takes `rowH`).
+- ☑ `--text-1` defined; danger buttons filled; focus-visible on chrome
+  controls; OS caption colours tokenised.
+- ☑ Topbar hides zero ahead/behind counts; status bar is the drift home
+  (colour only when non-zero, branch ellipsis, encoding only with a file
+  open). Sidebar empty Tags/Submodules copy.
+- ☑ Commit detail overflow menu + file/diff resize; graph chips truncate
+  to the last segment and render author avatars.
+- ☑ Heroi composer/header overflow; worktree size skips `node_modules` /
+  `target` / other build dirs; Worktrees copy is git-general.
+- ☑ Platform-correct shortcuts (`formatBinding`); `1 file` pluralization;
+  PR breadcrumb no longer dangles; "1d Ago" capitalize removed.
+- ☐ Remaining write dialogs still hand-roll the shell (migrate onto
+  `Dialog` the same way Branch / Tag / Clone / Settings / ForcePush did).
+- ☐ Mechanical `features.css` token sweep of leftover px font-size /
+  radius declarations.
+
 ### 2026-07-29 desktop audit hardening
 - ☑ Work terminals remain composited under the stable runtime layer while
   inactive panes alone are hidden (`features.css`, `Work.test.ts`).

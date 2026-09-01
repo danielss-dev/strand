@@ -14,8 +14,10 @@ import { useRepo } from '../stores/repo';
 import { useBranchIntegration } from '../stores/branchIntegration';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
+import { AuthorAvatar } from '../components/AuthorAvatar';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Icon } from '../components/Icon';
+import { refChipLabel } from '../lib/refLabel';
 import { copyToClipboard } from '../components/PierreTree';
 import { CommitDetail } from './CommitDetail';
 import { CommitGraphCell, graphColWidth } from './CommitGraphCell';
@@ -24,11 +26,12 @@ import { CompareRefsDialog } from './CompareRefsDialog';
 import { MainlineDialog, type MainlineOperation } from './MainlineDialog';
 
 /**
- * Row heights per density — must match `.graph-table tbody tr` in
- * features.css. The table is virtualized (only the viewport slice renders),
- * so the spacer math needs the exact row height.
+ * Row heights per density — must match `--row-h` in tokens.css and
+ * `.graph-table tbody tr` in features.css. The table is virtualized
+ * (only the viewport slice renders), so the spacer math needs the exact
+ * row height.
  */
-const ROW_PX: Record<string, number> = { compact: 26, default: 32, relaxed: 38 };
+const ROW_PX: Record<string, number> = { compact: 22, default: 26, relaxed: 32 };
 /** `.graph-table thead th` height (features.css). */
 const HEADER_PX = 28;
 /** Rows rendered beyond each viewport edge so fast scrolls meet content. */
@@ -1206,7 +1209,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                         }}
                       >
                         <td role="gridcell" className="graph-col" style={{ width: colWidth }}>
-                          {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} /> : null}
+                          {row ? <CommitGraphCell row={row} laneCount={graph.laneCount} rowH={rowH} /> : null}
                         </td>
                         <td role="gridcell" className="msg">
                           {stash ? (
@@ -1219,9 +1222,9 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                                 <span
                                   key={chip.key}
                                   className={`ref-chip ${chip.kind}${chip.merged ? ' merged' : ''}`}
-                                  title={chip.title}
+                                  title={chip.title ?? chip.label}
                                 >
-                                  {chip.label}
+                                  {refChipLabel(chip.label).label}
                                   {chip.merged && <span className="ref-chip-merged" aria-label="merged">✓</span>}
                                 </span>
                               ))}
@@ -1241,8 +1244,13 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                             {stash ? c.subject : highlight(c.subject, query, searchMode === 'message')}
                           </span>
                         </td>
-                        <td role="gridcell" className="author">
-                          {stash ? null : highlight(c.author_name, query, searchMode === 'author')}
+                        <td role="gridcell" className="author" title={c.author_name}>
+                          {stash ? null : (
+                            <>
+                              <AuthorAvatar name={c.author_name} />
+                              {highlight(c.author_name, query, searchMode === 'author')}
+                            </>
+                          )}
                         </td>
                         <td role="gridcell" className="date">{relativeDate(c.time_unix)}</td>
                         <td role="gridcell" className="hash">
