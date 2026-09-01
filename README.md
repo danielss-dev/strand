@@ -217,9 +217,11 @@ the resolved app appearance automatically.
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;
   selected-remote-branch fetch/pull; richer ref menus copy names, refs, and SHAs;
-  local branches merged into the primary branch by ancestry or by an exact-tip
-  completed GitHub/Azure PR are marked in the sidebar and commit graph and can
-  be cleared in bulk with independent, guarded local/remote selection; branches,
+  local branches merged into the primary branch by ancestry or by a completed
+  GitHub/Azure PR into that branch (source-branch match; covers squash/rebase
+  when the provider omits tip SHAs) are marked in the sidebar and commit graph
+  and can be cleared in bulk with independent, guarded local/remote selection;
+  branches,
   tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
