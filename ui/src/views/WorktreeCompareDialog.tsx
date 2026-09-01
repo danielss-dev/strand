@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import { Icon } from '../components/Icon';
+import { Dialog } from '../components/Dialog';
 import { worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { Worktree } from '../lib/types';
@@ -49,8 +49,6 @@ export function WorktreeCompareDialog({
       dels: 0,
     })),
   );
-  const dialogRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     let cancelled = false;
     worktrees.forEach((w, i) => {
@@ -100,42 +98,13 @@ export function WorktreeCompareDialog({
     return new Set([...counts.entries()].filter(([, n]) => n > 1).map(([p]) => p));
   }, [attempts]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  // Restore focus to the opener on close.
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Dialog
+      title={`Compare ${attempts.length} attempts`}
+      icon="worktree"
+      onClose={onClose}
+      className="worktree-dialog wt-compare-dialog"
     >
-      <div
-        className="clone-dialog worktree-dialog wt-compare-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Compare worktree attempts"
-        ref={dialogRef}
-      >
-        <div className="clone-head">
-          <Icon name="worktree" size={15} />
-          <span className="title">Compare {attempts.length} attempts</span>
-          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
         <div className="clone-body">
           <p className="stash-blurb">
             Each column is one worktree's changes since its fork point.
@@ -206,7 +175,6 @@ export function WorktreeCompareDialog({
             })}
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -15,6 +15,7 @@ import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { FileTreeDirectoryHandle, FileTreeItemHandle, GitStatus, GitStatusEntry } from '@pierre/trees';
 
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { EmptyState } from './EmptyState';
 import { TREE_ICONS } from '../lib/treeIcons';
 import { expandTreeSelection, resolveTreeActionTargets } from '../lib/treeSelection';
 import type { DiffStatus } from '../lib/types';
@@ -713,7 +714,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
   } as CSSProperties;
 
   if (paths.length === 0 && emptyLabel) {
-    return <div className="tree-empty">{emptyLabel}</div>;
+    return <EmptyState compact title={emptyLabel} />;
   }
 
   return (

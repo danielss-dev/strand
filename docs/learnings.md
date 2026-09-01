@@ -823,7 +823,9 @@ vitest requires vite 6+ and will not run here).
 
 **Rule.** The commit graph table renders only a viewport slice with spacer
 rows; the math reads `ROW_PX` in `views/Commits.tsx`, which **must** equal
-`.graph-table tbody tr` heights in `features.css` per density (26 / 32 / 38).
+`.graph-table tbody tr { height: var(--row-h) }` in `features.css` (compact 22 /
+default 26 / relaxed 32). `CommitGraphCell` takes the same `rowH` for its
+viewBox so lane geometry does not distort.
 Change one → change both. Blame's virtual list has the same coupling (18px).
 
 **Why.** A drifted constant doesn't crash — it makes the scrollbar lie and
@@ -831,6 +833,24 @@ rows land under the wrong mouse position, which reads as "selection is
 flaky" and is miserable to bisect. Focus/reveal jumps also fall back to
 index × rowH math when the target row isn't mounted (`scrollIntoView` can't
 reach an unmounted row), so the constant is correctness, not just layout.
+
+---
+
+## Dialogs go through `Dialog`; empties and pane heads share one shell
+
+**Rule.** New modals use `components/Dialog.tsx` (shared Tab trap including
+`select`/`textarea`, Esc blocked while busy unless `blockEscapeWhileBusy` is
+false, focus restore). New empty/loading copy uses `EmptyState` (`compact` in
+tree panes). New main-pane toolbars use `PaneHeader` or the `.pane-head`
+height token. Diff stacked/split maps through `toPierreLayout` /
+`DiffLayoutToggle` — do not reimplement the toggle in a file header.
+Transient success/error toasts go through `onToast` → `ToastViewport`; only
+in-place arm-to-confirm gestures (double-tap discard) may render a local
+`.toast`. PierreTree row height is `--trees-row-height: var(--row-h)`.
+
+**Why.** The 2026-09-01 UI audit found 26 hand-rolled traps, five header
+heights, and two toast looks. The primitives exist so the next surface does
+not invent a sixth.
 
 ---
 

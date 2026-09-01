@@ -190,7 +190,7 @@ the resolved app appearance automatically.
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure inline comments still need iteration tracking.
-- **Worktrees (⌘6)** — an AI-agent dashboard for every worktree with stable
+- **Worktrees (⌘6)** — a dashboard for every parallel checkout with stable
   repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
   activity, disk size, ahead/behind, and one-click Review pinned where the
   branch diverged from main. Worktree tabs of one repo group together instead

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
 import { startCloneDialogFocusLifecycle } from '../lib/cloneDialogFocus';
 import { pickDirectory } from '../lib/dialog';
@@ -25,7 +26,6 @@ export function CloneDialog({
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   if (openerRef.current === null && document.activeElement instanceof HTMLElement) {
     openerRef.current = document.activeElement;
@@ -44,40 +44,10 @@ export function CloneDialog({
     );
   }, []);
 
-  // Keep Tab focus inside the modal — required by the aria-modal contract,
-  // and stops a keyboard user silently driving the controls behind it.
-  function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusables = Array.from(
-      dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   // Keep the folder name auto-derived from the URL until the user edits it.
   useEffect(() => {
     if (!nameEdited) setName(deriveName(url));
   }, [url, nameEdited]);
-
-  // Escape closes.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   // The folder name must be a single path segment — no separators or `..`,
   // or the clone could land outside the chosen parent directory.
@@ -101,28 +71,23 @@ export function CloneDialog({
   }
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="clone-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('clone.title')}
-        ref={dialogRef}
-        onKeyDown={onTrapKeyDown}
-      >
-        <div className="clone-head">
-          <Icon name="remote" size={15} />
-          <span className="title">{t('clone.title')}</span>
-          <button type="button" className="cd-close" aria-label={t('common.close')} onClick={onClose}>
-            ×
+    <Dialog
+      title={t('clone.title')}
+      icon="remote"
+      blockEscapeWhileBusy={false}
+      initialFocusRef={urlRef}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            {t('common.cancel')}
           </button>
-        </div>
-
+          <button type="button" className="btn primary" disabled={!canClone} onClick={start}>
+            {t('clone.action')}
+          </button>
+        </>
+      }
+    >
         <div className="clone-body">
           <div className="clone-security-note" role="note">
             <Icon name="warning" size={14} />
@@ -180,17 +145,7 @@ export function CloneDialog({
             </div>
           ) : null}
         </div>
-
-        <div className="clone-foot">
-          <button type="button" className="btn" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" className="btn primary" disabled={!canClone} onClick={start}>
-            {t('clone.action')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

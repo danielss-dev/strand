@@ -9,6 +9,7 @@ import {
   type AccentOption,
   type ThemeOption,
 } from '../../lib/theme';
+import { formatBinding } from '../../lib/keys';
 import {
   DENSITY_OPTIONS,
   MONO_FONT_OPTIONS,
@@ -40,6 +41,7 @@ export function AppearanceSection() {
   const uiFont = useSettings((s) => s.uiFont);
   const monoFont = useSettings((s) => s.monoFont);
   const fileOpenTab = useSettings((s) => s.fileOpenTab);
+  const platform = useSettings((s) => s.platform);
   const set = useSettings((s) => s.set);
   const setPref = (next: ThemePref) => set('theme', next);
   const setAccent = (next: AccentId) => set('accent', next);
@@ -98,7 +100,7 @@ export function AppearanceSection() {
           {pref === 'system'
             ? `Following the system — currently ${resolved}.`
             : `Using the ${pref} theme.`}
-          {' '}Change anytime with <kbd className="kbd">⌘⇧T</kbd>.
+          {' '}Change anytime with <kbd className="kbd">{formatBinding('Mod+Shift+T', platform)}</kbd>.
         </p>
       </div>
 

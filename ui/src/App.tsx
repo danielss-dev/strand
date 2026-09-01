@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
 
+import { DiffLayoutToggle } from './components/DiffChrome';
 import { HistoryModeToggle } from './components/HistoryModeToggle';
 import { ReviewModeToggle } from './components/ReviewModeToggle';
 import { Icon } from './components/Icon';
@@ -31,6 +32,7 @@ import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { t } from './lib/i18n';
+import { plural } from './lib/plural';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
 import { installAppMenu, nativeMenuPreemptsKeydown, type MenuHandlers } from './lib/menu';
@@ -2016,11 +2018,12 @@ export function App() {
           />
     )],
     [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
-      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={lifecycle.focused} />
+      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} onToast={showToast} active={lifecycle.focused} />
     )],
     [BUILT_IN_SURFACE_IDS.changesExplorer, ({ lifecycle }) => (
           <LocalChanges
             onOpenFileInEditor={openActiveFileInEditor}
+            onToast={showToast}
             active={lifecycle.focused}
             explorerOnly
             onOpenFileChanges={openChangesInWork}
@@ -2029,6 +2032,7 @@ export function App() {
     [BUILT_IN_SURFACE_IDS.review, ({ lifecycle, host }) => (
       <Review
         onOpenFileInEditor={openActiveFileInEditor}
+        onToast={showToast}
         active={lifecycle.focused}
         embedded={host !== 'main'}
       />
@@ -2040,7 +2044,7 @@ export function App() {
           />
     )],
     [BUILT_IN_SURFACE_IDS.workspaceReview, ({ lifecycle }) => (
-      <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={lifecycle.focused} />
+      <WorkspaceReview onOpenFileInEditor={openEditorTarget} onToast={showToast} active={lifecycle.focused} />
     )],
     [BUILT_IN_SURFACE_IDS.reflog, () => (
           <Reflog
@@ -2707,10 +2711,8 @@ function MainHeader({
   const selectedFile = useRepo((s) => s.selectedFile);
   const refreshLocalChanges = useRepo((s) => s.refreshLocalChanges);
   const refreshLog = useRepo((s) => s.refreshLog);
-  const diffMode = useSettings((s) => s.diffMode);
   const diffsCollapsed = useSettings((s) => s.diffsCollapsed);
   const setSetting = useSettings((s) => s.set);
-  const setDiffMode = useRepo((s) => s.setDiffMode);
   const [refreshing, setRefreshing] = useState(false);
 
   const doRefresh = useCallback(async () => {
@@ -2738,10 +2740,11 @@ function MainHeader({
     : view === 'review' ? t('nav.review')
     : view === 'workspace-review' ? t('nav.workspaceReview')
     : view === 'worktrees' ? t('nav.worktrees')
+    : view === 'pull-requests' ? t('nav.pullRequests')
     : view === 'branch' ? t('nav.branch')
     : '';
   const sub = view === 'local'
-    ? `${meta?.branch ?? '—'} · ${status.length} files with changes`
+    ? `${meta?.branch ?? '—'} · ${plural(status.length, 'file')} with changes`
     : view === 'commits'
       ? `${commits.length} commits across all branches`
       : view === 'reflog'
@@ -2770,34 +2773,21 @@ function MainHeader({
         <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           {repoFamilyName(meta)}
         </span>
-        <span className="sep"><Icon name="chev-right" size={10} /></span>
-        <span className="leaf">{title}</span>
-        <span style={{ color: 'var(--text-dim)', fontSize: 11.5, marginLeft: 6 }}>· {sub}</span>
+        {title ? (
+          <>
+            <span className="sep"><Icon name="chev-right" size={10} /></span>
+            <span className="leaf">{title}</span>
+          </>
+        ) : null}
+        {sub ? (
+          <span style={{ color: 'var(--text-dim)', fontSize: 11.5, marginLeft: 6 }}>· {sub}</span>
+        ) : null}
       </div>
       <div className="h-actions">
         {(view === 'commits' || view === 'reflog') && <HistoryModeToggle />}
         {(view === 'review' || view === 'workspace-review') && <ReviewModeToggle />}
-        {(view === 'local' || view === 'review' || view === 'workspace-review') && (
-          <>
-            <button
-              type="button"
-              className={'icon-btn' + (diffMode === 'stacked' ? ' on' : '')}
-              onClick={() => setDiffMode('stacked')}
-              title="Stacked (unified)"
-              aria-label="Stacked (unified) diff view"
-            >
-              <Icon name="unified" size={13} />
-            </button>
-            <button
-              type="button"
-              className={'icon-btn' + (diffMode === 'split' ? ' on' : '')}
-              onClick={() => setDiffMode('split')}
-              title="Split (side-by-side)"
-              aria-label="Split (side-by-side) diff view"
-            >
-              <Icon name="split" size={13} />
-            </button>
-          </>
+        {(view === 'local' || view === 'review' || view === 'workspace-review' || view === 'commits') && (
+          <DiffLayoutToggle />
         )}
         {view === 'local' && (
           <button
@@ -2809,6 +2799,7 @@ function MainHeader({
             aria-pressed={diffsCollapsed}
           >
             <Icon name={diffsCollapsed ? 'expand-all' : 'collapse-all'} size={13} />
+            <span className="icon-btn-label">{diffsCollapsed ? 'Expand' : 'Collapse'}</span>
           </button>
         )}
         <button

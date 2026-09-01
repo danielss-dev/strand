@@ -842,7 +842,9 @@ export function HeroiView({
                 <span className={`plugin-heroi-thread-dot ${activeThreadState}`} />
                 <strong>{activeConversation?.title ?? t('plugins.heroi.newConversationTitle')}</strong>
                 <span className="plugin-heroi-context-separator" />
-                <span>{providerLabel(provider)} · {selectedCatalogModel?.name ?? selectedModel}</span>
+                <span className="plugin-heroi-thread-model" title={`${providerLabel(provider)} · ${selectedCatalogModel?.name ?? selectedModel}`}>
+                  {providerLabel(provider)} · {selectedCatalogModel?.name ?? selectedModel}
+                </span>
                 <span className="plugin-heroi-context-separator" />
                 <code title={activePath}>{branchLabel}</code>
               </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { File as PierreFile } from '@pierre/diffs/react';
 
+import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { pierreThemeOptions } from '../lib/pierreTheme';
@@ -212,9 +213,9 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
         {loadError ? (
           <div className="mm-error">{loadError}</div>
         ) : !views ? (
-          <div className="mm-loading">Loading conflicted file…</div>
+          <EmptyState icon="refresh" spinning title="Loading conflicted file…" />
         ) : total === 0 ? (
-          <div className="mm-loading">No conflict markers found — nothing to resolve.</div>
+          <EmptyState icon="check" title="No conflict markers found — nothing to resolve." />
         ) : (
           <>
             <div className="mm-sides">

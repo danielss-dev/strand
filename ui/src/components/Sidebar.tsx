@@ -4,11 +4,13 @@ import { Icon, type IconName } from './Icon';
 import { copyToClipboard } from './PierreTree';
 import { RepositoryFiles } from './RepositoryFiles';
 import { t } from '../lib/i18n';
+import { formatBinding } from '../lib/keys';
 import { customPanes } from '../lib/customView';
 import { pathKey, worktreeName } from '../lib/repoIdentity';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
 import { useBranchIntegration } from '../stores/branchIntegration';
 import { useCustomView } from '../stores/customView';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
@@ -1134,8 +1136,9 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
             count={filtered.tags.length}
             action={{ icon: 'plus', title: 'New tag…', onClick: onCreateTag }}
           />
-          {sections.tags &&
-            renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags')}
+          {sections.tags && (filtered.tags.length === 0
+            ? <div className="side-empty">No tags yet.</div>
+            : renderTreeChildren(tagTree, 0, collapsed, toggleCollapsed, renderTagLeaf, 'tags'))}
 
           <SideSection
             label="Stashes"
@@ -1170,6 +1173,9 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
                 : undefined
             }
           />
+          {sections.submods && filteredSubmodules.length === 0 && (
+            <div className="side-empty">No submodules.</div>
+          )}
           {sections.submods &&
             filteredSubmodules.map((sub) => (
               <SideLeaf
@@ -1427,9 +1433,10 @@ interface EmptyProps {
 }
 
 function EmptyRepoState({ recents, onOpenRepo, onOpenRecent, onForget }: EmptyProps) {
+  const platform = useSettings((s) => s.platform);
   return (
     <div className="lc-empty" style={{ padding: '16px 12px', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>No repository open. Use <kbd>⌘O</kbd>, drop a folder onto the window, or:</div>
+      <div>No repository open. Use <kbd>{formatBinding('Mod+O', platform)}</kbd>, drop a folder onto the window, or:</div>
       <button
         type="button"
         onClick={onOpenRepo}

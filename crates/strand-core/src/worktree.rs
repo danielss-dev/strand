@@ -670,6 +670,12 @@ impl Repo {
 /// One-pass walk of a working directory: total file bytes + newest mtime,
 /// skipping anything named `.git` and never following symlinks. Errors are
 /// swallowed per entry — stats are advisory, not a source of truth.
+const SKIP_DIR_NAMES: &[&str] = &[
+    "node_modules", "target", "dist", "build", "out", "vendor",
+    ".next", ".nuxt", ".turbo", ".cache", ".venv", "venv",
+    "__pycache__", "coverage",
+];
+
 fn scan_workdir(root: &Path) -> (u64, Option<i64>) {
     let mut bytes = 0u64;
     let mut newest: Option<i64> = None;
@@ -677,7 +683,8 @@ fn scan_workdir(root: &Path) -> (u64, Option<i64>) {
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
-            if entry.file_name() == ".git" {
+            let name = entry.file_name();
+            if name == ".git" || SKIP_DIR_NAMES.iter().any(|n| name == *n) {
                 continue;
             }
             let Ok(meta) = entry.metadata() else { continue };
@@ -1321,6 +1328,27 @@ mod tests {
         assert!(stats.disk_bytes >= 2048, "walk counted the payload: {}", stats.disk_bytes);
         assert!(stats.last_activity_unix.is_some());
         assert!(stats.insertions >= 1, "a.txt gained a line: {}", stats.insertions);
+
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn stats_skip_build_and_dependency_dirs() {
+        let main = setup("stats-skip");
+        std::fs::write(main.join("keep.bin"), vec![0u8; 1024]).unwrap();
+        std::fs::create_dir_all(main.join("node_modules")).unwrap();
+        std::fs::write(main.join("node_modules").join("huge.bin"), vec![0u8; 50_000]).unwrap();
+        std::fs::create_dir_all(main.join("target")).unwrap();
+        std::fs::write(main.join("target").join("huge.bin"), vec![0u8; 50_000]).unwrap();
+
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let stats = repo.worktree_stats().unwrap();
+        assert!(
+            stats.disk_bytes < 50_000,
+            "ignored build dirs must not inflate size: {}",
+            stats.disk_bytes
+        );
+        assert!(stats.disk_bytes >= 1024, "tracked payload still counted: {}", stats.disk_bytes);
 
         let _ = std::fs::remove_dir_all(main.parent().unwrap());
     }

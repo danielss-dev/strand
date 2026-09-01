@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
 import { mergedBranchCleanupPlan } from '../lib/branchCleanup';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
@@ -82,12 +83,6 @@ export function BranchCleanupDialog({
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(0);
 
-  const dialogRef = useRef<HTMLFormElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
-  if (openerRef.current === null && typeof document !== 'undefined') {
-    openerRef.current = document.activeElement as HTMLElement | null;
-  }
-
   useEffect(() => {
     let cancelled = false;
     if (!activePath) {
@@ -128,46 +123,6 @@ export function BranchCleanupDialog({
         localCount ? `${localCount} local` : '',
         remoteCount ? `${remoteCount} remote` : '',
       ].filter(Boolean).join(' + ');
-
-  useEffect(() => {
-    // The palette restores focus as it unmounts. Re-claim it one frame later
-    // so keyboard users land inside the dialog they just opened.
-    const frame = requestAnimationFrame(() => {
-      const target = dialogRef.current?.querySelector<HTMLElement>(
-        '.branch-cleanup-grid input:not([disabled])',
-      ) ?? dialogRef.current?.querySelector<HTMLElement>('button:not([disabled])');
-      target?.focus();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      openerRef.current?.focus?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [busy, onClose]);
-
-  function trapFocus(event: React.KeyboardEvent<HTMLFormElement>) {
-    if (event.key !== 'Tab' || !dialogRef.current) return;
-    const focusables = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ));
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   function toggleLocal(name: string, checked: boolean) {
     setLocalSelection((current) => {
@@ -262,39 +217,37 @@ export function BranchCleanupDialog({
   }
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
-      }}
+    <Dialog
+      title="Clear merged branches"
+      icon="branch"
+      labelledBy="branch-cleanup-title"
+      describedBy="branch-cleanup-description"
+      busy={busy}
+      onClose={onClose}
+      className="branch-cleanup-dialog"
+      footer={
+        <>
+          <span className="branch-cleanup-summary" aria-live="polite">
+            {busy ? `Clearing ${completed} of ${total}…` : summary}
+          </span>
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>
+            {!checkingProvider && plan.candidates.length === 0 ? 'Close' : 'Cancel'}
+          </button>
+          {!checkingProvider && plan.candidates.length > 0 ? (
+            <button type="submit" form="branch-cleanup-form" className="btn danger" disabled={busy || total === 0}>
+              {busy ? 'Clearing…' : 'Clear selected'}
+            </button>
+          ) : null}
+        </>
+      }
     >
       <form
-        ref={dialogRef}
-        className="clone-dialog branch-cleanup-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="branch-cleanup-title"
-        aria-describedby="branch-cleanup-description"
-        onKeyDown={trapFocus}
+        id="branch-cleanup-form"
         onSubmit={(event) => {
           event.preventDefault();
           void clearSelected();
         }}
       >
-        <div className="clone-head">
-          <Icon name="branch" size={15} />
-          <span id="branch-cleanup-title" className="title">Clear merged branches</span>
-          <button
-            type="button"
-            className="cd-close"
-            aria-label="Close"
-            disabled={busy}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-
         <div className="clone-body">
           <p id="branch-cleanup-description" className="stash-blurb">
             These branch tips are contained by{' '}
@@ -400,21 +353,7 @@ export function BranchCleanupDialog({
             </div>
           ) : null}
         </div>
-
-        <div className="clone-foot">
-          <span className="branch-cleanup-summary" aria-live="polite">
-            {busy ? `Clearing ${completed} of ${total}…` : summary}
-          </span>
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            {!checkingProvider && plan.candidates.length === 0 ? 'Close' : 'Cancel'}
-          </button>
-          {!checkingProvider && plan.candidates.length > 0 ? (
-            <button type="submit" className="btn danger" disabled={busy || total === 0}>
-              {busy ? 'Clearing…' : 'Clear selected'}
-            </button>
-          ) : null}
-        </div>
       </form>
-    </div>
+    </Dialog>
   );
 }

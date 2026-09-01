@@ -6,8 +6,10 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
+import { formatBinding } from '../lib/keys';
 import { useOutsideClose } from '../lib/useOutsideClose';
 import { groupColor, groupTabs, repoTabLabel, workspaceMemberSet } from '../lib/repoIdentity';
+import { useSettings } from '../stores/settings';
 import { t as translate } from '../lib/i18n';
 import type { RepoTab } from '../stores/repo';
 
@@ -401,6 +403,7 @@ function RepoSwitcherButton({
 }) {
   const recents = useRepo((s) => s.recents);
   const forgetRecent = useRepo((s) => s.forgetRecent);
+  const platform = useSettings((s) => s.platform);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -441,7 +444,7 @@ function RepoSwitcherButton({
           >
             <span className="ico"><Icon name="folder-open" size={13} /></span>
             <span className="label">Open repository…</span>
-            <span className="meta">⌘O</span>
+            <span className="meta">{formatBinding('Mod+O', platform)}</span>
           </button>
           <button
             type="button"

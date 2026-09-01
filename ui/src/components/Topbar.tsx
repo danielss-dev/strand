@@ -259,7 +259,7 @@ export function Topbar({
               <Icon name="arrow-down" size={13} />
             </span>
           )}
-          <span className="count">{behind}</span>
+          {behind > 0 && <span className="count">{behind}</span>}
         </button>
         <button
           type="button"
@@ -276,7 +276,7 @@ export function Topbar({
               <Icon name="arrow-up" size={13} />
             </span>
           )}
-          <span className="count">{ahead}</span>
+          {ahead > 0 && <span className="count">{ahead}</span>}
         </button>
         <button
           type="button"
@@ -313,7 +313,13 @@ export function Topbar({
         onToast={onToast}
       />
 
-      <button type="button" className="cmd-pill" onClick={onOpenPalette} aria-label="Quick Launch">
+      <button
+        type="button"
+        className="cmd-pill"
+        onClick={onOpenPalette}
+        aria-label="Quick Launch"
+        title="Quick Launch"
+      >
         <Icon name="search" size={13} />
         <span>Quick Launch</span>
         <kbd>{platform === 'mac' ? '⌘K' : 'Ctrl K'}</kbd>
@@ -645,7 +651,6 @@ function BranchSwitcherButton({
           !hasRepo ? 'No repository open' : detached ? `Detached HEAD at ${branch}` : 'Switch branch'
         }
         onClick={() => { if (hasRepo) setOpen((o) => !o); }}
-        style={hasRepo ? undefined : { opacity: 0.5, cursor: 'default' }}
         disabled={!hasRepo}
       >
         <Icon name={detached ? 'circle' : 'branch'} size={13} />

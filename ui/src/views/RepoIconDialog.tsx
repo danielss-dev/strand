@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
 import { useRepoIcons } from '../stores/repoIcons';
 import { tileGlyph } from '../lib/repoIdentity';
@@ -93,19 +94,7 @@ export function RepoIconDialog({
   const [image, setImage] = useState<string | null>(saved?.image ?? null);
   const [error, setError] = useState<string | null>(null);
 
-  const dialogRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const draft: RepoIcon = useMemo(
     () => ({ color, letter, emoji, image }),
@@ -139,126 +128,115 @@ export function RepoIconDialog({
   };
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="clone-dialog repo-icon-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Customize repository icon"
-        ref={dialogRef}
-      >
-        <div className="clone-head">
-          <Icon name="edit" size={15} />
-          <span className="title">Customize icon</span>
-          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>×</button>
-        </div>
-
-        <div className="clone-body">
-          <div className="ri-preview-row">
-            <div className="ri-preview" style={image ? undefined : { background: previewColor }}>
-              {image
-                ? <img src={image} alt="" />
-                : <span className={emoji.trim() ? 'emoji' : undefined}>{tileGlyph(draft, name)}</span>}
-            </div>
-            <div className="ri-preview-meta">
-              <div className="ri-name">{name}</div>
-              <div className="ri-hint">Preview of the rail tile.</div>
-            </div>
-          </div>
-
-          <label className="clone-field">
-            <span className="lbl">Color</span>
-            <div className="ri-swatches">
-              <button
-                type="button"
-                className={'ri-swatch default' + (color === null ? ' on' : '')}
-                title="Default (app accent)"
-                aria-label="Default color (app accent)"
-                onClick={() => setColor(null)}
-                style={{ background: 'var(--accent-base)' }}
-              >
-                {color === null && <Icon name="check" size={12} stroke={2.4} />}
-              </button>
-              {SWATCHES.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={'ri-swatch' + (color === `var(${c})` ? ' on' : '')}
-                  aria-label={`Color ${c}`}
-                  onClick={() => setColor(`var(${c})`)}
-                  style={{ background: `var(${c})` }}
-                >
-                  {color === `var(${c})` && <Icon name="check" size={12} stroke={2.4} />}
-                </button>
-              ))}
-            </div>
-          </label>
-
-          <div className="ri-fields">
-            <label className="clone-field">
-              <span className="lbl">Initials</span>
-              <input
-                className="clone-input"
-                placeholder={tileGlyph({ ...draft, letter: '', emoji: '' }, name)}
-                value={letter}
-                maxLength={2}
-                onChange={(e) => setLetter(e.target.value.slice(0, 2))}
-              />
-            </label>
-            <label className="clone-field">
-              <span className="lbl">Emoji</span>
-              <input
-                className="clone-input"
-                placeholder="🚀"
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <label className="clone-field">
-            <span className="lbl">Image</span>
-            <div className="ri-image-row">
-              <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
-                <Icon name="file" size={13} /> {image ? 'Replace image…' : 'Choose image…'}
-              </button>
-              {image && (
-                <button type="button" className="btn ghost" onClick={() => setImage(null)}>
-                  Remove image
-                </button>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*,.svg"
-                hidden
-                onChange={(e) => void onPickFile(e)}
-              />
-            </div>
-          </label>
-
-          <div className="stash-note">
-            {image
-              ? 'Image overrides the emoji and initials.'
-              : emoji.trim()
-                ? 'Emoji overrides the initials.'
-                : 'Leave fields empty to use the repo’s initials and auto color.'}
-          </div>
-
-          {error && <div className="clone-error">{error}</div>}
-        </div>
-
-        <div className="clone-foot">
+    <Dialog
+      title="Customize icon"
+      icon="edit"
+      className="repo-icon-dialog"
+      onClose={onClose}
+      footer={
+        <>
           <button type="button" className="btn ghost ri-reset" onClick={() => void reset()}>
             Reset to default
           </button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="button" className="btn primary" onClick={() => void save()}>Save</button>
+        </>
+      }
+    >
+      <div className="clone-body">
+        <div className="ri-preview-row">
+          <div className="ri-preview" style={image ? undefined : { background: previewColor }}>
+            {image
+              ? <img src={image} alt="" />
+              : <span className={emoji.trim() ? 'emoji' : undefined}>{tileGlyph(draft, name)}</span>}
+          </div>
+          <div className="ri-preview-meta">
+            <div className="ri-name">{name}</div>
+            <div className="ri-hint">Preview of the rail tile.</div>
+          </div>
         </div>
+
+        <label className="clone-field">
+          <span className="lbl">Color</span>
+          <div className="ri-swatches">
+            <button
+              type="button"
+              className={'ri-swatch default' + (color === null ? ' on' : '')}
+              title="Default (app accent)"
+              aria-label="Default color (app accent)"
+              onClick={() => setColor(null)}
+              style={{ background: 'var(--accent-base)' }}
+            >
+              {color === null && <Icon name="check" size={12} stroke={2.4} />}
+            </button>
+            {SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={'ri-swatch' + (color === `var(${c})` ? ' on' : '')}
+                aria-label={`Color ${c}`}
+                onClick={() => setColor(`var(${c})`)}
+                style={{ background: `var(${c})` }}
+              >
+                {color === `var(${c})` && <Icon name="check" size={12} stroke={2.4} />}
+              </button>
+            ))}
+          </div>
+        </label>
+
+        <div className="ri-fields">
+          <label className="clone-field">
+            <span className="lbl">Initials</span>
+            <input
+              className="clone-input"
+              placeholder={tileGlyph({ ...draft, letter: '', emoji: '' }, name)}
+              value={letter}
+              maxLength={2}
+              onChange={(e) => setLetter(e.target.value.slice(0, 2))}
+            />
+          </label>
+          <label className="clone-field">
+            <span className="lbl">Emoji</span>
+            <input
+              className="clone-input"
+              placeholder="🚀"
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <label className="clone-field">
+          <span className="lbl">Image</span>
+          <div className="ri-image-row">
+            <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+              <Icon name="file" size={13} /> {image ? 'Replace image…' : 'Choose image…'}
+            </button>
+            {image && (
+              <button type="button" className="btn ghost" onClick={() => setImage(null)}>
+                Remove image
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,.svg"
+              hidden
+              onChange={(e) => void onPickFile(e)}
+            />
+          </div>
+        </label>
+
+        <div className="stash-note">
+          {image
+            ? 'Image overrides the emoji and initials.'
+            : emoji.trim()
+              ? 'Emoji overrides the initials.'
+              : 'Leave fields empty to use the repo’s initials and auto color.'}
+        </div>
+
+        {error && <div className="clone-error">{error}</div>}
       </div>
-    </div>
+    </Dialog>
   );
 }

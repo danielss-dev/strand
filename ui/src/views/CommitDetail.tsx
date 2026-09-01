@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
+import { ContextMenu, type MenuItem } from '../components/ContextMenu';
 import { Diff } from '../components/Diff';
+import { toPierreLayout } from '../components/DiffChrome';
+import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
 import { copyToClipboard } from '../components/PierreTree';
@@ -61,7 +65,8 @@ export function CommitDetail({
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
   const diffMode = useSettings((s) => s.diffMode);
-  const layout = diffMode === 'split' ? 'split' : 'unified';
+  const layout = toPierreLayout(diffMode);
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
 
   // A stash node selected in the graph isn't in `commits`; resolve it from the
   // stash list and render a synthetic commit (its diff is base→stash, already
@@ -326,15 +331,6 @@ export function CommitDetail({
               <button
                 type="button"
                 className="btn ghost cd-action-btn"
-                onClick={() => onCreateTag(hash, commit.short_hash)}
-                title="Create a tag at this commit"
-              >
-                <Icon name="tag" size={12} />
-                Tag…
-              </button>
-              <button
-                type="button"
-                className="btn ghost cd-action-btn"
                 disabled={historyBusy}
                 onClick={() => void onCherryPick()}
                 title="Apply this commit's changes onto the current branch"
@@ -355,59 +351,67 @@ export function CommitDetail({
               <button
                 type="button"
                 className="btn ghost cd-action-btn"
-                disabled={historyBusy}
-                onClick={() =>
-                  onInteractiveRebase(commit.parents.length ? `${hash}^` : null, commit.short_hash)
-                }
-                title="Reorder, edit, squash, reword, or drop this commit and everything newer"
-              >
-                <Icon name="rebase" size={12} />
-                Rebase from here…
-              </button>
-              <button
-                type="button"
-                className="btn ghost cd-action-btn"
-                onClick={() => {
-                  copyToClipboard(commit.subject);
-                  onToast('Copied commit subject');
+                aria-label="More commit actions"
+                aria-haspopup="menu"
+                aria-expanded={moreMenu != null}
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMoreMenu({ x: r.right, y: r.bottom + 4 });
                 }}
-                title="Copy only this commit's subject line"
               >
-                <Icon name="file" size={12} />
-                Copy subject
-              </button>
-              <button
-                type="button"
-                className="btn ghost cd-action-btn"
-                disabled={!commit.body}
-                onClick={() => {
-                  copyToClipboard(commit.body);
-                  onToast('Copied commit body');
-                }}
-                title={commit.body ? "Copy this commit's message body" : 'This commit has no message body'}
-              >
-                <Icon name="file" size={12} />
-                Copy body
-              </button>
-              <button
-                type="button"
-                className="btn ghost cd-action-btn"
-                onClick={() => onExportPatch(commit)}
-                title="Export this commit as an mbox-compatible patch"
-              >
-                <Icon name="external" size={12} />
-                Export patch…
+                <Icon name="more" size={12} />
               </button>
             </>
           )}
         </div>
         {checkoutError ? <div className="cd-action-error">{checkoutError}</div> : null}
       </div>
+      {moreMenu && !stash && (
+        <ContextMenu
+          x={moreMenu.x}
+          y={moreMenu.y}
+          onClose={() => setMoreMenu(null)}
+          items={[
+            { label: 'Tag…', icon: 'tag', onSelect: () => onCreateTag(hash, commit.short_hash) },
+            {
+              label: 'Rebase from here…',
+              icon: 'rebase',
+              disabled: historyBusy,
+              onSelect: () =>
+                onInteractiveRebase(commit.parents.length ? `${hash}^` : null, commit.short_hash),
+            },
+            {
+              label: 'Copy subject',
+              icon: 'file',
+              onSelect: () => {
+                copyToClipboard(commit.subject);
+                onToast('Copied commit subject');
+              },
+            },
+            {
+              label: 'Copy body',
+              icon: 'file',
+              disabled: !commit.body,
+              onSelect: () => {
+                copyToClipboard(commit.body);
+                onToast('Copied commit body');
+              },
+            },
+            {
+              label: 'Export patch…',
+              icon: 'external',
+              onSelect: () => onExportPatch(commit),
+            },
+          ] satisfies MenuItem[]}
+        />
+      )}
+      <PanelGroup direction="vertical" className="cd-split">
+      <Panel defaultSize={36} minSize={18}>
       <div className="cd-files">
         {loading && diffs.length === 0 ? (
-          <div className="cd-empty">Loading…</div>
+          <EmptyState icon="refresh" spinning title="Loading…" />
         ) : diffs.length === 0 ? (
-          <div className="cd-empty">No file changes.</div>
+          <EmptyState icon="check" title="No file changes." hint="This commit did not touch any files." />
         ) : (
           diffs.map((d) => (
             <CdFileRow
@@ -419,6 +423,9 @@ export function CommitDetail({
           ))
         )}
       </div>
+      </Panel>
+      <PanelResizeHandle className="rs-handle" />
+      <Panel defaultSize={64} minSize={25}>
       <div className="cd-diff">
         {focused ? (
           focused.binary && isImagePath(focused.path) ? (
@@ -436,18 +443,21 @@ export function CommitDetail({
               />
             </div>
           ) : focused.binary || focused.patch.length === 0 ? (
-            <div className="cd-empty">
-              {focused.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}
-            </div>
+            <EmptyState
+              icon="file"
+              title={focused.binary ? 'Binary file — no textual diff.' : 'No textual diff.'}
+            />
           ) : (
             <div className="cd-diff-scroll">
               <Diff patch={focused.patch} layout={layout} />
             </div>
           )
         ) : (
-          <div className="cd-empty">Select a file to see its diff.</div>
+          <EmptyState icon="file" title="Select a file to see its diff." hint="Pick a path from the list above." />
         )}
         </div>
+      </Panel>
+      </PanelGroup>
       </aside>
       {mainlineAction && (
         <MainlineDialog

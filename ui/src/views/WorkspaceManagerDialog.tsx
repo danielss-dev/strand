@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
 import { recents as recentsDb } from '../lib/db';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from '../lib/dialog';
@@ -56,20 +57,6 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
     workspaces.find((w) => w.id === DEFAULT_WORKSPACE_ID) ??
     null;
   const isDefault = selected?.id === DEFAULT_WORKSPACE_ID;
-
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   // Open tabs are already valid. Re-open only the other recents, both to
   // canonicalize them and to avoid offering deleted worktrees from the DB.
@@ -184,19 +171,15 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
   };
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Dialog
+      title="Manage workspaces"
+      icon="workspace"
+      onClose={onClose}
+      className="ws-mgr"
+      footer={
+        <button type="button" className="btn primary" onClick={onClose}>Done</button>
+      }
     >
-      <div className="clone-dialog ws-mgr" role="dialog" aria-modal="true" aria-label="Manage workspaces" ref={dialogRef}>
-        <div className="clone-head">
-          <Icon name="workspace" size={15} />
-          <span className="title">Manage workspaces</span>
-          <button type="button" className="cd-close" aria-label="Close" onClick={onClose}>×</button>
-        </div>
-
         <div className="ws-mgr-body">
           {/* Left: workspace list */}
           <div className="ws-mgr-list" role="tablist" aria-label="Workspaces">
@@ -322,12 +305,7 @@ export function WorkspaceManagerDialog({ initialCreate, onClose }: { initialCrea
             )}
           </div>
         </div>
-
-        <div className="clone-foot">
-          <button type="button" className="btn primary" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

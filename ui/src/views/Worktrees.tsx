@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
+import { Dialog } from '../components/Dialog';
+import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
+import { PaneHeader } from '../components/PaneHeader';
 import { pathLeaf, repoFamilyName, worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
@@ -408,21 +411,16 @@ export function Worktrees({
 
   return (
     <div className="wt-view">
-      <div className="wt-hero">
-        <div className="wt-hero-copy">
-          <span className="wt-kicker">Agent workspaces</span>
-          <h2>{repoName}</h2>
-          <p>
-            Keep one AI task per worktree, then review each branch against its fork
-            point without disturbing your main checkout.
-          </p>
-        </div>
-        <div className="wt-hero-stats" aria-label="Worktree summary">
-          <Metric value={orderedWorktrees.length} label="total" />
-          <Metric value={dirtyWorktrees} label="dirty" />
-          <Metric value={mergedWorktrees} label="merged" />
-        </div>
-        <div className="wt-hero-actions">
+      <PaneHeader
+        title={repoName}
+        actions={
+          <>
+            <div className="wt-hero-stats" aria-label="Worktree summary">
+              <Metric value={orderedWorktrees.length} label="total" />
+              <Metric value={dirtyWorktrees} label="dirty" />
+              <Metric value={mergedWorktrees} label="merged" />
+            </div>
+            <div className="wt-hero-actions">
           <button type="button" className="btn primary" onClick={onCreateWorktree}>
             <Icon name="plus" size={13} stroke={2} />
             <span>New worktree</span>
@@ -460,21 +458,22 @@ export function Worktrees({
               <span>Prune stale</span>
             </button>
           )}
-        </div>
-      </div>
+            </div>
+          </>
+        }
+      />
 
       {orderedWorktrees.length === 0 ? (
-        <div className="wt-empty">
-          <Icon name="worktree" size={22} />
-          <p>No worktrees yet.</p>
-          <span>
-            Start a feature or bugfix branch in its own directory so an agent can
-            work there while your main tree stays review-ready.
-          </span>
-          <button type="button" className="btn primary" onClick={onCreateWorktree}>
-            Create your first worktree
-          </button>
-        </div>
+        <EmptyState
+          icon="worktree"
+          title="No worktrees yet."
+          hint="Start a feature or bugfix branch in its own directory so you can work there while the main tree stays review-ready."
+          action={
+            <button type="button" className="btn primary" onClick={onCreateWorktree}>
+              Create your first worktree
+            </button>
+          }
+        />
       ) : (
         <div
           className="wt-list"
@@ -731,45 +730,14 @@ export function Worktrees({
       )}
 
       {showCleanup && (
-        <div
-          className="palette-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !cleanupBusy) setShowCleanup(false);
-          }}
-        >
-          <div className="clone-dialog worktree-dialog" role="dialog" aria-modal="true" aria-label="Clean up worktrees">
-            <div className="clone-head">
-              <Icon name="trash" size={15} />
-              <span className="title">Clean up merged worktrees</span>
-              <button
-                type="button"
-                className="cd-close"
-                aria-label="Close"
-                disabled={cleanupBusy}
-                onClick={() => setShowCleanup(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="clone-body">
-              <p className="stash-blurb">
-                These worktrees are clean and every commit is already in their base
-                branch. Each one is snapshotted to the archive before its directory
-                and branch are removed.
-              </p>
-              <ul className="wt-cleanup-list">
-                {cleanupCandidates.map((w) => {
-                  const h = stats[w.path]?.health;
-                  return (
-                    <li key={w.path}>
-                      <strong>{w.branch}</strong>
-                      <span className="wt-dim"> — in {h?.merged_into ?? h?.base_branch} · {w.path}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            <div className="clone-foot">
+        <Dialog
+          title="Clean up merged worktrees"
+          icon="trash"
+          className="worktree-dialog"
+          busy={cleanupBusy}
+          onClose={() => setShowCleanup(false)}
+          footer={
+            <>
               <button type="button" className="btn" disabled={cleanupBusy} onClick={() => setShowCleanup(false)}>
                 Cancel
               </button>
@@ -783,9 +751,28 @@ export function Worktrees({
                   ? 'Cleaning…'
                   : `Remove ${cleanupCandidates.length} worktree${cleanupCandidates.length === 1 ? '' : 's'}`}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="clone-body">
+            <p className="stash-blurb">
+              These worktrees are clean and every commit is already in their base
+              branch. Each one is snapshotted to the archive before its directory
+              and branch are removed.
+            </p>
+            <ul className="wt-cleanup-list">
+              {cleanupCandidates.map((w) => {
+                const h = stats[w.path]?.health;
+                return (
+                  <li key={w.path}>
+                    <strong>{w.branch}</strong>
+                    <span className="wt-dim"> — in {h?.merged_into ?? h?.base_branch} · {w.path}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

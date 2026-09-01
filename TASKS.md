@@ -434,6 +434,41 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ## Frontend — components & wiring
 
+### 2026-09-01 UI/UX audit
+- ☑ Shared pane header, empty state, dialog shell, and diff layout toggle
+  (`PaneHeader`, `EmptyState`, `Dialog`, `DiffLayoutToggle`, `toPierreLayout`).
+- ☑ Pierre diff surface mapped onto `--bg-base` / `--gutter` / `--selection`
+  (`DIFF_SURFACE_STYLE` in `Diff.tsx`).
+- ☑ Density tokens drive chrome heights and the commit graph (`--row-h`,
+  `--chrome-*`, `--pane-head-h`; `CommitGraphCell` takes `rowH`).
+- ☑ `--text-1` defined; danger buttons filled; focus-visible on chrome
+  controls; OS caption colours tokenised.
+- ☑ Topbar hides zero ahead/behind counts; status bar is the drift home
+  (colour only when non-zero, branch ellipsis, encoding only with a file
+  open). Sidebar empty Tags/Submodules copy.
+- ☑ Commit detail overflow menu + file/diff resize; graph chips truncate
+  to the last segment and render author avatars.
+- ☑ Heroi composer/header overflow; worktree size skips `node_modules` /
+  `target` / other build dirs; Worktrees copy is git-general.
+- ☑ Platform-correct shortcuts (`formatBinding`); `1 file` pluralization;
+  PR breadcrumb no longer dangles; "1d Ago" capitalize removed.
+- ☑ Write dialogs migrated onto `Dialog` (Ignore, RenameBranch, RenameFile,
+  FileEntry, InitRepo, Remote, Mainline, Merge, Reset, Stash, BranchNetwork,
+  CompareRefs, Maintenance, RepoIcon, Worktree trio, PR create, Workspace
+  Manager, BranchCleanup, plus the Worktrees cleanup confirm). Palette /
+  RepoSwitcher / RebaseEditor stay as overlays.
+- ☑ `PaneHeader` on Worktrees, Pull Requests, Review, and Workspace Review;
+  `EmptyState` on PR / Worktrees empties and compact PierreTree empties.
+- ☑ LC / Review / Workspace Review op/notice toasts go through `onToast` →
+  `ToastViewport` (double-tap discard confirm stays in-view).
+- ☑ Chip / menu families share tokens (`.ref-chip` / `.pr-state` / `.wt-tag`,
+  `.repo-menu` ≈ `.context-menu`); PierreTree rows use `--row-h`.
+- ☐ Mechanical `features.css` sweep of leftover hardcoded `font-size: Npx`
+  (~100 remain outside the chip/menu/header pass).
+- ☐ Settings control widgets still split (SegRow vs Git inputs vs Hosting
+  switch). Rail/tab menus still copy-pasted. Worktrees still appear in both
+  the rail/tabs and the Git sidebar. Diff minimap / search stay Review-only.
+
 ### 2026-07-29 desktop audit hardening
 - ☑ Work terminals remain composited under the stable runtime layer while
   inactive panes alone are hidden (`features.css`, `Work.test.ts`).
