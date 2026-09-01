@@ -1606,17 +1606,20 @@ after its local branch was merged. Local cleanup calls
 worktree occupancy at deletion time; never rely on a frozen dialog snapshot as
 the final destructive-operation guard.
 
-**Provider exact-tip extension (2026-08-07, DAN-41).** The sidebar, commit
-graph, and bulk cleanup may additionally mark a non-current local branch when a
-completed GitHub/Azure PR targets the primary branch, the PR source name matches
-the local branch, and its recorded source SHA exactly equals the current local
-tip. This is the safe signal for squash/rebase merges: never infer them from
-tree equality, subjects, PR numbers, or ahead/behind. Keep discovery async,
+**Provider exact-tip extension (2026-08-07, DAN-41; revised 2026-09-01, DAN-63).**
+The sidebar, commit graph, and bulk cleanup may additionally mark a non-current
+local branch when a completed GitHub/Azure PR targets the primary branch and the
+PR source name matches the local branch. Tip equality is not required: Azure
+DevOps completed PRs often omit or rewrite `lastMergeSourceCommit` after squash,
+so exact-tip matching left squash-merged locals unmarked and out of cleanup.
+Never infer merges from tree equality, subjects, PR numbers, or ahead/behind.
+An open or active PR from the same source into the primary branch means the
+name was reused for new work — leave those unmarked. Keep discovery async,
 delayed, deduplicated, and session-cached off repo-open/ref-snapshot hot paths;
 explicit cleanup refreshes once and freezes its display plan. Remote deletion
 remains ancestry-only. Local provider-confirmed deletion must call
-`Repo::delete_branch_at`, which rejects a moved tip and any current/worktree-
-held branch at execution time.
+`Repo::delete_branch_at`, which rejects a tip that moved after the plan froze
+and any current/worktree-held branch at execution time.
 
 ---
 

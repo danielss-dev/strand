@@ -748,15 +748,18 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (confirm). HEAD shows a disabled "Current branch".
 - ☑ Merged-branch indicators (DAN-19 — `refs::Branch.merged` uses commit
   ancestry against the repository's primary branch; sidebar icons and
-  commit-graph ref chips also use `providerMergedBranchNames` to mark an exact
-  local source tip from a completed GitHub/Azure PR into that primary branch,
-  without mislabeling the primary branch while a feature is checked out).
+  commit-graph ref chips also use `providerMergedBranchNames` to mark a local
+  branch when a completed GitHub/Azure PR into that primary branch shares its
+  source name — DAN-63 drops exact-tip equality so squash merges still light
+  up when ADO omits/rewrites `source_commit`; open/active PRs on the same
+  source stay unmarked; primary and checked-out branches stay unmarked).
 - ☑ Clear merged branches in bulk (`BranchCleanupDialog` +
   `mergedBranchCleanupPlan`: palette action with per-branch local selection,
   opt-in matching upstream/origin deletion, checked-out-worktree exclusion,
   remote-tip containment via `RemoteBranch.merged`, and a deletion-time
-  ancestry guard or provider-tip `Repo::delete_branch_at` guard; DAN-41 adds
-  squash/rebase PR cleanup while keeping provider-unproven remotes protected).
+  ancestry guard or provider-tip `Repo::delete_branch_at` guard; DAN-41/DAN-63
+  add squash/rebase PR cleanup via provider source-branch match while keeping
+  provider-unproven remotes protected).
 - ☑ Ref clipboard/context expansion (2026-07-16): local branches copy name /
   full ref / SHA and the current branch exposes Pull + Push strategy submenus;
   remote branches copy short name / remote ref / SHA; tags copy name / SHA and
