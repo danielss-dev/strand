@@ -2275,6 +2275,9 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   `33323894309` published 13 desktop assets; explicit Store CLI upload timeout
   in `microsoft-store-msix.yml`; production run `33326040162` uploaded the
   exact tag and Partner Center advanced it to Certification).
+- ☐ Publish `v1.5.1` through GitHub Releases and Microsoft Store (manifests
+  synchronized at 1.5.1; tag, signed desktop release, and Store submission
+  remain).
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

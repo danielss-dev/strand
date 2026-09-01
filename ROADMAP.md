@@ -2732,6 +2732,11 @@ actions sit under a `…` menu; write dialogs share one Tab trap; LC / Review
 toasts use `ToastViewport`; worktree disk size skips `node_modules`/`target`;
 shortcuts and pluralization are platform-correct.
 
+**Strand 1.5.1 release kick (2026-09-02):** The five lockstep desktop app
+manifests and Cargo lockfile are synchronized at 1.5.1. The signed desktop
+release and Microsoft Store submission workflows are the remaining promotion
+steps.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and
