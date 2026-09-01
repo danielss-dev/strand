@@ -50,11 +50,13 @@ import { ConflictLanding } from './ConflictLanding';
  */
 export function LocalChanges({
   onOpenFileInEditor,
+  onToast,
   active = true,
   explorerOnly = false,
   onOpenFileChanges,
 }: {
   onOpenFileInEditor: (file: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
   /** Only the focused Custom-view pane owns window-level single-key actions. */
   active?: boolean;
   /** Workbench's Changes explorer: just the Unstaged/Staged trees — row
@@ -199,15 +201,9 @@ export function LocalChanges({
   // enough toast. These used to be fire-and-forget `void` calls, which made
   // failures (e.g. a stale .git/index.lock blocking every index write) look
   // like the buttons silently doing nothing.
-  const [opError, setOpError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!opError) return;
-    const t = setTimeout(() => setOpError(null), 8000);
-    return () => clearTimeout(t);
-  }, [opError]);
   const fail = useCallback(
-    (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
-    [],
+    (verb: string) => (e: unknown) => onToast(`${verb} failed: ${gitErrorHint(e)}`, 'error'),
+    [onToast],
   );
 
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
@@ -355,15 +351,6 @@ export function LocalChanges({
         <div className="toast" role="status">
           <span style={{ color: 'var(--del)' }}><Icon name="trash" size={13} /></span>
           <span>Press <strong>d</strong> again to discard {confirmDiscard.split('/').pop()}</span>
-        </div>
-      )}
-      {opError && (
-        <div className="toast" role="alert">
-          <span style={{ color: 'var(--del)' }}><Icon name="x" size={13} stroke={2} /></span>
-          <span>{opError}</span>
-          <button type="button" className="toast-action" onClick={() => setOpError(null)}>
-            Dismiss
-          </button>
         </div>
       )}
       <div className="lc-main">

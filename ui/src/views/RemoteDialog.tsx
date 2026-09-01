@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Icon } from '../components/Icon';
+import { Dialog } from '../components/Dialog';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 
@@ -35,47 +35,10 @@ export function RemoteDialog({
   const [pushUrl, setPushUrl] = useState(mode.kind === 'url' ? mode.pushUrl : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
   // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
   // cleanup-only effect would leave it permanently false (frozen busy state).
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-
-  // Restore focus to whatever opened the dialog when it closes, so keyboard
-  // flow returns to the sidebar/palette instead of falling to <body>.
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-
-  // Keep Tab focus inside the modal — same aria-modal contract as BranchDialog.
-  function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusables = Array.from(
-      dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
-  // Escape closes (unless an op is mid-flight).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [busy, onClose]);
 
   const title = mode.kind === 'add' ? 'Add remote'
     : mode.kind === 'rename' ? 'Rename remote'
@@ -125,130 +88,113 @@ export function RemoteDialog({
   }
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
+    <Dialog
+      title={title}
+      icon="remote"
+      size="sm"
+      busy={busy}
+      onClose={onClose}
+      footer={
+        mode.kind === 'refspecs' ? (
+          <button type="button" autoFocus className="btn primary" onClick={onClose}>Close</button>
+        ) : (
+          <>
+            <button type="button" className="btn" disabled={busy} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="btn primary" disabled={busy} onClick={() => void submit()}>
+              {busy ? 'Working…' : submitLabel}
+            </button>
+          </>
+        )
+      }
     >
-      <div
-        className="clone-dialog stash-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        ref={dialogRef}
-        onKeyDown={onTrapKeyDown}
-      >
-        <div className="clone-head">
-          <Icon name="remote" size={15} />
-          <span className="title">{title}</span>
-          <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={onClose}>
-            ×
-          </button>
-        </div>
+      <div className="clone-body">
+        {mode.kind !== 'add' && mode.kind !== 'refspecs' && (
+          <p className="stash-blurb">
+            {mode.kind === 'rename' ? 'Rename remote ' : 'Change the fetch and push URLs of '}
+            <code>{mode.name}</code>.
+          </p>
+        )}
 
-        <div className="clone-body">
-          {mode.kind !== 'add' && mode.kind !== 'refspecs' && (
+        {mode.kind !== 'url' && mode.kind !== 'refspecs' && (
+          <label className="clone-field">
+            <span className="lbl">Name</span>
+            <input
+              autoFocus
+              className="clone-input"
+              placeholder="upstream"
+              value={name}
+              disabled={busy}
+              // Remote names can't contain spaces — sanitize to dashes as
+              // the user types, matching the branch-name fields.
+              onChange={(e) => setName(e.target.value.replace(/\s+/g, '-'))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          </label>
+        )}
+
+        {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
+          <label className="clone-field">
+            <span className="lbl">Fetch URL</span>
+            <input
+              autoFocus={mode.kind === 'url'}
+              className="clone-input"
+              placeholder="https://github.com/user/repo.git"
+              value={url}
+              disabled={busy}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          </label>
+        )}
+
+        {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
+          <label className="clone-field">
+            <span className="lbl">Push URL <span className="muted">(optional)</span></span>
+            <input
+              className="clone-input"
+              placeholder="Uses the fetch URL when blank"
+              value={pushUrl}
+              disabled={busy}
+              onChange={(e) => setPushUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          </label>
+        )}
+
+        {mode.kind === 'refspecs' && (
+          <>
             <p className="stash-blurb">
-              {mode.kind === 'rename' ? 'Rename remote ' : 'Change the fetch and push URLs of '}
-              <code>{mode.name}</code>.
+              Git ref mappings configured for <code>{mode.name}</code>.
             </p>
-          )}
+            <div className="remote-refspec-group">
+              <span className="lbl">Fetch refspecs</span>
+              {mode.fetchRefspecs.length > 0
+                ? mode.fetchRefspecs.map((refspec) => (
+                  <code key={refspec} className="remote-refspec">{refspec}</code>
+                ))
+                : <span className="muted">None configured</span>}
+            </div>
+            <div className="remote-refspec-group">
+              <span className="lbl">Push refspecs</span>
+              {mode.pushRefspecs.length > 0
+                ? mode.pushRefspecs.map((refspec) => (
+                  <code key={refspec} className="remote-refspec">{refspec}</code>
+                ))
+                : <span className="muted">None configured — Git's push rules apply</span>}
+            </div>
+          </>
+        )}
 
-          {mode.kind !== 'url' && mode.kind !== 'refspecs' && (
-            <label className="clone-field">
-              <span className="lbl">Name</span>
-              <input
-                autoFocus
-                className="clone-input"
-                placeholder="upstream"
-                value={name}
-                disabled={busy}
-                // Remote names can't contain spaces — sanitize to dashes as
-                // the user types, matching the branch-name fields.
-                onChange={(e) => setName(e.target.value.replace(/\s+/g, '-'))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submit();
-                }}
-              />
-            </label>
-          )}
-
-          {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
-            <label className="clone-field">
-              <span className="lbl">Fetch URL</span>
-              <input
-                autoFocus={mode.kind === 'url'}
-                className="clone-input"
-                placeholder="https://github.com/user/repo.git"
-                value={url}
-                disabled={busy}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submit();
-                }}
-              />
-            </label>
-          )}
-
-          {mode.kind !== 'rename' && mode.kind !== 'refspecs' && (
-            <label className="clone-field">
-              <span className="lbl">Push URL <span className="muted">(optional)</span></span>
-              <input
-                className="clone-input"
-                placeholder="Uses the fetch URL when blank"
-                value={pushUrl}
-                disabled={busy}
-                onChange={(e) => setPushUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submit();
-                }}
-              />
-            </label>
-          )}
-
-          {mode.kind === 'refspecs' && (
-            <>
-              <p className="stash-blurb">
-                Git ref mappings configured for <code>{mode.name}</code>.
-              </p>
-              <div className="remote-refspec-group">
-                <span className="lbl">Fetch refspecs</span>
-                {mode.fetchRefspecs.length > 0
-                  ? mode.fetchRefspecs.map((refspec) => (
-                    <code key={refspec} className="remote-refspec">{refspec}</code>
-                  ))
-                  : <span className="muted">None configured</span>}
-              </div>
-              <div className="remote-refspec-group">
-                <span className="lbl">Push refspecs</span>
-                {mode.pushRefspecs.length > 0
-                  ? mode.pushRefspecs.map((refspec) => (
-                    <code key={refspec} className="remote-refspec">{refspec}</code>
-                  ))
-                  : <span className="muted">None configured — Git's push rules apply</span>}
-              </div>
-            </>
-          )}
-
-          {error ? <div className="clone-error">{error}</div> : null}
-        </div>
-
-        <div className="clone-foot">
-          {mode.kind === 'refspecs' ? (
-            <button type="button" autoFocus className="btn primary" onClick={onClose}>Close</button>
-          ) : (
-            <>
-              <button type="button" className="btn" disabled={busy} onClick={onClose}>
-                Cancel
-              </button>
-              <button type="button" className="btn primary" disabled={busy} onClick={() => void submit()}>
-                {busy ? 'Working…' : submitLabel}
-              </button>
-            </>
-          )}
-        </div>
+        {error ? <div className="clone-error">{error}</div> : null}
       </div>
-    </div>
+    </Dialog>
   );
 }

@@ -840,10 +840,13 @@ reach an unmounted row), so the constant is correctness, not just layout.
 
 **Rule.** New modals use `components/Dialog.tsx` (shared Tab trap including
 `select`/`textarea`, Esc blocked while busy unless `blockEscapeWhileBusy` is
-false, focus restore). New empty/loading copy uses `EmptyState`. New main-pane
-toolbars use `PaneHeader` or the `.pane-head` height token. Diff stacked/split
-maps through `toPierreLayout` / `DiffLayoutToggle` — do not reimplement the
-toggle in a file header.
+false, focus restore). New empty/loading copy uses `EmptyState` (`compact` in
+tree panes). New main-pane toolbars use `PaneHeader` or the `.pane-head`
+height token. Diff stacked/split maps through `toPierreLayout` /
+`DiffLayoutToggle` — do not reimplement the toggle in a file header.
+Transient success/error toasts go through `onToast` → `ToastViewport`; only
+in-place arm-to-confirm gestures (double-tap discard) may render a local
+`.toast`. PierreTree row height is `--trees-row-height: var(--row-h)`.
 
 **Why.** The 2026-09-01 UI audit found 26 hand-rolled traps, five header
 heights, and two toast looks. The primitives exist so the next surface does

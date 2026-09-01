@@ -7,7 +7,9 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ParsedDiff } from '../components/Diff';
 import { DiffLayoutToggle, toPierreLayout } from '../components/DiffChrome';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
+import { EmptyState } from '../components/EmptyState';
 import { Icon, type IconName } from '../components/Icon';
+import { PaneHeader } from '../components/PaneHeader';
 import { PierreTree } from '../components/PierreTree';
 import { applyCommentFormat, type CommentFormat } from '../lib/commentComposer';
 import { pullRequestReview } from '../lib/db';
@@ -2514,28 +2516,33 @@ export function PullRequests({
       </div>
 
       {error && !data ? (
-        <div className="pr-empty" role="alert">
-          <Icon name="remote" size={28} />
-          <strong>Pull requests are not available yet</strong>
-          <p>{error}</p>
-          <span>Strand uses the signed-in provider CLI so it never stores your access token.</span>
-          <button type="button" className="btn" onClick={manualRefresh}>Try again</button>
-        </div>
+        <EmptyState
+          icon="remote"
+          title="Pull requests are not available yet"
+          hint={<>{error}<br />Strand uses the signed-in provider CLI so it never stores your access token.</>}
+          action={<button type="button" className="btn" onClick={manualRefresh}>Try again</button>}
+        />
       ) : loading && !data ? (
-        <div className="pr-empty" aria-live="polite"><Icon name="refresh" size={28} className="spin" /><strong>Loading pull requests…</strong></div>
+        <EmptyState icon="refresh" spinning title="Loading pull requests…" />
       ) : data && data.pull_requests.length === 0 ? (
-        <div className="pr-empty"><Icon name="check" size={28} /><strong>No pull requests found</strong><p>This repository has no open, closed, or merged pull requests in the latest 100.</p></div>
+        <EmptyState
+          icon="check"
+          title="No pull requests found"
+          hint="This repository has no open, closed, or merged pull requests in the latest 100."
+        />
       ) : data ? (
         <div className="pr-main">
           {openedId == null ? (
             <div className="pr-list-screen">
-              <div className="pr-inbox-head">
-                <h1>Pull requests</h1>
-                <p>
-                  Review and track work across {providerName(data.repository.provider)}
-                  {data.repository.viewer ? <> as <strong>{data.repository.viewer}</strong></> : null}.
-                </p>
-              </div>
+              <PaneHeader
+                title="Pull requests"
+                meta={
+                  <>
+                    Review and track work across {providerName(data.repository.provider)}
+                    {data.repository.viewer ? <> as <strong>{data.repository.viewer}</strong></> : null}.
+                  </>
+                }
+              />
               <div className="pr-inbox-controls">
                 <label className="pr-inbox-search" htmlFor="pr-inbox-search">
                   <Icon name="search" size={17} />

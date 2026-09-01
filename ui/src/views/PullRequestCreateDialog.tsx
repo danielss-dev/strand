@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Dialog } from '../components/Dialog';
 import { Icon } from '../components/Icon';
 import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { repoAiStyle } from '../lib/db';
@@ -73,7 +74,6 @@ export function PullRequestCreateDialog({
   const [providerUsed, setProviderUsed] = useState<AiProvider | null>(null);
   const [undoDraft, setUndoDraft] = useState<{ title: string; description: string } | null>(null);
   const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef<{ opId: string; path: string; target: string; provider: typeof aiProvider; model: string } | null>(null);
@@ -83,11 +83,6 @@ export function PullRequestCreateDialog({
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    return () => previous?.focus?.();
   }, []);
 
   function cancelSuggestion() {
@@ -103,37 +98,12 @@ export function PullRequestCreateDialog({
     onClose();
   }
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) closeDialog();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [busy, onClose]);
-
   useEffect(() => () => {
     const request = requestRef.current;
     requestRef.current = null;
     suggestingRef.current = false;
     if (request) void tauri.repoCancelOp(request.opId);
   }, [path, targetBranch, aiProvider, openaiCli, anthropicCli, openaiModel, anthropicModel]);
-
-  function trapFocus(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== 'Tab' || !dialogRef.current) return;
-    const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ));
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   async function submit() {
     if (busy || suggesting) return;
@@ -251,27 +221,23 @@ export function PullRequestCreateDialog({
   const aiActionLabel = title.trim() || description.trim() ? 'Replace' : 'Fill';
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) closeDialog();
-      }}
+    <Dialog
+      title="Create pull request"
+      icon="remote"
+      size="sm"
+      busy={busy}
+      onClose={closeDialog}
+      className="pr-create-dialog"
+      footer={
+        <>
+          <button type="button" className="btn" disabled={busy} onClick={closeDialog}>Cancel</button>
+          <button type="submit" form="pr-create-form" className="btn primary" disabled={busy || suggesting}>
+            {busy ? 'Creating…' : 'Create pull request'}
+          </button>
+        </>
+      }
     >
-      <div
-        ref={dialogRef}
-        className="clone-dialog stash-dialog pr-create-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Create pull request"
-        onKeyDown={trapFocus}
-      >
-        <div className="clone-head">
-          <Icon name="remote" size={15} />
-          <span className="title">Create pull request</span>
-          <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={closeDialog}>×</button>
-        </div>
-
-        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <form id="pr-create-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <div className="clone-body">
             <p className="stash-blurb">
               Create on {providerLabel} from <code>{sourceBranch}</code>. If the branch is not on the repository remote yet, Strand will push it first.
@@ -383,15 +349,7 @@ export function PullRequestCreateDialog({
               </div>
             ) : null}
           </div>
-
-          <div className="clone-foot">
-            <button type="button" className="btn" disabled={busy} onClick={closeDialog}>Cancel</button>
-            <button type="submit" className="btn primary" disabled={busy || suggesting}>
-              {busy ? 'Creating…' : 'Create pull request'}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -2726,10 +2726,11 @@ and Partner Center advanced it to Certification.
 
 **UI audit applied (2026-09-01):** Shared `Dialog` / `EmptyState` / `PaneHeader`
 / `DiffLayoutToggle` primitives; Pierre diffs use the warm `--bg-base` surface;
-density tokens now move chrome and the commit graph; topbar hides zero
-ahead/behind counts; status bar is the drift home; commit-detail actions sit
-under a `…` menu; worktree disk size skips `node_modules`/`target`; shortcuts
-and pluralization are platform-correct.
+density tokens now move chrome, the commit graph, and PierreTree rows; topbar
+hides zero ahead/behind counts; status bar is the drift home; commit-detail
+actions sit under a `…` menu; write dialogs share one Tab trap; LC / Review
+toasts use `ToastViewport`; worktree disk size skips `node_modules`/`target`;
+shortcuts and pluralization are platform-correct.
 
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface

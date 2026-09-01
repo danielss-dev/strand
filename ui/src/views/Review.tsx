@@ -7,6 +7,7 @@ import { Diff, parsePatchCached } from '../components/Diff';
 import { DiffMinimap } from '../components/DiffMinimap';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
+import { PaneHeader } from '../components/PaneHeader';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
 import {
@@ -64,10 +65,12 @@ const REVIEW_DIFF_HOST = '.rv-single .rv-diff-scroll';
 
 export function Review({
   onOpenFileInEditor,
+  onToast,
   active = true,
   embedded = false,
 }: {
   onOpenFileInEditor: (file: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
   /** Only the focused Custom-view pane owns window-level single-key actions. */
   active?: boolean;
   /** Custom stays mounted under a different global view id, so follow ordinary
@@ -250,15 +253,9 @@ export function Review({
   }, [diffSearchSignal, clearDiffSearch]);
 
   // Failed write ops surface here instead of vanishing into the console.
-  const [opError, setOpError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!opError) return;
-    const t = setTimeout(() => setOpError(null), 8000);
-    return () => clearTimeout(t);
-  }, [opError]);
   const fail = useCallback(
-    (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
-    [],
+    (verb: string) => (e: unknown) => onToast(`${verb} failed: ${gitErrorHint(e)}`, 'error'),
+    [onToast],
   );
 
   // ── Review notes (the agent feedback loop) ────────────────────────────
@@ -277,22 +274,14 @@ export function Review({
     setNoteEditor(null);
   }, []);
 
-  // Success notice ("Copied feedback …"); opError takes the toast slot first.
-  const [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 2600);
-    return () => clearTimeout(t);
-  }, [notice]);
-
   const pinBaseline = useCallback(() => {
     const action = sessionMode ? setBaseline() : setBranchBaseline();
     void action
       .then((hit) => {
-        if (hit) setNotice(`Reviewing from the fork point with ${hit.name}.`);
+        if (hit) onToast(`Reviewing from the fork point with ${hit.name}.`);
       })
       .catch(fail(sessionMode ? 'Move baseline' : 'Find branch start'));
-  }, [sessionMode, setBaseline, setBranchBaseline, fail]);
+  }, [sessionMode, setBaseline, setBranchBaseline, fail, onToast]);
 
   // ── AI code review ───────────────────────────────────────────────────
   const [reviewingWithAi, setReviewingWithAi] = useState(false);
@@ -356,7 +345,7 @@ export function Review({
         : repoState.reviewUnstagedDiffs;
       if (!repoState.activePath || reviewingWithAiRef.current) return;
       if (requestPool.length === 0) {
-        setNotice('Nothing changed — there is no code to review.');
+        onToast('Nothing changed — there is no code to review.');
         return;
       }
       const opId = `ai-review-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -407,7 +396,7 @@ export function Review({
         setAiCoverage({ coverage: outcome.coverage, provider: outcome.provider });
         const count = outcome.suggestion.findings.length;
         const providerLabel = provider === 'openai' ? 'Codex' : 'Claude Code';
-        setNotice(
+        onToast(
           count === 0
             ? `${providerLabel} found no actionable issues in the included changes.`
             : `${providerLabel} found ${count} possible issue${count === 1 ? '' : 's'} for you to review.`,
@@ -440,6 +429,7 @@ export function Review({
       anthropicModel,
       openaiCli,
       anthropicCli,
+      onToast,
     ],
   );
 
@@ -448,11 +438,11 @@ export function Review({
     addAiReviewFindings(findings);
     const accepted = new Set(findings);
     setPendingAiFindings((current) => current.filter((finding) => !accepted.has(finding)));
-    setNotice(
+    onToast(
       `Added ${findings.length} AI finding${findings.length === 1 ? '' : 's'} as review ` +
       `note${findings.length === 1 ? '' : 's'} — no files were changed.`,
     );
-  }, [addAiReviewFindings]);
+  }, [addAiReviewFindings, onToast]);
 
   const dismissAiFindings = useCallback((findings: CodeReviewFinding[]) => {
     const dismissed = new Set(findings);
@@ -489,11 +479,11 @@ export function Review({
         files: feedbackFiles,
       }),
     );
-    setNotice(
+    onToast(
       `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
         `${feedbackFiles.length} file${feedbackFiles.length === 1 ? '' : 's'}`,
     );
-  }, [activePath, feedbackFiles, noteCount, meta, baseline]);
+  }, [activePath, feedbackFiles, noteCount, meta, baseline, onToast]);
 
   // Two-step confirms for the destructive actions.
   const [armDiscardAll, setArmDiscardAll] = useState(false);
@@ -1191,20 +1181,6 @@ export function Review({
         <span className="kbd-inline">⌘F</span> search
       </div>
 
-      {opError ? (
-        <div className="toast" role="alert">
-          <span style={{ color: 'var(--del)' }}><Icon name="x" size={13} stroke={2} /></span>
-          <span>{opError}</span>
-          <button type="button" className="toast-action" onClick={() => setOpError(null)}>
-            Dismiss
-          </button>
-        </div>
-      ) : notice ? (
-        <div className="toast" role="status">
-          <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2} /></span>
-          <span>{notice}</span>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1243,46 +1219,54 @@ function ReviewToolbar({
 }) {
   const pct = total > 0 ? Math.round((reviewedCount / total) * 100) : 0;
   return (
-    <div className="rv-toolbar" role="toolbar" aria-label="Review session">
-      <span className="rv-chip">
-        <Icon name="history" size={12} />
-        {sessionMode ? (
-          <>
-            Session since <code>{baselineShort}</code>
-            {when ? ` · ${when}` : ''}
-          </>
-        ) : (
-          'Uncommitted changes'
-        )}
-      </span>
-      {total > 0 && (
+    <div role="toolbar" aria-label="Review session">
+    <PaneHeader
+      title={
+        <span className="rv-chip">
+          <Icon name="history" size={12} />
+          {sessionMode ? (
+            <>
+              Session since <code>{baselineShort}</code>
+              {when ? ` · ${when}` : ''}
+            </>
+          ) : (
+            'Uncommitted changes'
+          )}
+        </span>
+      }
+      meta={
+        total > 0 ? (
         <span className="rv-progress" title={`${reviewedCount} of ${total} files reviewed`}>
           <span className="rv-progress-bar" aria-hidden="true">
             <span className="fill" style={{ width: `${pct}%` }} />
           </span>
           {reviewedCount}/{total} reviewed
         </span>
-      )}
-      <div className="rv-actions">
-        {extra}
-        <button
-          type="button"
-          className="h-link"
-          onClick={onPin}
-          title={
-            sessionMode
-              ? 'Re-pin the baseline at the current HEAD'
-              : 'Detect this branch\'s fork point and review every commit since it was created'
-          }
-        >
-          {sessionMode ? 'Move baseline to HEAD' : 'Review from branch start'}
-        </button>
-        {sessionMode && (
-          <button type="button" className="h-link" onClick={onClear}>
-            Clear baseline
+        ) : null
+      }
+      actions={
+        <div className="rv-actions">
+          {extra}
+          <button
+            type="button"
+            className="h-link"
+            onClick={onPin}
+            title={
+              sessionMode
+                ? 'Re-pin the baseline at the current HEAD'
+                : 'Detect this branch\'s fork point and review every commit since it was created'
+            }
+          >
+            {sessionMode ? 'Move baseline to HEAD' : 'Review from branch start'}
           </button>
-        )}
-      </div>
+          {sessionMode && (
+            <button type="button" className="h-link" onClick={onClear}>
+              Clear baseline
+            </button>
+          )}
+        </div>
+      }
+    />
     </div>
   );
 }

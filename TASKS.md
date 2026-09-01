@@ -452,10 +452,22 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `target` / other build dirs; Worktrees copy is git-general.
 - ☑ Platform-correct shortcuts (`formatBinding`); `1 file` pluralization;
   PR breadcrumb no longer dangles; "1d Ago" capitalize removed.
-- ☐ Remaining write dialogs still hand-roll the shell (migrate onto
-  `Dialog` the same way Branch / Tag / Clone / Settings / ForcePush did).
-- ☐ Mechanical `features.css` token sweep of leftover px font-size /
-  radius declarations.
+- ☑ Write dialogs migrated onto `Dialog` (Ignore, RenameBranch, RenameFile,
+  FileEntry, InitRepo, Remote, Mainline, Merge, Reset, Stash, BranchNetwork,
+  CompareRefs, Maintenance, RepoIcon, Worktree trio, PR create, Workspace
+  Manager, BranchCleanup, plus the Worktrees cleanup confirm). Palette /
+  RepoSwitcher / RebaseEditor stay as overlays.
+- ☑ `PaneHeader` on Worktrees, Pull Requests, Review, and Workspace Review;
+  `EmptyState` on PR / Worktrees empties and compact PierreTree empties.
+- ☑ LC / Review / Workspace Review op/notice toasts go through `onToast` →
+  `ToastViewport` (double-tap discard confirm stays in-view).
+- ☑ Chip / menu families share tokens (`.ref-chip` / `.pr-state` / `.wt-tag`,
+  `.repo-menu` ≈ `.context-menu`); PierreTree rows use `--row-h`.
+- ☐ Mechanical `features.css` sweep of leftover hardcoded `font-size: Npx`
+  (~100 remain outside the chip/menu/header pass).
+- ☐ Settings control widgets still split (SegRow vs Git inputs vs Hosting
+  switch). Rail/tab menus still copy-pasted. Worktrees still appear in both
+  the rail/tabs and the Git sidebar. Diff minimap / search stay Review-only.
 
 ### 2026-07-29 desktop audit hardening
 - ☑ Work terminals remain composited under the stable runtime layer while

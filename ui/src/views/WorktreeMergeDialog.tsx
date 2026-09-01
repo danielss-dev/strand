@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Icon } from '../components/Icon';
+import { Dialog } from '../components/Dialog';
 import { Select } from '../components/Select';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
@@ -76,44 +76,10 @@ export function WorktreeMergeDialog({
       .catch(() => { if (!cancelled) setFfPossible(false); });
     return () => { cancelled = true; };
   }, [activePath, branch, base, baseTip]);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
   // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
   // cleanup-only effect would leave it permanently false (frozen busy state).
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-
-  // Restore focus to the opener on close.
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    return () => prev?.focus?.();
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [busy, onClose]);
-
-  function onTrapKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusables = Array.from(
-      dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
 
   // Changing the base can invalidate the chosen mode: no checkout of the
   // base leaves only ff, and a moved base rules ff out.
@@ -189,28 +155,23 @@ export function WorktreeMergeDialog({
   );
 
   return (
-    <div
-      className="palette-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
-    >
-      <div
-        className="clone-dialog worktree-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Merge worktree"
-        ref={dialogRef}
-        onKeyDown={onTrapKeyDown}
-      >
-        <div className="clone-head">
-          <Icon name="worktree" size={15} />
-          <span className="title">Merge &amp; clean up</span>
-          <button type="button" className="cd-close" aria-label="Close" disabled={busy} onClick={onClose}>
-            ×
+    <Dialog
+      title="Merge & clean up"
+      icon="worktree"
+      busy={busy}
+      onClose={onClose}
+      className="worktree-dialog"
+      footer={
+        <>
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>
+            Cancel
           </button>
-        </div>
-
+          <button type="button" className="btn primary" disabled={!canSubmit} onClick={() => void submit()}>
+            {busy ? 'Merging…' : cleanup ? 'Merge & remove' : 'Merge'}
+          </button>
+        </>
+      }
+    >
         <div className="clone-body">
           <p className="stash-blurb">
             Land <strong>{branch}</strong>
@@ -299,16 +260,6 @@ export function WorktreeMergeDialog({
 
           {error ? <div className="clone-error">{error}</div> : null}
         </div>
-
-        <div className="clone-foot">
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn primary" disabled={!canSubmit} onClick={() => void submit()}>
-            {busy ? 'Merging…' : cleanup ? 'Merge & remove' : 'Merge'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

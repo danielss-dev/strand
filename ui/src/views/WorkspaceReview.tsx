@@ -7,6 +7,7 @@ import { Diff, parsePatchCached } from '../components/Diff';
 import { DiffMinimap } from '../components/DiffMinimap';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
+import { PaneHeader } from '../components/PaneHeader';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
 import {
@@ -67,9 +68,11 @@ const WORKSPACE_REVIEW_DIFF_HOST = '.rv-workspace .rv-diff-scroll';
 
 export function WorkspaceReview({
   onOpenFileInEditor,
+  onToast,
   active = true,
 }: {
   onOpenFileInEditor: (repoPath: string, file: string) => void;
+  onToast: (msg: string, kind?: 'success' | 'error') => void;
   /** Only the focused Custom-view pane owns window-level single-key actions. */
   active?: boolean;
 }) {
@@ -282,15 +285,9 @@ export function WorkspaceReview({
   );
 
   // Failed write ops surface here instead of vanishing into the console.
-  const [opError, setOpError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!opError) return;
-    const t = setTimeout(() => setOpError(null), 8000);
-    return () => clearTimeout(t);
-  }, [opError]);
   const fail = useCallback(
-    (verb: string) => (e: unknown) => setOpError(`${verb} failed: ${gitErrorHint(e)}`),
-    [],
+    (verb: string) => (e: unknown) => onToast(`${verb} failed: ${gitErrorHint(e)}`, 'error'),
+    [onToast],
   );
 
   // ── Review notes (the agent feedback loop, workspace-wide) ────────────
@@ -309,14 +306,6 @@ export function WorkspaceReview({
     el?.blur();
     setNoteEditor(null);
   }, []);
-
-  // Success notice ("Copied feedback …"); opError takes the toast slot first.
-  const [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 2600);
-    return () => clearTimeout(t);
-  }, [notice]);
 
   // Per member, the union of pool files with notes and noted paths that left
   // the pool (staged away in inbox mode, …) — a stored note must never
@@ -341,12 +330,12 @@ export function WorkspaceReview({
     if (feedbackRepos.length === 0) return;
     copyToClipboard(buildWorkspaceReviewFeedback({ workspaceName, repos: feedbackRepos }));
     const fileCount = feedbackRepos.reduce((n, r) => n + r.files.length, 0);
-    setNotice(
+    onToast(
       `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
         `${fileCount} file${fileCount === 1 ? '' : 's'} in ` +
         `${feedbackRepos.length} repo${feedbackRepos.length === 1 ? '' : 's'}`,
     );
-  }, [feedbackRepos, noteCount, workspaceName]);
+  }, [feedbackRepos, noteCount, workspaceName, onToast]);
 
   // Two-step confirm for the destructive discard (d d, or double-click the
   // header button).
@@ -380,12 +369,12 @@ export function WorkspaceReview({
       // empty, which would drop the file we're navigating to.
       if (file) await useRepo.getState().refreshReviewDiffs();
     } catch (e) {
-      setOpError(`Open failed: ${gitErrorHint(e)}`);
+      onToast(`Open failed: ${gitErrorHint(e)}`, 'error');
       return;
     }
     if (file) useRepo.getState().selectReviewFile(file);
     useRepo.getState().setView('review');
-  }, []);
+  }, [onToast]);
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -929,20 +918,6 @@ export function WorkspaceReview({
         <span className="kbd-inline">⌘F</span> search
       </div>
 
-      {opError ? (
-        <div className="toast" role="alert">
-          <span style={{ color: 'var(--del)' }}><Icon name="x" size={13} stroke={2} /></span>
-          <span>{opError}</span>
-          <button type="button" className="toast-action" onClick={() => setOpError(null)}>
-            Dismiss
-          </button>
-        </div>
-      ) : notice ? (
-        <div className="toast" role="status">
-          <span style={{ color: 'var(--add)' }}><Icon name="check" size={13} stroke={2} /></span>
-          <span>{notice}</span>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1124,34 +1099,42 @@ function WorkspaceReviewToolbar({
 }) {
   const pct = total > 0 ? Math.round((reviewedCount / total) * 100) : 0;
   return (
-    <div className="rv-toolbar" role="toolbar" aria-label="Workspace review">
-      <span className="rv-chip">
-        <Icon name="workspace" size={12} />
-        {workspaceName}
-        <span className="wsr-chip-meta">
-          · {repoCount} repo{repoCount === 1 ? '' : 's'}
-          {worktreeCount > 0 && ` + ${worktreeCount} worktree${worktreeCount === 1 ? '' : 's'}`}
-        </span>
-      </span>
-      {total > 0 && (
-        <span className="rv-progress" title={`${reviewedCount} of ${total} files reviewed across the workspace`}>
-          <span className="rv-progress-bar" aria-hidden="true">
-            <span className="fill" style={{ width: `${pct}%` }} />
+    <div role="toolbar" aria-label="Workspace review">
+      <PaneHeader
+        title={
+          <span className="rv-chip">
+            <Icon name="workspace" size={12} />
+            {workspaceName}
+            <span className="wsr-chip-meta">
+              · {repoCount} repo{repoCount === 1 ? '' : 's'}
+              {worktreeCount > 0 && ` + ${worktreeCount} worktree${worktreeCount === 1 ? '' : 's'}`}
+            </span>
           </span>
-          {reviewedCount}/{total} reviewed
-        </span>
-      )}
-      <div className="rv-actions">
-        {extra}
-        <button
-          type="button"
-          className="h-link"
-          onClick={onRefresh}
-          title="Re-collect changes from every member repository"
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </div>
+        }
+        meta={
+          total > 0 ? (
+            <span className="rv-progress" title={`${reviewedCount} of ${total} files reviewed across the workspace`}>
+              <span className="rv-progress-bar" aria-hidden="true">
+                <span className="fill" style={{ width: `${pct}%` }} />
+              </span>
+              {reviewedCount}/{total} reviewed
+            </span>
+          ) : null
+        }
+        actions={
+          <div className="rv-actions">
+            {extra}
+            <button
+              type="button"
+              className="h-link"
+              onClick={onRefresh}
+              title="Re-collect changes from every member repository"
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        }
+      />
     </div>
   );
 }

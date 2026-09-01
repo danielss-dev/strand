@@ -2018,11 +2018,12 @@ export function App() {
           />
     )],
     [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
-      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} active={lifecycle.focused} />
+      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} onToast={showToast} active={lifecycle.focused} />
     )],
     [BUILT_IN_SURFACE_IDS.changesExplorer, ({ lifecycle }) => (
           <LocalChanges
             onOpenFileInEditor={openActiveFileInEditor}
+            onToast={showToast}
             active={lifecycle.focused}
             explorerOnly
             onOpenFileChanges={openChangesInWork}
@@ -2031,6 +2032,7 @@ export function App() {
     [BUILT_IN_SURFACE_IDS.review, ({ lifecycle, host }) => (
       <Review
         onOpenFileInEditor={openActiveFileInEditor}
+        onToast={showToast}
         active={lifecycle.focused}
         embedded={host !== 'main'}
       />
@@ -2042,7 +2044,7 @@ export function App() {
           />
     )],
     [BUILT_IN_SURFACE_IDS.workspaceReview, ({ lifecycle }) => (
-      <WorkspaceReview onOpenFileInEditor={openEditorTarget} active={lifecycle.focused} />
+      <WorkspaceReview onOpenFileInEditor={openEditorTarget} onToast={showToast} active={lifecycle.focused} />
     )],
     [BUILT_IN_SURFACE_IDS.reflog, () => (
           <Reflog
