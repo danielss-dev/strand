@@ -4,7 +4,7 @@ export interface BranchCleanupCandidate {
   local: Branch;
   /** Matching remote-tracking ref, when it is still known locally. */
   remote: RemoteBranch | null;
-  /** Provider confirmed this exact tip was merged even though ancestry did not. */
+  /** Provider confirmed a completed PR into the primary branch even though ancestry did not. */
   providerMerged: boolean;
 }
 

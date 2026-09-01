@@ -76,8 +76,8 @@ system ported verbatim. No real feature surface yet.
     create + track a remote branch, or `Create branch…` via prompt
   - ☑ Clear merged branches from the command palette with per-branch local and
     matching remote selection (`BranchCleanupDialog`; worktree-held branches
-    stay protected; DAN-41 also recognizes exact tips from completed
-    GitHub/Azure squash or rebase PRs without weakening remote deletion)
+    stay protected; DAN-41/DAN-63 recognize completed GitHub/Azure squash or
+    rebase PRs by source-branch name without weakening remote deletion)
 - ☑ **File tree**
   - ☑ Working-tree view, status badges, click to file detail (`Repo::work_tree`
     lists index entries overlaid with status; Sidebar Files tab renders a
@@ -2568,6 +2568,14 @@ PR into the primary branch, covering squash and rebase merges that Git ancestry
 cannot prove. Provider lookup is delayed and session-cached off the repo-open
 hot path; explicit cleanup refreshes and freezes the snapshot, keeps remote
 deletion ancestry-only, and rechecks the local branch SHA at deletion time.
+
+**DAN-63 squash-merged provider marks shipped (2026-09-01):** Provider merge
+detection no longer requires exact tip equality. A completed/merged GitHub or
+Azure PR into the primary branch marks the matching local source branch for the
+sidebar check, commit-graph chip, and cleanup candidacy even when ADO omits or
+rewrites `source_commit` after squash. Open/active PRs on the same source stay
+unmarked; remote deletion remains ancestry-only; `delete_branch_at` still
+refuses a tip that moved after the cleanup plan froze.
 
 **DAN-40 updater-safe Windows taskbar icon shipped (2026-08-07):** Strand now
 loads the embedded `icon.ico` resource into explicit big and small native HWND

@@ -68,16 +68,43 @@ const refs: Refs = {
 };
 
 describe('providerMergedBranchNames', () => {
-  it('marks the exact current source tip of a completed PR into the primary branch', () => {
+  it('marks a completed or merged PR source into the primary branch', () => {
     expect([...providerMergedBranchNames(refs, data([pullRequest({})]))]).toEqual(['feature']);
     expect([...providerMergedBranchNames(refs, data([pullRequest({ state: 'merged' })]))]).toEqual(['feature']);
   });
 
-  it('rejects closed PRs, other targets, moved branches, and the checked-out branch', () => {
+  it('marks squash merges even when the provider omits or rewrites the source tip', () => {
+    expect([...providerMergedBranchNames(refs, data([pullRequest({ source_commit: '' })]))]).toEqual(['feature']);
+    expect([
+      ...providerMergedBranchNames(refs, data([pullRequest({ source_commit: 'b'.repeat(40) })])),
+    ]).toEqual(['feature']);
+  });
+
+  it('rejects closed PRs, other targets, open reuse of the branch, and the checked-out branch', () => {
     expect(providerMergedBranchNames(refs, data([pullRequest({ state: 'closed' })])).size).toBe(0);
     expect(providerMergedBranchNames(refs, data([pullRequest({ target_branch: 'release' })])).size).toBe(0);
-    expect(providerMergedBranchNames(refs, data([pullRequest({ source_commit: 'b'.repeat(40) })])).size).toBe(0);
+    expect(providerMergedBranchNames(
+      refs,
+      data([
+        pullRequest({}),
+        pullRequest({ id: 2, state: 'active', source_commit: 'c'.repeat(40) }),
+      ]),
+    ).size).toBe(0);
+    expect(providerMergedBranchNames(
+      refs,
+      data([
+        pullRequest({ state: 'merged' }),
+        pullRequest({ id: 2, state: 'open', source_commit: 'c'.repeat(40) }),
+      ]),
+    ).size).toBe(0);
     const checkedOut = { ...refs, branches: [refs.branches[0], branch('feature', 'a'.repeat(40), true)] };
     expect(providerMergedBranchNames(checkedOut, data([pullRequest({})])).size).toBe(0);
+  });
+
+  it('does not mark a local branch with no matching completed PR source name', () => {
+    expect(providerMergedBranchNames(
+      refs,
+      data([pullRequest({ source_branch: 'other-feature' })]),
+    ).size).toBe(0);
   });
 });

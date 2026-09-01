@@ -81,7 +81,7 @@ describe('mergedBranchCleanupPlan', () => {
     expect(plan.checkedOut).toEqual(['in-use']);
   });
 
-  it('includes an exact provider-confirmed squash merge without offering an unproven remote', () => {
+  it('includes a provider-confirmed squash merge without ancestry or a proven remote', () => {
     const local = branch('squashed', { merged: false });
     const plan = mergedBranchCleanupPlan(
       refs([local], [remote('origin', 'squashed', false)]),
@@ -91,6 +91,26 @@ describe('mergedBranchCleanupPlan', () => {
 
     expect(plan.candidates).toHaveLength(1);
     expect(plan.candidates[0]).toMatchObject({ providerMerged: true, remote: null });
+    expect(plan.candidates[0].local.merged).toBe(false);
+  });
+
+  it('keeps ancestry-merged candidates working alongside provider-confirmed ones', () => {
+    const ancestry = branch('contained');
+    const providerOnly = branch('squashed', { merged: false });
+    const plan = mergedBranchCleanupPlan(
+      refs([ancestry, providerOnly]),
+      [],
+      new Set(['squashed']),
+    );
+
+    expect(plan.candidates.map((candidate) => candidate.local.name).sort()).toEqual([
+      'contained',
+      'squashed',
+    ]);
+    expect(plan.candidates.find((candidate) => candidate.local.name === 'contained')?.providerMerged)
+      .toBe(false);
+    expect(plan.candidates.find((candidate) => candidate.local.name === 'squashed')?.providerMerged)
+      .toBe(true);
   });
 
   it('uses the configured upstream even when the remote branch has another name', () => {
