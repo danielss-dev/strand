@@ -6,7 +6,12 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const outRoot = path.join(root, 'dist');
 const origin = 'https://strandgit.com';
 const failures = [];
-const htmlFiles = await findFiles(outRoot, (file) => file.endsWith('.html'));
+// dist/demo is the app bundle (noindex), not a canonical page. It is an
+// optional build input, so links into it are only verified when it exists.
+const hasDemo = await exists(path.join(outRoot, 'demo', 'index.html'));
+if (!hasDemo) console.warn('seo-check: dist/demo missing — /demo/ links not verified (run `pnpm demo:build`).');
+const htmlFiles = (await findFiles(outRoot, (file) => file.endsWith('.html')))
+  .filter((file) => !file.startsWith(path.join(outRoot, 'demo') + path.sep));
 const titles = new Map();
 const descriptions = new Map();
 
@@ -66,6 +71,7 @@ async function checkLink(href, sourceRoute) {
   try { url = new URL(href, `${origin}${sourceRoute}`); } catch { failures.push(`${sourceRoute} has invalid link: ${href}`); return; }
   if (url.origin !== origin) return;
   if (url.searchParams.has('page') || url.pathname.endsWith('.md')) failures.push(`${sourceRoute} contains a legacy documentation link: ${href}`);
+  if (url.pathname.startsWith('/demo/') && !hasDemo) return;
   const file = routeToFile(url.pathname);
   if (!(await exists(file))) failures.push(`${sourceRoute} links to missing output: ${href}`);
 }

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,10 +38,18 @@ if (!slugs.has('index')) {
 await rm(outRoot, { recursive: true, force: true });
 await mkdir(outRoot, { recursive: true });
 
-for (const file of ['index.html', 'style.css', 'script.js', 'favicon.svg', 'favicon.png', 'og-image.svg', 'og-image.png']) {
+for (const file of ['index.html', 'style.css', 'script.js', 'favicon.svg', 'favicon.png', 'og-image.svg', 'og-image.png', 'demo-poster.webp']) {
   await cp(path.join(root, file), path.join(outRoot, file));
 }
 await cp(path.join(root, 'fonts'), path.join(outRoot, 'fonts'), { recursive: true });
+
+// The live demo (`pnpm demo:build` at the repo root → website/demo) is an
+// optional input: the static site still builds without it, the hero just
+// keeps its poster.
+const demoRoot = path.join(root, 'demo');
+const hasDemo = await stat(path.join(demoRoot, 'index.html')).then((s) => s.isFile(), () => false);
+if (hasDemo) await cp(demoRoot, path.join(outRoot, 'demo'), { recursive: true });
+
 await mkdir(path.join(outRoot, 'docs'), { recursive: true });
 await cp(path.join(docsRoot, 'docs.css'), path.join(outRoot, 'docs', 'docs.css'));
 
@@ -81,7 +89,7 @@ await writeFile(
   'utf8',
 );
 
-console.log(`Built Strand website with ${pages.length} static documentation pages.`);
+console.log(`Built Strand website with ${pages.length} static documentation pages${hasDemo ? ' and the live demo' : ' (no live demo — run `pnpm demo:build` first)'}.`);
 
 function rewriteMarkdownLinks(markdown, sourceSlug) {
   return markdown.replace(/\]\(([a-z0-9-]+)\.md(#[^)]+)?\)/g, (match, target, hash = '') => {

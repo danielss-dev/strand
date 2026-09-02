@@ -10,6 +10,13 @@ Markdown user guide into crawlable HTML and writes the deployable site to
 <https://strand-landing-production.up.railway.app>. The custom domain
 `strandgit.com` is live through the Railway service.
 
+**Deploy sequence**: `pnpm demo:build` from the repo root first, then
+`railway up` from this folder. The live demo at `/demo/` is the real app
+bundle built into `website/demo/` (gitignored); `railway up` uploads the
+folder as-is, so a deploy without that step ships a landing page whose
+"Launch the live demo" button 404s — `npm run build` prints a warning when
+the bundle is missing.
+
 Preview locally with `pnpm site` from the repo root (builds and serves on
 <http://localhost:4321> via [`serve`](https://github.com/vercel/serve)). Run
 `npm test` from this folder to build and validate titles, descriptions,
@@ -24,20 +31,35 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
   choices visible.
 - `fonts/` — Geist + JetBrains Mono woff2, copied from `ui/public/fonts`
   (self-hosted, latin subsets only).
-- The hero window is a replica of the actual app shell (workspace/repo tabs,
-  network and stash controls, sidebar, Work tabs, Review toolbar and queue,
-  pull requests, commit graph, diff, and statusbar), built to the real metrics
-  in `ui/src/styles/chrome.css` and `features.css`, with syntax colors taken
-  from the app's `pierre-dark` Shiki theme (`@pierre/theme`). It's a working
-  demo: all five primary sidebar destinations switch in place; file/terminal
-  tabs, Git/Files, repository/workspace Review scope, PR selection, file
-  actions, review notes, baselines, tree folders, keyboard navigation, commit
-  form, and both pane resizers respond like their app counterparts. If the
-  app's chrome changes materially, re-sync the mock against fresh screenshots.
-- ⌘K opens a page-level clone of the app's command palette (same grouped /
-  fuzzy / highlighted UI): it scrolls to page sections, switches the demo
-  views, sets the accent, and opens GitHub / X. Items live in `ITEMS` in
-  `script.js` — add new destinations there.
+- The hero window (`#demo`) is the actual Strand UI. `pnpm demo:build` runs
+  `ui/` through Vite in `--mode demo` (`ui/.env.demo` sets `VITE_DEMO=1`),
+  which swaps the Tauri IPC layer for the in-browser backend in
+  `ui/src/demo/` — an in-memory git model (commits, branches, worktrees,
+  index/workdir, stash, blame, unified patches), fixture history for a sample
+  `acme-api` repository, scripted pull requests, a scripted terminal, and
+  stubs for the desktop-only plugins — and emits a static SPA to
+  `website/demo/`, served at `/demo/` with `noindex`. The landing page embeds
+  it in an iframe behind `demo-poster.webp`; "Launch the live demo" mounts
+  it, "Restart" remounts it (state lives in the iframe, so this resets the
+  sample repo), and "Full screen" opens `/demo/` in a tab. Deep links from
+  page sections post `{ type: 'strand-demo:view', view }` to the iframe (or
+  pass `?view=` on first mount); below 720px the embed hands off to a new
+  tab because the app shell is a desktop layout. Because it is the real UI,
+  chrome changes in `ui/src` flow through automatically — only the fixtures
+  and IPC handlers in `ui/src/demo/` need care when a command's shape
+  changes.
+- `demo-poster.webp` (1440×900) is a screenshot of `/demo/?view=review` with
+  `src/auth/retry.ts` selected. Regenerate it after visible chrome changes:
+  serve `dist/`, capture the demo at 1440×900, `cwebp -q 82`.
+- The version pill, download cards, and release date read
+  `repos/danielss-dev/strand/releases/latest` at load; the markup carries the
+  last-known tag as a static fallback — bump it when cutting a release so the
+  no-JS / rate-limited path stays honest.
+- ⌘K (or the nav pill) opens a page-level clone of the app's command palette
+  (same grouped / fuzzy / highlighted UI): it scrolls to page sections,
+  switches the demo's view, sets the accent, and opens GitHub / X. Items live
+  in `ITEMS` in `script.js` — add new destinations there. Inside the iframe,
+  ⌘K opens the app's own palette; key events don't cross the frame boundary.
 - `docs/` — the user-guide source, served as pre-rendered pages at `/docs/`
   and `/docs/<slug>/`. Content is plain markdown (`*.md`, one file per page),
   converted at build time by `build.mjs` with the vendored
@@ -73,5 +95,5 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
       (`releases/latest/download/latest.json`), which `tauri-action` publishes
       automatically — `tauri.conf.json` points the updater there. No custom
       `/updates` route on `strandgit.com` is needed.
-- [x] The performance figures in §02 match `docs/perf-baseline.md` as of the
-      2026-07-18 1.0 content pass.
+- [x] The performance figures in §06 match `docs/perf-baseline.md` (re-checked
+      during the 2026-09-02 refresh).

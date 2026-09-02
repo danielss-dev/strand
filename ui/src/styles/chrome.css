@@ -90,6 +90,18 @@
     padding-left: 6px;
     padding-right: 0;
 }
+/* Web demo (ui/src/demo): the embedding page draws the window chrome, so
+ * there are no OS controls to clear or fake on either platform. */
+html[data-demo] .topbar[data-native-chrome="mac"] {
+    padding-left: 6px;
+}
+html[data-demo] [data-platform="win11"] .topbar {
+    padding-right: 10px;
+}
+html[data-demo] .traffic,
+html[data-demo] .win-controls {
+    display: none;
+}
 
 .topbar[data-native-chrome] .sync-group,
 .topbar[data-native-chrome] .branch-btn,

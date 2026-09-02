@@ -14,6 +14,7 @@ ui/.vite/
 **/*.tsbuildinfo
 ui/src/**/*.js
 /website/dist/
+/website/demo/
 
 # Editor / OS
 .DS_Store

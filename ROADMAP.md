@@ -2743,6 +2743,21 @@ the signed release for the app's current protocol channel, with no Strand
 version compatibility gate. Incompatible or broken binaries remain removable,
 and replacement preserves profiles and vault credentials.
 
+**strandgit.com refreshed for 1.5.x (2026-09-02, DAN-58):** The landing page
+now leads with agent review and walks visitors demo → download → open a repo.
+Numbered editorial sections cover Review, Worktrees, the whole Git client
+(pull requests + everyday Git), Workbench, AI drafting, keyboard, and
+performance; every claim traces to the README, ROADMAP, or
+`docs/perf-baseline.md`. The hand-coded app replica is gone: the hero window
+now embeds the real Strand UI, built for the browser (`pnpm demo:build`,
+Vite `--mode demo`) against an in-memory git backend in `ui/src/demo/` —
+staging, committing, the graph, worktrees, pull requests, the terminal, and
+the command palette all run the production React code on a sample `acme-api`
+repository, so chrome changes flow to the site automatically. The version
+badge / download cards read the latest GitHub release at load. The landing
+page itself stays a static, zero-dependency build; `npm test` validates the
+SEO contract and `/demo/` is shipped `noindex`.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and
