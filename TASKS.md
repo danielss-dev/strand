@@ -2293,7 +2293,27 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   The 2026-07-29 app-replica sync added current Workspaces/network/sidebar
   chrome, all five primary views, Work file/terminal tabs, pull-request
   selection, repository/workspace Review scope, notes/baseline/file actions,
-  and pointer + keyboard pane resizing; desktop/narrow browser QA is clean.)
+  and pointer + keyboard pane resizing; desktop/narrow browser QA is clean.
+  The 2026-09-02 DAN-58 refresh rewrote the landing page for 1.5.x: editorial
+  numbered sections (Review → Worktrees → Git client → Workbench → AI →
+  Keyboard → Performance), a "what to click next" start rail under the demo,
+  and version/date pulled live from the GitHub latest release with a
+  `v1.5.1` static fallback. The hand-coded app replica was then replaced by
+  the real UI: `pnpm demo:build` builds `ui/` in Vite `--mode demo` against
+  the in-browser backend in `ui/src/demo/` (in-memory git model + LCS
+  unified patches, `acme-api` fixtures, scripted PRs and terminal, Tauri
+  plugin stubs via `@tauri-apps/api/mocks`) into `website/demo/`, embedded
+  as an iframe behind `demo-poster.webp` with Launch/Restart/Full-screen,
+  `?view=` + `postMessage` deep links, and a new-tab hand-off below 720px.
+  `build.mjs` copies the bundle, `seo-check.mjs` skips it (`noindex`). Docs
+  pages keep the shared mono base; `npm test` and `tsc` green.)
+- ☐ Build the web demo inside the Railway deploy instead of relying on a local
+  `pnpm demo:build` before `railway up` (needs pnpm + `ui/` deps in the
+  service build; today `website/build.mjs` only warns when `website/demo/`
+  is missing).
+- ☐ Web demo: forward the landing page's accent pick into the iframe
+  (`postMessage`, like `strand-demo:view`) so the hero dots recolor the
+  embedded app too.
 - ☑ User-guide docs on the website (2026-07-08: `website/docs/` — nine
   fact-checked markdown pages + `manifest.json`; since 2026-07-31, `build.mjs`
   pre-renders them with vendored `marked.min.js` into crawlable clean-URL HTML

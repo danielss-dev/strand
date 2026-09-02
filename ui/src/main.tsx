@@ -17,6 +17,13 @@ import './styles/base.css';
 import './styles/chrome.css';
 import './styles/features.css';
 
+// strandgit.com/demo: the same app against an in-browser sample repository.
+// Dead code in every other build (VITE_DEMO is only set by `--mode demo`).
+if (import.meta.env.VITE_DEMO) {
+  const { installDemoBackend } = await import('./demo/boot');
+  installDemoBackend();
+}
+
 if (isTauri()) document.documentElement.classList.add('tauri');
 
 // Perf-measurement test hook: exposes the zustand stores so an external

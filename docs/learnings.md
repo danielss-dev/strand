@@ -2374,3 +2374,21 @@ so valid Partner Center submissions fail consistently at the Azure blob upload
 after package preparation. The upstream fix was merged after v0.4.1 but was not
 yet released when Strand 1.5.0 was submitted.
 
+## The website demo is the production UI behind a mocked IPC layer (2026-09-02)
+
+**Rule.** `strandgit.com/demo/` is `ui/` built with `--mode demo`
+(`VITE_DEMO=1`), not a replica. Every Tauri command the UI invokes must have a
+handler in `ui/src/demo/dispatch.ts` (or a plugin stub in `boot.ts`), and the
+demo's event payloads must match the desktop wire format exactly — e.g. PTY
+output is base64, progress events carry the same `kind`/`phase` shape. When you
+add or reshape an IPC command, add the demo handler in the same change; an
+unhandled command surfaces as an error toast in the live demo. Do not add
+`if (demo)` branches to app code beyond the single bootstrap hook in
+`ui/src/main.tsx` — the demo runs the same React tree on purpose so chrome
+changes reach the site for free. Presentation-only differences (no OS window
+controls to clear) go in CSS under `html[data-demo]` in `chrome.css`; `boot.ts`
+sets that attribute.
+
+**Why.** The hand-coded HTML mock drifted from the app on every release and
+was replaced because it felt fake. Keeping the demo honest costs one handler
+per command; a special-cased UI would drift the same way the mock did.

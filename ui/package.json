@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/clean-stale-js.mjs && vite",
     "build": "node scripts/clean-stale-js.mjs && tsc -b && vite build",
+    "build:demo": "node scripts/clean-stale-js.mjs && tsc -b && vite build --mode demo",
+    "dev:demo": "node scripts/clean-stale-js.mjs && STRAND_NO_HMR=1 vite --mode demo",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "tsc -b --noEmit",

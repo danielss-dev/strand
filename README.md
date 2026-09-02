@@ -12,8 +12,9 @@
 **[Roadmap](./ROADMAP.md)** ·
 **[Commercial license](./COMMERCIAL.md)**
 
-The website includes a keyboard-operable, resizable demo of Strand's current
-Work, Local Changes, Review, Pull Requests, and All Commits surfaces.
+The website hosts a **[live demo](https://strandgit.com/#demo)** — the real
+Strand UI running in the browser against a sample repository (in-memory git
+backend in `ui/src/demo/`, built with `pnpm demo:build`).
 
 Keyboard-first: almost every action is operable from the keyboard alone —
 never keyboard-only, the mouse stays first-class. Shortcuts are listed below
@@ -351,7 +352,8 @@ strand/
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands
 ├── packaging/          # Store/distribution manifests assembled around release binaries
 ├── ui/                 # Vite + React + TypeScript frontend
-├── website/            # strandgit.com: landing page + pre-rendered user guide
+│   └── src/demo/       # In-browser git backend for the website's live demo
+├── website/            # strandgit.com: landing page, live demo, pre-rendered user guide
 ├── docs/               # design notes, perf baseline, packaging
 ├── PRD.md              # product spec
 ├── ROADMAP.md          # milestones and status
