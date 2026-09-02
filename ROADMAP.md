@@ -2737,6 +2737,12 @@ manifests and Cargo lockfile are synchronized at 1.5.1. The signed desktop
 release and Microsoft Store submission workflows are the remaining promotion
 steps.
 
+**Azure DevOps Server helper recovery shipped (2026-09-02):** Settings →
+Hosting Retry now force-downloads and atomically replaces `strand-azdo` from
+the signed release for the app's current protocol channel, with no Strand
+version compatibility gate. Incompatible or broken binaries remain removable,
+and replacement preserves profiles and vault credentials.
+
 **strandgit.com refreshed for 1.5.x (2026-09-02, DAN-58):** The landing page
 now leads with agent review and walks visitors demo → download → open a repo.
 Numbered editorial sections cover Review, Worktrees, the whole Git client

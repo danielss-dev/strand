@@ -58,6 +58,7 @@ pub fn handle() -> Result<&'static AppHandle> {
 pub struct HelperStatus {
     pub enabled: bool,
     pub installed: bool,
+    pub present: bool,
     pub version: Option<String>,
     pub protocol_version: Option<u32>,
     pub profiles: Vec<ServerProfile>,
@@ -85,7 +86,8 @@ struct VersionOutput {
 #[serde(deny_unknown_fields)]
 struct HelperManifest {
     schema_version: u32,
-    strand_version: String,
+    #[serde(rename = "strand_version")]
+    helper_version: String,
     protocol_version: u32,
     assets: Vec<HelperAsset>,
 }
@@ -102,6 +104,7 @@ struct HelperAsset {
 
 pub fn status(app: &AppHandle) -> HelperStatus {
     let config = load_config(app).unwrap_or_default();
+    let present = helper_binary(app).is_ok_and(|path| path.is_file());
     match installed_version(app) {
         Ok(version) if version.protocol_version == PROTOCOL_VERSION => {
             let authentication = config
@@ -116,6 +119,7 @@ pub fn status(app: &AppHandle) -> HelperStatus {
             HelperStatus {
                 enabled: config.enabled,
                 installed: true,
+                present,
                 version: Some(version.version),
                 protocol_version: Some(version.protocol_version),
                 profiles: config.profiles,
@@ -126,6 +130,7 @@ pub fn status(app: &AppHandle) -> HelperStatus {
         Ok(version) => HelperStatus {
             enabled: config.enabled,
             installed: false,
+            present,
             version: Some(version.version),
             protocol_version: Some(version.protocol_version),
             profiles: config.profiles,
@@ -138,6 +143,7 @@ pub fn status(app: &AppHandle) -> HelperStatus {
         Err(error) => HelperStatus {
             enabled: config.enabled,
             installed: false,
+            present,
             version: None,
             protocol_version: None,
             profiles: config.profiles,
@@ -458,10 +464,10 @@ fn install_client() -> Result<reqwest::blocking::Client> {
 }
 
 fn ensure_installed_or_download(app: &AppHandle) -> Result<()> {
-    download_and_install(app)
+    download_and_install(app, false)
 }
 
-fn download_and_install(app: &AppHandle) -> Result<()> {
+fn download_and_install(app: &AppHandle, force_replace: bool) -> Result<()> {
     let client = install_client()?;
     let base = install_base_url();
     let manifest_bytes = download(
@@ -486,15 +492,16 @@ fn download_and_install(app: &AppHandle) -> Result<()> {
     let manifest: HelperManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("The helper manifest is invalid: {error}"))?;
     if manifest.schema_version != 1
-        || manifest.strand_version.trim().is_empty()
+        || manifest.helper_version.trim().is_empty()
         || manifest.protocol_version != PROTOCOL_VERSION
     {
-        return Err("The latest helper manifest is not compatible with this Strand version".into());
+        return Err("The helper manifest does not match this protocol channel".into());
     }
-    if installed_version(app).is_ok_and(|version| {
-        version.version == manifest.strand_version
-            && version.protocol_version == manifest.protocol_version
-    }) {
+    if !should_download(
+        force_replace,
+        installed_version(app).ok().as_ref(),
+        &manifest,
+    ) {
         return Ok(());
     }
     let target = release_target()?;
@@ -544,7 +551,7 @@ fn download_and_install(app: &AppHandle) -> Result<()> {
     let output = run_json_at(app, &staged, &["version"], None)?;
     let version: VersionOutput = serde_json::from_value(output)
         .map_err(|error| format!("Downloaded strand-azdo version is invalid: {error}"))?;
-    if version.version != manifest.strand_version
+    if version.version != manifest.helper_version
         || version.protocol_version != manifest.protocol_version
     {
         return Err("The downloaded helper did not report the expected version".into());
@@ -612,26 +619,51 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 pub fn install(app: &AppHandle) -> Result<HelperStatus> {
-    ensure_installed_or_download(app)?;
+    download_and_install(app, true)?;
     Ok(status(app))
 }
 
 pub fn remove_all(app: &AppHandle) -> Result<()> {
     let config = load_config(app)?;
-    if !config.profiles.is_empty() {
-        ensure_installed(app).map_err(|_| {
-            "Reinstall the matching strand-azdo helper before removing profiles so Strand can delete their vault credentials".to_string()
-        })?;
-        for profile in config.profiles {
-            clear_pat(app, profile.id)?;
-        }
+    for profile in config.profiles {
+        clear_vault_credential(profile.id)?;
     }
-    let home = helper_home(app)?;
+    remove_helper_home(&helper_home(app)?)
+}
+
+fn remove_helper_home(home: &Path) -> Result<()> {
     if home.exists() {
         fs::remove_dir_all(home)
             .map_err(|error| format!("Could not remove strand-azdo: {error}"))?;
     }
     Ok(())
+}
+
+fn helper_matches_manifest(version: Option<&VersionOutput>, manifest: &HelperManifest) -> bool {
+    version.is_some_and(|version| {
+        version.version == manifest.helper_version
+            && version.protocol_version == manifest.protocol_version
+    })
+}
+
+fn should_download(
+    force_replace: bool,
+    version: Option<&VersionOutput>,
+    manifest: &HelperManifest,
+) -> bool {
+    force_replace || !helper_matches_manifest(version, manifest)
+}
+
+fn clear_vault_credential(id: Uuid) -> Result<()> {
+    let entry = keyring::Entry::new("dev.danielss.strand.azdo", &id.to_string())
+        .map_err(|_| "The operating-system credential vault is unavailable".to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err(
+            "Could not remove the personal access token from the operating-system credential vault"
+                .into(),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -666,6 +698,57 @@ mod tests {
                 "https://github.com/danielss-dev/strand/releases/download/strand-azdo-protocol-{PROTOCOL_VERSION}"
             )
         );
+    }
+
+    #[test]
+    fn protocol_mismatch_downloads_the_matching_channel_helper() {
+        let manifest = manifest("1.2.2", PROTOCOL_VERSION);
+        let mismatched = VersionOutput {
+            version: "1.2.1".into(),
+            protocol_version: PROTOCOL_VERSION - 1,
+            _capabilities: Vec::new(),
+        };
+
+        assert!(should_download(false, Some(&mismatched), &manifest));
+    }
+
+    #[test]
+    fn explicit_retry_forces_download_even_when_the_installed_helper_matches() {
+        let manifest = manifest("1.2.2", PROTOCOL_VERSION);
+        let installed = VersionOutput {
+            version: "1.2.2".into(),
+            protocol_version: PROTOCOL_VERSION,
+            _capabilities: Vec::new(),
+        };
+
+        assert!(!should_download(false, Some(&installed), &manifest));
+        assert!(should_download(true, Some(&installed), &manifest));
+    }
+
+    #[test]
+    fn removal_does_not_execute_a_protocol_mismatched_binary() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        fs::write(bin.join(binary_name()), b"broken protocol-mismatched helper").unwrap();
+        fs::write(
+            root.path().join("profiles.json"),
+            b"profiles survive until remove",
+        )
+        .unwrap();
+
+        remove_helper_home(root.path()).unwrap();
+
+        assert!(!root.path().exists());
+    }
+
+    fn manifest(helper_version: &str, protocol_version: u32) -> HelperManifest {
+        HelperManifest {
+            schema_version: 1,
+            helper_version: helper_version.into(),
+            protocol_version,
+            assets: Vec::new(),
+        }
     }
 
     #[test]

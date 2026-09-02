@@ -1941,6 +1941,11 @@ tree: watch the agent work, review fast, accept or reject safely.
   promoted to `strand-azdo-protocol-5` plus the legacy `strand-azdo-latest`
   channel; hosted post-promotion Linux smoke passed and all three manifests
   matched byte-for-byte (`Release` run `30427932365`; 2026-07-29).
+- ☑ DAN-64 helper lifecycle recovery (`azdo_helper::download_and_install` force
+  mode + protocol-only manifest gating, direct vault cleanup, and removable
+  incompatible-binary status; 2026-09-02): Hosting Retry always replaces the
+  binary from the current signed protocol channel, while startup retains the
+  matching-helper fast path and Remove no longer executes the stuck helper.
 - ☑ PR-level CI gate (`.github/workflows/ci.yml` — on push to main + PRs:
   `cargo test -p strand-core`, `cargo clippy -p strand-core -p strand-tauri
   -- -D warnings` (clippy-clean as of 2026-06-09; `result_large_err` allowed

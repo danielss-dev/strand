@@ -232,6 +232,7 @@ export interface AzdoServerProfile {
 export interface AzdoHelperStatus {
   enabled: boolean;
   installed: boolean;
+  present: boolean;
   version: string | null;
   protocol_version: number | null;
   profiles: AzdoServerProfile[];
