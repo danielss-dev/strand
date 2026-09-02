@@ -30,7 +30,7 @@ function showView(raw: unknown): void {
  * from the embedding page afterwards, so "See it in the demo" links switch
  * surfaces without reloading the app. */
 function installDeepLinks(): void {
-  showView(new URLSearchParams(window.location.search).get('view'));
+  showView(new URLSearchParams(window.location.search).get('view') ?? 'review');
   window.addEventListener('message', (event: MessageEvent<{ type?: string; view?: string }>) => {
     if (event.origin !== window.location.origin) return;
     if (event.data?.type === 'strand-demo:view') showView(event.data.view);

@@ -116,7 +116,7 @@
           </p>
           <div class="cta-row" data-reveal>
             <a class="btn btn-accent btn-lg" id="dl-primary" href="#download">Download Strand</a>
-            <a class="btn btn-ghost btn-lg" href="#demo">Try the demo <span aria-hidden="true">↓</span></a>
+            <a class="btn btn-ghost btn-lg" href="#demo" data-show-demo="review">Try the demo <span aria-hidden="true">↓</span></a>
           </div>
           <p class="cta-note" data-reveal>
             <span class="mini-platforms" aria-hidden="true">
@@ -145,7 +145,7 @@
 
       <!-- The real Strand UI (ui/), built for the browser against an in-memory
            git backend (ui/src/demo) and served from /demo/. It's a full app
-           bundle, so it boots on demand behind the poster. -->
+           bundle, so it boots automatically behind the poster. -->
       <div class="wrap demo-wrap" id="demo" data-reveal>
         <figure class="demo-frame" id="demo-frame" data-state="idle">
           <div class="demo-bar">
@@ -158,14 +158,6 @@
           <div class="demo-stage" id="demo-stage">
             <img class="demo-poster" src="demo-poster.webp" width="1440" height="900" loading="lazy" decoding="async"
                  alt="Strand's Review surface: worktrees, branches, and stashes in the sidebar, a queue of six changed files, and a whole-file diff of src/auth/retry.ts with the retry-policy changes highlighted." />
-            <div class="demo-launch">
-              <button class="btn btn-accent btn-lg" type="button" id="demo-launch">Launch the live demo</button>
-              <a class="btn btn-accent btn-lg demo-launch-narrow" href="demo/" target="_blank" rel="noopener">Open the live demo <span aria-hidden="true">↗</span></a>
-              <p>The actual Strand interface, running in your browser against a sample repository.
-                 Stage and commit, walk the graph, review a worktree, open a terminal, merge a pull request —
-                 nothing here touches your machine.</p>
-              <noscript><p><a href="demo/">Open the demo in a new page →</a></p></noscript>
-            </div>
             <div class="demo-loading" aria-hidden="true"><span class="demo-spinner"></span>Starting Strand…</div>
           </div>
         </figure>

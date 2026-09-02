@@ -49,7 +49,7 @@ export function PullRequestMonitor() {
     return () => { branchGeneration.current += 1; };
   }, [branch, followBranchMatch, hydrated, path]);
 
-  if (permission !== 'denied' || followedCount === 0) return null;
+  if (document.documentElement.dataset.demo !== undefined || permission !== 'denied' || followedCount === 0) return null;
   return (
     <div className="pr-notification-banner" role="status">
       <Icon name="bell" size={13} />

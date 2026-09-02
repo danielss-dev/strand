@@ -289,22 +289,8 @@ p { margin: 0; }
 .demo-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
 .demo-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: var(--bg-base); }
 
-.demo-launch {
-  position: absolute; inset: 0; z-index: 2;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-  padding: 32px; text-align: center;
-  background: color-mix(in oklab, var(--bg-base) 55%, transparent);
-  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
-}
-.demo-launch p {
-  max-width: 520px; margin: 0; padding: 10px 16px; border-radius: 8px;
-  font-size: 14px; line-height: 1.55; color: var(--text-2);
-  background: color-mix(in oklab, var(--bg-base) 82%, transparent);
-}
-.demo-launch p a { color: var(--text-2); border-bottom: 1px dotted var(--text-dim); }
 /* The app shell is a desktop layout; below ~720px hand off to a full tab
  * instead of embedding it at phone width. */
-.demo-launch-narrow { display: none; }
 .demo-loading {
   position: absolute; inset: 0; z-index: 3; display: none; align-items: center; justify-content: center; gap: 10px;
   background: var(--bg-base); color: var(--text-muted); font-family: var(--font-mono); font-size: 12.5px;
@@ -317,9 +303,7 @@ p { margin: 0; }
 @keyframes demo-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .demo-spinner { animation: none; } }
 
-.demo-frame[data-state="loading"] .demo-launch { display: none; }
 .demo-frame[data-state="loading"] .demo-loading { display: flex; }
-.demo-frame[data-state="ready"] .demo-launch,
 .demo-frame[data-state="ready"] .demo-loading,
 .demo-frame[data-state="ready"] .demo-poster { display: none; }
 .demo-frame[data-state="idle"] .demo-iframe { visibility: hidden; }
@@ -865,9 +849,7 @@ p { margin: 0; }
   .footer-row { grid-template-columns: 1fr; gap: 36px; }
   .try-hint { display: none; } /* no keyboard to try on touch */
   .demo-stage { aspect-ratio: 4 / 3; }
-  .demo-title, #demo-launch, #demo-restart { display: none; }
-  .demo-launch-narrow { display: inline-flex; }
-  .demo-launch p { font-size: 13px; }
+  .demo-title, #demo-restart { display: none; }
   .commit-card { font-size: 10.5px; padding: 16px; }
   .cc-line.author { margin: 0 -16px; padding: 0 16px; }
   .cc-tag { display: none; }
