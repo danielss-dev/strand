@@ -26,6 +26,7 @@ sha2 = "0.10"
 base64 = "0.22"
 flate2 = "1"
 minisign-verify = "0.2.5"
+keyring = "4.1"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "rustls-native-certs"] }
 tar = "0.4"
 uuid.workspace = true
