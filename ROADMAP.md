@@ -2743,6 +2743,11 @@ the signed release for the app's current protocol channel, with no Strand
 version compatibility gate. Incompatible or broken binaries remain removable,
 and replacement preserves profiles and vault credentials.
 
+**Live demo ships from the Railway build (2026-09-02):** The `strand`
+landing service now builds from the repo root so `pnpm demo:build` runs
+inside the deploy. The earlier `website/`-only root left `website/demo/`
+(gitignored) out of the image, and `strandgit.com/demo/` 404'd.
+
 **strandgit.com refreshed for 1.5.x (2026-09-02, DAN-58):** The landing page
 now leads with agent review and walks visitors demo → download → open a repo.
 Numbered editorial sections cover Review, Worktrees, the whole Git client

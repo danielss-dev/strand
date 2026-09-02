@@ -2312,10 +2312,16 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   `?view=` + `postMessage` deep links, and a new-tab hand-off below 720px.
   `build.mjs` copies the bundle, `seo-check.mjs` skips it (`noindex`). Docs
   pages keep the shared mono base; `npm test` and `tsc` green.)
-- ☐ Build the web demo inside the Railway deploy instead of relying on a local
-  `pnpm demo:build` before `railway up` (needs pnpm + `ui/` deps in the
-  service build; today `website/build.mjs` only warns when `website/demo/`
-  is missing).
+- ☑ Build the web demo inside the Railway deploy (2026-09-02: service `strand`
+  in project `landings` now builds from the repo root —
+  `pnpm install --frozen-lockfile && pnpm --filter strand-ui build:demo &&
+  pnpm --filter strand-website build`,
+  start `npx --yes serve website/dist` (runtime has Node via apt, not
+  pnpm), watch `/website/**` + `/ui/**`.
+  Railpack is pinned to Node (`railpack.json` + `RAILPACK_PACKAGES` /
+  `RAILPACK_INSTALL_CMD`) so the root `Cargo.toml` is not treated as a Rust
+  app. `website/build.mjs` fails on Railway/CI if `website/demo/` is missing;
+  `pnpm site:build` is the local equivalent.)
 - ☐ Web demo: forward the landing page's accent pick into the iframe
   (`postMessage`, like `strand-demo:view`) so the hero dots recolor the
   embedded app too.

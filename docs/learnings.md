@@ -2395,6 +2395,26 @@ sets that attribute.
 was replaced because it felt fake. Keeping the demo honest costs one handler
 per command; a special-cased UI would drift the same way the mock did.
 
+**Rule.** Railway service `strand` (project `landings`) must build from the
+repo root, not `website/`. `website/demo/` is gitignored, so a
+`website/`-only root never sees the Vite bundle and `strandgit.com/demo/`
+404s. Railpack otherwise detects the root `Cargo.toml` as Rust and has no
+pnpm; keep `railpack.json` (`"provider": "node"`) and the service vars
+`RAILPACK_PACKAGES=node@22 pnpm@9.0.0`,
+`RAILPACK_INSTALL_CMD=true`, `RAILPACK_NO_SPA=1`. The build command is
+`pnpm install --frozen-lockfile && pnpm --filter strand-ui build:demo &&
+pnpm --filter strand-website build` (one step — Railpack's Rust provider
+races a separate install layer). Start with
+`npx --yes serve website/dist -l ${PORT:-4321}` plus
+`RAILPACK_DEPLOY_APT_PACKAGES=nodejs npm` until `railpack.json` is on
+`main` and the Node provider owns the runtime. Watch `/website/**` and
+`/ui/**`. `website/build.mjs` must fail on Railway/CI when the bundle is
+missing.
+
+**Why.** The 2026-09-02 DAN-58 landing shipped the iframe chrome without
+the demo artifact because Railway only pulled `website/` and
+`build.mjs` warned instead of failing.
+
 ---
 
 ## Optional helpers use protocol compatibility, not app versions

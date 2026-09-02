@@ -43,11 +43,14 @@ for (const file of ['index.html', 'style.css', 'script.js', 'favicon.svg', 'favi
 }
 await cp(path.join(root, 'fonts'), path.join(outRoot, 'fonts'), { recursive: true });
 
-// The live demo (`pnpm demo:build` at the repo root → website/demo) is an
-// optional input: the static site still builds without it, the hero just
-// keeps its poster.
+// The live demo (`pnpm demo:build` at the repo root → website/demo) is
+// required on Railway/CI so strandgit.com/demo cannot 404. Local docs-only
+// builds still work; the hero keeps its poster.
 const demoRoot = path.join(root, 'demo');
 const hasDemo = await stat(path.join(demoRoot, 'index.html')).then((s) => s.isFile(), () => false);
+if (!hasDemo && (process.env.RAILWAY_ENVIRONMENT || process.env.CI)) {
+  throw new Error('website/demo is missing — run `pnpm demo:build` (or `pnpm site:build`) before shipping.');
+}
 if (hasDemo) await cp(demoRoot, path.join(outRoot, 'demo'), { recursive: true });
 
 await mkdir(path.join(outRoot, 'docs'), { recursive: true });
