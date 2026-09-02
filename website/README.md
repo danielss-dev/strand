@@ -43,9 +43,9 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
   `acme-api` repository, scripted pull requests, a scripted terminal, and
   stubs for the desktop-only plugins — and emits a static SPA to
   `website/demo/`, served at `/demo/` with `noindex`. The landing page embeds
-  it in an iframe behind `demo-poster.webp`; "Launch the live demo" mounts
-  it, "Restart" remounts it (state lives in the iframe, so this resets the
-  sample repo), and "Full screen" opens `/demo/` in a tab. Deep links from
+  it in an iframe behind `demo-poster.webp`; desktop visitors get an automatic
+  Review-first mount, "Restart" remounts it (state lives in the iframe, so
+  this resets the sample repo), and "Full screen" opens `/demo/` in a tab. Deep links from
   page sections post `{ type: 'strand-demo:view', view }` to the iframe (or
   pass `?view=` on first mount); below 720px the embed hands off to a new
   tab because the app shell is a desktop layout. Because it is the real UI,

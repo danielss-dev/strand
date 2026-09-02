@@ -111,7 +111,7 @@
   $$('.stat-num [data-count]').forEach((n) => cio.observe(n));
 
   /* ══ Live demo — the real app (ui/ built with --mode demo) in an iframe ══
-   * It's a full bundle, so it mounts on demand behind a poster. Same origin,
+   * It's a full bundle, so it mounts automatically behind a poster. Same origin,
    * so we can watch React's first commit instead of guessing at a delay. */
   const frame = $('#demo-frame');
   const stage = $('#demo-stage');
@@ -125,7 +125,7 @@
     iframe = document.createElement('iframe');
     iframe.className = 'demo-iframe';
     iframe.title = 'Strand live demo';
-    iframe.src = view ? `demo/?view=${encodeURIComponent(view)}` : 'demo/';
+    iframe.src = `demo/?view=${encodeURIComponent(view || 'review')}`;
     const mounted = iframe;
     iframe.addEventListener('load', () => {
       const t0 = performance.now();
@@ -151,14 +151,14 @@
     if (!iframe) mountDemo(view);
     else iframe.contentWindow?.postMessage({ type: 'strand-demo:view', view }, location.origin);
   }
-  $('#demo-launch').addEventListener('click', () => mountDemo());
-  restartBtn.addEventListener('click', () => mountDemo());
+  restartBtn.addEventListener('click', () => mountDemo('review'));
   $$('[data-show-demo]').forEach((a) => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
       showDemo(a.dataset.showDemo);
     });
   });
+  if (!narrow.matches) mountDemo('review');
 
   /* ══ Command palette (the app's ⌘K, driving this page) ══ */
   const veil = $('#palette-veil');
