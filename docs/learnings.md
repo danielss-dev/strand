@@ -2374,3 +2374,19 @@ so valid Partner Center submissions fail consistently at the Azure blob upload
 after package preparation. The upstream fix was merged after v0.4.1 but was not
 yet released when Strand 1.5.0 was submitted.
 
+---
+
+## Optional helpers use protocol compatibility, not app versions
+
+**Rule.** `strand-azdo` compatibility is determined only by
+`PROTOCOL_VERSION` and its signed `strand-azdo-protocol-N` release channel.
+Background startup may keep an installed helper that matches the channel
+manifest, but a user-triggered install or Retry is a repair action and must
+download, verify, and replace the binary even when its reported helper version
+matches. Removing helper state must not require executing that helper.
+
+**Why.** Helper releases advance independently of Strand releases, and a
+binary can be corrupt or otherwise broken while still reporting expected
+metadata. Sharing an updater fast path with explicit Retry made recovery a
+no-op; requiring a protocol-compatible helper to remove its own state trapped
+users after a breaking IPC change.

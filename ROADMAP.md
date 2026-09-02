@@ -2737,6 +2737,12 @@ manifests and Cargo lockfile are synchronized at 1.5.1. The signed desktop
 release and Microsoft Store submission workflows are the remaining promotion
 steps.
 
+**Azure DevOps Server helper recovery shipped (2026-09-02):** Settings →
+Hosting Retry now force-downloads and atomically replaces `strand-azdo` from
+the signed release for the app's current protocol channel, with no Strand
+version compatibility gate. Incompatible or broken binaries remain removable,
+and replacement preserves profiles and vault credentials.
+
 **Work and Custom unified as Workbench (2026-08-28):** The separate Labs
 destination is gone. Workbench opens on the existing full-size Work surface
 when a workspace has no saved composition, while Mod+8, the View menu, and
