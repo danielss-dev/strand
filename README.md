@@ -355,6 +355,7 @@ strand/
 ├── ui/                 # Vite + React + TypeScript frontend
 │   └── src/demo/       # In-browser git backend for the website's live demo
 ├── website/            # strandgit.com: landing page, live demo, pre-rendered user guide
+├── railpack.json       # Force Node on the landing-page Railway build (root has Cargo.toml)
 ├── docs/               # design notes, perf baseline, packaging
 ├── PRD.md              # product spec
 ├── ROADMAP.md          # milestones and status

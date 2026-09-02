@@ -4,20 +4,23 @@ Static site for `strandgit.com`. A zero-dependency Node build pre-renders the
 Markdown user guide into crawlable HTML and writes the deployable site to
 `dist/`.
 
-**Deployed on Railway**: project `landings` → service `strand-landing`
-(`railway up` from this folder redeploys; Railway runs `npm run build` and then
-`npm start`, which serves `dist/` on `$PORT`). Test URL:
+**Deployed on Railway**: project `landings` → service `strand`
+(GitHub `danielss-dev/strand` @ `main`). The service root is the repo
+(not this folder): Railway installs Node/pnpm (not the root Rust crate), then
+`pnpm install --frozen-lockfile && pnpm --filter strand-ui build:demo &&
+pnpm --filter strand-website build`,
+and starts with `npx --yes serve website/dist -l ${PORT:-4321}` (the
+Railpack Rust runtime has no pnpm on PATH). Watch paths are
+`/website/**` and `/ui/**` so chrome changes rebuild the live demo. Test URL:
 <https://strand-landing-production.up.railway.app>. The custom domain
 `strandgit.com` is live through the Railway service.
 
-**Deploy sequence**: `pnpm demo:build` from the repo root first, then
-`railway up` from this folder. The live demo at `/demo/` is the real app
-bundle built into `website/demo/` (gitignored); `railway up` uploads the
-folder as-is, so a deploy without that step ships a landing page whose
-"Launch the live demo" button 404s — `npm run build` prints a warning when
-the bundle is missing.
-
-Preview locally with `pnpm site` from the repo root (builds and serves on
+The live demo at `/demo/` is the real app bundle built into
+`website/demo/` (gitignored). `website/build.mjs` copies it into `dist/`;
+on Railway/CI a missing bundle fails the build so the hero cannot ship a
+404. Locally, `pnpm site:build` from the repo root (or `pnpm demo:build`
+then `npm run build` here) produces the same output. Preview locally with
+`pnpm site` from the repo root (builds and serves on
 <http://localhost:4321> via [`serve`](https://github.com/vercel/serve)). Run
 `npm test` from this folder to build and validate titles, descriptions,
 canonicals, JSON-LD, the sitemap, robots policy, and internal links.
@@ -31,7 +34,8 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
   choices visible.
 - `fonts/` — Geist + JetBrains Mono woff2, copied from `ui/public/fonts`
   (self-hosted, latin subsets only).
-- The hero window (`#demo`) is the actual Strand UI. `pnpm demo:build` runs
+- The hero window (`#demo`) is the actual Strand UI. Railway (and
+  `pnpm site:build`) runs `pnpm demo:build`, which puts
   `ui/` through Vite in `--mode demo` (`ui/.env.demo` sets `VITE_DEMO=1`),
   which swaps the Tauri IPC layer for the in-browser backend in
   `ui/src/demo/` — an in-memory git model (commits, branches, worktrees,
