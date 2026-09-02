@@ -61,10 +61,13 @@ compatible with this Strand version.
 While the helper is being fetched and verified, the status row, install button,
 and progress bar show that the download is still running.
 The status row shows the installed helper and protocol versions; **Retry
-installation** replaces it only after signature and SHA-256 verification.
+installation** always downloads and replaces the helper from Strand's current
+protocol channel, including when the existing binary reports the same version,
+and installs it only after signature and SHA-256 verification.
 Disabling keeps profiles and credentials. **Remove helper and credentials** is
 confirmed separately and removes the binary, profiles, imported certificates,
-and vault entries.
+and vault entries even when the installed helper is broken or uses an older
+protocol.
 
 Each server profile has a display name and an HTTPS collection URL such as
 `https://server/tfs/DefaultCollection`. For a standard on-prem HTTPS clone URL,

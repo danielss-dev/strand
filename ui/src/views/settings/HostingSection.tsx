@@ -17,6 +17,7 @@ import { useRepo } from '../../stores/repo';
 const emptyStatus: AzdoHelperStatus = {
   enabled: false,
   installed: false,
+  present: false,
   version: null,
   protocol_version: null,
   profiles: [],
@@ -260,9 +261,9 @@ export function HostingSection() {
             <div className="settings-row">
               <button type="button" className="btn" disabled={busy || !desktop} onClick={() => void enable()}>
                 {installing && <span className="spinner" aria-hidden="true" />}
-                {installing ? 'Downloading helper…' : status.installed ? 'Retry installation' : 'Install helper'}
+                {installing ? 'Downloading helper…' : status.present ? 'Retry installation' : 'Install helper'}
               </button>
-              <button type="button" className="btn danger" disabled={busy || (!status.installed && status.profiles.length === 0)} onClick={() => void removeEverything()}>
+              <button type="button" className="btn danger" disabled={busy || (!status.present && status.profiles.length === 0)} onClick={() => void removeEverything()}>
                 Remove helper and credentials
               </button>
             </div>

@@ -5937,6 +5937,7 @@ version = "1.5.1"
 dependencies = [
  "base64 0.22.1",
  "flate2",
+ "keyring",
  "libc",
  "minisign-verify",
  "portable-pty",

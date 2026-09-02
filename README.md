@@ -174,7 +174,8 @@ the resolved app appearance automatically.
   `az` CLI. Azure DevOps Server 2020+ is available through an optional,
   independently versioned and updated, signed `strand-azdo` REST helper from
   a protocol-specific release channel, configured in Settings → Hosting;
-  installation shows an explicit download and verification indicator;
+  installation shows an explicit download and verification indicator, and
+  Retry force-replaces a broken or protocol-incompatible installed helper;
   PATs live only in the native credential vault, and Windows can use integrated
   Negotiate/NTLM authentication. Its collection URL automatically matches HTTPS
   repository remotes and supplies the project/repository coordinates used by the
