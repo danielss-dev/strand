@@ -8401,8 +8401,8 @@ textarea.clone-input {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  font-size: var(--type-ui-sm);
-  font-family: var(--font-mono);
+  font-size: var(--type-ui);
+  font-family: var(--font-ui);
 }
 .wt-table-head,
 .wt-row {
@@ -8412,9 +8412,9 @@ textarea.clone-input {
   min-width: 650px;
 }
 .wt-table-head {
-  height: 26px;
-  flex: 0 0 26px;
-  padding: 0 10px;
+  height: var(--row-h);
+  flex: 0 0 var(--row-h);
+  padding: 0 var(--row-pad-x);
   border-bottom: 0.5px solid var(--border);
   color: var(--text-dim);
   font-family: var(--font-ui);
@@ -8433,8 +8433,8 @@ textarea.clone-input {
 }
 .wt-row {
   position: relative;
-  height: 26px;
-  padding: 0 10px;
+  height: var(--row-h);
+  padding: 0 var(--row-pad-x);
   color: var(--text-muted);
   cursor: default;
 }
@@ -8462,14 +8462,18 @@ textarea.clone-input {
 .wt-row.current .wt-name {
   color: var(--accent);
 }
-.wt-name,
-.wt-branch-cell {
+.wt-name {
   color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: var(--type-ui);
 }
 .wt-branch-cell {
   display: flex;
   align-items: baseline;
   gap: 6px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
 }
 .wt-merged,
 .wt-touched {
@@ -8480,6 +8484,8 @@ textarea.clone-input {
 }
 .wt-changes {
   color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
 }
 .wt-add {
   color: var(--add);
