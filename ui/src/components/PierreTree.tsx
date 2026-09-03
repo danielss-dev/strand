@@ -155,7 +155,16 @@ const pathsKeyOf = (paths: readonly string[]) => paths.join('\n');
 const statusKeyOf = (entries: readonly GitStatusEntry[] | undefined) =>
   entries ? entries.map((e) => `${e.path}:${e.status}`).join('\n') : '';
 
-const SEARCH_ACTION_CSS = `
+/**
+ * Shadow CSS for an optional trailing search-row action (Files create `+`).
+ *
+ * The header slot is absolutely positioned over the search row; reserved end
+ * padding keeps the input clear of that control. Flex items default to
+ * `min-width: auto`, and Pierre's search `<input>` has a large intrinsic
+ * minimum — without `min-width: 0` a narrow Files pane lets the field refuse
+ * to shrink and paint under the action even when end padding is correct.
+ */
+export const SEARCH_ACTION_CSS = `
   [data-file-tree-virtualized-root='true'] {
     position: relative;
   }
@@ -166,11 +175,18 @@ const SEARCH_ACTION_CSS = `
     z-index: 2;
   }
   [data-file-tree-search-container] {
+    min-width: 0;
     padding-inline-end: calc(
       var(--trees-padding-inline) + var(--strand-tree-search-action-space, 0px)
     );
   }
+  [data-file-tree-search-input] {
+    min-width: 0;
+  }
 `;
+
+/** Outer width of `.side-files-create` (content-box row height + pad + border) plus a 2px gap. */
+export const SEARCH_ACTION_SPACE = 'calc(var(--trees-row-height, 30px) + 6px)';
 
 /**
  * Walk an event's composed path (which crosses the shadow boundary) for the
@@ -707,9 +723,7 @@ export const PierreTree = forwardRef<PierreTreeHandle, PierreTreeProps>(function
     height: '100%',
     width: '100%',
     minHeight: 0,
-    '--strand-tree-search-action-space': searchAction
-      ? 'calc(var(--trees-row-height, 30px) + 6px)'
-      : '0px',
+    '--strand-tree-search-action-space': searchAction ? SEARCH_ACTION_SPACE : '0px',
     ...style,
   } as CSSProperties;
 

@@ -94,15 +94,21 @@ gradients and masks cannot collide inside the combined sprite.
 `FileTree` header slot and `PierreTree`'s wrapper-owned shadow CSS. Install that
 CSS when the model is created, then vary reserved width with an inherited host
 custom property; `useFileTree` captures its option object once, so toggling an
-`unsafeCSS` option later does not update the mounted model. Match the action to
-`--trees-row-height` and reserve that width plus 2px so resize never overlays
-the search input or opens a wider gap.
+`unsafeCSS` option later does not update the mounted model. Match the action's
+outer box (for `.side-files-create`, content-box `--trees-row-height` plus its
+1px pad and border) and reserve that width plus a 2px gap
+(`SEARCH_ACTION_SPACE`). Always set `min-width: 0` on
+`[data-file-tree-search-container]` and `[data-file-tree-search-input]` in that
+same shadow CSS — reserved end padding alone is not enough.
 
 **Why.** Rendering the action outside the tree adds an empty toolbar row. The
 header slot keeps the control keyboard-accessible and in the tree's composition
 contract, while the host variable lets working-tree and historical views change
 the available search width without recreating Pierre's model or losing tree
-selection and expansion.
+selection and expansion. Flex items default to `min-width: auto`, and Pierre's
+search `<input>` has a large intrinsic minimum, so a narrow Files pane used to
+let the field refuse to shrink and paint under the create `+` even when end
+padding matched the control (DAN-66).
 
 ---
 
