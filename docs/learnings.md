@@ -1180,6 +1180,27 @@ the cursor.
 
 ---
 
+## Worktrees pane is persist-cut Review chrome, not a session-manager landing
+
+**Rule.** The Worktrees overview is a dense Review-sibling table: 32px
+`PaneHeader` breadcrumb (`repo / Worktrees`, muted 11px + weight-500 leaf) and
+one filled **New worktree**; 26px `--row-h` rows; Geist `--type-ui` names;
+JetBrains Mono branches; quiet Geist Changes subjects (`clean · …`) with
+colored mono `+n −n`; dim `merged` word, never chips. Current = inset 2px
+`--accent` rail + `--bg-sel` that wins over hover/focus. Focused path lives
+in the status bar (`.sb-worktree-path`), not the row.
+
+**Why.** The persist-cut Doop target is the density/type spec. Restoring
+cards, masthead, CURRENT/MAIN/DIRTY/MERGED pills, in-row ghosts, or Clean up
+chrome is a regression. Matching the marketing landing is also wrong — Review
+is the sibling.
+
+**How to apply.** Tokens from `tokens.css` (`--row-h`, `--pane-head-h`,
+`--type-ui`, `--font-ui` / `--font-mono`, `--bg-sel`). Do not add a second
+breadcrumb row, counts, or current-row padding that misaligns columns.
+
+---
+
 ## AI commit messages use vendor CLIs, not raw OAuth
 
 **Rule.** Subscription-backed AI features delegate auth and billing to the

@@ -1425,6 +1425,7 @@ html[data-demo] .win-controls {
     max-width: min(48vw, 640px);
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-dim);
     font-family: var(--font-mono);
 }
 .statusbar .sb-gear {

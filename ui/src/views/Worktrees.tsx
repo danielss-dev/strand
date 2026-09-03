@@ -196,7 +196,7 @@ export function Worktrees({
       <PaneHeader
         title={
           <span className="wt-breadcrumb">
-            <span>{repoName}</span><span aria-hidden="true"> / </span><strong>Worktrees</strong>
+            {repoName} / <strong>Worktrees</strong>
           </span>
         }
         actions={

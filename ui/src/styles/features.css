@@ -8384,16 +8384,14 @@ textarea.clone-input {
   flex-direction: column;
   overflow: hidden;
 }
-.wt-breadcrumb {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  color: var(--text-dim);
+.wt-view .pane-head-title {
+  font-size: var(--type-ui-sm);
   font-weight: 400;
+  color: var(--text-muted);
 }
 .wt-breadcrumb strong {
-  color: var(--text-1);
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
 }
 .wt-table {
   flex: 1;
@@ -8407,19 +8405,22 @@ textarea.clone-input {
 .wt-table-head,
 .wt-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.05fr) minmax(120px, 0.75fr) minmax(240px, 2.8fr) minmax(72px, 0.45fr);
+  grid-template-columns: minmax(140px, 240px) minmax(120px, 160px) minmax(220px, 1fr) 88px;
+  gap: 12px;
   align-items: center;
   min-width: 650px;
+  /* +2px left gutter so the current-row accent rail sits in padding, not on glyphs. */
+  padding: 0 var(--row-pad-x) 0 calc(var(--row-pad-x) + 2px);
 }
 .wt-table-head {
   height: var(--row-h);
   flex: 0 0 var(--row-h);
-  padding: 0 var(--row-pad-x);
   border-bottom: 0.5px solid var(--border);
   color: var(--text-dim);
   font-family: var(--font-ui);
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .wt-table-body {
@@ -8432,9 +8433,8 @@ textarea.clone-input {
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .wt-row {
-  position: relative;
   height: var(--row-h);
-  padding: 0 var(--row-pad-x);
+  border-bottom: 0.5px solid color-mix(in oklch, var(--border) 50%, transparent);
   color: var(--text-muted);
   cursor: default;
 }
@@ -8448,44 +8448,53 @@ textarea.clone-input {
 .wt-row.focused {
   background: var(--bg-hover);
 }
-.wt-row.current {
-  padding-left: 12px;
+.wt-row.current,
+.wt-row.current:hover,
+.wt-row.current.focused,
+.wt-row.current.focused:hover {
   background: var(--bg-sel);
-}
-.wt-row.current::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--accent);
+  box-shadow: 2px 0 0 var(--accent) inset;
 }
 .wt-row.current .wt-name {
   color: var(--accent);
+  font-weight: 500;
 }
 .wt-name {
   color: var(--text-2);
   font-family: var(--font-ui);
   font-size: var(--type-ui);
+  font-weight: 400;
 }
 .wt-branch-cell {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  color: var(--text-2);
+  color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--type-mono);
 }
-.wt-merged,
+.wt-merged {
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
 .wt-touched {
   color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: var(--type-ui);
 }
 .wt-dim {
   color: var(--text-dim);
 }
 .wt-changes {
   color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--type-ui);
+}
+.wt-add,
+.wt-del {
   font-family: var(--font-mono);
-  font-size: var(--type-mono);
+  font-variant-numeric: tabular-nums;
 }
 .wt-add {
   color: var(--add);
