@@ -38,10 +38,11 @@ if (!slugs.has('index')) {
 await rm(outRoot, { recursive: true, force: true });
 await mkdir(outRoot, { recursive: true });
 
-for (const file of ['index.html', 'style.css', 'script.js', 'favicon.svg', 'favicon.png', 'og-image.svg', 'og-image.png', 'demo-poster.webp']) {
+for (const file of ['index.html', 'style.css', 'script.js', 'hero-scene.js', 'favicon.svg', 'favicon.png', 'og-image.svg', 'og-image.png', 'demo-poster.webp']) {
   await cp(path.join(root, file), path.join(outRoot, file));
 }
 await cp(path.join(root, 'fonts'), path.join(outRoot, 'fonts'), { recursive: true });
+await cp(path.join(root, 'vendor'), path.join(outRoot, 'vendor'), { recursive: true });
 
 // The live demo (`pnpm demo:build` at the repo root → website/demo) is
 // required on Railway/CI so strandgit.com/demo cannot 404. Local docs-only

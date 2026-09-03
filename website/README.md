@@ -34,6 +34,15 @@ canonicals, JSON-LD, the sitemap, robots policy, and internal links.
   choices visible.
 - `fonts/` — Geist + JetBrains Mono woff2, copied from `ui/public/fonts`
   (self-hosted, latin subsets only).
+- `hero-scene.js` + `vendor/three.*.min.js` — the WebGL hero behind the
+  headline: a braid of git strands (main in the accent hue, agent branches
+  forking, carrying commits, and merging back; pulses light commits as they
+  pass). three.js r180 is vendored like `docs/marked.min.js`; the module
+  build imports `./three.core.min.js`, so both files ship together. It is
+  `import()`ed from `script.js` after `load` (idle callback) and only at
+  ≥721px, renders one frame under `prefers-reduced-motion`, pauses when
+  off-screen or the tab is hidden, and retints when the accent dots change
+  `--accent-h`. Purely decorative — the copy never depends on it.
 - The hero window (`#demo`) is the actual Strand UI. Railway (and
   `pnpm site:build`) runs `pnpm demo:build`, which puts
   `ui/` through Vite in `--mode demo` (`ui/.env.demo` sets `VITE_DEMO=1`),

@@ -102,6 +102,10 @@
 
     <!-- ============================== HERO ============================== -->
     <section class="hero">
+      <div class="hero-top">
+      <!-- Three.js braid of git strands (hero-scene.js), mounted by script.js
+           after load on wide viewports. Decorative; the copy never depends on it. -->
+      <div class="hero-scene" aria-hidden="true"><canvas id="hero-canvas"></canvas></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <p class="eyebrow" data-reveal>
@@ -141,6 +145,7 @@
           </div>
           <p class="accents-note">Same hue rotation as the app's Appearance settings.</p>
         </div>
+      </div>
       </div>
 
       <!-- The real Strand UI (ui/), built for the browser against an in-memory

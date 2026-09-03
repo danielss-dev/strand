@@ -183,8 +183,22 @@ p { margin: 0; }
   background: radial-gradient(ellipse at center, var(--accent-glow), transparent 65%);
   filter: blur(48px); opacity: 0.55;
 }
+.hero-top { position: relative; }
+.hero-scene {
+  /* WebGL strands behind the copy: bleeds up behind the nav, stops at the
+   * datum line. Fades out to the left so the headline keeps its contrast. */
+  position: absolute; top: -150px; right: 0; bottom: 0; left: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+  mask-image: linear-gradient(180deg, transparent 0, #000 90px, #000 78%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 90px, #000 78%, transparent 100%);
+}
+.hero-scene canvas {
+  display: block; width: 100%; height: 100%;
+  mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,0.18) 34%, #000 62%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,0.18) 34%, #000 62%);
+}
 .hero-grid {
-  position: relative;
+  position: relative; z-index: 1;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: end;
   padding-bottom: 56px;
   border-bottom: var(--rule);
@@ -834,6 +848,7 @@ p { margin: 0; }
 @media (max-width: 720px) {
   .nav-links, .nav-pill { display: none; }
   .hero { padding-top: 112px; }
+  .hero-scene { display: none; } /* script.js also skips loading three here */
   .hero h1 { font-size: clamp(34px, 10vw, 48px); }
   .hero-grid::before, .hero-grid::after { display: none; }
   .section { padding: 84px 0; }

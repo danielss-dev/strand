@@ -28,6 +28,17 @@
   }
   $$('.dot').forEach((dot) => dot.addEventListener('click', () => setAccent(dot.dataset.h)));
 
+  /* ── Hero scene (three.js, ~180 KB gzipped) ──
+   * Deferred past load so it never competes with first paint; skipped on
+   * narrow viewports where the CSS hides the canvas anyway. */
+  const heroCanvas = $('#hero-canvas');
+  if (heroCanvas && matchMedia('(min-width: 721px)').matches) {
+    const mountHero = () => import('./hero-scene.js').then((m) => m.mount(heroCanvas)).catch(() => heroCanvas.remove());
+    const idle = () => (window.requestIdleCallback ? requestIdleCallback(mountHero, { timeout: 1500 }) : setTimeout(mountHero, 200));
+    if (document.readyState === 'complete') idle();
+    else addEventListener('load', idle, { once: true });
+  }
+
   /* ── Downloads → latest release ── */
   /* Asset names embed the version (Strand_1.5.1_universal.dmg), so resolve
    * them through the API; on any failure the hrefs keep pointing at the
