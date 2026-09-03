@@ -213,6 +213,15 @@ impl Repo {
         let mut args = push_args(mode);
         if self.should_set_origin_upstream() {
             args.extend(["--set-upstream", "--", "origin", "HEAD"]);
+            return run_git_streaming(&self.path, &args, on_progress, cancel);
+        }
+        // When an upstream is configured, push there with an explicit refspec.
+        // Bare `git push` under `push.default=simple` refuses when the upstream
+        // short name ≠ the local branch name — common for linked worktrees
+        // created with `--track` from a differently named remote start-point.
+        if let Some((remote, refspec)) = self.configured_upstream_push_target() {
+            args.extend(["--", remote.as_str(), refspec.as_str()]);
+            return run_git_streaming(&self.path, &args, on_progress, cancel);
         }
         run_git_streaming(&self.path, &args, on_progress, cancel)
     }
@@ -318,6 +327,35 @@ impl Repo {
             && config
                 .get_string(&format!("branch.{branch}.remote"))
                 .is_err()
+    }
+
+    /// Remote + `HEAD:<merge>` refspec for the current branch's configured
+    /// upstream. Prefer `branch.<name>.pushRemote` when set (same as Git),
+    /// otherwise the upstream remote. Returns `None` when there is no
+    /// upstream so callers can fall through to bare `git push`.
+    fn configured_upstream_push_target(&self) -> Option<(String, String)> {
+        let repo = self.git2().ok()?;
+        let head = repo.head().ok()?;
+        if !head.is_branch() {
+            return None;
+        }
+        let full_name = head.name()?;
+        // Confirm an upstream exists before reading config — a lone
+        // `branch.<name>.remote` without `.merge` is not a push target.
+        repo.branch_upstream_name(full_name).ok()?;
+        let branch = head.shorthand()?;
+        let config = repo.config().ok()?;
+        let remote = config
+            .get_string(&format!("branch.{branch}.pushRemote"))
+            .or_else(|_| config.get_string(&format!("branch.{branch}.remote")))
+            .ok()?;
+        let merge = config
+            .get_string(&format!("branch.{branch}.merge"))
+            .ok()?;
+        if merge.is_empty() || !merge.starts_with("refs/heads/") {
+            return None;
+        }
+        Some((remote, format!("HEAD:{merge}")))
     }
 
     /// Delete `branch` on `remote` (`git push <remote> --delete refs/heads/<branch>`).
@@ -902,6 +940,92 @@ mod tests {
         assert_eq!(
             git(&local, &["rev-parse", "HEAD"]),
             git(&local, &["rev-parse", "refs/remotes/origin/topic"])
+        );
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    /// Linked worktrees created with `--track` from a differently named remote
+    /// start-point leave the local branch tracking that remote ref. Under
+    /// `push.default=simple`, bare `git push` refuses that mismatch — Strand
+    /// must still publish HEAD to the configured upstream.
+    #[test]
+    fn push_succeeds_when_upstream_short_name_mismatches_local_branch() {
+        let (repo, local, base) = push_fixture();
+        repo.push(PushMode::Default, |_| {}, None).unwrap();
+        // Publish a differently named remote start-point for the worktree.
+        git(&local, &["push", "-q", "origin", "topic:start-point"]);
+
+        let linked = base.join("wt");
+        git(
+            &local,
+            &[
+                "worktree",
+                "add",
+                "--track",
+                "-b",
+                "feat/portal3-flipped-bar",
+                linked.to_str().unwrap(),
+                "origin/start-point",
+            ],
+        );
+        assert_eq!(
+            git(
+                &linked,
+                &["config", "--get", "branch.feat/portal3-flipped-bar.merge"]
+            ),
+            "refs/heads/start-point"
+        );
+
+        std::fs::write(linked.join("a.txt"), "ahead\n").unwrap();
+        git(&linked, &["commit", "-qam", "ahead"]);
+        // Sanity: bare push still fails under simple — that's the bug Strand hits.
+        assert!(!git_succeeds(&linked, &["push"]));
+
+        let wt = Repo::discover(linked.to_str().unwrap()).unwrap();
+        wt.push(PushMode::Default, |_| {}, None).unwrap();
+
+        assert_eq!(
+            git(&linked, &["rev-parse", "HEAD"]),
+            git(&linked, &["rev-parse", "refs/remotes/origin/start-point"])
+        );
+        assert_eq!(
+            git(
+                &linked,
+                &["config", "--get", "branch.feat/portal3-flipped-bar.remote"]
+            ),
+            "origin"
+        );
+        assert_eq!(
+            git(
+                &linked,
+                &["config", "--get", "branch.feat/portal3-flipped-bar.merge"]
+            ),
+            "refs/heads/start-point",
+            "upstream must be preserved, not rewritten"
+        );
+
+        drop(wt);
+        drop(repo);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn push_to_matching_upstream_still_updates_remote_tracking_ref() {
+        let (repo, local, base) = push_fixture();
+        repo.push(PushMode::Default, |_| {}, None).unwrap();
+        std::fs::write(local.join("a.txt"), "two\n").unwrap();
+        git(&local, &["commit", "-qam", "second"]);
+
+        repo.push(PushMode::Default, |_| {}, None).unwrap();
+        assert_eq!(
+            git(&local, &["rev-parse", "HEAD"]),
+            git(&local, &["rev-parse", "refs/remotes/origin/topic"])
+        );
+        assert_eq!(
+            git(&local, &["config", "--get", "branch.topic.merge"]),
+            "refs/heads/topic"
         );
 
         drop(repo);

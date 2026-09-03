@@ -290,7 +290,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   guarded `--force-with-lease` pushes through the toolbar/branch menus and
   command palette; plain `--force` is intentionally unavailable;
   `Repo::push` creates `origin/<branch>` and sets it as upstream on the first
-  push of an otherwise unconfigured local branch — DAN-10)
+  push of an otherwise unconfigured local branch — DAN-10; when an upstream
+  is already configured, push uses an explicit `HEAD:<merge>` refspec so
+  `push.default=simple` cannot refuse mismatched upstream short names from
+  linked worktrees — `configured_upstream_push_target`, DAN-65)
 - ☑ Set / change / unset a local branch's upstream from the branch menu
   (`Repo::set_branch_upstream`, `BranchNetworkDialog`).
 - ☑ Push a chosen non-current local branch to a chosen remote/ref without
