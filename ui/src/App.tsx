@@ -2235,7 +2235,9 @@ export function App() {
                   ) : null
                 ) : (
                   <div className="main">
-                    <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
+                    {view !== 'worktrees' && (
+                      <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
+                    )}
                     <OpBanner onToast={showToast} />
                     {mainSurfaceId && (
                       <SurfaceHost
@@ -2729,7 +2731,6 @@ function MainHeader({
   }, [activePath, refreshing, refreshLocalChanges, refreshLog]);
 
   const reflog = useRepo((s) => s.reflog);
-  const worktrees = useRepo((s) => s.worktrees);
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
@@ -2763,8 +2764,6 @@ function MainHeader({
                   ` · ${wsMembers.reduce((n, m) => n + m.diffs.length, 0)} files to review`
                 );
               })()
-            : view === 'worktrees'
-              ? `${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}`
               : '';
 
   return (

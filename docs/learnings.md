@@ -1188,7 +1188,8 @@ one filled **New worktree**; 26px `--row-h` rows; Geist `--type-ui` names;
 JetBrains Mono branches; quiet Geist Changes subjects (`clean · …`) with
 colored mono `+n −n`; dim `merged` word, never chips. Current = inset 2px
 `--accent` rail + `--bg-sel` that wins over hover/focus. Focused path lives
-in the status bar (`.sb-worktree-path`), not the row.
+in the status bar (`.sb-worktree-path`), not the row. Do not stack
+`MainHeader` on this view — `PaneHeader` is the only 32px head.
 
 **Why.** The persist-cut Doop target is the density/type spec. Restoring
 cards, masthead, CURRENT/MAIN/DIRTY/MERGED pills, in-row ghosts, or Clean up
