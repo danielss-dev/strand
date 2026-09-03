@@ -2780,6 +2780,14 @@ upstream config; force-with-lease still only via `PushMode::ForceWithLease`).
 Verified: `cargo test -p strand-core --lib network::tests` (21, including
 mismatched-upstream worktree case).
 
+**DAN-66 Files search/create overlap shipped (2026-09-03):** Narrow Files
+panes no longer let the trailing create `+` cover Pierre's Search field.
+`PierreTree`'s searchAction shadow CSS keeps reserved end padding and now
+forces `min-width: 0` on the search container and input so the flex field
+shrinks instead of painting under the absolutely positioned header slot.
+Contract covered by `PierreTree.searchAction.test.ts`; empty-tree standalone
+create toolbar unchanged.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
