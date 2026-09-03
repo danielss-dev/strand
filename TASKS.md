@@ -1066,12 +1066,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `refreshWorktrees` eager on open/tab-switch, `addWorktree` / `removeWorktree` /
   `pruneWorktrees` / `openWorktree` = `openRepo` reuse). Removing/pruning a
   worktree closes its open tab (`samePath` match) so no dead tab lingers.
-- ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘5 + ⌘K "Show:
-  Worktrees"; AI-agent dashboard with stable repo-family heading, per-worktree
-  branch/session labels, lazy `repoStatus`/`repoMeta`/`repoLog` enrichment →
-  dirty count, ahead/behind, last commit; Review opens the worktree tab without
-  a row-jump and pins the review baseline when possible; keyboard `role=listbox`
-  + ↑/↓ + Enter).
+- ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘6 + ⌘K "Show:
+  Worktrees"; dense 26px Worktree / Branch / Changes / Touched table with the
+  current row accented, focused path in `StatusBar`, ↑/↓ focus, Enter/open on
+  activation, and New worktree as the sole pane action; palette cleanup
+  listener retained while archives and management controls stay out of pane).
 - ☑ Sidebar Worktrees section (first section in the Git tab; current marked with
   the accent check; single-click → overview, double-click/Enter → open as tab;
   context menu open/show/copy/remove/force-remove/prune; stale entries expose

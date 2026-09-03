@@ -8384,225 +8384,108 @@ textarea.clone-input {
   flex-direction: column;
   overflow: hidden;
 }
-.wt-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px;
-  align-items: center;
-  min-height: var(--pane-head-h);
-  padding: 6px 12px;
-  border-bottom: 0.5px solid var(--border);
-  background: var(--bg-panel);
-}
-.wt-hero-copy {
-  min-width: 0;
-}
-.wt-kicker {
-  display: none;
-}
-.wt-hero h2 {
-  margin: 0;
-  font-size: var(--type-ui);
-  font-weight: 600;
-  line-height: 1.2;
-}
-.wt-hero p {
-  display: none;
-}
-.wt-hero-stats {
+.wt-breadcrumb {
   display: flex;
-  gap: 8px;
-}
-.wt-metric {
-  min-width: unset;
-  padding: 2px 8px;
-  border: 0.5px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  display: inline-flex;
   align-items: baseline;
   gap: 5px;
-}
-.wt-metric strong,
-.wt-metric span {
-  display: inline;
-}
-.wt-metric strong {
-  color: var(--text);
-  font-size: var(--type-ui);
-}
-.wt-metric span {
   color: var(--text-dim);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 400;
 }
-.wt-list {
+.wt-breadcrumb strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.wt-table {
   flex: 1;
-  overflow-y: auto;
-  outline: none;
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--type-ui-sm);
+  font-family: var(--font-mono);
 }
-.wt-list:focus-visible {
-  box-shadow: 0 0 0 1.5px var(--accent) inset;
-}
-.wt-card {
-  position: relative;
-  display: flex;
+.wt-table-head,
+.wt-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.05fr) minmax(120px, 0.75fr) minmax(240px, 2.8fr) minmax(72px, 0.45fr);
   align-items: center;
-  gap: 13px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 0.5px solid var(--border);
-  background: var(--bg-elev);
-  cursor: pointer;
+  min-width: 650px;
 }
-.wt-card::before {
-  content: "";
-  position: absolute;
-  inset: 8px auto 8px 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: transparent;
+.wt-table-head {
+  height: 26px;
+  flex: 0 0 26px;
+  padding: 0 10px;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.wt-card:hover {
+.wt-table-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+.wt-table-body:focus-visible {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.wt-row {
+  position: relative;
+  height: 26px;
+  padding: 0 10px;
+  color: var(--text-muted);
+  cursor: default;
+}
+.wt-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wt-row:hover,
+.wt-row.focused {
   background: var(--bg-hover);
 }
-.wt-card.focused {
-  box-shadow: 0 0 0 1.5px var(--accent) inset;
+.wt-row.current {
+  padding-left: 12px;
+  background: var(--bg-sel);
 }
-.wt-card.current {
-  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
-}
-.wt-card.current::before {
+.wt-row.current::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
   background: var(--accent);
 }
-.wt-card-icon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  border-radius: 9px;
-  background: var(--bg-active);
+.wt-row.current .wt-name {
   color: var(--accent);
 }
-.wt-card-main {
-  flex: 1;
-  min-width: 0;
+.wt-name,
+.wt-branch-cell {
+  color: var(--text-2);
+}
+.wt-branch-cell {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  gap: 6px;
 }
-.wt-card-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.wt-branch {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-  color: var(--text);
-}
-.wt-detail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wt-merged,
+.wt-touched {
   color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.wt-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 9px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--bg-active);
-  color: var(--text-muted);
-}
-.wt-tag.current {
-  color: var(--accent);
-}
-.wt-drift {
-  display: inline-flex;
-  gap: 6px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-}
-.wt-drift .drift-ahead {
-  color: var(--add);
-}
-.wt-drift .drift-behind {
-  color: var(--del);
-}
-.wt-card-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: var(--type-ui-sm);
-}
-.wt-dirty {
-  color: var(--warn);
-}
-.wt-clean {
-  color: var(--text-muted);
 }
 .wt-dim {
   color: var(--text-dim);
 }
-.wt-msg {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wt-changes {
   color: var(--text-muted);
 }
-.wt-path {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wt-add {
+  color: var(--add);
 }
-.wt-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.wt-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 24px;
-}
-.wt-empty p {
-  margin: 0;
-  color: var(--text-2);
-}
-.wt-empty span {
-  font-size: var(--type-ui-sm);
-  max-width: 360px;
+.wt-del {
+  color: var(--del);
 }
 
 /* New-worktree dialog reuses the clone-dialog shell; the select matches the
@@ -8613,25 +8496,6 @@ textarea.clone-input {
 select.clone-input {
   appearance: none;
   cursor: pointer;
-}
-
-/* Hero action stack: create + clean-up + prune in the hero's third column. */
-.wt-hero-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-.wt-hero-actions .btn {
-  justify-content: center;
-}
-
-/* Health badges (W2): merged = safe to retire, warn = work only exists here. */
-.wt-tag.merged {
-  color: var(--add);
-}
-.wt-tag.warn {
-  color: var(--warn);
 }
 
 /* Merge dialog: exact-commands preview + dirty-files warning. */

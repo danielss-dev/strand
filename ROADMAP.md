@@ -2788,6 +2788,14 @@ shrinks instead of painting under the absolutely positioned header slot.
 Contract covered by `PierreTree.searchAction.test.ts`; empty-tree standalone
 create toolbar unchanged.
 
+**Persistent Worktrees cut shipped (2026-09-03):** The Worktrees pane is now
+the dense repository table from the persistent-shell design: a breadcrumb and
+single New worktree action above 26px Worktree / Branch / Changes / Touched
+rows. Current state uses the accent selection treatment, merged state is quiet
+inline text, and keyboard focus publishes the full path to the status bar.
+Dashboard metrics, chips, row actions, compare selection, and archive UI were
+removed from the pane; palette cleanup remains wired to its confirmation.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

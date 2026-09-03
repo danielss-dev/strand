@@ -99,7 +99,7 @@ Discards permanently modify the working tree, so for anything larger than a bloc
 
 ## Review vs base for worktrees
 
-Worktrees are the natural container for agent tasks — one attempt per worktree. **Review vs base** (the Review button on a worktree row in the Worktrees dashboard, or the "Review vs base" item in a worktree's sidebar / rail / tab context menu) pins the review baseline at the point where the worktree's branch forked from its detected base branch — the branch it was actually cut from, which is not necessarily the main branch — and opens that worktree's tab directly on Review in session mode (if the base branch cannot be detected, the tab opens on Local Changes instead). You see the attempt's committed, staged, and unstaged work since the fork point as one diff, with the full queue, notes, and feedback export.
+Worktrees are the natural container for agent tasks — one attempt per worktree. **Review vs base** in a worktree's sidebar / rail / tab context menu pins the review baseline at the point where the worktree's branch forked from its detected base branch — the branch it was actually cut from, which is not necessarily the main branch — and opens that worktree's tab directly on Review in session mode (if the base branch cannot be detected, the tab opens on Local Changes instead). You see the attempt's committed, staged, and unstaged work since the fork point as one diff, with the full queue, notes, and feedback export.
 
 See [Worktrees](worktrees.md) for creating worktrees, comparing multiple attempts, and merging the winner.
 

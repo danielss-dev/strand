@@ -7,7 +7,7 @@ Strand is a fast, keyboard-first Git client built for reviewing what AI coding a
 Strand is a native desktop app that treats agent-driven development as a first-class workflow:
 
 - A dedicated **Review** view shows an agent's changes as whole files with edits inline, backed by a review queue, pinnable baselines ("everything since this commit" — including work the agent already staged or committed), inline notes, and a one-click feedback export you can paste back into the agent.
-- A **Worktrees** dashboard treats parallel checkouts as first-class: per-worktree activity, dirty, and ahead/behind stats, side-by-side comparison, and a single "Merge & clean up" motion with full snapshot archiving so removals are always recoverable.
+- A compact **Worktrees** table treats parallel checkouts as first-class: current branch, clean/dirty summary, last commit, and recent activity stay visible at a glance, while review and Merge & clean up remain in the worktree context menus.
 - **Workspaces** group the repositories behind one product and let you review changes across all of them in a single merged queue.
 
 It is also a full everyday client: staging down to individually selected lines, a commit graph with inline stashes and full-history search, interactive rebase without an editor ever popping up, branches, remotes, tags, stashes, submodules, a three-way merge editor, and a command palette (`Mod+K`) that reaches nearly everything.
