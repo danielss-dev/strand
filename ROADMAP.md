@@ -2771,6 +2771,15 @@ templates. Done removes editing chrome; Reset deletes that workspace's saved
 layout. Existing Custom layouts, startup preferences, and shortcut overrides
 migrate to Workbench without duplicating or remounting the live Work runtime.
 
+**Worktree push with mismatched upstream (2026-09-03, DAN-65):** Primary
+Push no longer dies under `push.default=simple` when a linked worktree's
+local branch tracks a differently named remote ref. `Repo::push` keeps the
+first-push `--set-upstream origin HEAD` path, and when an upstream is already
+configured it publishes with an explicit `HEAD:<merge>` refspec (preserving
+upstream config; force-with-lease still only via `PushMode::ForceWithLease`).
+Verified: `cargo test -p strand-core --lib network::tests` (21, including
+mismatched-upstream worktree case).
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
