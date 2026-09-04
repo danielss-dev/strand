@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { Dialog } from '../components/Dialog';
@@ -12,7 +12,7 @@ import { useRepo } from '../stores/repo';
 
 interface WtStats {
   loading: boolean;
-  dirty: number;
+  dirty: number | null;
   lastSubject: string | null;
   lastTime: number | null;
   health: WorktreeHealth | null;
@@ -21,7 +21,7 @@ interface WtStats {
 
 const EMPTY_STATS: WtStats = {
   loading: true,
-  dirty: 0,
+  dirty: null,
   lastSubject: null,
   lastTime: null,
   health: null,
@@ -31,9 +31,11 @@ const EMPTY_STATS: WtStats = {
 /** Compact worktree switcher and state summary. */
 export function Worktrees({
   onCreateWorktree,
+  onReviewWorktree,
   onToast,
 }: {
   onCreateWorktree: () => void;
+  onReviewWorktree: (path: string) => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const meta = useRepo((s) => s.meta);
@@ -45,7 +47,9 @@ export function Worktrees({
   const removeWorktree = useRepo((s) => s.removeWorktree);
 
   const [stats, setStats] = useState<Record<string, WtStats>>({});
-  const [focused, setFocused] = useState(0);
+  const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const rowId = useId();
+  const tableRef = useRef<HTMLDivElement>(null);
   const [showCleanup, setShowCleanup] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const focusedRowRef = useRef<HTMLDivElement>(null);
@@ -106,13 +110,11 @@ export function Worktrees({
     const rank = (isCurrent: boolean, isMain: boolean) => isCurrent ? 0 : isMain ? 1 : 2;
     return [...worktrees].sort((a, b) =>
       rank(a.is_current, a.is_main) - rank(b.is_current, b.is_main)
-      || (stats[b.path]?.fs?.last_activity_unix ?? 0) - (stats[a.path]?.fs?.last_activity_unix ?? 0)
       || worktreeName(a).localeCompare(worktreeName(b)));
-  }, [worktrees, stats]);
+  }, [worktrees]);
 
-  useEffect(() => {
-    setFocused((current) => Math.min(current, Math.max(0, orderedWorktrees.length - 1)));
-  }, [orderedWorktrees.length]);
+  const focused = Math.max(0, orderedWorktrees.findIndex((w) => w.path === focusedPath));
+  const selectedWorktree = orderedWorktrees[focused];
 
   useEffect(() => {
     focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
@@ -126,7 +128,7 @@ export function Worktrees({
 
   const cleanupCandidates = useMemo(
     () => worktrees.filter((w) => {
-      if (w.is_main || w.is_current || !w.branch) return false;
+      if (w.is_main || w.is_current || w.is_locked || w.is_prunable || !w.branch) return false;
       const st = stats[w.path];
       return !!st && !st.loading && st.dirty === 0 && !!st.health?.merged;
     }),
@@ -134,7 +136,7 @@ export function Worktrees({
   );
 
   // The palette action switches here, then asks this mounted view to open the
-  // confirmation. Keep this listener even though cleanup has no pane control.
+  // confirmation. The header button opens the same dialog.
   useEffect(() => {
     const onCleanupRequest = () => setShowCleanup(true);
     window.addEventListener('strand:worktrees-cleanup', onCleanupRequest);
@@ -174,19 +176,24 @@ export function Worktrees({
     })();
   };
 
+  const openSelected = (path: string) => {
+    void openWorktree(path).catch((error) => onToast(`Could not open worktree: ${errMessage(error)}`, 'error'));
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (orderedWorktrees.length === 0) return;
-    if (event.key === 'ArrowDown') {
+    let next = focused;
+    if (event.key === 'ArrowDown') next = Math.min(focused + 1, orderedWorktrees.length - 1);
+    else if (event.key === 'ArrowUp') next = Math.max(focused - 1, 0);
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = orderedWorktrees.length - 1;
+    else if (event.key === 'Enter') {
       event.preventDefault();
-      setFocused((current) => Math.min(current + 1, orderedWorktrees.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setFocused((current) => Math.max(current - 1, 0));
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      const worktree = orderedWorktrees[focused];
-      if (worktree) void openWorktree(worktree.path);
-    }
+      if (selectedWorktree && !selectedWorktree.is_prunable && !selectedWorktree.is_bare) openSelected(selectedWorktree.path);
+      return;
+    } else return;
+    event.preventDefault();
+    setFocusedPath(orderedWorktrees[next].path);
   };
 
   const repoName = repoFamilyName(meta);
@@ -200,10 +207,15 @@ export function Worktrees({
           </span>
         }
         actions={
-          <button type="button" className="btn primary" onClick={onCreateWorktree}>
-            <Icon name="plus" size={13} stroke={2} />
-            <span>New worktree</span>
-          </button>
+          <>
+            <button type="button" className="btn" onClick={() => setShowCleanup(true)}>
+              Clean up…
+            </button>
+            <button type="button" className="btn primary" onClick={onCreateWorktree}>
+              <Icon name="plus" size={13} stroke={2} />
+              <span>New worktree</span>
+            </button>
+          </>
         }
       />
 
@@ -215,41 +227,72 @@ export function Worktrees({
           action={<button type="button" className="btn primary" onClick={onCreateWorktree}>New worktree</button>}
         />
       ) : (
-        <div className="wt-table" role="table" aria-label="Worktrees">
-          <div className="wt-table-head" role="row">
-            <span role="columnheader">Worktree</span>
-            <span role="columnheader">Branch</span>
-            <span role="columnheader">Changes</span>
-            <span role="columnheader">Touched</span>
+        <>
+          <div className="wt-table" role="grid" aria-label="Worktrees" aria-readonly="true"
+            aria-activedescendant={`${rowId}-${focused}`} tabIndex={0} ref={tableRef} onKeyDown={onKeyDown}>
+            <div className="wt-table-head" role="row">
+              <span role="columnheader">Worktree <span className="wt-dim">{orderedWorktrees.length}</span></span>
+              <span role="columnheader">Working changes</span>
+              <span role="columnheader" className="wt-commit">Latest commit</span>
+            </div>
+            <div className="wt-table-body" role="rowgroup">
+              {orderedWorktrees.map((w, index) => {
+                const st = stats[w.path] ?? EMPTY_STATS;
+                return (
+                  <div
+                    key={w.path}
+                    id={`${rowId}-${index}`}
+                    ref={index === focused ? focusedRowRef : undefined}
+                    className={`wt-row${index === focused ? ' selected' : ''}${w.is_current ? ' current' : ''}`}
+                    role="row"
+                    aria-selected={index === focused}
+                    aria-label={`${worktreeName(w)}${w.is_current ? ', current checkout' : ''}, ${statusText(st)}, ${w.path}`}
+                    onClick={() => { setFocusedPath(w.path); tableRef.current?.focus({ preventScroll: true }); }}
+                    onDoubleClick={() => { if (!w.is_prunable && !w.is_bare) openSelected(w.path); }}
+                  >
+                    <div className="wt-identity" role="gridcell">
+                      <Icon name={w.is_main ? 'folder' : 'worktree'} size={16} />
+                      <div className="wt-cell-lines">
+                        <div className="wt-name-line">
+                          <span className="wt-name" title={worktreeName(w)}>{worktreeName(w)}</span>
+                          {w.is_current && <span className="wt-current-label">Current</span>}
+                          {w.is_locked && <span title={w.lock_reason ?? 'Locked'} aria-label="Locked"><Icon name="lock" size={12} /></span>}
+                        </div>
+                        <span className="wt-path" title={w.path}>{w.is_main ? 'Main checkout · ' : ''}{w.path}</span>
+                      </div>
+                    </div>
+                    <div className="wt-cell-lines wt-changes" role="gridcell">
+                      {w.is_prunable ? <span className="wt-dim">Directory missing</span> : <Changes stats={st} />}
+                    </div>
+                    <div className="wt-cell-lines wt-commit" role="gridcell">
+                      <span className="wt-subject" title={st.lastSubject ?? undefined}>{st.lastSubject ?? (st.loading ? 'Loading…' : '—')}</span>
+                      <span className="wt-detail">
+                        {st.lastTime == null ? '—' : agoText(st.lastTime)}
+                        {st.health?.merged && <span className="wt-merged"> · Merged{st.health.merged_into ? ` into ${st.health.merged_into}` : ''}</span>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="wt-table-body" role="rowgroup" tabIndex={0} onKeyDown={onKeyDown}>
-            {orderedWorktrees.map((w, index) => {
-              const st = stats[w.path] ?? EMPTY_STATS;
-              const touched = st.fs?.last_activity_unix ?? st.lastTime;
-              return (
-                <div
-                  key={w.path}
-                  ref={index === focused ? focusedRowRef : undefined}
-                  className={`wt-row${index === focused ? ' focused' : ''}${w.is_current ? ' current' : ''}`}
-                  role="row"
-                  aria-selected={index === focused}
-                  aria-label={`${worktreeName(w)}, ${statusText(st)}, ${w.path}`}
-                  title={w.path}
-                  onClick={() => setFocused(index)}
-                  onDoubleClick={() => void openWorktree(w.path)}
-                >
-                  <span className="wt-name" role="cell">{worktreeName(w)}</span>
-                  <span className="wt-branch-cell" role="cell">
-                    <span>{w.branch ?? 'detached'}</span>
-                    {st.health?.merged && <span className="wt-merged">merged</span>}
-                  </span>
-                  <span className="wt-changes" role="cell"><Changes stats={st} /></span>
-                  <span className="wt-touched" role="cell">{touched == null ? '—' : agoText(touched)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+          {selectedWorktree && (
+            <div className="wt-selection-bar">
+              <span className="wt-selection-copy"><span className="wt-name">{worktreeName(selectedWorktree)}</span><span className="wt-dim">↑ ↓ to select · Enter to open</span></span>
+              <div className="wt-selection-actions">
+                {!selectedWorktree.is_main && !selectedWorktree.is_prunable && !selectedWorktree.is_bare && (
+                  <button type="button" className="btn" onClick={() => onReviewWorktree(selectedWorktree.path)}>
+                    <Icon name="eye" size={13} />Review vs base
+                  </button>
+                )}
+                <button type="button" className="btn" disabled={selectedWorktree.is_prunable || selectedWorktree.is_bare}
+                  onClick={() => openSelected(selectedWorktree.path)}>
+                  Open worktree<Icon name="chev-right" size={13} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {showCleanup && (
@@ -286,6 +329,7 @@ export function Worktrees({
               branch. Each one is snapshotted to the archive before its directory
               and branch are removed.
             </p>
+            {cleanupCandidates.length === 0 && <p className="wt-dim">No worktrees are ready to clean up. Current and locked checkouts are kept.</p>}
             <ul className="wt-cleanup-list">
               {cleanupCandidates.map((w) => {
                 const h = stats[w.path]?.health;
@@ -305,26 +349,30 @@ export function Worktrees({
 }
 
 function Changes({ stats }: { stats: WtStats }) {
-  if (stats.loading) return <>loading…</>;
-  if (stats.dirty === 0) return <>{stats.lastSubject ? `clean · ${stats.lastSubject}` : 'clean'}</>;
+  if (stats.loading) return <span className="wt-dim">Loading…</span>;
+  if (stats.dirty == null) return <span className="wt-dim">Status unavailable</span>;
+  if (stats.dirty === 0) return <span className="wt-dim">Clean</span>;
   return (
     <>
-      <span className="wt-add">+{stats.fs?.insertions ?? 0}</span>{' '}
-      <span className="wt-del">−{stats.fs?.deletions ?? 0}</span>
-      {` · ${stats.dirty} file${stats.dirty === 1 ? '' : 's'}`}
+      <span>{stats.dirty} changed file{stats.dirty === 1 ? '' : 's'}</span>
+      <span className="wt-detail">
+        {stats.fs && <><span className="wt-add">+{stats.fs.insertions}</span>{' '}<span className="wt-del">−{stats.fs.deletions}</span></>}
+        {stats.fs?.last_activity_unix != null && <span className="wt-dim"> · active {agoText(stats.fs.last_activity_unix)}</span>}
+      </span>
     </>
   );
 }
 
 function statusText(stats: WtStats): string {
   if (stats.loading) return 'loading';
+  if (stats.dirty == null) return 'status unavailable';
   return stats.dirty > 0 ? `${stats.dirty} changed files` : 'clean';
 }
 
 function agoText(unix: number): string {
   const seconds = Math.max(0, Math.floor(Date.now() / 1000 - unix));
   if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }

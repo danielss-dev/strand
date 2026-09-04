@@ -2055,6 +2055,7 @@ export function App() {
     )],
     [BUILT_IN_SURFACE_IDS.worktrees, () => (
           <Worktrees
+            onReviewWorktree={reviewWorktreeTab}
             onCreateWorktree={() => setWorktreeDialog({ start: null })}
             onToast={showToast}
           />

@@ -1180,25 +1180,25 @@ the cursor.
 
 ---
 
-## Worktrees pane is persist-cut Review chrome, not a session-manager landing
+## Worktrees should distinguish checkout identity, state, and selection
 
-**Rule.** The Worktrees overview is a dense Review-sibling table: 32px
-`PaneHeader` breadcrumb (`repo / Worktrees`, muted 11px + weight-500 leaf) and
-one filled **New worktree**; 26px `--row-h` rows; Geist `--type-ui` names;
-JetBrains Mono branches; quiet Geist Changes subjects (`clean · …`) with
-colored mono `+n −n`; dim `merged` word, never chips. Current = inset 2px
-`--accent` rail + `--bg-sel` that wins over hover/focus. Focused path lives
-in the status bar (`.sb-worktree-path`), not the row. Do not stack
-`MainHeader` on this view — `PaneHeader` is the only 32px head.
+**Rule.** Keep the single shared `PaneHeader` and repository-family breadcrumb.
+Show each branch once, with its directory below; give working changes and the
+latest commit their own columns. Use existing font, color, and density tokens.
+Mark the current checkout independently of the selected row: selecting another
+checkout must visibly move selection without implying that HEAD switched.
+Keep Open worktree and Review vs base discoverable for the selected checkout,
+and retain keyboard navigation and focus outlines. On narrow panes, prioritize
+identity and changes over commit metadata.
 
-**Why.** The persist-cut Doop target is the density/type spec. Restoring
-cards, masthead, CURRENT/MAIN/DIRTY/MERGED pills, in-row ghosts, or Clean up
-chrome is a regression. Matching the marketing landing is also wrong — Review
-is the sibling.
+**Why.** The owner rejected PR 113's September 3 persist-cut presentation on
+2026-09-04. Its duplicate branch columns, clipped names, hidden actions, and
+current-row selection styling obscured the worktrees' actual state. This rule
+supersedes that branch's exact 26px table/no-controls constraint.
 
-**How to apply.** Tokens from `tokens.css` (`--row-h`, `--pane-head-h`,
-`--type-ui`, `--font-ui` / `--font-mono`, `--bg-sel`). Do not add a second
-breadcrumb row, counts, or current-row padding that misaligns columns.
+**How to apply.** Key selection by checkout path and keep asynchronous stats
+from reordering the list under the pointer. Failed status reads are unknown,
+never clean. Cleanup must exclude current, main, locked, and missing checkouts.
 
 ---
 

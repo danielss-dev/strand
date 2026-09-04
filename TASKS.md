@@ -1067,10 +1067,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `pruneWorktrees` / `openWorktree` = `openRepo` reuse). Removing/pruning a
   worktree closes its open tab (`samePath` match) so no dead tab lingers.
 - ☑ Worktrees overview (`views/Worktrees.tsx` — peer view, ⌘6 + ⌘K "Show:
-  Worktrees"; dense 26px Worktree / Branch / Changes / Touched table with the
-  current row accented, focused path in `StatusBar`, ↑/↓ focus, Enter/open on
-  activation, and New worktree as the sole pane action; palette cleanup
-  listener retained while archives and management controls stay out of pane).
+  Worktrees"; two-line branch/path rows, changes and latest-commit columns,
+  explicit current/locked states, path-keyed selection, ↑/↓ and Home/End,
+  Open worktree / Review vs base action bar, and New worktree / Clean up…
+  header; unknown status stays unknown and cleanup skips locked checkouts).
 - ☑ Sidebar Worktrees section (first section in the Git tab; current marked with
   the accent check; single-click → overview, double-click/Enter → open as tab;
   context menu open/show/copy/remove/force-remove/prune; stale entries expose

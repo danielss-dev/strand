@@ -2816,3 +2816,13 @@ removed from the pane; palette cleanup remains wired to its confirmation.
   4. ☐ PR review surface — 1.1 candidate.
   5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.
+
+
+**Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
+readable two-line rows: branch and directory together, working changes and
+latest commit in separate columns, explicit current/locked indicators, and
+visible selected-checkout Open / Review vs base actions. New worktree and
+Clean up stay in the single pane header. Path-keyed selection survives metadata
+updates, Home/End join arrow navigation, and narrow panes collapse the commit
+column. Failed status reads are no longer presented as clean; cleanup excludes
+locked checkouts. This supersedes the September 3 persist-cut presentation.

@@ -192,11 +192,11 @@ the resolved app appearance automatically.
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure inline comments still need iteration tracking.
-- **Worktrees (⌘6)** — a compact table for every parallel checkout with stable
-  repo naming and Worktree / Branch / Changes / Touched columns. The current
-  checkout uses the repository accent, keyboard focus moves with ↑/↓, and its
-  full path appears in the status bar; the pane keeps **New worktree** as its
-  only action. Worktree tabs of one repo group together instead of looking
+- **Worktrees (⌘6)** — a checkout list with branch names, directory paths,
+  working changes, and latest commits. Current and locked checkouts are marked;
+  selection moves with ↑/↓ or Home/End. **Open worktree** and **Review vs base**
+  act on the selected checkout, while **New worktree** and **Clean up…** stay
+  in the header. Worktree tabs of one repo group together instead of looking
   like separate repos. Sidebar and palette commands retain the deeper flows:
   **Merge & clean up** lands a worktree's branch (squash / merge /
   fast-forward, exact commands previewed) and retires the worktree + branch
