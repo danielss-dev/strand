@@ -7,7 +7,7 @@ import { Icon } from '../components/Icon';
 import { PaneHeader } from '../components/PaneHeader';
 import { repoFamilyName, worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import type { WorktreeHealth, WorktreeStats } from '../lib/types';
+import type { Worktree, WorktreeHealth, WorktreeStats } from '../lib/types';
 import { useRepo } from '../stores/repo';
 
 interface WtStats {
@@ -189,7 +189,7 @@ export function Worktrees({
     else if (event.key === 'End') next = orderedWorktrees.length - 1;
     else if (event.key === 'Enter') {
       event.preventDefault();
-      if (selectedWorktree && !selectedWorktree.is_prunable && !selectedWorktree.is_bare) openSelected(selectedWorktree.path);
+      if (selectedWorktree && canOpen(selectedWorktree)) openSelected(selectedWorktree.path);
       return;
     } else return;
     event.preventDefault();
@@ -248,7 +248,7 @@ export function Worktrees({
                     aria-selected={index === focused}
                     aria-label={`${worktreeName(w)}${w.is_current ? ', current checkout' : ''}, ${statusText(st)}, ${w.path}`}
                     onClick={() => { setFocusedPath(w.path); tableRef.current?.focus({ preventScroll: true }); }}
-                    onDoubleClick={() => { if (!w.is_prunable && !w.is_bare) openSelected(w.path); }}
+                    onDoubleClick={() => { if (canOpen(w)) openSelected(w.path); }}
                   >
                     <div className="wt-identity" role="gridcell">
                       <Icon name={w.is_main ? 'folder' : 'worktree'} size={16} />
@@ -278,14 +278,20 @@ export function Worktrees({
           </div>
           {selectedWorktree && (
             <div className="wt-selection-bar">
-              <span className="wt-selection-copy"><span className="wt-name">{worktreeName(selectedWorktree)}</span><span className="wt-dim">↑ ↓ to select · Enter to open</span></span>
+              <span className="wt-selection-copy">
+                <span className="wt-name">{worktreeName(selectedWorktree)}</span>
+                <span className="wt-dim">
+                  {selectedWorktree.is_current ? 'Already open · ↑ ↓ to select another' : '↑ ↓ to select · Enter to open'}
+                </span>
+              </span>
               <div className="wt-selection-actions">
                 {!selectedWorktree.is_main && !selectedWorktree.is_prunable && !selectedWorktree.is_bare && (
                   <button type="button" className="btn" onClick={() => onReviewWorktree(selectedWorktree.path)}>
                     <Icon name="eye" size={13} />Review vs base
                   </button>
                 )}
-                <button type="button" className="btn" disabled={selectedWorktree.is_prunable || selectedWorktree.is_bare}
+                <button type="button" className="btn" disabled={!canOpen(selectedWorktree)}
+                  title={selectedWorktree.is_current ? 'This checkout is already open' : undefined}
                   onClick={() => openSelected(selectedWorktree.path)}>
                   Open worktree<Icon name="chev-right" size={13} />
                 </button>
@@ -346,6 +352,11 @@ export function Worktrees({
       )}
     </div>
   );
+}
+
+/** Opening is a no-op for the current checkout (its tab is already active). */
+function canOpen(w: Worktree): boolean {
+  return !w.is_prunable && !w.is_bare && !w.is_current;
 }
 
 function Changes({ stats }: { stats: WtStats }) {

@@ -551,6 +551,12 @@
   gap: 6px;
   flex-shrink: 0;
 }
+/* Full-height controls are only 4px shorter than the head; leave 4px of air
+   above and below so they read as buttons inside a bar, not a second bar. */
+.pane-head-actions .btn {
+  height: calc(var(--pane-head-h) - 8px);
+  padding: 0 10px;
+}
 
 .empty-state {
   display: flex;
@@ -8427,6 +8433,9 @@ textarea.clone-input {
   gap: 8px;
 }
 .wt-row {
+  /* Stretch cells so one-line states ("Clean", "Loading…") share the first
+     text line with the two-line cells instead of floating mid-row. */
+  align-items: stretch;
   scroll-margin-top: var(--pane-head-h);
   min-height: calc(var(--row-h) * 2 + 12px);
   border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
@@ -8446,14 +8455,17 @@ textarea.clone-input {
   min-width: 0;
 }
 .wt-identity > svg { flex: 0 0 auto; color: var(--text-dim); }
+/* Fill the row so the name shares the other columns' first line; the icon
+   stays centred on the two-line block. */
+.wt-identity > .wt-cell-lines { align-self: stretch; }
 .wt-row.current .wt-identity > svg { color: var(--accent); }
 .wt-cell-lines {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-width: 0;
   gap: 5px;
-  padding: 10px 0;
+  /* Top pad centres the two-line block in the 64px row. */
+  padding: 16px 0 10px;
 }
 .wt-name-line {
   display: flex;

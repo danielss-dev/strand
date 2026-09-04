@@ -12,7 +12,7 @@ Each checkout has a two-line row, ordered current first, then the main checkout,
 - **Working changes** — changed-file count, available added/deleted line counts, and last working-directory activity. Clean checkouts say **Clean**; failed status reads say **Status unavailable**.
 - **Latest commit** — its subject and age, plus merge status when available. This column hides in narrow panes to preserve room for branch names and changes.
 
-Click a row to select it. The action bar offers **Open worktree** and, for linked checkouts, **Review vs base**. Double-click or press `Enter` to open it directly. Selection has its own highlight, separate from the current-checkout label. The selected path also appears in the status bar. Missing directories cannot be opened; repair or prune them through the sidebar.
+Click a row to select it. The action bar offers **Open worktree** (disabled for the current checkout, which is already open) and, for linked checkouts, **Review vs base**. Double-click or press `Enter` to open it directly. Selection has its own highlight, separate from the current-checkout label. The selected path also appears in the status bar. Missing directories cannot be opened; repair or prune them through the sidebar.
 
 | Key | Action |
 |---|---|
