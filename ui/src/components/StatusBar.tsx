@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { Icon } from './Icon';
 import { t } from '../lib/i18n';
 import { formatBinding } from '../lib/keys';
@@ -9,6 +11,15 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const status = useRepo((s) => s.status);
   const selectedFile = useRepo((s) => s.selectedFile);
   const platform = useSettings((s) => s.platform);
+  const [focusedWorktreePath, setFocusedWorktreePath] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onWorktreeFocus = (event: Event) => {
+      setFocusedWorktreePath((event as CustomEvent<string | null>).detail);
+    };
+    window.addEventListener('strand:worktree-focus', onWorktreeFocus);
+    return () => window.removeEventListener('strand:worktree-focus', onWorktreeFocus);
+  }, []);
 
   const syncLabel = !meta
     ? t('status.noRepository')
@@ -46,6 +57,11 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
 
       <div className="right">
+        {focusedWorktreePath && (
+          <div className="sb-item sb-worktree-path" title={focusedWorktreePath}>
+            {focusedWorktreePath}
+          </div>
+        )}
         {selectedFile && (
           <>
             <div className="sb-item">UTF-8 · LF</div>

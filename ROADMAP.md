@@ -2788,6 +2788,14 @@ shrinks instead of painting under the absolutely positioned header slot.
 Contract covered by `PierreTree.searchAction.test.ts`; empty-tree standalone
 create toolbar unchanged.
 
+**Persistent Worktrees cut shipped (2026-09-03):** The Worktrees pane is now
+the dense repository table from the persistent-shell design: a breadcrumb and
+single New worktree action above 26px Worktree / Branch / Changes / Touched
+rows. Current state uses the accent selection treatment, merged state is quiet
+inline text, and keyboard focus publishes the full path to the status bar.
+Dashboard metrics, chips, row actions, compare selection, and archive UI were
+removed from the pane; palette cleanup remains wired to its confirmation.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
@@ -2808,3 +2816,13 @@ create toolbar unchanged.
   4. ☐ PR review surface — 1.1 candidate.
   5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.
+
+
+**Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
+readable two-line rows: branch and directory together, working changes and
+latest commit in separate columns, explicit current/locked indicators, and
+visible selected-checkout Open / Review vs base actions. New worktree and
+Clean up stay in the single pane header. Path-keyed selection survives metadata
+updates, Home/End join arrow navigation, and narrow panes collapse the commit
+column. Failed status reads are no longer presented as clean; cleanup excludes
+locked checkouts. This supersedes the September 3 persist-cut presentation.

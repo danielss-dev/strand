@@ -1418,6 +1418,15 @@ html[data-demo] .win-controls {
     margin-left: auto;
     display: flex;
     gap: 14px;
+    min-width: 0;
+}
+.statusbar .sb-worktree-path {
+    min-width: 0;
+    max-width: min(48vw, 640px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
 }
 .statusbar .sb-gear {
     color: var(--text-muted);

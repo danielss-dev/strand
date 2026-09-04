@@ -192,19 +192,17 @@ the resolved app appearance automatically.
   builds recover the user's CLI `PATH` from the Unix login shell or persisted
   Windows environment, so package-manager and version-manager installs work
   without a custom path. Azure inline comments still need iteration tracking.
-- **Worktrees (⌘6)** — a dashboard for every parallel checkout with stable
-  repo naming, branch/session labels, dirty count, ±lines, "touched 3m ago"
-  activity, disk size, ahead/behind, and one-click Review pinned where the
-  branch diverged from main. Worktree tabs of one repo group together instead
-  of looking like separate repos. Rows badge merged / unpushed work against
-  the detected base and warn when parallel worktrees touch the same files;
+- **Worktrees (⌘6)** — a checkout list with branch names, directory paths,
+  working changes, and latest commits. Current and locked checkouts are marked;
+  selection moves with ↑/↓ or Home/End. **Open worktree** and **Review vs base**
+  act on the selected checkout, while **New worktree** and **Clean up…** stay
+  in the header. Worktree tabs of one repo group together instead of looking
+  like separate repos. Sidebar and palette commands retain the deeper flows:
   **Merge & clean up** lands a worktree's branch (squash / merge /
   fast-forward, exact commands previewed) and retires the worktree + branch
   in one motion, and every removal first archives a full snapshot —
-  uncommitted and untracked files included — restorable later as a new
-  worktree. Select two or more attempts and **Compare** them side by side —
-  shared files highlighted — then pick the winner and land it. Creating a
-  worktree can start from any branch, remote branch, tag, or commit
+  uncommitted and untracked files included. Creating a worktree can start from
+  any branch, remote branch, tag, or commit
   (fetch-first for remote bases) and copies gitignored setup files listed in
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box. Stale entries whose directories are already gone prune immediately.

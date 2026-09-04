@@ -1180,6 +1180,28 @@ the cursor.
 
 ---
 
+## Worktrees should distinguish checkout identity, state, and selection
+
+**Rule.** Keep the single shared `PaneHeader` and repository-family breadcrumb.
+Show each branch once, with its directory below; give working changes and the
+latest commit their own columns. Use existing font, color, and density tokens.
+Mark the current checkout independently of the selected row: selecting another
+checkout must visibly move selection without implying that HEAD switched.
+Keep Open worktree and Review vs base discoverable for the selected checkout,
+and retain keyboard navigation and focus outlines. On narrow panes, prioritize
+identity and changes over commit metadata.
+
+**Why.** The owner rejected PR 113's September 3 persist-cut presentation on
+2026-09-04. Its duplicate branch columns, clipped names, hidden actions, and
+current-row selection styling obscured the worktrees' actual state. This rule
+supersedes that branch's exact 26px table/no-controls constraint.
+
+**How to apply.** Key selection by checkout path and keep asynchronous stats
+from reordering the list under the pointer. Failed status reads are unknown,
+never clean. Cleanup must exclude current, main, locked, and missing checkouts.
+
+---
+
 ## AI commit messages use vendor CLIs, not raw OAuth
 
 **Rule.** Subscription-backed AI features delegate auth and billing to the
