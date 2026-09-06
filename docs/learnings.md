@@ -388,7 +388,13 @@ the existing pattern better than a forced shared abstraction.
 behaviour matters more than staying pure-git2: **conflicts** (git leaves markers
 + the in-progress state on disk), **GPG/SSH signing**, and **hooks** — none of
 which git2's `merge`/`cherrypick`/`revert` do for free, and git2 has no rebase
-driver. Index/commit ops still use git2. After any history op, the store refresh
+driver. Index operations still use git2; commit/amend always use system Git
+(F01, 2026-09-06), including unsigned commits, so Git owns hook discovery,
+rejection, message rewriting, merge parents and effective identity. No hook
+existence shortcut: conditional/worktree config and installed hooks can change
+between operations. Capture bounded stdout/stderr, preserve checkout drafts on
+failure, and do not report post-success refresh errors as commit failures.
+After any history op, the store refresh
 tail is meta + local-changes + log + refs (`refreshAfterHistoryOp`), and a paused
 op is detected via `Repo::operation_in_progress` reading `.git/` markers
 (`rebase-merge`/`rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_HEAD`,
@@ -2523,3 +2529,33 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+
+## Repository identity must use the commit resolver
+
+Effective author/committer reads use system Git, including conditional includes,
+worktree config and environment overrides. Keep these reads on the explicit
+settings surface; do not add subprocesses to snapshot/status paths. Local
+identity edits target the direct common repository config, never a file reached
+through an include. Show both the saved local values and the effective values:
+a later conditional include or a worktree/environment override can still win.
+Linked worktrees share local config; `--worktree` writes must never silently
+fall back to `--local` when `extensions.worktreeConfig` is disabled.
+
+## Signing policy must remain Git-compatible (2026-09-06)
+
+Signing settings store only key references and existing-agent configuration.
+Operation-level inherit/sign/unsigned choices never rewrite config, and signing
+or hook failures retain the draft. Tag creation runs system Git too: `--file`
+already creates an annotated tag, while explicit `--annotate` suppresses
+`tag.forceSignAnnotated`. Use that override only for an explicitly unsigned
+annotation, alongside `--no-sign`. With verbatim cleanup, ensure a final newline
+before Git appends the signature or the result cannot be verified.
+
+Verify tags lazily against their immutable object ID. Display Git's verification
+output and distinguish unsigned, valid and failed results; do not turn signature
+validity into an unconditional claim of signer trust. Keep config reads and
+signature verification out of status/snapshot and graph-wide refresh paths.
+In `git config --null --get-regexp` output, a valueless boolean has no newline
+separator and means true; a newline followed by an empty value means false.
+Preserve that distinction in settings displays and scoped editing.

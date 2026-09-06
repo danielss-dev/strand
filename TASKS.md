@@ -89,16 +89,20 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (`docs/git-client-feature-audit-2026-09-06.md`: 19 missing/partial feature
   families, code evidence, priorities, fallbacks, and acceptance criteria).
   Priorities below are current recommendations, not historical PRD release gates.
-- ☐ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
+- ☑ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
   git2 commit-policy versus Git-hook contract tension; honor `core.hooksPath`,
   rejection and message rewriting, preserve drafts and bounded diagnostics,
-  and measure the no-hook path (`commit.rs`; signed commits already use Git).
-- ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
+  and measure the no-hook path (`Repo::commit`, bounded `git_output`, checkout
+  `commitDrafts`; evidence in `docs/hooks-identity-signing-validation-2026-09-06.md`).
+- ☑ **F02 / P1 — Effective repository identity and scoped overrides.** Show
   the current author/committer identity, set/remove repo-local name/email
-  without changing global/conditional config, and verify linked worktrees.
-- ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
+  without changing global/conditional config, and verify linked worktrees
+  (`repository_identity` / `repo_set_identity`, Settings → Git source display).
+- ☑ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
-  with agent delegation and visible signing failures.
+  with agent delegation and visible signing failures (`signing_settings` /
+  `set_signing_config`, commit/tag `SigningChoice`, `TagVerificationDialog`;
+  real GPG/SSH and native Windows evidence in the F01–F03 validation note).
 - ☑ **F04 / P1 — LFS compatibility and management.** Filter-aware single/bulk
   staging, discard, checkout and hard reset; exact pointer/commit/push/pull and
   missing-filter fixtures pass (`lfs.rs`). Local setup, patterns, object/transfer
@@ -1480,6 +1484,11 @@ community plugins, performance and platform certification from Git feature gaps.
   and focus-restore to the opener on close (captured pre-`autoFocus`).
 
 ### Cross-cutting
+- ☐ Investigate Windows watcher burst timing: unchanged
+  `watch::tests::debounce_collapses_a_burst_into_one_callback` observed two
+  callbacks instead of one in the 2026-09-06 F01–F03 final full run and isolated
+  retry, after earlier full-suite passes. Reproduce and distinguish OS event
+  delivery from debounce/test timing before changing production behavior.
 - ☑ Resizable panes everywhere (`react-resizable-panels`); sizes
   persisted per-region via `autoSaveId` (`strand:body`, `strand:lc-main`,
   `strand:lc-files`)

@@ -2158,7 +2158,8 @@ and Store certification remain external gates.
 - ☑ Git LFS — filter-correct staging/checkout/discard/hard reset and explicit
   setup, patterns, object/transfer status and server locks (`LfsDialog`,
   `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
-- GPG / SSH commit signing UI
+- ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
+  choices; signed-tag creation and verification, 2026-09-06).
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
@@ -2828,6 +2829,34 @@ modules. Real Git and native UI checks cover registration/index preservation,
 network cancellation, URL edits, nesting, confirmations and reinitialization.
 
 ---
+
+**Commit hook parity shipped (2026-09-06, F01):** Signed and unsigned commit/amend
+now run system Git’s applicable hooks and honor custom hooksPath, rejection
+and rewritten messages. Checkout session drafts survive rejection/navigation;
+expandable output retains bounded diagnostics. Native Ctrl+Enter flows and
+core/store regressions passed; the loaded-host no-hook cost is recorded in
+`docs/hooks-identity-signing-validation-2026-09-06.md`. Index/status paths are
+unchanged; the commit-policy exception is explicit in PRD and learnings.
+
+
+**Repository identity shipped (2026-09-06, F02):** Settings → Git and its palette
+entry show effective author/committer identity with per-field source/scope.
+Individual local name/email overrides can be saved or removed without editing
+global or included files. Linked worktrees share local values; existing
+worktree overrides remain effective. Conditional, two-repository and linked
+worktree fixtures passed; native settings save/remove and repository switching
+were exercised with isolated fixtures.
+
+
+**Signing controls and signed tags shipped (2026-09-06, F03):** Repository and
+enabled worktree settings show effective signing defaults, format, key and SSH
+allowed-signers sources. Commit/amend and tag forms offer inherited, signed or
+unsigned operations without changing defaults. Signed tags require an
+annotation; lazy verification displays the immutable object and Git trust
+diagnostics. Real GPG/SSH fixtures cover hooks, amend, linked worktrees,
+unsigned overrides, tampering and failed signers. Native Windows settings,
+commit/amend and palette tag flows passed; validation and platform limits are
+recorded in `docs/hooks-identity-signing-validation-2026-09-06.md`.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

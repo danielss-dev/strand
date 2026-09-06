@@ -144,3 +144,55 @@ describe('AI review notes', () => {
     }]);
   });
 });
+
+
+describe('commit outcome boundary', () => {
+  it('propagates a hook rejection and refreshes its index changes', async () => {
+    const refresh = vi.fn(async () => {});
+    const failure = { message: 'commit-msg rejected' };
+    vi.spyOn(tauri, 'repoCommit').mockRejectedValue(failure);
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh });
+    await expect(useRepo.getState().commit('draft', 'body', true)).rejects.toBe(failure);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a completed commit successful if refresh fails', async () => {
+    const outcome = { oid: 'abc', amended: false, output: 'hook accepted' };
+    vi.spyOn(tauri, 'repoCommit').mockResolvedValue(outcome);
+    const refresh = vi.fn(async () => { throw new Error('refresh failed'); });
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh,
+      refreshLog: refresh, refreshStashes: refresh, refreshMeta: refresh, refreshRefs: refresh });
+    await expect(useRepo.getState().commit('draft', null, false)).resolves.toEqual(outcome);
+  });
+
+  it('does not refresh a different checkout after a slow hook completes', async () => {
+    const refresh = vi.fn(async () => {});
+    vi.spyOn(tauri, 'repoCommit').mockImplementation(async () => {
+      useRepo.setState({ activePath: '/other' });
+      return { oid: 'abc', amended: false, output: '' };
+    });
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh, refreshLog: refresh });
+    await useRepo.getState().commit('draft', null, false);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('tag outcome boundary', () => {
+  it('keeps a created signed tag successful if refresh fails', async () => {
+    vi.spyOn(tauri, 'repoTagCreate').mockResolvedValue(undefined);
+    const refresh = vi.fn(async () => { throw new Error('refresh failed'); });
+    useRepo.setState({ activePath: '/repo', refreshRefs: refresh, refreshLog: refresh });
+    await expect(useRepo.getState().createTag('release', null, 'annotation', 'sign')).resolves.toBeUndefined();
+    expect(tauri.repoTagCreate).toHaveBeenCalledWith('/repo', 'release', null, 'annotation', false, 'sign');
+  });
+
+  it('does not refresh another checkout after the signer completes', async () => {
+    const refresh = vi.fn(async () => {});
+    vi.spyOn(tauri, 'repoTagCreate').mockImplementation(async () => {
+      useRepo.setState({ activePath: '/other' });
+    });
+    useRepo.setState({ activePath: '/repo', refreshRefs: refresh, refreshLog: refresh });
+    await useRepo.getState().createTag('release', null, 'annotation');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
