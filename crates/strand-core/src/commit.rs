@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{Error, Result},
     repo::Repo,
+    signing::SigningMode,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,94 +13,41 @@ pub struct CommitOutcome {
     pub oid: String,
     /// Whether this commit was an amend of the previous HEAD.
     pub amended: bool,
+    /// Bounded stdout and stderr, including successful hook diagnostics.
+    pub output: String,
 }
 
-/// Whether the repo's effective config asks for signed commits
-/// (`commit.gpgSign = true`). Read through a snapshot for a consistent merged
-/// view (system + global + local), like [`gitconfig`](crate::gitconfig); git2
-/// config keys are case-insensitive, so the lowercase lookup matches any
-/// spelling.
-fn signing_enabled(repo: &git2::Repository) -> bool {
-    repo.config()
-        .and_then(|mut c| c.snapshot())
-        .and_then(|s| s.get_bool("commit.gpgsign"))
-        .unwrap_or(false)
-}
-
-/// Write the current index as a new commit on HEAD.
-///
-/// Two paths: when `commit.gpgSign` is off (the default) we commit in-process
-/// via git2; when it's on we shell out to the user's `git` instead, because
-/// git2 never signs — the shell-out picks up the user's gpg/ssh signing
-/// config, `gpg.format`, and key lookup for free.
+/// Commit/amend always use system Git: it owns hooks (including hooksPath),
+/// identity, merge parents, signing and message rewrites. Index edits stay on
+/// git2. This deliberately supersedes the old unsigned git2 fast path.
 impl Repo {
     pub fn commit(&self, subject: &str, body: Option<&str>, amend: bool) -> Result<CommitOutcome> {
-        let repo = self.git2()?;
+        self.commit_with_signing(subject, body, amend, SigningMode::Inherit)
+    }
 
+    pub fn commit_with_signing(&self, subject: &str, body: Option<&str>, amend: bool, signing: SigningMode) -> Result<CommitOutcome> {
         let message = match body.map(str::trim).filter(|b| !b.is_empty()) {
             Some(b) => format!("{}\n\n{}\n", subject.trim(), b),
             None => format!("{}\n", subject.trim()),
         };
-
-        let oid = if signing_enabled(repo) {
-            self.commit_via_git(&message, amend)?;
-            repo.head()?.peel_to_commit()?.id()
-        } else {
-            let sig = repo.signature()?;
-            let mut index = repo.index()?;
-            let tree_oid = index.write_tree()?;
-            let tree = repo.find_tree(tree_oid)?;
-
-            if amend {
-                let head = repo.head()?;
-                let head_commit = head.peel_to_commit()?;
-                // Author `None` keeps the original author (git2 reuses the
-                // existing field), matching real `git commit --amend` and the
-                // shell-out path; only the committer is the current user.
-                head_commit.amend(
-                    Some("HEAD"),
-                    None,
-                    Some(&sig),
-                    None,
-                    Some(&message),
-                    Some(&tree),
-                )?
-            } else {
-                // Parent list: HEAD if it exists; empty for the initial commit.
-                let parents: Vec<git2::Commit> = match repo.head() {
-                    Ok(h) => vec![h.peel_to_commit()?],
-                    Err(_) => Vec::new(),
-                };
-                let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-                repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parent_refs)?
-            }
-        };
-
-        Ok(CommitOutcome {
-            oid: oid.to_string(),
-            amended: amend,
-        })
+        let output = self.commit_via_git(&message, amend, signing)?;
+        let oid = self.git2()?.head()?.peel_to_commit()?.id().to_string();
+        Ok(CommitOutcome { oid, amended: amend, output })
     }
 
-    /// Commit the staged index by shelling out to the user's `git` — the
-    /// signing path, since git2 cannot sign. The message goes through a temp
-    /// file (`-F`, with `--cleanup=verbatim`: the file is built by us and
-    /// already exact, so verbatim keeps `#` lines AND byte parity with the
-    /// git2 path, which never cleans) to dodge platform quoting. Unlike the
-    /// git2 path this runs the user's hooks (pre-commit / commit-msg) — that
-    /// matches plain `git commit` and is the same accepted trust boundary the
-    /// other shell-out ops have (PRD §10).
-    fn commit_via_git(&self, message: &str, amend: bool) -> Result<()> {
+    fn commit_via_git(&self, message: &str, amend: bool, signing: SigningMode) -> Result<String> {
         let file = temp_message_file(message)?;
         let file_arg = file.to_string_lossy().into_owned();
         let mut args = vec!["commit", "-F", file_arg.as_str(), "--cleanup=verbatim"];
-        if amend {
-            args.push("--amend");
+        if amend { args.push("--amend"); }
+        match signing {
+            SigningMode::Inherit => {},
+            SigningMode::Sign => args.push("--gpg-sign"),
+            SigningMode::Unsigned => args.push("--no-gpg-sign"),
         }
         let res = run_git(&self.path, &args);
-        // Best effort, on the error path too — a leak here is only temp litter.
         let _ = std::fs::remove_file(&file);
-        res.map(|_| ())
+        res
     }
 }
 
@@ -109,7 +57,7 @@ impl Repo {
 /// refuses to open a path that already exists — including a pre-planted
 /// symlink in the shared temp dir (local TOCTOU) — so a collision just bumps
 /// the counter and retries (bounded).
-fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
+pub(crate) fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -141,7 +89,7 @@ fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
 /// (not a `Repo` method) so it doesn't collide with `stash`'s same-named
 /// helper on the same type.
 fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
-    let out = crate::git_command()
+    let out = crate::git_output::capture(crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Detach stdin so git can never block reading from a TTY/pipe we don't
@@ -149,8 +97,8 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
         .stdin(std::process::Stdio::null())
         // Neutralize repo-local config that would run code as a side effect.
         .args(crate::GIT_SAFE_CONFIG)
-        .args(args)
-        .output()
+        .env("GIT_EDITOR", ":")
+        .args(args))
         .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
     if !out.status.success() {
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -162,7 +110,7 @@ fn run_git(cwd: &Path, args: &[&str]) -> Result<String> {
             combined
         }));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    Ok(format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).trim().to_string())
 }
 
 #[cfg(test)]
@@ -185,6 +133,8 @@ mod tests {
         git(&dir, &["init", "-q", "-b", "main"]);
         git(&dir, &["config", "user.name", "Test"]);
         git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        git(&dir, &["config", "core.hooksPath", ".git/hooks"]);
         (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
     }
 
@@ -204,18 +154,85 @@ mod tests {
         git(dir, &["add", file]);
     }
 
+    fn hook(dir: &Path, name: &str, script: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
     #[test]
-    fn signing_enabled_defaults_off_and_follows_config() {
+    fn hooks_reject_rewrite_and_run_after_commit_and_amend() {
         let (repo, dir) = scratch_repo();
-        let g2 = repo.git2().unwrap();
-        assert!(!signing_enabled(&g2), "unset ⇒ off");
+        stage(&dir, "a.txt", "a\n");
+        let hooks = dir.join("custom hooks");
+        git(&dir, &["config", "core.hooksPath", "custom hooks"]);
+        hook(&hooks, "pre-commit", "echo policy-rejected >&2; exit 1");
+        let error = repo.commit("draft", Some("body"), false).unwrap_err().to_string();
+        assert!(error.contains("policy-rejected"));
+        assert!(repo.git2().unwrap().head().is_err());
+        assert_eq!(git(&dir, &["diff", "--cached", "--name-only"]), "a.txt");
+        hook(&hooks, "pre-commit", "echo pre-commit-ok");
+        hook(&hooks, "prepare-commit-msg", "echo prepared >> \"$1\"");
+        hook(&hooks, "commit-msg", "echo rewritten >> \"$1\"");
+        hook(&hooks, "post-commit", "echo post-commit-ok >&2");
+        hook(&hooks, "post-rewrite", "read old new; echo post-rewrite-$1-$old-$new >&2");
+        let outcome = repo.commit("draft", Some("body"), false).unwrap();
+        assert!(outcome.output.contains("pre-commit-ok"));
+        assert!(outcome.output.contains("post-commit-ok"));
+        assert_eq!(git(&dir, &["log", "-1", "--format=%B"]), "draft\n\nbody\nprepared\nrewritten");
+        hook(&hooks, "commit-msg", "echo message-rejected >&2; exit 1");
+        assert!(repo.commit("amend draft", None, true).unwrap_err().to_string().contains("message-rejected"));
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), outcome.oid);
+        hook(&hooks, "commit-msg", "echo amended >> \"$1\"");
+        let amended = repo.commit("amend draft", None, true).unwrap();
+        assert!(amended.output.contains(&format!("post-rewrite-amend-{}-{}", outcome.oid, amended.oid)));
+        assert_eq!(git(&dir, &["rev-list", "--count", "HEAD"]), "1");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
-        git(&dir, &["config", "commit.gpgsign", "true"]);
-        assert!(signing_enabled(&repo.git2().unwrap()));
+    #[test]
+    fn hook_output_is_bounded_and_preserves_final_failure() {
+        let (repo, dir) = scratch_repo();
+        stage(&dir, "a.txt", "a\n");
+        hook(&dir.join(".git/hooks"), "pre-commit", "i=0; while [ $i -lt 3000 ]; do echo verbose-hook-output; echo verbose-stderr >&2; i=$((i+1)); done; echo final-rejection >&2; exit 1");
+        let error = repo.commit("draft", None, false).unwrap_err().to_string();
+        assert!(error.len() < 34 * 1024);
+        assert!(error.contains("output truncated"));
+        assert!(error.ends_with("final-rejection"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
-        git(&dir, &["config", "commit.gpgsign", "false"]);
-        assert!(!signing_enabled(&repo.git2().unwrap()));
-
+    #[test]
+    #[ignore = "manual no-hook latency measurement"]
+    fn measure_no_hook_commit_path() {
+        let (repo, dir) = scratch_repo();
+        let mut samples = Vec::new();
+        for i in 0..25 {
+            stage(&dir, "a.txt", &format!("{i}\n"));
+            let start = std::time::Instant::now();
+            repo.commit("measurement", None, false).unwrap();
+            samples.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        let mut previous = Vec::new();
+        for i in 0..25 {
+            stage(&dir, "a.txt", &format!("old-{i}\n"));
+            let start = std::time::Instant::now();
+            let g2 = repo.git2().unwrap();
+            let sig = g2.signature().unwrap();
+            let tree_oid = g2.index().unwrap().write_tree().unwrap();
+            let tree = g2.find_tree(tree_oid).unwrap();
+            let parent = g2.head().unwrap().peel_to_commit().unwrap();
+            g2.commit(Some("HEAD"), &sig, &sig, "measurement", &tree, &[&parent]).unwrap();
+            previous.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        previous.sort_by(f64::total_cmp);
+        println!("previous git2 path: median {:.2}ms, p95 {:.2}ms (25 iterations)", previous[12], previous[23]);
+        samples.sort_by(f64::total_cmp);
+        println!("no-hook Git commit: median {:.2}ms, p95 {:.2}ms (25 iterations)", samples[12], samples[23]);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -242,7 +259,7 @@ mod tests {
         git(&dir, &["commit", "-q", "-m", "base"]);
 
         stage(&dir, "a.txt", "a\n");
-        repo.commit_via_git("subject\n\nbody line\n", false).unwrap();
+        repo.commit_via_git("subject\n\nbody line\n", false, SigningMode::Inherit).unwrap();
         assert_eq!(git(&dir, &["log", "-1", "--format=%B"]), "subject\n\nbody line");
         assert_eq!(git(&dir, &["rev-list", "--count", "HEAD"]), "2");
 
@@ -250,7 +267,7 @@ mod tests {
         // author and only updates the committer — assert that parity here.
         git(&dir, &["config", "user.name", "Other"]);
         git(&dir, &["config", "user.email", "other@example.com"]);
-        repo.commit_via_git("amended subject\n", true).unwrap();
+        repo.commit_via_git("amended subject\n", true, SigningMode::Inherit).unwrap();
         assert_eq!(git(&dir, &["log", "-1", "--format=%B"]), "amended subject");
         assert_eq!(git(&dir, &["rev-list", "--count", "HEAD"]), "2", "amend replaces, not adds");
         assert_eq!(
@@ -273,7 +290,7 @@ mod tests {
         stage(&dir, "a.txt", "a\n");
         repo.commit("original", None, false).unwrap();
 
-        // Same parity check for the git2 path: a different configured user
+        // A different configured user
         // amends, the original author survives, the committer updates.
         git(&dir, &["config", "user.name", "Other"]);
         git(&dir, &["config", "user.email", "other@example.com"]);

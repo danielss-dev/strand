@@ -89,34 +89,47 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (`docs/git-client-feature-audit-2026-09-06.md`: 19 missing/partial feature
   families, code evidence, priorities, fallbacks, and acceptance criteria).
   Priorities below are current recommendations, not historical PRD release gates.
-- ☐ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
+- ☑ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
   git2 commit-policy versus Git-hook contract tension; honor `core.hooksPath`,
   rejection and message rewriting, preserve drafts and bounded diagnostics,
-  and measure the no-hook path (`commit.rs`; signed commits already use Git).
-- ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
+  and measure the no-hook path (`Repo::commit`, bounded `git_output`, checkout
+  `commitDrafts`; evidence in `docs/hooks-identity-signing-validation-2026-09-06.md`).
+- ☑ **F02 / P1 — Effective repository identity and scoped overrides.** Show
   the current author/committer identity, set/remove repo-local name/email
-  without changing global/conditional config, and verify linked worktrees.
-- ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
+  without changing global/conditional config, and verify linked worktrees
+  (`repository_identity` / `repo_set_identity`, Settings → Git source display).
+- ☑ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
-  with agent delegation and visible signing failures.
-- ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
-  correctness across single/bulk staging, checkout, commit and network flows;
-  then add setup/tracking/status/locks/progress. System-Git networking alone
-  does not establish end-to-end LFS support.
-- ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
-  with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
-  `.gitmodules` and index changes, plus cancellable network operations.
+  with agent delegation and visible signing failures (`signing_settings` /
+  `set_signing_config`, commit/tag `SigningChoice`, `TagVerificationDialog`;
+  real GPG/SSH and native Windows evidence in the F01–F03 validation note).
+- ☑ **F04 / P1 — LFS compatibility and management.** Filter-aware single/bulk
+  staging, discard, checkout and hard reset; exact pointer/commit/push/pull and
+  missing-filter fixtures pass (`lfs.rs`). Local setup, patterns, object/transfer
+  status, bounded locks and cancellable transfers are exposed in `LfsDialog`.
+  Real lock-API fixtures and native setup/staging/palette/cancellation/recovery
+  checks pass; no eager LFS network or status subprocesses.
+- ☑ **F05 / P1 — Submodule lifecycle.** Add/remove/deinit/sync/URL changes,
+  paged nested inspection and cancellable updates (`SubmoduleDialog`,
+  `Repo::{submodule_action,submodule_children}`). Real Git transport, dirty,
+  ignored and nested files, unrecorded commits and `.gitmodules`/index
+  preservation fixtures pass. Native lifecycle, keyboard/palette, module
+  opening, destructive guards and cancellation checks pass.
 - ☑ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
   Implemented (`interchange.rs`, `InterchangeDialog`, Repository menu/palette);
   five native fixtures and three IPC tests pass. Native WebView2 verified patch
   targets, authored mailbox/conflict continuation and bundle import/export.
-- ☐ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
-  compatibility fixtures for excluded paths, dirty trees and sparse indexes.
-- ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
+- ☑ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
+  compatibility fixtures for excluded paths, dirty trees and sparse indexes
+  (`Repo::set_sparse_checkout`, `SparseCheckoutDialog`, `sparse_checkout.rs` fixtures).
+- ☑ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
   partial-clone filter and recursive-submodule options; deepen/unshallow,
-  progress/cancellation, and safe argument construction.
+  progress/cancellation, and safe argument construction (`clone_with_options`,
+  `repo_expand_history`, `CloneScopeDialog`; `docs/sparse-clone-verification.md`).
+  Follow-up: verify real LFS clone checkout on Git 2.45.1 / LFS 3.5.1;
+  see `docs/git-assets-validation-2026-09-06.md` for the hook rejection.
 - ☑ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
   execution (`bisect.rs`, `BisectDialog`, Repository menu/palette and banner;
@@ -125,9 +138,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
   initial push, with recovery from partial failure.
-- ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
+- ☑ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
   argv templates, exact context, palette/menu discovery, preview, bounded output
-  and cancellation; editor/terminal templates and internal registries already exist.
+  and cancellation. (`UserActionsEditor`, `UserActionDialog`,
+  `repo_user_action_preview` / `repo_user_action_run`; personally persisted settings.)
 - ☑ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
   existing local Review notes are separate from Git notes. (`AdvancedRefsDialog`,
@@ -1481,6 +1495,11 @@ community plugins, performance and platform certification from Git feature gaps.
   and focus-restore to the opener on close (captured pre-`autoFocus`).
 
 ### Cross-cutting
+- ☐ Investigate Windows watcher burst timing: unchanged
+  `watch::tests::debounce_collapses_a_burst_into_one_callback` observed two
+  callbacks instead of one in the 2026-09-06 F01–F03 final full run and isolated
+  retry, after earlier full-suite passes. Reproduce and distinguish OS event
+  delivery from debounce/test timing before changing production behavior.
 - ☑ Resizable panes everywhere (`react-resizable-panels`); sizes
   persisted per-region via `autoSaveId` (`strand:body`, `strand:lc-main`,
   `strand:lc-files`)

@@ -6,6 +6,10 @@ impl Repo {
     /// Stage `path` — adds new/modified files, records deletions. Mirrors
     /// `git add <path>` for one path at a time.
     pub fn stage_path(&self, path: &str) -> Result<()> {
+        if self.is_lfs_path(Path::new(path))? {
+            return self.stage_lfs_paths(&[path.to_owned()]);
+        }
+        if self.sparse_enabled() { return self.stage_paths(&[path.into()]); }
         let repo = self.git2()?;
         let mut index = repo.index()?;
 
@@ -30,6 +34,17 @@ impl Repo {
         if paths.is_empty() {
             return Ok(());
         }
+        for path in paths {
+            if self.is_lfs_path(Path::new(path))? {
+                return self.stage_lfs_paths(paths);
+            }
+        }
+        if self.sparse_enabled() {
+            let mut args = vec!["--literal-pathspecs", "add", "--"];
+            args.extend(paths.iter().map(String::as_str));
+            self.sparse_git(&args, None)?;
+            return Ok(());
+        }
         let repo = self.git2()?;
         let mut index = repo.index()?;
         let workdir = repo.workdir().map(Path::to_path_buf);
@@ -51,6 +66,12 @@ impl Repo {
     /// fallback drops the entries with one index write.
     pub fn unstage_paths(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
+            return Ok(());
+        }
+        if self.sparse_enabled() {
+            let mut args = vec!["--literal-pathspecs", "restore", "--staged", "--"];
+            args.extend(paths.iter().map(String::as_str));
+            self.sparse_git(&args, None)?;
             return Ok(());
         }
         let repo = self.git2()?;
@@ -97,6 +118,17 @@ impl Repo {
             }
         }
         if !tracked.is_empty() {
+            for path in &tracked {
+                if self.is_lfs_path(Path::new(path))? {
+                    return self.discard_lfs_paths(&tracked);
+                }
+            }
+            if self.sparse_enabled() {
+                let mut args = vec!["--literal-pathspecs", "checkout-index", "--force", "--"];
+                args.extend(tracked);
+                self.sparse_git(&args, None)?;
+                return Ok(());
+            }
             let mut opts = git2::build::CheckoutBuilder::new();
             // This command opened a fresh repository + index above, so there
             // is nothing stale to refresh. More importantly, libgit2's refresh
@@ -124,6 +156,7 @@ impl Repo {
     /// without touching the working tree. Equivalent to
     /// `git restore --staged <path>`.
     pub fn unstage_path(&self, path: &str) -> Result<()> {
+        if self.sparse_enabled() { return self.unstage_paths(&[path.into()]); }
         let repo = self.git2()?;
         match repo.head().ok().map(|h| h.peel_to_commit()) {
             // No HEAD yet (unborn branch): just drop the index entry.

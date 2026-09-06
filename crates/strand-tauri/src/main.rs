@@ -10,6 +10,7 @@ mod path_env;
 mod pull_requests;
 mod state;
 mod terminal;
+mod user_actions;
 
 use tauri::Manager;
 
@@ -238,6 +239,11 @@ fn main() {
             commands::repo_branch_fetch,
             commands::repo_branch_pull,
             commands::repo_clone,
+            commands::repo_clone_scope,
+            commands::repo_sparse_checkout,
+            commands::repo_set_sparse_checkout,
+            commands::repo_disable_sparse_checkout,
+            commands::repo_expand_history,
             commands::repo_checkout,
             commands::repo_checkout_commit,
             commands::repo_tree,
@@ -245,6 +251,8 @@ fn main() {
             commands::repo_tree_at,
             commands::repo_submodules,
             commands::repo_submodule_update,
+            commands::repo_submodule_children,
+            commands::repo_submodule_action,
             commands::repo_worktrees,
             commands::repo_worktree_add,
             commands::repo_worktree_remove,
@@ -297,6 +305,11 @@ fn main() {
             commands::repo_bundle_preview,
             commands::repo_bundle_import,
             commands::repo_bundle_export,
+
+            commands::repo_user_action_preview,
+            commands::repo_user_action_run,
+
+            commands::repo_lfs_action,
             commands::repo_tag_create,
             commands::repo_tag_delete,
             commands::repo_tag_push,
@@ -316,6 +329,11 @@ fn main() {
             commands::repo_open_mergetool,
             commands::repo_open_in_editor,
             commands::repo_open_in_terminal,
+            commands::repo_tag_verify,
+            commands::repo_signing_settings,
+            commands::repo_set_signing_config,
+            commands::repo_identity,
+            commands::repo_set_identity,
             commands::git_global_identity,
             commands::git_set_global_identity,
             commands::workspace_file_read,
@@ -392,6 +410,7 @@ fn main() {
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
                 app.state::<state::AppState>().terminals.close_all(None);
+                user_actions::shutdown();
             }
         });
 }

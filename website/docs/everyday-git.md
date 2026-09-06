@@ -2,6 +2,12 @@
 
 Strand is a complete daily-driver Git client alongside its review features. This page covers staging and committing in Local Changes, syncing with remotes, the sidebar's branch/tag/stash/remote/submodule sections, history operations like cherry-pick and interactive rebase, and conflict resolution.
 
+Commit and amend run system Git’s hooks, including a configured `core.hooksPath`.
+A rejecting hook leaves your subject, body and amend selection in the checkout’s
+session draft. Drafts also survive view/repository switches. Failures show Git’s
+diagnostics; successful commits offer expandable **Commit output**. Output keeps
+the first and last 8 KiB of each stream when a hook is verbose.
+
 ## Local Changes (`Mod+2`)
 
 Local Changes is a pure staging workspace: an Unstaged pane and a Staged pane (hierarchical file trees with status badges), a diff pane, and the commit form.
@@ -76,7 +82,15 @@ height so it does not crowd the diff. `Mod+Enter` in either field commits (the
 Commit button shows the same chip); plain Enter still inserts a newline in the
 description. An **amend** checkbox rewrites the previous commit instead.
 
-**Commit signing honors your existing setup**: if `commit.gpgSign=true` is configured, Strand runs your real `git commit`, so GPG or SSH signing happens automatically and pre-commit/commit-msg hooks fire as they would on the command line. With signing off, commits are made by Strand's own engine and hooks are not run.
+Every commit and amend runs your real `git commit`, including applicable hooks,
+`core.hooksPath`, rejecting policies and message rewrites. The **Signature**
+selector defaults to **Inherit Git config** and shows whether Git will sign.
+**Sign this commit** and **Do not sign this commit** override that operation
+without changing config. **Signing settings…** opens scoped defaults and key
+references in Settings → Git. Signing uses your existing GPG/SSH agents; hook
+or signing failures retain the subject, description, amend and signing choices
+for retry, including when you leave this view and return during the session.
+Expandable **Commit output** shows bounded diagnostics after success.
 
 ### AI commit message suggestions
 
@@ -104,7 +118,36 @@ The first push of a new local branch creates the same-named branch on `origin` a
 | `Mod+Shift+Y` | Fetch |
 | `Mod+Shift+S` | Sync (fetch + pull + push) |
 
-Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own. Content filters configured in your git (such as Git LFS) run as they do on the command line, though Strand has no dedicated LFS UI yet.
+Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own.
+
+### Git LFS
+
+Open **Git LFS** in the sidebar or search **Git LFS:** in the command palette.
+Select an action, fill its fields, then choose **Run action**. Reads are explicit:
+opening the dialog does not start an object scan or contact the remote.
+
+- **Installation and configuration** shows the installed version and effective
+  LFS environment. Install Git LFS separately if Git reports it missing.
+- **Set up this repository** runs `git lfs install --local`, including the
+  pre-push hook. Existing conflicting hooks are reported, never overwritten.
+- **Tracked patterns**, **Track a pattern**, and **Stop tracking a pattern**
+  inspect/edit `.gitattributes`. Review and stage that file and the intended
+  assets in Local Changes. Tracking does not rewrite existing commits.
+- **Object and transfer status** shows Git LFS's queued changes; **List objects
+  and sizes** lists current LFS files (`*` is full content, `-` is a pointer).
+- **Download objects**, **Download and check out objects**, and **Upload objects**
+  use the named Git remote. Downloads can be retried after cancellation; completed
+  objects remain in the local LFS cache.
+- **List locks**, **Lock a file**, and **Unlock by ID** use the server's lock API.
+  The list is limited to 100; filter by an exact path to inspect other files.
+  Unsupported locking, authentication failures and offline errors remain visible.
+
+Whole-file staging (including Stage all), discard, hard reset and branch/revision checkout
+run the required LFS filters. Missing filters fail rather than stage raw assets.
+LFS files cannot be partially staged or discarded: use the whole-file action.
+Operations show bounded output/progress and **Cancel operation**. After an error,
+inspect status, correct the installation/configuration or remote access, and retry.
+There is no LFS history migration operation in Strand.
 
 ## The sidebar Git tab
 
@@ -124,7 +167,17 @@ Each remote is a tree rooted at its name, showing all remote-tracking branches. 
 
 ### Tags
 
-Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
+Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), Verify tag signature, copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
+
+The tag dialog offers **Inherit Git config**, **Sign this tag**, and **Do not sign
+this tag**. Inherited signing honors `tag.gpgSign` and `tag.forceSignAnnotated`.
+A signed tag requires an annotation; unsigned tags with no message are
+lightweight. A failed signing attempt keeps the form open with your draft and
+Git’s error. To inspect a signature, use the tag menu or the palette’s **Verify
+tag signature…**. The dialog verifies the selected tag object on demand and
+shows its immutable object ID, unsigned/valid/failed status, and Git’s verification
+output. Review that output for trust details; a valid signature alone does not
+establish that you trust the signer.
 
 ### Stashes
 
@@ -132,7 +185,44 @@ Single-clicking a stash switches to All Commits, reveals its graph node, and ope
 
 ### Submodules
 
-Submodules list with status badges (uninitialized, out of date, modified). Double-click opens the submodule as its own repository tab; the menu offers Open, Update (or Init & update), and Copy path. The section header action runs "Update all" (`--init --recursive`) with streamed progress.
+Submodules list with status badges (uninitialized, out of date, modified).
+Double-click opens the module as its own repository tab. The menu offers Open,
+Update (or Init & update), Copy path, and **Manage / inspect nested modules…**.
+The section header's **Manage submodules** control also works in repositories
+with no submodules. Every management action is searchable as **Submodules:**
+in the command palette.
+
+Choose an action and a module, then **Run action**:
+
+- **Add submodule** clones a URL into a new relative path and stages its
+  `.gitmodules` entry and gitlink. Existing directories are preserved.
+- **Initialize / update submodule** and **Initialize / update all submodules**
+  use Git's configured update behavior. The nested checkbox controls recursion.
+- **Change submodule URL** edits `.gitmodules` and synchronizes local URL config.
+  Review and stage `.gitmodules` in Local Changes before committing.
+  **Sync configured URLs** reapplies the recorded URLs, optionally recursively.
+- **Deinitialize submodule** removes its working directory and local registration
+  while retaining `.gitmodules` and the index for later initialization.
+- **Remove submodule** removes its working directory and stages removal of its
+  gitlink and `.gitmodules` entry. Git retains module history in its modules directory.
+
+Removal and deinitialization need a second confirmation. Dirty/untracked or ignored files,
+nested changes and checked-out commits that differ from the index block those
+actions. Updates also refuse dirty modules. Commit or stash the module's changes,
+and stage/commit the intended gitlink before retrying. Add/remove/URL changes
+refuse pending `.gitmodules` edits so they cannot stage or overwrite unrelated work.
+
+The manager loads one level and up to 100 modules per page. Its list compares
+recorded and checked-out commits; **Inspect working-tree status** explicitly
+checks local and nested files. **Inspect nested modules** descends into an
+initialized module; **Repository root** returns to the original repository.
+Use **Previous page** / **Next page** for larger lists and **Open repository**
+to work in a module's own tab.
+
+Progress and errors remain visible. **Cancel operation** stops Git and its
+helpers. Completed clones and local objects remain available: refresh, inspect
+the current state, correct the error and retry. Git's transport restrictions
+still apply, including restrictions on local-file submodule URLs.
 
 ## Repository maintenance
 
