@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -50,23 +50,18 @@ import {
 } from './lib/keys';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
-import { CloneDialog } from './views/CloneDialog';
-import { InitRepoDialog, type InitRepoRequest } from './views/InitRepoDialog';
-import { SettingsDialog, type SettingsSectionId } from './views/SettingsDialog';
+import type { InitRepoRequest } from './views/InitRepoDialog';
+import type { SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { BranchDialog } from './views/BranchDialog';
-import { BranchCleanupDialog } from './views/BranchCleanupDialog';
 import { TagDialog } from './views/TagDialog';
 import { MergeDialog } from './views/MergeDialog';
-import { RebaseEditor } from './views/RebaseEditor';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
-import { MaintenanceDialog } from './views/MaintenanceDialog';
 import { FileEntryDialog } from './views/FileEntryDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
 import { RepoIconDialog } from './views/RepoIconDialog';
-import { WorkspaceManagerDialog } from './views/WorkspaceManagerDialog';
 import { Commits } from './views/Commits';
 import { FileView } from './views/FileView';
 import { Work } from './views/Work';
@@ -93,7 +88,6 @@ import { CustomView, type CustomPaneFrame } from './views/CustomView';
 import { LocalChanges } from './views/LocalChanges';
 import { Reflog } from './views/Reflog';
 import { Review } from './views/Review';
-import { PullRequests } from './views/PullRequests';
 import { WorkspaceReview } from './views/WorkspaceReview';
 import { Worktrees } from './views/Worktrees';
 import { WorktreeDialog, type WorktreeDialogStart } from './views/WorktreeDialog';
@@ -118,6 +112,15 @@ import type {
 
 const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+const CloneDialog = lazy(() => import('./views/CloneDialog').then((m) => ({ default: m.CloneDialog })));
+const InitRepoDialog = lazy(() => import('./views/InitRepoDialog').then((m) => ({ default: m.InitRepoDialog })));
+const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
+const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
+const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
+const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
+const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
 
 /** Whole-UI zoom bounds + step for the browser-style Ctrl/⌘ +/− shortcuts.
  *  Ctrl+= / Ctrl++ zoom in, Ctrl+- out, Ctrl+0 resets to 100%. */
@@ -2103,7 +2106,9 @@ export function App() {
     if (isPluginSurface(request.contribution.id)) {
       return renderPluginSurface(request);
     }
-    return surfaceRenderers.get(request.contribution.id)?.(request) ?? null;
+    return <Suspense fallback={<div className="custom-empty" role="status">Loading…</div>}>
+      {surfaceRenderers.get(request.contribution.id)?.(request) ?? null}
+    </Suspense>;
   }, [surfaceRenderers]);
 
   const renderCustomSurface = useCallback((surface: CustomSurfaceRef, active: boolean) => (
@@ -2325,6 +2330,7 @@ export function App() {
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
 
+      <Suspense fallback={null}>
       {repoSwitcherOpen && (
         <RepoSwitcher onOpenRecent={openByPath} onClose={() => setRepoSwitcherOpen(false)} />
       )}
@@ -2483,6 +2489,7 @@ export function App() {
           onClose={() => setWorkspaceManagerOpen(false)}
         />
       )}
+      </Suspense>
 
       {!isTauri() && !meta && (
         <div style={{
