@@ -101,6 +101,9 @@ with `claude`, `codex`, or `cursor-agent` before starting a chat. Custom Claude
 and Codex executable paths come from Settings → AI; Cursor Agent must be on
 `PATH`.
 
+Heroi saves conversation progress automatically, grouping updates while an
+answer streams and saving completed, stopped, or failed turns immediately.
+
 Heroi's Threads rail lists only conversations for the active repository. The
 header shows the current agent, model, and branch; each assistant turn starts
 with one grouped Tool calls control, then the Markdown reply (headings, lists,

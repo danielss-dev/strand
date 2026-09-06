@@ -3,6 +3,9 @@ import { create } from 'zustand';
 import { settings } from '../lib/db';
 import { marketplaceManifestFor } from '../plugins/marketplace';
 import { pluginRegistry } from '../plugins/registry';
+import { BufferedWrites } from '../lib/bufferedWrites';
+
+const stateWrites = new BufferedWrites((key, value) => settings.set(key, value));
 
 const INSTALLED_PLUGINS_KEY = 'plugins.installed';
 const PLUGIN_STATE_PREFIX = 'plugin-state:';
@@ -20,6 +23,8 @@ interface PluginStoreState {
   uninstall(pluginId: string): Promise<void>;
   loadState<T>(key: string): Promise<T | null>;
   saveState<T>(key: string, value: T): Promise<void>;
+  scheduleState<T>(key: string, value: T): void;
+  flushState(key: string): Promise<void>;
 }
 
 async function persistInstalled(ids: readonly string[]): Promise<void> {
@@ -62,10 +67,14 @@ export const usePlugins = create<PluginStoreState>((set, get) => ({
   },
 
   async loadState<T>(key: string): Promise<T | null> {
+    await stateWrites.flush(key);
     return settings.get<T>(key);
   },
 
   async saveState<T>(key: string, value: T): Promise<void> {
-    await settings.set(key, value);
+    stateWrites.schedule(key, value);
+    await stateWrites.flush(key);
   },
+  scheduleState: (key, value) => stateWrites.schedule(key, value),
+  flushState: (key) => stateWrites.flush(key),
 }));

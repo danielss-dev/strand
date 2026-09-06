@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -61,6 +62,35 @@ interface HeroiMessage {
   state?: MessageState;
   activities?: HeroiActivity[];
 }
+
+const EMPTY_ACTIVITIES: HeroiActivity[] = [];
+
+const MessageRow = memo(function MessageRow({ message, provider, projectPath, activity,
+  toolsExpanded, expandedActivities, onToggleGroup, onToggleActivity, onOpenPath,
+}: {
+  message: HeroiMessage; provider: HeroiProvider; projectPath: string; activity?: string;
+  toolsExpanded: boolean; expandedActivities: ReadonlySet<string>;
+  onToggleGroup: (id: string, defaultOpen: boolean) => void;
+  onToggleActivity: (id: string) => void; onOpenPath: (path: string) => void;
+}) {
+  return <article className={`plugin-heroi-message ${message.role}`}>
+    <header>
+      <span>{message.role === 'user' ? t('plugins.heroi.you') : `Heroi · ${providerLabel(provider)}`}</span>
+      {message.state && message.state !== 'complete' && (
+        <span className={`plugin-heroi-message-state ${message.state}`}>
+          {message.state === 'running' ? activity : t(message.state === 'stopped'
+            ? 'plugins.heroi.state.stopped' : 'plugins.heroi.state.error')}
+        </span>
+      )}
+    </header>
+    {message.role === 'assistant' ? <AssistantTurnBody
+      messageId={message.id} text={message.text} activities={message.activities ?? EMPTY_ACTIVITIES}
+      projectPath={projectPath} toolsExpanded={toolsExpanded}
+      onToggleGroup={() => onToggleGroup(message.id, toolsExpanded)} expandedActivities={expandedActivities}
+      onToggleActivity={onToggleActivity} onOpenPath={onOpenPath}
+    /> : message.text ? <MessageMarkdown text={message.text} /> : null}
+  </article>;
+});
 
 interface HeroiConversation {
   id: string;
@@ -188,7 +218,8 @@ export function HeroiView({
   const openaiCli = useSettings((state) => state.openaiCli);
   const anthropicCli = useSettings((state) => state.anthropicCli);
   const loadPluginState = usePlugins((state) => state.loadState);
-  const savePluginState = usePlugins((state) => state.saveState);
+  const schedulePluginState = usePlugins((state) => state.scheduleState);
+  const flushPluginState = usePlugins((state) => state.flushState);
 
   const [conversations, setConversations] = useState<HeroiConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -202,7 +233,8 @@ export function HeroiView({
   const [activeRuns, setActiveRuns] = useState<Record<string, ActiveRun>>({});
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [error, setError] = useState<string | null>(null);
-  const [restored, setRestored] = useState(false);
+  const [restoredKey, setRestoredKey] = useState<string | null>(null);
+  const savedTransition = useRef('');
   const [catalog, setCatalog] = useState<{ provider: HeroiProvider; models: HeroiModel[] } | null>(null);
   const [skills, setSkills] = useState<HeroiSkill[]>([]);
   const [repoFiles, setRepoFiles] = useState<string[]>([]);
@@ -217,6 +249,7 @@ export function HeroiView({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const stateKey = pluginStateKey('daniels.heroi', request.instanceId);
+  const restored = restoredKey === stateKey;
   const activePath = activeTabPath ?? '';
   const repoConversations = useMemo(
     () => conversations
@@ -282,15 +315,32 @@ export function HeroiView({
       }));
       setConversations(restoredConversations);
       setActiveConversationId(stored?.activeConversationId ?? null);
-      setRestored(true);
+      setRestoredKey(stateKey);
     });
     return () => { current = false; };
   }, [loadPluginState, stateKey]);
 
   useEffect(() => {
     if (!restored) return;
-    void savePluginState(stateKey, { conversations, activeConversationId } satisfies PersistedHeroiState);
-  }, [activeConversationId, conversations, restored, savePluginState, stateKey]);
+    schedulePluginState(stateKey, { conversations, activeConversationId } satisfies PersistedHeroiState);
+    // Text/activity bursts share one save; run starts, completions, stops,
+    // failures and conversation selection flush immediately, even during
+    // another conversation's ongoing run.
+    const transition = `${stateKey}:${activeConversationId}:` + conversations.map((conversation) => {
+      const last = conversation.messages.at(-1);
+      return `${conversation.id}:${last?.id}:${last?.state}`;
+    }).join('|');
+    if (transition !== savedTransition.current) {
+      savedTransition.current = transition;
+      void flushPluginState(stateKey).catch((error) => console.warn('Heroi save failed', error));
+    }
+  }, [activeConversationId, conversations, restored, schedulePluginState, flushPluginState, stateKey]);
+
+  useEffect(() => {
+    const flush = () => { void flushPluginState(stateKey).catch((error) => console.warn('Heroi save failed', error)); };
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, [flushPluginState, stateKey]);
 
   useEffect(() => {
     if (!restored) return;
@@ -688,6 +738,10 @@ export function HeroiView({
     });
   }, []);
 
+  const toggleToolGroup = useCallback((messageId: string, defaultOpen: boolean) => {
+    setToolGroupOpen((current) => ({ ...current, [messageId]: !(current[messageId] ?? defaultOpen) }));
+  }, []);
+
   const openTurnPath = useCallback((path: string) => {
     if (!activePath) return;
     window.dispatchEvent(new CustomEvent(HEROI_OPEN_FILE_EVENT, {
@@ -877,40 +931,12 @@ export function HeroiView({
                   || activities.some((entry) => entry.state === 'running');
                 const toolsExpanded = toolGroupOpen[message.id] ?? toolsRunning;
                 return (
-                  <article key={message.id} className={`plugin-heroi-message ${message.role}`}>
-                    <header>
-                      <span>{message.role === 'user'
-                        ? t('plugins.heroi.you')
-                        : `Heroi · ${providerLabel(activeConversation.provider)}`}</span>
-                      {message.state && message.state !== 'complete' && (
-                        <span className={`plugin-heroi-message-state ${message.state}`}>
-                          {message.state === 'running'
-                            ? activeRuns[activeConversation.id]?.activity
-                            : t(message.state === 'stopped'
-                              ? 'plugins.heroi.state.stopped'
-                              : 'plugins.heroi.state.error')}
-                        </span>
-                      )}
-                    </header>
-                    {message.role === 'assistant' ? (
-                      <AssistantTurnBody
-                        messageId={message.id}
-                        text={message.text}
-                        activities={activities}
-                        projectPath={activeConversation.projectPath}
-                        toolsExpanded={toolsExpanded}
-                        onToggleGroup={() => setToolGroupOpen((current) => ({
-                          ...current,
-                          [message.id]: !toolsExpanded,
-                        }))}
-                        expandedActivities={expandedActivities}
-                        onToggleActivity={toggleActivity}
-                        onOpenPath={openTurnPath}
-                      />
-                    ) : (
-                      message.text ? <MessageMarkdown text={message.text} /> : null
-                    )}
-                  </article>
+                  <MessageRow key={message.id} message={message}
+                    provider={activeConversation.provider} projectPath={activeConversation.projectPath}
+                    activity={message.state === 'running' ? activeRuns[activeConversation.id]?.activity : undefined}
+                    toolsExpanded={toolsExpanded} expandedActivities={expandedActivities}
+                    onToggleGroup={toggleToolGroup} onToggleActivity={toggleActivity} onOpenPath={openTurnPath}
+                  />
                 );
               })}
             </div>
