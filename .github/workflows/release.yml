@@ -233,6 +233,15 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         uses: sigstore/cosign-installer@v4.1.2
 
+      # The beforeBuildCommand signs the companion before Tauri imports its
+      # own bundling keychain, so the identity must already be available.
+      - name: Import macOS signing certificate for companion
+        if: matrix.platform == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
       - name: Build, sign, and release
         uses: tauri-apps/tauri-action@v0
         env:

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter strand-ui dev",
     "build": "pnpm --filter strand-ui build",
+    "build:desktop": "node scripts/build-companion.mjs && pnpm build",
     "clean:js": "pnpm --filter strand-ui clean:js",
     "site": "pnpm site:build && pnpm --filter strand-website exec serve dist -l 4321",
     "demo:build": "pnpm --filter strand-ui build:demo",

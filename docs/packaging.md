@@ -169,6 +169,13 @@ manual dispatch) and opens a **draft** GitHub Release with the installers
 attached — macOS universal `.dmg`, Windows `.msi`, Linux `.deb`/`.rpm`/
 `.AppImage`. Review and publish the draft by hand.
 
+The Tauri build hook invokes `pnpm --workspace-root run build:desktop`, which
+builds and stages the companion before building the frontend. To reproduce the
+release hook's nested working directory locally, run that command from
+`crates/` as well as from the repository root.
+The macOS runner imports its Apple certificate before this hook because the
+companion is signed before Tauri creates the app's bundling keychain.
+
 Manual dispatch checks out the requested tag before building; it never labels
 the current branch snapshot as that tag. On Linux, the release job requests a
 short-lived GitHub Actions OIDC identity, signs every AppImage with Cosign,

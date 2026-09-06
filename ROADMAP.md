@@ -3005,6 +3005,14 @@ at 1.6.0, and the bump script includes the new headless and operations crates.
 The existing published release has no assets; protocol-7 helper publication,
 correcting the desktop tag, and successful desktop/Store builds remain pending.
 
+**Desktop companion packaging repair kick (2026-09-07):** Once the version
+and helper gates passed, the release runners exposed Tauri's `crates/` hook
+working directory. The build hook now invokes the root `build:desktop` script
+through pnpm's explicit workspace-root option, keeping companion build and
+copy paths anchored to the repository on every platform.
+The macOS release also imports its existing Apple certificate before the hook
+signs the companion; Tauri's own keychain is created later during bundling.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

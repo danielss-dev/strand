@@ -2473,6 +2473,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
   still points to 1.5.1 source and has no assets. Publish the prepared signed
   protocol-7 helper, correct the release tag to the repaired commit, and
   complete desktop/Store builds before promoting the release.
+- ◐ Repair the desktop companion packaging hook (2026-09-07): Tauri starts
+  the release hook from `crates/`; `build:desktop` runs via pnpm's workspace
+  root so `build-companion.mjs` resolves its script, artifacts, and bundle
+  destinations consistently for desktop and Store builds. The macOS release
+  imports its existing Apple certificate before the hook signs the companion.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

@@ -2797,3 +2797,15 @@ headless companion and operations crate alongside core, Tauri, and the shared
 Azure protocol crate. Use `cargo metadata --no-deps --locked` after a bump to
 verify that no workspace package requires a lockfile repair. The independently
 versioned `strand-azdo` helper remains excluded.
+
+## Tauri build hooks must anchor workspace-relative scripts (2026-09-07)
+
+With the Tauri project under `crates/strand-tauri`, release CI runs its build
+hook from `crates/`. Invoke root scripts through `pnpm --workspace-root run`
+so both Node script lookup and the companion's Cargo/output paths use the
+repository root. Verify packaging hooks from the nested directory used by CI;
+running the script directly from the root misses this failure.
+
+The companion is signed inside this hook, before Tauri creates its bundling
+keychain. Import the existing Apple certificate before the desktop build step
+so the companion can use the same Developer ID as the app.

@@ -7,7 +7,7 @@
     "frontendDist": "../../ui/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "node scripts/build-companion.mjs && pnpm build"
+    "beforeBuildCommand": "pnpm --workspace-root run build:desktop"
   },
   "app": {
     "windows": [
