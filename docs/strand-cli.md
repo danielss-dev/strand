@@ -1,6 +1,10 @@
 # `strand` CLI — feature design
 
-Status (2026-06-12): **design only, scheduled post-1.0** (ROADMAP §1.1+,
+Status (2026-09-06): **launcher implemented; read commands and daemon in progress**.
+The desktop bundles `strand-cli` (the GUI executable already owns `strand`);
+Settings → Integrations installs it as the user's `strand` command. Startup
+and subsequent argv requests share a bounded inbox drained after session restore.
+The remaining sections describe the staged target. Originally scheduled post-1.0 (ROADMAP §1.1+,
 where "CLI companion binary" has been a bullet since the start — this doc
 fleshes it out). Shares its foundation with
 [`remote-ssh.md`](./remote-ssh.md): both consume the transport-agnostic

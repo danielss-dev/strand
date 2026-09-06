@@ -65,6 +65,8 @@ function prComment(author: string, body: string, path: string | null, prId: numb
 }
 
 export const handlers: Record<string, Handler> = {
+  app_take_open_requests: () => [],
+  app_install_cli: () => unavailable('Installing the strand command'),
   // ---- app / environment -------------------------------------------------
   microsoft_store_update_available: () => false,
   microsoft_store_open_product: () => unavailable('The Microsoft Store'),

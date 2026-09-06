@@ -1121,6 +1121,24 @@ export function App() {
   // tabs are open). Each step is idempotent, so StrictMode's double-invoke is
   // harmless.
   useEffect(() => {
+    let disposed = false;
+    let ready = false;
+    let draining = false;
+    let wakeAgain = false;
+    const drain = async () => {
+      if (disposed || !ready) return;
+      if (draining) { wakeAgain = true; return; }
+      draining = true;
+      try {
+        do {
+          wakeAgain = false;
+          for (const path of await tauri.appTakeOpenRequests()) await openByPath(path);
+        } while (wakeAgain && !disposed);
+      } catch (error) {
+        showToast(`Launch request failed: ${errMessage(error)}`, 'error');
+      } finally { draining = false; }
+    };
+    const unlisten = isTauri() ? listen('app://open-request', () => { void drain(); }) : Promise.resolve(() => {});
     void refreshRecents();
     void (async () => {
       await useWorkspaces.getState().load();
@@ -1128,9 +1146,13 @@ export function App() {
         await restoreSession();
       } finally {
         useWorkspaces.getState().initAfterRestore();
+        await unlisten;
+        ready = true;
+        if (isTauri()) await drain();
       }
     })();
-  }, [refreshRecents, restoreSession]);
+    return () => { disposed = true; void unlisten.then((stop) => stop()); };
+  }, [refreshRecents, restoreSession, openByPath, showToast]);
 
   // Native desktop menu. Menu item actions read the latest callbacks
   // through this ref, so the menu itself only rebuilds when the repo-scoped
@@ -1633,6 +1655,7 @@ export function App() {
     // Repo-independent — always available.
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
+      { id: 'install-cli', label: 'Install strand command…', group: 'Actions', keywords: 'terminal PATH launcher companion', run: () => { setSettingsSection('integrations'); setSettingsOpen(true); } },
       { id: 'init',    label: 'Initialize repository…', group: 'Actions', keywords: 'new create git init local repository', run: () => setInitRepoOpen(true) },
       { id: 'clone',   label: t('clone.paletteAction'), group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },

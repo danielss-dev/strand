@@ -21,9 +21,21 @@ export function IntegrationsSection() {
   const editorTool = useSettings((s) => s.editorTool);
   const terminalTool = useSettings((s) => s.terminalTool);
   const set = useSettings((s) => s.set);
+  const [cliStatus, setCliStatus] = useState<string | null>(null);
+  const [installingCli, setInstallingCli] = useState(false);
 
   return (
     <section className="settings-section" aria-label="Integrations">
+      <div className="settings-field">
+        <span className="settings-field-label">Command line</span>
+        <button type="button" className="btn" disabled={installingCli} onClick={async () => {
+          setInstallingCli(true);
+          try { setCliStatus(await tauri.appInstallCli()); }
+          catch (error) { setCliStatus(errMessage(error)); }
+          finally { setInstallingCli(false); }
+        }}>{installingCli ? 'Installing…' : 'Install strand command'}</button>
+        <p className="settings-hint" role="status">{cliStatus ?? 'Install in ~/.local/bin. strand PATH opens a repository in this desktop instance. Windows adds the folder to your user PATH; on macOS/Linux, add it to your shell PATH if needed.'}</p>
+      </div>
       <ToolPicker
         label="External editor"
         hint="Used by “Open externally” on files. Placeholders: {file}, {line}, {dir}."

@@ -1,5 +1,15 @@
 # Learnings
 
+## Desktop launch arguments need an inbox (2026-09-06)
+
+Single-instance events can arrive before React subscribes or while persisted
+tabs are restoring. Keep a bounded native inbox, use events only as wakeups,
+and drain after session restore and listener registration. Resolve relative
+paths against the sending process's cwd. The desktop binary already owns the
+`strand` filename, so the bundle stores the headless companion as `strand-cli`;
+the user command installation maps it to `strand` with an absolute desktop
+locator, avoiding shell interpolation of repository paths.
+
 Things we've learned while building Strand that aren't otherwise obvious from
 the PRD / ROADMAP / TASKS files. Append here when you discover something
 that future work (yours or another agent's) needs to respect.

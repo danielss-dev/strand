@@ -2166,7 +2166,7 @@ and Store certification remain external gates.
 - Patch import/mailbox and Git bundle workflows
 - Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
 - Repository/ref/file custom actions with safe argv templates
-- **CLI companion binary (`strand`)** — `strand <path>` opens the repo
+- ◐ **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
   typed, full-context data the `git` porcelain can't (same serde types
   as the IPC layer). Read-only by design — no push/pull, no writes.
@@ -2809,6 +2809,12 @@ planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
 ---
+
+**F16 launcher shipped locally (2026-09-06):** The bundled `strand-cli`
+companion installs as the user's `strand` command from Settings → Integrations
+and the palette. A single-instance argv inbox opens requested repositories
+after session restore and focuses the existing window. Read commands and SSH
+transport follow in separately verified changes.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

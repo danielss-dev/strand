@@ -54,6 +54,9 @@ jobs:
       - name: Test strand-core
         run: cargo test -p strand-core
 
+      - name: Test Strand companion
+        run: cargo test -p strand-headless
+
       - name: Test strand-tauri
         run: cargo test -p strand-tauri
 

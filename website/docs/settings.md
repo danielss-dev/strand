@@ -1,5 +1,18 @@
 # Settings
 
+Settings → Integrations → **Install strand command** installs the bundled
+companion in `~/.local/bin`. Windows adds that directory to your user PATH;
+open a new terminal afterward. On macOS/Linux, add that directory to your
+shell PATH if it is missing. The palette's **Install strand command…** opens
+this setting. Reinstall the command after upgrading Strand to refresh the
+installed companion.
+
+Run `strand PATH` (for example, `strand .`) to open the containing repository
+in Strand. A running instance receives the request and comes to the foreground;
+otherwise the desktop starts and opens the repository after session restore.
+Quote paths containing spaces. Existing unrelated `strand` executables in the
+installation directory are never replaced.
+
 Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; git identity and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.

@@ -117,6 +117,8 @@ fn install_crash_log(app: &tauri::App) {
     }));
 }
 
+mod launcher;
+
 fn main() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("strand=info,strand_core=info"));
@@ -133,6 +135,10 @@ fn main() {
     strand_core::init();
 
     tauri::Builder::default()
+        .manage(launcher::LaunchInbox::default())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            launcher::receive(app, &args, std::path::Path::new(&cwd));
+        }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -147,6 +153,8 @@ fn main() {
         )
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            launcher::app_take_open_requests,
+            launcher::app_install_cli,
             commands::repo_open,
             commands::microsoft_store_update_available,
             commands::microsoft_store_open_product,
@@ -348,6 +356,7 @@ fn main() {
                 }
                 let _ = win.show();
             }
+            launcher::receive(app.handle(), &std::env::args().collect::<Vec<_>>(), &std::env::current_dir().unwrap_or_default());
             Ok(())
         })
         .build(tauri::generate_context!())

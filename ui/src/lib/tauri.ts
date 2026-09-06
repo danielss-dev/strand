@@ -115,6 +115,8 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  appTakeOpenRequests: () => invoke<string[]>('app_take_open_requests'),
+  appInstallCli: () => invoke<string>('app_install_cli'),
   microsoftStoreUpdateAvailable: () =>
     invoke<boolean>('microsoft_store_update_available'),
   microsoftStoreOpenProduct: () =>

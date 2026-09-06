@@ -2614,12 +2614,14 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 
 ### App integration
 
-- ☐ P2 Wire `tauri-plugin-single-instance` into `strand-tauri` (second
+- ☑ P2 Wire `tauri-plugin-single-instance` into `strand-tauri` (second
   launch forwards argv to the running instance) — prerequisite for
-  `strand <path>`
-- ☐ P2 `strand <path>`: forward to running app or launch it with the
-  path (macOS `open -a Strand --args`; exec elsewhere)
-- ☐ P2 Settings action: install `strand` shim/symlink on PATH (the VS
-  Code `code`-command pattern); Windows `strand.cmd` variant
-- ☐ P2 Ship the binary inside the app bundle + standalone per-release
-  download for headless boxes
+  `strand <path>`; `launcher::LaunchInbox` queues argv until session restore)
+- ☑ P2 `strand <path>`: forward to running app or launch it with the
+  path (`strand-headless::launcher`, macOS `open -a Strand --args`; exec elsewhere)
+- ☑ P2 Settings action: install `strand` on PATH (`app_install_cli`, private
+  executable + desktop locator avoids shell argument interpolation; Windows
+  user PATH registration, Unix ~/.local/bin with shell PATH instructions)
+- ◐ P2 Ship the binary inside the app bundle + standalone per-release
+  download for headless boxes (`build-companion.mjs`, Tauri resources and MSIX
+  layout bundle the companion; standalone release matrix remains)

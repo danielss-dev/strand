@@ -71,6 +71,9 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Command line launcher** — Settings → Integrations installs `strand` in
+  your user command directory. `strand PATH` opens and focuses a repository
+  in the existing desktop instance, including paths with spaces.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with
@@ -350,6 +353,7 @@ calls, so `pnpm dev` is useful for UI work without a Rust build.
 strand/
 ├── crates/
 │   ├── strand-core/           # Git engine (gix for reads, git2 for writes)
+│   ├── strand-headless/       # CLI launcher, read-only companion and stdio engine
 │   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
 │   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands

@@ -7,7 +7,7 @@
     "frontendDist": "../../ui/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "node scripts/build-companion.mjs && pnpm build"
   },
   "app": {
     "windows": [
@@ -45,6 +45,7 @@
   },
   "bundle": {
     "active": true,
+    "resources": ["binaries/*"],
     "createUpdaterArtifacts": true,
     "targets": ["app", "dmg", "msi", "deb", "appimage", "rpm"],
     "icon": [
