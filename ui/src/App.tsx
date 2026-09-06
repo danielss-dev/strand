@@ -119,6 +119,7 @@ const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => (
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const InterchangeDialog = lazy(() => import('./views/InterchangeDialog').then((m) => ({ default: m.InterchangeDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
 
@@ -351,6 +352,7 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [interchangePath, setInterchangePath] = useState<string | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
@@ -1161,6 +1163,7 @@ export function App() {
     push: () => { void onPush(); },
     openInEditor,
     openInTerminal,
+    openInterchange: () => { const path = useRepo.getState().activePath; if (path) setInterchangePath(path); },
   };
   const hasRepo = Boolean(meta);
   useEffect(() => {
@@ -1875,6 +1878,7 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        { id: 'git-interchange', label: 'Patches, mailboxes & bundles…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); setInterchangePath(meta.path); } },
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
           setMaintenanceOpen(true);
@@ -2251,7 +2255,7 @@ export function App() {
                 ) : view === 'work' ? (
                   workbenchComposed ? (
                     <div className="main">
-                      <OpBanner onToast={showToast} />
+                      <OpBanner onToast={showToast} onOpenMailbox={() => { if (meta) setInterchangePath(meta.path); }} />
                       <CustomView
                         editing={workbenchEditing}
                         renderSurface={renderCustomSurface}
@@ -2268,7 +2272,7 @@ export function App() {
                     {view !== 'worktrees' && (
                       <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                     )}
-                    <OpBanner onToast={showToast} />
+                    <OpBanner onToast={showToast} onOpenMailbox={() => { if (meta) setInterchangePath(meta.path); }} />
                     {mainSurfaceId && (
                       <SurfaceHost
                         registry={workbenchSurfaceRegistry}
@@ -2386,6 +2390,7 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
+      {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} path={interchangePath} onClose={() => setInterchangePath(null)} /></Suspense>}
 
       {fileEntryDialog && meta && (
         <FileEntryDialog
@@ -2643,6 +2648,7 @@ function CrashToast({
 
 /** Human label for an in-progress sequencer op (from `meta.operation`). */
 const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
+  mailbox: 'Mailbox in progress',
   rebase: 'Rebase in progress',
   'cherry-pick': 'Cherry-pick in progress',
   revert: 'Revert in progress',
@@ -2657,7 +2663,7 @@ const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
  * conflict remains. The op clears `operation` on the next refresh, which hides
  * the banner.
  */
-function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
+function OpBanner({ onToast, onOpenMailbox }: { onToast: (msg: string, kind?: 'success' | 'error') => void; onOpenMailbox: () => void }) {
   const operation = useRepo((s) => s.meta?.operation ?? null);
   const status = useRepo((s) => s.status);
   const abortOperation = useRepo((s) => s.abortOperation);
@@ -2667,6 +2673,7 @@ function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'erro
   const hasConflicts = useMemo(() => status.some((s) => s.kind === 'CONFLICTED'), [status]);
 
   if (!operation) return null;
+  if (operation === 'mailbox') return <div className="op-banner" role="status"><span className="op-label">Mailbox in progress</span><span className="op-hint">Resolve and stage conflicts, then continue the mailbox.</span><button className="btn" onClick={onOpenMailbox}>Continue / skip / abort mailbox…</button></div>;
 
   const onAbort = async () => {
     if (busy) return;

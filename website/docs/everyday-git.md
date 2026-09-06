@@ -221,6 +221,38 @@ The merge editor is a full-screen three-way view:
 
 Once every conflicted file is resolved, the banner's Continue button resumes the operation.
 
+## Patches, mailboxes and bundles
+
+Open **Repository → Patches, Mailboxes & Bundles…**, or search the same name
+in Quick Launch. Tab moves between controls; native selectors use arrow keys;
+Enter or Space activates buttons and Escape closes the dialog while idle.
+
+For a patch, choose the file and an explicit target: **Working tree only**
+(unstaged), **Index only** (staged, without changing files), or **Index and
+working tree**. **Preview and validate** lists every affected old/new path
+and checks application before enabling Apply. A changed input or repository
+requires another preview. Paths outside the repository, Git administrative
+paths and symlink patches are rejected. Patch and mailbox input is limited
+to 32 MiB; mailbox series are limited to 1,000 patches.
+
+Choose **Mailbox** for format-patch output. The preview includes authors,
+dates and subjects, and validates the series against a temporary index.
+Starting requires a clean repository and creates commits with the original
+author metadata. If direct application fails, Git tries a three-way merge.
+A paused mailbox is detected from Git’s own state, including one started in
+a terminal. Resolve and stage conflicts in Local Changes, reopen the dialog,
+then **Continue mailbox**. **Skip patch** discards the current patch changes;
+**Abort mailbox** restores the checkout before the mailbox. Both require a
+second click after explaining the discarded changes. Git errors remain visible.
+
+For a bundle, **Verify bundle** shows advertised refs, prerequisite commits
+and Git’s validation output. Choose one advertised ref and a **new local
+branch** to import; existing branches and the current checkout are preserved.
+An incremental bundle cannot be imported until this repository has its
+prerequisites. **Export bundle** takes a full ref (such as `refs/heads/main`)
+and an optional prerequisite revision to exclude. It writes a new destination
+file and reports the exported refs/prerequisites; it never overwrites a file.
+
 ## Where Strand uses your system git
 
 Strand reads repositories with its own fast engine, but the operations where your environment matters shell out to the real `git` binary and therefore honor your global and per-repo configuration:

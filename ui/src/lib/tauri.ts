@@ -1,4 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
 
 import type {
   AiProvider,
@@ -115,6 +116,13 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoPatchPreview: (path: string, source: string, target: PatchTarget) => invoke<PatchPreview>('repo_patch_preview', { path, source, target }),
+  repoPatchImport: (path: string, source: string, target: PatchTarget, token: string) => invoke<InterchangeOutcome>('repo_patch_import', { path, source, target, token }),
+  repoMailboxState: (path: string) => invoke<MailboxState | null>('repo_mailbox_state', { path }),
+  repoMailboxAction: (path: string, action: 'continue' | 'skip' | 'abort', token: string) => invoke<InterchangeOutcome>('repo_mailbox_action', { path, action, token }),
+  repoBundlePreview: (path: string, source: string) => invoke<BundlePreview>('repo_bundle_preview', { path, source }),
+  repoBundleImport: (path: string, source: string, token: string, sourceRef: string, branch: string) => invoke<InterchangeOutcome>('repo_bundle_import', { path, source, token, sourceRef, branch }),
+  repoBundleExport: (path: string, destination: string, refname: string, prerequisite: string | null) => invoke<BundlePreview>('repo_bundle_export', { path, destination, refname, prerequisite }),
   microsoftStoreUpdateAvailable: () =>
     invoke<boolean>('microsoft_store_update_available'),
   microsoftStoreOpenProduct: () =>

@@ -176,6 +176,8 @@ mod tests {
             "/repo/.git/refs/heads/main",
             "/repo/.git/MERGE_HEAD",
             "/repo/.git/rebase-merge/done",
+            "/repo/.git/rebase-apply/applying",
+            "/repo/.git/rebase-apply/next",
         ] {
             assert!(relevant_path(&PathBuf::from(p), &git_dir()), "{p} should refresh");
         }

@@ -1,5 +1,17 @@
 # Learnings
 
+## Interchange state comes from Git, not a saved UI session (2026-09-06)
+
+`rebase-apply/applying` identifies `git am`; `rebase-apply` alone can mean a
+rebase. Test this before the generic rebase check so Continue/Abort dispatch
+to the right porcelain. Mailbox previews parse every message with Git's
+mailsplit/mailinfo, preserving authors and checking old/new paths. Imported
+paths reject administrative entries and symlink traversal, including missing
+descendants; never enable `--unsafe-paths`. Preview stamps include file bytes,
+index and HEAD because status-row equality does not prove unchanged content.
+Bundle imports publish only a new local branch after verification/unbundle,
+using non-forcing ref creation to reject concurrent external branch creation.
+
 Things we've learned while building Strand that aren't otherwise obvious from
 the PRD / ROADMAP / TASKS files. Append here when you discover something
 that future work (yours or another agent's) needs to respect.

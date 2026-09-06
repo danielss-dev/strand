@@ -69,6 +69,41 @@ impl From<strand_core::Error> for CmdError {
 
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
 
+#[tauri::command]
+pub async fn repo_patch_preview(path: String, source: String, target: strand_core::interchange::PatchTarget) -> CmdResult<strand_core::interchange::PatchPreview> {
+    run_blocking("preview patch", move || Repo::discover(path)?.preview_patch_import(Path::new(&source), target).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_patch_import(path: String, source: String, target: strand_core::interchange::PatchTarget, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import patch", move || Repo::discover(path)?.import_patch(Path::new(&source), target, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_state(path: String) -> CmdResult<Option<strand_core::interchange::MailboxState>> {
+    run_blocking("mailbox state", move || Repo::discover(path)?.mailbox_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_action(path: String, action: strand_core::interchange::MailboxAction, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("mailbox action", move || Repo::discover(path)?.mailbox_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_preview(path: String, source: String) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("verify bundle", move || Repo::discover(path)?.preview_bundle(Path::new(&source)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_import(path: String, source: String, token: String, source_ref: String, branch: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import bundle", move || Repo::discover(path)?.import_bundle(Path::new(&source), &token, &source_ref, &branch).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_export(path: String, destination: String, refname: String, prerequisite: Option<String>) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("export bundle", move || Repo::discover(path)?.export_bundle(Path::new(&destination), &refname, prerequisite.as_deref()).map_err(Into::into)).await
+}
+
 #[tauri::command(async)]
 pub fn repo_terminal_create(
     path: String,

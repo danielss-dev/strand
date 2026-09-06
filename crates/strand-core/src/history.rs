@@ -370,6 +370,7 @@ impl Repo {
             .operation_in_progress()
             .ok_or_else(|| Error::Other("no operation in progress to continue".into()))?;
         let cmd = match op.as_str() {
+            "mailbox" => "am",
             "rebase" => "rebase",
             "cherry-pick" => "cherry-pick",
             "revert" => "revert",
@@ -428,6 +429,7 @@ impl Repo {
             .operation_in_progress()
             .ok_or_else(|| Error::Other("no operation in progress to abort".into()))?;
         let cmd = match op.as_str() {
+            "mailbox" => "am",
             "rebase" => "rebase",
             "cherry-pick" => "cherry-pick",
             "revert" => "revert",

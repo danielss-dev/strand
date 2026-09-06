@@ -231,6 +231,10 @@ the resolved app appearance automatically.
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
   pause/conflict Continue / Abort.
+- **Patch interchange** — preview affected paths and validate patch imports
+  into the working tree, index, or both; import mailboxes with original authors
+  and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
+  import into a new branch, and export full or incremental bundles.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
   resizable commit detail panel with lazy GPG/SSH/X.509 verification,

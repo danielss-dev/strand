@@ -106,9 +106,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
   with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
   `.gitmodules` and index changes, plus cancellable network operations.
-- ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
+- ☑ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
+  Implemented (`interchange.rs`, `InterchangeDialog`, Repository menu/palette);
+  five native fixtures and three IPC tests pass. Native WebView2 verified patch
+  targets, authored mailbox/conflict continuation and bundle import/export.
 - ☐ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
   compatibility fixtures for excluded paths, dirty trees and sparse indexes.
 - ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,

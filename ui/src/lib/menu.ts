@@ -48,6 +48,7 @@ export interface MenuHandlers {
   push(): void;
   openInEditor(): void;
   openInTerminal(): void;
+  openInterchange(): void;
 }
 
 let preemptsKeydown = false;
@@ -195,6 +196,7 @@ export async function installAppMenu(
   const repoMenu = await Submenu.new({
     text: 'Repository',
     items: [
+      await item({ id: 'git-interchange', text: 'Patches, Mailboxes & Bundles…', enabled: hasRepo, action: () => handlers().openInterchange() }),
       await item({
         id: 'sync',
         text: 'Sync (Fetch + Pull + Push)',

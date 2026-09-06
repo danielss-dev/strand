@@ -2163,7 +2163,9 @@ and Store certification remain external gates.
   retention policy, and backend justify adding it
 - Guided Git bisect
 - Sparse checkout (cone mode first)
-- Patch import/mailbox and Git bundle workflows
+- ☑ Patch import/mailbox and Git bundle workflows (F07: `InterchangeDialog`,
+  validation, author-preserving mailbox recovery and new-branch bundle import;
+  native desktop flows verified)
 - Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
 - Repository/ref/file custom actions with safe argv templates
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
@@ -2809,6 +2811,15 @@ planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
 ---
+
+**Patch interchange shipped (2026-09-06):** Added affected-path previews,
+explicit index/worktree targets, validated import, original-author mailboxes
+with Continue/Skip/Abort, and bundle verification/import/export with
+prerequisite/ref summaries. Native fixtures cover stale previews, all patch
+targets, mailbox authors/recovery and missing bundle prerequisites. Rust
+checks, five fixtures and three frontend IPC tests pass. Native WebView2
+verified palette/focus, worktree/index targets, mailbox authors and conflict
+continuation, and bundle verification/import/incremental export.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
