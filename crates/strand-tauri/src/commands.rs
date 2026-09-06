@@ -19,16 +19,19 @@ use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     commit_metadata::CommitSignature,
+    signing::{SigningMode, SigningScope, SigningSettings},
+    tag::TagVerification,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
-    gitconfig::{self, GlobalIdentity},
+    gitconfig::{self, GlobalIdentity, RepositoryIdentity},
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
+    lfs::LfsAction,
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
-    network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
+    network::{clone_with_options as core_clone, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
-    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry,
+    status::FileStatus, submodule::{Submodule, SubmoduleAction, SubmodulePage}, tree::WorkTreeEntry,
     worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats}, Repo,
 };
 use tauri::ipc::Channel;
@@ -68,6 +71,187 @@ impl From<strand_core::Error> for CmdError {
 }
 
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
+
+#[tauri::command]
+pub async fn repo_gitflow_detect() -> CmdResult<strand_core::gitflow::FlowTool> {
+    run_blocking("detect Git-flow", || strand_core::gitflow::detect().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_state(path: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("inspect Git-flow", move || Repo::discover(path)?.gitflow_state().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_configure(path: String, config: strand_core::gitflow::FlowConfig, enabled: bool, token: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("configure Git-flow", move || Repo::discover(path)?.configure_gitflow(config, enabled, &token).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_plan(path: String, kind: strand_core::gitflow::FlowKind, action: strand_core::gitflow::FlowAction, name: String) -> CmdResult<strand_core::gitflow::FlowPlan> {
+    run_blocking("review Git-flow", move || Repo::discover(path)?.plan_gitflow(kind, action, &name).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_run(path: String, plan: strand_core::gitflow::FlowPlan, on_event: Channel<String>) -> CmdResult<strand_core::gitflow::FlowOutcome> {
+    run_blocking("run Git-flow", move || Repo::discover(path)?.run_gitflow(plan, |text| { let _ = on_event.send(text); }).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_advanced_refs(
+    path: String,
+    notes_ref: String,
+) -> CmdResult<strand_core::advanced_refs::AdvancedRefs> {
+    run_blocking("inspect advanced refs", move || {
+        Repo::discover(path)?
+            .advanced_refs(&notes_ref)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note(
+    path: String,
+    notes_ref: String,
+    revision: String,
+) -> CmdResult<strand_core::advanced_refs::GitNote> {
+    run_blocking("read Git note", move || {
+        Repo::discover(path)?
+            .git_note(&notes_ref, &revision)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note_write(
+    path: String,
+    notes_ref: String,
+    object: String,
+    expected: Option<String>,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write Git note", move || {
+        Repo::discover(path)?
+            .write_git_note(&notes_ref, &object, expected.as_deref(), message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_review(
+    path: String,
+    original: String,
+    replacement: String,
+) -> CmdResult<strand_core::advanced_refs::ReplaceReview> {
+    run_blocking("review replacement", move || {
+        Repo::discover(path)?
+            .review_replacement(&original, &replacement)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_write(
+    path: String,
+    original: String,
+    replacement: Option<String>,
+    expected: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write replacement", move || {
+        Repo::discover(path)?
+            .write_replacement(&original, replacement.as_deref(), expected.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit_review(
+    path: String,
+    name: String,
+    target: String,
+) -> CmdResult<strand_core::advanced_refs::TagEditReview> {
+    run_blocking("review tag edit", move || {
+        Repo::discover(path)?
+            .review_tag_edit(&name, &target)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit(
+    path: String,
+    name: String,
+    target: String,
+    expected: String,
+    kind: strand_core::advanced_refs::TagEditKind,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("edit tag", move || {
+        Repo::discover(path)?
+            .edit_tag(&name, &target, &expected, kind, message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_published(
+    path: String,
+    remote: String,
+    name: String,
+) -> CmdResult<strand_core::advanced_refs::PublishedTag> {
+    run_blocking("check published tag", move || {
+        Repo::discover(path)?
+            .published_tag(&remote, &name)
+            .map_err(Into::into)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_state(path: String) -> CmdResult<strand_core::bisect::BisectState> {
+    run_blocking("bisect state", move || Repo::discover(path)?.bisect_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_start(path: String, good: String, bad: String, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("start bisect", move || Repo::discover(path)?.bisect_start(&good, &bad, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_action(path: String, action: strand_core::bisect::BisectAction, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("bisect action", move || Repo::discover(path)?.bisect_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_patch_preview(path: String, source: String, target: strand_core::interchange::PatchTarget) -> CmdResult<strand_core::interchange::PatchPreview> {
+    run_blocking("preview patch", move || Repo::discover(path)?.preview_patch_import(Path::new(&source), target).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_patch_import(path: String, source: String, target: strand_core::interchange::PatchTarget, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import patch", move || Repo::discover(path)?.import_patch(Path::new(&source), target, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_state(path: String) -> CmdResult<Option<strand_core::interchange::MailboxState>> {
+    run_blocking("mailbox state", move || Repo::discover(path)?.mailbox_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_action(path: String, action: strand_core::interchange::MailboxAction, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("mailbox action", move || Repo::discover(path)?.mailbox_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_preview(path: String, source: String) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("verify bundle", move || Repo::discover(path)?.preview_bundle(Path::new(&source)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_import(path: String, source: String, token: String, source_ref: String, branch: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import bundle", move || Repo::discover(path)?.import_bundle(Path::new(&source), &token, &source_ref, &branch).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_export(path: String, destination: String, refname: String, prerequisite: Option<String>) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("export bundle", move || Repo::discover(path)?.export_bundle(Path::new(&destination), &refname, prerequisite.as_deref()).map_err(Into::into)).await
+}
 
 #[tauri::command(async)]
 pub fn repo_terminal_create(
@@ -391,6 +575,50 @@ pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     })
     .await
 }
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_completion(path: String, id: u64, enable: bool, strategy: pull_requests::PullRequestMergeStrategy, expected_head: String) -> CmdResult<()> {
+    run_blocking("pull request completion", move || pull_requests::completion::set(&path, id, enable, strategy, &expected_head).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_boundaries(path: String, id: u64, expected_head: String, request_id: String) -> CmdResult<Vec<pull_requests::evolution::Boundary>> {
+    run_blocking("pull request boundaries", move || pull_requests::evolution::boundaries(&path, id, &expected_head, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_compare_review(path: String, id: u64, from: String, expected_head: String) -> CmdResult<pull_requests::evolution::Comparison> {
+    run_blocking("pull request compare_review", move || pull_requests::evolution::compare(&path, id, &from, &expected_head).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_feedback(path: String, id: u64, expected_head: String, request_id: String) -> CmdResult<pull_requests::evolution::Feedback> {
+    run_blocking("pull request feedback", move || pull_requests::evolution::feedback(&path, id, &expected_head, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_suggestion_preview(path: String, id: u64, request: pull_requests::evolution::SuggestionRequest, request_id: String) -> CmdResult<pull_requests::evolution::SuggestionPreview> {
+    run_blocking("pull request suggestion_preview", move || pull_requests::evolution::preview(&path, id, &request, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_suggestion_apply(path: String, id: u64, request: pull_requests::evolution::SuggestionRequest, expected_preview: pull_requests::evolution::SuggestionPreview, request_id: String) -> CmdResult<String> {
+    run_blocking("pull request suggestion_apply", move || pull_requests::evolution::apply(&path, id, &request, &expected_preview, &request_id).map_err(|message| CmdError { message })).await
+}
+
+/// One bounded provider page; cancellation never affects provider writes.
+#[tauri::command(async)]
+pub async fn repo_pull_request_inbox_page(path: String, cursor: Option<String>, request_id: String) -> CmdResult<PullRequestList> {
+    run_blocking("pull request inbox page", move || pull_requests::pages::inbox(&path, cursor.as_deref(), &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_data_page(path: String, id: u64, expected_head: String, request: pull_requests::pages::Cursor, request_id: String) -> CmdResult<pull_requests::pages::Page> {
+    run_blocking("pull request data page", move || pull_requests::pages::read(&path, id, &expected_head, request, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command]
+pub fn repo_pull_request_cancel_read(request_id: String) { pull_requests::pages::cancel(&request_id); }
 
 /// Active pull request for one checked-out branch. This targeted query lets
 /// automatic following work without loading the full hosted-PR workspace.
@@ -899,13 +1127,16 @@ pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResul
 }
 
 #[tauri::command(async)]
-pub fn repo_commit(
+pub async fn repo_commit(
     path: String,
     subject: String,
     body: Option<String>,
     amend: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<CommitOutcome> {
-    Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+    run_blocking("commit", move || {
+        Ok(Repo::discover(&path)?.commit_with_signing(&subject, body.as_deref(), amend, signing.unwrap_or_default())?)
+    }).await
 }
 
 // Network commands run on a blocking thread (they shell out to `git`, which
@@ -1094,6 +1325,7 @@ pub async fn repo_branch_pull(
 pub async fn repo_clone(
     url: String,
     dest: String,
+    options: Option<CloneOptions>,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -1104,6 +1336,7 @@ pub async fn repo_clone(
         core_clone(
             &url,
             &dest,
+            &options.unwrap_or_default(),
             |p| {
                 let _ = on_event.send(p);
             },
@@ -1112,6 +1345,44 @@ pub async fn repo_clone(
         .map_err(CmdError::from)
     })
     .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_clone_scope(path: String) -> CmdResult<CloneScope> {
+    run_blocking("clone scope", move || Ok(Repo::discover(path)?.clone_scope()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_sparse_checkout(path: String) -> CmdResult<strand_core::sparse::SparseCheckout> {
+    run_blocking("sparse checkout", move || Ok(Repo::discover(path)?.sparse_checkout()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_sparse_checkout(path: String, directories: Vec<String>, sparse_index: bool) -> CmdResult<String> {
+    run_blocking("set sparse checkout", move || Ok(Repo::discover(path)?.set_sparse_checkout(&directories, sparse_index)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_disable_sparse_checkout(path: String) -> CmdResult<String> {
+    run_blocking("disable sparse checkout", move || Ok(Repo::discover(path)?.disable_sparse_checkout()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_expand_history(
+    path: String,
+    remote: String,
+    expansion: HistoryExpansion,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("expand history", move || {
+        Ok(Repo::discover(path)?.expand_history(&remote, expansion, |p| { let _ = on_event.send(p); }, Some(&cancel))?)
+    }).await;
     deregister_op(&state, &op_id);
     result
 }
@@ -1185,15 +1456,37 @@ pub async fn repo_submodule_update(
     init: bool,
     recursive: bool,
     on_event: Channel<Progress>,
+    op_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    run_blocking("submodule update", move || {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule update", move || {
         let repo = Repo::discover(&path)?;
         repo.submodule_update(&paths, init, recursive, |p| {
             let _ = on_event.send(p);
-        })
+        }, Some(&cancel))
         .map_err(CmdError::from)
     })
-    .await
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_children(path: String, parent: String, offset: usize) -> CmdResult<SubmodulePage> {
+    run_blocking("submodule children", move || Ok(Repo::discover(&path)?.submodule_children(&parent, offset)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_action(path: String, action: SubmoduleAction, op_id: Option<String>, on_event: Channel<Progress>, state: State<'_, AppState>) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule lifecycle", move || {
+        Repo::discover(&path)?.submodule_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 #[tauri::command(async)]
@@ -1497,15 +1790,85 @@ pub async fn repo_maintenance(
 }
 
 #[tauri::command(async)]
-pub fn repo_tag_create(
+pub async fn repo_user_action_preview(
+    action: strand_core::user_actions::UserAction,
+    context: strand_core::user_actions::ActionContext,
+) -> CmdResult<strand_core::user_actions::ActionPreview> {
+    run_blocking("user action preview", move || {
+        crate::user_actions::preview(&action, &context).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_user_action_run(
+    action: strand_core::user_actions::UserAction,
+    context: strand_core::user_actions::ActionContext,
+    preview: strand_core::user_actions::ActionPreview,
+    op_id: String,
+    on_started: Channel<()>,
+    state: State<'_, AppState>,
+) -> CmdResult<crate::user_actions::ActionOutcome> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    {
+        let mut ops = state.ops.lock().map_err(|_| CmdError { message: "operation registry unavailable".into() })?;
+        if ops.contains_key(&op_id) { return Err(CmdError { message: "Action is already running".into() }); }
+        ops.insert(op_id.clone(), OperationCancelHandle::Ai(cancel.clone()));
+    }
+    // UI replays an early cancellation after this registration handshake.
+    let _ = on_started.send(());
+    let result = run_blocking("user action", move || {
+        let current = crate::user_actions::preview(&action, &context).map_err(|message| CmdError { message })?;
+        if current != preview { return Err(CmdError { message: "Action context or executable changed. Preview again before running.".into() }); }
+        crate::user_actions::run(&current, &cancel).map_err(|message| CmdError { message })
+    }).await;
+    deregister_op(&state, &Some(op_id));
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_lfs_action(
+    path: String,
+    action: LfsAction,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("Git LFS", move || {
+        Repo::discover(&path)?.lfs_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_tag_create(
     path: String,
     name: String,
     target: Option<String>,
     message: Option<String>,
     force: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<()> {
-    Repo::discover(&path)?.create_tag(&name, target.as_deref(), message.as_deref(), force)?;
-    Ok(())
+    run_blocking("tag", move || {
+        Ok(Repo::discover(&path)?.create_tag_with_signing(&name, target.as_deref(), message.as_deref(), force, signing.unwrap_or_default())?)
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_tag_verify(path: String, name: String) -> CmdResult<TagVerification> {
+    run_blocking("verify-tag", move || Ok(Repo::discover(&path)?.verify_tag(&name)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_signing_settings(path: String) -> CmdResult<SigningSettings> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.signing_settings()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_signing_config(path: String, scope: SigningScope, key: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.set_signing_config(scope, &key, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]
@@ -1657,6 +2020,16 @@ pub fn repo_open_in_editor(
 #[tauri::command(async)]
 pub fn repo_open_in_terminal(path: String, template: String) -> CmdResult<()> {
     Ok(Repo::discover(&path)?.open_in_terminal(&template)?)
+}
+
+#[tauri::command(async)]
+pub async fn repo_identity(path: String) -> CmdResult<RepositoryIdentity> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.repository_identity()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_identity(path: String, field: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.set_repository_identity(&field, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]
@@ -2147,4 +2520,33 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
     }
+}
+
+#[tauri::command(async)]
+pub async fn repo_hosting_providers(path: String) -> CmdResult<Vec<pull_requests::RemoteHostingProvider>> {
+    run_blocking("remote hosting providers", move || pull_requests::hosting_providers(&path).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn repo_set_hosting_provider(path: String, remote: String, provider: String) -> CmdResult<()> {
+    run_blocking("configure remote provider", move || pull_requests::set_hosting_provider(&path, &remote, &provider).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_accounts(path: String, provider: String, host: String) -> CmdResult<pull_requests::publish::PublishAccount> {
+    run_blocking("publish destinations", move || pull_requests::publish::accounts(&path, &provider, &host).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_state(path: String) -> CmdResult<Option<pull_requests::publish::PublishState>> {
+    run_blocking("publish recovery", move || pull_requests::publish::state(&path).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_preview(path: String, request: pull_requests::publish::PublishRequest) -> CmdResult<pull_requests::publish::PublishState> {
+    run_blocking("review publish destination", move || pull_requests::publish::preview(&path, request).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_advance(path: String, id: String, action: String) -> CmdResult<pull_requests::publish::PublishState> {
+    run_blocking("publish repository", move || pull_requests::publish::advance(&path, &id, &action).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_forget(path: String) -> CmdResult<()> {
+    run_blocking("dismiss publish recovery", move || pull_requests::publish::forget(&path).map_err(|message| CmdError { message })).await
 }

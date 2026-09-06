@@ -36,7 +36,7 @@ impl Repo {
     pub fn snapshot(&self) -> Result<Snapshot> {
         let repo = self.git2()?;
         let statuses = repo.statuses(Some(&mut crate::status::status_options()))?;
-        let status = crate::status::from_statuses(&statuses);
+        let status = if self.sparse_enabled() { self.status()? } else { crate::status::from_statuses(&statuses) };
         let work_tree = crate::tree::from_index_and_statuses(repo, &statuses)?;
         drop(statuses);
 

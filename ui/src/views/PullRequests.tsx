@@ -52,6 +52,7 @@ import type {
   PullRequestCheck,
   PullRequestComment,
   PullRequestCreateOutcome,
+  PullRequestDataPage,
   PullRequestList,
   PullRequestPendingComment,
   PullRequestReview,
@@ -62,11 +63,15 @@ import type {
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
+import { HostedReviewTools } from './HostedReviewTools';
+import { PullRequestCompletionControl } from './PullRequestCompletionControl';
+import { PullRequestDataLoader } from './PullRequestDataLoader';
+import { PullRequestInboxLoader } from './PullRequestInboxLoader';
+import { appendPullRequestPage, uniqueBy } from '../lib/pullRequestPages';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
 import { PullRequestCreateDialog } from './PullRequestCreateDialog';
 
-const providerName = (provider: PullRequestList['repository']['provider']) =>
-  provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
+import { providerName } from '../lib/pullRequests';
 
 function displayState(pr: PullRequest): string {
   if (pr.is_draft) return 'draft';
@@ -423,7 +428,7 @@ function PullRequestSummary({
       </details>
 
       <details className="pr-summary-section" open>
-        <summary>Checks <span>{pr.checks.length}</span></summary>
+        <summary>Checks <span>{pr.checks.length}{!pr.checks_complete ? '+' : ''}</span></summary>
         <div className="pr-summary-section-body">
           {pr.checks.length > 0 ? (
             <ul className="pr-facts">
@@ -436,7 +441,7 @@ function PullRequestSummary({
       </details>
 
       <details className="pr-summary-section" open>
-        <summary>Reviews <span>{(pr.reviews ?? []).length}</span></summary>
+        <summary>Reviews <span>{(pr.reviews ?? []).length}{pr.data_pages?.some((p) => p.kind === 'reviews') ? '+' : ''}</span></summary>
         <div className="pr-summary-section-body pr-existing-reviews">
           {(pr.reviews ?? []).length > 0 ? (pr.reviews ?? []).map((review) => (
             <PullRequestReviewCard
@@ -454,7 +459,7 @@ function PullRequestSummary({
 
       <section className="pr-summary-comments">
         <h3>Comments <span>{pr.comments.length}</span></h3>
-        {isOpenPullRequest(pr) ? (
+        {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
           <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
         ) : (
           <p className="pr-muted">This pull request is {displayState(pr)}. Its discussion is read-only in Strand.</p>
@@ -663,7 +668,7 @@ function PullRequestTimeline({
           );
         })}
       </div>
-      {isOpenPullRequest(pr) ? (
+      {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
         <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
       ) : (
         <p className="pr-muted">This pull request is {displayState(pr)}. Its timeline is read-only in Strand.</p>
@@ -719,7 +724,7 @@ function PullRequestInlineThread({
       className={`pr-inline-thread${thread.is_resolved ? ' resolved' : ''}${thread.is_outdated ? ' outdated' : ''}`}
     >
       <header>
-        <strong>{thread.side === 'deletions' ? 'Old' : 'New'} line{thread.start_line === thread.end_line ? '' : 's'} {lineLabel}</strong>
+        <strong>{thread.end_line === 0 ? 'File feedback' : `${thread.side === 'deletions' ? 'Old' : 'New'} line${thread.start_line === thread.end_line ? '' : 's'} ${lineLabel}`}</strong>
         <div className="pr-inline-thread-head-actions">
           <div className="pr-inline-thread-labels">
             {thread.is_resolved && <span>Resolved</span>}
@@ -1020,7 +1025,7 @@ function PullRequestChanges({
     () => unresolvedThreadTargets(allTreePaths, pr.review_threads ?? []),
     [allTreePaths, pr.review_threads],
   );
-  const openForReview = pr.state === 'open' || pr.state === 'active';
+  const openForReview = (pr.capabilities?.can_comment ?? true) && (pr.state === 'open' || pr.state === 'active');
 
   useEffect(() => {
     if (navigationTarget && filesByPath.has(navigationTarget.path) && !treePaths.includes(navigationTarget.path)) {
@@ -1107,7 +1112,7 @@ function PullRequestChanges({
   }, [pr.id, selectLines]);
 
   const inlineAnnotations = useMemo<DiffLineAnnotation<InlineCommentAnnotation>[]>(() => {
-    const annotations: DiffLineAnnotation<InlineCommentAnnotation>[] = selectedThreads.map((thread) => ({
+    const annotations: DiffLineAnnotation<InlineCommentAnnotation>[] = selectedThreads.filter(thread => thread.end_line > 0).map((thread) => ({
       side: thread.side,
       lineNumber: thread.end_line,
       metadata: { kind: 'thread' as const, thread },
@@ -1528,8 +1533,8 @@ function PullRequestChanges({
           <div className="pr-review-submit-actions">
             <span>{reviewDraft.body.length.toLocaleString()} / 65,536</span>
             <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('comment')}>Comment</button>
-            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('approve')}>Approve</button>
-            <button type="button" className="btn danger" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || !reviewDraft.body.trim()} onClick={() => void submitReview('request_changes')}>Request changes</button>
+            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || pr.capabilities?.can_review === false} onClick={() => void submitReview('approve')}>Approve</button>
+            <button type="button" className="btn danger" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || !reviewDraft.body.trim() || pr.capabilities?.can_request_changes === false} onClick={() => void submitReview('request_changes')}>Request changes</button>
           </div>
         </section>
       )}
@@ -1633,6 +1638,23 @@ function PullRequestChanges({
                     {commentMessage.text}
                   </div>
                 )}
+                {!collapsed && selectedThreads.filter(thread => thread.end_line === 0).map(thread => (
+                          <PullRequestInlineThread key={thread.id}
+                            thread={thread}
+                            prUrl={pr.url}
+                            canWrite={openForReview}
+                            replying={replyingThreadId === thread.id}
+                            replyDraft={replyDrafts[thread.id] ?? ''}
+                            writeKind={threadWrites[thread.id]}
+                            message={threadMessages[thread.id]}
+                            platform={platform}
+                            onStartReply={() => startThreadReply(thread.id)}
+                            onCancelReply={() => cancelThreadReply(thread.id)}
+                            onReplyDraft={(value) => setThreadReplyDraft(thread.id, value)}
+                            onSubmitReply={() => { void submitThreadReply(thread); }}
+                            onSetResolved={(resolved) => { void setThreadResolved(thread, resolved); }}
+                          />
+                ))}
                 {!collapsed && (
                   <ParsedDiff<InlineCommentAnnotation>
                     fileDiff={selectedFile}
@@ -1799,6 +1821,7 @@ function PullRequestDetails({
   pr,
   tab,
   onTabChange,
+  onPage,
   onUpdated,
   onToast,
   followed,
@@ -1811,6 +1834,7 @@ function PullRequestDetails({
   pr: PullRequest;
   tab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
+  onPage: (page: PullRequestDataPage) => void;
   onUpdated: (next: PullRequest) => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
   followed: boolean;
@@ -1846,9 +1870,9 @@ function PullRequestDetails({
       : !pr.source_commit
         ? 'Refresh this pull request before merging'
       : '';
-  const lifecycleAction = isOpenPullRequest(pr)
+  const lifecycleAction = isOpenPullRequest(pr) && (pr.capabilities?.can_close ?? true)
     ? 'close'
-    : isReopenablePullRequest(pr)
+    : isReopenablePullRequest(pr) && (pr.capabilities?.can_reopen ?? true)
       ? 'reopen'
       : null;
   useEffect(() => {
@@ -1993,6 +2017,7 @@ function PullRequestDetails({
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
+          {(provider === 'git_hub' || provider === 'azure_dev_ops') && <HostedReviewTools path={path} provider={provider} pr={pr} />}
           <button
             type="button"
             className={`btn pr-follow${followed ? ' on' : ''}`}
@@ -2062,6 +2087,8 @@ function PullRequestDetails({
           </details>
         )}
       </div>
+      <PullRequestCompletionControl path={path} pr={pr} onUpdated={onUpdated} />
+      <PullRequestDataLoader path={path} pr={pr} onPage={onPage} />
       {lifecycleMenu && (
         <ContextMenu
           x={lifecycleMenu.x}
@@ -2166,13 +2193,11 @@ export function PullRequests({
       const preferredId = branchPullRequest?.id ?? next.pull_requests[0]?.id ?? null;
       const autoOpenContext = `${path}\0${currentBranch ?? '<detached>'}`;
       const shouldAutoOpen = autoOpenedContext.current !== autoOpenContext;
-      setData(next);
+      setData((current) => current ? { ...next, pull_requests: uniqueBy(next.pull_requests, current.pull_requests.filter((item) => !next.pull_requests.some((pr) => pr.id === item.id)), (pr) => pr.id) } : next);
       setSelectedId((selected) =>
-        !shouldAutoOpen && next.pull_requests.some((pr) => pr.id === selected)
+        !shouldAutoOpen && selected != null
           ? selected
           : preferredId);
-      setOpenedId((opened) =>
-        next.pull_requests.some((pr) => pr.id === opened) ? opened : null);
       if (shouldAutoOpen) {
         autoOpenedContext.current = autoOpenContext;
         setOpenedId(branchPullRequest?.id ?? null);
@@ -2528,7 +2553,7 @@ export function PullRequests({
         <EmptyState
           icon="check"
           title="No pull requests found"
-          hint="This repository has no open, closed, or merged pull requests in the latest 100."
+          hint="No pull requests were returned by the provider."
         />
       ) : data ? (
         <div className="pr-main">
@@ -2543,6 +2568,7 @@ export function PullRequests({
                   </>
                 }
               />
+              {path && <PullRequestInboxLoader path={path} data={data} onPage={(page) => setData((current) => current ? { ...page, pull_requests: uniqueBy(current.pull_requests, page.pull_requests, (pr) => pr.id) } : page)} />}
               <div className="pr-inbox-controls">
                 <label className="pr-inbox-search" htmlFor="pr-inbox-search">
                   <Icon name="search" size={17} />
@@ -2671,6 +2697,7 @@ export function PullRequests({
               tab={detailTab}
               onTabChange={setDetailTab}
               onUpdated={updatePullRequest}
+              onPage={(page) => setDetail((current) => current ? appendPullRequestPage(current, page) : current)}
               onToast={onToast}
               followed={Boolean(openedFollowed)}
               notificationPermission={notificationPermission}

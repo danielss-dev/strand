@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { userActionMenu } from '../lib/userActions';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard } from './PierreTree';
 import { RepositoryFiles } from './RepositoryFiles';
@@ -79,6 +80,8 @@ function SideSection({ label, collapsed, onToggle, count, action }: SectionProps
 }
 
 interface SidebarProps {
+  onManageLfs: () => void;
+  onManageSubmodules: (path?: string, action?: import('../lib/submodules').SubmoduleDialogAction) => void;
   onOpenWorkbench: () => void;
   onOpenWorkSurface: () => void;
   onOpenRepo: () => void;
@@ -87,6 +90,9 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  onEditTag: (name: string, kind: 'retarget' | 'reannotate') => void;
+
+  onVerifyTag: (name: string) => void;
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
   onCreateBranch: (start: string | null, label: string) => void;
@@ -176,7 +182,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onEditTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -224,7 +230,6 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
   const stashPop = useRepo((s) => s.stashPop);
   const stashDrop = useRepo((s) => s.stashDrop);
   const submodules = useRepo((s) => s.submodules);
-  const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
   const worktrees = useRepo((s) => s.worktrees);
   const openWorktree = useRepo((s) => s.openWorktree);
   const removeWorktree = useRepo((s) => s.removeWorktree);
@@ -501,6 +506,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
   };
 
   const branchMenu = (b: Branch): MenuItem[] => {
+    const actionItem = userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: b.full_name, oid: b.target } });
     const newBranchItem: MenuItem = {
       label: 'New branch from here…',
       icon: 'plus',
@@ -544,6 +550,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
             { label: 'Force with lease…', danger: true, onSelect: onForcePush },
           ],
         },
+        actionItem,
         newBranchItem,
         newWorktreeItem,
         renameItem,
@@ -594,12 +601,13 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
       { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
     );
     items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) });
+    items.push(actionItem);
     return items;
   };
 
   const remoteMenu = (rb: RemoteBranch): MenuItem[] => {
     const local = localByUpstream.get(rb.name);
-    const items: MenuItem[] = [];
+    const items: MenuItem[] = [userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: rb.full_name, oid: rb.target } })];
     items.push({ label: 'Fetch this branch', icon: 'arrow-down', onSelect: () => onFetchBranch(rb) });
     if (currentBranch) {
       items.push({
@@ -745,6 +753,10 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
+      { label: 'Retarget tag…', onSelect: () => onEditTag(tg.name, 'retarget') },
+      { label: 'Re-annotate tag…', onSelect: () => onEditTag(tg.name, 'reannotate') },
+
+      userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: tg.full_name, oid: tg.target } }),
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
@@ -770,6 +782,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
       { label: 'Copy tag name', icon: 'file', onSelect: () => { void copyToClipboard(tg.name); onToast('Tag name copied'); } },
       { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(tg.target); onToast('Commit SHA copied'); } },
     );
+    items.push({ label: 'Verify tag signature…', icon: 'tag', onSelect: () => onVerifyTag(tg.name) });
     items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteTag(tg.name)) });
     return items;
   };
@@ -795,19 +808,6 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
     if (!meta || !sub.initialized) return;
     onOpenRecent(`${meta.path}/${sub.path}`);
   };
-  // `git submodule update` (always --init --recursive) for the given paths
-  // (empty ⇒ all). Surfaces start + result via a toast.
-  const runSubmoduleUpdate = (paths: string[], label: string) => {
-    void (async () => {
-      onToast(`Updating ${label}…`);
-      try {
-        await submoduleUpdate(paths, true, true);
-        onToast(`Updated ${label}`);
-      } catch (e) {
-        onToast(`Submodule update failed: ${errMessage(e)}`, 'error');
-      }
-    })();
-  };
   const submoduleMenu = (sub: Submodule): MenuItem[] => {
     const items: MenuItem[] = [];
     if (sub.initialized) {
@@ -816,9 +816,10 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
     items.push({
       label: sub.initialized ? 'Update' : 'Init & update',
       icon: 'arrow-down',
-      onSelect: () => runSubmoduleUpdate([sub.path], leafName(sub.path)),
+      onSelect: () => onManageSubmodules(sub.path, 'update'),
     });
     items.push({ label: 'Copy path', icon: 'file', onSelect: () => void copyToClipboard(sub.path) });
+    items.push({ label: 'Manage / inspect nested modules…', icon: 'submodule', onSelect: () => onManageSubmodules(sub.path) });
     return items;
   };
 
@@ -942,7 +943,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
           if (wt) void openWorktree(wt.path);
           else void runBranchOp(() => checkout(b.name));
         }}
-        onSelect={() => revealInGraph(b.target)}
+        onSelect={() => { revealInGraph(b.target); useRepo.getState().selectRef(b.full_name); }}
         onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
       />
     );
@@ -974,7 +975,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
               : createBranch(localBranchName(rb), rb.name, true),
           )
         }
-        onSelect={() => revealInGraph(rb.target)}
+        onSelect={() => { revealInGraph(rb.target); useRepo.getState().selectRef(rb.full_name); }}
         onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
       />
     );
@@ -989,7 +990,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
       meta={tg.annotated ? 'annotated' : undefined}
       title={`${leafName(tg.name)} — click to reveal, double-click to check out`}
       onActivate={() => void runBranchOp(() => checkoutCommit(tg.target))}
-      onSelect={() => revealInGraph(tg.target)}
+      onSelect={() => { revealInGraph(tg.target); useRepo.getState().selectRef(tg.full_name); }}
       onMenu={(x, y) => openMenu(x, y, tagMenu(tg))}
     />
   );
@@ -1016,6 +1017,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
         />
       )}
       <div className="side-primary">
+        {meta && <SideRow icon="sync" label="Git LFS" active={false} onClick={onManageLfs} />}
         <SideRow
           icon="terminal"
           label={t('nav.workbench')}
@@ -1121,6 +1123,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
             count={refs.remotes.length}
             action={{ icon: 'plus', title: 'Add remote…', onClick: () => onManageRemote({ kind: 'add' }) }}
           />
+          {sections.remotes && <SideRow icon="plus" label="Publish repository…" onClick={() => window.dispatchEvent(new CustomEvent('strand:publish-repository'))} />}
           {sections.remotes &&
             renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes', {
               folderIcon: 'remote',
@@ -1167,11 +1170,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
             collapsed={!sections.submods}
             onToggle={() => toggle('submods')}
             count={filteredSubmodules.length}
-            action={
-              submodules.length > 0
-                ? { icon: 'sync', title: 'Update all submodules', onClick: () => runSubmoduleUpdate([], 'all submodules') }
-                : undefined
-            }
+            action={{ icon: 'plus', title: 'Manage submodules', onClick: () => onManageSubmodules() }}
           />
           {sections.submods && filteredSubmodules.length === 0 && (
             <div className="side-empty">No submodules.</div>

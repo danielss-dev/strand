@@ -6032,10 +6032,12 @@ version = "1.5.1"
 dependencies = [
  "git2",
  "gix",
+ "libc",
  "notify",
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -6077,6 +6079,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha1_smol",
  "sha2",
  "sqlx",
  "strand-azdo-protocol",

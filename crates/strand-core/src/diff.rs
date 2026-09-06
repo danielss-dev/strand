@@ -44,6 +44,22 @@ pub struct DiffPath {
 
 impl Repo {
     pub fn diff_unstaged_paths(&self) -> Result<Vec<DiffPath>> {
+        if self.sparse_enabled() {
+            let bytes = self.sparse_git(&["diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", "--"], None)?;
+            let mut fields = bytes.split(|b| *b == 0).filter(|row| !row.is_empty());
+            let mut paths = Vec::new();
+            while let Some(status) = fields.next() {
+                let Some(path) = fields.next() else { break; };
+                let path = String::from_utf8_lossy(path).into_owned();
+                let (path, old_path) = if status.starts_with(b"R") || status.starts_with(b"C") {
+                    let Some(new) = fields.next() else { break; };
+                    (String::from_utf8_lossy(new).into_owned(), Some(path))
+                } else { (path, None) };
+                paths.push(DiffPath { path, old_path });
+            }
+            paths.extend(self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked).map(|s| DiffPath { path: s.path, old_path: None }));
+            return Ok(paths);
+        }
         let repo = self.git2()?;
         let mut diff = repo.diff_index_to_workdir(None, Some(&mut diff_options()))?;
         let mut find = git2::DiffFindOptions::new();
@@ -59,6 +75,7 @@ impl Repo {
     /// Working tree vs index — the "unstaged" diff shown above the
     /// commit-form in Local Changes.
     pub fn diff_unstaged(&self) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() { return self.sparse_workdir_diff(false, None, 3, None); }
         let repo = self.git2()?;
         let mut opts = diff_options();
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
@@ -67,6 +84,7 @@ impl Repo {
 
     /// Index vs HEAD — what `git diff --cached` would show.
     pub fn diff_staged(&self) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() { return self.sparse_workdir_diff(true, None, 3, None); }
         let repo = self.git2()?;
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
         let mut opts = diff_options();
@@ -78,6 +96,11 @@ impl Repo {
     /// and the file view's Compare tab.
     pub fn diff_between(&self, from: &str, to: &str) -> Result<Vec<FileDiff>> {
         let repo = self.git2()?;
+        if self.is_partial_clone() {
+            let from = repo.revparse_single(from)?.peel_to_commit()?.id().to_string();
+            let to = repo.revparse_single(to)?.peel_to_commit()?.id().to_string();
+            return self.git_revision_diff(&[&from, &to, "--"], false);
+        }
         let from_tree = repo.revparse_single(from)?.peel_to_commit()?.tree()?;
         let to_tree = repo.revparse_single(to)?.peel_to_commit()?.tree()?;
         let mut opts = diff_options();
@@ -91,6 +114,10 @@ impl Repo {
     /// added.
     pub fn diff_commit(&self, oid: &str) -> Result<Vec<FileDiff>> {
         let repo = self.git2()?;
+        if self.is_partial_clone() {
+            let oid = repo.revparse_single(oid)?.peel_to_commit()?.id().to_string();
+            return self.git_revision_diff(&[&oid, "--"], true);
+        }
         let to_oid = repo.revparse_single(oid)?.id();
         let to_commit = repo.find_commit(to_oid)?;
         let to_tree = to_commit.tree()?;
@@ -112,6 +139,10 @@ impl Repo {
     /// it existed under a different name before a rename).
     pub fn diff_commit_file(&self, oid: &str, path: &str) -> Result<Vec<FileDiff>> {
         let repo = self.git2()?;
+        if self.is_partial_clone() {
+            let oid = repo.revparse_single(oid)?.peel_to_commit()?.id().to_string();
+            return self.git_revision_diff(&[&oid, "--", path], true);
+        }
         let to_commit = repo.revparse_single(oid)?.peel_to_commit()?;
         let to_tree = to_commit.tree()?;
         let from_tree = if to_commit.parent_count() == 0 {
@@ -131,6 +162,7 @@ impl Repo {
     /// showing work the agent already staged or committed away from the
     /// baseline, so the reviewer sees the whole session in one diff.
     pub fn diff_since(&self, baseline: &str) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() || self.is_partial_clone() { return self.sparse_workdir_diff(false, Some(baseline), 3, None); }
         let repo = self.git2()?;
         let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
         let mut opts = diff_options();
@@ -142,6 +174,7 @@ impl Repo {
     /// carries the entire file, not just hunks. Powers the Review view, which
     /// shows an agent's edits in the context of the full file.
     pub fn diff_unstaged_full(&self) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() { return self.sparse_workdir_diff(false, None, WHOLE_FILE_CONTEXT, None); }
         let repo = self.git2()?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
@@ -150,6 +183,7 @@ impl Repo {
 
     /// `diff_since` with whole-file context — see `diff_unstaged_full`.
     pub fn diff_since_full(&self, baseline: &str) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() || self.is_partial_clone() { return self.sparse_workdir_diff(false, Some(baseline), WHOLE_FILE_CONTEXT, None); }
         let repo = self.git2()?;
         let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
@@ -163,12 +197,55 @@ impl Repo {
     /// directly to the workdir (ignoring the index), so a half-staged file still
     /// shows its full on-disk delta; untracked files appear as additions.
     pub fn diff_workdir_file(&self, path: &str) -> Result<Vec<FileDiff>> {
+        if self.sparse_enabled() {
+            return self.sparse_workdir_diff(false, Some("HEAD"), 3, Some(path));
+        }
         let repo = self.git2()?;
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
         let mut opts = diff_options();
         opts.pathspec(path);
         let diff = repo.diff_tree_to_workdir(head_tree.as_ref(), Some(&mut opts))?;
         collect(diff)
+    }
+
+    fn sparse_workdir_diff(&self, staged: bool, baseline: Option<&str>, context: u32, path: Option<&str>) -> Result<Vec<FileDiff>> {
+        let context_arg = format!("--unified={context}");
+        let oid = baseline.map(|rev| self.git2()?.revparse_single(rev)?.peel_to_commit().map(|c| c.id().to_string()).map_err(crate::Error::from)).transpose()?;
+        let mut args = vec!["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--binary", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--find-renames", &context_arg];
+        if staged { args.push("--cached"); }
+        if let Some(oid) = &oid { args.push(oid); }
+        args.push("--");
+        if let Some(path) = path { args.push(path); }
+        let bytes = self.sparse_git(&args, None)?;
+        let mut files = if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?)? };
+        if !staged {
+            let untracked: Vec<_> = self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked && path.is_none_or(|path| s.path == path)).collect();
+            if !untracked.is_empty() {
+                // One path-limited libgit2 walk for all untracked contents;
+                // never spawn a Git process per untracked file.
+                let mut opts = diff_options_with(context);
+                opts.disable_pathspec_match(true);
+                for entry in untracked { opts.pathspec(entry.path); }
+                files.extend(collect(self.git2()?.diff_index_to_workdir(None, Some(&mut opts))?)?);
+            }
+        }
+        Ok(files)
+    }
+
+    fn git_revision_diff(&self, revisions: &[&str], commit: bool) -> Result<Vec<FileDiff>> {
+        let mut command = crate::git_command();
+        command.current_dir(&self.path)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .args(crate::GIT_SAFE_CONFIG)
+            .arg("--literal-pathspecs");
+        if commit { command.args(["show", "--format=", "--first-parent"]); } else { command.arg("diff"); }
+        let output = command.args(["--no-ext-diff", "--no-textconv", "--no-color", "--binary", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--find-renames"])
+            .args(revisions).output()?;
+        if !output.status.success() {
+            return Err(crate::Error::Other(String::from_utf8_lossy(&output.stderr).trim().into()));
+        }
+        if output.stdout.is_empty() { return Ok(Vec::new()); }
+        collect_ready(git2::Diff::from_buffer(&output.stdout)?)
     }
 }
 
@@ -201,6 +278,10 @@ fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     let mut find = git2::DiffFindOptions::new();
     find.renames(true).copies(true);
     diff.find_similar(Some(&mut find))?;
+    collect_ready(diff)
+}
+
+fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
 
     // Pre-populate one FileDiff per delta so the print callback can index
     // into us by delta_idx.

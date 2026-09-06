@@ -1,7 +1,7 @@
 # Pull Requests
 
 The **Pull Requests** sidebar destination shows hosted pull requests for the
-active repository. Strand currently supports GitHub and Azure DevOps, detected
+active repository. Strand supports GitHub, GitLab, Bitbucket Cloud and Azure DevOps, detected
 from the repository's remotes; `origin` wins when more than one supported remote
 exists. Open the same view from the command palette with "Show: Pull Requests".
 
@@ -11,10 +11,20 @@ GitHub and Azure DevOps Services delegate authentication to the provider's
 official CLI, and Strand never reads or stores those access tokens:
 
 - GitHub requires [GitHub CLI](https://cli.github.com/) and `gh auth login`.
+- GitLab requires [glab](https://docs.gitlab.com/cli/) and
+  `glab auth login --hostname HOST` (use `gitlab.com` for the public service).
+- Bitbucket Cloud uses your system Git credential helper's HTTPS credential
+  for `api.bitbucket.org`: Atlassian account email and a scoped API token.
+  This API credential is separate from Git clone/push authentication.
 - Azure DevOps requires Azure CLI, the `azure-devops` extension, and `az login`.
 
-Settings → Hosting summarizes both CLI connections and displays the signed-in
-account reported by each provider.
+Settings → Hosting summarizes GitHub and Azure CLI connections. Its custom-host
+section provides GitLab/Bitbucket setup and a provider selector for each remote.
+Public hosts are automatic; select GitHub / Enterprise or GitLab for custom
+hosts and refresh Pull Requests. GitHub Enterprise uses
+`gh auth login --hostname HOST`; custom API routing follows `gh` configuration.
+Hostnames are part of custom-host review identities, so drafts and follows do
+not collide with the same repository name on another server.
 
 Azure DevOps Server 2020+ uses the optional `strand-azdo` REST helper instead
 of `az`. Enable it and add an HTTPS collection profile under **Settings →
@@ -40,7 +50,7 @@ shows the provider error and the setup command. Provider calls time out after
 
 Choose **Create PR** in the Pull Requests toolbar, or run “Pull Requests:
 create for current branch…” from the command palette. The dialog creates a
-GitHub or Azure DevOps pull request from the checked-out branch with a title,
+pull request or GitLab merge request from the checked-out branch with a title,
 Markdown description, target branch, and optional draft state. After creation,
 Strand opens the new PR and follows it automatically.
 
@@ -72,7 +82,10 @@ alternate retry does not change the provider selected in Settings.
 
 ## Browse PRs
 
-The list contains up to the latest 100 open, closed, and merged pull requests.
+The GitHub inbox initially loads 100 open, closed, and merged pull requests.
+Choose **Load more pull requests** to continue through older pages. The loaded
+count and total stay visible; search and filters apply to loaded rows. Azure
+DevOps retains its existing latest-100 inbox.
 Use the local search field to match a PR number, title, author, source branch,
 or target branch without starting another provider request. The filter tabs are:
 
@@ -92,6 +105,15 @@ Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
 use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
 toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
+
+GitHub detail also loads reviews, threads, replies, comments, commits and checks
+in bounded pages. **Partial data** lists the connections with more to load;
+counts describe loaded items, and incomplete checks cannot report readiness.
+Choose **Load more** to fetch the next page, or **Cancel loading** to stop its
+read. Loaded items and drafts survive a failed or cancelled page. A source push
+requires Refresh before continuing to prevent mixing review coordinates. Both
+actions are available through “Pull Requests: load next data page” and
+“Pull Requests: cancel loading page” in Quick Launch.
 
 ## Follow PR activity
 
@@ -142,6 +164,28 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
+Below readiness, GitHub repositories that require a queue expose **Join merge
+queue**, queue position when reported, and **Leave merge queue**. Other GitHub
+repositories expose **Enable auto-merge** and **Cancel auto-merge** when the
+provider permits them. Choose an allowed merge strategy before enabling.
+Immediate Merge uses GitHub's guarded merge endpoint; it does not silently
+queue the request.
+
+Azure exposes **Enable auto-complete** and **Cancel auto-complete**, with a
+**waiting for policies** state instead of a queue position. Strand exposes
+Azure enablement conservatively to the signed-in PR author, and cancellation
+to that author or the existing auto-complete owner; Azure enforces current
+permissions. Azure Server requires helper protocol 7 with the new completion
+operation. Release distribution of that helper must accompany this app change.
+
+Deferred completion remains controlled by provider policies and can include
+later source pushes. GitHub enable/enqueue requests carry an atomic expected
+head; Azure enablement rechecks the head and includes `lastMergeSourceCommit`.
+Cancellation never merges code. Controls refresh after each request and when
+activity reports a changed head. A failed request or refresh stays visible next
+to the controls. Run “Pull Requests: merge queue or auto-complete…” in Quick
+Launch to focus this surface.
+
 The adjacent **Pull request actions** menu closes an active PR behind a second
 confirmation. A closed GitHub or abandoned Azure DevOps PR shows **Reopen pull
 request** there instead. Merged/completed PRs have no lifecycle or merge action.
@@ -169,6 +213,46 @@ Lightweight activity reloads rich detail only when something changed. The
 opened PR uses the full content width, starts directly beneath the compact PR
 toolbar, and keeps its three tabs centered there. Use `Left`/`Right`, `Home`,
 and `End` while the tab bar is focused.
+
+### Review tools
+
+Open **Review tools…** in the detail header. **Mark head reviewed** saves the
+currently displayed source commit on this device, independently of file viewed
+marks and review drafts. Under **Changes since review**, choose that boundary
+or **Load review commits** (GitHub) / **Load iterations** (Azure). **Compare to
+current head** shows a keyboard-navigable file list and one diff at a time.
+Arrow keys, Home and End move through files.
+
+Comparisons use the exact two commit trees, including after a rebase or force
+push. Strand labels rewritten history and fetches missing objects without
+checking out a branch. If the provider no longer retains the old commit, the
+error leaves the boundary and previous comparison intact. A changed source
+head labels the previous result until you compare again.
+
+Choose **Unresolved feedback**, then **Load all unresolved feedback**. This
+explicit read traverses GitHub thread and reply pages; errors prevent a partial
+export from being presented as complete. **Cancel read** or closing the dialog
+stops further paging. Preview and **Copy feedback** include provider links,
+source commit, thread/comment IDs, authors, full replies, file and line-side
+context, and outdated/iteration markers. File-level feedback is included;
+GitHub top-level comments have no resolution state and are outside this export.
+The clipboard text is ready to paste into an external agent.
+
+Under **Suggestions**, load feedback, choose a standard suggestion block, and
+**Preview local change**. Use **Open branch in worktree…** first: the local HEAD
+must be the exact provider source commit, and the file must have no staged or
+unstaged changes. **Apply locally** rechecks the head, comment body, range and
+previewed file content before writing. It preserves line endings and leaves the
+change unstaged for review. It does not submit a provider comment or commit.
+
+Outdated, old-side, mixed-side, column or offset-form suggestions cannot be
+applied automatically. Azure suggestions also require the current iteration;
+unknown or old iteration coordinates are refused. Errors preserve the preview
+and review drafts. Source changes require reloading feedback and a new preview.
+
+Quick Launch offers **compare reviewed head…**, **mark head reviewed…**,
+**export unresolved feedback…**, and **preview suggestions…** under Pull
+Requests. All open the same keyboard-operable dialog.
 
 ### Summary
 
@@ -316,5 +400,32 @@ available while any PR is active, and the update command appears only for an
 open GitHub PR; both contextual commands disappear on the inbox.
 
 Suggestions and richer Azure policy details are planned but are not presented
-as available yet. GitLab and
-Bitbucket adapters will use the same workspace in a later slice.
+as available yet.
+
+## GitLab and Bitbucket Cloud
+
+Both adapters page their lists, commits and discussions to completion; a failed
+page is an error rather than a complete-looking partial result. Rich detail
+loads on selection and patches load only on Code. Activity refreshes do not
+download patches or commit history. Pipeline/commit status alone is not treated
+as a complete view of provider merge policies.
+
+GitLab supports comments, approvals, inline replies and resolution, close/reopen,
+mark-ready and merging with the project's merge method or squash. Inline
+comments preserve diff-version base/start/head commits and renamed-file paths.
+Approval and merge include the reviewed SHA. Request changes remains available
+on GitLab's website.
+
+Bitbucket Cloud supports comments, inline replies, approval,
+request-changes and closing a request. Merge, discussion resolution, reopening and draft transitions
+remain provider-site actions. Cloud's merge API cannot atomically guard the
+reviewed head, so Strand does not offer that write. Inline comments and review
+decisions recheck the head before and after writing; the API cannot pin them
+atomically. If the head changes during a write, inspect the posted result before
+retrying. Fork checkout also requires opening the source fork locally.
+Bitbucket Server is outside this adapter's scope.
+
+GitLab and Bitbucket review batches consist of separate API writes. A failure
+retains the draft and reports confirmed progress: refresh and reconcile posted
+items before retrying to avoid duplicates. Provider permissions remain
+authoritative even when a control was enabled by the last refresh.

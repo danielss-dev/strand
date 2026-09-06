@@ -398,3 +398,7 @@ export function pullRequestForBranch(
     return source === current && (state === 'open' || state === 'active');
   }) ?? null;
 }
+
+export function providerName(provider: PullRequestProvider): string {
+  return { git_hub: 'GitHub', azure_dev_ops: 'Azure DevOps', git_lab: 'GitLab', bitbucket: 'Bitbucket Cloud' }[provider];
+}

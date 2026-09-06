@@ -1,5 +1,14 @@
+import type { RemoteHostingProvider, PublishAccount, PublishRequest, PublishState } from './types';
+
+import type { FlowAction, FlowConfig, FlowKind, FlowOutcome, FlowPlan, FlowState, FlowTool } from './gitflow';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { RemoteEnvelope, RemoteReadOp } from './remoteRepos';
+
+import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
+import type { BisectAction, BisectState, BisectOutcome } from './bisect';
+import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
+
+import type { UserAction, ActionContext, ActionPreview, ActionOutcome } from './userActions';
 
 import type {
   AiProvider,
@@ -13,6 +22,10 @@ import type {
   BranchPushRequest,
   CheckoutOutcome,
   CloneOutcome,
+  CloneOptions,
+  CloneScope,
+  SparseCheckout,
+  HistoryExpansion,
   Commit,
   CommitSignature,
   CommitMessageSuggestion,
@@ -26,6 +39,11 @@ import type {
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
+  RepositoryIdentity,
+  SigningMode,
+  SigningScope,
+  SigningSettings,
+  TagVerification,
   HostingConnectionStatus,
   HeroiAgentEvent,
   HeroiAgentOutcome,
@@ -36,11 +54,16 @@ import type {
   InitOutcome,
   MaintenanceOutcome,
   MaintenanceTask,
+  LfsAction,
+  SubmoduleAction,
+  SubmodulePage,
   MergeMode,
   NetworkOutcome,
   Progress,
   PullMode,
   PullRequest,
+  PullRequestPageCursor,
+  PullRequestDataPage,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
   PullRequestCheckoutPreparation,
@@ -50,6 +73,8 @@ import type {
   PullRequestLifecycleAction,
   PullRequestMergeStrategy,
   PullRequestPendingComment,
+  PullRequestBoundary, PullRequestComparison, PullRequestFeedback,
+  PullRequestSuggestionRequest, PullRequestSuggestionPreview,
   PullRequestReviewEvent,
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
@@ -122,6 +147,41 @@ export const tauri = {
   remoteRepoDisconnect: (address: string) => invoke<void>('remote_repo_disconnect', { address }),
   appTakeOpenRequests: () => invoke<string[]>('app_take_open_requests'),
   appInstallCli: () => invoke<string>('app_install_cli'),
+
+  repoGitflowDetect: () => invoke<FlowTool>('repo_gitflow_detect'),
+  repoGitflowState: (path: string) => invoke<FlowState>('repo_gitflow_state', { path }),
+  repoGitflowConfigure: (path: string, config: FlowConfig, enabled: boolean, token: string) => invoke<FlowState>('repo_gitflow_configure', { path, config, enabled, token }),
+  repoGitflowPlan: (path: string, kind: FlowKind, action: FlowAction, name: string) => invoke<FlowPlan>('repo_gitflow_plan', { path, kind, action, name }),
+  repoGitflowRun: (path: string, plan: FlowPlan, onProgress: (output: string) => void) => {
+    const onEvent = new Channel<string>(); onEvent.onmessage = onProgress;
+    return invoke<FlowOutcome>('repo_gitflow_run', { path, plan, onEvent });
+  },
+  repoAdvancedRefs: (path: string, notesRef: string) => invoke<AdvancedRefs>('repo_advanced_refs', { path, notesRef }),
+  repoGitNote: (path: string, notesRef: string, revision: string) => invoke<GitNote>('repo_git_note', { path, notesRef, revision }),
+  repoGitNoteWrite: (path: string, notesRef: string, object: string, expected: string | null, message: string | null) => invoke<void>('repo_git_note_write', { path, notesRef, object, expected, message }),
+  repoReplaceReview: (path: string, original: string, replacement: string) => invoke<ReplaceReview>('repo_replace_review', { path, original, replacement }),
+  repoReplaceWrite: (path: string, original: string, replacement: string | null, expected: string | null) => invoke<void>('repo_replace_write', { path, original, replacement, expected }),
+  repoTagEditReview: (path: string, name: string, target: string) => invoke<TagEditReview>('repo_tag_edit_review', { path, name, target }),
+  repoTagEdit: (path: string, name: string, target: string, expected: string, kind: TagEditKind, message: string | null) => invoke<void>('repo_tag_edit', { path, name, target, expected, kind, message }),
+  repoTagPublished: (path: string, remote: string, name: string) => invoke<PublishedTag>('repo_tag_published', { path, remote, name }),
+  repoBisectState: (path: string) => invoke<BisectState>('repo_bisect_state', { path }),
+  repoBisectStart: (path: string, good: string, bad: string, token: string) => invoke<BisectOutcome>('repo_bisect_start', { path, good, bad, token }),
+  repoBisectAction: (path: string, action: BisectAction, token: string) => invoke<BisectOutcome>('repo_bisect_action', { path, action, token }),
+  repoPatchPreview: (path: string, source: string, target: PatchTarget) => invoke<PatchPreview>('repo_patch_preview', { path, source, target }),
+  repoPatchImport: (path: string, source: string, target: PatchTarget, token: string) => invoke<InterchangeOutcome>('repo_patch_import', { path, source, target, token }),
+  repoMailboxState: (path: string) => invoke<MailboxState | null>('repo_mailbox_state', { path }),
+  repoMailboxAction: (path: string, action: 'continue' | 'skip' | 'abort', token: string) => invoke<InterchangeOutcome>('repo_mailbox_action', { path, action, token }),
+  repoBundlePreview: (path: string, source: string) => invoke<BundlePreview>('repo_bundle_preview', { path, source }),
+  repoBundleImport: (path: string, source: string, token: string, sourceRef: string, branch: string) => invoke<InterchangeOutcome>('repo_bundle_import', { path, source, token, sourceRef, branch }),
+  repoBundleExport: (path: string, destination: string, refname: string, prerequisite: string | null) => invoke<BundlePreview>('repo_bundle_export', { path, destination, refname, prerequisite }),
+
+  repoUserActionPreview: (action: UserAction, context: ActionContext) =>
+    invoke<ActionPreview>('repo_user_action_preview', { action, context }),
+  repoUserActionRun: (action: UserAction, context: ActionContext, preview: ActionPreview, opId: string, onStarted: () => void) => {
+    const channel = new Channel<null>();
+    channel.onmessage = onStarted;
+    return invoke<ActionOutcome>('repo_user_action_run', { action, context, preview, opId, onStarted: channel });
+  },
   microsoftStoreUpdateAvailable: () =>
     invoke<boolean>('microsoft_store_update_available'),
   microsoftStoreOpenProduct: () =>
@@ -133,6 +193,13 @@ export const tauri = {
     createInitialCommit: boolean,
   ) => invoke<InitOutcome>('repo_init', { path, initialBranch, gitignore, createInitialCommit }),
   azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
+  repoHostingProviders: (path: string) => invoke<RemoteHostingProvider[]>('repo_hosting_providers', { path }),
+  repoSetHostingProvider: (path: string, remote: string, provider: string) => invoke<void>('repo_set_hosting_provider', { path, remote, provider }),
+  hostedPublishAccounts: (path: string, provider: string, host: string) => invoke<PublishAccount>('hosted_publish_accounts', { path, provider, host }),
+  hostedPublishState: (path: string) => invoke<PublishState | null>('hosted_publish_state', { path }),
+  hostedPublishPreview: (path: string, request: PublishRequest) => invoke<PublishState>('hosted_publish_preview', { path, request }),
+  hostedPublishAdvance: (path: string, id: string, action: string) => invoke<PublishState>('hosted_publish_advance', { path, id, action }),
+  hostedPublishForget: (path: string) => invoke<void>('hosted_publish_forget', { path }),
   hostingConnectionStatus: () => invoke<HostingConnectionStatus>('hosting_connection_status'),
   azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
   azdoHelperDisable: () => invoke<AzdoHelperStatus>('azdo_helper_disable'),
@@ -202,6 +269,11 @@ export const tauri = {
   repoCommitExportPatch: (path: string, oids: string[], destination: string) =>
     invoke<number>('repo_commit_export_patch', { path, oids, destination }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
+  repoPullRequestInboxPage: (path: string, cursor: string | null, requestId: string) =>
+    invoke<PullRequestList>('repo_pull_request_inbox_page', { path, cursor, requestId }),
+  repoPullRequestDataPage: (path: string, id: number, expectedHead: string, request: PullRequestPageCursor, requestId: string) =>
+    invoke<PullRequestDataPage>('repo_pull_request_data_page', { path, id, expectedHead, request, requestId }),
+  repoPullRequestCancelRead: (requestId: string) => invoke<void>('repo_pull_request_cancel_read', { requestId }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
   repoPullRequestForBranch: (path: string, branch: string) =>
     invoke<PullRequestBranchMatch | null>('repo_pull_request_for_branch', { path, branch }),
@@ -288,6 +360,18 @@ export const tauri = {
     invoke<PullRequestReviewThreadUpdate>('repo_pull_request_thread_resolve', {
       path, threadId, resolved,
     }),
+  repoPullRequestBoundaries: (path: string, id: number, expectedHead: string, requestId: string) =>
+    invoke<PullRequestBoundary[]>('repo_pull_request_boundaries', { path, id, expectedHead, requestId }),
+  repoPullRequestCompareReview: (path: string, id: number, from: string, expectedHead: string) =>
+    invoke<PullRequestComparison>('repo_pull_request_compare_review', { path, id, from, expectedHead }),
+  repoPullRequestFeedback: (path: string, id: number, expectedHead: string, requestId: string) =>
+    invoke<PullRequestFeedback>('repo_pull_request_feedback', { path, id, expectedHead, requestId }),
+  repoPullRequestSuggestionPreview: (path: string, id: number, request: PullRequestSuggestionRequest, requestId: string) =>
+    invoke<PullRequestSuggestionPreview>('repo_pull_request_suggestion_preview', { path, id, request, requestId }),
+  repoPullRequestSuggestionApply: (path: string, id: number, request: PullRequestSuggestionRequest, expectedPreview: PullRequestSuggestionPreview, requestId: string) =>
+    invoke<string>('repo_pull_request_suggestion_apply', { path, id, request, expectedPreview, requestId }),
+  repoPullRequestCompletion: (path: string, id: number, enable: boolean, strategy: PullRequestMergeStrategy, expectedHead: string) =>
+    invoke<void>('repo_pull_request_completion', { path, id, enable, strategy, expectedHead }),
   repoPullRequestMerge: (
     path: string,
     id: number,
@@ -367,8 +451,8 @@ export const tauri = {
     patch: string,
     target: 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir',
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
-  repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
-    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
+  repoCommit: (path: string, subject: string, body: string | null, amend: boolean, signing: SigningMode = 'inherit') =>
+    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend, signing }),
   repoFetch: (
     path: string,
     remote: string | null,
@@ -447,8 +531,15 @@ export const tauri = {
       opId,
       onEvent: progressChannel(onProgress),
     }),
-  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void, opId?: string) =>
-    invoke<CloneOutcome>('repo_clone', { url, dest, opId, onEvent: progressChannel(onProgress) }),
+  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void, opId?: string, options?: CloneOptions) =>
+    invoke<CloneOutcome>('repo_clone', { url, dest, options, opId, onEvent: progressChannel(onProgress) }),
+  repoCloneScope: (path: string) => invoke<CloneScope>('repo_clone_scope', { path }),
+  repoSparseCheckout: (path: string) => invoke<SparseCheckout>('repo_sparse_checkout', { path }),
+  repoSetSparseCheckout: (path: string, directories: string[], sparseIndex: boolean) =>
+    invoke<string>('repo_set_sparse_checkout', { path, directories, sparseIndex }),
+  repoDisableSparseCheckout: (path: string) => invoke<string>('repo_disable_sparse_checkout', { path }),
+  repoExpandHistory: (path: string, remote: string, expansion: HistoryExpansion, onProgress?: (p: Progress) => void, opId?: string) =>
+    invoke<NetworkOutcome>('repo_expand_history', { path, remote, expansion, opId, onEvent: progressChannel(onProgress) }),
   repoCheckout: (path: string, branch: string) =>
     invoke<CheckoutOutcome>('repo_checkout', { path, branch }),
   repoCheckoutCommit: (path: string, rev: string) =>
@@ -460,12 +551,18 @@ export const tauri = {
   repoTreeAt: (path: string, rev: string) =>
     invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
+  repoSubmoduleChildren: (path: string, parent: string, offset: number) => invoke<SubmodulePage>('repo_submodule_children', { path, parent, offset }),
+  repoSubmoduleAction: (path: string, action: SubmoduleAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_submodule_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
+  repoLfsAction: (path: string, action: LfsAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_lfs_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
   repoSubmoduleUpdate: (
     path: string,
     paths: string[],
     init: boolean,
     recursive: boolean,
     onProgress?: (p: Progress) => void,
+    opId?: string,
   ) =>
     invoke<NetworkOutcome>('repo_submodule_update', {
       path,
@@ -473,6 +570,7 @@ export const tauri = {
       init,
       recursive,
       onEvent: progressChannel(onProgress),
+      opId,
     }),
   repoWorktrees: (path: string) => invoke<Worktree[]>('repo_worktrees', { path }),
   // `startPoint` (branch/tag/commit; null = HEAD) and `track` (set upstream to
@@ -582,7 +680,8 @@ export const tauri = {
     target: string | null,
     message: string | null,
     force: boolean,
-  ) => invoke<void>('repo_tag_create', { path, name, target, message, force }),
+    signing: SigningMode = 'inherit',
+  ) => invoke<void>('repo_tag_create', { path, name, target, message, force, signing }),
   repoTagDelete: (path: string, name: string) =>
     invoke<void>('repo_tag_delete', { path, name }),
   repoTagPush: (
@@ -647,6 +746,13 @@ export const tauri = {
     invoke<void>('repo_open_in_editor', { path, file, line, template }),
   repoOpenInTerminal: (path: string, template: string) =>
     invoke<void>('repo_open_in_terminal', { path, template }),
+  repoTagVerify: (path: string, name: string) => invoke<TagVerification>('repo_tag_verify', { path, name }),
+  repoSigningSettings: (path: string) => invoke<SigningSettings>('repo_signing_settings', { path }),
+  repoSetSigningConfig: (path: string, scope: SigningScope, key: string, value: string | null) =>
+    invoke<void>('repo_set_signing_config', { path, scope, key, value }),
+  repoIdentity: (path: string) => invoke<RepositoryIdentity>('repo_identity', { path }),
+  repoSetIdentity: (path: string, field: 'name' | 'email', value: string | null) =>
+    invoke<void>('repo_set_identity', { path, field, value }),
   gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
   gitSetGlobalIdentity: (name: string, email: string) =>
     invoke<void>('git_set_global_identity', { name, email }),

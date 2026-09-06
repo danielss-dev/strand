@@ -48,6 +48,10 @@ export interface MenuHandlers {
   push(): void;
   openInEditor(): void;
   openInTerminal(): void;
+  openInterchange(): void;
+  openBisect(): void;
+  openAdvancedRefs(): void;
+  openGitflow(): void;
 }
 
 let preemptsKeydown = false;
@@ -195,6 +199,10 @@ export async function installAppMenu(
   const repoMenu = await Submenu.new({
     text: 'Repository',
     items: [
+      await item({ id: 'git-interchange', text: 'Patches, Mailboxes & Bundles…', enabled: hasRepo, action: () => handlers().openInterchange() }),
+      await item({ id: 'git-advanced-refs', text: 'Git Notes, Replacements & Tag Editing…', enabled: hasRepo, action: () => handlers().openAdvancedRefs() }),
+      await item({ id: 'gitflow', text: 'Git-flow Workflows…', enabled: hasRepo, action: () => handlers().openGitflow() }),
+      await item({ id: 'git-bisect', text: 'Guided Bisect…', enabled: hasRepo, action: () => handlers().openBisect() }),
       await item({
         id: 'sync',
         text: 'Sync (Fetch + Pull + Push)',

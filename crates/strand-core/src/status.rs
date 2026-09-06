@@ -28,6 +28,31 @@ impl Repo {
     /// Uses `git2` for now because gix's status APIs are still maturing;
     /// the public type intentionally hides which engine produced it.
     pub fn status(&self) -> Result<Vec<FileStatus>> {
+        if self.sparse_enabled() {
+            let output = self.sparse_git(&["status", "--porcelain=v1", "-z", "--untracked-files=all"], None)?;
+            let mut records = output.split(|byte| *byte == 0).filter(|row| !row.is_empty());
+            let mut result = Vec::new();
+            while let Some(row) = records.next() {
+                if row.len() < 4 { continue; }
+                let path = String::from_utf8_lossy(&row[3..]).into_owned();
+                let (x, y) = (row[0], row[1]);
+                if x == b'R' || x == b'C' || y == b'R' || y == b'C' { records.next(); }
+                if x == b'U' || y == b'U' || (x == b'A' && y == b'A') || (x == b'D' && y == b'D') {
+                    result.push(FileStatus { path, kind: StatusKind::Conflicted, staged: false });
+                    continue;
+                }
+                for (code, staged) in [(x, true), (y, false)] {
+                    let kind = match code {
+                        b'A' | b'C' => StatusKind::Added, b'D' => StatusKind::Deleted,
+                        b'R' => StatusKind::Renamed, b'M' | b'T' => StatusKind::Modified,
+                        b'?' if !staged => StatusKind::Untracked,
+                        _ => continue,
+                    };
+                    result.push(FileStatus { path: path.clone(), kind, staged });
+                }
+            }
+            return Ok(result);
+        }
         let repo = self.git2()?;
         let statuses = repo.statuses(Some(&mut status_options()))?;
         Ok(from_statuses(&statuses))

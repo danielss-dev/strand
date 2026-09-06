@@ -23,6 +23,9 @@ pub struct WorkTreeEntry {
     /// because ignored files are not working-tree changes.
     #[serde(default)]
     pub ignored: bool,
+    /// Tracked in Git but intentionally absent from this sparse working tree.
+    #[serde(default)]
+    pub excluded: bool,
 }
 
 impl Repo {
@@ -82,6 +85,7 @@ impl Repo {
                 path,
                 status: None,
                 ignored: true,
+                excluded: false,
             });
         }
         entries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
@@ -106,6 +110,7 @@ impl Repo {
                         path: format!("{root}{name}"),
                         status: None,
                         ignored: false,
+                        excluded: false,
                     });
                 }
             }
@@ -127,11 +132,11 @@ pub(crate) fn from_index_and_statuses(
     // Start from the index — the canonical set of tracked paths. A
     // BTreeMap keeps the output path-sorted and dedupes conflict entries
     // (which appear once per stage).
-    let mut map: BTreeMap<String, (Option<StatusKind>, bool)> = BTreeMap::new();
+    let mut map: BTreeMap<String, (Option<StatusKind>, bool, bool)> = BTreeMap::new();
     let index = repo.index()?;
     for entry in index.iter() {
         if let Ok(p) = std::str::from_utf8(&entry.path) {
-            map.entry(p.to_string()).or_insert((None, false));
+            map.entry(p.to_string()).or_insert((None, false, entry.flags_extended & (1 << 14) != 0));
         }
     }
 
@@ -142,16 +147,20 @@ pub(crate) fn from_index_and_statuses(
     for e in statuses.iter() {
         let Some(path) = e.path() else { continue };
         let s = e.status();
+        // libgit2 reports absent skip-worktree entries as deletions. These
+        // remain tracked; only a real staged change overrides their identity.
+        if map.get(path).is_some_and(|(_, _, excluded)| *excluded)
+            && s == git2::Status::WT_DELETED { continue; }
         if s.is_ignored() {
-            map.entry(path.to_string()).or_insert((None, true));
+            map.entry(path.to_string()).or_insert((None, true, false));
             continue;
         }
-        map.insert(path.to_string(), (Some(classify(s)), false));
+        map.insert(path.to_string(), (Some(classify(s)), false, false));
     }
 
     Ok(map
         .into_iter()
-        .map(|(path, (status, ignored))| WorkTreeEntry { path, status, ignored })
+        .map(|(path, (status, ignored, excluded))| WorkTreeEntry { path, status, ignored, excluded })
         .collect())
 }
 
@@ -220,7 +229,7 @@ fn ignored_boundaries(
 ) -> Result<Vec<WorkTreeEntry>> {
     let mut map = entries
         .into_iter()
-        .map(|entry| (entry.path, (entry.status, entry.ignored)))
+        .map(|entry| (entry.path, (entry.status, entry.ignored, entry.excluded)))
         .collect::<BTreeMap<_, _>>();
     let mut pending = vec![(workdir.to_path_buf(), String::new())];
 
@@ -255,7 +264,7 @@ fn ignored_boundaries(
                 } else {
                     relative
                 };
-                map.insert(path, (None, true));
+                map.insert(path, (None, true, false));
                 continue;
             }
             if file_type.is_dir() && !file_type.is_symlink() && !child.path().join(".git").exists() {
@@ -266,10 +275,11 @@ fn ignored_boundaries(
 
     Ok(map
         .into_iter()
-        .map(|(path, (status, ignored))| WorkTreeEntry {
+        .map(|(path, (status, ignored, excluded))| WorkTreeEntry {
             path,
             status,
             ignored,
+            excluded,
         })
         .collect())
 }

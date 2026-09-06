@@ -89,45 +89,69 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (`docs/git-client-feature-audit-2026-09-06.md`: 19 missing/partial feature
   families, code evidence, priorities, fallbacks, and acceptance criteria).
   Priorities below are current recommendations, not historical PRD release gates.
-- ☐ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
+- ☑ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
   git2 commit-policy versus Git-hook contract tension; honor `core.hooksPath`,
   rejection and message rewriting, preserve drafts and bounded diagnostics,
-  and measure the no-hook path (`commit.rs`; signed commits already use Git).
-- ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
+  and measure the no-hook path (`Repo::commit`, bounded `git_output`, checkout
+  `commitDrafts`; evidence in `docs/hooks-identity-signing-validation-2026-09-06.md`).
+- ☑ **F02 / P1 — Effective repository identity and scoped overrides.** Show
   the current author/committer identity, set/remove repo-local name/email
-  without changing global/conditional config, and verify linked worktrees.
-- ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
+  without changing global/conditional config, and verify linked worktrees
+  (`repository_identity` / `repo_set_identity`, Settings → Git source display).
+- ☑ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
-  with agent delegation and visible signing failures.
-- ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
-  correctness across single/bulk staging, checkout, commit and network flows;
-  then add setup/tracking/status/locks/progress. System-Git networking alone
-  does not establish end-to-end LFS support.
-- ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
-  with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
-  `.gitmodules` and index changes, plus cancellable network operations.
-- ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
+  with agent delegation and visible signing failures (`signing_settings` /
+  `set_signing_config`, commit/tag `SigningChoice`, `TagVerificationDialog`;
+  real GPG/SSH and native Windows evidence in the F01–F03 validation note).
+- ☑ **F04 / P1 — LFS compatibility and management.** Filter-aware single/bulk
+  staging, discard, checkout and hard reset; exact pointer/commit/push/pull and
+  missing-filter fixtures pass (`lfs.rs`). Local setup, patterns, object/transfer
+  status, bounded locks and cancellable transfers are exposed in `LfsDialog`.
+  Real lock-API fixtures and native setup/staging/palette/cancellation/recovery
+  checks pass; no eager LFS network or status subprocesses.
+- ☑ **F05 / P1 — Submodule lifecycle.** Add/remove/deinit/sync/URL changes,
+  paged nested inspection and cancellable updates (`SubmoduleDialog`,
+  `Repo::{submodule_action,submodule_children}`). Real Git transport, dirty,
+  ignored and nested files, unrecorded commits and `.gitmodules`/index
+  preservation fixtures pass. Native lifecycle, keyboard/palette, module
+  opening, destructive guards and cancellation checks pass.
+- ☑ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
-- ☐ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
-  compatibility fixtures for excluded paths, dirty trees and sparse indexes.
-- ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
+  Implemented (`interchange.rs`, `InterchangeDialog`, Repository menu/palette);
+  five native fixtures and three IPC tests pass. Native WebView2 verified patch
+  targets, authored mailbox/conflict continuation and bundle import/export.
+- ☑ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
+  compatibility fixtures for excluded paths, dirty trees and sparse indexes
+  (`Repo::set_sparse_checkout`, `SparseCheckoutDialog`, `sparse_checkout.rs` fixtures).
+- ☑ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
   partial-clone filter and recursive-submodule options; deepen/unshallow,
-  progress/cancellation, and safe argument construction.
-- ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
+  progress/cancellation, and safe argument construction (`clone_with_options`,
+  `repo_expand_history`, `CloneScopeDialog`; `docs/sparse-clone-verification.md`).
+  Follow-up: verify real LFS clone checkout on Git 2.45.1 / LFS 3.5.1;
+  see `docs/git-assets-validation-2026-09-06.md` for the hook rejection.
+- ☑ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
-  execution until the manual workflow is complete.
-- ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
+  execution (`bisect.rs`, `BisectDialog`, Repository menu/palette and banner;
+  three native fixtures, two frontend tests and native WebView2 keyboard,
+  external-resume, dirty-reset and original-target checks).
+- ☑ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
-  initial push, with recovery from partial failure.
-- ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
+  initial push, with recovery from partial failure (GitHub/Enterprise, GitLab
+  and Bitbucket Cloud; `PublishRepoDialog`, `hosted_publish_*`, persisted
+  recovery stages and exact-reviewed-commit push).
+- ☑ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
   argv templates, exact context, palette/menu discovery, preview, bounded output
-  and cancellation; editor/terminal templates and internal registries already exist.
-- ☐ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
+  and cancellation. (`UserActionsEditor`, `UserActionDialog`,
+  `repo_user_action_preview` / `repo_user_action_run`; personally persisted settings.)
+- ☑ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
-  existing local Review notes are separate from Git notes.
-- ☐ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
+  existing local Review notes are separate from Git notes. (`AdvancedRefsDialog`,
+  locked notes updates, replace refs and compare-and-swap tag edits; native verified.)
+- ☑ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
   inspectable start/finish feature/release/hotfix flows with conflict recovery.
+  (`GitflowDialog`, AVH command review/streaming, locked opt-in configuration
+  and merge-only recovery; all three flows and stale state verified natively.)
 
 Hosted-review F06/F11–F13 stay in the Pull requests backlog below. CLI/deep-link
 F16 and remote-SSH F17 keep their existing Platform / CLI companion / Remote
@@ -1473,6 +1497,11 @@ community plugins, performance and platform certification from Git feature gaps.
   and focus-restore to the opener on close (captured pre-`autoFocus`).
 
 ### Cross-cutting
+- ☐ Investigate Windows watcher burst timing: unchanged
+  `watch::tests::debounce_collapses_a_burst_into_one_callback` observed two
+  callbacks instead of one in the 2026-09-06 F01–F03 final full run and isolated
+  retry, after earlier full-suite passes. Reproduce and distinguish OS event
+  delivery from debounce/test timing before changing production behavior.
 - ☑ Resizable panes everywhere (`react-resizable-panels`); sizes
   persisted per-region via `autoSaveId` (`strand:body`, `strand:lc-main`,
   `strand:lc-files`)
@@ -1867,16 +1896,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     batched submission use GitHub's atomic review payload or Azure's bounded
     latest-iteration/change-tracking resolver (`azure_review_coordinates`,
     `azure_server_review_coordinates`).
-  - ☐ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
+  - ☑ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
     reviews, threads/replies and check contexts beyond the current bounded
     queries; expose partial/error states, deduplicate pages and test 101+
-    entries while keeping initial queries shallow.
+    entries while keeping initial queries shallow (`pull_requests::pages`,
+    `PullRequestDataLoader`, `PullRequestInboxLoader`; 34 Rust / 38 frontend
+    tests and WebView2 101-row/review, failure, cancellation and stale-head pass).
   - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails (`pullRequestReview` drafts,
     `PullRequestChanges` review composer, `repo_pull_request_submit_review`).
   - ☑ Searchable repository PR inbox (`filterPullRequests`, `.pr-inbox-*`):
-    All, Authored, and Completed filter the shallow latest-100 list locally;
+    All, Authored, and Completed filter the loaded shallow inbox pages locally;
     search covers number/title/author/source/target branches; provider-account
     identity drives Authored without hiding All when identity lookup fails;
     selection, j/k/arrows/Home/End/Enter, focus restoration, and palette search
@@ -1892,20 +1923,32 @@ tree: watch the agent work, review fast, accept or reject safely.
     worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
     from target** are shipped (`repo_pull_request_prepare_checkout`,
     `repo_pull_request_update_branch`, `PullRequestDetails.openBranchInWorktree`).
-    Reliable “since my last review” compare where the provider exposes a
-    boundary, suggestions, and unresolved-feedback export for external agents
-    remain 1.1 work.
-  - ☐ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
+    Reviewed-head comparisons, suggestions and unresolved-feedback export
+    ship in F13 below.
+  - ☑ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
     comparison, validated suggestion application and unresolved-feedback export;
-    handle rebases and force pushes without reusing stale coordinates.
+    handle rebases and force pushes without reusing stale coordinates
+    (`evolution::{boundaries,compare,feedback,preview,apply}`, `HostedReviewTools`,
+    41 hosted Rust tests / 43 frontend tests and WebView2 comparison/export/
+    suggestion/failure/cancellation/head-refresh pass; live GitHub read IPC).
+  - ☐ **F13 provider validation.** Exercise Azure Services/Server iteration
+    comparison and current-iteration suggestions with a live authenticated
+    fixture. Local coordinate/payload tests pass; hosted writes were not used.
   - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
-    remain neutral. Merge queue/auto-complete and richer required-review detail
-    remain 1.1 work.
-  - ☐ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
+    remain neutral. Merge queue/auto-complete controls ship in F12 below; richer
+    required-review detail remains later work.
+  - ☑ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
     enable/cancel, queued versus merged state, policy blockers and head refresh;
-    preserve GitHub queue versus Azure auto-complete semantics.
+    preserve GitHub queue versus Azure auto-complete semantics
+    (`completion::set`, `PullRequestCompletionControl`, helper protocol 7
+    `SetAutoComplete`; 36 hosted Rust tests, 12 helper/protocol tests, WebView2
+    enable/cancel/position/policy/head-refresh pass).
+  - ☐ **F12 release validation.** Publish the signed protocol-7 helper channel
+    with the desktop build and exercise queue/auto-complete against a live
+    policy-controlled GitHub and Azure Services/Server PR. Local tests use
+    provider payloads and WebView2 fixtures; no live hosted writes were made.
   - ☑ Hosted PR lifecycle actions.
     - ☑ Mark permission-backed drafts ready for review
       (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer
@@ -1918,11 +1961,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     - ☑ Close/reopen the PR (`repo_pull_request_lifecycle`; GitHub `gh pr`,
       Azure Services `az repos pr update`, and Azure Server helper protocol v2
       `Operation::SetStatus`; keyboard-operable confirmed overflow action).
-  - ☐ 1.1: GitLab merge-request adapter.
-  - ☐ 1.1: Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
-  - ☐ **F11 / P2 — GitHub enterprise/custom-host adapter.** Model host/API/auth
+  - ☑ 1.1: GitLab merge-request adapter (`HostedRepo`, paged collections,
+    versioned inline coordinates, approvals, lifecycle and SHA-guarded merge).
+  - ☑ 1.1: Bitbucket Cloud pull-request adapter (`HostedRepo`, opaque pagination,
+    replies/ranges, approval/request-changes and capability-gated actions).
+  - ☐ Bitbucket Server adapter; Cloud merge remains a provider-site action
+    until an atomic expected-head guard is available. GitLab request-changes
+    and Bitbucket discussion resolution/draft transitions also remain
+    provider-site actions.
+  - ☑ **F11 / P2 — GitHub enterprise/custom-host adapter.** Model host/API/auth
     scope instead of hardcoding GitHub.com; keep the GitLab/Bitbucket adapter
-    rows above as the other F11 deliverables.
+    rows above as the other F11 deliverables (`GitHubContext`, host-scoped CLI
+    routing and per-remote adapter selection in Settings → Hosting).
   - ☐ 1.1: Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
     to provider CLIs (blocked on Platform → per-platform credential storage).
 

@@ -24,6 +24,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # tauri-plugin-sql, so these direct deps add ~no build cost.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
 sha2 = "0.10"
+sha1_smol = "1"
 base64 = "0.22"
 flate2 = "1"
 minisign-verify = "0.2.5"

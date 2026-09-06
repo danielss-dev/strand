@@ -57,9 +57,7 @@ impl Repo {
         let entry = tree
             .get_path(Path::new(rel_path))
             .map_err(|_| Error::Other(format!("{rel_path} is not tracked at HEAD")))?;
-        let blob = repo
-            .find_blob(entry.id())
-            .map_err(|_| Error::Other(format!("{rel_path} is not a file")))?;
+        let blob = self.find_blob(entry.id())?;
         if blob.is_binary() {
             return Err(Error::Other(format!("{rel_path} is binary — no blame")));
         }
@@ -72,6 +70,9 @@ impl Repo {
             )));
         }
 
+        if self.is_partial_clone() || repo.is_shallow() {
+            return self.blame_with_git(rel_path);
+        }
         let mut opts = git2::BlameOptions::new();
         let blame = repo.blame_file(Path::new(rel_path), Some(&mut opts))?;
 
@@ -122,6 +123,42 @@ impl Repo {
             }
         }
         Ok(out)
+    }
+
+    /// Git understands shallow boundaries and can fetch promised blobs while
+    /// walking history. Keep that work on demand, after the size/binary gate.
+    fn blame_with_git(&self, path: &str) -> Result<Vec<BlameLine>> {
+        let output = crate::git_command().current_dir(&self.path)
+            .env("GIT_TERMINAL_PROMPT", "0").args(crate::GIT_SAFE_CONFIG)
+            .args(["blame", "--line-porcelain", "HEAD", "--", path]).output()?;
+        if !output.status.success() {
+            return Err(Error::Other(String::from_utf8_lossy(&output.stderr).trim().into()));
+        }
+        let mut result = Vec::new();
+        let mut current: Option<BlameLine> = None;
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(content) = line.strip_prefix('\t') {
+                if let Some(mut entry) = current.take() {
+                    entry.content = content.to_owned();
+                    result.push(entry);
+                }
+                continue;
+            }
+            let fields: Vec<_> = line.split(' ').collect();
+            if fields.len() >= 3 && fields[0].len() == 40 && fields[0].bytes().all(|b| b.is_ascii_hexdigit()) {
+                current = Some(BlameLine {
+                    line_no: fields[2].parse().map_err(|_| Error::Other("Invalid Git blame line".into()))?,
+                    commit: fields[0].into(), short: fields[0][..7].into(), content: String::new(),
+                    author: String::new(), author_email: String::new(), time_unix: 0, summary: String::new(),
+                });
+            } else if let Some(entry) = &mut current {
+                if let Some(value) = line.strip_prefix("author ") { entry.author = value.into(); }
+                else if let Some(value) = line.strip_prefix("author-mail ") { entry.author_email = value.trim_start_matches('<').trim_end_matches('>').into(); }
+                else if let Some(value) = line.strip_prefix("author-time ") { entry.time_unix = value.parse().map_err(|_| Error::Other("Invalid Git blame time".into()))?; }
+                else if let Some(value) = line.strip_prefix("summary ") { entry.summary = value.into(); }
+            }
+        }
+        Ok(result)
     }
 }
 
