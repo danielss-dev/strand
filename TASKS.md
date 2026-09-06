@@ -1903,11 +1903,18 @@ tree: watch the agent work, review fast, accept or reject safely.
   - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
-    remain neutral. Merge queue/auto-complete and richer required-review detail
-    remain 1.1 work.
-  - ☐ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
+    remain neutral. Merge queue/auto-complete controls ship in F12 below; richer
+    required-review detail remains later work.
+  - ☑ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
     enable/cancel, queued versus merged state, policy blockers and head refresh;
-    preserve GitHub queue versus Azure auto-complete semantics.
+    preserve GitHub queue versus Azure auto-complete semantics
+    (`completion::set`, `PullRequestCompletionControl`, helper protocol 7
+    `SetAutoComplete`; 36 hosted Rust tests, 12 helper/protocol tests, WebView2
+    enable/cancel/position/policy/head-refresh pass).
+  - ☐ **F12 release validation.** Publish the signed protocol-7 helper channel
+    with the desktop build and exercise queue/auto-complete against a live
+    policy-controlled GitHub and Azure Services/Server PR. Local tests use
+    provider payloads and WebView2 fixtures; no live hosted writes were made.
   - ☑ Hosted PR lifecycle actions.
     - ☑ Mark permission-backed drafts ready for review
       (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer

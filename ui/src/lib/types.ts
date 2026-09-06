@@ -338,7 +338,19 @@ export interface PullRequestReview {
   can_dismiss: boolean;
 }
 
+export interface PullRequestCompletion {
+  kind: 'github_queue' | 'github_auto_merge' | 'azure_auto_complete';
+  status: 'disabled' | 'queued' | 'waiting_for_policies' | 'merged' | 'closed';
+  source_commit: string;
+  position: number | null;
+  can_enable: boolean;
+  can_cancel: boolean;
+  blockers: string[];
+  strategies: PullRequestMergeStrategy[];
+}
+
 export interface PullRequest {
+  completion?: PullRequestCompletion | null;
   data_pages?: PullRequestPageCursor[];
   id: number;
   title: string;

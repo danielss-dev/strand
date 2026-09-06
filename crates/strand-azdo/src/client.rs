@@ -441,6 +441,20 @@ fn request_spec(operation: Operation) -> RequestSpec {
             })),
             unwrap_value: false,
         },
+        Operation::SetAutoComplete { project, repository, id, enabled, viewer_id, expected_head, strategy } => RequestSpec {
+            method: Method::PATCH,
+            path: git_path(&project, &repository, &format!("pullrequests/{id}")),
+            query: api(),
+            body: Some(if enabled { json!({
+                "autoCompleteSetBy": {"id": viewer_id},
+                "lastMergeSourceCommit": {"commitId": expected_head},
+                "completionOptions": {
+                    "mergeStrategy": match strategy { MergeStrategy::MergeCommit => "noFastForward", MergeStrategy::Squash => "squash", MergeStrategy::Rebase => "rebase" },
+                    "deleteSourceBranch": false, "transitionWorkItems": false, "bypassPolicy": false
+                }
+            }) } else { json!({"autoCompleteSetBy":{"id":"00000000-0000-0000-0000-000000000000"}}) }),
+            unwrap_value: false,
+        },
         Operation::Complete {
             project,
             repository,
@@ -621,6 +635,23 @@ mod tests {
         Header, Response as MockResponse, Server, SslConfig, StatusCode as MockStatus,
     };
     use uuid::Uuid;
+
+    #[test]
+    fn auto_complete_enable_and_cancel_have_distinct_payloads() {
+        let operation = |enabled| Operation::SetAutoComplete {
+            project: "project".into(), repository: "repo".into(), id: 7,
+            enabled, viewer_id: "viewer".into(), expected_head: "a".repeat(40), strategy: MergeStrategy::Squash,
+        };
+        let enable = request_spec(operation(true));
+        let body = enable.body.unwrap();
+        assert_eq!(body["autoCompleteSetBy"]["id"], "viewer");
+        assert_eq!(body["lastMergeSourceCommit"]["commitId"], "a".repeat(40));
+        assert_eq!(body["completionOptions"]["bypassPolicy"], false);
+        assert!(body.get("status").is_none());
+        let cancel = request_spec(operation(false)).body.unwrap();
+        assert_eq!(cancel["autoCompleteSetBy"]["id"], "00000000-0000-0000-0000-000000000000");
+        assert!(cancel.get("completionOptions").is_none());
+    }
 
     #[test]
     fn list_route_is_escaped_bounded_and_shallow() {

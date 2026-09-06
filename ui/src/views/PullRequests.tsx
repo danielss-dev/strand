@@ -63,6 +63,7 @@ import type {
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
+import { PullRequestCompletionControl } from './PullRequestCompletionControl';
 import { PullRequestDataLoader } from './PullRequestDataLoader';
 import { PullRequestInboxLoader } from './PullRequestInboxLoader';
 import { appendPullRequestPage, uniqueBy } from '../lib/pullRequestPages';
@@ -2068,6 +2069,7 @@ function PullRequestDetails({
           </details>
         )}
       </div>
+      <PullRequestCompletionControl path={path} pr={pr} onUpdated={onUpdated} />
       <PullRequestDataLoader path={path} pr={pr} onPage={onPage} />
       {lifecycleMenu && (
         <ContextMenu

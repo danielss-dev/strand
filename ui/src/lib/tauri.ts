@@ -288,6 +288,8 @@ export const tauri = {
     invoke<PullRequestReviewThreadUpdate>('repo_pull_request_thread_resolve', {
       path, threadId, resolved,
     }),
+  repoPullRequestCompletion: (path: string, id: number, enable: boolean, strategy: PullRequestMergeStrategy, expectedHead: string) =>
+    invoke<void>('repo_pull_request_completion', { path, id, enable, strategy, expectedHead }),
   repoPullRequestMerge: (
     path: string,
     id: number,

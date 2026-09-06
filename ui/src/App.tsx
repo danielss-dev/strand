@@ -1742,6 +1742,13 @@ export function App() {
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-search')),
           } satisfies PaletteAction,
           ...(activePullRequestKey ? [{
+            id: 'pull-request-completion',
+            label: 'Pull Requests: merge queue or auto-complete…',
+            group: 'Actions',
+            keywords: 'pr github azure enable cancel auto merge queue status policies',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-completion')),
+          } satisfies PaletteAction,
+          {
             id: 'pull-request-merge',
             label: 'Pull Requests: merge or mark ready…',
             group: 'Actions',

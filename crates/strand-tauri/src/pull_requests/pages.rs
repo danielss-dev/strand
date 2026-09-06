@@ -262,6 +262,7 @@ pub fn initial(cwd: &str, owner: &str, repo: &str, pr: &mut PullRequest) {
         .map(|kind| connection(*kind, "null"))
         .collect::<Vec<_>>()
         .join(" ");
+    let fields = format!("{} {fields}", completion::GITHUB_FIELDS);
     let query_text = format!("query($owner: String!, $repo: String!, $number: Int!) {{ repository(owner: $owner, name: $repo) {{ pullRequest(number: $number) {{ headRefOid viewerCanUpdate {fields} }} }} }}");
     let result = query(
         cwd,
@@ -271,6 +272,7 @@ pub fn initial(cwd: &str, owner: &str, repo: &str, pr: &mut PullRequest) {
     );
     if let Ok(value) = &result {
         pr.can_mark_ready = pr.is_draft && parse_github_can_mark_ready(value);
+        pr.completion = Some(completion::github(&value["data"]["repository"]["pullRequest"]));
     }
     for kind in KINDS {
         let request = Cursor {

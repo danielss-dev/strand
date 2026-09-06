@@ -27,6 +27,7 @@ use crate::ai::bin::{base_command, resolve_cli};
 use crate::azdo_helper;
 
 pub mod pages;
+pub mod completion;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
@@ -235,6 +236,7 @@ struct AzureDiscussion {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequest {
+    pub completion: Option<completion::Completion>,
     pub data_pages: Vec<pages::Cursor>,
     pub id: u64,
     pub title: String,
@@ -1355,23 +1357,13 @@ fn merge_github(
     strategy: PullRequestMergeStrategy,
     expected_head: &str,
 ) -> Result<()> {
-    let slug = format!("{owner}/{repo}");
-    let id = id.to_string();
-    run_command(
-        cwd,
-        "gh",
-        &[
-            "pr",
-            "merge",
-            &id,
-            "--repo",
-            &slug,
-            github_merge_flag(strategy),
-            "--match-head-commit",
-            expected_head,
-        ],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
+    let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/merge");
+    let input = serde_json::to_vec(&completion::github_merge_payload(strategy, expected_head)).map_err(|e| e.to_string())?;
+    let output = run_command_input(cwd, "gh", &["api", &endpoint, "--method", "PUT", "--input", "-"], &[("GH_PROMPT_DISABLED", "1")], Some(&input))?;
+    let value: Value = serde_json::from_slice(&output).map_err(|e| e.to_string())?;
+    if value["merged"].as_bool() != Some(true) {
+        return Err(text(value.get("message")).unwrap_or_else(|| "GitHub did not merge the pull request".into()));
+    }
     Ok(())
 }
 
@@ -1629,6 +1621,7 @@ fn detail_azure_server(
             .collect();
         pull_request.checks_complete = true;
     }
+    pull_request.completion = Some(completion::azure(&value, viewer.as_deref()));
     Ok(pull_request)
 }
 
@@ -2303,6 +2296,7 @@ fn detail_azure(
             .collect();
         pull_request.checks_complete = true;
     }
+    pull_request.completion = Some(completion::azure(&value, viewer.as_deref()));
     Ok(pull_request)
 }
 
@@ -3559,13 +3553,6 @@ fn validate_commit(commit: &str) -> Result<()> {
     Ok(())
 }
 
-fn github_merge_flag(strategy: PullRequestMergeStrategy) -> &'static str {
-    match strategy {
-        PullRequestMergeStrategy::MergeCommit => "--merge",
-        PullRequestMergeStrategy::Squash => "--squash",
-        PullRequestMergeStrategy::Rebase => "--rebase",
-    }
-}
 
 fn github_lifecycle_verb(action: PullRequestLifecycleAction) -> &'static str {
     match action {
@@ -3946,6 +3933,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         .collect();
     Some(PullRequest {
         data_pages: Vec::new(),
+        completion: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("state"))
@@ -4266,6 +4254,7 @@ fn parse_azure_pr(
     };
     Some(PullRequest {
         data_pages: Vec::new(),
+        completion: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("status"))
@@ -5392,12 +5381,12 @@ mod tests {
         assert!(validate_commit("0123456").is_err());
         assert!(validate_commit("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").is_err());
         assert_eq!(
-            github_merge_flag(PullRequestMergeStrategy::MergeCommit),
-            "--merge"
+            completion::github_merge_payload(PullRequestMergeStrategy::MergeCommit, "head")["merge_method"],
+            "merge"
         );
         assert_eq!(
-            github_merge_flag(PullRequestMergeStrategy::Squash),
-            "--squash"
+            completion::github_merge_payload(PullRequestMergeStrategy::Squash, "head")["merge_method"],
+            "squash"
         );
         assert_eq!(
             azure_merge_strategy(PullRequestMergeStrategy::MergeCommit),

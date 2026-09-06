@@ -203,6 +203,7 @@ fn main() {
             commands::repo_pull_request_thread_reply,
             commands::repo_pull_request_thread_resolve,
             commands::repo_pull_request_merge,
+            commands::repo_pull_request_completion,
             commands::repo_pull_request_ready,
             commands::repo_pull_request_lifecycle,
             commands::repo_pull_request_update_branch,

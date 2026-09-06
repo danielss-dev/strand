@@ -2814,6 +2814,12 @@ checks. Partial counts, retry/cancel controls and palette actions preserve
 loaded content and drafts. Page appends deduplicate provider IDs and reject
 head changes; inbox navigation remains shallow and hosted patches remain lazy.
 
+**Deferred hosted completion shipped (2026-09-06, F12):** GitHub queue and
+auto-merge plus Azure auto-complete now expose capability-gated enable/cancel,
+queue versus policy-wait states, and refresh after head changes. Immediate
+GitHub merge uses the guarded REST endpoint. Azure Server adds protocol 7
+`SetAutoComplete`; its signed helper channel must ship with this app change.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

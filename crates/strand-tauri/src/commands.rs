@@ -392,6 +392,11 @@ pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     .await
 }
 
+#[tauri::command(async)]
+pub async fn repo_pull_request_completion(path: String, id: u64, enable: bool, strategy: pull_requests::PullRequestMergeStrategy, expected_head: String) -> CmdResult<()> {
+    run_blocking("pull request completion", move || pull_requests::completion::set(&path, id, enable, strategy, &expected_head).map_err(|message| CmdError { message })).await
+}
+
 /// One bounded provider page; cancellation never affects provider writes.
 #[tauri::command(async)]
 pub async fn repo_pull_request_inbox_page(path: String, cursor: Option<String>, request_id: String) -> CmdResult<PullRequestList> {

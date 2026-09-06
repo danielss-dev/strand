@@ -154,6 +154,28 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
+Below readiness, GitHub repositories that require a queue expose **Join merge
+queue**, queue position when reported, and **Leave merge queue**. Other GitHub
+repositories expose **Enable auto-merge** and **Cancel auto-merge** when the
+provider permits them. Choose an allowed merge strategy before enabling.
+Immediate Merge uses GitHub's guarded merge endpoint; it does not silently
+queue the request.
+
+Azure exposes **Enable auto-complete** and **Cancel auto-complete**, with a
+**waiting for policies** state instead of a queue position. Strand exposes
+Azure enablement conservatively to the signed-in PR author, and cancellation
+to that author or the existing auto-complete owner; Azure enforces current
+permissions. Azure Server requires helper protocol 7 with the new completion
+operation. Release distribution of that helper must accompany this app change.
+
+Deferred completion remains controlled by provider policies and can include
+later source pushes. GitHub enable/enqueue requests carry an atomic expected
+head; Azure enablement rechecks the head and includes `lastMergeSourceCommit`.
+Cancellation never merges code. Controls refresh after each request and when
+activity reports a changed head. A failed request or refresh stays visible next
+to the controls. Run “Pull Requests: merge queue or auto-complete…” in Quick
+Launch to focus this surface.
+
 The adjacent **Pull request actions** menu closes an active PR behind a second
 confirmation. A closed GitHub or abandoned Azure DevOps PR shows **Reopen pull
 request** there instead. Merged/completed PRs have no lifecycle or merge action.

@@ -1414,7 +1414,8 @@ PR number alone can then integrate code the user never saw. Provider policies
 also contain information Strand may not have loaded (especially in Azure
 DevOps), so client-side green checks are not sufficient authorization.
 
-**How to apply.** GitHub merge commands use `--match-head-commit`; Azure
+**How to apply.** GitHub immediate merges use REST `sha`; queue/auto-merge mutations use
+`expectedHeadOid`. Azure
 completion requests include `lastMergeSourceCommit`. Keep required checks,
 reviews, queues, and branch policies provider-authoritative, preserve their
 failure text next to the initiating control, and refresh the PR after a
@@ -2503,3 +2504,13 @@ provider ID when appending, and keep already loaded data on failures. A thread
 page fetches only its root comment; replies have independent cursors. Counts
 remain explicitly partial until their connections are exhausted. Background
 check snapshots traverse check pages without patch or comment-body reads.
+
+## Deferred completion retains provider semantics (2026-09-06)
+
+GitHub queue membership, GitHub auto-merge and Azure auto-complete are separate
+states. Enabling carries the loaded head; cancellation targets the existing
+provider intent and remains possible after source changes. Do not call
+`gh pr merge` for immediate completion because it may silently enqueue. Azure
+auto-complete follows subsequent source pushes under server policies; its
+waiting state is not a queue position. Helper operations advance the protocol
+channel and need a corresponding signed helper release.
