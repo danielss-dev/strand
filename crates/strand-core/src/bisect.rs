@@ -136,7 +136,9 @@ impl Repo {
             .count();
         let culprit = log.lines().rev().find_map(|line| {
             let prefix = format!("# first {bad_term} commit: [");
+            let quoted_prefix = format!("# first '{bad_term}' commit: [");
             line.strip_prefix(&prefix)
+                .or_else(|| line.strip_prefix(&quoted_prefix))
                 .and_then(|s| s.split_once(']'))
                 .map(|(oid, _)| oid.to_owned())
         });
