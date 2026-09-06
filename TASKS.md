@@ -2467,6 +2467,12 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Publish `v1.5.1` through GitHub Releases and Microsoft Store (manifests
   synchronized at 1.5.1; tag, signed desktop release, and Store submission
   remain).
+- ◐ Recover the failed `v1.6.0` release (2026-09-07): synchronize desktop
+  manifests and all five workspace-versioned crates at 1.6.0; include
+  `strand-headless` and `strand-ops` in `bump-version.mjs`. The published tag
+  still points to 1.5.1 source and has no assets. Publish the prepared signed
+  protocol-7 helper, correct the release tag to the repaired commit, and
+  complete desktop/Store builds before promoting the release.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

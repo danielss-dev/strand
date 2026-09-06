@@ -258,9 +258,16 @@ build and before helper promotion, including the helpers-only path. Tauri can
 finish a bundle while only warning about a private/public key mismatch; that
 warning is a failed release, never an artifact to promote.
 
-**Before tagging:** bump `version` in `tauri.conf.json`, the workspace
-`Cargo.toml`, and `package.json` to match the tag. Tauri names the artifacts
-from the config version, not the tag.
+**Before tagging:** run `pnpm version:set <version>` and commit the result.
+This keeps the root/UI packages, Tauri config, workspace version, and all
+workspace-versioned Cargo lockfile entries in sync. Run
+`node scripts/check-release-version.mjs` with `VERSION=v<version>` and
+`pnpm release:check-helper` before creating the matching tag. Tauri names the
+artifacts from the config version, not the tag.
+
+If the tag/version check fails, rerunning the same source cannot repair it:
+the version bump must be committed into the release candidate. If the helper
+channel check fails, publish the matching signed helper release first.
 
 For helper-only tags, use `pnpm version:azdo <version|major|minor|patch>`.
 That command changes only `crates/strand-azdo/Cargo.toml` and its Cargo.lock

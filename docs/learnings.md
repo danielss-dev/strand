@@ -2788,3 +2788,12 @@ backdrop starts 96px below the window top. A max-height of 88vh or 100vh minus
 64px can clip the footer. Reserve that offset plus bottom space, let the body
 scroll, and prevent header/footer and form controls from shrinking. Verify both
 1280×800 and 880×600. Readable text alone does not establish a readable layout.
+
+## Desktop version bumps include every workspace-versioned crate (2026-09-07)
+
+When adding a crate with `version.workspace = true`, add its Cargo.lock entry
+to `scripts/bump-version.mjs` as well. The desktop bump must update the
+headless companion and operations crate alongside core, Tauri, and the shared
+Azure protocol crate. Use `cargo metadata --no-deps --locked` after a bump to
+verify that no workspace package requires a lockfile repair. The independently
+versioned `strand-azdo` helper remains excluded.

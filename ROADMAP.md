@@ -2998,6 +2998,13 @@ checks the public manifest, signature, and every platform archive before
 building. Signed helper publication and a separate protocol-6 backfill remain
 pending; protocol compatibility and signature enforcement stay in place.
 
+**Strand 1.6.0 release repair kick (2026-09-07):** The desktop and Store
+workflows rejected `v1.6.0` because its source still declared 1.5.1. The
+candidate manifests and five workspace-versioned crates are now synchronized
+at 1.6.0, and the bump script includes the new headless and operations crates.
+The existing published release has no assets; protocol-7 helper publication,
+correcting the desktop tag, and successful desktop/Store builds remain pending.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on
