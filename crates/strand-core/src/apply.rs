@@ -36,6 +36,15 @@ impl Repo {
             ApplyTarget::Workdir => (patch.to_owned(), git2::ApplyLocation::WorkDir),
         };
         let diff = git2::Diff::from_buffer(buf.as_bytes())?;
+        for delta in diff.deltas() {
+            for file in [delta.old_file(), delta.new_file()] {
+                if let Some(path) = file.path() {
+                    if self.is_lfs_path(path)? {
+                        return Err(crate::Error::Other("LFS files must be staged, unstaged or discarded as a whole file; partial patches would corrupt the pointer.".into()));
+                    }
+                }
+            }
+        }
         repo.apply(&diff, location, None)?;
         Ok(())
     }

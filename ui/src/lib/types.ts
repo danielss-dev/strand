@@ -587,6 +587,14 @@ export type FilesTreeMutation = FilesTreeMutationChange & {
 /** A submodule's state relative to the superproject's recorded commit. */
 export type SubmoduleState = 'uninitialized' | 'up-to-date' | 'out-of-date' | 'modified';
 
+export type LfsAction =
+  | { action: 'environment' | 'install' | 'patterns' | 'status' | 'objects' }
+  | { action: 'track' | 'untrack'; pattern: string }
+  | { action: 'fetch' | 'pull' | 'push'; remote: string }
+  | { action: 'locks'; path: string }
+  | { action: 'lock'; path: string }
+  | { action: 'unlock'; id: string };
+
 export interface Submodule {
   name: string;
   /** Path within the superproject working tree (forward-slashed). */

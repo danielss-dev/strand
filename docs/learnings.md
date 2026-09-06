@@ -6,6 +6,20 @@ that future work (yours or another agent's) needs to respect.
 
 ---
 
+## LFS files need Git's external clean/smudge filters (2026-09-06)
+
+The real Git LFS fixture proved git2 `index.add_path` stored raw asset bytes
+instead of the pointer produced by `git hash-object --path`. The historical
+index-on-git2 policy has an LFS exception: detect `filter=lfs` attributes and
+stage the complete batch with one literal, NUL-delimited Git pathspec input.
+Enforce `filter.lfs.required` so missing tooling cannot silently store raw data.
+Whole-file checkout/discard and hard reset use Git for LFS; partial patches are refused.
+Ordinary status must not start LFS subprocesses. Management reads are explicit,
+transcripts bounded, and cancellation must terminate LFS/submodule descendants
+that otherwise keep pipes open. Tracking edits attributes, never history.
+
+---
+
 ## Closeable tabs follow browser closing conventions
 
 **Rule.** Every closeable repository or Work tab supports its visible close

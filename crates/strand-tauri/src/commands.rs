@@ -23,6 +23,7 @@ use strand_core::{
     gitconfig::{self, GlobalIdentity},
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
+    lfs::LfsAction,
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
@@ -1492,6 +1493,23 @@ pub async fn repo_maintenance(
             .map_err(CmdError::from)
     })
     .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_lfs_action(
+    path: String,
+    action: LfsAction,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("Git LFS", move || {
+        Repo::discover(&path)?.lfs_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
     deregister_op(&state, &op_id);
     result
 }

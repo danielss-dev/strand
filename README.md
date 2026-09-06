@@ -71,6 +71,10 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Git LFS** — repository setup, tracking patterns, object/transfer status,
+  downloads/uploads and server locks from the sidebar and command palette.
+  Whole-file staging, checkout, discard and hard reset honor LFS filters;
+  history is never migrated.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with

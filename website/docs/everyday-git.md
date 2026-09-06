@@ -104,7 +104,36 @@ The first push of a new local branch creates the same-named branch on `origin` a
 | `Mod+Shift+Y` | Fetch |
 | `Mod+Shift+S` | Sync (fetch + pull + push) |
 
-Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own. Content filters configured in your git (such as Git LFS) run as they do on the command line, though Strand has no dedicated LFS UI yet.
+Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own.
+
+### Git LFS
+
+Open **Git LFS** in the sidebar or search **Git LFS:** in the command palette.
+Select an action, fill its fields, then choose **Run action**. Reads are explicit:
+opening the dialog does not start an object scan or contact the remote.
+
+- **Installation and configuration** shows the installed version and effective
+  LFS environment. Install Git LFS separately if Git reports it missing.
+- **Set up this repository** runs `git lfs install --local`, including the
+  pre-push hook. Existing conflicting hooks are reported, never overwritten.
+- **Tracked patterns**, **Track a pattern**, and **Stop tracking a pattern**
+  inspect/edit `.gitattributes`. Review and stage that file and the intended
+  assets in Local Changes. Tracking does not rewrite existing commits.
+- **Object and transfer status** shows Git LFS's queued changes; **List objects
+  and sizes** lists current LFS files (`*` is full content, `-` is a pointer).
+- **Download objects**, **Download and check out objects**, and **Upload objects**
+  use the named Git remote. Downloads can be retried after cancellation; completed
+  objects remain in the local LFS cache.
+- **List locks**, **Lock a file**, and **Unlock by ID** use the server's lock API.
+  The list is limited to 100; filter by an exact path to inspect other files.
+  Unsupported locking, authentication failures and offline errors remain visible.
+
+Whole-file staging (including Stage all), discard, hard reset and branch/revision checkout
+run the required LFS filters. Missing filters fail rather than stage raw assets.
+LFS files cannot be partially staged or discarded: use the whole-file action.
+Operations show bounded output/progress and **Cancel operation**. After an error,
+inspect status, correct the installation/configuration or remote access, and retry.
+There is no LFS history migration operation in Strand.
 
 ## The sidebar Git tab
 

@@ -99,10 +99,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
   with agent delegation and visible signing failures.
-- ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
-  correctness across single/bulk staging, checkout, commit and network flows;
-  then add setup/tracking/status/locks/progress. System-Git networking alone
-  does not establish end-to-end LFS support.
+- ☑ **F04 / P1 — LFS compatibility and management.** Filter-aware single/bulk
+  staging, discard, checkout and hard reset; exact pointer/commit/push/pull and
+  missing-filter fixtures pass (`lfs.rs`). Local setup, patterns, object/transfer
+  status, bounded locks and cancellable transfers are exposed in `LfsDialog`.
+  Real lock-API fixtures and native setup/staging/palette/cancellation/recovery
+  checks pass; no eager LFS network or status subprocesses.
 - ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
   with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
   `.gitmodules` and index changes, plus cancellable network operations.

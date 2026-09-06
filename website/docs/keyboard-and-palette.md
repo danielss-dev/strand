@@ -85,6 +85,11 @@ integrity check, incremental Git maintenance, or guarded garbage collection.
 Use `Tab` to move between actions and activity entries, `Enter` to run or
 expand one, and `Escape` to close when no operation is running.
 
+Search **Git LFS:** for each management action. The dialog focuses the action
+selector; use arrow keys to choose, `Tab` to reach fields and buttons, and
+`Enter` to run. While work runs, **Cancel operation** stops it; `Escape` closes
+the dialog once it finishes.
+
 **New file…** and **New folder…** open a focus-trapped path dialog for the
 active repository. The Files sidebar exposes the same actions from its **+**
 menu; use the arrow keys and Enter to choose one, or Escape to close it. Focus a

@@ -1,0 +1,15 @@
+export const LFS_ACTIONS = [
+  ['environment', 'Installation and configuration'],
+  ['install', 'Set up this repository'],
+  ['patterns', 'Tracked patterns'],
+  ['track', 'Track a pattern'],
+  ['untrack', 'Stop tracking a pattern'],
+  ['status', 'Object and transfer status'],
+  ['objects', 'List objects and sizes'],
+  ['fetch', 'Download objects'],
+  ['pull', 'Download and check out objects'],
+  ['push', 'Upload objects'],
+  ['locks', 'List locks'],
+  ['lock', 'Lock a file'],
+  ['unlock', 'Unlock by ID'],
+] as const;

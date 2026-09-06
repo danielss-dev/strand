@@ -35,6 +35,7 @@ import type {
   InitOutcome,
   MaintenanceOutcome,
   MaintenanceTask,
+  LfsAction,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -453,6 +454,8 @@ export const tauri = {
   repoTreeAt: (path: string, rev: string) =>
     invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
+  repoLfsAction: (path: string, action: LfsAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_lfs_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
   repoSubmoduleUpdate: (
     path: string,
     paths: string[],

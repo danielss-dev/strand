@@ -80,9 +80,13 @@ impl Repo {
             ResetMode::Soft => repo.reset(&obj, git2::ResetType::Soft, None)?,
             ResetMode::Mixed => repo.reset(&obj, git2::ResetType::Mixed, None)?,
             ResetMode::Hard => {
-                let mut co = git2::build::CheckoutBuilder::new();
-                co.force();
-                repo.reset(&obj, git2::ResetType::Hard, Some(&mut co))?;
+                if self.lfs_checkout_needed(&obj.peel_to_tree()?)? {
+                    self.run_lfs_filtered(&["reset", "--hard", &obj.id().to_string(), "--"])?;
+                } else {
+                    let mut co = git2::build::CheckoutBuilder::new();
+                    co.force();
+                    repo.reset(&obj, git2::ResetType::Hard, Some(&mut co))?;
+                }
             }
         }
 

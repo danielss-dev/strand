@@ -2155,7 +2155,9 @@ and Store certification remain external gates.
   + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
   everything through the `commands.rs` seam) are active now.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
-- Git LFS (status badges + progress)
+- ☑ Git LFS — filter-correct staging/checkout/discard/hard reset and explicit
+  setup, patterns, object/transfer status and server locks (`LfsDialog`,
+  `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
 - GPG / SSH commit signing UI
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
   GitHub Releases channel)
@@ -2807,6 +2809,14 @@ expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
 implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
+
+**LFS implementation shipped (2026-09-06):** Real fixtures exposed raw asset
+blobs from git2 staging. LFS paths now stage in one literal NUL-delimited Git
+batch; checkout, discard and hard reset honor required filters, and partial
+pointer patches are rejected. The lazy sidebar/palette dialog exposes setup,
+patterns, objects, transfers and server locks with bounded output and process
+tree cancellation. Exact pointer/commit/network/lock fixtures and native
+setup, staging, keyboard, cancellation and recovery checks pass.
 
 ---
 
