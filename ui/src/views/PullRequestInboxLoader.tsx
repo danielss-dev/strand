@@ -39,7 +39,7 @@ export function PullRequestInboxLoader({ path, data, onPage }: {
   }, [load, stop]);
   return <div className="pr-data-status" role="status">
     <span>{data.pull_requests.length} loaded{data.total_count != null ? ` of ${data.total_count}` : ''}
-      {data.next_cursor ? ' · Partial inbox; filters search loaded items.' : ''}</span>
+      </span>
     {data.next_cursor && <button type="button" className="h-link" disabled={busy} onClick={() => void load()}>{busy ? 'Loading…' : 'Load more pull requests'}</button>}
     {busy && <button type="button" className="h-link" onClick={stop}>Cancel loading</button>}
     {error && <span role="alert">{error} · Retry loading.</span>}

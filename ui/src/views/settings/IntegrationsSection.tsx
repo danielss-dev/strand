@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { UserActionsEditor } from './UserActionsEditor';
 
 import { Select } from '../../components/Select';
 import {
@@ -18,7 +17,7 @@ import { useSettings, type ExternalTool } from '../../stores/settings';
  * terminal"). Preset apps per platform plus a custom command template with
  * `{file}` / `{line}` / `{dir}` placeholders.
  */
-export function IntegrationsSection({ focusUserActions = false }: { focusUserActions?: boolean }) {
+export function IntegrationsSection() {
   const editorTool = useSettings((s) => s.editorTool);
   const terminalTool = useSettings((s) => s.terminalTool);
   const set = useSettings((s) => s.set);
@@ -27,16 +26,16 @@ export function IntegrationsSection({ focusUserActions = false }: { focusUserAct
 
   return (
     <section className="settings-section" aria-label="Integrations">
-      <div className="settings-field">
-        <span className="settings-field-label">Command line</span>
+      <details className="settings-field settings-disclosure">
+        <summary>Command line</summary>
         <button type="button" className="btn" disabled={installingCli} onClick={async () => {
           setInstallingCli(true);
           try { setCliStatus(await tauri.appInstallCli()); }
           catch (error) { setCliStatus(errMessage(error)); }
           finally { setInstallingCli(false); }
         }}>{installingCli ? 'Installing…' : 'Install strand command'}</button>
-        <p className="settings-hint" role="status">{cliStatus ?? 'Install in ~/.local/bin. strand PATH opens a repository in this desktop instance. Windows adds the folder to your user PATH; on macOS/Linux, add it to your shell PATH if needed.'}</p>
-      </div>
+        <p className="settings-hint" role="status">{cliStatus ?? 'Open repositories from your terminal with strand followed by a folder path. Windows adds the command to your user PATH. On macOS and Linux, you may need to add ~/.local/bin to your shell PATH.'}</p>
+      </details>
       <ToolPicker
         label="External editor"
         hint="Used by “Open externally” on files. Placeholders: {file}, {line}, {dir}."
@@ -61,7 +60,6 @@ export function IntegrationsSection({ focusUserActions = false }: { focusUserAct
           return tauri.repoOpenInTerminal(path, template);
         }}
       />
-      <UserActionsEditor focusOnMount={focusUserActions} />
     </section>
   );
 }

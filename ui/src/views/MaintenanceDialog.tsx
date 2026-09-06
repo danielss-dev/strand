@@ -42,10 +42,12 @@ function duration(ms: number): string {
 
 export function MaintenanceDialog({
   path,
+  activityOnly = false,
   onClose,
   onToast,
 }: {
   path: string;
+  activityOnly?: boolean;
   onClose: () => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
@@ -111,11 +113,11 @@ export function MaintenanceDialog({
 
   return (
     <Dialog
-      title="Repository maintenance"
+      title={activityOnly ? "Activity history" : "Repository maintenance"}
       icon="sync"
       className="maintenance-dialog"
       busy={Boolean(running)}
-      initialFocusRef={firstActionRef}
+      initialFocusRef={activityOnly ? undefined : firstActionRef}
       onClose={onClose}
       footer={
         running ? (
@@ -127,9 +129,9 @@ export function MaintenanceDialog({
     >
       <div className="clone-body maintenance-body">
         <p className="stash-blurb">
-          Run Git’s own maintenance tools. Every exact command and its captured output are retained for this repository.
+          {activityOnly ? "Recent maintenance and successful commit output for this repository." : "Run Git’s own maintenance tools. Commands and output are retained for this repository."}
         </p>
-        <div className="maintenance-actions">
+        {!activityOnly && <div className="maintenance-actions">
           {TASKS.map((definition, index) => {
             const active = running?.task === definition.task;
             const confirming = definition.task === 'garbage-collect' && confirmGc;
@@ -147,7 +149,7 @@ export function MaintenanceDialog({
               </button>
             );
           })}
-        </div>
+        </div>}
 
         <div className="maintenance-log-head">
           <span>Activity</span>
@@ -155,11 +157,11 @@ export function MaintenanceDialog({
         </div>
         <div className="maintenance-log" aria-live="polite">
           {entries.length === 0 ? (
-            <div className="maintenance-empty">No maintenance activity yet.</div>
+            <div className="maintenance-empty">No recorded activity yet.</div>
           ) : entries.map((entry) => (
             <details key={entry.id} className={`maintenance-entry${entry.success ? '' : ' failed'}`}>
               <summary>
-                <span>{taskDefinition(entry.task).label}</span>
+                <span>{entry.task === 'commit' ? 'Commit' : entry.task === 'amend' ? 'Amend commit' : taskDefinition(entry.task).label}</span>
                 <span>{entry.success ? 'Completed' : 'Failed'} · {duration(entry.duration_ms)} · {new Date(entry.started_at).toLocaleString()}</span>
               </summary>
               <code className="maintenance-command">{entry.command}</code>

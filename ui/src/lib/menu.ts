@@ -48,9 +48,11 @@ export interface MenuHandlers {
   push(): void;
   openInEditor(): void;
   openInTerminal(): void;
-  openInterchange(): void;
+  openInterchange(mode?: 'patch' | 'bundle' | 'export'): void;
+  openRepositorySettings(): void;
+  openLfs(): void;
   openBisect(): void;
-  openAdvancedRefs(): void;
+  openAdvancedRefs(mode?: 'notes' | 'replace'): void;
   openGitflow(): void;
 }
 
@@ -199,10 +201,6 @@ export async function installAppMenu(
   const repoMenu = await Submenu.new({
     text: 'Repository',
     items: [
-      await item({ id: 'git-interchange', text: 'Patches, Mailboxes & Bundles…', enabled: hasRepo, action: () => handlers().openInterchange() }),
-      await item({ id: 'git-advanced-refs', text: 'Git Notes, Replacements & Tag Editing…', enabled: hasRepo, action: () => handlers().openAdvancedRefs() }),
-      await item({ id: 'gitflow', text: 'Git-flow Workflows…', enabled: hasRepo, action: () => handlers().openGitflow() }),
-      await item({ id: 'git-bisect', text: 'Guided Bisect…', enabled: hasRepo, action: () => handlers().openBisect() }),
       await item({
         id: 'sync',
         text: 'Sync (Fetch + Pull + Push)',
@@ -212,6 +210,19 @@ export async function installAppMenu(
       }),
       await item({ id: 'pull', text: 'Pull', cmd: 'pull', enabled: hasRepo, action: () => handlers().pull() }),
       await item({ id: 'push', text: 'Push', cmd: 'push', enabled: hasRepo, action: () => handlers().push() }),
+      await sep(),
+      await item({ id: 'repository-settings', text: 'Repository Settings…', enabled: hasRepo, action: () => handlers().openRepositorySettings() }),
+      await item({ id: 'git-lfs', text: 'Git LFS…', enabled: hasRepo, action: () => handlers().openLfs() }),
+      await Submenu.new({ text: 'Import / Export', items: [
+        await item({ id: 'git-patch', text: 'Apply Patch or Mailbox…', enabled: hasRepo, action: () => handlers().openInterchange('patch') }),
+        await item({ id: 'git-bundle-import', text: 'Import Bundle…', enabled: hasRepo, action: () => handlers().openInterchange('bundle') }),
+        await item({ id: 'git-bundle-export', text: 'Export Bundle…', enabled: hasRepo, action: () => handlers().openInterchange('export') }),
+      ] }),
+      await Submenu.new({ text: 'Advanced', items: [
+        await item({ id: 'git-advanced-refs', text: 'Replacement Refs…', enabled: hasRepo, action: () => handlers().openAdvancedRefs('replace') }),
+        await item({ id: 'gitflow', text: 'Git-flow…', enabled: hasRepo, action: () => handlers().openGitflow() }),
+        await item({ id: 'git-bisect', text: 'Find Regression…', enabled: hasRepo, action: () => handlers().openBisect() }),
+      ] }),
       await sep(),
       await item({
         id: 'open-editor',

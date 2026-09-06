@@ -81,6 +81,17 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ---
 
+## UI placement and readability (2026-09-06)
+
+- ☑ Move the September 6 feature controls into repository settings, contextual
+  menus and PR content; simplify labels and help text; verify keyboard access
+  and browser layouts (`repositoryTools`, `RepositorySettingsDialog`, per-section
+  PR paging, inline suggestion entry points, Merge options, and
+  `docs/ui-placement-validation-2026-09-06.md`).
+- ☐ Run the revised placements in native Windows WebView2; the isolated launch
+  was blocked by automatic approval review. Browser checks cover the UI, while
+  native IPC/signing/SSH/provider behavior needs that final integration pass.
+
 ## strand-core (Rust git engine)
 
 ### Git-client feature audit follow-ups (2026-09-06)

@@ -1,3 +1,4 @@
+import { openRepositoryTool } from '../lib/repositoryTools';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { userActionMenu } from '../lib/userActions';
 
@@ -318,7 +319,13 @@ export function RepositoryFiles({
       },
     ];
     if (!selectedCommit && actionPaths.length === 1) {
-      if (meta && !rowIsDirectory) items.push(userActionMenu({ path: meta.path, target: { kind: 'file', file: rowPath } }));
+      if (meta && !rowIsDirectory) items.push(userActionMenu({ path: meta.path, target: { kind: 'file', file: rowPath } }), {
+        label: 'Git LFS', submenu: [
+          { label: 'Track a pattern…', onSelect: () => openRepositoryTool({ path: meta.path, tool: 'lfs', lfsAction: 'track', file: rowPath }) },
+          { label: 'Lock this file…', onSelect: () => openRepositoryTool({ path: meta.path, tool: 'lfs', lfsAction: 'lock', file: rowPath }) },
+          { label: 'View locks for this file…', onSelect: () => openRepositoryTool({ path: meta.path, tool: 'lfs', lfsAction: 'locks', file: rowPath }) },
+        ],
+      });
       items.push(
         { label: 'Open in editor', icon: 'external', onSelect: () => onOpenFileInEditor(rowPath) },
         {
@@ -462,13 +469,13 @@ export function RepositoryFiles({
         ref={fileCreateButtonRef}
         type="button"
         className="side-files-create"
-        title={t('files.createEntry')}
-        aria-label={t('files.createEntry')}
+        title="File actions"
+        aria-label="File actions"
         aria-haspopup="menu"
         aria-expanded={createMenu != null}
         onClick={openFileCreateMenu}
       >
-        <Icon name="plus" size={14} stroke={2} />
+        <Icon name="chev-down" size={14} stroke={2} />
       </button>
     </div>
   );
@@ -484,8 +491,7 @@ export function RepositoryFiles({
       )}
       {!selectedCommit && localTree && filePaths.length === 0 && fileCreateToolbar}
       {!selectedCommit && displayedTree.some((entry) => entry.excluded) && <div className="side-files-revision">
-        Sparse-excluded files are omitted.
-        <button className="btn" type="button" onClick={() => window.dispatchEvent(new Event('strand:open-sparse-checkout'))}>Manage</button>
+        <button className="h-link" type="button" title="Some tracked folders are excluded from this checkout. Choose which folders to keep locally." onClick={() => window.dispatchEvent(new Event('strand:open-sparse-checkout'))}>Sparse checkout</button>
       </div>}
       {selectedCommit && (
         <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
@@ -544,6 +550,7 @@ export function RepositoryFiles({
           items={[
             { label: t('files.newFile'), icon: 'file-plus', onSelect: () => onCreateFileEntry('', false) },
             { label: t('files.newFolder'), icon: 'folder-plus', onSelect: () => onCreateFileEntry('', true) },
+            { label: 'Choose checked-out folders…', icon: 'folder', onSelect: () => window.dispatchEvent(new Event('strand:open-sparse-checkout')) },
           ]}
           onClose={() => setCreateMenu(null)}
         />

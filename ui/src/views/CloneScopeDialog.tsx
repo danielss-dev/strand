@@ -48,7 +48,7 @@ export function CloneScopeDialog({ path, busy, progress, onExpand, onCancel, onC
       {error && <p role="alert" className="clone-error">{error}</p>}
       {busy && <p role="status">{progress || 'Downloading history…'}</p>}
       {!scope ? <p>Reading repository configuration…</p> : <>
-        <p>{scope.shallow ? 'Shallow repository — older commits and merge bases may be unavailable.' : 'Full history — no shallow boundary.'}</p>
+        <p>{scope.shallow ? 'Only recent history is downloaded. Older commits may be unavailable.' : 'All available commit history is downloaded.'}</p>
         <label className="clone-field"><span className="lbl">Remote</span>
           <Select ref={first} className="clone-input" value={remote} disabled={busy || !scope.remotes.length} onChange={(e) => setRemote(e.target.value)}>
             {scope.remotes.map((r) => <option key={r.name}>{r.name}</option>)}
@@ -57,7 +57,7 @@ export function CloneScopeDialog({ path, busy, progress, onExpand, onCancel, onC
         {!scope.remotes.length && <p>No remotes configured. Add a remote before downloading history.</p>}
         {selected && <>
           <p className="stash-blurb">{selected.filter ? `Partial clone filter: ${selected.filter}. Missing file contents may need a network connection.` : 'No partial-clone filter configured for this remote.'}</p>
-          <div className="stash-blurb">Fetched branches: {selected.fetch_refspecs.length ? selected.fetch_refspecs.map((ref) => <div key={ref}><code>{ref}</code></div>) : 'No fetch refspec configured'}</div>
+          <details className="settings-disclosure"><summary>Branch download rules</summary><div className="stash-blurb">Fetched branches: {selected.fetch_refspecs.length ? selected.fetch_refspecs.map((ref) => <div key={ref}><code>{ref}</code></div>) : 'No fetch refspec configured'}</div></details>
         </>}
         {scope.shallow && <>
           <label className="clone-field"><span className="lbl">Additional commits</span>

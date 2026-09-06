@@ -7,8 +7,8 @@ import { errMessage, tauri } from '../lib/tauri';
 import type { BundlePreview, InterchangeOutcome, MailboxState, PatchPreview, PatchTarget } from '../lib/interchange';
 import { useRepo } from '../stores/repo';
 
-export function InterchangeDialog({ path, onClose }: { path: string; onClose: () => void }) {
-  const [mode, setMode] = useState<'patch' | 'bundle' | 'export'>('patch');
+export function InterchangeDialog({ path, initialMode = 'patch', onClose }: { path: string; initialMode?: 'patch' | 'bundle' | 'export'; onClose: () => void }) {
+  const [mode] = useState<'patch' | 'bundle' | 'export'>(initialMode);
   const [source, setSource] = useState('');
   const [target, setTarget] = useState<PatchTarget>('worktree');
   const [patch, setPatch] = useState<PatchPreview | null>(null);
@@ -22,7 +22,7 @@ export function InterchangeDialog({ path, onClose }: { path: string; onClose: ()
   const [confirm, setConfirm] = useState<'skip' | 'abort' | null>(null);
   const [output, setOutput] = useState('');
   const [error, setError] = useState('');
-  const first = useRef<HTMLSelectElement>(null);
+  const first = useRef<HTMLInputElement>(null);
   const generation = useRef(0);
   const stateGeneration = useRef(0);
   const mounted = useRef(true);
@@ -80,7 +80,7 @@ export function InterchangeDialog({ path, onClose }: { path: string; onClose: ()
     if (typeof chosen === 'string') { setSource(chosen); invalidate(); }
   }
 
-  return <Dialog title="Patches, mailboxes & bundles" size="lg" busy={busy} onClose={onClose} initialFocusRef={first}
+  return <Dialog className="git-tool-dialog" title={mode === 'patch' ? 'Apply patch or mailbox' : mode === 'bundle' ? 'Import bundle' : 'Export bundle'} size="lg" busy={busy} onClose={onClose} initialFocusRef={first}
     footer={<><span role="status">{busy ? 'Running Git…' : ''}</span><button className="btn" disabled={busy} onClick={() => { invalidate(); void refresh(); }}>Refresh state</button><button className="btn" disabled={busy} onClick={onClose}>Close</button></>}>
     <div className="clone-body git-tool-body">
       <p className="stash-blurb">Repository: <code>{path}</code></p>
@@ -97,14 +97,11 @@ export function InterchangeDialog({ path, onClose }: { path: string; onClose: ()
           }}>{confirm === action ? 'Confirm ' : ''}{action === 'skip' ? 'Skip patch' : 'Abort mailbox'}</button>)}
         </div>
       </section>}
-      <label className="clone-field"><span className="lbl">Workflow</span><Select ref={first} className="clone-input" value={mode} disabled={busy} onChange={(e) => { setMode(e.target.value as typeof mode); setSource(''); setOutput(''); invalidate(); }}>
-        <option value="patch">Import patch or mailbox</option><option value="bundle">Verify / import bundle</option><option value="export">Export bundle</option>
-      </Select></label>
-      <label className="clone-field"><span className="lbl">{mode === 'export' ? 'New destination file' : 'Source file'}</span><input className="clone-input" value={source} disabled={busy} onChange={(e) => { setSource(e.target.value); invalidate(); }} /></label>
+      <label className="clone-field"><span className="lbl">{mode === 'export' ? 'New destination file' : 'Source file'}</span><input ref={first} className="clone-input" value={source} disabled={busy} onChange={(e) => { setSource(e.target.value); invalidate(); }} /></label>
       <button className="btn" disabled={busy} onClick={() => void run(browse)}>Browse…</button>
       {mode === 'patch' && <>
         <label className="clone-field"><span className="lbl">Apply to</span><Select className="clone-input" value={target} disabled={busy} onChange={(e) => { setTarget(e.target.value as PatchTarget); invalidate(); }}>
-          <option value="worktree">Working tree only (unstaged changes)</option><option value="index">Index only (staged changes; files unchanged)</option><option value="both">Index and working tree (staged changes)</option><option value="mailbox">Mailbox — create commits with original authors</option>
+          <option value="worktree">Working tree only (unstaged changes)</option><option value="index">Stage changes only (leave working files unchanged)</option><option value="both">Apply and stage changes</option><option value="mailbox">Mailbox — create commits with original authors</option>
         </Select></label>
         <button className="btn" disabled={busy || !source || !!mailbox} onClick={() => void run(preview)}>Preview and validate</button>
         {patch && <section className="git-tool-review" aria-label="Patch preview">
@@ -127,8 +124,8 @@ export function InterchangeDialog({ path, onClose }: { path: string; onClose: ()
         </section>}
       </>}
       {mode === 'export' && <>
-        <label className="clone-field"><span className="lbl">Full ref to export</span><input className="clone-input" value={exportRef} disabled={busy} onChange={(e) => setExportRef(e.target.value)} placeholder="refs/heads/main" /></label>
-        <label className="clone-field"><span className="lbl">Exclude prerequisite revision (optional)</span><input className="clone-input" value={base} disabled={busy} onChange={(e) => setBase(e.target.value)} placeholder="Leave empty for complete history" /></label>
+        <label className="clone-field"><span className="lbl">Branch or tag to export</span><input className="clone-input" value={exportRef} disabled={busy} onChange={(e) => setExportRef(e.target.value)} placeholder="refs/heads/main" /></label>
+        <label className="clone-field"><span className="lbl">History already available to the recipient (optional)</span><input className="clone-input" value={base} disabled={busy} onChange={(e) => setBase(e.target.value)} placeholder="Leave empty for complete history" /></label>
         <p className="stash-note">Recipients need the excluded history. The new file contains the selected ref and reachable history; existing files are never overwritten.</p>
         <button className="btn primary" disabled={busy || !source || !exportRef} onClick={() => void run(async () => { const result = await tauri.repoBundleExport(path, source, exportRef, base || null); setOutput(`Exported ${source}\n${result.validation}\nPrerequisites:\n${result.prerequisites.join('\n') || 'None'}`); })}>Export bundle</button>
       </>}

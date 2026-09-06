@@ -1,3 +1,4 @@
+import { Select } from '../components/Select';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -68,9 +69,9 @@ export function RemoteReposDialog({ onClose }: { onClose: () => void }) {
     if (state.mode === 'files') void loadFile(path);
   }
   const canRead = !!state.snapshot && !state.busy && state.health === 'connected';
-  return <Dialog title="SSH repositories" icon="remote" size="wide" className="remote-repo-dialog" onClose={onClose} initialFocusRef={addressRef}>
+  return <Dialog title="Open repository over SSH" icon="remote" size="wide" className="remote-repo-dialog" onClose={onClose} initialFocusRef={addressRef}>
     <div className="remote-repo-controls">
-      <label className="settings-field">Repository on SSH host
+      <label className="settings-field">Remote repository address
         <input ref={addressRef} className="clone-input" list="ssh-recent-repositories" value={address} onChange={(event) => setAddress(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void state.connect(address); } }} />
         <datalist id="ssh-recent-repositories">{state.recents.map((address) => <option key={address} value={address} />)}</datalist>
       </label>
@@ -78,16 +79,16 @@ export function RemoteReposDialog({ onClose }: { onClose: () => void }) {
       <button className="btn" disabled={!state.address || state.busy} onClick={() => void state.connect(state.address)}>Reconnect now</button>
       <button className="btn" disabled={!state.address} onClick={() => void state.disconnect()}>{state.busy ? 'Cancel connection' : 'Disconnect'}</button>
     </div>
-    <p className="settings-hint">System OpenSSH uses your host alias, known_hosts and SSH agent. Authenticate in a terminal first; install the compatible companion as ~/.strand/bin/strand on the host.</p>
-    <div className="remote-repo-context" role="status">{state.address || 'No remote repository'} · <strong>{state.health}</strong> · Read only · Git and file reads execute on the SSH host</div>
+    <details className="settings-disclosure"><summary>Connection setup</summary><p className="settings-hint">Sign in to this host with SSH from your terminal first. Install the compatible Strand command at ~/.strand/bin/strand on that computer. Strand uses your existing SSH settings and trusted hosts.</p></details>
+    <div className="remote-repo-context" role="status">{state.address || 'No remote repository'} · <strong>{state.health}</strong> · Read only</div>
     {state.error && <p className="remote-repo-error" role="alert">{state.error}</p>}
     <div className="remote-repo-controls">
-      <label>View <select className="clone-input" value={state.mode} disabled={!canRead} onChange={(event) => void state.selectMode(event.target.value as typeof state.mode)}>
+      <label>View <Select className="clone-input" value={state.mode} disabled={!canRead} onChange={(event) => void state.selectMode(event.target.value as typeof state.mode)}>
         <option value="status">Status</option><option value="diff">Changes since HEAD</option><option value="log">Recent history</option><option value="review">Review since…</option><option value="files">Files</option>
-      </select></label>
+      </Select></label>
       {state.mode === 'review' && <><input className="clone-input" aria-label="Review base revision" value={since} onChange={(event) => setSince(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void state.selectMode('review', since); } }} /><button className="btn" disabled={!canRead} onClick={() => void state.selectMode('review', since)}>Review</button></>}
       <button className="btn" disabled={!canRead} onClick={() => void state.refresh()}>Refresh</button>
-      {state.snapshot && <span>{state.snapshot.meta.branch} · {state.snapshot.status.length} status entries</span>}
+      {state.snapshot && <span>{state.snapshot.meta.branch} · {state.snapshot.status.length} changed files</span>}
     </div>
     <div className="remote-repo-body" aria-busy={state.busy}>
       {state.mode === 'log' ? <div className="remote-repo-scroll">{state.result?.kind === 'log' && state.result.data.map((commit) => <p key={commit.hash}><code>{commit.short_hash}</code> {commit.subject} — {commit.author_name}</p>)}</div> :
@@ -112,8 +113,8 @@ export function RemoteReposDialog({ onClose }: { onClose: () => void }) {
                 {fileError && <p role="alert">{fileError}</p>}
                 {chunk && <p>{fileBytes.length} / {chunk.total} bytes · read-only snapshot <button className="btn" disabled={fileBusy || !canRead} onClick={() => void loadFile(selected)}>Reload file</button></p>}
                 {fileBytes.includes(0) ? <p>Binary file.</p> : <pre>{new TextDecoder().decode(new Uint8Array(fileBytes))}</pre>}
-                {chunk && chunk.next_offset < chunk.total && fileBytes.length < 1_048_576 && <button className="btn" disabled={fileBusy || !canRead} onClick={() => void loadFile(selected, true)}>Read next 64 KiB</button>}
-                {fileBytes.length >= 1_048_576 && chunk && chunk.next_offset < chunk.total && <p>Preview stopped at 1 MiB.</p>}
+                {chunk && chunk.next_offset < chunk.total && fileBytes.length < 1_048_576 && <button className="btn" disabled={fileBusy || !canRead} onClick={() => void loadFile(selected, true)}>Load more of this file</button>}
+                {fileBytes.length >= 1_048_576 && chunk && chunk.next_offset < chunk.total && <p>Only the first 1 MB is shown.</p>}
                 {fileBusy && <p role="status">Reading file…</p>}
               </>}
             </div>

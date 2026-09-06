@@ -1,6 +1,7 @@
 # Repositories over SSH
 
-Use **Open repository on SSH host…** in the command palette or the **SSH** topbar button
+Use **Open repository over SSH…** in the command palette or **Open over SSH…**
+in the repository `+` menu
 to inspect a repository on another machine. This first version is read only:
 Git and file reads run on that host, and the inspector shows its address and
 connection state throughout. Your local repository stays open behind it.

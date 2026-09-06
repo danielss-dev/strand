@@ -520,7 +520,7 @@ export interface MaintenanceOutcome {
 
 export interface RepoActivityEntry extends MaintenanceOutcome {
   id: string;
-  task: MaintenanceTask;
+  task: MaintenanceTask | 'commit' | 'amend';
   started_at: number;
 }
 

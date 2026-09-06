@@ -1,3 +1,5 @@
+import { repoActivity } from '../lib/db';
+import { openRepositoryTool } from '../lib/repositoryTools';
 import { SigningChoice } from '../components/SigningChoice';
 import { emptyCommitDraft, useCommitDrafts } from '../stores/commitDrafts';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -1795,9 +1797,15 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
     if (!trimmed || useCommitDrafts.getState().drafts[draftPath]?.submitting) return;
     if (!canCommit && !amend) return;
     patchDraft(draftPath, { submitting: true, error: null, output: '' });
+    const startedAt = Date.now();
     try {
       const result = await commit(trimmed, body.trim() || null, amend, signing);
-      patchDraft(draftPath, { subject: '', body: '', amend: false, signing: 'inherit', output: result.output });
+      patchDraft(draftPath, { subject: '', body: '', amend: false, signing: 'inherit', output: '' });
+      if (result.output) await repoActivity.append(draftPath, {
+        id: crypto.randomUUID(), task: amend ? 'amend' : 'commit', started_at: startedAt,
+        command: amend ? 'git commit --amend' : 'git commit', output: result.output,
+        success: true, duration_ms: Date.now() - startedAt,
+      }).catch(() => patchDraft(draftPath, { output: result.output, error: 'Commit completed, but its output could not be saved to activity history.' }));
     } catch (e) {
       console.error('commit failed', e);
       setCommitError(`Commit failed: ${gitErrorHint(e)}`);
@@ -1884,6 +1892,11 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
             </span>
           )}
         </button>
+        {activePath && <SigningChoice key={activePath} path={activePath} kind="commit" compact value={signing} extraItems={[
+            { label: 'Apply patch or mailbox…', onSelect: () => openRepositoryTool({ path: activePath, tool: 'patch' }) },
+            { label: 'Activity history…', onSelect: () => openRepositoryTool({ path: activePath, tool: 'activity' }) },
+          ]}
+          disabled={submitting} onChange={(signing) => patchDraft(draftPath, { signing })} />}
       </div>
       <textarea
         ref={bodyRef}
@@ -1909,8 +1922,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
           </div>
         </div>
       )}
-      {activePath && <SigningChoice key={activePath} path={activePath} kind="commit" value={signing}
-        disabled={submitting} onChange={(signing) => patchDraft(draftPath, { signing })} />}
+
       {output && <details className="cb-output"><summary>Commit output</summary><pre>{output}</pre></details>}
       {commitError && (
         <div className="cb-error" role="alert">

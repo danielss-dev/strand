@@ -2771,3 +2771,20 @@ Preserve that distinction in settings displays and scoped editing.
 LFS guards must run before sparse-index mutation dispatch. Refresh an attached
 memory-only sparse index through `sparse_read_index`, never `Index::read` from
 disk; keep one process-tree cancellation helper when composing Git workflows.
+
+### 2026-09-06 — Place occasional Git tools with their context
+
+The user rejected the accumulated UI controls in PRs #115–122. Keep the main
+work surfaces quiet: put repository identity/signing in Repository settings,
+per-commit signing beside Commit, file scope under Files, Git-flow under Branches,
+imports/exports under repository menus, and PR actions beside the content they
+affect. User actions has a separate settings page with individual argument rows;
+do not expose JSON editing for ordinary configuration. Keep advanced setup and
+source diagnostics collapsed. Menus must capture their exact repository/ref/file,
+including inactive repository tabs, and remain reachable by keyboard and palette.
+
+Check shared dialog placement against the actual backdrop offset: the current
+backdrop starts 96px below the window top. A max-height of 88vh or 100vh minus
+64px can clip the footer. Reserve that offset plus bottom space, let the body
+scroll, and prevent header/footer and form controls from shrinking. Verify both
+1280×800 and 880×600. Readable text alone does not establish a readable layout.

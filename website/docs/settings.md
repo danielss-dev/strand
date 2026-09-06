@@ -1,6 +1,6 @@
 # Settings
 
-Settings → Integrations → **Install strand command** installs the bundled
+Settings → Integrations → **Command line** → **Install strand command** installs the bundled
 companion in `~/.local/bin`. Windows adds that directory to your user PATH;
 open a new terminal afterward. On macOS/Linux, add that directory to your
 shell PATH if it is missing. The palette's **Install strand command…** opens
@@ -37,7 +37,7 @@ Review includes recent HEAD history and reports its before/after HEAD because
 concurrent repository changes can occur between reads. No command stages,
 commits, fetches, pushes or invokes a pager.
 
-Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; Git identity, signing, and Azure DevOps Server profiles have explicit save actions.
+Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The sections are Appearance, Terminal, Diff, Keyboard, Git, Hosting, Integrations, User actions, AI, Plugins, Updates, and Privacy. Most changes apply live; Git identity, signing, and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.
 
@@ -76,7 +76,12 @@ Rebindable defaults include the command palette (`Mod+K`), destinations `Mod+1`�
 
 Below the rebindable list, a **Context shortcuts** card documents the fixed, surface-local keys — things like `F6` to focus Work tabs, `Mod+Enter` to commit from the message box, `Mod+F` to search within the current file or diff, `/` to search commits, and `j`/`k` to step files in the Review queue and Local Changes. These are not rebindable; the card is a reference so you can look them up without leaving Settings.
 
-## Git
+## Repository settings
+
+Right-click a repository tab or rail icon and choose **Repository settings…**, or use
+**Repository settings: Identity and signing** in Quick Launch. These settings apply
+to that repository. Identity and Signing have separate tabs; configuration sources
+and key details expand when needed.
 
 - **Repository identity** — The active checkout’s effective author and committer,
   with the scope and source of each name/email. **Save name/email** and
@@ -89,28 +94,31 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
   overrides for commit/tag signing defaults, annotated-tag signing, signing
   format (OpenPGP, SSH, or X.509), key ID/path, and SSH allowed signers file.
   Removing an override restores inheritance; global and included files are
-  unchanged. The palette action **Settings: Repository identity and signing**
-  opens this section.
+  unchanged. Signing defaults use **Enabled**, **Disabled**, or **Use existing Git setting**.
+## Git
+
 - **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. These defaults apply to Git outside Strand too; repository, worktree, conditional and environment overrides can take precedence.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
 Network operations, commit/amend and tag creation use your system Git.
 Credentials, signing programs and GPG/SSH agents come from your existing setup.
 Strand stores key references, never private keys or passphrases. SSH verification
-uses Git’s allowed signers file. Commit and tag forms offer **Inherit Git config**,
+uses Git’s allowed signers file. Commit and tag options offer **Use Git setting**,
 **Sign this commit/tag**, and **Do not sign this commit/tag**; these choices apply
 only to that operation. Signed and unsigned commits honor hooks (including
 `core.hooksPath`), rejection and message rewrites. A rejection preserves your
-checkout’s draft and signing choice; expandable commit output retains bounded
-hook diagnostics.
+checkout’s draft and signing choice. Successful hook output is saved in the
+repository’s **Activity history…**. Commit options sits beside the Commit button;
+tag signing is under **Advanced options**.
 
 ## Hosting
 
-The **GitLab, Bitbucket Cloud and custom GitHub hosts** section provides setup
-instructions and lists the active repository's remotes. For a custom host,
-select **GitHub / Enterprise** or **GitLab**, then refresh Pull Requests.
-**Automatic** restores public-host detection. The selection saves immediately
-in this repository's Git configuration and does not change the remote URL.
+Expand **GitLab, Bitbucket and GitHub Enterprise setup** for sign-in instructions.
+For a custom host, right-click its remote in the Git sidebar, choose **Edit URLs…**,
+and expand **Advanced**. Select **GitHub / Enterprise** or **GitLab**, then click
+**Save provider** and refresh Pull Requests. **Detect automatically** restores
+public-host detection. This saves repository Git configuration without changing
+the remote URL.
 The palette command **Settings: Hosting** opens this section directly.
 
 Sign in to GitLab with `glab auth login --hostname HOST`, or to GitHub
@@ -205,14 +213,14 @@ Configure Work's embedded terminals separately from external applications.
 - **External editor** — a dropdown of per-platform presets, None, or "Custom command…". Custom commands are templates with `{file}`, `{line}`, and `{dir}` placeholders, and a **Test** button lets you verify the command before relying on it.
 - **Terminal** — the same style of picker; the template takes a `{dir}` placeholder and opens the repository folder.
 
-### User actions
+## User actions
 
-In **Settings → Integrations → User actions**, create, edit, or delete personal
+In **Settings → User actions**, create, edit, or delete personal
 commands. Quick Launch (`Mod+K`) also offers **Manage user actions…**.
 Give each action a name, a context (repository, selected branch/tag, or selected
-working-tree file), an executable, and arguments as a JSON array of strings.
-Each string is exactly one argument; spaces, quotes, and shell metacharacters
-in substituted paths remain inside that argument. An empty string is allowed.
+working-tree file), a command or program, and one argument per row. Use
+**Add argument** or **Remove** to edit the list. Spaces, quotes and shell
+metacharacters stay within their row; a blank row passes an empty argument.
 
 Use an installed command such as `git`, or an absolute executable path without
 surrounding quotes. Windows actions require a native `.exe`; to run a script,
@@ -236,16 +244,21 @@ the selected file's parent. Prefer `{file}` with the latter choice.
 For example, a **File** action named “Inspect file history” can use executable
 `git`, repository working directory, and arguments:
 
-```json
-["log", "-5", "--oneline", "--", "{relativeFile}"]
+```text
+log
+-5
+--oneline
+--
+{relativeFile}
 ```
 
 Use `--` before path operands where the executable supports it. Git actions
 include Strand's `core.fsmonitor` and pager overrides in the displayed argument
 list; no other arguments are added implicitly.
 
-Open **User actions…** on a repository tab, branch/tag row, or single file in
-the Files tree. The row you invoke owns the target, including an inactive
+Open **Actions** on a repository tab, branch/tag row, or single file in
+the Files tree, then choose the saved action directly. **Manage user actions…**
+opens the dedicated settings page. The row you invoke owns the target, including an inactive
 repository tab. Historical files, directories, and multiple file selections
 do not offer working-tree file actions. Palette entries named **User action:
 …** use the active Work file or explicitly selected branch/tag in All Commits;

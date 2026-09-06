@@ -83,7 +83,7 @@ alternate retry does not change the provider selected in Settings.
 ## Browse PRs
 
 The GitHub inbox initially loads 100 open, closed, and merged pull requests.
-Choose **Load more pull requests** to continue through older pages. The loaded
+Use **Load more pull requests** in the inbox footer to continue through older pages. The loaded
 count and total stay visible; search and filters apply to loaded rows. Azure
 DevOps retains its existing latest-100 inbox.
 Use the local search field to match a PR number, title, author, source branch,
@@ -107,10 +107,10 @@ toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
 
 GitHub detail also loads reviews, threads, replies, comments, commits and checks
-in bounded pages. **Partial data** lists the connections with more to load;
-counts describe loaded items, and incomplete checks cannot report readiness.
-Choose **Load more** to fetch the next page, or **Cancel loading** to stop its
-read. Loaded items and drafts survive a failed or cancelled page. A source push
+in bounded pages. **Load more checks/reviews/comments/commits** appears beside
+its section; Code offers **Load more review threads**, and each thread offers
+**Load more replies** when needed. Counts describe loaded items, and incomplete
+checks cannot report readiness. Each active page request offers **Cancel**. Loaded items and drafts survive a failed or cancelled page. A source push
 requires Refresh before continuing to prevent mixing review coordinates. Both
 actions are available through “Pull Requests: load next data page” and
 “Pull Requests: cancel loading page” in Quick Launch.
@@ -164,7 +164,7 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
-Below readiness, GitHub repositories that require a queue expose **Join merge
+In **Merge options**, GitHub repositories that require a queue expose **Join merge
 queue**, queue position when reported, and **Leave merge queue**. Other GitHub
 repositories expose **Enable auto-merge** and **Cancel auto-merge** when the
 provider permits them. Choose an allowed merge strategy before enabling.
@@ -216,11 +216,11 @@ and `End` while the tab bar is focused.
 
 ### Review tools
 
-Open **Review tools…** in the detail header. **Mark head reviewed** saves the
-currently displayed source commit on this device, independently of file viewed
-marks and review drafts. Under **Changes since review**, choose that boundary
-or **Load review commits** (GitHub) / **Load iterations** (Azure). **Compare to
-current head** shows a keyboard-navigable file list and one diff at a time.
+In the **Code** toolbar, **Mark reviewed** saves the currently displayed source
+commit on this device, independently of file viewed marks and review drafts.
+**Changes since last review…** opens a comparison dialog. Choose a saved revision
+or **Find previous reviews**, then **Show changes** for a keyboard-navigable
+file list and one diff at a time.
 Arrow keys, Home and End move through files.
 
 Comparisons use the exact two commit trees, including after a rebase or force
@@ -229,7 +229,8 @@ checking out a branch. If the provider no longer retains the old commit, the
 error leaves the boundary and previous comparison intact. A changed source
 head labels the previous result until you compare again.
 
-Choose **Unresolved feedback**, then **Load all unresolved feedback**. This
+Choose **Pull request actions → Export unresolved feedback…**, then
+**Load all unresolved feedback**. This
 explicit read traverses GitHub thread and reply pages; errors prevent a partial
 export from being presented as complete. **Cancel read** or closing the dialog
 stops further paging. Preview and **Copy feedback** include provider links,
@@ -238,10 +239,10 @@ context, and outdated/iteration markers. File-level feedback is included;
 GitHub top-level comments have no resolution state and are outside this export.
 The clipboard text is ready to paste into an external agent.
 
-Under **Suggestions**, load feedback, choose a standard suggestion block, and
-**Preview local change**. Use **Open branch in worktree…** first: the local HEAD
+On a standard suggestion block in Code, choose **Preview suggestion…**.
+The selected suggestion is checked automatically and shown as Before and After. Use **Open branch in worktree…** first: the local HEAD
 must be the exact provider source commit, and the file must have no staged or
-unstaged changes. **Apply locally** rechecks the head, comment body, range and
+unstaged changes. **Apply to working file** rechecks the head, comment body, range and
 previewed file content before writing. It preserves line endings and leaves the
 change unstaged for review. It does not submit a provider comment or commit.
 

@@ -1,3 +1,4 @@
+import { openRepositoryTool, REPOSITORY_TOOL_EVENT, type RepositoryToolRequest } from './lib/repositoryTools';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
@@ -142,6 +143,7 @@ const LfsDialog = lazy(() => import('./views/LfsDialog').then((m) => ({ default:
 const SubmoduleDialog = lazy(() => import('./views/SubmoduleDialog').then((m) => ({ default: m.SubmoduleDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
+const RepositorySettingsDialog = lazy(() => import('./views/RepositorySettingsDialog').then(m => ({ default: m.RepositorySettingsDialog })));
 const RemoteReposDialog = lazy(() => import('./views/RemoteReposDialog').then((m) => ({ default: m.RemoteReposDialog })));
 
 /** Whole-UI zoom bounds + step for the browser-style Ctrl/⌘ +/− shortcuts.
@@ -357,7 +359,13 @@ export function App() {
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [remoteReposOpen, setRemoteReposOpen] = useState(false);
-  const remoteHealth = useRemoteRepos((state) => state.health);
+  const [repositorySettingsPath, setRepositorySettingsPath] = useState<string | null>(null);
+  const [repositorySettingsSection, setRepositorySettingsSection] = useState<'identity' | 'signing'>('identity');
+  const [lfsFile, setLfsFile] = useState('');
+  const [toolActivityPath, setToolActivityPath] = useState<string | null>(null);
+  const [interchangeMode, setInterchangeMode] = useState<'patch' | 'bundle' | 'export'>('patch');
+  const [toolRevision, setToolRevision] = useState<string | undefined>();
+  const [bisectRevision, setBisectRevision] = useState<{ revision: string; rating: 'good' | 'bad' } | undefined>();
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
   const [publishRepoOpen, setPublishRepoOpen] = useState(false);
@@ -543,9 +551,31 @@ export function App() {
     setSettingsOpen(true);
   }, []);
   useEffect(() => {
-    const open = () => openSettingsAt('git');
+    const open = () => setRepositorySettingsPath(useRepo.getState().activePath);
+    const ssh = () => setRemoteReposOpen(true);
+    const actions = () => openSettingsAt('user-actions');
+    const tool = (event: Event) => {
+      const request = (event as CustomEvent<RepositoryToolRequest>).detail;
+      const { path, tool, revision, rating } = request;
+      if (tool === 'settings' || tool === 'signing') { setRepositorySettingsSection(tool === 'signing' ? 'signing' : 'identity'); setRepositorySettingsPath(path); }
+      else if (tool === 'lfs') { setLfsFile(request.file ?? ''); setLfsAction({ repoPath: path, action: request.lfsAction ?? 'environment' }); }
+      else if (tool === 'history') setCloneScopePath(path);
+      else if (tool === 'activity') setToolActivityPath(path);
+      else if (tool === 'gitflow') setGitflowPath(path);
+      else if (tool === 'bisect') { setBisectRevision(revision && rating ? { revision, rating } : undefined); setBisectPath(path); }
+      else if (tool === 'notes' || tool === 'replace') { setToolRevision(revision); setAdvancedRefs({ path, mode: tool }); }
+      else { setInterchangeMode(tool); setInterchangePath(path); }
+    };
     window.addEventListener('strand:open-git-settings', open);
-    return () => window.removeEventListener('strand:open-git-settings', open);
+    window.addEventListener('strand:open-ssh', ssh);
+    window.addEventListener('strand:manage-user-actions', actions);
+    window.addEventListener(REPOSITORY_TOOL_EVENT, tool);
+    return () => {
+      window.removeEventListener('strand:open-git-settings', open);
+      window.removeEventListener('strand:open-ssh', ssh);
+      window.removeEventListener('strand:manage-user-actions', actions);
+      window.removeEventListener(REPOSITORY_TOOL_EVENT, tool);
+    };
   }, [openSettingsAt]);
 
   useEffect(() => {
@@ -1261,9 +1291,11 @@ export function App() {
     push: () => { void onPush(); },
     openInEditor,
     openInTerminal,
-    openInterchange: () => { const path = useRepo.getState().activePath; if (path) setInterchangePath(path); },
+    openInterchange: (mode = 'patch') => { const path = useRepo.getState().activePath; if (path) openRepositoryTool({ path, tool: mode }); },
+    openRepositorySettings: () => setRepositorySettingsPath(useRepo.getState().activePath),
+    openLfs: () => { const path = useRepo.getState().activePath; if (path) setLfsAction({ repoPath: path, action: 'environment' }); },
     openGitflow: () => { const path = useRepo.getState().activePath; if (path) setGitflowPath(path); },
-    openAdvancedRefs: () => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode: 'notes' }); },
+    openAdvancedRefs: (mode = 'notes') => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode }); },
     openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
   };
   const hasRepo = Boolean(meta) && !remoteReposOpen;
@@ -1742,7 +1774,7 @@ export function App() {
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
       { id: 'install-cli', label: 'Install strand command…', group: 'Actions', keywords: 'terminal PATH launcher companion', run: () => { setSettingsSection('integrations'); setSettingsOpen(true); } },
-      { id: 'ssh-repositories', label: 'Open repository on SSH host…', group: 'Actions', keywords: 'remote daemon read status log diff review', run: () => setRemoteReposOpen(true) },
+      { id: 'ssh-repositories', label: 'Open repository over SSH…', group: 'Actions', keywords: 'remote daemon read status log diff review', run: () => setRemoteReposOpen(true) },
       { id: 'ssh-reconnect', label: 'Reconnect SSH repository…', group: 'Actions', run: () => setRemoteReposOpen(true) },
       { id: 'ssh-disconnect', label: 'Disconnect SSH repository', group: 'Actions', run: () => { void useRemoteRepos.getState().disconnect(); } },
       { id: 'init',    label: 'Initialize repository…', group: 'Actions', keywords: 'new create git init local repository', run: () => setInitRepoOpen(true) },
@@ -2016,16 +2048,18 @@ export function App() {
           : []),
         { id: 'publish-repository', label: 'Publish repository…', group: 'Actions', keywords: 'create hosted github gitlab bitbucket repository account organization visibility initial push', run: () => setPublishRepoOpen(true) },
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
-        { id: 'git-interchange', label: 'Patches, mailboxes & bundles…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); setInterchangePath(meta.path); } },
+        { id: 'git-interchange', label: 'Apply patch or mailbox…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); openRepositoryTool({path:meta.path,tool:'patch'}); } },
+        { id: 'git-import-bundle', label: 'Import bundle…', group: 'Actions', keywords: 'import verify git bundle', run: () => openRepositoryTool({path:meta.path,tool:'bundle'}) },
+        { id: 'git-export-bundle', label: 'Export bundle…', group: 'Actions', keywords: 'export git bundle history', run: () => openRepositoryTool({path:meta.path,tool:'export'}) },
         { id: 'git-notes', label: 'Git notes…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'notes' }); } },
-        { id: 'git-replace', label: 'Replace refs…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'replace' }); } },
-        { id: 'git-retarget', label: 'Retarget tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'retarget' }); } },
-        { id: 'git-reannotate', label: 'Re-annotate tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'reannotate' }); } },
+        { id: 'git-replace', label: 'Replacement refs…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'replace' }); } },
+        { id: 'git-retarget', label: 'Change tag target…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'retarget' }); } },
+        { id: 'git-reannotate', label: 'Edit tag message…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'reannotate' }); } },
         { id: 'gitflow', label: 'Git-flow workflows…', group: 'Actions', keywords: 'AVH feature release hotfix start finish resume configuration', run: () => { setPaletteOpen(false); setGitflowPath(meta.path); } },
-        { id: 'git-bisect', label: 'Guided bisect…', group: 'Actions', keywords: 'good bad skip regression culprit test resume reset', run: () => { setPaletteOpen(false); setBisectPath(meta.path); } },
+        { id: 'git-bisect', label: 'Find regression…', group: 'Actions', keywords: 'bisect good bad skip regression culprit test resume reset', run: () => { setPaletteOpen(false); setBisectPath(meta.path); } },
 
         { id: 'clone-scope', label: 'Repository history and downloads…', group: 'Actions', keywords: 'clone shallow partial filter deepen unshallow single branch', run: () => setCloneScopePath(meta.path) },
-        { id: 'sparse-checkout', label: 'Sparse checkout…', group: 'Actions', keywords: 'cone directories select inspect change disable excluded sparse index', run: () => setSparsePath(meta.path) },
+        { id: 'sparse-checkout', label: 'Choose checked-out folders…', group: 'Actions', keywords: 'sparse checkout cone directories select inspect change disable excluded sparse index', run: () => setSparsePath(meta.path) },
 
         ...SUBMODULE_ACTIONS.map(([action, label]) => ({ id: `submodule-${action}`, label: `Submodules: ${label}…`, group: 'Actions', keywords: 'submodule lifecycle url nested status add remove deinit sync', run: () => { setPaletteOpen(false); setSubmoduleDialog({ repoPath: meta.path, path: '', action }); } } satisfies PaletteAction)),
         ...LFS_ACTIONS.map(([action, label]) => ({ id: `lfs-${action}`, label: `Git LFS: ${label}…`, group: 'Actions', keywords: 'large file storage lfs objects filters patterns transfers locks', run: () => { setPaletteOpen(false); setLfsAction({ repoPath: meta.path, action }); } } satisfies PaletteAction)),
@@ -2101,7 +2135,8 @@ export function App() {
     base.push(
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
-      { id: 'settings-git', label: 'Settings: Repository identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => openSettingsAt('git') },
+      { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email', run: () => openSettingsAt('git') },
+      ...(meta ? [{ id: 'settings-git', label: 'Repository settings: Identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => setRepositorySettingsPath(meta.path) } satisfies PaletteAction] : []),
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-hosting', label: 'Settings: Hosting', group: 'Actions', keywords: 'github enterprise custom host gitlab bitbucket azure provider authentication account', run: () => openSettingsAt('hosting') },
       { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
@@ -2298,8 +2333,6 @@ export function App() {
       <PullRequestMonitor />
       <div className="strand-window">
         <Topbar
-          onOpenRemote={() => setRemoteReposOpen(true)}
-          remoteHealth={remoteHealth}
           onOpenPalette={() => setPaletteOpen(true)}
           onFetch={onFetch}
           onPull={onPull}
@@ -2337,7 +2370,6 @@ export function App() {
           onOpenRecent={openByPath}
           onClone={() => setCloneOpen(true)}
           onCloneScope={() => { if (meta) setCloneScopePath(meta.path); }}
-          onSparseCheckout={() => { if (meta) setSparsePath(meta.path); }}
           onCustomize={openIconDialog}
           onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
           onWorktreeReview={reviewWorktreeTab}
@@ -2386,7 +2418,6 @@ export function App() {
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onManageRemote={(mode) => setRemoteDialog(mode)}
-                onManageLfs={() => { if (meta) setLfsAction({ repoPath: meta.path, action: 'environment' }); }}
                 onManageSubmodules={(path = '', action = 'inspect') => { if (meta) setSubmoduleDialog({ repoPath: meta.path, path, action }); }}
                 onRenameBranch={(name) => setRenameBranchDialog({ name })}
                 onManageBranchNetwork={(mode) => setBranchNetworkDialog(mode)}
@@ -2557,10 +2588,12 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
-      {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} path={interchangePath} onClose={() => setInterchangePath(null)} /></Suspense>}
+      {repositorySettingsPath && <Suspense fallback={null}><RepositorySettingsDialog key={repositorySettingsPath} path={repositorySettingsPath} initialSection={repositorySettingsSection} onClose={() => { setRepositorySettingsPath(null); setRepositorySettingsSection('identity'); }} /></Suspense>}
+      {toolActivityPath && <MaintenanceDialog activityOnly key={toolActivityPath} path={toolActivityPath} onClose={() => setToolActivityPath(null)} onToast={showToast} />}
+      {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} initialMode={interchangeMode} path={interchangePath} onClose={() => { setInterchangePath(null); setInterchangeMode('patch'); }} /></Suspense>}
       {gitflowPath && <Suspense fallback={null}><GitflowDialog key={gitflowPath} path={gitflowPath} onClose={() => setGitflowPath(null)} /></Suspense>}
-      {advancedRefs && <Suspense fallback={null}><AdvancedRefsDialog key={advancedRefs.path} path={advancedRefs.path} initialMode={advancedRefs.mode} initialTag={advancedRefs.tag} onClose={() => setAdvancedRefs(null)} /></Suspense>}
-      {bisectPath && <Suspense fallback={null}><BisectDialog key={bisectPath} path={bisectPath} onClose={() => setBisectPath(null)} /></Suspense>}
+      {advancedRefs && <Suspense fallback={null}><AdvancedRefsDialog key={advancedRefs.path} path={advancedRefs.path} initialMode={advancedRefs.mode} initialTag={advancedRefs.tag} initialRevision={toolRevision} onClose={() => { setAdvancedRefs(null); setToolRevision(undefined); }} /></Suspense>}
+      {bisectPath && <Suspense fallback={null}><BisectDialog key={bisectPath} path={bisectPath} initialRevision={bisectRevision} onClose={() => { setBisectPath(null); setBisectRevision(undefined); }} /></Suspense>}
 
       {userActionRequest && (
         <UserActionDialog key={userActionRequest.key} request={userActionRequest}
@@ -2568,7 +2601,7 @@ export function App() {
           onManage={() => { setUserActionRequest(null); openSettingsAt('user-actions'); }} />
       )}
 
-      {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} onClose={() => setLfsAction(null)} />}
+      {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} initialValue={lfsFile} onClose={() => { setLfsAction(null); setLfsFile(''); }} />}
       {submoduleDialog && <SubmoduleDialog path={submoduleDialog.repoPath} initialPath={submoduleDialog.path} initialAction={submoduleDialog.action} onClose={() => setSubmoduleDialog(null)} />}
 
       {cloneScopePath && <CloneScopeDialog key={cloneScopePath} path={cloneScopePath}
@@ -2859,8 +2892,8 @@ function OpBanner({ onToast, onOpenMailbox, onOpenBisect }: { onToast: (msg: str
   const hasConflicts = useMemo(() => status.some((s) => s.kind === 'CONFLICTED'), [status]);
 
   if (!operation) return null;
-  if (operation === 'bisect') return <div className="op-banner" role="status"><span className="op-label">Bisect in progress</span><span className="op-hint">Test the selected revision, then rate it.</span><button className="btn" onClick={onOpenBisect}>Good / bad / skip / reset bisect…</button></div>;
-  if (operation === 'mailbox') return <div className="op-banner" role="status"><span className="op-label">Mailbox in progress</span><span className="op-hint">Resolve and stage conflicts, then continue the mailbox.</span><button className="btn" onClick={onOpenMailbox}>Continue / skip / abort mailbox…</button></div>;
+  if (operation === 'bisect') return <div className="op-banner" role="status"><span className="op-label">Bisect in progress</span><span className="op-hint">Test the selected revision, then rate it.</span><button className="btn" onClick={onOpenBisect}>Resume bisect…</button></div>;
+  if (operation === 'mailbox') return <div className="op-banner" role="status"><span className="op-label">Mailbox in progress</span><span className="op-hint">Resolve and stage conflicts, then continue the mailbox.</span><button className="btn" onClick={onOpenMailbox}>Resume mailbox…</button></div>;
 
   const onAbort = async () => {
     if (busy) return;

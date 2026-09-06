@@ -71,17 +71,21 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Repository settings** — identity and signing defaults live in each repository’s
+  context menu. Commit options holds per-commit signing; successful hook output
+  goes to Activity history. Tag signing stays under Advanced options.
+
 - **Read-only command line companion** — `strand status/log/diff/review`
   works without the desktop; `--json` emits a versioned typed payload and
   `strand schema` describes it. Full-file review context uses the same engine
-  as the app. Settings → Integrations installs `strand` in
+  as the app. Settings → Integrations → Command line installs `strand` in
   your user command directory. `strand PATH` opens and focuses a repository
   in the existing desktop instance, including paths with spaces.
 
 - **More hosting providers** — GitLab merge requests and Bitbucket Cloud pull
   requests use the review workspace, with paged lists, comments, inline threads
   and supported review decisions. GitHub Enterprise/custom hosts use their own
-  CLI authentication scope; select custom adapters in Settings → Hosting.
+  CLI authentication scope; select a custom provider in Edit remote → Advanced.
   GitLab merges guard the reviewed head and follow project settings. Bitbucket
   merge, GitLab request-changes and Bitbucket draft transitions remain
   provider-site actions. Bitbucket Server is not supported.
@@ -91,18 +95,21 @@ the resolved app appearance automatically.
   Interrupted creation and remote setup can be resumed from the same dialog.
 
 - **Personal user actions** — define repository, ref, and working-tree file
-  commands in Settings → Integrations. Menu and palette entries open an exact
+  commands in Settings → User actions, with one argument per row. Contextual
+  Actions menus and palette entries open an exact
   executable/argument/working-directory preview, with bounded output and cancellation.
 
 - **Repository size controls** — clone a chosen branch with optional depth,
   single-branch fetching, on-demand file contents (`blob:none`), and recursive
   submodules. Inspect clone scope and download more or full history from the
-  network menu or palette. Sparse checkout selects cone directories, distinguishes
-  excluded files from deletions, and preserves external sparse indexes on reads.
+  Fetch submenu or palette. Files → File actions opens folder selection for
+  sparse checkout. Excluded files remain distinct from deletions, and reads
+  preserve external sparse indexes.
   Selection changes refuse dirty trees and ignored-file removal.
 
 - **Git LFS** — repository setup, tracking patterns, object/transfer status,
-  downloads/uploads and server locks from the sidebar and command palette.
+  downloads/uploads and server locks from repository menus and the command palette.
+  File menus prefill a tracking pattern or lock target.
   Whole-file staging, checkout, discard and hard reset honor LFS filters;
   history is never migrated.
 - **Submodule lifecycle** — add, remove, deinitialize, synchronize URLs, and
@@ -209,9 +216,10 @@ the resolved app appearance automatically.
   Explicit GitHub merge queue/auto-merge and Azure auto-complete controls show
   provider capability, enable/cancel, policy state and queue position separately
   from a completed merge.
-  **Review tools** saves a reviewed head, compares exact trees across pushes or
-  rebases, exports all unresolved feedback with replies, and previews validated
-  standard suggestions before applying them to a clean local file.
+  Code’s toolbar saves a reviewed revision and compares changes since the last
+  review. The PR menu exports unresolved feedback; each suggestion offers a
+  before/after preview. Section-level controls load more discussion and checks.
+  Automatic merging and queue controls live in Merge options.
   Every GitHub or Azure PR can open its exact provider head in a new worktree
   without changing local refs or `FETCH_HEAD`. Active PRs can be closed from a
   confirmed overflow action. Closed PRs can be reopened;
@@ -289,8 +297,8 @@ the resolved app appearance automatically.
 - **Advanced Git refs** — inspect and edit Git notes and replacement refs;
   retarget or re-annotate existing unsigned tags with old/new targets and
   optional remote publication checks. External edits require a fresh review.
-- **Guided bisect** — start from known good/bad revisions, test and mark
-  good/bad/skip, inspect remaining candidates and the culprit, resume external
+- **Guided bisect** — use a commit’s Find regression menu to choose working
+  and broken revisions; test and mark working/broken/skip, inspect remaining candidates and the culprit, resume external
   sessions, and reset to the original checkout while protecting test edits.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
@@ -349,7 +357,8 @@ the resolved app appearance automatically.
   Review findings are structured, path/line-validated, stale-diff guarded, and
   require explicit acceptance before they become notes; repository files are
   never changed by an AI review.
-- **Read-only SSH repositories** — inspect remote status, history, full-context
+- **Read-only SSH repositories** — open from the repository `+` menu or palette
+  to inspect remote status, history, full-context
   reviews and bounded file snapshots through system OpenSSH, with watching,
   connection health, cancellation and reconnect. Requires a manually installed
   compatible companion on the POSIX host; see the

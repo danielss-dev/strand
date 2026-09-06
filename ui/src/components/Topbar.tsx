@@ -11,8 +11,6 @@ import { useRepo } from '../stores/repo';
 import type { PullMode, PushMode } from '../lib/types';
 
 interface Props {
-  onOpenRemote: () => void;
-  remoteHealth: string;
   onOpenPalette: () => void;
   onFetch: (prune?: boolean) => void;
   onPull: (mode?: PullMode, autostash?: boolean) => void;
@@ -45,7 +43,6 @@ interface Props {
   /** Open the clone dialog (tabs-mode `+` menu). */
   onClone: () => void;
   onCloneScope: () => void;
-  onSparseCheckout: () => void;
   /** Open the icon-customization dialog for a repo tab. */
   onCustomize: (path: string) => void;
   /** Open the workspace manager dialog (tabs-mode switcher). */
@@ -60,8 +57,6 @@ interface Props {
 }
 
 export function Topbar({
-  onOpenRemote,
-  remoteHealth,
   onOpenPalette,
   onFetch,
   onPull,
@@ -88,7 +83,6 @@ export function Topbar({
   onOpenRecent,
   onClone,
   onCloneScope,
-  onSparseCheckout,
   onCustomize,
   onManageWorkspaces,
   onWorktreeReview,
@@ -124,6 +118,7 @@ export function Topbar({
         },
         { label: 'Fetch and prune', onSelect: () => onFetch(true) },
         { label: 'Fetch without pruning', onSelect: () => onFetch(false) },
+        { label: 'Download more history…', onSelect: onCloneScope },
         {
           label: 'Set repository default',
           submenu: [
@@ -174,9 +169,7 @@ export function Topbar({
         { label: 'Force with lease…', icon: 'arrow-up', danger: true, onSelect: onForcePush },
       ],
     },
-    { label: 'Repository history and downloads…', disabled: networkBusy, onSelect: onCloneScope },
-    { label: 'Sparse checkout…', disabled: networkBusy, onSelect: onSparseCheckout },
-  ], [fetchPrune, networkBusy, onCloneScope, onSparseCheckout, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetFetchPrune, onSetPullAutostash, onSetPullMode, pullAutostash, pullMode, pullModeLabel]);
+  ], [fetchPrune, networkBusy, onCloneScope, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetFetchPrune, onSetPullAutostash, onSetPullMode, pullAutostash, pullMode, pullModeLabel]);
 
   const inTauri = isTauri();
   // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:
@@ -335,7 +328,6 @@ export function Topbar({
         <kbd>{platform === 'mac' ? '⌘K' : 'Ctrl K'}</kbd>
       </button>
 
-      <button type="button" className="btn" onClick={onOpenRemote} title={`SSH repositories · ${remoteHealth}`} aria-label={`SSH repositories · ${remoteHealth}`}>SSH{remoteHealth !== 'disconnected' ? ` · ${remoteHealth}` : ''}</button>
       {showWinControls && <WinControls functional={inTauri} />}
     </div>
   );
