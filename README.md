@@ -253,6 +253,19 @@ the resolved app appearance automatically.
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
   pause/conflict Continue / Abort.
+- **Patch interchange** — preview affected paths and validate patch imports
+  into the working tree, index, or both; import mailboxes with original authors
+  and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
+  import into a new branch, and export full or incremental bundles.
+- **Git-flow workflows** — opt-in Git-flow AVH detection and repository
+  configuration, reviewed feature/release/hotfix start and finish, streamed
+  output, and merge recovery that retains already completed stages.
+- **Advanced Git refs** — inspect and edit Git notes and replacement refs;
+  retarget or re-annotate existing unsigned tags with old/new targets and
+  optional remote publication checks. External edits require a fresh review.
+- **Guided bisect** — start from known good/bad revisions, test and mark
+  good/bad/skip, inspect remaining candidates and the culprit, resume external
+  sessions, and reset to the original checkout while protecting test edits.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
   resizable commit detail panel with lazy GPG/SSH/X.509 verification,

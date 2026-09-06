@@ -17,7 +17,7 @@ export interface RepoMeta {
    * Multi-step history op paused mid-flight, or `null` in a normal state.
    * Drives the in-progress banner + Abort affordance.
    */
-  operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | null;
+  operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | 'mailbox' | 'bisect' | null;
   /**
    * The shared git dir (`commondir`), identical for every worktree of the same
    * repository. The tab strip groups worktree tabs on this value.

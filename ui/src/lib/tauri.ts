@@ -1,4 +1,9 @@
+import type { FlowAction, FlowConfig, FlowKind, FlowOutcome, FlowPlan, FlowState, FlowTool } from './gitflow';
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
+import type { BisectAction, BisectState, BisectOutcome } from './bisect';
+import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
+
 import type { UserAction, ActionContext, ActionPreview, ActionOutcome } from './userActions';
 
 import type {
@@ -128,6 +133,33 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoGitflowDetect: () => invoke<FlowTool>('repo_gitflow_detect'),
+  repoGitflowState: (path: string) => invoke<FlowState>('repo_gitflow_state', { path }),
+  repoGitflowConfigure: (path: string, config: FlowConfig, enabled: boolean, token: string) => invoke<FlowState>('repo_gitflow_configure', { path, config, enabled, token }),
+  repoGitflowPlan: (path: string, kind: FlowKind, action: FlowAction, name: string) => invoke<FlowPlan>('repo_gitflow_plan', { path, kind, action, name }),
+  repoGitflowRun: (path: string, plan: FlowPlan, onProgress: (output: string) => void) => {
+    const onEvent = new Channel<string>(); onEvent.onmessage = onProgress;
+    return invoke<FlowOutcome>('repo_gitflow_run', { path, plan, onEvent });
+  },
+  repoAdvancedRefs: (path: string, notesRef: string) => invoke<AdvancedRefs>('repo_advanced_refs', { path, notesRef }),
+  repoGitNote: (path: string, notesRef: string, revision: string) => invoke<GitNote>('repo_git_note', { path, notesRef, revision }),
+  repoGitNoteWrite: (path: string, notesRef: string, object: string, expected: string | null, message: string | null) => invoke<void>('repo_git_note_write', { path, notesRef, object, expected, message }),
+  repoReplaceReview: (path: string, original: string, replacement: string) => invoke<ReplaceReview>('repo_replace_review', { path, original, replacement }),
+  repoReplaceWrite: (path: string, original: string, replacement: string | null, expected: string | null) => invoke<void>('repo_replace_write', { path, original, replacement, expected }),
+  repoTagEditReview: (path: string, name: string, target: string) => invoke<TagEditReview>('repo_tag_edit_review', { path, name, target }),
+  repoTagEdit: (path: string, name: string, target: string, expected: string, kind: TagEditKind, message: string | null) => invoke<void>('repo_tag_edit', { path, name, target, expected, kind, message }),
+  repoTagPublished: (path: string, remote: string, name: string) => invoke<PublishedTag>('repo_tag_published', { path, remote, name }),
+  repoBisectState: (path: string) => invoke<BisectState>('repo_bisect_state', { path }),
+  repoBisectStart: (path: string, good: string, bad: string, token: string) => invoke<BisectOutcome>('repo_bisect_start', { path, good, bad, token }),
+  repoBisectAction: (path: string, action: BisectAction, token: string) => invoke<BisectOutcome>('repo_bisect_action', { path, action, token }),
+  repoPatchPreview: (path: string, source: string, target: PatchTarget) => invoke<PatchPreview>('repo_patch_preview', { path, source, target }),
+  repoPatchImport: (path: string, source: string, target: PatchTarget, token: string) => invoke<InterchangeOutcome>('repo_patch_import', { path, source, target, token }),
+  repoMailboxState: (path: string) => invoke<MailboxState | null>('repo_mailbox_state', { path }),
+  repoMailboxAction: (path: string, action: 'continue' | 'skip' | 'abort', token: string) => invoke<InterchangeOutcome>('repo_mailbox_action', { path, action, token }),
+  repoBundlePreview: (path: string, source: string) => invoke<BundlePreview>('repo_bundle_preview', { path, source }),
+  repoBundleImport: (path: string, source: string, token: string, sourceRef: string, branch: string) => invoke<InterchangeOutcome>('repo_bundle_import', { path, source, token, sourceRef, branch }),
+  repoBundleExport: (path: string, destination: string, refname: string, prerequisite: string | null) => invoke<BundlePreview>('repo_bundle_export', { path, destination, refname, prerequisite }),
+
   repoUserActionPreview: (action: UserAction, context: ActionContext) =>
     invoke<ActionPreview>('repo_user_action_preview', { action, context }),
   repoUserActionRun: (action: UserAction, context: ActionContext, preview: ActionPreview, opId: string, onStarted: () => void) => {

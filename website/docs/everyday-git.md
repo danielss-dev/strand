@@ -311,6 +311,38 @@ The merge editor is a full-screen three-way view:
 
 Once every conflicted file is resolved, the banner's Continue button resumes the operation.
 
+## Patches, mailboxes and bundles
+
+Open **Repository → Patches, Mailboxes & Bundles…**, or search the same name
+in Quick Launch. Tab moves between controls; native selectors use arrow keys;
+Enter or Space activates buttons and Escape closes the dialog while idle.
+
+For a patch, choose the file and an explicit target: **Working tree only**
+(unstaged), **Index only** (staged, without changing files), or **Index and
+working tree**. **Preview and validate** lists every affected old/new path
+and checks application before enabling Apply. A changed input or repository
+requires another preview. Paths outside the repository, Git administrative
+paths and symlink patches are rejected. Patch and mailbox input is limited
+to 32 MiB; mailbox series are limited to 1,000 patches.
+
+Choose **Mailbox** for format-patch output. The preview includes authors,
+dates and subjects, and validates the series against a temporary index.
+Starting requires a clean repository and creates commits with the original
+author metadata. If direct application fails, Git tries a three-way merge.
+A paused mailbox is detected from Git’s own state, including one started in
+a terminal. Resolve and stage conflicts in Local Changes, reopen the dialog,
+then **Continue mailbox**. **Skip patch** discards the current patch changes;
+**Abort mailbox** restores the checkout before the mailbox. Both require a
+second click after explaining the discarded changes. Git errors remain visible.
+
+For a bundle, **Verify bundle** shows advertised refs, prerequisite commits
+and Git’s validation output. Choose one advertised ref and a **new local
+branch** to import; existing branches and the current checkout are preserved.
+An incremental bundle cannot be imported until this repository has its
+prerequisites. **Export bundle** takes a full ref (such as `refs/heads/main`)
+and an optional prerequisite revision to exclude. It writes a new destination
+file and reports the exported refs/prerequisites; it never overwrites a file.
+
 ## Where Strand uses your system git
 
 Strand reads repositories with its own fast engine, but the operations where your environment matters shell out to the real `git` binary and therefore honor your global and per-repo configuration:
@@ -323,3 +355,68 @@ Strand reads repositories with its own fast engine, but the operations where you
 - **External merge tool** — your configured `git mergetool`.
 
 If it works in your terminal, it works in Strand.
+
+## Git notes, replacements and tag editing
+
+Open **Repository → Git Notes, Replacements & Tag Editing**, or use the
+**Git notes**, **Replace refs**, **Retarget tag** or **Re-annotate tag** palette
+commands. Tag rows also offer retarget/re-annotate in their context menu
+(including the keyboard context-menu key).
+
+Git notes live in a selected `refs/notes/…` namespace and are separate from
+Strand's local Review notes. Inspect an object, edit its note, then Save.
+Removing a note requires confirmation. An external namespace change refuses
+Save and keeps your draft; use **Inspect note / reload draft** to review the
+current note before retrying. Notes are shared by linked worktrees.
+
+Replacement review shows the full original/replacement object IDs and types.
+Both types must match; cycles and excessive replacement chains are refused.
+Replacement-aware Git commands read the replacement; Strand's normal
+in-process graph and diff readers continue to show original objects.
+
+Tag editing shows current and proposed commit IDs, subjects and changed-file
+count. Retarget preserves an unsigned tag's annotation or lightweight kind;
+re-annotation keeps its target. Check any configured remote explicitly to
+inspect whether its tag matches the local tag. Acknowledgement applies to the
+local edit only: other repositories' copies remain unchanged and no push is
+performed. Signed tags require a new signature and are refused by this editor.
+External tag changes require reviewing the targets again.
+
+## Git-flow workflows
+
+Open **Repository → Git-flow Workflows**, or search **Git-flow workflows** in
+the command palette. The extension is optional: **Detect Git-flow AVH** checks
+the installed tool. Install Git-flow AVH separately if it is missing. Other
+Git-flow implementations are not supported by this dialog.
+
+Choose two distinct existing production/develop branches, branch prefixes and
+an optional version-tag prefix, then **Enable / save Git-flow**. This opts the
+repository into Strand's workflow and saves the reviewed shared Git settings.
+Other Git-flow options are retained and can be inspected in the dialog. Save
+refuses an external configuration change until you reload it. **Disable in
+Strand** leaves Git-flow configuration and branches intact. Per-worktree or
+symlinked config files must be managed externally.
+
+Choose Feature, Release or Hotfix and enter its exact name without the prefix.
+Existing names are suggested, including branches started from a terminal.
+**Review start** shows the base branch and commit; **Review finish / resume**
+shows source/destination commits, tag behavior and the arguments passed to Git.
+Workflow names use letters, digits, `/`, `-`, `_` and `.`. Workflows with custom
+bases must be finished using the external tool.
+
+Start and finish require a clean branch checkout. Feature finish merges into
+develop. Release/hotfix finish merges into production, creates an annotated
+version tag, then back-merges it into develop. The tag annotation is the
+reviewed `Finish release NAME` or `Finish hotfix NAME`; configured signing and
+Git/Git-flow hooks are honored. Finish retains local and remote workflow
+branches and explicitly disables fetching/pushing, squashing and feature
+rebasing for this operation. Publish or delete branches separately when ready.
+
+Progress and failures appear in the Git output panel. If a merge conflicts,
+open Local Changes, resolve and stage the files, reopen Git-flow, then
+**Review continue merge**. After that merge completes, select the original
+workflow name and review Finish again to complete remaining stages. Git-flow
+skips stages it already completed. **Review abort merge** aborts only the
+currently active merge: prior successful production merges and tags remain.
+The review becomes stale when refs, configuration, checkout or merge state
+change externally; review again before executing.

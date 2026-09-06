@@ -115,9 +115,12 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   ignored and nested files, unrecorded commits and `.gitmodules`/index
   preservation fixtures pass. Native lifecycle, keyboard/palette, module
   opening, destructive guards and cancellation checks pass.
-- ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
+- ☑ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
+  Implemented (`interchange.rs`, `InterchangeDialog`, Repository menu/palette);
+  five native fixtures and three IPC tests pass. Native WebView2 verified patch
+  targets, authored mailbox/conflict continuation and bundle import/export.
 - ☑ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
   compatibility fixtures for excluded paths, dirty trees and sparse indexes
   (`Repo::set_sparse_checkout`, `SparseCheckoutDialog`, `sparse_checkout.rs` fixtures).
@@ -127,9 +130,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   `repo_expand_history`, `CloneScopeDialog`; `docs/sparse-clone-verification.md`).
   Follow-up: verify real LFS clone checkout on Git 2.45.1 / LFS 3.5.1;
   see `docs/git-assets-validation-2026-09-06.md` for the hook rejection.
-- ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
+- ☑ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
-  execution until the manual workflow is complete.
+  execution (`bisect.rs`, `BisectDialog`, Repository menu/palette and banner;
+  three native fixtures, two frontend tests and native WebView2 keyboard,
+  external-resume, dirty-reset and original-target checks).
 - ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
   initial push, with recovery from partial failure.
@@ -137,11 +142,14 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   argv templates, exact context, palette/menu discovery, preview, bounded output
   and cancellation. (`UserActionsEditor`, `UserActionDialog`,
   `repo_user_action_preview` / `repo_user_action_run`; personally persisted settings.)
-- ☐ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
+- ☑ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
-  existing local Review notes are separate from Git notes.
-- ☐ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
+  existing local Review notes are separate from Git notes. (`AdvancedRefsDialog`,
+  locked notes updates, replace refs and compare-and-swap tag edits; native verified.)
+- ☑ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
   inspectable start/finish feature/release/hotfix flows with conflict recovery.
+  (`GitflowDialog`, AVH command review/streaming, locked opt-in configuration
+  and merge-only recovery; all three flows and stale state verified natively.)
 
 Hosted-review F06/F11–F13 stay in the Pull requests backlog below. CLI/deep-link
 F16 and remote-SSH F17 keep their existing Platform / CLI companion / Remote

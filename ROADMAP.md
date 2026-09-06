@@ -2154,7 +2154,8 @@ and Store certification remain external gates.
   never touches credentials). Designed 2026-06-12: `docs/remote-ssh.md`
   + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
   everything through the `commands.rs` seam) are active now.
-- Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
+- ☑ Git-flow (F19: opt-in Git-flow AVH detection/configuration, reviewed
+  feature/release/hotfix start/finish and recovery from partial completion)
 - ☑ Git LFS — filter-correct staging/checkout/discard/hard reset and explicit
   setup, patterns, object/transfer status and server locks (`LfsDialog`,
   `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
@@ -2164,9 +2165,14 @@ and Store certification remain external gates.
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
   retention policy, and backend justify adding it
-- Guided Git bisect
+- ☑ Guided Git bisect (F10: manual good/bad/skip, progress/culprit,
+  external-session resume, clean-tree reset and reviewed original target)
+- ☑ Advanced refs (F18: Git notes, replace refs, explicit tag retarget/re-annotation
+  with stale-write guards and remote publication checks; native desktop verified)
 - Sparse checkout (cone mode first)
-- Patch import/mailbox and Git bundle workflows
+- ☑ Patch import/mailbox and Git bundle workflows (F07: `InterchangeDialog`,
+  validation, author-preserving mailbox recovery and new-branch bundle import;
+  native desktop flows verified)
 - ☑ Expanded submodule lifecycle — guarded add/remove/deinit/sync/URL, paged
   nested inspection and cancellable updates (`SubmoduleDialog`); real Git
   preservation fixtures and native lifecycle/keyboard checks pass.
@@ -2813,6 +2819,36 @@ expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
 implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
+
+**Advanced refs and Git-flow shipped (2026-09-06):** Added lazy Git notes and
+replacement-ref management, explicit unsigned tag retarget/re-annotation with
+current/new target review and remote publication checks, and opt-in Git-flow
+AVH configuration plus feature/release/hotfix start/finish. Stale external refs,
+checkout/config changes and unresolved conflicts block reviewed writes.
+Git-flow streams bounded output and preserves completed merges/tags when a
+later merge is aborted. Native WebView2 exercised notes, replacements, tag
+edits, all three workflow types, external-session recovery and keyboard focus.
+The core suite passed (174 normal tests plus three explicit AVH integrations),
+as did the frontend typecheck and five focused frontend tests.
+
+---
+
+**Patch interchange shipped (2026-09-06):** Added affected-path previews,
+explicit index/worktree targets, validated import, original-author mailboxes
+with Continue/Skip/Abort, and bundle verification/import/export with
+prerequisite/ref summaries. Native fixtures cover stale previews, all patch
+targets, mailbox authors/recovery and missing bundle prerequisites. Rust
+checks, five fixtures and three frontend IPC tests pass. Native WebView2
+verified palette/focus, worktree/index targets, mailbox authors and conflict
+continuation, and bundle verification/import/incremental export.
+
+**Guided bisect shipped (2026-09-06):** The Repository menu, palette and
+operation banner open a manual bisect dialog backed by worktree-local Git
+state. It shows remaining candidates, final/ambiguous outcomes, custom
+external terms and no-checkout sessions. Stale ratings and dirty checkout/
+reset transitions are refused. Three native fixtures, two frontend tests,
+Rust checks/typecheck and native WebView2 rating/resume/reset/keyboard flows
+pass. Automated test-command execution remains a separate later slice.
 
 **Personal user actions shipped (2026-09-06, F15):** Settings → Integrations
 now edits explicit executable/argv definitions for repositories, qualified refs,

@@ -21,6 +21,9 @@ pub mod log;
 pub mod diff;
 pub mod stage;
 pub mod apply;
+pub mod interchange;
+pub mod advanced_refs;
+pub mod bisect;
 pub mod commit;
 pub mod signing;
 pub mod commit_metadata;
@@ -34,6 +37,8 @@ pub mod conflict;
 pub mod external;
 pub mod user_actions;
 pub mod gitconfig;
+pub mod gitflow;
+
 mod git_output;
 pub mod history;
 pub mod ignore;

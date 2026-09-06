@@ -128,6 +128,11 @@ const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => (
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const InterchangeDialog = lazy(() => import('./views/InterchangeDialog').then((m) => ({ default: m.InterchangeDialog })));
+const GitflowDialog = lazy(() => import('./views/GitflowDialog').then((m) => ({ default: m.GitflowDialog })));
+const AdvancedRefsDialog = lazy(() => import('./views/AdvancedRefsDialog').then((m) => ({ default: m.AdvancedRefsDialog })));
+const BisectDialog = lazy(() => import('./views/BisectDialog').then((m) => ({ default: m.BisectDialog })));
+
 const UserActionDialog = lazy(() => import('./views/UserActionDialog').then((m) => ({ default: m.UserActionDialog })));
 
 const LfsDialog = lazy(() => import('./views/LfsDialog').then((m) => ({ default: m.LfsDialog })));
@@ -371,6 +376,11 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [interchangePath, setInterchangePath] = useState<string | null>(null);
+  const [gitflowPath, setGitflowPath] = useState<string | null>(null);
+  const [advancedRefs, setAdvancedRefs] = useState<{ path: string; mode: 'notes' | 'replace' | 'retarget' | 'reannotate'; tag?: string } | null>(null);
+  const [bisectPath, setBisectPath] = useState<string | null>(null);
+
   const userActions = useSettings((state) => state.userActions);
   const [userActionRequest, setUserActionRequest] = useState<(ActionRequest & { key: string }) | null>(null);
   useEffect(() => {
@@ -1215,6 +1225,10 @@ export function App() {
     push: () => { void onPush(); },
     openInEditor,
     openInTerminal,
+    openInterchange: () => { const path = useRepo.getState().activePath; if (path) setInterchangePath(path); },
+    openGitflow: () => { const path = useRepo.getState().activePath; if (path) setGitflowPath(path); },
+    openAdvancedRefs: () => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode: 'notes' }); },
+    openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
   };
   const hasRepo = Boolean(meta);
   useEffect(() => {
@@ -1930,6 +1944,14 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        { id: 'git-interchange', label: 'Patches, mailboxes & bundles…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); setInterchangePath(meta.path); } },
+        { id: 'git-notes', label: 'Git notes…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'notes' }); } },
+        { id: 'git-replace', label: 'Replace refs…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'replace' }); } },
+        { id: 'git-retarget', label: 'Retarget tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'retarget' }); } },
+        { id: 'git-reannotate', label: 'Re-annotate tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'reannotate' }); } },
+        { id: 'gitflow', label: 'Git-flow workflows…', group: 'Actions', keywords: 'AVH feature release hotfix start finish resume configuration', run: () => { setPaletteOpen(false); setGitflowPath(meta.path); } },
+        { id: 'git-bisect', label: 'Guided bisect…', group: 'Actions', keywords: 'good bad skip regression culprit test resume reset', run: () => { setPaletteOpen(false); setBisectPath(meta.path); } },
+
         { id: 'clone-scope', label: 'Repository history and downloads…', group: 'Actions', keywords: 'clone shallow partial filter deepen unshallow single branch', run: () => setCloneScopePath(meta.path) },
         { id: 'sparse-checkout', label: 'Sparse checkout…', group: 'Actions', keywords: 'cone directories select inspect change disable excluded sparse index', run: () => setSparsePath(meta.path) },
 
@@ -2034,7 +2056,7 @@ export function App() {
       { id: 'toggle-sidebar', label: sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar', group: 'Actions', shortcut: keyHint('toggle-sidebar'), keywords: 'sidebar collapse expand hide show panel', run: toggleSidebar },
     );
     // Surface "Abort" in the palette only while an op is actually paused.
-    if (meta?.operation) {
+    if (meta?.operation && meta.operation !== 'bisect' && meta.operation !== 'mailbox') {
       base.push({
         id: 'abort-op',
         label: `Abort ${meta.operation}`,
@@ -2278,6 +2300,7 @@ export function App() {
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
                 onVerifyTag={(name) => { if (activePath) setTagVerification({ path: activePath, name }); }}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onEditTag={(tag, mode) => { if (meta) setAdvancedRefs({ path: meta.path, mode, tag }); }}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
                 onBranchFromStash={(index) => setBranchDialog({
                   start: `stash@{${index}}`,
@@ -2320,7 +2343,7 @@ export function App() {
                 ) : view === 'work' ? (
                   workbenchComposed ? (
                     <div className="main">
-                      <OpBanner onToast={showToast} />
+                      <OpBanner onToast={showToast} onOpenMailbox={() => { if (meta) setInterchangePath(meta.path); }} onOpenBisect={() => { if (meta) setBisectPath(meta.path); }} />
                       <CustomView
                         editing={workbenchEditing}
                         renderSurface={renderCustomSurface}
@@ -2337,7 +2360,7 @@ export function App() {
                     {view !== 'worktrees' && (
                       <MainHeader onOpenEditor={openInEditor} onOpenTerminal={openInTerminal} />
                     )}
-                    <OpBanner onToast={showToast} />
+                    <OpBanner onToast={showToast} onOpenMailbox={() => { if (meta) setInterchangePath(meta.path); }} onOpenBisect={() => { if (meta) setBisectPath(meta.path); }} />
                     {mainSurfaceId && (
                       <SurfaceHost
                         registry={workbenchSurfaceRegistry}
@@ -2457,6 +2480,11 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
+      {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} path={interchangePath} onClose={() => setInterchangePath(null)} /></Suspense>}
+      {gitflowPath && <Suspense fallback={null}><GitflowDialog key={gitflowPath} path={gitflowPath} onClose={() => setGitflowPath(null)} /></Suspense>}
+      {advancedRefs && <Suspense fallback={null}><AdvancedRefsDialog key={advancedRefs.path} path={advancedRefs.path} initialMode={advancedRefs.mode} initialTag={advancedRefs.tag} onClose={() => setAdvancedRefs(null)} /></Suspense>}
+      {bisectPath && <Suspense fallback={null}><BisectDialog key={bisectPath} path={bisectPath} onClose={() => setBisectPath(null)} /></Suspense>}
+
       {userActionRequest && (
         <UserActionDialog key={userActionRequest.key} request={userActionRequest}
           onClose={() => setUserActionRequest(null)}
@@ -2728,6 +2756,8 @@ function CrashToast({
 
 /** Human label for an in-progress sequencer op (from `meta.operation`). */
 const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
+  mailbox: 'Mailbox in progress',
+  bisect: 'Bisect in progress',
   rebase: 'Rebase in progress',
   'cherry-pick': 'Cherry-pick in progress',
   revert: 'Revert in progress',
@@ -2742,7 +2772,7 @@ const OP_LABEL: Record<NonNullable<RepoMeta['operation']>, string> = {
  * conflict remains. The op clears `operation` on the next refresh, which hides
  * the banner.
  */
-function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
+function OpBanner({ onToast, onOpenMailbox, onOpenBisect }: { onToast: (msg: string, kind?: 'success' | 'error') => void; onOpenMailbox: () => void; onOpenBisect: () => void }) {
   const operation = useRepo((s) => s.meta?.operation ?? null);
   const status = useRepo((s) => s.status);
   const abortOperation = useRepo((s) => s.abortOperation);
@@ -2752,6 +2782,8 @@ function OpBanner({ onToast }: { onToast: (msg: string, kind?: 'success' | 'erro
   const hasConflicts = useMemo(() => status.some((s) => s.kind === 'CONFLICTED'), [status]);
 
   if (!operation) return null;
+  if (operation === 'bisect') return <div className="op-banner" role="status"><span className="op-label">Bisect in progress</span><span className="op-hint">Test the selected revision, then rate it.</span><button className="btn" onClick={onOpenBisect}>Good / bad / skip / reset bisect…</button></div>;
+  if (operation === 'mailbox') return <div className="op-banner" role="status"><span className="op-label">Mailbox in progress</span><span className="op-hint">Resolve and stage conflicts, then continue the mailbox.</span><button className="btn" onClick={onOpenMailbox}>Continue / skip / abort mailbox…</button></div>;
 
   const onAbort = async () => {
     if (busy) return;

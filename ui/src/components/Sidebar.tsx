@@ -90,6 +90,8 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  onEditTag: (name: string, kind: 'retarget' | 'reannotate') => void;
+
   onVerifyTag: (name: string) => void;
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
@@ -180,7 +182,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onEditTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -751,6 +753,9 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
+      { label: 'Retarget tag…', onSelect: () => onEditTag(tg.name, 'retarget') },
+      { label: 'Re-annotate tag…', onSelect: () => onEditTag(tg.name, 'reannotate') },
+
       userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: tg.full_name, oid: tg.target } }),
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },

@@ -370,6 +370,7 @@ impl Repo {
             .operation_in_progress()
             .ok_or_else(|| Error::Other("no operation in progress to continue".into()))?;
         let cmd = match op.as_str() {
+            "mailbox" => "am",
             "rebase" => "rebase",
             "cherry-pick" => "cherry-pick",
             "revert" => "revert",
@@ -397,7 +398,7 @@ impl Repo {
     /// suppression). Same pause-aware mapping.
     fn run_sequencer_env(&self, args: &[&str], envs: &[(&str, &str)]) -> Result<bool> {
         match run_git_env(&self.path, args, envs) {
-            Ok(_) => Ok(self.operation_in_progress().is_some()),
+            Ok(_) => Ok(self.operation_in_progress().is_some_and(|op| op != "bisect")),
             Err(e) => {
                 // A conflict is the expected paused outcome. Git can also
                 // leave CHERRY_PICK_HEAD/REVERT_HEAD behind after a *real*
@@ -429,6 +430,7 @@ impl Repo {
             .operation_in_progress()
             .ok_or_else(|| Error::Other("no operation in progress to abort".into()))?;
         let cmd = match op.as_str() {
+            "mailbox" => "am",
             "rebase" => "rebase",
             "cherry-pick" => "cherry-pick",
             "revert" => "revert",

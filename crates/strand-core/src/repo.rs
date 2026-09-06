@@ -111,14 +111,16 @@ impl Repo {
 
     /// Which multi-step history op (if any) is paused mid-flight, detected from
     /// the on-disk markers git leaves in `.git/`. Returns one of `"rebase"`,
-    /// `"cherry-pick"`, `"revert"`, `"merge"`, or `None`. Order matters: a
+    /// `"cherry-pick"`, `"revert"`, `"merge"`, `"mailbox"`, or `None`. Order matters: a
     /// rebase can leave a `MERGE_HEAD` while resolving, so rebase is checked
     /// first. Used by [`meta`](Repo::meta) (UI banner) and
     /// [`abort_operation`](crate::repo::Repo::abort_operation).
     pub(crate) fn operation_in_progress(&self) -> Option<String> {
         let git_dir = self.gix.git_dir();
         let has = |name: &str| git_dir.join(name).exists();
-        if has("rebase-merge") || has("rebase-apply") {
+        if has("rebase-apply/applying") {
+            Some("mailbox".into())
+        } else if has("rebase-merge") || has("rebase-apply") {
             Some("rebase".into())
         } else if has("CHERRY_PICK_HEAD") {
             Some("cherry-pick".into())
@@ -126,6 +128,8 @@ impl Repo {
             Some("revert".into())
         } else if has("MERGE_HEAD") {
             Some("merge".into())
+        } else if has("BISECT_START") {
+            Some("bisect".into())
         } else {
             None
         }

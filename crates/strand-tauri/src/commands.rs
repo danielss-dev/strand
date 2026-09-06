@@ -72,6 +72,187 @@ impl From<strand_core::Error> for CmdError {
 
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
 
+#[tauri::command]
+pub async fn repo_gitflow_detect() -> CmdResult<strand_core::gitflow::FlowTool> {
+    run_blocking("detect Git-flow", || strand_core::gitflow::detect().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_state(path: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("inspect Git-flow", move || Repo::discover(path)?.gitflow_state().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_configure(path: String, config: strand_core::gitflow::FlowConfig, enabled: bool, token: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("configure Git-flow", move || Repo::discover(path)?.configure_gitflow(config, enabled, &token).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_plan(path: String, kind: strand_core::gitflow::FlowKind, action: strand_core::gitflow::FlowAction, name: String) -> CmdResult<strand_core::gitflow::FlowPlan> {
+    run_blocking("review Git-flow", move || Repo::discover(path)?.plan_gitflow(kind, action, &name).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_run(path: String, plan: strand_core::gitflow::FlowPlan, on_event: Channel<String>) -> CmdResult<strand_core::gitflow::FlowOutcome> {
+    run_blocking("run Git-flow", move || Repo::discover(path)?.run_gitflow(plan, |text| { let _ = on_event.send(text); }).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_advanced_refs(
+    path: String,
+    notes_ref: String,
+) -> CmdResult<strand_core::advanced_refs::AdvancedRefs> {
+    run_blocking("inspect advanced refs", move || {
+        Repo::discover(path)?
+            .advanced_refs(&notes_ref)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note(
+    path: String,
+    notes_ref: String,
+    revision: String,
+) -> CmdResult<strand_core::advanced_refs::GitNote> {
+    run_blocking("read Git note", move || {
+        Repo::discover(path)?
+            .git_note(&notes_ref, &revision)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note_write(
+    path: String,
+    notes_ref: String,
+    object: String,
+    expected: Option<String>,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write Git note", move || {
+        Repo::discover(path)?
+            .write_git_note(&notes_ref, &object, expected.as_deref(), message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_review(
+    path: String,
+    original: String,
+    replacement: String,
+) -> CmdResult<strand_core::advanced_refs::ReplaceReview> {
+    run_blocking("review replacement", move || {
+        Repo::discover(path)?
+            .review_replacement(&original, &replacement)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_write(
+    path: String,
+    original: String,
+    replacement: Option<String>,
+    expected: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write replacement", move || {
+        Repo::discover(path)?
+            .write_replacement(&original, replacement.as_deref(), expected.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit_review(
+    path: String,
+    name: String,
+    target: String,
+) -> CmdResult<strand_core::advanced_refs::TagEditReview> {
+    run_blocking("review tag edit", move || {
+        Repo::discover(path)?
+            .review_tag_edit(&name, &target)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit(
+    path: String,
+    name: String,
+    target: String,
+    expected: String,
+    kind: strand_core::advanced_refs::TagEditKind,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("edit tag", move || {
+        Repo::discover(path)?
+            .edit_tag(&name, &target, &expected, kind, message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_published(
+    path: String,
+    remote: String,
+    name: String,
+) -> CmdResult<strand_core::advanced_refs::PublishedTag> {
+    run_blocking("check published tag", move || {
+        Repo::discover(path)?
+            .published_tag(&remote, &name)
+            .map_err(Into::into)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_state(path: String) -> CmdResult<strand_core::bisect::BisectState> {
+    run_blocking("bisect state", move || Repo::discover(path)?.bisect_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_start(path: String, good: String, bad: String, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("start bisect", move || Repo::discover(path)?.bisect_start(&good, &bad, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_action(path: String, action: strand_core::bisect::BisectAction, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("bisect action", move || Repo::discover(path)?.bisect_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_patch_preview(path: String, source: String, target: strand_core::interchange::PatchTarget) -> CmdResult<strand_core::interchange::PatchPreview> {
+    run_blocking("preview patch", move || Repo::discover(path)?.preview_patch_import(Path::new(&source), target).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_patch_import(path: String, source: String, target: strand_core::interchange::PatchTarget, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import patch", move || Repo::discover(path)?.import_patch(Path::new(&source), target, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_state(path: String) -> CmdResult<Option<strand_core::interchange::MailboxState>> {
+    run_blocking("mailbox state", move || Repo::discover(path)?.mailbox_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_mailbox_action(path: String, action: strand_core::interchange::MailboxAction, token: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("mailbox action", move || Repo::discover(path)?.mailbox_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_preview(path: String, source: String) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("verify bundle", move || Repo::discover(path)?.preview_bundle(Path::new(&source)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_import(path: String, source: String, token: String, source_ref: String, branch: String) -> CmdResult<strand_core::interchange::InterchangeOutcome> {
+    run_blocking("import bundle", move || Repo::discover(path)?.import_bundle(Path::new(&source), &token, &source_ref, &branch).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bundle_export(path: String, destination: String, refname: String, prerequisite: Option<String>) -> CmdResult<strand_core::interchange::BundlePreview> {
+    run_blocking("export bundle", move || Repo::discover(path)?.export_bundle(Path::new(&destination), &refname, prerequisite.as_deref()).map_err(Into::into)).await
+}
+
 #[tauri::command(async)]
 pub fn repo_terminal_create(
     path: String,
