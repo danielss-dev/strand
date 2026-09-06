@@ -256,7 +256,7 @@ export interface HostingConnectionStatus {
   azure_dev_ops: ProviderConnectionStatus;
 }
 
-export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
+export type PullRequestProvider = 'git_hub' | 'azure_dev_ops' | 'git_lab' | 'bitbucket';
 export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
 export type PullRequestLifecycleAction = 'close' | 'reopen';
 export type PullRequestReviewEvent = 'comment' | 'approve' | 'request_changes';
@@ -339,6 +339,7 @@ export interface PullRequestReview {
 }
 
 export interface PullRequest {
+  capabilities?: { can_comment: boolean; can_review: boolean; can_request_changes: boolean; can_close: boolean; can_reopen: boolean; merge_strategies: PullRequestMergeStrategy[] };
   id: number;
   title: string;
   state: string;
@@ -971,6 +972,16 @@ export type AiGenerationOutcome<T> =
       coverage: AiInputCoverage;
       provider: AiProvider;
     };
+
+export interface RemoteHostingProvider { remote: string; url: string; provider: string }
+export interface PublishDestination { id: string; label: string; kind: string }
+export interface PublishAccount { account: string; account_id: string; destinations: PublishDestination[] }
+export interface PublishRequest { provider: 'github' | 'gitlab' | 'bitbucket'; host: string; account_id: string; destination: string; name: string; visibility: 'private' | 'public'; remote: string }
+export interface PublishState {
+  id: string; request: PublishRequest; account: string; destination: PublishDestination;
+  url: string; clone_url: string; branch: string; head: string;
+  stage: 'review' | 'uncertain' | 'created' | 'remote_ready' | 'pushed'; error: string | null;
+}
 
 export interface ScopedValue {
   value: string;

@@ -69,6 +69,28 @@ hook diagnostics.
 
 ## Hosting
 
+The **GitLab, Bitbucket Cloud and custom GitHub hosts** section provides setup
+instructions and lists the active repository's remotes. For a custom host,
+select **GitHub / Enterprise** or **GitLab**, then refresh Pull Requests.
+**Automatic** restores public-host detection. The selection saves immediately
+in this repository's Git configuration and does not change the remote URL.
+The palette command **Settings: Hosting** opens this section directly.
+
+Sign in to GitLab with `glab auth login --hostname HOST`, or to GitHub
+Enterprise with `gh auth login --hostname HOST`. API routing and authentication
+stay scoped to that hostname in the CLI. GitHub's custom API host configuration
+is honored by `gh`.
+
+Bitbucket Cloud reads an API-only HTTPS credential for `api.bitbucket.org`
+from the system Git credential helper. Use your Atlassian account email as
+username and a scoped API token as password. Supply read scopes for user,
+workspace, repository and pull-request data; add repository and pull-request
+write scopes for creation and review writes. Scopes do not grant repository
+membership or override branch restrictions. See
+[Bitbucket API token permissions](https://support.atlassian.com/bitbucket-cloud/docs/api-token-permissions/).
+Git clone/push authentication remains separate. Strand does not save this token
+in its settings or recovery records.
+
 Hosting is organized into GitHub, Azure DevOps, and Azure DevOps Server
 accordions. Each summary keeps its connection state visible while the details
 are collapsed. GitHub shows the account returned by `gh`; Azure DevOps shows

@@ -2477,3 +2477,32 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+#[tauri::command(async)]
+pub async fn repo_hosting_providers(path: String) -> CmdResult<Vec<pull_requests::RemoteHostingProvider>> {
+    run_blocking("remote hosting providers", move || pull_requests::hosting_providers(&path).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn repo_set_hosting_provider(path: String, remote: String, provider: String) -> CmdResult<()> {
+    run_blocking("configure remote provider", move || pull_requests::set_hosting_provider(&path, &remote, &provider).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_accounts(path: String, provider: String, host: String) -> CmdResult<pull_requests::publish::PublishAccount> {
+    run_blocking("publish destinations", move || pull_requests::publish::accounts(&path, &provider, &host).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_state(path: String) -> CmdResult<Option<pull_requests::publish::PublishState>> {
+    run_blocking("publish recovery", move || pull_requests::publish::state(&path).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_preview(path: String, request: pull_requests::publish::PublishRequest) -> CmdResult<pull_requests::publish::PublishState> {
+    run_blocking("review publish destination", move || pull_requests::publish::preview(&path, request).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_advance(path: String, id: String, action: String) -> CmdResult<pull_requests::publish::PublishState> {
+    run_blocking("publish repository", move || pull_requests::publish::advance(&path, &id, &action).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn hosted_publish_forget(path: String) -> CmdResult<()> {
+    run_blocking("dismiss publish recovery", move || pull_requests::publish::forget(&path).map_err(|message| CmdError { message })).await
+}

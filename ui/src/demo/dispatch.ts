@@ -93,6 +93,13 @@ export const handlers: Record<string, Handler> = {
   azdo_profile_set_pat: () => unavailable('Azure DevOps profiles'),
   azdo_profile_clear_pat: () => unavailable('Azure DevOps profiles'),
   azdo_profile_test: () => unavailable('Azure DevOps profiles'),
+  repo_hosting_providers: () => [],
+  repo_set_hosting_provider: () => unavailable('Hosted repository setup'),
+  hosted_publish_accounts: () => unavailable('Hosted repository setup'),
+  hosted_publish_state: () => null,
+  hosted_publish_preview: () => unavailable('Hosted repository setup'),
+  hosted_publish_advance: () => unavailable('Hosted repository setup'),
+  hosted_publish_forget: () => unavailable('Hosted repository setup'),
   hosting_connection_status: () => ({
     github: { installed: true, connected: true, account: 'dana', detail: 'gh 2.62.0 · signed in as dana (demo)' },
     azure_dev_ops: { installed: false, connected: false, account: null, detail: 'az CLI not installed' },

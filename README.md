@@ -71,6 +71,18 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **More hosting providers** — GitLab merge requests and Bitbucket Cloud pull
+  requests use the review workspace, with paged lists, comments, inline threads
+  and supported review decisions. GitHub Enterprise/custom hosts use their own
+  CLI authentication scope; select custom adapters in Settings → Hosting.
+  GitLab merges guard the reviewed head and follow project settings. Bitbucket
+  merge, GitLab request-changes and Bitbucket draft transitions remain
+  provider-site actions. Bitbucket Server is not supported.
+- **Publish repository** — create an empty GitHub/Enterprise, GitLab or Bitbucket
+  Cloud repository after reviewing its account, destination and visibility.
+  Add the remote, then explicitly choose whether to push the reviewed commit.
+  Interrupted creation and remote setup can be resumed from the same dialog.
+
 - **Personal user actions** — define repository, ref, and working-tree file
   commands in Settings → Integrations. Menu and palette entries open an exact
   executable/argument/working-directory preview, with bounded output and cancellation.

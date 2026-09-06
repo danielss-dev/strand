@@ -9560,6 +9560,11 @@ select.clone-input {
   .plugin-heroi-select-thinking,
   .plugin-heroi-select-permission { display: none; }
 }
+.publish-review { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; }
+.publish-review dt { color: var(--text-muted); }
+.publish-review dd { margin: 0; overflow-wrap: anywhere; }
+.publish-review a { color: var(--accent); }
+
 /* Repository tools mount only while their dialog is open. */
 .git-tool-body { overflow-y: auto; min-height: 0; max-height: 70vh; }
 .git-tool-body > .btn { align-self: flex-start; }

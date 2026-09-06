@@ -121,6 +121,8 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 const CloneDialog = lazy(() => import('./views/CloneDialog').then((m) => ({ default: m.CloneDialog })));
+const PublishRepoDialog = lazy(() => import('./views/PublishRepoDialog').then((m) => ({ default: m.PublishRepoDialog })));
+
 const CloneScopeDialog = lazy(() => import('./views/CloneScopeDialog').then((m) => ({ default: m.CloneScopeDialog })));
 const SparseCheckoutDialog = lazy(() => import('./views/SparseCheckoutDialog').then((m) => ({ default: m.SparseCheckoutDialog })));
 const InitRepoDialog = lazy(() => import('./views/InitRepoDialog').then((m) => ({ default: m.InitRepoDialog })));
@@ -352,6 +354,12 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [publishRepoOpen, setPublishRepoOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setPublishRepoOpen(true);
+    window.addEventListener('strand:publish-repository', open);
+    return () => window.removeEventListener('strand:publish-repository', open);
+  }, []);
   const [cloneScopePath, setCloneScopePath] = useState<string | null>(null);
   const [sparsePath, setSparsePath] = useState<string | null>(null);
   useEffect(() => {
@@ -1943,6 +1951,7 @@ export function App() {
               })(),
             ]
           : []),
+        { id: 'publish-repository', label: 'Publish repository…', group: 'Actions', keywords: 'create hosted github gitlab bitbucket repository account organization visibility initial push', run: () => setPublishRepoOpen(true) },
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'git-interchange', label: 'Patches, mailboxes & bundles…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); setInterchangePath(meta.path); } },
         { id: 'git-notes', label: 'Git notes…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'notes' }); } },
@@ -2031,6 +2040,7 @@ export function App() {
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-git', label: 'Settings: Repository identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => openSettingsAt('git') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
+      { id: 'settings-hosting', label: 'Settings: Hosting', group: 'Actions', keywords: 'github enterprise custom host gitlab bitbucket azure provider authentication account', run: () => openSettingsAt('hosting') },
       { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
       { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },
       {
@@ -2435,6 +2445,7 @@ export function App() {
         <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
       )}
 
+      {publishRepoOpen && activePath && <PublishRepoDialog key={activePath} path={activePath} onClose={() => setPublishRepoOpen(false)} />}
       {initRepoOpen && (
         <InitRepoDialog onClose={() => setInitRepoOpen(false)} onInit={runInitRepo} />
       )}

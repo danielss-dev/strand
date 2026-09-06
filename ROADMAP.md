@@ -2200,6 +2200,8 @@ and Store certification remain external gates.
 - ◐ Hosted-review expansion — GitLab/Bitbucket adapters, deeper pagination,
   merge queue/auto-complete, and review-evolution
   comparisons build on the completed GitHub/Azure 1.0 workspace.
+  GitLab, Bitbucket Cloud and custom GitHub host adapters are complete;
+  the remaining expansion items stay open.
 
 **AI commit messages (2026-07-01):** Subscription-first suggestions prefer the
 staged diff, and fall back to all unstaged changes when no staged diff exists —
@@ -2832,6 +2834,20 @@ The core suite passed (174 normal tests plus three explicit AVH integrations),
 as did the frontend typecheck and five focused frontend tests.
 
 ---
+
+**Hosted adapters shipped (2026-09-06):** GitLab merge requests and Bitbucket
+Cloud pull requests share the existing review workspace, with paged collections,
+provider-specific inline coordinates, permission-gated controls and explicit
+fallbacks for unsupported writes. Custom GitHub hosts use host-scoped CLI
+authentication and per-remote adapter selection. GitHub.com and Azure routing
+remain intact. Bitbucket merge stays on the provider because its API cannot
+atomically guard the reviewed head.
+
+**Hosted repository publication shipped (2026-09-06):** Publish repository
+reviews an authenticated GitHub/Enterprise, GitLab or Bitbucket Cloud destination,
+creates an empty repository, adds its remote, then separately offers an explicit
+push of the reviewed commit. A local recovery record survives partial failures;
+uncertain creation checks the destination without repeating the create request.
 
 **Patch interchange shipped (2026-09-06):** Added affected-path previews,
 explicit index/worktree targets, validated import, original-author mailboxes

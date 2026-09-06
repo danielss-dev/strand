@@ -119,6 +119,34 @@ Tabs are deduplicated by canonical path — opening the same repo twice focuses 
 
 All of these are rebindable in Settings → Keyboard; "Next repository" and "Previous repository" also exist as palette actions. Both tab cycling and the quick switcher are **workspace-aware**: with a workspace active, they move within its members.
 
+## Publish a hosted repository
+
+With a local repository open, run **Publish repository…** from the command
+palette, or **Publish repository** beneath Remotes in the Git sidebar.
+
+1. Choose GitHub, GitLab or Bitbucket Cloud, enter the host, then **Load account
+   and destinations**. GitHub Enterprise and custom GitLab hosts are supported.
+   The active CLI/helper account is displayed; switch accounts in the provider
+   CLI before loading again if needed.
+2. Select the account, organization, namespace or workspace, a repository name,
+   private/public visibility and a new remote name. Existing remotes are not
+   overwritten. **Review destination** shows the exact hosted URL, account,
+   visibility, remote URL, branch and commit to be published.
+3. **Create repository** creates an empty destination. **Add remote** then
+   configures it locally. These steps do not push files.
+4. Optionally check **Push the reviewed commit and its history to this
+   destination**, then **Push reviewed commit**. The checkbox starts unchecked.
+   The push sends the reviewed commit even if newer local commits now exist,
+   preserves an existing upstream and never force-pushes. With no commit at
+   review time, create one and use the ordinary Push action later.
+
+Close and reopen the dialog to resume. A failed or interrupted creation becomes
+an uncertain result: **Check destination** inspects the exact repository without
+issuing another create request. Remote setup and push failures retain their
+stage for retry. A changed remote URL, Git URL rewrite or changed branch stops
+the initial push. Dismissing a recovery record keeps the hosted repository and
+local remote. Azure repository creation is not part of this flow.
+
 ## Persistence
 
 Strand restores your session across launches: window size, position, and

@@ -2581,6 +2581,25 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
 
+**Hosted provider writes preserve host and commit scope (2026-09-06).**
+Custom GitHub remotes need an explicit adapter and host-scoped CLI calls; keep
+GitHub.com's existing owner/repo identity so saved follows and drafts survive.
+GitLab inline coordinates use the diff version's base/start/head and both
+paths across a rename. A preflight head read is not an atomic merge guard:
+Bitbucket Cloud merge stays unavailable until its API accepts an expected
+head. Cloud comment/review races must report that a write may have happened,
+and partial batches must retain drafts with reconciliation guidance. Never
+reuse another provider's credentials; Cloud API tokens are scoped to
+api.bitbucket.org through the system Git credential helper.
+
+**Repository creation must be resumable before any network write (2026-09-06).**
+Persist the concrete destination and reviewed commit locally before creation,
+record uncertain state before POST, and recover by GET instead of blindly
+reposting. Creation, remote attachment and initial push are separate user
+actions. Initial push sends only the reviewed SHA to the reviewed branch,
+rejects URL rewrites/alternate push URLs, disables implicit tag/submodule
+pushes and preserves an existing upstream. Recovery records contain no tokens.
+
 
 ### Advanced refs preserve reviewed identities (2026-09-06)
 

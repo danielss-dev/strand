@@ -1,9 +1,13 @@
 //! Pull-request host integration.
 //!
-//! Authentication stays with the provider CLIs (`gh` and `az`): Strand never
-//! reads or stores their tokens. The list call stays shallow; a second command
+//! CLI authentication stays with `gh`, `glab` and `az`; Bitbucket API credentials
+//! come from the system Git helper. The list call stays shallow; a second command
 //! loads nested metadata only for the selected pull request so provider query
 //! limits and large repositories remain predictable.
+mod hosted;
+pub(crate) mod publish;
+pub(crate) mod transport;
+use transport::{github_command, github_command_input, GitHubContext};
 
 use std::{
     collections::HashMap,
@@ -138,6 +142,8 @@ type Result<T> = std::result::Result<T, String>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PullRequestProvider {
+    GitLab,
+    Bitbucket,
     GitHub,
     AzureDevOps,
 }
@@ -267,8 +273,20 @@ struct AzureDiscussion {
     review_threads: Vec<PullRequestReviewThread>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct PullRequestCapabilities {
+    pub can_comment: bool,
+    pub can_review: bool,
+    pub can_request_changes: bool,
+    pub can_close: bool,
+    pub can_reopen: bool,
+    pub merge_strategies: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct PullRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<PullRequestCapabilities>,
     pub id: u64,
     pub title: String,
     pub state: String,
@@ -372,7 +390,9 @@ pub enum PullRequestDiffSide {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum HostRepo {
+    Hosted(hosted::HostedRepo),
     GitHub {
+        host: String,
         owner: String,
         repo: String,
     },
@@ -392,7 +412,8 @@ enum HostRepo {
 pub fn list(path: &str) -> Result<PullRequestList> {
     let (remote, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => list_github(path, remote, owner, repo),
+        HostRepo::Hosted(host) => host.list(&host.client(path), remote, None),
+        HostRepo::GitHub { host, owner, repo } => list_github(&GitHubContext { path, host: &host }, remote, owner, repo),
         HostRepo::Azure {
             organization,
             project,
@@ -410,7 +431,8 @@ pub fn list(path: &str) -> Result<PullRequestList> {
 pub fn for_branch(path: &str, branch: &str) -> Result<Option<PullRequestBranchMatch>> {
     let (remote, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => for_branch_github(path, remote, owner, repo, branch),
+        HostRepo::Hosted(host) => host.list(&host.client(path), remote, Some(branch)).map(|list| list.pull_requests.into_iter().next().map(|pull_request| PullRequestBranchMatch { repository: list.repository, pull_request })),
+        HostRepo::GitHub { host, owner, repo } => for_branch_github(&GitHubContext { path, host: &host }, remote, owner, repo, branch),
         HostRepo::Azure {
             organization,
             project,
@@ -437,8 +459,8 @@ pub fn create(
     let (remote, host) = host_for_path(path)?;
     ensure_source_branch_on_remote(path, &remote, source_branch)?;
     match host {
-        HostRepo::GitHub { owner, repo } => create_github(
-            path,
+        HostRepo::Hosted(host) => host.create(&host.client(path), source_branch, target_branch, title, description, is_draft),
+        HostRepo::GitHub { host, owner, repo } => create_github(&GitHubContext { path, host: &host },
             &owner,
             &repo,
             source_branch,
@@ -516,7 +538,8 @@ fn ensure_source_branch_on_remote(path: &str, remote: &str, source_branch: &str)
 pub fn activity(path: &str, id: u64) -> Result<PullRequestActivitySnapshot> {
     let (remote, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => activity_github(path, remote, owner, repo, id),
+        HostRepo::Hosted(host) => host.activity(&host.client(path), remote, id),
+        HostRepo::GitHub { host, owner, repo } => activity_github(&GitHubContext { path, host: &host }, remote, owner, repo, id),
         HostRepo::Azure {
             organization,
             project,
@@ -534,7 +557,8 @@ pub fn activity(path: &str, id: u64) -> Result<PullRequestActivitySnapshot> {
 pub fn detail(path: &str, id: u64) -> Result<PullRequest> {
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => detail_github(path, owner, repo, id),
+        HostRepo::Hosted(host) => host.detail(&host.client(path), id),
+        HostRepo::GitHub { host, owner, repo } => detail_github(&GitHubContext { path, host: &host }, owner, repo, id),
         HostRepo::Azure {
             organization,
             project,
@@ -552,7 +576,8 @@ pub fn detail(path: &str, id: u64) -> Result<PullRequest> {
 pub fn diff(path: &str, id: u64) -> Result<String> {
     let (remote, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => diff_github(path, owner, repo, id),
+        HostRepo::Hosted(host) => host.diff(&host.client(path), id),
+        HostRepo::GitHub { host, owner, repo } => diff_github(&GitHubContext { path, host: &host }, owner, repo, id),
         HostRepo::Azure {
             organization,
             project,
@@ -571,7 +596,8 @@ pub fn add_comment(path: &str, id: u64, body: &str) -> Result<()> {
     validate_comment(body)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => add_comment_github(path, owner, repo, id, body),
+        HostRepo::Hosted(host) => host.add_comment(&host.client(path), id, body),
+        HostRepo::GitHub { host, owner, repo } => add_comment_github(&GitHubContext { path, host: &host }, owner, repo, id, body),
         HostRepo::Azure {
             organization,
             project,
@@ -607,13 +633,13 @@ pub fn add_inline_comment(
     }
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
-            let current = detail_github(path, owner.clone(), repo.clone(), id)?;
+        HostRepo::Hosted(host) => host.inline(&host.client(path), id, &PullRequestPendingComment { path: file_path.into(), start_line, end_line, side, body: body.into() }, expected_head),
+        HostRepo::GitHub { host, owner, repo } => {
+            let current = detail_github(&GitHubContext { path, host: &host }, owner.clone(), repo.clone(), id)?;
             if current.source_commit != expected_head {
                 return Err("The pull request changed while this comment was being written. Refresh Changes and select the lines again.".to_string());
             }
-            add_inline_comment_github(
-                path, owner, repo, id, body, file_path, start_line, end_line, side,
+            add_inline_comment_github(&GitHubContext { path, host: &host }, owner, repo, id, body, file_path, start_line, end_line, side,
                 expected_head,
             )
         }
@@ -635,7 +661,8 @@ pub fn reply_to_thread(path: &str, thread_id: &str, body: &str) -> Result<PullRe
     validate_thread_id(thread_id)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { .. } => reply_to_thread_github(path, thread_id, body),
+        HostRepo::Hosted(host) => host.reply(&host.client(path), thread_id, body),
+        HostRepo::GitHub { host, .. } => reply_to_thread_github(&GitHubContext { path, host: &host }, thread_id, body),
         HostRepo::Azure {
             organization,
             project,
@@ -665,7 +692,8 @@ pub fn set_thread_resolved(
     validate_thread_id(thread_id)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { .. } => set_thread_resolved_github(path, thread_id, resolved),
+        HostRepo::Hosted(host) => host.resolve(&host.client(path), thread_id, resolved),
+        HostRepo::GitHub { host, .. } => set_thread_resolved_github(&GitHubContext { path, host: &host }, thread_id, resolved),
         HostRepo::Azure {
             organization,
             project,
@@ -705,8 +733,8 @@ pub fn submit_review(
     validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => submit_review_github(
-            path, &owner, &repo, id, event, body, comments, expected_head,
+        HostRepo::Hosted(host) => host.review(&host.client(path), id, event, body, comments, expected_head),
+        HostRepo::GitHub { host, owner, repo } => submit_review_github(&GitHubContext { path, host: &host }, &owner, &repo, id, event, body, comments, expected_head,
         ),
         HostRepo::Azure { organization, project, repo } => submit_review_azure(
             path, &organization, &project, &repo, id, event, body, comments, expected_head,
@@ -722,7 +750,8 @@ pub fn update_review(path: &str, _id: u64, review_id: &str, body: &str) -> Resul
     validate_comment(body)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { .. } => update_review_github(path, review_id, body),
+        HostRepo::Hosted(_) => Err("Edit review summaries on the provider website".into()),
+        HostRepo::GitHub { host, .. } => update_review_github(&GitHubContext { path, host: &host }, review_id, body),
         HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
             "Azure DevOps votes do not have an editable review summary. Submit a new summary comment or change the vote instead."
                 .into(),
@@ -739,9 +768,10 @@ pub fn dismiss_review(
     validate_review_id(review_id)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { .. } => {
+        HostRepo::Hosted(_) => Err("Reset reviews on the provider website".into()),
+        HostRepo::GitHub { host, .. } => {
             validate_comment(message)?;
-            dismiss_review_github(path, review_id, message)
+            dismiss_review_github(&GitHubContext { path, host: &host }, review_id, message)
         }
         HostRepo::Azure { organization, .. } => {
             reset_review_azure(path, &organization, id, review_id)
@@ -764,8 +794,9 @@ pub fn merge(
     validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
-            merge_github(path, &owner, &repo, id, strategy, expected_head)
+        HostRepo::Hosted(host) => host.merge(&host.client(path), id, strategy, expected_head),
+        HostRepo::GitHub { host, owner, repo } => {
+            merge_github(&GitHubContext { path, host: &host }, &owner, &repo, id, strategy, expected_head)
         }
         HostRepo::Azure {
             organization,
@@ -792,7 +823,8 @@ pub fn merge(
 pub fn mark_ready(path: &str, id: u64) -> Result<()> {
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => mark_ready_github(path, &owner, &repo, id),
+        HostRepo::Hosted(host) => host.ready(&host.client(path), id),
+        HostRepo::GitHub { host, owner, repo } => mark_ready_github(&GitHubContext { path, host: &host }, &owner, &repo, id),
         HostRepo::Azure { organization, .. } => mark_ready_azure(path, &organization, id),
         HostRepo::AzureServer {
             profile_id,
@@ -806,8 +838,9 @@ pub fn mark_ready(path: &str, id: u64) -> Result<()> {
 pub fn set_lifecycle(path: &str, id: u64, action: PullRequestLifecycleAction) -> Result<()> {
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
-            set_lifecycle_github(path, &owner, &repo, id, action)
+        HostRepo::Hosted(host) => host.lifecycle(&host.client(path), id, action),
+        HostRepo::GitHub { host, owner, repo } => {
+            set_lifecycle_github(&GitHubContext { path, host: &host }, &owner, &repo, id, action)
         }
         HostRepo::Azure { organization, .. } => {
             set_lifecycle_azure(path, &organization, id, action)
@@ -825,8 +858,9 @@ pub fn update_branch(path: &str, id: u64, expected_head: &str) -> Result<()> {
     validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
-            update_branch_github(path, &owner, &repo, id, expected_head)
+        HostRepo::Hosted(_) => Err("Update this source branch in a local worktree".into()),
+        HostRepo::GitHub { host, owner, repo } => {
+            update_branch_github(&GitHubContext { path, host: &host }, &owner, &repo, id, expected_head)
         }
         HostRepo::Azure { .. } | HostRepo::AzureServer { .. } => Err(
             "Azure DevOps does not expose a safe update-source-branch pull-request operation. Open the branch in a worktree and update it locally."
@@ -843,8 +877,9 @@ pub fn prepare_checkout(
     validate_commit(expected_head)?;
     let (remote, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
-            prepare_checkout_github(path, &remote, &owner, &repo, id, expected_head)
+        HostRepo::Hosted(host) => host.checkout(&host.client(path), path, &remote, id, expected_head),
+        HostRepo::GitHub { host, owner, repo } => {
+            prepare_checkout_github(&GitHubContext { path, host: &host }, &remote, &owner, &repo, id, expected_head)
         }
         HostRepo::Azure { organization, .. } => {
             let value = azure_pr_value(path, &organization, id)?;
@@ -881,7 +916,10 @@ fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     let mut supported = remotes
         .iter()
         .filter_map(|remote| {
-            let coordinates = parse_remote(&remote.1)?;
+            let coordinates = parse_remote(&remote.1).or_else(|| {
+                let configured = run_command(path, "git", &["config", "--get", &format!("remote.{}.strand-provider", remote.0)], &[]).ok().and_then(|v| String::from_utf8(v).ok());
+                parse_hosted_remote(&remote.1, configured.as_deref().map(str::trim))
+            })?;
             Some((remote.0.clone(), coordinates))
         })
         .collect::<Vec<_>>();
@@ -906,19 +944,19 @@ fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
     }
 
     supported.into_iter().next().ok_or_else(|| {
-        "No supported GitHub, Azure DevOps Services, or configured Azure DevOps Server remote was found for this repository".to_string()
+        "No supported hosting remote was found. Configure a custom GitHub/GitLab remote provider in Hosting settings.".to_string()
     })
 }
 
-fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result<PullRequestList> {
-    let slug = format!("{owner}/{repo}");
+fn list_github(cwd: &GitHubContext<'_>, remote: String, owner: String, repo: String) -> Result<PullRequestList> {
+    let slug = cwd.slug(&owner, &repo);
     // Keep the list query shallow. Asking GraphQL to expand nested comments,
     // commits, reviews, and checks across 100 PRs can exceed GitHub's 500k
     // possible-node cap even for a modest repository. Rich fields load only
     // for the selected PR via `detail_github`.
     let (output, viewer) = thread::scope(|scope| {
         let viewer = scope.spawn(|| github_viewer(cwd));
-        let output = run_command(
+        let output = github_command(
             cwd,
             "gh",
             &[
@@ -957,15 +995,15 @@ fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result
 }
 
 fn for_branch_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     remote: String,
     owner: String,
     repo: String,
     branch: &str,
 ) -> Result<Option<PullRequestBranchMatch>> {
-    let slug = format!("{owner}/{repo}");
+    let slug = cwd.slug(&owner, &repo);
     let branch = branch.strip_prefix("refs/heads/").unwrap_or(branch);
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &[
@@ -1000,8 +1038,8 @@ fn for_branch_github(
         }))
 }
 
-fn github_viewer(cwd: &str) -> Result<String> {
-    let output = run_command(
+fn github_viewer(cwd: &GitHubContext<'_>) -> Result<String> {
+    let output = github_command(
         cwd,
         "gh",
         &["api", "user", "--jq", ".login"],
@@ -1012,7 +1050,7 @@ fn github_viewer(cwd: &str) -> Result<String> {
 
 #[allow(clippy::too_many_arguments)]
 fn create_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     source_branch: &str,
@@ -1021,7 +1059,7 @@ fn create_github(
     description: &str,
     is_draft: bool,
 ) -> Result<PullRequestCreateOutcome> {
-    let slug = format!("{owner}/{repo}");
+    let slug = cwd.slug(owner, repo);
     let source_branch = branch_name(source_branch.to_string());
     let target_branch = branch_name(target_branch.to_string());
     let mut args = vec![
@@ -1041,7 +1079,7 @@ fn create_github(
     if is_draft {
         args.push("--draft");
     }
-    let output = run_command_input(
+    let output = github_command_input(
         cwd,
         "gh",
         &args,
@@ -1084,7 +1122,7 @@ fn map_github_create_error(error: String, source_branch: &str, target_branch: &s
 }
 
 fn activity_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     remote: String,
     owner: String,
     repo: String,
@@ -1094,7 +1132,7 @@ fn activity_github(
     let owner_arg = format!("owner={owner}");
     let repo_arg = format!("repo={repo}");
     let number = format!("number={id}");
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &[
@@ -1112,16 +1150,16 @@ fn activity_github(
         PullRequestRepository {
             provider: PullRequestProvider::GitHub,
             remote,
-            label: format!("{owner}/{repo}"),
+            label: cwd.slug(&owner, &repo),
             viewer: None,
         },
     )
 }
 
-fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<PullRequest> {
-    let slug = format!("{owner}/{repo}");
+fn detail_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64) -> Result<PullRequest> {
+    let slug = cwd.slug(&owner, &repo);
     let id_string = id.to_string();
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &[
@@ -1141,8 +1179,8 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
     for commit in &mut pull_request.commits {
         commit.url = Some(format!(
-            "https://github.com/{owner}/{repo}/commit/{}",
-            commit.id
+            "https://{}/{owner}/{repo}/commit/{}",
+            cwd.host, commit.id
         ));
     }
     pull_request.checks_complete = true;
@@ -1160,11 +1198,20 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         .sort_by(|left, right| left.created_at.cmp(&right.created_at));
     pull_request.comment_count = pull_request.comments.len();
     pull_request.review_threads = review_threads;
+    if cwd.host != "github.com" {
+        let scope = |avatar: &mut Option<String>| cwd.scope_avatar(avatar);
+        for comment in &mut pull_request.comments { scope(&mut comment.avatar_url); }
+        for commit in &mut pull_request.commits { scope(&mut commit.avatar_url); }
+        for review in &mut pull_request.reviews { scope(&mut review.avatar_url); }
+        for thread in &mut pull_request.review_threads {
+            for comment in &mut thread.comments { scope(&mut comment.avatar_url); }
+        }
+    }
     Ok(pull_request)
 }
 
 fn github_review_threads(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     id: u64,
@@ -1173,7 +1220,7 @@ fn github_review_threads(
     let owner = format!("owner={owner}");
     let repo = format!("repo={repo}");
     let number = format!("number={id}");
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &[
@@ -1190,10 +1237,10 @@ fn github_review_threads(
     ))
 }
 
-fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String> {
-    let slug = format!("{owner}/{repo}");
+fn diff_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64) -> Result<String> {
+    let slug = cwd.slug(&owner, &repo);
     let id = id.to_string();
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &["pr", "diff", &id, "--repo", &slug, "--color", "never"],
@@ -1206,10 +1253,10 @@ fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String
         .map_err(|error| format!("GitHub CLI returned a non-UTF-8 diff: {error}"))
 }
 
-fn add_comment_github(cwd: &str, owner: String, repo: String, id: u64, body: &str) -> Result<()> {
-    let slug = format!("{owner}/{repo}");
+fn add_comment_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64, body: &str) -> Result<()> {
+    let slug = cwd.slug(&owner, &repo);
     let id = id.to_string();
-    run_command_input(
+    github_command_input(
         cwd,
         "gh",
         &["pr", "comment", &id, "--repo", &slug, "--body-file", "-"],
@@ -1221,7 +1268,7 @@ fn add_comment_github(cwd: &str, owner: String, repo: String, id: u64, body: &st
 
 #[allow(clippy::too_many_arguments)]
 fn add_inline_comment_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: String,
     repo: String,
     id: u64,
@@ -1237,7 +1284,7 @@ fn add_inline_comment_github(
         github_inline_comment_payload(body, file_path, start_line, end_line, side, expected_head);
     let input = serde_json::to_vec(&payload)
         .map_err(|error| format!("Could not encode GitHub inline comment: {error}"))?;
-    run_command_input(
+    github_command_input(
         cwd,
         "gh",
         &["api", "--method", "POST", &endpoint, "--input", "-"],
@@ -1249,7 +1296,7 @@ fn add_inline_comment_github(
 
 #[allow(clippy::too_many_arguments)]
 fn submit_review_github(
-    cwd: &str, owner: &str, repo: &str, id: u64, event: PullRequestReviewEvent,
+    cwd: &GitHubContext<'_>, owner: &str, repo: &str, id: u64, event: PullRequestReviewEvent,
     body: &str, comments: &[PullRequestPendingComment], expected_head: &str,
 ) -> Result<()> {
     let current = github_current_head(cwd, owner, repo, id)?;
@@ -1257,17 +1304,17 @@ fn submit_review_github(
     let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/reviews");
     let input = serde_json::to_vec(&github_review_payload(event, body, comments, expected_head))
         .map_err(|error| format!("Could not encode GitHub review: {error}"))?;
-    run_command_input(
+    github_command_input(
         cwd, "gh", &["api", "--method", "POST", &endpoint, "--input", "-"],
         &[("GH_PROMPT_DISABLED", "1")], Some(&input),
     )?;
     Ok(())
 }
 
-fn github_current_head(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<String> {
-    let slug = format!("{owner}/{repo}");
+fn github_current_head(cwd: &GitHubContext<'_>, owner: &str, repo: &str, id: u64) -> Result<String> {
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
-    let output = run_command(
+    let output = github_command(
         cwd, "gh", &["pr", "view", &id, "--repo", &slug, "--json", "headRefOid"],
         &[("GH_PROMPT_DISABLED", "1")],
     )?;
@@ -1278,7 +1325,7 @@ fn github_current_head(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<St
 }
 
 fn update_branch_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     id: u64,
@@ -1287,7 +1334,7 @@ fn update_branch_github(
     let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/update-branch");
     let input = serde_json::to_vec(&github_update_branch_payload(expected_head))
         .map_err(|error| format!("Could not encode GitHub branch update: {error}"))?;
-    run_command_input(
+    github_command_input(
         cwd,
         "gh",
         &["api", "--method", "PUT", &endpoint, "--input", "-"],
@@ -1298,16 +1345,16 @@ fn update_branch_github(
 }
 
 fn prepare_checkout_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     remote: &str,
     owner: &str,
     repo: &str,
     id: u64,
     expected_head: &str,
 ) -> Result<PullRequestCheckoutPreparation> {
-    let slug = format!("{owner}/{repo}");
+    let slug = cwd.slug(owner, repo);
     let number = id.to_string();
-    let output = run_command(
+    let output = github_command(
         cwd,
         "gh",
         &[
@@ -1331,7 +1378,7 @@ fn prepare_checkout_github(
         .filter(|branch| !branch.is_empty())
         .ok_or_else(|| "GitHub did not return the pull request source branch".to_string())?;
     let pull_ref = github_pull_head_ref(id);
-    Repo::discover(cwd)
+    Repo::discover(cwd.path)
         .map_err(|error| error.to_string())?
         .fetch_refs_for_read(remote, &[&pull_ref])
         .map_err(|error| format!("Could not fetch GitHub PR #{id} for a worktree: {error}"))?;
@@ -1349,19 +1396,21 @@ fn github_pull_head_ref(id: u64) -> String {
     format!("refs/pull/{id}/head")
 }
 
-fn reply_to_thread_github(cwd: &str, thread_id: &str, body: &str) -> Result<PullRequestComment> {
+fn reply_to_thread_github(cwd: &GitHubContext<'_>, thread_id: &str, body: &str) -> Result<PullRequestComment> {
     let value = run_github_graphql_mutation(
         cwd,
         GITHUB_THREAD_REPLY_MUTATION,
         serde_json::json!({ "threadId": thread_id, "body": body }),
     )?;
-    parse_github_thread_reply(&value).ok_or_else(|| {
+    let mut reply = parse_github_thread_reply(&value).ok_or_else(|| {
         "GitHub accepted the reply request but returned an incomplete comment".to_string()
-    })
+    })?;
+    cwd.scope_avatar(&mut reply.avatar_url);
+    Ok(reply)
 }
 
 fn set_thread_resolved_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     thread_id: &str,
     resolved: bool,
 ) -> Result<PullRequestReviewThreadUpdate> {
@@ -1377,7 +1426,7 @@ fn set_thread_resolved_github(
     })
 }
 
-fn update_review_github(cwd: &str, review_id: &str, body: &str) -> Result<()> {
+fn update_review_github(cwd: &GitHubContext<'_>, review_id: &str, body: &str) -> Result<()> {
     run_github_graphql_mutation(
         cwd,
         GITHUB_REVIEW_UPDATE_MUTATION,
@@ -1386,7 +1435,7 @@ fn update_review_github(cwd: &str, review_id: &str, body: &str) -> Result<()> {
     Ok(())
 }
 
-fn dismiss_review_github(cwd: &str, review_id: &str, message: &str) -> Result<()> {
+fn dismiss_review_github(cwd: &GitHubContext<'_>, review_id: &str, message: &str) -> Result<()> {
     run_github_graphql_mutation(
         cwd,
         GITHUB_REVIEW_DISMISS_MUTATION,
@@ -1399,10 +1448,10 @@ fn github_graphql_payload(query: &str, variables: Value) -> Value {
     serde_json::json!({ "query": query, "variables": variables })
 }
 
-fn run_github_graphql_mutation(cwd: &str, query: &str, variables: Value) -> Result<Value> {
+fn run_github_graphql_mutation(cwd: &GitHubContext<'_>, query: &str, variables: Value) -> Result<Value> {
     let input = serde_json::to_vec(&github_graphql_payload(query, variables))
         .map_err(|error| format!("Could not encode GitHub review request: {error}"))?;
-    let output = run_command_input(
+    let output = github_command_input(
         cwd,
         "gh",
         &["api", "graphql", "--method", "POST", "--input", "-"],
@@ -1475,16 +1524,16 @@ fn github_review_payload(
 }
 
 fn merge_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     id: u64,
     strategy: PullRequestMergeStrategy,
     expected_head: &str,
 ) -> Result<()> {
-    let slug = format!("{owner}/{repo}");
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
-    run_command(
+    github_command(
         cwd,
         "gh",
         &[
@@ -1502,10 +1551,10 @@ fn merge_github(
     Ok(())
 }
 
-fn mark_ready_github(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<()> {
-    let slug = format!("{owner}/{repo}");
+fn mark_ready_github(cwd: &GitHubContext<'_>, owner: &str, repo: &str, id: u64) -> Result<()> {
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
-    run_command(
+    github_command(
         cwd,
         "gh",
         &["pr", "ready", &id, "--repo", &slug],
@@ -1515,16 +1564,16 @@ fn mark_ready_github(cwd: &str, owner: &str, repo: &str, id: u64) -> Result<()> 
 }
 
 fn set_lifecycle_github(
-    cwd: &str,
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     id: u64,
     action: PullRequestLifecycleAction,
 ) -> Result<()> {
-    let slug = format!("{owner}/{repo}");
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
     let verb = github_lifecycle_verb(action);
-    run_command(
+    github_command(
         cwd,
         "gh",
         &["pr", verb, &id, "--repo", &slug],
@@ -3467,6 +3516,8 @@ fn auth_hint(program: &str, stderr: &str) -> &'static str {
         ""
     } else if program == "gh" {
         " Sign in with `gh auth login`, then try again."
+    } else if program == "glab" {
+        " Sign in with `glab auth login --hostname HOST` for this remote, then try again."
     } else {
         " Sign in with `az login`, then try again."
     }
@@ -4051,6 +4102,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         })
         .collect();
     Some(PullRequest {
+        capabilities: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("state"))
@@ -4370,6 +4422,7 @@ fn parse_azure_pr(
         "review required".into()
     };
     Some(PullRequest {
+        capabilities: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("status"))
@@ -4638,7 +4691,49 @@ fn branch_name(value: String) -> String {
         .to_string()
 }
 
+fn parse_hosted_remote(remote: &str, configured: Option<&str>) -> Option<HostRepo> {
+    let remote = if remote.contains("://") { remote.to_string() }
+        else { let (user_host, path) = remote.split_once(':')?; format!("ssh://{user_host}/{path}") };
+    let url = url::Url::parse(&remote).ok()?;
+    if !matches!(url.scheme(), "https" | "ssh") || url.password().is_some() || url.query().is_some() || url.fragment().is_some() { return None; }
+    let host = format!("{}{}", url.host_str()?, url.port().map(|p| format!(":{p}")).unwrap_or_default());
+    transport::validate_host(&host).ok()?;
+    let path = url.path().trim_matches('/').trim_end_matches(".git");
+    let parts = path.split('/').map(percent_decode).collect::<Vec<_>>();
+    if parts.len() < 2 || parts.iter().any(|p| p.is_empty() || p == "." || p == ".." || p.contains(['/', '\\', '\0', '\r', '\n'])) { return None; }
+    let provider = match host.as_str() { "github.com" => "github", "gitlab.com" => "gitlab", "bitbucket.org" => "bitbucket", _ => configured? };
+    match provider {
+        "github" if parts.len() == 2 => Some(HostRepo::GitHub { host, owner: parts[0].clone(), repo: parts[1].clone() }),
+        "gitlab" | "bitbucket" if provider == "gitlab" || host == "bitbucket.org" && parts.len() == 2 => Some(HostRepo::Hosted(hosted::HostedRepo {
+            provider: provider.into(), host, namespace: parts[..parts.len()-1].join("/"), repo: parts.last()?.clone(),
+        })),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct RemoteHostingProvider { pub remote: String, pub url: String, pub provider: String }
+
+pub fn hosting_providers(path: &str) -> Result<Vec<RemoteHostingProvider>> {
+    let repo = Repo::discover(path).map_err(|e| e.to_string())?;
+    repo.refs().map_err(|e| e.to_string())?.remotes.into_iter().map(|remote| {
+        let url = repo.configured_remote_url(&remote.name).map_err(|e| e.to_string())?.unwrap_or_default();
+        let provider = run_command(path, "git", &["config", "--get", &format!("remote.{}.strand-provider", remote.name)], &[]).ok().and_then(|v| String::from_utf8(v).ok()).unwrap_or_default().trim().to_string();
+        Ok(RemoteHostingProvider { remote: remote.name, url, provider })
+    }).collect()
+}
+
+pub fn set_hosting_provider(path: &str, remote: &str, provider: &str) -> Result<()> {
+    let remotes = hosting_providers(path)?;
+    let remote = remotes.iter().find(|r| r.remote == remote).ok_or("Remote no longer exists")?;
+    if !matches!(provider, "" | "github" | "gitlab") { return Err("Select automatic detection, GitHub, or GitLab".into()); }
+    if !provider.is_empty() && parse_hosted_remote(&remote.url, Some(provider)).is_none() { return Err("This remote has no supported HTTPS/SSH repository coordinates".into()); }
+    run_command(path, "git", &["config", "--local", &format!("remote.{}.strand-provider", remote.remote), provider], &[])?;
+    Ok(())
+}
+
 fn parse_remote(url: &str) -> Option<HostRepo> {
+    if let Some(host) = parse_hosted_remote(url, None) { return Some(host); }
     let trimmed = url.trim().trim_end_matches(".git").trim_end_matches('/');
     if let Some(rest) = trimmed
         .strip_prefix("https://github.com/")
@@ -4648,6 +4743,7 @@ fn parse_remote(url: &str) -> Option<HostRepo> {
     {
         let mut parts = rest.split('/');
         return Some(HostRepo::GitHub {
+            host: "github.com".into(),
             owner: percent_decode(parts.next()?),
             repo: percent_decode(parts.next()?),
         });
@@ -4750,6 +4846,17 @@ mod tests {
     use super::*;
     use std::{path::Path, process::Command};
 
+    #[test]
+    fn custom_hosts_require_explicit_adapter_and_preserve_auth_coordinates() {
+        assert!(parse_hosted_remote("git@enterprise.example:team/repo.git", None).is_none());
+        assert_eq!(parse_hosted_remote("ssh://git@enterprise.example:8443/team/repo.git", Some("github")), Some(HostRepo::GitHub {host:"enterprise.example:8443".into(),owner:"team".into(),repo:"repo".into()}));
+        assert!(matches!(parse_hosted_remote("https://gitlab.example/group/sub/repo.git",Some("gitlab")), Some(HostRepo::Hosted(host)) if host.namespace == "group/sub" && host.host == "gitlab.example"));
+        assert!(parse_hosted_remote("https://bitbucket.example/projects/A/repos/b",Some("bitbucket")).is_none());
+        assert!(parse_hosted_remote("https://enterprise.example/team/repo/extra",Some("github")).is_none());
+        assert!(parse_hosted_remote("https://token:secret@enterprise.example/team/repo",Some("github")).is_none());
+        assert!(parse_hosted_remote("https://enterprise.example/team%2Frepo/app",Some("github")).is_none());
+    }
+
     fn git(dir: &Path, args: &[&str]) -> String {
         let output = Command::new("git")
             .current_dir(dir)
@@ -4769,6 +4876,7 @@ mod tests {
         assert_eq!(
             parse_remote("git@github.com:openai/codex.git"),
             Some(HostRepo::GitHub {
+            host: "github.com".into(),
                 owner: "openai".into(),
                 repo: "codex".into()
             })
@@ -4801,8 +4909,8 @@ mod tests {
 
     #[test]
     fn rejects_unimplemented_hosts() {
-        assert_eq!(parse_remote("git@gitlab.com:acme/web.git"), None);
-        assert_eq!(parse_remote("https://bitbucket.org/acme/web.git"), None);
+        assert!(matches!(parse_remote("git@gitlab.com:acme/web.git"), Some(HostRepo::Hosted(_))));
+        assert!(matches!(parse_remote("https://bitbucket.org/acme/web.git"), Some(HostRepo::Hosted(_))));
     }
 
     #[test]
