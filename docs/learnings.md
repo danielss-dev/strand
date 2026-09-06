@@ -1,5 +1,47 @@
 # Learnings
 
+## SSH reads must stay isolated and bounded (2026-09-06)
+
+Remote identities never enter local filesystem commands. The first SSH surface
+is an isolated read-only inspector; suspend local repository shortcuts and
+native repository menu actions while it owns focus. Keep the system SSH command
+fixed and pass repository paths in JSON, with strict host-key checking and
+terminal-owned authentication. Local reads must never acquire transport locks.
+
+Retain cancellation slots until native workers actually stop. Desktop
+cancellation kills the whole host connection and drains its waiters; EOF,
+timeouts and protocol errors use the same teardown. Register pending requests
+under the drain lock and recheck liveness there to avoid an EOF race. Watch
+coalescing needs trailing invalidation and UI generations, including when an
+already-modified file changes again.
+
+JSON-RPC `result: null` is a successful response. Serde `Option<Value>` normally
+collapses it into a missing field: use presence-preserving deserialization and
+keep the null-result regression. File chunk metadata tokens detect ordinary
+edits; they are not content hashes or atomic snapshots.
+
+## Desktop launch arguments need an inbox (2026-09-06)
+
+Single-instance events can arrive before React subscribes or while persisted
+tabs are restoring. Keep a bounded native inbox, use events only as wakeups,
+and drain after session restore and listener registration. Resolve relative
+paths against the sending process's cwd. The desktop binary already owns the
+`strand` filename, so the bundle stores the headless companion as `strand-cli`;
+the user command installation maps it to `strand` with an absolute desktop
+locator, avoiding shell interpolation of repository paths.
+
+## Headless reads are a versioned allowlist (2026-09-06)
+
+`strand-ops::ReadOp` is shared by the companion and remote engine. Do not route
+arbitrary Tauri command names or shell commands through it. Local meta/status/
+snapshot calls stay typed and in process. Output schemas derive from the core
+serde types behind the `schema` feature; changing an existing shape is a public
+contract change. Serde's internally tagged unit variants can ignore extra
+fields even with `deny_unknown_fields`: use empty struct variants and retain
+the unknown-field regression test. The headless process disables Git lazy
+fetch before starting threads, so reads of partial clones cannot initiate a
+network write as a hidden side effect.
+
 ## Bisect ratings belong to the expected revision (2026-09-06)
 
 Read `BISECT_*` and refs from Git for every dialog refresh/action; these are

@@ -101,6 +101,8 @@ New-Item -ItemType Directory -Force -Path (Join-Path $layoutPath 'Assets') | Out
 New-Item -ItemType Directory -Force -Path $distPath | Out-Null
 
 Copy-Item -LiteralPath $executablePath -Destination (Join-Path $layoutPath 'strand.exe')
+New-Item -ItemType Directory -Force -Path (Join-Path $layoutPath 'binaries') | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot 'crates\strand-tauri\binaries\strand-cli.exe') -Destination (Join-Path $layoutPath 'binaries\strand-cli.exe')
 foreach ($asset in @('StoreLogo.png', 'Square150x150Logo.png', 'Square44x44Logo.png')) {
     Copy-Item `
         -LiteralPath (Join-Path $repoRoot "crates\strand-tauri\icons\$asset") `

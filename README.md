@@ -71,6 +71,13 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Read-only command line companion** — `strand status/log/diff/review`
+  works without the desktop; `--json` emits a versioned typed payload and
+  `strand schema` describes it. Full-file review context uses the same engine
+  as the app. Settings → Integrations installs `strand` in
+  your user command directory. `strand PATH` opens and focuses a repository
+  in the existing desktop instance, including paths with spaces.
+
 - **More hosting providers** — GitLab merge requests and Bitbucket Cloud pull
   requests use the review workspace, with paged lists, comments, inline threads
   and supported review decisions. GitHub Enterprise/custom hosts use their own
@@ -341,6 +348,11 @@ the resolved app appearance automatically.
   Review findings are structured, path/line-validated, stale-diff guarded, and
   require explicit acceptance before they become notes; repository files are
   never changed by an AI review.
+- **Read-only SSH repositories** — inspect remote status, history, full-context
+  reviews and bounded file snapshots through system OpenSSH, with watching,
+  connection health, cancellation and reconnect. Requires a manually installed
+  compatible companion on the POSIX host; see the
+  [setup guide](./website/docs/remote-repositories.md).
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in
@@ -403,6 +415,8 @@ calls, so `pnpm dev` is useful for UI work without a Rust build.
 strand/
 ├── crates/
 │   ├── strand-core/           # Git engine (gix for reads, git2 for writes)
+│   ├── strand-headless/       # CLI launcher, read-only companion and stdio engine
+│   ├── strand-ops/            # Shared read operations and versioned wire types
 │   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
 │   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands

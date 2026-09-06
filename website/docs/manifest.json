@@ -5,6 +5,7 @@
     { "file": "work", "title": "Workbench: Files & Terminals", "description": "Use Strand as a Git client with an integrated file browser, lightweight editor, previews, and repository terminals." },
     { "file": "custom-view", "title": "Customize the Workbench", "description": "Arrange live Strand surfaces per workspace, or keep the default full-size Work surface." },
     { "file": "repositories-and-workspaces", "title": "Repositories & Workspaces", "description": "Manage multiple Git repositories, tabs, recent projects, and cross-repository workspaces in Strand." },
+    { "file": "remote-repositories", "title": "Repositories over SSH", "description": "Connect through system OpenSSH to inspect remote repository status, history, diffs and file snapshots." },
     { "file": "reviewing-agent-changes", "title": "Reviewing Agent Changes", "description": "Review AI coding-agent changes with whole-file diffs, baselines, notes, and reusable feedback in Strand." },
     { "file": "pull-requests", "title": "Pull Requests", "description": "Browse and review GitHub and Azure DevOps pull requests from the Strand desktop Git client." },
     { "file": "worktrees", "title": "Worktrees", "description": "Use Strand's Git worktree GUI to isolate agent tasks, compare attempts, review changes, and merge the winner." },

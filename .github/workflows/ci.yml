@@ -55,6 +55,9 @@ jobs:
       - name: Test strand-core
         run: cargo test -p strand-core
 
+      - name: Test Strand companion
+        run: cargo test -p strand-ops -p strand-headless
+
       - name: Test strand-tauri
         run: cargo test -p strand-tauri
 
@@ -62,7 +65,7 @@ jobs:
         run: cargo test -p strand-azdo-protocol -p strand-azdo
 
       - name: Clippy (deny warnings)
-        run: cargo clippy -p strand-core -p strand-tauri -p strand-azdo-protocol -p strand-azdo -- -D warnings
+        run: cargo clippy -p strand-core -p strand-tauri -p strand-ops -p strand-headless -p strand-azdo-protocol -p strand-azdo -- -D warnings
 
   windows-helper:
     name: Azure DevOps Server helper (Windows)

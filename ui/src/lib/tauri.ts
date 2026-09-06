@@ -2,6 +2,8 @@ import type { RemoteHostingProvider, PublishAccount, PublishRequest, PublishStat
 
 import type { FlowAction, FlowConfig, FlowKind, FlowOutcome, FlowPlan, FlowState, FlowTool } from './gitflow';
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { RemoteEnvelope, RemoteReadOp } from './remoteRepos';
+
 import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
 import type { BisectAction, BisectState, BisectOutcome } from './bisect';
 import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
@@ -139,6 +141,13 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  remoteRepoRead: (address: string, op: RemoteReadOp, requestId: string) => invoke<RemoteEnvelope>('remote_repo_read', { address, op, requestId }),
+  remoteRepoCancel: (requestId: string) => invoke<void>('remote_repo_cancel', { requestId }),
+  remoteRepoWatch: (address: string, enabled: boolean) => invoke<void>('remote_repo_watch', { address, enabled }),
+  remoteRepoDisconnect: (address: string) => invoke<void>('remote_repo_disconnect', { address }),
+  appTakeOpenRequests: () => invoke<string[]>('app_take_open_requests'),
+  appInstallCli: () => invoke<string>('app_install_cli'),
+
   repoGitflowDetect: () => invoke<FlowTool>('repo_gitflow_detect'),
   repoGitflowState: (path: string) => invoke<FlowState>('repo_gitflow_state', { path }),
   repoGitflowConfigure: (path: string, config: FlowConfig, enabled: boolean, token: string) => invoke<FlowState>('repo_gitflow_configure', { path, config, enabled, token }),

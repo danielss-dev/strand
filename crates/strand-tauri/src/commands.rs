@@ -323,7 +323,7 @@ async fn run_blocking<T: Send + 'static>(
 
 #[tauri::command(async)]
 pub async fn repo_open(path: String, state: State<'_, AppState>) -> CmdResult<RepoMeta> {
-    let meta = run_blocking("open", move || Ok(Repo::discover(&path)?.meta()?)).await?;
+    let meta = run_blocking("open", move || Ok(strand_ops::meta(&path)?)).await?;
     if let Ok(mut paths) = state.open_paths.lock() {
         paths.insert(meta.path.clone());
     }
@@ -348,12 +348,12 @@ pub async fn microsoft_store_open_product() -> CmdResult<()> {
 
 #[tauri::command(async)]
 pub async fn repo_meta(path: String) -> CmdResult<RepoMeta> {
-    run_blocking("meta", move || Ok(Repo::discover(&path)?.meta()?)).await
+    run_blocking("meta", move || Ok(strand_ops::meta(&path)?)).await
 }
 
 #[tauri::command(async)]
 pub async fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
-    run_blocking("status", move || Ok(Repo::discover(&path)?.status()?)).await
+    run_blocking("status", move || Ok(strand_ops::status(&path)?)).await
 }
 
 /// One-call refresh bundle: meta + status + work tree + refs + submodules
@@ -361,7 +361,7 @@ pub async fn repo_status(path: String) -> CmdResult<Vec<FileStatus>> {
 /// post-change refresh path calls this instead of five separate commands.
 #[tauri::command(async)]
 pub async fn repo_snapshot(path: String) -> CmdResult<Snapshot> {
-    run_blocking("snapshot", move || Ok(Repo::discover(&path)?.snapshot()?)).await
+    run_blocking("snapshot", move || Ok(strand_ops::snapshot(&path)?)).await
 }
 
 /// Start watching `path`'s working tree; emits a `repo://changed` event with

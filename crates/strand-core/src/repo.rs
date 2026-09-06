@@ -22,6 +22,9 @@ pub struct Repo {
 impl Repo {
     /// Discover and open the repository containing `path`.
     pub fn discover(path: impl AsRef<Path>) -> Result<Self> {
+        if path.as_ref().to_str().is_some_and(|path| path.starts_with("ssh://")) {
+            return Err(crate::Error::Other("SSH repository addresses require the remote transport; they are not local filesystem paths.".into()));
+        }
         let gix = gix::discover(path.as_ref())?;
         let workdir = gix
             .work_dir()
@@ -225,6 +228,7 @@ impl Repo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RepoMeta {
     pub name: String,
     pub path: String,

@@ -21,6 +21,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Snapshot {
     pub meta: RepoMeta,
     pub status: Vec<FileStatus>,

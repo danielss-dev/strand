@@ -19,6 +19,7 @@ use crate::{
 /// git2's `SubmoduleStatus` bitset to the single badge the UI shows.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum SubmoduleState {
     /// No working tree checked out (never `init`-ed / `update`-d).
     Uninitialized,
@@ -33,6 +34,7 @@ pub enum SubmoduleState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Submodule {
     /// Submodule name from `.gitmodules` (often equal to `path`).
     pub name: String,

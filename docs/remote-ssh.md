@@ -1,9 +1,51 @@
 # Remote repos over SSH — feature design
 
-Status (2026-06-12): **design only, scheduled post-1.0** (ROADMAP §1.1+).
-Nothing here is implemented. This document records the decided
-architecture so pre-1.0 work doesn't accidentally close the door on it —
-see "What 1.0 must not break" below.
+Status (2026-09-06): **F17 read-only foundation implemented locally**.
+`strand-cli --stdio` serves the versioned `strand-ops` allowlist. The desktop's
+**SSH repositories** inspector connects through system OpenSSH and displays
+status, history, full-context changes/reviews, and bounded file previews. Local
+repository commands stay in process; remote identities are rejected by local
+`Repo::discover`. Remote inspection has separate state and no mutation controls.
+
+The host must currently have a compatible companion installed at
+`~/.strand/bin/strand`. Automatic SFTP installation, signed host-artifact
+manifests, the Linux/macOS release matrix, host discovery/directory browsing,
+ordinary remote tabs and remote writes remain open. The sections below record
+the broader target design; they are not claims about the current inspector.
+See [the user guide](../website/docs/remote-repositories.md) for today's setup.
+
+## Implemented protocol and limits
+
+- `ssh://HOST-ALIAS/absolute/path` identifies the repository; configure user,
+  port and jump hosts in OpenSSH config. Paths travel in JSON on stdin, never
+  in a shell command. Only the fixed `exec "$HOME/.strand/bin/strand" --stdio`
+  command executes remotely. `BatchMode=yes` and `StrictHostKeyChecking=yes`
+  keep authentication and host-key enrollment in the terminal.
+- JSON-RPC 2.0 uses increasing integer IDs, newline-delimited UTF-8 frames and
+  an 8 MiB frame limit. Protocol 1 negotiates schema 1 and read/watch/file-chunk
+  capabilities. Unknown methods/fields, malformed frames and unknown response
+  IDs fail closed. `hello`, `read`, `watch`, `unwatch` and `cancel` are the only
+  methods; read operations share the CLI's typed schema.
+- The daemon permits four concurrent reads, sixteen repository watches and
+  eight queued output frames. Watch events debounce at 400 ms and coalesce on
+  a 200 ms notifier; a full queue preserves a trailing notification. File reads
+  are at most 64 KiB with an offset and metadata version token. A changed token
+  rejects appending to an old preview; these are not atomic disk snapshots.
+- The desktop permits sixteen hosts, sixteen pending requests per connection
+  and thirty-two IPC reads overall. Reads retry connection failures twice
+  (250 ms, then 1 s). Handshake/read/diff deadlines are 15/30/60 seconds;
+  timeout or cancellation kills the SSH process tree and fails every pending
+  read on that host. Cancellation does not interrupt another host or a local
+  operation. No write queue or write replay exists.
+- EOF ends the daemon and its watchers. Daemon-side cancellation retains the
+  worker slot until the native read returns; desktop cancellation tears down
+  the connection for prompt interruption. Diagnostics retain at most 16 KiB;
+  a peer emitting more than 64 KiB of stderr is stopped.
+- The inspector keeps a single diff mounted, shows at most 500 matching file
+  names (filter to narrow), and caps file previews at 1 MiB. Watch refreshes
+  coalesce with a trailing read and reject stale generations. Closing the
+  inspector cancels reads and disconnects; successful remote addresses alone
+  are saved as recents. Disconnect leaves a visibly stale snapshot.
 
 ## Why
 

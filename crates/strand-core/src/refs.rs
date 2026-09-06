@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{error::Result, repo::Repo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Branch {
     /// Short name, e.g. `main`.
     pub name: String,
@@ -30,6 +31,7 @@ pub struct Branch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct UpstreamRef {
     /// Short name as git presents it, e.g. `origin/main`.
     pub name: String,
@@ -38,6 +40,7 @@ pub struct UpstreamRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RemoteBranch {
     /// Short name, e.g. `origin/main`.
     pub name: String,
@@ -54,6 +57,7 @@ pub struct RemoteBranch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Remote {
     pub name: String,
     pub url: Option<String>,
@@ -68,6 +72,7 @@ pub struct Remote {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Tag {
     pub name: String,
     pub full_name: String,
@@ -80,6 +85,7 @@ pub struct Tag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Refs {
     pub branches: Vec<Branch>,
     /// Primary branch used to determine merged local branches.

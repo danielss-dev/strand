@@ -5,6 +5,8 @@
 # Tauri build artifacts
 /crates/strand-tauri/gen/
 /crates/strand-tauri/target/
+/crates/strand-tauri/binaries/*
+!/crates/strand-tauri/binaries/.gitkeep
 
 # Node / Vite
 node_modules/

@@ -1,0 +1,12 @@
+.remote-repo-controls { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; padding: 0 16px; }
+.remote-repo-dialog > .clone-head + .remote-repo-controls { padding-top: 12px; }
+.remote-repo-dialog > .settings-hint { margin: 8px 16px; }
+.remote-repo-controls .settings-field { flex: 1; min-width: 260px; }
+.remote-repo-context { padding: 10px 16px; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.remote-repo-error { margin: 8px 16px; color: var(--del); white-space: pre-wrap; max-height: 100px; overflow: auto; }
+.remote-repo-body { height: min(58vh, 620px); min-height: 260px; margin-top: 12px; border-top: 1px solid var(--border); }
+.remote-repo-files { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 8px; min-width: 0; }
+.remote-repo-list { flex: 1; min-height: 0; width: 100%; background: var(--bg-base); color: var(--text); border: 1px solid var(--border); font-family: var(--font-mono); }
+.remote-repo-list option { padding: 4px; }
+.remote-repo-scroll { height: 100%; overflow: auto; padding: 8px; }
+.remote-repo-scroll pre { font-family: var(--font-mono); white-space: pre; }

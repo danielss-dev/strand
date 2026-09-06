@@ -25,6 +25,7 @@ const MAX_CONTENT_BYTES: usize = 2_000_000;
 const MAX_BLOB_BYTES: usize = 8_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileContent {
     pub path: String,
     /// File text (empty when `binary`). Truncated to [`MAX_CONTENT_BYTES`].
@@ -57,6 +58,7 @@ pub enum BlobSource<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileHistoryEntry {
     pub hash: String,
     pub short_hash: String,
@@ -70,7 +72,38 @@ pub struct FileHistoryEntry {
     pub dels: u32,
 }
 
+/// One bounded working-tree read for transports. The metadata token detects
+/// ordinary concurrent edits between chunks; it is not a content hash.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FileChunk {
+    pub bytes: Vec<u8>,
+    pub offset: u64,
+    pub next_offset: u64,
+    pub total: u64,
+    pub version: String,
+}
+
 impl Repo {
+    pub fn file_chunk(&self, path: &str, offset: u64, length: usize, expected: Option<&str>) -> Result<FileChunk> {
+        use std::io::{Read, Seek, SeekFrom};
+        if !(1..=65_536).contains(&length) { return Err(Error::Other("File chunk must be 1–65536 bytes.".into())); }
+        let mut file = std::fs::File::open(self.workdir_path(path)?)?;
+        let meta = file.metadata()?;
+        if !meta.is_file() || offset > meta.len() { return Err(Error::Other("Invalid file or chunk offset.".into())); }
+        let token = |meta: &std::fs::Metadata| -> Result<String> {
+            let time = meta.modified()?.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+            Ok(format!("{}:{time}", meta.len()))
+        };
+        let version = token(&meta)?;
+        if expected.is_some_and(|expected| expected != version) { return Err(Error::Other("File changed; restart reading at byte 0.".into())); }
+        file.seek(SeekFrom::Start(offset))?;
+        let mut bytes = Vec::with_capacity(length);
+        (&mut file).take(length as u64).read_to_end(&mut bytes)?;
+        if token(&file.metadata()?)? != version { return Err(Error::Other("File changed during read; retry.".into())); }
+        Ok(FileChunk { next_offset: offset + bytes.len() as u64, bytes, offset, total: meta.len(), version })
+    }
+
     /// Read a file's content. `rev = None` reads the working-tree copy from disk
     /// (with the same path-traversal guard the conflict reader uses); `rev =
     /// Some(spec)` reads the blob from that revision's tree.

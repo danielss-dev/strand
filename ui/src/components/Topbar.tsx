@@ -11,6 +11,8 @@ import { useRepo } from '../stores/repo';
 import type { PullMode, PushMode } from '../lib/types';
 
 interface Props {
+  onOpenRemote: () => void;
+  remoteHealth: string;
   onOpenPalette: () => void;
   onFetch: (prune?: boolean) => void;
   onPull: (mode?: PullMode, autostash?: boolean) => void;
@@ -58,6 +60,8 @@ interface Props {
 }
 
 export function Topbar({
+  onOpenRemote,
+  remoteHealth,
   onOpenPalette,
   onFetch,
   onPull,
@@ -331,6 +335,7 @@ export function Topbar({
         <kbd>{platform === 'mac' ? '⌘K' : 'Ctrl K'}</kbd>
       </button>
 
+      <button type="button" className="btn" onClick={onOpenRemote} title={`SSH repositories · ${remoteHealth}`} aria-label={`SSH repositories · ${remoteHealth}`}>SSH{remoteHealth !== 'disconnected' ? ` · ${remoteHealth}` : ''}</button>
       {showWinControls && <WinControls functional={inTauri} />}
     </div>
   );

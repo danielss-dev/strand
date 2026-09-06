@@ -10,6 +10,8 @@ mod path_env;
 mod pull_requests;
 mod state;
 mod terminal;
+mod remote_repos;
+
 mod user_actions;
 
 use tauri::Manager;
@@ -118,6 +120,8 @@ fn install_crash_log(app: &tauri::App) {
     }));
 }
 
+mod launcher;
+
 fn main() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("strand=info,strand_core=info"));
@@ -134,6 +138,11 @@ fn main() {
     strand_core::init();
 
     tauri::Builder::default()
+        .manage(launcher::LaunchInbox::default())
+        .manage(std::sync::Arc::new(remote_repos::RemoteRepos::default()))
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            launcher::receive(app, &args, std::path::Path::new(&cwd));
+        }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -148,6 +157,12 @@ fn main() {
         )
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            launcher::app_take_open_requests,
+            launcher::app_install_cli,
+            remote_repos::remote_repo_read,
+            remote_repos::remote_repo_cancel,
+            remote_repos::remote_repo_watch,
+            remote_repos::remote_repo_disconnect,
             commands::repo_open,
             commands::microsoft_store_update_available,
             commands::microsoft_store_open_product,
@@ -405,6 +420,7 @@ fn main() {
                 }
                 let _ = win.show();
             }
+            launcher::receive(app.handle(), &std::env::args().collect::<Vec<_>>(), &std::env::current_dir().unwrap_or_default());
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -426,6 +442,8 @@ fn main() {
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
                 app.state::<state::AppState>().terminals.close_all(None);
+                app.state::<std::sync::Arc<remote_repos::RemoteRepos>>().stop_all();
+
                 user_actions::shutdown();
             }
         });

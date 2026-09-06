@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{error::Result, repo::Repo, status::StatusKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WorkTreeEntry {
     pub path: String,
     /// Change status if the file differs from HEAD/index; `None` for a clean
