@@ -70,3 +70,25 @@ per-remote settings persistence in a scratch repository. Hosted responses and
 writes were injected fixtures; no authenticated live-provider mutation was
 performed. The app used a separate identity/profile and temporary embedded
 debug configuration; the normal binary was rebuilt after verification.
+
+## Repository publishing
+
+`pull_requests/publish.rs` uses GitHub
+[repository creation](https://docs.github.com/en/rest/repos/repos), GitLab
+[project creation](https://docs.gitlab.com/api/projects/) and
+[namespaces](https://docs.gitlab.com/api/namespaces/), and Bitbucket's repository
+and workspace APIs linked above. Azure creation is outside this flow.
+
+The journal in repository-local `strand.publish-state` contains the reviewed
+account/destination/visibility, branch and commit, plus recovery stage. It has no
+credentials. Creation persists `uncertain` before POST; recovery only performs
+GET. Attaching a remote and pushing require separate explicit actions. The
+initial push pins the reviewed object, rejects changed or rewritten URLs,
+disables implicit tag/submodule pushes and preserves an existing upstream.
+
+Fixtures cover uncertain creation without duplicate POST, changed accounts,
+visibility mismatch and remote conflicts. A real local bare-repository test
+proves that only the reviewed object is pushed after a newer local commit and
+that an existing upstream survives. The desktop pass exercised destination
+review, remote-setup failure, close/resume/retry, an initially unchecked push
+checkbox, and completion; it also caught and fixed initial keyboard focus.

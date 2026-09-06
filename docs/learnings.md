@@ -2505,3 +2505,11 @@ head. Cloud comment/review races must report that a write may have happened,
 and partial batches must retain drafts with reconciliation guidance. Never
 reuse another provider's credentials; Cloud API tokens are scoped to
 api.bitbucket.org through the system Git credential helper.
+
+**Repository creation must be resumable before any network write (2026-09-06).**
+Persist the concrete destination and reviewed commit locally before creation,
+record uncertain state before POST, and recover by GET instead of blindly
+reposting. Creation, remote attachment and initial push are separate user
+actions. Initial push sends only the reviewed SHA to the reviewed branch,
+rejects URL rewrites/alternate push URLs, disables implicit tag/submodule
+pushes and preserves an existing upstream. Recovery records contain no tokens.

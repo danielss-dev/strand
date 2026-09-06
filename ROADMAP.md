@@ -2820,6 +2820,12 @@ authentication and per-remote adapter selection. GitHub.com and Azure routing
 remain intact. Bitbucket merge stays on the provider because its API cannot
 atomically guard the reviewed head.
 
+**Hosted repository publication shipped (2026-09-06):** Publish repository
+reviews an authenticated GitHub/Enterprise, GitLab or Bitbucket Cloud destination,
+creates an empty repository, adds its remote, then separately offers an explicit
+push of the reviewed commit. A local recovery record survives partial failures;
+uncertain creation checks the destination without repeating the create request.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

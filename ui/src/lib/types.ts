@@ -930,3 +930,11 @@ export type AiGenerationOutcome<T> =
     };
 
 export interface RemoteHostingProvider { remote: string; url: string; provider: string }
+export interface PublishDestination { id: string; label: string; kind: string }
+export interface PublishAccount { account: string; account_id: string; destinations: PublishDestination[] }
+export interface PublishRequest { provider: 'github' | 'gitlab' | 'bitbucket'; host: string; account_id: string; destination: string; name: string; visibility: 'private' | 'public'; remote: string }
+export interface PublishState {
+  id: string; request: PublishRequest; account: string; destination: PublishDestination;
+  url: string; clone_url: string; branch: string; head: string;
+  stage: 'review' | 'uncertain' | 'created' | 'remote_ready' | 'pushed'; error: string | null;
+}

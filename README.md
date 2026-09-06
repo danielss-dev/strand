@@ -78,6 +78,10 @@ the resolved app appearance automatically.
   GitLab merges guard the reviewed head and follow project settings. Bitbucket
   merge, GitLab request-changes and Bitbucket draft transitions remain
   provider-site actions. Bitbucket Server is not supported.
+- **Publish repository** — create an empty GitHub/Enterprise, GitLab or Bitbucket
+  Cloud repository after reviewing its account, destination and visibility.
+  Add the remote, then explicitly choose whether to push the reviewed commit.
+  Interrupted creation and remote setup can be resumed from the same dialog.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with

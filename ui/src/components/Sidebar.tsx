@@ -1121,6 +1121,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
             count={refs.remotes.length}
             action={{ icon: 'plus', title: 'Add remote…', onClick: () => onManageRemote({ kind: 'add' }) }}
           />
+          {sections.remotes && <SideRow icon="plus" label="Publish repository…" onClick={() => window.dispatchEvent(new CustomEvent('strand:publish-repository'))} />}
           {sections.remotes &&
             renderTreeChildren(remoteTree, 0, collapsed, toggleCollapsed, renderRemoteLeaf, 'remotes', {
               folderIcon: 'remote',

@@ -114,6 +114,7 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 const CloneDialog = lazy(() => import('./views/CloneDialog').then((m) => ({ default: m.CloneDialog })));
+const PublishRepoDialog = lazy(() => import('./views/PublishRepoDialog').then((m) => ({ default: m.PublishRepoDialog })));
 const InitRepoDialog = lazy(() => import('./views/InitRepoDialog').then((m) => ({ default: m.InitRepoDialog })));
 const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
@@ -335,6 +336,12 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [publishRepoOpen, setPublishRepoOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setPublishRepoOpen(true);
+    window.addEventListener('strand:publish-repository', open);
+    return () => window.removeEventListener('strand:publish-repository', open);
+  }, []);
   const [initRepoOpen, setInitRepoOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean; keepIndex: boolean } | null>(null);
@@ -1874,6 +1881,7 @@ export function App() {
               })(),
             ]
           : []),
+        { id: 'publish-repository', label: 'Publish repository…', group: 'Actions', keywords: 'create hosted github gitlab bitbucket repository account organization visibility initial push', run: () => setPublishRepoOpen(true) },
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
@@ -2344,6 +2352,7 @@ export function App() {
         <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
       )}
 
+      {publishRepoOpen && activePath && <PublishRepoDialog key={activePath} path={activePath} onClose={() => setPublishRepoOpen(false)} />}
       {initRepoOpen && (
         <InitRepoDialog onClose={() => setInitRepoOpen(false)} onInit={runInitRepo} />
       )}

@@ -5,6 +5,7 @@
 //! loads nested metadata only for the selected pull request so provider query
 //! limits and large repositories remain predictable.
 mod hosted;
+pub(crate) mod publish;
 pub(crate) mod transport;
 use transport::{github_command, github_command_input, GitHubContext};
 

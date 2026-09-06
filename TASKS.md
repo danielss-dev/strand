@@ -117,9 +117,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
   execution until the manual workflow is complete.
-- ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
+- ☑ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
-  initial push, with recovery from partial failure.
+  initial push, with recovery from partial failure (GitHub/Enterprise, GitLab
+  and Bitbucket Cloud; `PublishRepoDialog`, `hosted_publish_*`, persisted
+  recovery stages and exact-reviewed-commit push).
 - ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
   argv templates, exact context, palette/menu discovery, preview, bounded output
   and cancellation; editor/terminal templates and internal registries already exist.

@@ -1,4 +1,4 @@
-import type { RemoteHostingProvider } from './types';
+import type { RemoteHostingProvider, PublishAccount, PublishRequest, PublishState } from './types';
 import { Channel, invoke } from '@tauri-apps/api/core';
 
 import type {
@@ -129,6 +129,11 @@ export const tauri = {
   azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
   repoHostingProviders: (path: string) => invoke<RemoteHostingProvider[]>('repo_hosting_providers', { path }),
   repoSetHostingProvider: (path: string, remote: string, provider: string) => invoke<void>('repo_set_hosting_provider', { path, remote, provider }),
+  hostedPublishAccounts: (path: string, provider: string, host: string) => invoke<PublishAccount>('hosted_publish_accounts', { path, provider, host }),
+  hostedPublishState: (path: string) => invoke<PublishState | null>('hosted_publish_state', { path }),
+  hostedPublishPreview: (path: string, request: PublishRequest) => invoke<PublishState>('hosted_publish_preview', { path, request }),
+  hostedPublishAdvance: (path: string, id: string, action: string) => invoke<PublishState>('hosted_publish_advance', { path, id, action }),
+  hostedPublishForget: (path: string) => invoke<void>('hosted_publish_forget', { path }),
   hostingConnectionStatus: () => invoke<HostingConnectionStatus>('hosting_connection_status'),
   azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
   azdoHelperDisable: () => invoke<AzdoHelperStatus>('azdo_helper_disable'),
