@@ -1,4 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { UserAction, ActionContext, ActionPreview, ActionOutcome } from './userActions';
 
 import type {
   AiProvider,
@@ -115,6 +116,13 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoUserActionPreview: (action: UserAction, context: ActionContext) =>
+    invoke<ActionPreview>('repo_user_action_preview', { action, context }),
+  repoUserActionRun: (action: UserAction, context: ActionContext, preview: ActionPreview, opId: string, onStarted: () => void) => {
+    const channel = new Channel<null>();
+    channel.onmessage = onStarted;
+    return invoke<ActionOutcome>('repo_user_action_run', { action, context, preview, opId, onStarted: channel });
+  },
   microsoftStoreUpdateAvailable: () =>
     invoke<boolean>('microsoft_store_update_available'),
   microsoftStoreOpenProduct: () =>

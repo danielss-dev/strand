@@ -120,9 +120,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
   initial push, with recovery from partial failure.
-- ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
+- ☑ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
   argv templates, exact context, palette/menu discovery, preview, bounded output
-  and cancellation; editor/terminal templates and internal registries already exist.
+  and cancellation. (`UserActionsEditor`, `UserActionDialog`,
+  `repo_user_action_preview` / `repo_user_action_run`; personally persisted settings.)
 - ☐ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
   existing local Review notes are separate from Git notes.

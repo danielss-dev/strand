@@ -2494,3 +2494,25 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+## Personal actions preserve argv and captured targets (2026-09-06)
+
+User actions are personal executable/argv definitions, separate from Workbench
+registries and community plugins. Establish argument boundaries before
+single-pass placeholder substitution; never interpolate repository-controlled
+values into an implicit shell or recursively expand substituted text. Resolve
+the executable before adopting the repository cwd. Windows actions require a
+native executable, with script paths passed to their interpreter as arguments;
+batch shims introduce another command parser.
+
+Menus capture the invoked repository/ref/file, including inactive repository
+tabs. Palette actions require an exact active target, and every run revalidates
+the resolved preview and captured ref ID. A sidebar ref click only reveals its
+graph row; Enter selects the tip's commit for ref palette actions. Do not infer
+a ref from HEAD or a commit shared by several branches/tags.
+
+Bound stdout and stderr independently. Cancel the whole process tree on close,
+timeout, output overflow, or selection changes. Stop descendants even after a
+natural parent exit **before** joining pipe readers: inherited stdout/stderr can
+otherwise keep the reader joins blocked indefinitely. Replay early cancellation
+after native operation registration to cover a closed dialog during IPC startup.

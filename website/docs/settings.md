@@ -121,6 +121,71 @@ Configure Work's embedded terminals separately from external applications.
 - **External editor** — a dropdown of per-platform presets, None, or "Custom command…". Custom commands are templates with `{file}`, `{line}`, and `{dir}` placeholders, and a **Test** button lets you verify the command before relying on it.
 - **Terminal** — the same style of picker; the template takes a `{dir}` placeholder and opens the repository folder.
 
+### User actions
+
+In **Settings → Integrations → User actions**, create, edit, or delete personal
+commands. Quick Launch (`Mod+K`) also offers **Manage user actions…**.
+Give each action a name, a context (repository, selected branch/tag, or selected
+working-tree file), an executable, and arguments as a JSON array of strings.
+Each string is exactly one argument; spaces, quotes, and shell metacharacters
+in substituted paths remain inside that argument. An empty string is allowed.
+
+Use an installed command such as `git`, or an absolute executable path without
+surrounding quotes. Windows actions require a native `.exe`; to run a script,
+choose its interpreter as the executable and put the script path in the
+arguments. Strand adds no shell. Do not embed placeholders inside interpreter
+code or shell command strings: pass repository values as script arguments.
+These commands run with your account permissions and can modify files or Git state.
+
+| Placeholder | Meaning | Context |
+| --- | --- | --- |
+| `{repo}` | Absolute working-tree root | All |
+| `{ref}` | Full selected ref, such as `refs/heads/topic` | Ref |
+| `{oid}` | Selected ref's commit ID | Ref |
+| `{file}` | Validated absolute working-tree file path | File |
+| `{relativeFile}` | Selected path relative to the repository root | File |
+
+Double braces (`{{` and `}}`) produce literal braces. Unavailable placeholders
+are errors. The working directory is the repository root, or, for file actions,
+the selected file's parent. Prefer `{file}` with the latter choice.
+
+For example, a **File** action named “Inspect file history” can use executable
+`git`, repository working directory, and arguments:
+
+```json
+["log", "-5", "--oneline", "--", "{relativeFile}"]
+```
+
+Use `--` before path operands where the executable supports it. Git actions
+include Strand's `core.fsmonitor` and pager overrides in the displayed argument
+list; no other arguments are added implicitly.
+
+Open **User actions…** on a repository tab, branch/tag row, or single file in
+the Files tree. The row you invoke owns the target, including an inactive
+repository tab. Historical files, directories, and multiple file selections
+do not offer working-tree file actions. Palette entries named **User action:
+…** use the active Work file or explicitly selected branch/tag in All Commits;
+repository actions use the active repository. Use the existing keyboard context
+menu (`Shift+F10`) on branch/tag and Files rows, or search Quick Launch.
+For a ref palette action, click its branch/tag row to reveal the tip, then press
+Enter in the graph to select that commit before opening Quick Launch.
+
+Choose **Preview command**, inspect the resolved executable, numbered arguments,
+selected target, and working directory, then **Run action**. A changed selection
+invalidates the dialog; a moved ref, missing file, or redirected executable/path
+is checked again before execution. Unsaved editor buffers are not written.
+
+**Cancel action**, Escape, or closing the dialog stops its process tree.
+Cancellation does not undo completed changes. Standard output and standard
+error are displayed separately after the process stops, with status, exit code,
+and duration. Each stream retains at most 128 KiB of source bytes; excess output
+or a ten-minute timeout stops the action. Results remain in the dialog until it
+closes; they are not saved to activity history.
+
+Definitions persist in your personal settings. They are separate from internal
+Workbench commands and bundled plugins; Strand never loads these action
+definitions from repository content or community packages.
+
 ## AI
 
 Strand can suggest a commit message from staged changes, or all unstaged changes

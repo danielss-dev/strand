@@ -71,6 +71,9 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Personal user actions** — define repository, ref, and working-tree file
+  commands in Settings → Integrations. Menu and palette entries open an exact
+  executable/argument/working-directory preview, with bounded output and cancellation.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with

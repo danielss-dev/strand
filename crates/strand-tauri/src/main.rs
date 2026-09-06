@@ -10,6 +10,7 @@ mod path_env;
 mod pull_requests;
 mod state;
 mod terminal;
+mod user_actions;
 
 use tauri::Manager;
 
@@ -274,6 +275,8 @@ fn main() {
             commands::repo_remote_set_urls,
             commands::repo_remote_set_default,
             commands::repo_maintenance,
+            commands::repo_user_action_preview,
+            commands::repo_user_action_run,
             commands::repo_tag_create,
             commands::repo_tag_delete,
             commands::repo_tag_push,
@@ -369,6 +372,7 @@ fn main() {
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
                 app.state::<state::AppState>().terminals.close_all(None);
+                user_actions::shutdown();
             }
         });
 }

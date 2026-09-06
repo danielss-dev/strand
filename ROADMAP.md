@@ -2165,7 +2165,8 @@ and Store certification remain external gates.
 - Sparse checkout (cone mode first)
 - Patch import/mailbox and Git bundle workflows
 - Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
-- Repository/ref/file custom actions with safe argv templates
+- ☑ Repository/ref/file custom actions with safe argv templates
+  (`UserActionsEditor`, context menus / Quick Launch, `UserActionDialog`)
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
   typed, full-context data the `git` porcelain can't (same serde types
@@ -2807,6 +2808,16 @@ expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
 implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
+
+**Personal user actions shipped (2026-09-06, F15):** Settings → Integrations
+now edits explicit executable/argv definitions for repositories, qualified refs,
+and working-tree files. Context menus and Quick Launch capture the target and
+require a resolved executable/arguments/cwd preview. Native execution revalidates
+paths and ref IDs, preserves argv boundaries, bounds both output streams, and
+cancels the process tree. Definitions stay in personal settings, separate from
+Workbench and plugins. Automated tests and an isolated Windows WebView2 pass
+covered literal spaces/metacharacters, stale selections, exact menu targets,
+nonzero exits, output limits, keyboard operation, and cancellation.
 
 ---
 

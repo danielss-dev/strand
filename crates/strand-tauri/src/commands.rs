@@ -1497,6 +1497,42 @@ pub async fn repo_maintenance(
 }
 
 #[tauri::command(async)]
+pub async fn repo_user_action_preview(
+    action: strand_core::user_actions::UserAction,
+    context: strand_core::user_actions::ActionContext,
+) -> CmdResult<strand_core::user_actions::ActionPreview> {
+    run_blocking("user action preview", move || {
+        crate::user_actions::preview(&action, &context).map_err(|message| CmdError { message })
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_user_action_run(
+    action: strand_core::user_actions::UserAction,
+    context: strand_core::user_actions::ActionContext,
+    preview: strand_core::user_actions::ActionPreview,
+    op_id: String,
+    on_started: Channel<()>,
+    state: State<'_, AppState>,
+) -> CmdResult<crate::user_actions::ActionOutcome> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    {
+        let mut ops = state.ops.lock().map_err(|_| CmdError { message: "operation registry unavailable".into() })?;
+        if ops.contains_key(&op_id) { return Err(CmdError { message: "Action is already running".into() }); }
+        ops.insert(op_id.clone(), OperationCancelHandle::Ai(cancel.clone()));
+    }
+    // UI replays an early cancellation after this registration handshake.
+    let _ = on_started.send(());
+    let result = run_blocking("user action", move || {
+        let current = crate::user_actions::preview(&action, &context).map_err(|message| CmdError { message })?;
+        if current != preview { return Err(CmdError { message: "Action context or executable changed. Preview again before running.".into() }); }
+        crate::user_actions::run(&current, &cancel).map_err(|message| CmdError { message })
+    }).await;
+    deregister_op(&state, &Some(op_id));
+    result
+}
+
+#[tauri::command(async)]
 pub fn repo_tag_create(
     path: String,
     name: String,

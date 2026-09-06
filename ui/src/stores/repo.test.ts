@@ -26,10 +26,18 @@ afterEach(() => {
 });
 
 describe('repository navigation state', () => {
+  it('drops the explicit action ref when its repository is deactivated', () => {
+    useRepo.setState({ activeTabPath: '/repo', activePath: '/repo' });
+    useRepo.getState().selectRef('refs/heads/topic');
+    useRepo.getState().deactivateTab();
+    expect(useRepo.getState().selectedRef).toBeNull();
+  });
+
   it('drops historical Files context when leaving history views', () => {
     useRepo.setState({
       view: 'commits',
       selectedCommit: 'deadbeef',
+      selectedRef: 'refs/heads/topic',
       selectedCommitDiffs: [{
         path: 'old.txt',
         old_path: null,
@@ -47,6 +55,7 @@ describe('repository navigation state', () => {
     expect(useRepo.getState()).toMatchObject({
       view: 'work',
       selectedCommit: null,
+      selectedRef: null,
       selectedCommitDiffs: [],
       selectedCommitDiffsLoading: false,
     });
