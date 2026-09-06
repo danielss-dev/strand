@@ -17,7 +17,7 @@ export interface RepoMeta {
    * Multi-step history op paused mid-flight, or `null` in a normal state.
    * Drives the in-progress banner + Abort affordance.
    */
-  operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | null;
+  operation: 'rebase' | 'cherry-pick' | 'revert' | 'merge' | 'mailbox' | 'bisect' | null;
   /**
    * The shared git dir (`commondir`), identical for every worktree of the same
    * repository. The tab strip groups worktree tabs on this value.
@@ -162,6 +162,7 @@ export interface ReviewNote {
 export interface CommitOutcome {
   oid: string;
   amended: boolean;
+  output: string;
 }
 
 export interface UpstreamRef {
@@ -255,7 +256,7 @@ export interface HostingConnectionStatus {
   azure_dev_ops: ProviderConnectionStatus;
 }
 
-export type PullRequestProvider = 'git_hub' | 'azure_dev_ops';
+export type PullRequestProvider = 'git_hub' | 'azure_dev_ops' | 'git_lab' | 'bitbucket';
 export type PullRequestMergeStrategy = 'merge_commit' | 'squash' | 'rebase';
 export type PullRequestLifecycleAction = 'close' | 'reopen';
 export type PullRequestReviewEvent = 'comment' | 'approve' | 'request_changes';
@@ -355,6 +356,8 @@ export interface PullRequestCompletion {
 export interface PullRequest {
   completion?: PullRequestCompletion | null;
   data_pages?: PullRequestPageCursor[];
+
+  capabilities?: { can_comment: boolean; can_review: boolean; can_request_changes: boolean; can_close: boolean; can_reopen: boolean; merge_strategies: PullRequestMergeStrategy[] };
   id: number;
   title: string;
   state: string;
@@ -558,6 +561,30 @@ export interface CloneOutcome {
   output: string;
 }
 
+export interface CloneOptions {
+  branch: string | null;
+  depth: number | null;
+  single_branch: boolean;
+  filter: 'blob-none' | null;
+  recurse_submodules: boolean;
+}
+
+export interface CloneScope {
+  shallow: boolean;
+  remotes: { name: string; filter: string | null; fetch_refspecs: string[] }[];
+}
+
+export type HistoryExpansion = { kind: 'deepen'; commits: number } | { kind: 'unshallow' };
+
+export interface SparseCheckout {
+  enabled: boolean;
+  cone: boolean;
+  sparse_index: boolean;
+  directories: string[];
+  available: string[];
+  patterns: string;
+}
+
 /** One file in the working-tree view (Files sidebar tab). */
 export interface WorkTreeEntry {
   path: string;
@@ -565,6 +592,7 @@ export interface WorkTreeEntry {
   status: StatusKind | null;
   /** Git-ignored local file; intentionally not represented as a change status. */
   ignored: boolean;
+  excluded?: boolean;
 }
 
 /** Shell used by Work's embedded terminal. Commands are tokenized into argv
@@ -606,6 +634,14 @@ export type FilesTreeMutation = FilesTreeMutationChange & {
 /** A submodule's state relative to the superproject's recorded commit. */
 export type SubmoduleState = 'uninitialized' | 'up-to-date' | 'out-of-date' | 'modified';
 
+export type LfsAction =
+  | { action: 'environment' | 'install' | 'patterns' | 'status' | 'objects' }
+  | { action: 'track' | 'untrack'; pattern: string }
+  | { action: 'fetch' | 'pull' | 'push'; remote: string }
+  | { action: 'locks'; path: string }
+  | { action: 'lock'; path: string }
+  | { action: 'unlock'; id: string };
+
 export interface Submodule {
   name: string;
   /** Path within the superproject working tree (forward-slashed). */
@@ -617,6 +653,16 @@ export interface Submodule {
   workdir_id: string | null;
   initialized: boolean;
   status: SubmoduleState;
+}
+
+export type SubmoduleAction =
+  | { action: 'add' | 'set-url'; path: string; url: string }
+  | { action: 'remove' | 'deinit' | 'inspect'; path: string }
+  | { action: 'sync' | 'update'; path: string; recursive: boolean };
+
+export interface SubmodulePage {
+  modules: Submodule[];
+  next_offset: number | null;
 }
 
 /** One entry in the repository's worktree registry (`git worktree list`). */
@@ -975,4 +1021,48 @@ export interface PullRequestSuggestionRequest {
 export interface PullRequestSuggestionPreview {
   path: string; start_line: number; end_line: number;
   before: string; after: string; expected_file: string;
+}
+
+export interface RemoteHostingProvider { remote: string; url: string; provider: string }
+export interface PublishDestination { id: string; label: string; kind: string }
+export interface PublishAccount { account: string; account_id: string; destinations: PublishDestination[] }
+export interface PublishRequest { provider: 'github' | 'gitlab' | 'bitbucket'; host: string; account_id: string; destination: string; name: string; visibility: 'private' | 'public'; remote: string }
+export interface PublishState {
+  id: string; request: PublishRequest; account: string; destination: PublishDestination;
+  url: string; clone_url: string; branch: string; head: string;
+  stage: 'review' | 'uncertain' | 'created' | 'remote_ready' | 'pushed'; error: string | null;
+}
+
+export interface ScopedValue {
+  value: string;
+  scope: string;
+  origin: string;
+}
+export interface EffectiveIdentity {
+  identity: string | null;
+  error: string | null;
+  name_source: ScopedValue;
+  email_source: ScopedValue;
+}
+export interface RepositoryIdentity {
+  author: EffectiveIdentity;
+  committer: EffectiveIdentity;
+  local: GlobalIdentity;
+}
+
+export type SigningMode = 'inherit' | 'sign' | 'unsigned';
+export type SigningScope = 'local' | 'worktree';
+export interface SigningSettings {
+  effective: Record<string, ScopedValue>;
+  local: Record<string, ScopedValue>;
+  worktree: Record<string, ScopedValue>;
+  worktree_enabled: boolean;
+  commit_sign: boolean;
+  tag_sign: boolean;
+  tag_force_annotated: boolean;
+}
+export interface TagVerification {
+  oid: string;
+  status: 'unsigned' | 'verified' | 'failed';
+  output: string;
 }

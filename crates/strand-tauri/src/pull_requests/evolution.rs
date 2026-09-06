@@ -45,7 +45,8 @@ pub struct SuggestionPreview {
 
 fn current_head(path: &str, host: &HostRepo, id: u64) -> Result<String> {
     match host {
-        HostRepo::GitHub { owner, repo } => github_current_head(path, owner, repo, id),
+        HostRepo::Hosted(_) => Err("Review evolution is unavailable for this provider".into()),
+        HostRepo::GitHub { host, owner, repo } => github_current_head(&GitHubContext { path, host }, owner, repo, id),
         HostRepo::Azure { organization, .. } => {
             text(azure_pr_value(path, organization, id)?.pointer("/lastMergeSourceCommit/commitId"))
                 .ok_or("Azure returned no source commit".into())

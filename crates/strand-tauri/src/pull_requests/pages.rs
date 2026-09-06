@@ -111,8 +111,8 @@ pub fn review_query_contract() -> String {
 }
 
 /// Background snapshots keep bodies/patches out, but never truncate checks.
-pub fn activity_checks(
-    cwd: &str,
+pub(super) fn activity_checks(
+    cwd: &GitHubContext<'_>,
     owner: &str,
     repo: &str,
     id: u64,
@@ -153,8 +153,8 @@ pub fn activity_checks(
     Ok(())
 }
 
-pub fn query(
-    cwd: &str,
+pub(super) fn query(
+    cwd: &GitHubContext<'_>,
     query: &str,
     variables: Value,
     cancelled: Option<&AtomicBool>,
@@ -162,10 +162,10 @@ pub fn query(
     let input =
         serde_json::to_vec(&github_graphql_payload(query, variables)).map_err(|e| e.to_string())?;
     let output = run_command_input_cancellable(
-        cwd,
+        cwd.path,
         "gh",
-        &["api", "graphql", "--method", "POST", "--input", "-"],
-        &[("GH_PROMPT_DISABLED", "1")],
+        &["api", "graphql", "--hostname", cwd.host, "--method", "POST", "--input", "-"],
+        &[("GH_PROMPT_DISABLED", "1"), ("GH_HOST", cwd.host)],
         Some(&input),
         cancelled,
     )?;
@@ -191,14 +191,14 @@ pub fn query(
 pub fn inbox(path: &str, cursor: Option<&str>, request_id: &str) -> Result<PullRequestList> {
     let guard = ReadGuard::new(request_id)?;
     let (remote, host) = host_for_path(path)?;
-    let HostRepo::GitHub { owner, repo } = host else {
+    let HostRepo::GitHub { host, owner, repo } = host else {
         if cursor.is_some() {
             return Err("Inbox pagination is unavailable for this provider".into());
         }
         return list(path);
     };
     let value = query(
-        path,
+        &GitHubContext { path, host: &host },
         r#"query($owner: String!, $repo: String!, $cursor: String) {
       viewer { login }
       repository(owner: $owner, name: $repo) {
@@ -221,7 +221,7 @@ pub fn inbox(path: &str, cursor: Option<&str>, request_id: &str) -> Result<PullR
         repository: PullRequestRepository {
             provider: PullRequestProvider::GitHub,
             remote,
-            label: format!("{owner}/{repo}"),
+            label: GitHubContext { path, host: &host }.slug(&owner, &repo),
             viewer: viewer.clone(),
         },
         pull_requests: array(connection, "nodes")
@@ -256,7 +256,7 @@ const KINDS: [Kind; 5] = [
     Kind::Checks,
 ];
 
-pub fn initial(cwd: &str, owner: &str, repo: &str, pr: &mut PullRequest) {
+pub(super) fn initial(cwd: &GitHubContext<'_>, owner: &str, repo: &str, pr: &mut PullRequest) {
     let fields = KINDS
         .iter()
         .map(|kind| connection(*kind, "null"))
@@ -327,7 +327,7 @@ pub fn read(
 pub fn read_cancellable(path: &str, id: u64, expected_head: &str, request: Cursor, cancelled: &AtomicBool) -> Result<Page> {
     validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
-    let HostRepo::GitHub { owner, repo } = host else {
+    let HostRepo::GitHub { host, owner, repo } = host else {
         return Err("Connection pages are unavailable for this provider".into());
     };
     let field = connection(request.kind, "$cursor");
@@ -349,7 +349,7 @@ pub fn read_cancellable(path: &str, id: u64, expected_head: &str, request: Curso
     };
     let query_text = format!("query($owner: String!, $repo: String!, $number: Int!, $cursor: String{thread_variable}) {{ repository(owner: $owner, name: $repo) {{ pullRequest(number: $number) {{ headRefOid viewerCanUpdate {pr_field} }} }} {selection} }}");
     let value = query(
-        path,
+        &GitHubContext { path, host: &host },
         &query_text,
         serde_json::json!({"owner":owner,"repo":repo,"number":id,"cursor":request.cursor,"threadId":request.thread_id}),
         Some(cancelled),
@@ -364,7 +364,21 @@ pub fn read_cancellable(path: &str, id: u64, expected_head: &str, request: Curso
     {
         return Err("Thread does not belong to this pull request".into());
     }
-    parse_page(&value, request, expected_head)
+    let mut page = parse_page(&value, request, expected_head)?;
+    scope_page(&mut page, &GitHubContext { path, host: &host }, &owner, &repo);
+    Ok(page)
+}
+
+fn scope_page(page: &mut Page, context: &GitHubContext<'_>, owner: &str, repo: &str) {
+    for commit in &mut page.commits {
+        commit.url = Some(format!("https://{}/{owner}/{repo}/commit/{}", context.host, commit.id));
+        context.scope_avatar(&mut commit.avatar_url);
+    }
+    for comment in &mut page.comments { context.scope_avatar(&mut comment.avatar_url); }
+    for review in &mut page.reviews { context.scope_avatar(&mut review.avatar_url); }
+    for thread in &mut page.review_threads {
+        for comment in &mut thread.comments { context.scope_avatar(&mut comment.avatar_url); }
+    }
 }
 
 fn parse_page(value: &Value, request: Cursor, expected_head: &str) -> Result<Page> {
@@ -466,6 +480,21 @@ fn parse_page(value: &Value, request: Cursor, expected_head: &str) -> Result<Pag
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn enterprise_commit_pages_keep_links_and_avatars_on_the_selected_host() {
+        let head = "a".repeat(40);
+        let value = serde_json::json!({"data":{"repository":{"pullRequest":{
+            "headRefOid":head,"commits":{"nodes":[{"commit":{"oid":head,
+                "author":{"name":"Reviewer","avatarUrl":"https://github.com/reviewer.png"}}}],
+                "pageInfo":{"hasNextPage":false}}
+        }}}});
+        let request = Cursor { kind: Kind::Commits, thread_id: None, cursor: None, total: None, error: None };
+        let mut page = parse_page(&value, request, &head).unwrap();
+        scope_page(&mut page, &GitHubContext { path: ".", host: "git.example:8443" }, "team", "app");
+        assert_eq!(page.commits[0].url.as_deref(), Some(format!("https://git.example:8443/team/app/commit/{head}").as_str()));
+        assert_eq!(page.commits[0].avatar_url.as_deref(), Some("https://git.example:8443/reviewer.png"));
+    }
+
     #[test]
     fn missing_or_repeated_cursor_is_an_error() {
         assert!(next_cursor(&serde_json::json!({}), None).is_err());

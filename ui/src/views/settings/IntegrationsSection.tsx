@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { UserActionsEditor } from './UserActionsEditor';
 
 import { Select } from '../../components/Select';
 import {
@@ -17,7 +18,7 @@ import { useSettings, type ExternalTool } from '../../stores/settings';
  * terminal"). Preset apps per platform plus a custom command template with
  * `{file}` / `{line}` / `{dir}` placeholders.
  */
-export function IntegrationsSection() {
+export function IntegrationsSection({ focusUserActions = false }: { focusUserActions?: boolean }) {
   const editorTool = useSettings((s) => s.editorTool);
   const terminalTool = useSettings((s) => s.terminalTool);
   const set = useSettings((s) => s.set);
@@ -48,6 +49,7 @@ export function IntegrationsSection() {
           return tauri.repoOpenInTerminal(path, template);
         }}
       />
+      <UserActionsEditor focusOnMount={focusUserActions} />
     </section>
   );
 }

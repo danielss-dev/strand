@@ -4,6 +4,12 @@ import type { WorkTreeEntry } from './types';
 import { workTreeGitStatus } from './workTreeGitStatus';
 
 describe('workTreeGitStatus', () => {
+  it('does not paint sparse-excluded files as deletions or ignored changes', () => {
+    expect(workTreeGitStatus([
+      { path: 'excluded/file.txt', status: null, ignored: false, excluded: true },
+      { path: 'included/deleted.txt', status: 'DELETED', ignored: false },
+    ])).toEqual([{ path: 'included/deleted.txt', status: 'deleted' }]);
+  });
   it('collapses a fully ignored tree into one muted directory status', () => {
     const entries: WorkTreeEntry[] = [
       { path: 'node_modules/.bin/tool', status: null, ignored: true },

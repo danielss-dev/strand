@@ -30,7 +30,7 @@ import { UpdatesSection } from './settings/UpdatesSection';
  */
 
 export type SettingsSectionId =
-  | 'appearance' | 'terminal' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'ai' | 'plugins' | 'updates' | 'privacy';
+  | 'appearance' | 'terminal' | 'diff' | 'keyboard' | 'git' | 'hosting' | 'integrations' | 'user-actions' | 'ai' | 'plugins' | 'updates' | 'privacy';
 
 const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] = [
   { id: 'appearance', label: 'settings.appearance', icon: 'eye' },
@@ -53,7 +53,7 @@ export function SettingsDialog({
   onClose: () => void;
   initialSection?: SettingsSectionId;
 }) {
-  const [section, setSection] = useState<SettingsSectionId>(initialSection);
+  const [section, setSection] = useState<SettingsSectionId>(initialSection === 'user-actions' ? 'integrations' : initialSection);
 
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +127,7 @@ export function SettingsDialog({
             {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}
             {section === 'hosting' && <HostingSection />}
-            {section === 'integrations' && <IntegrationsSection />}
+            {section === 'integrations' && <IntegrationsSection focusUserActions={initialSection === 'user-actions'} />}
             {section === 'ai' && <AiSection />}
             {section === 'plugins' && <PluginsSection />}
             {section === 'updates' && <UpdatesSection />}

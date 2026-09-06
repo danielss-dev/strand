@@ -1,7 +1,7 @@
 # Pull Requests
 
 The **Pull Requests** sidebar destination shows hosted pull requests for the
-active repository. Strand currently supports GitHub and Azure DevOps, detected
+active repository. Strand supports GitHub, GitLab, Bitbucket Cloud and Azure DevOps, detected
 from the repository's remotes; `origin` wins when more than one supported remote
 exists. Open the same view from the command palette with "Show: Pull Requests".
 
@@ -11,10 +11,20 @@ GitHub and Azure DevOps Services delegate authentication to the provider's
 official CLI, and Strand never reads or stores those access tokens:
 
 - GitHub requires [GitHub CLI](https://cli.github.com/) and `gh auth login`.
+- GitLab requires [glab](https://docs.gitlab.com/cli/) and
+  `glab auth login --hostname HOST` (use `gitlab.com` for the public service).
+- Bitbucket Cloud uses your system Git credential helper's HTTPS credential
+  for `api.bitbucket.org`: Atlassian account email and a scoped API token.
+  This API credential is separate from Git clone/push authentication.
 - Azure DevOps requires Azure CLI, the `azure-devops` extension, and `az login`.
 
-Settings → Hosting summarizes both CLI connections and displays the signed-in
-account reported by each provider.
+Settings → Hosting summarizes GitHub and Azure CLI connections. Its custom-host
+section provides GitLab/Bitbucket setup and a provider selector for each remote.
+Public hosts are automatic; select GitHub / Enterprise or GitLab for custom
+hosts and refresh Pull Requests. GitHub Enterprise uses
+`gh auth login --hostname HOST`; custom API routing follows `gh` configuration.
+Hostnames are part of custom-host review identities, so drafts and follows do
+not collide with the same repository name on another server.
 
 Azure DevOps Server 2020+ uses the optional `strand-azdo` REST helper instead
 of `az`. Enable it and add an HTTPS collection profile under **Settings →
@@ -40,7 +50,7 @@ shows the provider error and the setup command. Provider calls time out after
 
 Choose **Create PR** in the Pull Requests toolbar, or run “Pull Requests:
 create for current branch…” from the command palette. The dialog creates a
-GitHub or Azure DevOps pull request from the checked-out branch with a title,
+pull request or GitLab merge request from the checked-out branch with a title,
 Markdown description, target branch, and optional draft state. After creation,
 Strand opens the new PR and follows it automatically.
 
@@ -390,5 +400,32 @@ available while any PR is active, and the update command appears only for an
 open GitHub PR; both contextual commands disappear on the inbox.
 
 Suggestions and richer Azure policy details are planned but are not presented
-as available yet. GitLab and
-Bitbucket adapters will use the same workspace in a later slice.
+as available yet.
+
+## GitLab and Bitbucket Cloud
+
+Both adapters page their lists, commits and discussions to completion; a failed
+page is an error rather than a complete-looking partial result. Rich detail
+loads on selection and patches load only on Code. Activity refreshes do not
+download patches or commit history. Pipeline/commit status alone is not treated
+as a complete view of provider merge policies.
+
+GitLab supports comments, approvals, inline replies and resolution, close/reopen,
+mark-ready and merging with the project's merge method or squash. Inline
+comments preserve diff-version base/start/head commits and renamed-file paths.
+Approval and merge include the reviewed SHA. Request changes remains available
+on GitLab's website.
+
+Bitbucket Cloud supports comments, inline replies, approval,
+request-changes and closing a request. Merge, discussion resolution, reopening and draft transitions
+remain provider-site actions. Cloud's merge API cannot atomically guard the
+reviewed head, so Strand does not offer that write. Inline comments and review
+decisions recheck the head before and after writing; the API cannot pin them
+atomically. If the head changes during a write, inspect the posted result before
+retrying. Fork checkout also requires opening the source fork locally.
+Bitbucket Server is outside this adapter's scope.
+
+GitLab and Bitbucket review batches consist of separate API writes. A failure
+retains the draft and reports confirmed progress: refresh and reconcile posted
+items before retrying to avoid duplicates. Provider permissions remain
+authoritative even when a control was enabled by the last refresh.

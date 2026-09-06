@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
-import { canMarkPullRequestReady } from '../lib/pullRequests';
+import { canMarkPullRequestReady, providerName } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import type { PullRequest, PullRequestMergeStrategy, PullRequestProvider } from '../lib/types';
 
@@ -31,9 +31,6 @@ const STRATEGIES: {
   },
 ];
 
-const providerName = (provider: PullRequestProvider) =>
-  provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
-
 export function PullRequestMergeControl({
   path,
   provider,
@@ -49,6 +46,10 @@ export function PullRequestMergeControl({
   onMerged: (next: PullRequest) => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
+  const strategies = STRATEGIES.filter((item) => !pr.capabilities || pr.capabilities.merge_strategies.includes(item.value))
+    .map((item) => provider === 'git_lab' && item.value === 'merge_commit'
+      ? { ...item, buttonLabel: 'Merge with project settings', menuLabel: 'Use project merge method', hint: 'GitLab applies the project’s merge method and protections.' }
+      : item);
   const [strategy, setStrategy] = useState<PullRequestMergeStrategy>('merge_commit');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,11 +58,11 @@ export function PullRequestMergeControl({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mountedRef = useRef(true);
-  const selectedIndex = STRATEGIES.findIndex((item) => item.value === strategy);
-  const selected = STRATEGIES[selectedIndex];
+  const selectedIndex = Math.max(0, strategies.findIndex((item) => item.value === strategy));
+  const selected = strategies[selectedIndex] ?? strategies[0] ?? STRATEGIES[0];
   const markReady = canMarkPullRequestReady(pr);
   const deferred = pr.completion?.kind === 'github_queue' || pr.completion?.status === 'waiting_for_policies';
-  const disabled = deferred || (markReady ? false : Boolean(disabledReason)) || busy;
+  const disabled = deferred || (markReady ? false : (Boolean(disabledReason) || strategies.length === 0)) || busy;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -103,7 +104,7 @@ export function PullRequestMergeControl({
   };
 
   const moveMenuFocus = (index: number) => {
-    const wrapped = (index + STRATEGIES.length) % STRATEGIES.length;
+    const wrapped = (index + strategies.length) % strategies.length;
     optionRefs.current[wrapped]?.focus();
   };
 
@@ -113,7 +114,7 @@ export function PullRequestMergeControl({
     setBusy(true);
     setError(null);
     try {
-      await tauri.repoPullRequestMerge(path, pr.id, strategy, pr.source_commit);
+      await tauri.repoPullRequestMerge(path, pr.id, selected.value, pr.source_commit);
       let next: PullRequest;
       try {
         next = await tauri.repoPullRequest(path, pr.id);
@@ -169,6 +170,7 @@ export function PullRequestMergeControl({
     return () => window.removeEventListener('strand:pull-request-ready', onReadyRequest);
   }, [submitReady]);
 
+  if (!markReady && strategies.length === 0) return <span className="pr-muted">Merge on {providerName(provider)}</span>;
   if (markReady) {
     return (
       <div className="pr-merge-control">
@@ -233,12 +235,12 @@ export function PullRequestMergeControl({
             if (event.key === 'ArrowDown') { event.preventDefault(); moveMenuFocus(current + 1); }
             else if (event.key === 'ArrowUp') { event.preventDefault(); moveMenuFocus(current - 1); }
             else if (event.key === 'Home') { event.preventDefault(); moveMenuFocus(0); }
-            else if (event.key === 'End') { event.preventDefault(); moveMenuFocus(STRATEGIES.length - 1); }
+            else if (event.key === 'End') { event.preventDefault(); moveMenuFocus(strategies.length - 1); }
             else if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); }
             else if (event.key === 'Tab') setOpen(false);
           }}
         >
-          {STRATEGIES.map((item, index) => (
+          {strategies.map((item, index) => (
             <button
               type="button"
               role="menuitemradio"

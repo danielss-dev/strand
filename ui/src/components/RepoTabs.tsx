@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
+import { openUserAction } from '../lib/userActions';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useRepo } from '../stores/repo';
 import { useRepoIcons } from '../stores/repoIcons';
@@ -295,6 +296,9 @@ function TabContextMenu({
           </button>
         </>
       )}
+      <button type="button" className="repo-menu-item" role="menuitem" onClick={() => { openUserAction({ path: menu.path, target: { kind: 'repository' } }); onClose(); }}>
+        <span className="ico"><Icon name="terminal" size={13} /></span><span className="label">User actions…</span>
+      </button>
       <button type="button" className="repo-menu-item" role="menuitem" onClick={onCloseRepo}>
         <span className="ico"><Icon name="x" size={13} /></span>
         <span className="label">{menu.worktree ? 'Close worktree' : 'Close repository'}</span>

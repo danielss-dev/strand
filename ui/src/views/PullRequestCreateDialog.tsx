@@ -1,3 +1,4 @@
+import { providerName } from '../lib/pullRequests';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
@@ -215,7 +216,7 @@ export function PullRequestCreateDialog({
     void fillWithAi();
   }, [autoFill, targetBranch]);
 
-  const providerLabel = provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
+  const providerLabel = providerName(provider);
   const aiProviderLabel = aiProvider === 'openai' ? 'Codex' : 'Claude Code';
   const fieldsDisabled = busy || suggesting;
   const aiActionLabel = title.trim() || description.trim() ? 'Replace' : 'Fill';

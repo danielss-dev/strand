@@ -125,10 +125,11 @@ pub fn set(
     validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
     match host {
-        HostRepo::GitHub { owner, repo } => {
+        HostRepo::Hosted(_) => return Err("Deferred completion is unavailable for this provider".into()),
+        HostRepo::GitHub { host, owner, repo } => {
             let query = format!("query($owner: String!, $repo: String!, $number: Int!) {{ repository(owner: $owner, name: $repo) {{ pullRequest(number: $number) {{ {GITHUB_FIELDS} }} }} }}");
             let value = pages::query(
-                path,
+                &GitHubContext { path, host: &host },
                 &query,
                 serde_json::json!({"owner":owner,"repo":repo,"number":id}),
                 None,
@@ -139,7 +140,7 @@ pub fn set(
             let node_id = text(pr.get("id")).ok_or("GitHub returned no PR node ID")?;
             let (query, input) =
                 github_mutation(&state, enable, strategy, &node_id, expected_head)?;
-            pages::query(path, query, serde_json::json!({"input":input}), None)?;
+            pages::query(&GitHubContext { path, host: &host }, query, serde_json::json!({"input":input}), None)?;
         }
         HostRepo::Azure {
             organization,

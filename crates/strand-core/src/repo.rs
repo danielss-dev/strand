@@ -111,14 +111,16 @@ impl Repo {
 
     /// Which multi-step history op (if any) is paused mid-flight, detected from
     /// the on-disk markers git leaves in `.git/`. Returns one of `"rebase"`,
-    /// `"cherry-pick"`, `"revert"`, `"merge"`, or `None`. Order matters: a
+    /// `"cherry-pick"`, `"revert"`, `"merge"`, `"mailbox"`, or `None`. Order matters: a
     /// rebase can leave a `MERGE_HEAD` while resolving, so rebase is checked
     /// first. Used by [`meta`](Repo::meta) (UI banner) and
     /// [`abort_operation`](crate::repo::Repo::abort_operation).
     pub(crate) fn operation_in_progress(&self) -> Option<String> {
         let git_dir = self.gix.git_dir();
         let has = |name: &str| git_dir.join(name).exists();
-        if has("rebase-merge") || has("rebase-apply") {
+        if has("rebase-apply/applying") {
+            Some("mailbox".into())
+        } else if has("rebase-merge") || has("rebase-apply") {
             Some("rebase".into())
         } else if has("CHERRY_PICK_HEAD") {
             Some("cherry-pick".into())
@@ -126,6 +128,8 @@ impl Repo {
             Some("revert".into())
         } else if has("MERGE_HEAD") {
             Some("merge".into())
+        } else if has("BISECT_START") {
+            Some("bisect".into())
         } else {
             None
         }
@@ -151,6 +155,9 @@ impl Repo {
         // check-then-set can't race.
         if self.git2.get().is_none() {
             let opened = git2::Repository::open(&self.path)?;
+            if self.sparse_enabled() && opened.index().is_err() {
+                self.sparse_read_index(&opened)?;
+            }
             let _ = self.git2.set(opened);
         }
         Ok(self.git2.get().expect("git2 handle set above"))
@@ -161,6 +168,27 @@ impl Repo {
     /// the cached [`git2()`](Repo::git2).
     pub(crate) fn git2_owned(&self) -> Result<git2::Repository> {
         Ok(git2::Repository::open(&self.path)?)
+    }
+
+    pub(crate) fn is_partial_clone(&self) -> bool {
+        self.gix.config_snapshot().sections_by_name("remote").is_some_and(|mut sections| {
+            sections.any(|section| section.value("promisor").is_some_and(|value| value.eq_ignore_ascii_case(b"true")))
+        })
+    }
+
+    /// libgit2 does not fetch promised objects. Ask Git for this exact object
+    /// only after a missing-object read in a partial clone, then retry locally.
+    pub(crate) fn find_blob(&self, oid: git2::Oid) -> Result<git2::Blob<'_>> {
+        let repo = self.git2()?;
+        match repo.find_blob(oid) {
+            Ok(blob) => Ok(blob),
+            Err(error) if error.code() == git2::ErrorCode::NotFound && self.is_partial_clone() => {
+                crate::network::run_git_streaming(&self.path, &["cat-file", "-e", &oid.to_string()], |_| {}, None)?;
+                repo.odb()?.refresh()?;
+                Ok(repo.find_blob(oid)?)
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// Resolve `rel_path` against the working directory, rejecting absolute

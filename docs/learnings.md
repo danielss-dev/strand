@@ -1,8 +1,88 @@
 # Learnings
 
+## Bisect ratings belong to the expected revision (2026-09-06)
+
+Read `BISECT_*` and refs from Git for every dialog refresh/action; these are
+worktree-local and may be driven by another client. Map custom terms and
+`BISECT_HEAD` for no-checkout sessions, distinguish skipped ambiguity from a
+culprit, and reject a rating when HEAD differs from `BISECT_EXPECTED_REV`.
+Require a clean tree/index before checkout transitions and reset; test edits
+must not be discarded. Review the original ref's current target again before
+reset. A bisect marker remaining after a successful merge/rebase does not mean
+that sequencer is still paused. Dialogs that remain open after a busy action
+must restore focus once controls are enabled again; disabling the focused
+button can move focus out of the modal even with a correct Tab trap.
+
+## Interchange state comes from Git, not a saved UI session (2026-09-06)
+
+`rebase-apply/applying` identifies `git am`; `rebase-apply` alone can mean a
+rebase. Test this before the generic rebase check so Continue/Abort dispatch
+to the right porcelain. Mailbox previews parse every message with Git's
+mailsplit/mailinfo, preserving authors and checking old/new paths. Imported
+paths reject administrative entries and symlink traversal, including missing
+descendants; never enable `--unsafe-paths`. Preview stamps include file bytes,
+index and HEAD because status-row equality does not prove unchanged content.
+Bundle imports publish only a new local branch after verification/unbundle,
+using non-forcing ref creation to reject concurrent external branch creation.
+
+## Sparse indexes and promised blobs require Git-aware paths (2026-09-06)
+
+libgit2 1.8 cannot read the mandatory sparse-directory index extension and
+reports absent skip-worktree entries as deletions even with a full index.
+For sparse repositories, use Git for status, working diffs and index mutations;
+the compatibility index attached to libgit2 is expanded in memory for readers
+only. Never rewrite the user's index merely by opening it. Normal repositories
+retain their existing in-process paths. This is a scoped exception to the older
+index/commit-engine rule, required by F08's sparse-index semantics.
+
+Sparse selection must go directly through `sparse-checkout set --cone`; an
+init-then-set sequence can remove files between steps. Git may delete ignored
+files when excluding a directory. Refuse dirty/untracked work and any ignored
+boundary the new cone would exclude; do not stash, clean or discard implicitly.
+Use worktree-specific Git configuration and preserve external non-cone patterns
+until the user explicitly disables them.
+After the guard passes, refresh index stat data before changing the cone:
+a clean file restored by an editor can otherwise be retained as "not up to
+date". Keep Git's successful warnings visible when it retains files.
+
+Partial-clone fixtures must actually omit objects (`rev-list --missing=print`).
+A successful open is insufficient: historical content, diffs and blame need
+Git's lazy object fetching; shallow blame needs Git's boundary semantics.
+Keep those reads on demand. Recursive clone cancellation must terminate the
+transport/submodule child processes too, because they hold the progress pipes.
+
 Things we've learned while building Strand that aren't otherwise obvious from
 the PRD / ROADMAP / TASKS files. Append here when you discover something
 that future work (yours or another agent's) needs to respect.
+
+---
+
+## LFS files need Git's external clean/smudge filters (2026-09-06)
+
+The real Git LFS fixture proved git2 `index.add_path` stored raw asset bytes
+instead of the pointer produced by `git hash-object --path`. The historical
+index-on-git2 policy has an LFS exception: detect `filter=lfs` attributes and
+stage the complete batch with one literal, NUL-delimited Git pathspec input.
+Enforce `filter.lfs.required` so missing tooling cannot silently store raw data.
+Whole-file checkout/discard and hard reset use Git for LFS; partial patches are refused.
+Ordinary status must not start LFS subprocesses. Management reads are explicit,
+transcripts bounded, and cancellation must terminate LFS/submodule descendants
+that otherwise keep pipes open. Tracking edits attributes, never history.
+
+---
+
+## Submodule removal must preserve ignored local data (2026-09-06)
+
+Git's non-forced submodule deinit can remove ignored files, and a parent status
+does not report ignored files inside nested modules. Before remove/deinit,
+inspect ignored files and recorded commits in each initialized descendant;
+refuse the action when local data remains. Keep this work at the explicit
+mutation boundary. Nested browsing reads metadata one level/page at a time,
+without adding recursive dirty scans to repository refreshes.
+
+Opening a module from a dialog must go through `useWorkspaces.openRepoInActive`.
+Calling `useRepo.openRepo` directly omits workspace membership, and the workspace
+reconciler can immediately clear the active repository.
 
 ---
 
@@ -359,7 +439,13 @@ the existing pattern better than a forced shared abstraction.
 behaviour matters more than staying pure-git2: **conflicts** (git leaves markers
 + the in-progress state on disk), **GPG/SSH signing**, and **hooks** — none of
 which git2's `merge`/`cherrypick`/`revert` do for free, and git2 has no rebase
-driver. Index/commit ops still use git2. After any history op, the store refresh
+driver. Index operations still use git2; commit/amend always use system Git
+(F01, 2026-09-06), including unsigned commits, so Git owns hook discovery,
+rejection, message rewriting, merge parents and effective identity. No hook
+existence shortcut: conditional/worktree config and installed hooks can change
+between operations. Capture bounded stdout/stderr, preserve checkout drafts on
+failure, and do not report post-success refresh errors as commit failures.
+After any history op, the store refresh
 tail is meta + local-changes + log + refs (`refreshAfterHistoryOp`), and a paused
 op is detected via `Repo::operation_in_progress` reading `.git/` markers
 (`rebase-merge`/`rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_HEAD`,
@@ -2538,3 +2624,101 @@ ID deduplication and source context. Include file-level threads without inventin
 line zero annotations; they render above the file diff. Keep this traversal out
 of inbox and background monitoring. A read error must not produce a supposedly
 complete export or overwrite a review draft.
+
+**Hosted provider writes preserve host and commit scope (2026-09-06).**
+Custom GitHub remotes need an explicit adapter and host-scoped CLI calls; keep
+GitHub.com's existing owner/repo identity so saved follows and drafts survive.
+GitLab inline coordinates use the diff version's base/start/head and both
+paths across a rename. A preflight head read is not an atomic merge guard:
+Bitbucket Cloud merge stays unavailable until its API accepts an expected
+head. Cloud comment/review races must report that a write may have happened,
+and partial batches must retain drafts with reconciliation guidance. Never
+reuse another provider's credentials; Cloud API tokens are scoped to
+api.bitbucket.org through the system Git credential helper.
+
+**Repository creation must be resumable before any network write (2026-09-06).**
+Persist the concrete destination and reviewed commit locally before creation,
+record uncertain state before POST, and recover by GET instead of blindly
+reposting. Creation, remote attachment and initial push are separate user
+actions. Initial push sends only the reviewed SHA to the reviewed branch,
+rejects URL rewrites/alternate push URLs, disables implicit tag/submodule
+pushes and preserves an existing upstream. Recovery records contain no tokens.
+
+
+### Advanced refs preserve reviewed identities (2026-09-06)
+
+Git notes must use a locked namespace tip and publish the prepared notes tree
+atomically; a stale note editor must retain its draft when another worktree
+changes that namespace. Replacement inspection uses raw object IDs because
+libgit2/gix readers do not apply Git's replace refs. Tag retargeting and
+re-annotation are separate operations with compare-and-swap of the raw tag ref,
+not its peeled commit. Never drop an existing tag signature during an edit.
+
+
+### Git-flow finish is a resumable sequence, not a transaction (2026-09-06)
+
+Git-flow AVH can finish its production merge and tag before a develop merge
+conflicts. Abort must be described as aborting only that current merge; it must
+never reset earlier completed stages. Retain workflow branches and use exact
+names so a later finish can resume. AVH flags can default from Git config:
+explicitly negate every publication flag (including release pushproduction,
+pushdevelop and pushtag), not just push. AVH builds its tag command with shell
+`eval`; use reviewed generated annotation text from validated names rather
+than interpolating arbitrary editor text. Keep tool detection and all of this
+metadata off repository-open and graph/diff hot paths.
+
+## Personal actions preserve argv and captured targets (2026-09-06)
+
+User actions are personal executable/argv definitions, separate from Workbench
+registries and community plugins. Establish argument boundaries before
+single-pass placeholder substitution; never interpolate repository-controlled
+values into an implicit shell or recursively expand substituted text. Resolve
+the executable before adopting the repository cwd. Windows actions require a
+native executable, with script paths passed to their interpreter as arguments;
+batch shims introduce another command parser.
+
+Menus capture the invoked repository/ref/file, including inactive repository
+tabs. Palette actions require an exact active target, and every run revalidates
+the resolved preview and captured ref ID. A sidebar ref click only reveals its
+graph row; Enter selects the tip's commit for ref palette actions. Do not infer
+a ref from HEAD or a commit shared by several branches/tags.
+
+Bound stdout and stderr independently. Cancel the whole process tree on close,
+timeout, output overflow, or selection changes. Stop descendants even after a
+natural parent exit **before** joining pipe readers: inherited stdout/stderr can
+otherwise keep the reader joins blocked indefinitely. Replay early cancellation
+after native operation registration to cover a closed dialog during IPC startup.
+
+
+## Repository identity must use the commit resolver
+
+Effective author/committer reads use system Git, including conditional includes,
+worktree config and environment overrides. Keep these reads on the explicit
+settings surface; do not add subprocesses to snapshot/status paths. Local
+identity edits target the direct common repository config, never a file reached
+through an include. Show both the saved local values and the effective values:
+a later conditional include or a worktree/environment override can still win.
+Linked worktrees share local config; `--worktree` writes must never silently
+fall back to `--local` when `extensions.worktreeConfig` is disabled.
+
+## Signing policy must remain Git-compatible (2026-09-06)
+
+Signing settings store only key references and existing-agent configuration.
+Operation-level inherit/sign/unsigned choices never rewrite config, and signing
+or hook failures retain the draft. Tag creation runs system Git too: `--file`
+already creates an annotated tag, while explicit `--annotate` suppresses
+`tag.forceSignAnnotated`. Use that override only for an explicitly unsigned
+annotation, alongside `--no-sign`. With verbatim cleanup, ensure a final newline
+before Git appends the signature or the result cannot be verified.
+
+Verify tags lazily against their immutable object ID. Display Git's verification
+output and distinguish unsigned, valid and failed results; do not turn signature
+validity into an unconditional claim of signer trust. Keep config reads and
+signature verification out of status/snapshot and graph-wide refresh paths.
+In `git config --null --get-regexp` output, a valueless boolean has no newline
+separator and means true; a newline followed by an empty value means false.
+Preserve that distinction in settings displays and scoped editing.
+
+LFS guards must run before sparse-index mutation dispatch. Refresh an attached
+memory-only sparse index through `sparse_read_index`, never `Index::read` from
+disk; keep one process-tree cancellation helper when composing Git workflows.

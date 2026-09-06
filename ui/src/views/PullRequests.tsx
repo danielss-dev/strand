@@ -71,8 +71,7 @@ import { appendPullRequestPage, uniqueBy } from '../lib/pullRequestPages';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
 import { PullRequestCreateDialog } from './PullRequestCreateDialog';
 
-const providerName = (provider: PullRequestList['repository']['provider']) =>
-  provider === 'git_hub' ? 'GitHub' : 'Azure DevOps';
+import { providerName } from '../lib/pullRequests';
 
 function displayState(pr: PullRequest): string {
   if (pr.is_draft) return 'draft';
@@ -460,7 +459,7 @@ function PullRequestSummary({
 
       <section className="pr-summary-comments">
         <h3>Comments <span>{pr.comments.length}</span></h3>
-        {isOpenPullRequest(pr) ? (
+        {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
           <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
         ) : (
           <p className="pr-muted">This pull request is {displayState(pr)}. Its discussion is read-only in Strand.</p>
@@ -669,7 +668,7 @@ function PullRequestTimeline({
           );
         })}
       </div>
-      {isOpenPullRequest(pr) ? (
+      {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
         <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
       ) : (
         <p className="pr-muted">This pull request is {displayState(pr)}. Its timeline is read-only in Strand.</p>
@@ -1026,7 +1025,7 @@ function PullRequestChanges({
     () => unresolvedThreadTargets(allTreePaths, pr.review_threads ?? []),
     [allTreePaths, pr.review_threads],
   );
-  const openForReview = pr.state === 'open' || pr.state === 'active';
+  const openForReview = (pr.capabilities?.can_comment ?? true) && (pr.state === 'open' || pr.state === 'active');
 
   useEffect(() => {
     if (navigationTarget && filesByPath.has(navigationTarget.path) && !treePaths.includes(navigationTarget.path)) {
@@ -1534,8 +1533,8 @@ function PullRequestChanges({
           <div className="pr-review-submit-actions">
             <span>{reviewDraft.body.length.toLocaleString()} / 65,536</span>
             <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('comment')}>Comment</button>
-            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale} onClick={() => void submitReview('approve')}>Approve</button>
-            <button type="button" className="btn danger" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || !reviewDraft.body.trim()} onClick={() => void submitReview('request_changes')}>Request changes</button>
+            <button type="button" className="btn" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || pr.capabilities?.can_review === false} onClick={() => void submitReview('approve')}>Approve</button>
+            <button type="button" className="btn danger" disabled={!reviewDraftLoaded || submittingReview || reviewDraftStale || !reviewDraft.body.trim() || pr.capabilities?.can_request_changes === false} onClick={() => void submitReview('request_changes')}>Request changes</button>
           </div>
         </section>
       )}
@@ -1871,9 +1870,9 @@ function PullRequestDetails({
       : !pr.source_commit
         ? 'Refresh this pull request before merging'
       : '';
-  const lifecycleAction = isOpenPullRequest(pr)
+  const lifecycleAction = isOpenPullRequest(pr) && (pr.capabilities?.can_close ?? true)
     ? 'close'
-    : isReopenablePullRequest(pr)
+    : isReopenablePullRequest(pr) && (pr.capabilities?.can_reopen ?? true)
       ? 'reopen'
       : null;
   useEffect(() => {
@@ -2018,7 +2017,7 @@ function PullRequestDetails({
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
-          <HostedReviewTools path={path} provider={provider} pr={pr} />
+          {(provider === 'git_hub' || provider === 'azure_dev_ops') && <HostedReviewTools path={path} provider={provider} pr={pr} />}
           <button
             type="button"
             className={`btn pr-follow${followed ? ' on' : ''}`}
