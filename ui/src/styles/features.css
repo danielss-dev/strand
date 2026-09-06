@@ -4441,6 +4441,7 @@ textarea.clone-input {
   font: 10.5px/1.45 var(--font-mono);
   user-select: text;
 }
+.maintenance-entry > pre:first-child { padding-top: 10px; }
 
 /* Settings dialog — Appearance / theme picker (reuses the clone-dialog shell). */
 .settings-dialog {
@@ -9615,3 +9616,44 @@ select.clone-input {
 .settings-field .settings-hint { overflow-wrap: anywhere; }
 
 .tag-verification-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: var(--type-ui-sm); }
+
+/* Occasional tools stay in their owning menus and dialogs. */
+.repository-settings-body { padding: 20px; min-height: 0; overflow-y: auto; }
+.repository-settings-tabs { display: flex; gap: 8px; margin: 12px 0 20px; }
+.settings-disclosure { min-width: 0; }
+.settings-disclosure > summary { cursor: pointer; color: var(--text-2); padding-block: 6px; }
+.settings-disclosure[open] > summary { margin-bottom: 8px; }
+.settings-disclosure .settings-hint, .git-tool-body .stash-blurb { max-width: 75ch; line-height: 1.55; }
+.settings-disclosure code, .settings-disclosure pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.cb-options { flex-shrink: 0; gap: 5px; }
+.pr-section-loader { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 6px; font-size: var(--type-ui-sm); }
+.pr-section-loader [role="alert"] { color: var(--del); overflow-wrap: anywhere; }
+.pr-search-scope { font-size: var(--type-ui-sm); color: var(--text-muted); }
+.pr-completion-options { padding: 12px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; }
+.pr-completion-options > span { color: var(--text-muted); font-size: var(--type-ui-sm); }
+.pr-completion-options [role="alert"] { color: var(--del); }
+.pr-merge-menu { max-height: min(540px, 70vh); overflow-y: auto; }
+.pr-merge-menu[hidden] { display: none; }
+.user-action-arguments { display: flex; flex-direction: column; gap: 8px; }
+.user-action-arguments .clone-input { min-width: 0; flex: 1; }
+.remote-repo-dialog > .settings-disclosure { margin-inline: 16px; }
+
+.git-tool-dialog { max-height: calc(100vh - 112px); }
+.git-tool-dialog > .clone-head, .git-tool-dialog > .clone-foot { flex-shrink: 0; }
+.git-tool-dialog > .clone-body, .git-tool-dialog > .repository-settings-body { min-height: 0; overflow-y: auto; }
+
+.maintenance-dialog, .clone-options-dialog, .hosted-review-dialog, .remote-repo-dialog { max-height: calc(100vh - 112px); }
+.maintenance-dialog > .clone-head, .maintenance-dialog > .clone-foot, .hosted-review-dialog > .clone-head { flex-shrink: 0; }
+.remote-repo-dialog { overflow-y: auto; }
+.remote-repo-dialog > * { flex-shrink: 0; }
+
+.settings-dialog-lg { max-height: calc(100vh - 112px); }
+.git-tool-dialog > .clone-body > *, .maintenance-body > * { flex-shrink: 0; }
+
+.settings-dialog-lg > .clone-head, .settings-dialog-lg > .clone-foot { flex-shrink: 0; }
+.settings-nav { overflow-y: auto; }
+.settings-nav-item { flex-shrink: 0; }
+
+.pr-code-overview { flex-wrap: wrap; padding-block: 8px; font-size: var(--type-ui-sm); }
+.pr-code-overview > .h-link { flex-shrink: 0; white-space: nowrap; }
+.pr-code-overview code { font-size: inherit; }

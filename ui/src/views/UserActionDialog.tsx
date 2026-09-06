@@ -90,7 +90,7 @@ export function UserActionDialog({ request, onClose, onManage }: {
   }
   const target = request.context.target;
   return (
-    <Dialog title="Run user action" icon="terminal" size="lg" initialFocusRef={first}
+    <Dialog className="git-tool-dialog" title="Run user action" icon="terminal" size="lg" initialFocusRef={first}
       onClose={onClose} blockEscapeWhileBusy={false}
       footer={<>
         <button className="btn" onClick={onManage} disabled={running}>Manage actions…</button>
@@ -108,7 +108,7 @@ export function UserActionDialog({ request, onClose, onManage }: {
         </Select></label>
         <dl><dt>Repository</dt><dd>{request.context.path}</dd><dt>Selected context</dt>
           <dd>{target.kind === 'repository' ? 'Repository root' : target.kind === 'file' ? target.file : `${target.reference} · ${target.oid}`}</dd></dl>
-        <p className="settings-hint">Commands run with your account permissions and no added shell. Unsaved editor changes are not written. Closing this dialog cancels a running action; completed changes are not undone.</p>
+        <p className="settings-hint">Review this command before running it. Unsaved editor changes are not included. Closing this dialog stops the command, but does not undo changes it already made.</p>
         {stale && <p role="alert" className="form-error">Selection changed. Close this dialog and invoke the action again.</p>}
         {error && <p role="alert" className="form-error">{error}</p>}
         {preview && <div className="user-action-preview">
@@ -117,7 +117,7 @@ export function UserActionDialog({ request, onClose, onManage }: {
           <ol start={0}>{preview.command.args.map((arg, index) => <li key={index}><code>{JSON.stringify(arg)}</code></li>)}</ol>
           {preview.command.args.length === 0 && <p>No arguments.</p>}
         </div>}
-        {running && <p role="status">Running… Output is captured when the action stops.</p>}
+        {running && <p role="status">Running… Output appears when the command stops.</p>}
         {outcome && <section aria-label="Action result">
           <p role="status">{outcome.status} · exit {outcome.exit_code ?? '—'} · {outcome.duration_ms} ms{outcome.truncated ? ' · Output limit reached' : ''}</p>
           <h4>Standard output</h4><pre tabIndex={0}>{outcome.stdout || '(empty)'}</pre>

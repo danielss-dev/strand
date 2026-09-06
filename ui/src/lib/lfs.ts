@@ -1,10 +1,10 @@
 export const LFS_ACTIONS = [
-  ['environment', 'Installation and configuration'],
+  ['environment', 'Check installation and configuration'],
   ['install', 'Set up this repository'],
-  ['patterns', 'Tracked patterns'],
+  ['patterns', 'Show tracked patterns'],
   ['track', 'Track a pattern'],
   ['untrack', 'Stop tracking a pattern'],
-  ['status', 'Object and transfer status'],
+  ['status', 'Show file and transfer status'],
   ['objects', 'List objects and sizes'],
   ['fetch', 'Download objects'],
   ['pull', 'Download and check out objects'],

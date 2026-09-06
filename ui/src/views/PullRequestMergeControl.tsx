@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon';
 import { canMarkPullRequestReady, providerName } from '../lib/pullRequests';
 import { errMessage, tauri } from '../lib/tauri';
 import type { PullRequest, PullRequestMergeStrategy, PullRequestProvider } from '../lib/types';
+import { PullRequestCompletionControl } from './PullRequestCompletionControl';
 
 const STRATEGIES: {
   value: PullRequestMergeStrategy;
@@ -63,6 +64,8 @@ export function PullRequestMergeControl({
   const markReady = canMarkPullRequestReady(pr);
   const deferred = pr.completion?.kind === 'github_queue' || pr.completion?.status === 'waiting_for_policies';
   const disabled = deferred || (markReady ? false : (Boolean(disabledReason) || strategies.length === 0)) || busy;
+  const completionAvailable = !!pr.completion;
+  const menuDisabled = busy || (disabled && !completionAvailable);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -70,18 +73,22 @@ export function PullRequestMergeControl({
   }, []);
 
   const showMenu = useCallback((focus = false) => {
-    if (disabled) return;
+    if (menuDisabled) return;
     setError(null);
     setOpen(true);
     if (focus) {
-      window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus());
+      window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>('.pr-merge-menu button:not(:disabled), .pr-merge-menu select:not(:disabled)')?.focus());
     }
-  }, [disabled, selectedIndex]);
+  }, [menuDisabled]);
 
   useEffect(() => {
     const onMergeRequest = () => showMenu(true);
     window.addEventListener('strand:pull-request-merge-menu', onMergeRequest);
-    return () => window.removeEventListener('strand:pull-request-merge-menu', onMergeRequest);
+    window.addEventListener('strand:pull-request-completion', onMergeRequest);
+    return () => {
+      window.removeEventListener('strand:pull-request-merge-menu', onMergeRequest);
+      window.removeEventListener('strand:pull-request-completion', onMergeRequest);
+    };
   }, [showMenu]);
 
   useEffect(() => {
@@ -170,7 +177,7 @@ export function PullRequestMergeControl({
     return () => window.removeEventListener('strand:pull-request-ready', onReadyRequest);
   }, [submitReady]);
 
-  if (!markReady && strategies.length === 0) return <span className="pr-muted">Merge on {providerName(provider)}</span>;
+  if (!markReady && strategies.length === 0 && !completionAvailable) return <span className="pr-muted">Merge on {providerName(provider)}</span>;
   if (markReady) {
     return (
       <div className="pr-merge-control">
@@ -194,22 +201,22 @@ export function PullRequestMergeControl({
         <button
           type="button"
           className="pr-merge-main"
-          disabled={disabled}
-          title={deferred ? 'Use the deferred completion controls below' : disabledReason || `${selected.buttonLabel} using ${providerName(provider)}`}
-          onClick={() => void submit()}
+          disabled={deferred ? menuDisabled : disabled}
+          title={deferred ? 'Manage automatic merging' : disabledReason || `${selected.buttonLabel} using ${providerName(provider)}`}
+          onClick={() => deferred ? showMenu(true) : void submit()}
         >
-          {busy ? 'Merging…' : selected.buttonLabel}
+          {busy ? 'Merging…' : deferred ? pr.completion?.status === 'queued' ? 'In merge queue' : pr.completion?.status === 'waiting_for_policies' ? 'Automatic merge enabled' : 'Join merge queue…' : selected.buttonLabel}
         </button>
         <button
           type="button"
           className="pr-merge-toggle"
           ref={toggleRef}
-          disabled={disabled}
-          aria-label="Choose merge strategy"
-          aria-haspopup="menu"
+          disabled={menuDisabled}
+          aria-label="Merge options"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={`pr-merge-menu-${pr.id}`}
-          onClick={() => open ? closeMenu() : showMenu()}
+          onClick={() => open ? closeMenu() : showMenu(true)}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
               event.preventDefault();
@@ -224,23 +231,28 @@ export function PullRequestMergeControl({
         </button>
       </div>
 
-      {open && (
         <div
+          hidden={!open}
           className="pr-merge-menu"
           id={`pr-merge-menu-${pr.id}`}
-          role="menu"
-          aria-label="Merge strategy"
+          role="dialog"
+          aria-label="Merge options"
           onKeyDown={(event) => {
             const current = optionRefs.current.indexOf(document.activeElement as HTMLButtonElement);
-            if (event.key === 'ArrowDown') { event.preventDefault(); moveMenuFocus(current + 1); }
-            else if (event.key === 'ArrowUp') { event.preventDefault(); moveMenuFocus(current - 1); }
-            else if (event.key === 'Home') { event.preventDefault(); moveMenuFocus(0); }
-            else if (event.key === 'End') { event.preventDefault(); moveMenuFocus(strategies.length - 1); }
+            if (current >= 0 && event.key === 'ArrowDown') { event.preventDefault(); moveMenuFocus(current + 1); }
+            else if (current >= 0 && event.key === 'ArrowUp') { event.preventDefault(); moveMenuFocus(current - 1); }
+            else if (current >= 0 && event.key === 'Home') { event.preventDefault(); moveMenuFocus(0); }
+            else if (current >= 0 && event.key === 'End') { event.preventDefault(); moveMenuFocus(strategies.length - 1); }
             else if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); }
-            else if (event.key === 'Tab') setOpen(false);
+            else if (event.key === 'Tab') {
+              const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled)'));
+              const first = controls[0], last = controls.at(-1);
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            }
           }}
         >
-          {strategies.map((item, index) => (
+          {!deferred && <div role="menu" aria-label="Merge strategy">{strategies.map((item, index) => (
             <button
               type="button"
               role="menuitemradio"
@@ -258,12 +270,12 @@ export function PullRequestMergeControl({
                 <small>{item.hint}</small>
               </span>
             </button>
-          ))}
+          ))}</div>}
+          {pr.completion && <PullRequestCompletionControl path={path} pr={pr} onUpdated={onMerged} />}
           <div className="pr-merge-menu-note">
             {providerName(provider)} enforces required checks and branch policies. The source branch is kept.
           </div>
         </div>
-      )}
 
       {error && <div className="pr-merge-error" role="alert">{error}</div>}
     </div>

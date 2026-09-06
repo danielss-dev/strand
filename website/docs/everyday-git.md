@@ -83,14 +83,15 @@ Commit button shows the same chip); plain Enter still inserts a newline in the
 description. An **amend** checkbox rewrites the previous commit instead.
 
 Every commit and amend runs your real `git commit`, including applicable hooks,
-`core.hooksPath`, rejecting policies and message rewrites. The **Signature**
-selector defaults to **Inherit Git config** and shows whether Git will sign.
+`core.hooksPath`, rejecting policies and message rewrites. **Commit options**, the
+chevron beside Commit, defaults to **Use Git setting** and shows whether Git will sign.
 **Sign this commit** and **Do not sign this commit** override that operation
-without changing config. **Signing settings…** opens scoped defaults and key
-references in Settings → Git. Signing uses your existing GPG/SSH agents; hook
+without changing config. **Repository signing settings…** opens the Signing tab of
+Repository settings. Signing uses your existing GPG/SSH agents; hook
 or signing failures retain the subject, description, amend and signing choices
 for retry, including when you leave this view and return during the session.
-Expandable **Commit output** shows bounded diagnostics after success.
+Successful output is saved in **Activity history…**, available in Commit options
+and the repository context menu. Failures remain in the commit form.
 
 ### AI commit message suggestions
 
@@ -122,18 +123,21 @@ Network operations shell out to your system git, so **credential helpers, SSH ke
 
 ### Git LFS
 
-Open **Git LFS** in the sidebar or search **Git LFS:** in the command palette.
-Select an action, fill its fields, then choose **Run action**. Reads are explicit:
+Right-click a repository tab or rail icon and choose **Git LFS…**, or search
+**Git LFS:** in the command palette. A single working file’s Files context menu
+also offers **Git LFS → Track a pattern…**, **Lock this file…**, and **View locks for this file…**.
+Tracking prefills the selected path; review wildcard patterns before running.
+Select an action, fill its fields, then use the action’s named button. Reads are explicit:
 opening the dialog does not start an object scan or contact the remote.
 
-- **Installation and configuration** shows the installed version and effective
+- **Check installation and configuration** shows the installed version and effective
   LFS environment. Install Git LFS separately if Git reports it missing.
 - **Set up this repository** runs `git lfs install --local`, including the
   pre-push hook. Existing conflicting hooks are reported, never overwritten.
 - **Tracked patterns**, **Track a pattern**, and **Stop tracking a pattern**
   inspect/edit `.gitattributes`. Review and stage that file and the intended
   assets in Local Changes. Tracking does not rewrite existing commits.
-- **Object and transfer status** shows Git LFS's queued changes; **List objects
+- **Show file and transfer status** shows Git LFS's queued changes; **List objects
   and sizes** lists current LFS files (`*` is full content, `-` is a pointer).
 - **Download objects**, **Download and check out objects**, and **Upload objects**
   use the named Git remote. Downloads can be retried after cancellation; completed
@@ -163,13 +167,13 @@ The topbar branch dropdown also checks out local branches, tracks remote ones, a
 
 ### Remotes
 
-Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu can fetch, prune stale branches from only that remote, inspect its fetch/push refspecs, set Git's repository-local default remote, edit URLs, rename, copy URLs, or remove it. Adding or editing a remote accepts a required fetch URL and an optional push URL; remote URLs, refspecs, and `remote.pushDefault` stay in native Git configuration so command-line Git sees the same setup. Scoped prune, refspec inspection, and default selection are also searchable per remote in the command palette. The section `+` (or the palette's "Add remote…") adds a remote.
+Each remote is a tree rooted at its name, showing all remote-tracking branches. Branch leaves can fetch only that branch, pull it into the current branch with a chosen strategy, set it as the current branch's upstream, checkout-or-track ("Create local branch & track"), create a worktree, delete the branch on the remote, and copy its short name, remote ref, or tip SHA. The remote folder menu can fetch, prune stale branches from only that remote, inspect its fetch/push refspecs, set Git's repository-local default remote, edit URLs, rename, copy URLs, or remove it. Adding or editing a remote accepts a required fetch URL and an optional push URL; remote URLs, refspecs, and `remote.pushDefault` stay in native Git configuration so command-line Git sees the same setup. Scoped prune, refspec inspection, and default selection are also searchable per remote in the command palette. The section’s **Remote actions** menu offers Add remote and Publish repository.
 
 ### Tags
 
 Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), Verify tag signature, copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
 
-The tag dialog offers **Inherit Git config**, **Sign this tag**, and **Do not sign
+The tag dialog’s **Advanced options** offers **Use Git setting**, **Sign this tag**, and **Do not sign
 this tag**. Inherited signing honors `tag.gpgSign` and `tag.forceSignAnnotated`.
 A signed tag requires an annotation; unsigned tags with no message are
 lightweight. A failed signing attempt keeps the form open with your draft and
@@ -187,12 +191,13 @@ Single-clicking a stash switches to All Commits, reveals its graph node, and ope
 
 Submodules list with status badges (uninitialized, out of date, modified).
 Double-click opens the module as its own repository tab. The menu offers Open,
-Update (or Init & update), Copy path, and **Manage / inspect nested modules…**.
-The section header's **Manage submodules** control also works in repositories
-with no submodules. Every management action is searchable as **Submodules:**
+Update (or Init & update), Copy path, **Inspect submodule…**, and a **Manage**
+submenu for URL changes, synchronization, deinitialization and removal. The
+header’s **Submodule actions** menu offers Add, Update all and Manage, even when
+there are no submodules. Every management action is searchable as **Submodules:**
 in the command palette.
 
-Choose an action and a module, then **Run action**:
+Choose an action and a module, then use the action’s named button:
 
 - **Add submodule** clones a URL into a new relative path and stages its
   `.gitmodules` entry and gitlink. Existing directories are preserved.
@@ -313,13 +318,13 @@ Once every conflicted file is resolved, the banner's Continue button resumes the
 
 ## Patches, mailboxes and bundles
 
-Open **Repository → Patches, Mailboxes & Bundles…**, or search the same name
-in Quick Launch. Tab moves between controls; native selectors use arrow keys;
+Open **Import / Export** in the Repository menu or a repository’s context menu.
+Choose **Apply patch or mailbox…**, **Import bundle…**, or **Export bundle…**.
+Each command also appears separately in Quick Launch. Tab moves between controls; native selectors use arrow keys;
 Enter or Space activates buttons and Escape closes the dialog while idle.
 
 For a patch, choose the file and an explicit target: **Working tree only**
-(unstaged), **Index only** (staged, without changing files), or **Index and
-working tree**. **Preview and validate** lists every affected old/new path
+(unstaged), **Stage changes only** (without changing files), or **Apply and stage changes**. **Preview and validate** lists every affected old/new path
 and checks application before enabling Apply. A changed input or repository
 requires another preview. Paths outside the repository, Git administrative
 paths and symlink patches are rejected. Patch and mailbox input is limited
@@ -347,7 +352,7 @@ file and reports the exported refs/prerequisites; it never overwrites a file.
 
 Strand reads repositories with its own fast engine, but the operations where your environment matters shell out to the real `git` binary and therefore honor your global and per-repo configuration:
 
-- **Committing when `commit.gpgSign` is on** — GPG/SSH signing keys and pre-commit/commit-msg hooks (with signing off, commits are in-process and hooks don't run).
+- **Commit and amend** — hooks and message rewrites run for both signed and unsigned commits; signed commits also use your configured signing program.
 - **Network operations** (clone, fetch, pull, push) — credential helpers, SSH agents and keys, remote-related hooks, and content filters such as Git LFS.
 - **Interactive rebase** — hooks and signing on rewritten commits.
 - **Repository maintenance and integrity checks** — Git's configured
@@ -358,15 +363,16 @@ If it works in your terminal, it works in Strand.
 
 ## Git notes, replacements and tag editing
 
-Open **Repository → Git Notes, Replacements & Tag Editing**, or use the
-**Git notes**, **Replace refs**, **Retarget tag** or **Re-annotate tag** palette
-commands. Tag rows also offer retarget/re-annotate in their context menu
-(including the keyboard context-menu key).
+Use **Git note…** on a commit’s context menu. **Replacement refs…** lives under
+**Advanced** in the Repository menu or repository context menu. A tag’s
+**Edit tag** submenu offers **Change target commit…** and **Edit message…**.
+Quick Launch also offers Git notes, Replacement refs, Change tag target and
+Edit tag message.
 
 Git notes live in a selected `refs/notes/…` namespace and are separate from
 Strand's local Review notes. Inspect an object, edit its note, then Save.
 Removing a note requires confirmation. An external namespace change refuses
-Save and keeps your draft; use **Inspect note / reload draft** to review the
+Save and keeps your draft; use **Load Git note** to review the
 current note before retrying. Notes are shared by linked worktrees.
 
 Replacement review shows the full original/replacement object IDs and types.
@@ -384,13 +390,13 @@ External tag changes require reviewing the targets again.
 
 ## Git-flow workflows
 
-Open **Repository → Git-flow Workflows**, or search **Git-flow workflows** in
-the command palette. The extension is optional: **Detect Git-flow AVH** checks
+Open **Branch actions → Git-flow…** in the sidebar, or search **Git-flow workflows** in
+the command palette. The extension is optional: **Check Git-flow installation** checks
 the installed tool. Install Git-flow AVH separately if it is missing. Other
 Git-flow implementations are not supported by this dialog.
 
 Choose two distinct existing production/develop branches, branch prefixes and
-an optional version-tag prefix, then **Enable / save Git-flow**. This opts the
+an optional version-tag prefix, then **Save and enable Git-flow**. This opts the
 repository into Strand's workflow and saves the reviewed shared Git settings.
 Other Git-flow options are retained and can be inspected in the dialog. Save
 refuses an external configuration change until you reload it. **Disable in

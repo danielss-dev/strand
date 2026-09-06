@@ -14,6 +14,7 @@ import { PluginsSection } from './settings/PluginsSection';
 import { PrivacySection } from './settings/PrivacySection';
 import { TerminalSection } from './settings/TerminalSection';
 import { UpdatesSection } from './settings/UpdatesSection';
+import { UserActionsEditor } from './settings/UserActionsEditor';
 
 /**
  * Settings modal — a sidebar of sections (Appearance / Diff / Git /
@@ -40,6 +41,7 @@ const SECTIONS: { id: SettingsSectionId; label: MessageKey; icon: IconName }[] =
   { id: 'git', label: 'settings.git', icon: 'branch' },
   { id: 'hosting', label: 'settings.hosting', icon: 'remote' },
   { id: 'integrations', label: 'settings.integrations', icon: 'external' },
+  { id: 'user-actions', label: 'settings.userActions', icon: 'terminal' },
   { id: 'ai', label: 'settings.ai', icon: 'sparkle' },
   { id: 'plugins', label: 'settings.plugins', icon: 'workspace' },
   { id: 'updates', label: 'settings.updates', icon: 'sync' },
@@ -53,7 +55,7 @@ export function SettingsDialog({
   onClose: () => void;
   initialSection?: SettingsSectionId;
 }) {
-  const [section, setSection] = useState<SettingsSectionId>(initialSection === 'user-actions' ? 'integrations' : initialSection);
+  const [section, setSection] = useState<SettingsSectionId>(initialSection);
 
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -79,6 +81,7 @@ export function SettingsDialog({
       title={t('settings.title')}
       icon="settings"
       size="xl"
+      className="settings-dialog-lg"
       blockEscapeWhileBusy={false}
       onClose={onClose}
       footer={
@@ -127,7 +130,8 @@ export function SettingsDialog({
             {section === 'keyboard' && <KeyboardSection />}
             {section === 'git' && <GitSection />}
             {section === 'hosting' && <HostingSection />}
-            {section === 'integrations' && <IntegrationsSection focusUserActions={initialSection === 'user-actions'} />}
+            {section === 'integrations' && <IntegrationsSection />}
+            {section === 'user-actions' && <UserActionsEditor />}
             {section === 'ai' && <AiSection />}
             {section === 'plugins' && <PluginsSection />}
             {section === 'updates' && <UpdatesSection />}

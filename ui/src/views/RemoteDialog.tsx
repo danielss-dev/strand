@@ -1,3 +1,4 @@
+import { RemoteProviderSelect } from './settings/RemoteProviderSettings';
 import { useEffect, useRef, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
@@ -34,6 +35,8 @@ export function RemoteDialog({
   const [url, setUrl] = useState(mode.kind === 'url' ? mode.url : '');
   const [pushUrl, setPushUrl] = useState(mode.kind === 'url' ? mode.pushUrl : '');
   const [busy, setBusy] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const path = useRepo((state) => state.activePath);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   // Re-arm on mount — StrictMode's dev remount reuses the same ref, so a
@@ -92,6 +95,7 @@ export function RemoteDialog({
       title={title}
       icon="remote"
       size="sm"
+      className="clone-options-dialog"
       busy={busy}
       onClose={onClose}
       footer={
@@ -193,6 +197,9 @@ export function RemoteDialog({
           </>
         )}
 
+        {mode.kind === 'url' && path && <details className="settings-disclosure" onToggle={event => setAdvanced(event.currentTarget.open)}><summary>Advanced</summary>
+          {advanced && <RemoteProviderSelect key={path + mode.name} path={path} remote={mode.name} />}
+        </details>}
         {error ? <div className="clone-error">{error}</div> : null}
       </div>
     </Dialog>

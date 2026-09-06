@@ -33,10 +33,10 @@ export function openUserAction(context: ActionContext, actionId?: string) {
 export function userActionMenu(context: ActionContext): MenuItem {
   const actions = useSettings.getState().userActions.filter((action) => action.scope === context.target.kind);
   return {
-    label: 'User actions…', icon: 'terminal',
-    ...(actions.length ? { submenu: actions.map((action) => ({
+    label: 'Actions', icon: 'terminal',
+    submenu: [...actions.map((action) => ({
       label: action.name, onSelect: () => openUserAction(context, action.id),
-    })) } : { onSelect: () => openUserAction(context) }),
+    })), { label: 'Manage user actions…', onSelect: () => window.dispatchEvent(new Event('strand:manage-user-actions')) }],
   };
 }
 

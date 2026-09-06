@@ -11,7 +11,6 @@ export function PullRequestCompletionControl({ path, pr, onUpdated }: {
   const [strategy, setStrategy] = useState<PullRequestMergeStrategy>('squash');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const root = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const selected = state?.strategies.includes(strategy) ? strategy : state?.strategies[0];
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -29,13 +28,8 @@ export function PullRequestCompletionControl({ path, pr, onUpdated }: {
       if (mounted.current) setBusy(false);
     }
   }, [busy, onUpdated, path, pr.id, pr.source_commit, selected, state]);
-  useEffect(() => {
-    const focus = () => requestAnimationFrame(() => root.current?.querySelector<HTMLElement>('button:not(:disabled), select, [tabindex]')?.focus());
-    window.addEventListener('strand:pull-request-completion', focus);
-    return () => window.removeEventListener('strand:pull-request-completion', focus);
-  }, []);
   if (!state) return null;
-  return <div className="pr-data-status" ref={root} aria-label="Deferred pull request completion">
+  return <div className="pr-completion-options" aria-label="Automatic merging">
     <strong tabIndex={-1}>{completionLabel(state)}</strong>
     {state.can_enable && state.kind !== 'github_queue' && <Select aria-label="Automatic merge strategy" disabled={busy} value={selected} onChange={e => setStrategy(e.target.value as PullRequestMergeStrategy)}>
       {state.strategies.map(s => <option value={s} key={s}>{s === 'merge_commit' ? 'Merge commit' : s === 'squash' ? 'Squash' : 'Rebase'}</option>)}
@@ -44,7 +38,7 @@ export function PullRequestCompletionControl({ path, pr, onUpdated }: {
     {state.can_cancel && <button type="button" className="h-link" disabled={busy} onClick={() => void submit(false)}>{completionAction(state, false)}</button>}
     {busy && <span role="status">Updating completion…</span>}
     {state.status !== 'merged' && state.status !== 'closed' && <span>
-      {state.kind === 'github_queue' ? 'GitHub controls queue order and required checks.' : 'The provider completes automatically when policies pass, including later source pushes.'}
+      {state.kind === 'github_queue' ? 'GitHub manages the queue and required checks.' : 'Merges when the required checks pass. New commits pushed to this branch are included.'}
     </span>}
     {state.blockers.length > 0 && <span>{state.blockers.join(' · ')}</span>}
     {error && <span role="alert">{error} · Refresh to check the current provider state.</span>}

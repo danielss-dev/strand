@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Icon } from './Icon';
-import { openUserAction } from '../lib/userActions';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { repositoryToolMenu } from '../lib/repositoryTools';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { formatBinding } from '../lib/keys';
 import { useRepo } from '../stores/repo';
@@ -126,6 +127,13 @@ export function RepoRail({ onOpenRepo, onInitRepo, onOpenRecent, onClone, onCust
           e.preventDefault();
           void closeRepo(t.path);
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            setMenu({ path: t.path, name: t.meta.name, worktree: linked, x: rect.right, y: rect.top });
+          }
+        }}
         onContextMenu={(e) => openMenu(e, t)}
       >
         {linked ? (
@@ -190,54 +198,15 @@ function RailContextMenu({
   onReview: () => void;
   onMerge: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useOutsideClose([ref], true, onClose);
-
-  // Clamp the menu inside the viewport (it opens at the cursor).
-  const [pos, setPos] = useState({ top: menu.y, left: menu.x });
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const left = Math.min(menu.x, window.innerWidth - r.width - 8);
-    const top = Math.min(menu.y, window.innerHeight - r.height - 8);
-    setPos({ top, left });
-  }, [menu]);
-
-  return (
-    <div
-      ref={ref}
-      className="repo-menu"
-      role="menu"
-      style={{ position: 'fixed', top: pos.top, left: pos.left }}
-    >
-      {!menu.worktree && (
-        <button type="button" className="repo-menu-item" role="menuitem" onClick={onCustomize}>
-          <span className="ico"><Icon name="edit" size={13} /></span>
-          <span className="label">Customize…</span>
-        </button>
-      )}
-      {menu.worktree && (
-        <>
-          <button type="button" className="repo-menu-item" role="menuitem" onClick={onReview}>
-            <span className="ico"><Icon name="eye" size={13} /></span>
-            <span className="label">Review vs base</span>
-          </button>
-          <button type="button" className="repo-menu-item" role="menuitem" onClick={onMerge}>
-            <span className="ico"><Icon name="branch" size={13} /></span>
-            <span className="label">Merge &amp; clean up…</span>
-          </button>
-        </>
-      )}
-      <button type="button" className="repo-menu-item" role="menuitem" onClick={() => { openUserAction({ path: menu.path, target: { kind: 'repository' } }); onClose(); }}>
-        <span className="ico"><Icon name="terminal" size={13} /></span><span className="label">User actions…</span>
-      </button>
-      <button type="button" className="repo-menu-item" role="menuitem" onClick={onCloseRepo}>
-        <span className="ico"><Icon name="x" size={13} /></span>
-        <span className="label">{menu.worktree ? 'Close worktree' : 'Close repository'}</span>
-      </button>
-    </div>
-  );
+  const items: MenuItem[] = [
+    ...(menu.worktree ? [
+      { label: 'Review vs base', icon: 'eye' as const, onSelect: onReview },
+      { label: 'Merge & clean up…', icon: 'branch' as const, onSelect: onMerge },
+    ] : [{ label: 'Customize…', icon: 'edit' as const, onSelect: onCustomize }]),
+    ...repositoryToolMenu(menu.path),
+    { label: menu.worktree ? 'Close worktree' : 'Close repository', icon: 'x', onSelect: onCloseRepo },
+  ];
+  return <ContextMenu x={menu.x} y={menu.y} items={items} onClose={onClose} />;
 }
 
 /**
@@ -317,6 +286,9 @@ function RailAddButton({
           >
             <span className="ico"><Icon name="remote" size={13} /></span>
             <span className="label">Clone repository…</span>
+          </button>
+          <button type="button" className="repo-menu-item" role="menuitem" onClick={() => { setOpen(false); window.dispatchEvent(new Event('strand:open-ssh')); }}>
+            <span className="ico"><Icon name="remote" size={13} /></span><span className="label">Open over SSH…</span>
           </button>
 
           <div className="repo-menu-divider" />

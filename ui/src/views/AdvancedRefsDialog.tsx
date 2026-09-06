@@ -6,11 +6,11 @@ import { errMessage, tauri } from '../lib/tauri';
 import type { AdvancedRefs, GitNote, ReplaceReview, TagEditKind, TagEditReview } from '../lib/advancedRefs';
 import { useRepo } from '../stores/repo';
 
-export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '', onClose }: { path: string; initialMode?: 'notes' | 'replace' | TagEditKind; initialTag?: string; onClose: () => void }) {
-  const [mode, setMode] = useState(initialMode);
+export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '', initialRevision = 'HEAD', onClose }: { path: string; initialMode?: 'notes' | 'replace' | TagEditKind; initialTag?: string; initialRevision?: string; onClose: () => void }) {
+  const [mode] = useState(initialMode);
   const [notesRef, setNotesRef] = useState('refs/notes/commits');
   const [data, setData] = useState<AdvancedRefs | null>(null);
-  const [revision, setRevision] = useState('HEAD');
+  const [revision, setRevision] = useState(initialRevision);
   const [note, setNote] = useState<GitNote | null>(null);
   const [message, setMessage] = useState('');
   const [original, setOriginal] = useState('');
@@ -27,7 +27,7 @@ export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [output, setOutput] = useState('');
-  const first = useRef<HTMLSelectElement>(null);
+  const first = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
   const reads = useRef(0);
   const refresh = useCallback(async () => {
@@ -63,18 +63,15 @@ export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '
   }
   function clearTag() { setTagReview(null); setAcknowledged(false); setConfirm(''); }
   const tags = useRepo((s) => s.refs.tags);
-  return <Dialog title="Git notes, replacements & tag editing" size="lg" busy={busy} initialFocusRef={first} onClose={onClose}
+  return <Dialog className="git-tool-dialog" title={mode === 'notes' ? 'Git notes' : mode === 'replace' ? 'Replacement refs' : mode === 'retarget' ? 'Change tag target' : 'Edit tag message'} size="lg" busy={busy} initialFocusRef={first} onClose={onClose}
     footer={<><span role="status">{busy ? 'Working with Git…' : ''}</span><button className="btn" disabled={busy} onClick={() => void refresh()}>Refresh refs</button><button className="btn" disabled={busy} onClick={onClose}>Close</button></>}>
     <div className="clone-body git-tool-body">
       <p className="stash-blurb">Repository: <code>{path}</code>. These are Git objects and refs, separate from Strand’s local Review notes.</p>
-      <label className="clone-field"><span className="lbl">Action</span><Select ref={first} className="clone-input" value={mode} disabled={busy} onChange={(e) => { setMode(e.target.value as typeof mode); clearTag(); setReplaceReview(null); setConfirm(''); setOutput(''); }}>
-        <option value="notes">Inspect / edit Git notes</option><option value="replace">Inspect / edit replace refs</option><option value="retarget">Retarget an existing tag</option><option value="reannotate">Re-annotate an existing tag</option>
-      </Select></label>
       {mode === 'notes' && <>
-        <label className="clone-field"><span className="lbl">Notes namespace</span><input className="clone-input" value={notesRef} list="git-notes-refs" disabled={busy} onChange={(e) => { setNotesRef(e.target.value); setNote(null); }} /><datalist id="git-notes-refs">{data?.notes_refs.map((r) => <option key={r} value={r} />)}</datalist></label>
+        <label className="clone-field"><span className="lbl">Notes reference</span><input ref={first} className="clone-input" value={notesRef} list="git-notes-refs" disabled={busy} onChange={(e) => { setNotesRef(e.target.value); setNote(null); }} /><datalist id="git-notes-refs">{data?.notes_refs.map((r) => <option key={r} value={r} />)}</datalist></label>
         <label className="clone-field"><span className="lbl">Existing notes{data?.notes_truncated ? ' (first 2,000)' : ''}</span><Select className="clone-input" value="" disabled={busy || !data?.notes.length} onChange={(e) => { if (e.target.value) void run(() => inspectNote(e.target.value)); }}><option value="">Choose an annotated object…</option>{data?.notes.map((n) => <option key={n.object} value={n.object}>{n.object}</option>)}</Select></label>
-        <label className="clone-field"><span className="lbl">Object revision</span><input className="clone-input" value={revision} disabled={busy} onChange={(e) => { setRevision(e.target.value); setNote(null); }} /></label>
-        <button className="btn" disabled={busy || !revision} onClick={() => void run(() => inspectNote())}>Inspect note / reload draft</button>
+        <label className="clone-field"><span className="lbl">Commit, tag or object</span><input className="clone-input" value={revision} disabled={busy} onChange={(e) => { setRevision(e.target.value); setNote(null); }} /></label>
+        <button className="btn" disabled={busy || !revision} onClick={() => void run(() => inspectNote())}>Load Git note</button>
         {note && <section className="git-tool-review" aria-label="Git note editor">
           <code>{note.target.oid}</code><p>{note.target.kind} · {note.target.subject}</p>
           <label className="clone-field"><span className="lbl">Git note text</span><textarea className="clone-input" rows={6} value={message} disabled={busy} onChange={(e) => setMessage(e.target.value)} /></label>
@@ -84,9 +81,9 @@ export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '
         </section>}
       </>}
       {mode === 'replace' && <>
-        <p className="stash-note">Git replacement refs change how replacement-aware Git commands read objects; they do not rewrite the original object. Strand’s ordinary in-process graph/diff readers show original objects. This inspector shows raw object identities.</p>
+        <p className="stash-note">Replacement refs let Git interpret one object as another without rewriting the original. Strand’s history and diff views continue to show the originals.</p>
         <label className="clone-field"><span className="lbl">Existing replacement{data?.replacements_truncated ? ' (first 2,000)' : ''}</span><Select className="clone-input" disabled={busy || !data?.replacements.length} value="" onChange={(e) => { const r = data?.replacements.find((r) => r.original === e.target.value); if (!r) return; setOriginal(r.original); setReplacement(r.replacement); void run(async () => setReplaceReview(await tauri.repoReplaceReview(path, r.original, r.replacement))); }}><option value="">Choose a replace ref…</option>{data?.replacements.map((r) => <option key={r.original} value={r.original}>{r.original} → {r.replacement}</option>)}</Select></label>
-        <label className="clone-field"><span className="lbl">Original object revision</span><input className="clone-input" disabled={busy} value={original} onChange={(e) => { setOriginal(e.target.value); setReplaceReview(null); }} /></label>
+        <label className="clone-field"><span className="lbl">Original object revision</span><input ref={first} className="clone-input" disabled={busy} value={original} onChange={(e) => { setOriginal(e.target.value); setReplaceReview(null); }} /></label>
         <label className="clone-field"><span className="lbl">Replacement object revision</span><input className="clone-input" disabled={busy} value={replacement} onChange={(e) => { setReplacement(e.target.value); setReplaceReview(null); }} /></label>
         <button className="btn" disabled={busy || !original || !replacement} onClick={() => void run(async () => { setReplaceReview(await tauri.repoReplaceReview(path, original, replacement)); setConfirm(''); })}>Review replacement</button>
         {replaceReview && <section className="git-tool-review" aria-label="Replacement review">
@@ -98,7 +95,7 @@ export function AdvancedRefsDialog({ path, initialMode = 'notes', initialTag = '
         </section>}
       </>}
       {(mode === 'retarget' || mode === 'reannotate') && <>
-        <label className="clone-field"><span className="lbl">Existing tag name</span><input className="clone-input" value={tag} list="edit-tag-names" disabled={busy} onChange={(e) => { setTag(e.target.value); clearTag(); }} /><datalist id="edit-tag-names">{tags.map((t) => <option key={t.name} value={t.name} />)}</datalist></label>
+        <label className="clone-field"><span className="lbl">Existing tag name</span><input ref={first} className="clone-input" value={tag} list="edit-tag-names" disabled={busy} onChange={(e) => { setTag(e.target.value); clearTag(); }} /><datalist id="edit-tag-names">{tags.map((t) => <option key={t.name} value={t.name} />)}</datalist></label>
         {mode === 'retarget' && <label className="clone-field"><span className="lbl">New target revision</span><input className="clone-input" disabled={busy} value={target} onChange={(e) => { setTarget(e.target.value); clearTag(); }} /></label>}
         <button className="btn" disabled={busy || !tag || (mode === 'retarget' && !target)} onClick={() => void run(inspectTag)}>Review current and new target</button>
         {tagReview && <section className="git-tool-review" aria-label="Tag edit review">

@@ -2979,6 +2979,25 @@ unsigned overrides, tampering and failed signers. Native Windows settings,
 commit/amend and palette tag flows passed; validation and platform limits are
 recorded in `docs/hooks-identity-signing-validation-2026-09-06.md`.
 
+**UI placement and readability revision (2026-09-06):** Moved the September 6
+feature controls into their owning repository, file, branch, tag and PR menus.
+Repository settings separates identity and signing from global preferences;
+User actions has its own settings page and individual argument fields. Code owns
+review actions and inline suggestion previews, section footers own paging, and
+Merge options owns automatic completion. Advanced clone, signing and setup
+settings collapse; long dialogs scroll within the window with visible controls.
+This placement supersedes the earlier September 6 surface descriptions above.
+Browser interaction checks and validation limits are recorded in
+`docs/ui-placement-validation-2026-09-06.md`.
+
+**Azure helper download repair kick (2026-09-06):** The app advanced to helper
+protocol 7 while only protocol 5 was published; Strand 1.5.1's protocol-6
+channel is also missing. Helper 1.3.0 is prepared for protocol 7, installer
+404s now identify unavailable or incomplete releases, and desktop release CI
+checks the public manifest, signature, and every platform archive before
+building. Signed helper publication and a separate protocol-6 backfill remain
+pending; protocol compatibility and signature enforcement stay in place.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

@@ -568,6 +568,19 @@ fn download(client: &reqwest::blocking::Client, url: &str, limit: usize) -> Resu
         .send()
         .map_err(|error| format!("Could not download strand-azdo: {error}"))?;
     if !response.status().is_success() {
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(if url.ends_with("/strand-azdo-manifest.json") {
+                format!(
+                    "No compatible strand-azdo helper release was found for this Strand build \
+                     (protocol {PROTOCOL_VERSION}, 404 Not Found). Try again after the helper release is published."
+                )
+            } else {
+                format!(
+                    "The strand-azdo helper release for protocol {PROTOCOL_VERSION} is incomplete \
+                     (404 Not Found). Try again after the helper release is repaired."
+                )
+            });
+        }
         return Err(format!(
             "Could not download strand-azdo ({})",
             response.status()
@@ -698,6 +711,64 @@ mod tests {
                 "https://github.com/danielss-dev/strand/releases/download/strand-azdo-protocol-{PROTOCOL_VERSION}"
             )
         );
+    }
+
+    #[test]
+    fn missing_helper_downloads_explain_the_release_failure() {
+        use std::net::TcpListener;
+
+        for (file, status, expected) in [
+            (
+                "strand-azdo-manifest.json",
+                "404 Not Found",
+                "Try again after the helper release is published",
+            ),
+            (
+                "strand-azdo-manifest.json.minisig",
+                "404 Not Found",
+                "Try again after the helper release is repaired",
+            ),
+            (
+                "helper.zip",
+                "404 Not Found",
+                "Try again after the helper release is repaired",
+            ),
+            (
+                "strand-azdo-manifest.json",
+                "503 Service Unavailable",
+                "503 Service Unavailable",
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}/{file}", listener.local_addr().unwrap());
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = [0; 4096];
+                stream.read(&mut request).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+            });
+            let client = reqwest::blocking::Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(5))
+                .build()
+                .unwrap();
+            let error = download(&client, &url, 1024).unwrap_err();
+            server.join().unwrap();
+            assert!(error.contains(expected), "{error}");
+            if status.starts_with("404") {
+                assert!(
+                    error.contains(&format!("protocol {PROTOCOL_VERSION}")),
+                    "{error}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -2,21 +2,22 @@
 
 ## Guided bisect
 
-Open **Repository → Guided Bisect…**, or search **Guided bisect** in Quick
-Launch. Enter a known good ancestor and a known bad revision, then Start.
+Use a commit’s **Find regression** submenu to set it as a working or broken
+revision, or search **Find regression…** in Quick Launch. Enter a last known
+working commit and a commit with the problem, then choose **Start search**.
 Git checks out a candidate with detached HEAD. Run your tests yourself and
-choose **Mark good**, **Mark bad**, or **Skip — cannot test**. The dialog shows
+choose **Mark working**, **Mark broken**, or **Skip — cannot test**. The dialog shows
 the selected commit, remaining candidate count, and an approximate number of
 tests for linear history without skips. Git’s full bisect log is inspectable.
 
 Once Git identifies the first bad commit, Strand shows its SHA. Skipping too
 many candidates can leave an ambiguous result; Strand reports that separately.
-**Reset bisect…** reviews the original branch/commit and needs a second click
+**End search and return…** reviews the original branch/commit and needs a second click
 to return there. Start, ratings and reset refuse dirty working trees or indexes
 so test edits must first be committed or stashed. An external checkout that
 differs from Git’s expected revision cannot be rated accidentally.
 
-Closing the dialog keeps the session. Reopen it or use the bisect banner to
+Closing the dialog keeps the session. Reopen it or use **Resume bisect…** in the active operation banner to
 resume, including sessions started in a terminal. Custom good/bad terms and
 external `--no-checkout` sessions are recognized; in no-checkout mode you test
 `BISECT_HEAD`, while working files stay at HEAD. **Refresh from Git** reloads

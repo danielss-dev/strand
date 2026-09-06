@@ -1,3 +1,4 @@
+import { openRepositoryTool } from '../lib/repositoryTools';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -211,6 +212,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
       const fail = (verb: string, e: unknown) =>
         onToast(`${verb} failed: ${errMessage(e)}`, 'error');
       const contextSelection = multi.has(c.hash) ? bulkSelection : [c];
+      const path = useRepo.getState().activePath;
       if (contextSelection.length > 1) {
         const count = contextSelection.length;
         const items: MenuItem[] = [
@@ -373,6 +375,13 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           onSelect: () => void exportCommits([c]),
         },
       ];
+      if (path) items.push(
+        { label: 'Git note…', onSelect: () => openRepositoryTool({ path, tool: 'notes', revision: c.hash }) },
+        { label: 'Find regression', submenu: [
+          { label: 'Use as working commit…', onSelect: () => openRepositoryTool({ path, tool: 'bisect', revision: c.hash, rating: 'good' }) },
+          { label: 'Use as broken commit…', onSelect: () => openRepositoryTool({ path, tool: 'bisect', revision: c.hash, rating: 'bad' }) },
+        ] },
+      );
       setMenu({ x, y, items });
     },
     [bulkBusy, bulkSelection, cherryPick, checkoutCommit, commit, exportCommits,
@@ -913,6 +922,12 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           </button>
         )}
         <div className="graph-toolbar-spacer" />
+        <button className="btn" aria-label="Commit history actions" aria-haspopup="menu" onClick={(event) => {
+          const path = useRepo.getState().activePath;
+          if (!path) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          setMenu({ x: rect.left, y: rect.bottom, items: [{ label: 'Find regression…', onSelect: () => openRepositoryTool({ path, tool: 'bisect' }) }] });
+        }}><Icon name="chev-down" size={12} /></button>
         {baseline && (
           <button
             type="button"

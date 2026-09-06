@@ -66,7 +66,7 @@ export function SubmoduleDialog({ path, initialPath = '', initialAction = 'inspe
       const result = request
         ? await tauri.repoSubmoduleAction(owner, request, opId, (p) => setProgress(p.raw))
         : await tauri.repoSubmoduleUpdate(owner, [], true, recursive, (p) => setProgress(p.raw), opId);
-      setOutput(result.output || 'Completed. Review .gitmodules and the gitlink in Local Changes before committing.');
+      setOutput(result.output || 'Completed. Review the submodule and .gitmodules changes in Local Changes before committing.');
     } catch (e) {
       setError(true);
       setOutput(isCancelled(e) ? 'Cancelled. Completed clones and local Git data are retained. Refresh and inspect the module before retrying.' : errMessage(e));
@@ -81,9 +81,9 @@ export function SubmoduleDialog({ path, initialPath = '', initialAction = 'inspe
 
   return <Dialog title="Submodules" icon="submodule" className="maintenance-dialog" initialFocusRef={focus} busy={!!running} onClose={onClose}
     footer={<>{running ? <button className="btn danger" onClick={() => void tauri.repoCancelOp(running).catch((e) => setOutput(errMessage(e)))}>Cancel operation</button>
-      : <><button className="btn" onClick={onClose}>Close</button><button className={`btn ${destructive ? 'danger' : 'primary'}`} disabled={loading || (action !== 'add' && action !== 'update-all' && !selected) || (action === 'add' && !newPath.trim()) || ((action === 'add' || action === 'set-url') && !url.trim())} onClick={() => void run()}>{confirm ? `Confirm ${action === 'remove' ? 'removal' : 'deinitialization'}` : 'Run action'}</button></>}</>}>
+      : <><button className="btn" onClick={onClose}>Close</button><button className={`btn ${destructive ? 'danger' : 'primary'}`} disabled={loading || (action !== 'add' && action !== 'update-all' && !selected) || (action === 'add' && !newPath.trim()) || ((action === 'add' || action === 'set-url') && !url.trim())} onClick={() => void run()}>{confirm ? `Confirm ${action === 'remove' ? 'removal' : 'deinitialization'}` : SUBMODULE_ACTIONS.find(([id]) => id === action)?.[1]}</button></>}</>}>
     <div className="clone-body maintenance-body">
-      <p className="stash-blurb">{parent || 'Repository root'} · Children load one level at a time, at most 100 per page. The list compares commits; choose Inspect working-tree status to check local and nested changes.</p>
+      <p className="stash-blurb">{parent || 'Repository root'} · Choose a submodule to inspect its changes or browse its nested repositories.</p>
       <label className="clone-field"><span className="lbl">Action</span><Select className="clone-input" ref={focus} value={action} disabled={!!running} onChange={(e) => { setAction(e.target.value as SubmoduleDialogAction); setConfirm(false); setUrl(module?.url ?? ''); }}>{SUBMODULE_ACTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</Select></label>
       {action !== 'add' && <>
         <label className="clone-field"><span className="lbl">Submodule</span><Select className="clone-input" value={selected} disabled={!!running || loading} onChange={(e) => { setSelected(e.target.value); setConfirm(false); setUrl(page.modules.find((item) => item.path === e.target.value)?.url ?? ''); }}>{page.modules.length === 0 && <option value="">{loading ? 'Loading…' : 'No submodules at this level'}</option>}{page.modules.map((item) => <option key={item.path} value={item.path}>{item.path} — {item.initialized ? item.head_id === item.workdir_id ? 'recorded commit' : 'different commit' : 'uninitialized'}</option>)}</Select></label>
@@ -96,10 +96,10 @@ export function SubmoduleDialog({ path, initialPath = '', initialAction = 'inspe
           <button className="btn" disabled={!!running || loading || page.next_offset == null} onClick={() => setOffset(page.next_offset!)}>Next page</button>
         </div>
       </>}
-      {action === 'add' && <label className="clone-field"><span className="lbl">New relative path</span><input className="clone-input" value={newPath} disabled={!!running} onChange={(e) => setNewPath(e.target.value)} placeholder="vendor/library" /></label>}
+      {action === 'add' && <label className="clone-field"><span className="lbl">Folder within this repository</span><input className="clone-input" value={newPath} disabled={!!running} onChange={(e) => setNewPath(e.target.value)} placeholder="vendor/library" /></label>}
       {(action === 'add' || action === 'set-url') && <label className="clone-field"><span className="lbl">Repository URL</span><input className="clone-input" value={url} disabled={!!running} onChange={(e) => setUrl(e.target.value)} /></label>}
       {(action === 'update' || action === 'update-all' || action === 'sync') && <label><input type="checkbox" checked={recursive} disabled={!!running} onChange={(e) => setRecursive(e.target.checked)} /> Include nested submodules</label>}
-      {destructive && <p className="stash-blurb">{action === 'remove' ? 'Remove the working directory and stage removal of the gitlink and .gitmodules entry.' : 'Remove the working directory and local registration; keep .gitmodules and the index so it can be initialized again.'} Dirty or ignored files and unrecorded commits, including in nested modules, block this action. Git retains module history under its modules directory.</p>}
+      {destructive && <p className="stash-blurb">{action === 'remove' ? 'Remove the submodule’s local files and stage its removal from this repository.' : 'Remove the submodule’s local files, but keep its configuration so you can download it again.'} Strand stops if it finds local edits, ignored files or commits that would be lost, including in nested submodules. Git keeps the downloaded history.</p>}
       <div role="status" aria-live="polite">{progress}</div>
       <div className={`maintenance-entry${error ? ' failed' : ''}`}><pre tabIndex={0} aria-label="Submodule result">{output}</pre></div>
     </div>

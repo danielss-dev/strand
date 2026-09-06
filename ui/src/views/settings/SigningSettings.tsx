@@ -1,3 +1,4 @@
+import { Select } from '../../components/Select';
 import { useEffect, useState } from 'react';
 import { errMessage, tauri } from '../../lib/tauri';
 import type { ScopedValue, SigningScope, SigningSettings as Settings } from '../../lib/types';
@@ -12,6 +13,8 @@ const fields = [
   { key: 'gpg.ssh.allowedsignersfile', label: 'SSH allowed signers file' },
 ];
 
+const optionLabel = (value: string) => ({ true: 'Enabled', false: 'Disabled', openpgp: 'OpenPGP', ssh: 'SSH', x509: 'X.509' }[value] ?? value);
+
 function SettingRow({ field, current, effective, busy, save }: {
   field: typeof fields[number]; current?: ScopedValue; effective?: ScopedValue;
   busy: boolean; save: (key: string, value: string | null) => void;
@@ -20,19 +23,21 @@ function SettingRow({ field, current, effective, busy, save }: {
   useEffect(() => { setValue(current?.value ?? ''); }, [current?.value]);
   return <div className="settings-field">
     <label className="clone-field"><span className="lbl">{field.label}</span>
-      {field.options ? <select className="clone-input" aria-label={field.label} value={value}
+      {field.options ? <Select className="clone-input" aria-label={field.label} value={value}
         disabled={busy} onChange={(e) => setValue(e.target.value)}>
-        <option value="">Inherit</option>
+        <option value="">Use existing Git setting</option>
         {value && !field.options.includes(value) && <option value={value}>{value} (current)</option>}
-        {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
-      </select> : <input className="clone-input" aria-label={field.label} value={value}
+        {field.options.map((option) => <option key={option} value={option}>{optionLabel(option)}</option>)}
+      </Select> : <input className="clone-input" aria-label={field.label} value={value}
         placeholder="Inherited" disabled={busy} onChange={(e) => setValue(e.target.value)} />}
     </label>
-    <p className="settings-hint">Effective: {effective?.value ?? (field.key === 'gpg.format' ? 'openpgp' : 'Git default')}
-      {effective && <> · <ConfigSource value={effective} /></>}</p>
+    <details className="settings-disclosure"><summary>Current Git setting</summary>
+      <p className="settings-hint">{optionLabel(effective?.value ?? (field.key === 'gpg.format' ? 'openpgp' : 'Git default'))}
+        {effective && <> · <ConfigSource value={effective} /></>}</p>
+    </details>
     <div className="settings-row">
       <button type="button" className="btn" disabled={busy || value === (current?.value ?? '')}
-        onClick={() => save(field.key, value.trim() || null)}>Save {field.label.toLowerCase()}</button>
+        aria-label={`Save ${field.label.toLowerCase()}`} onClick={() => save(field.key, value.trim() || null)}>Save</button>
       <button type="button" className="btn" disabled={busy || !current}
         onClick={() => save(field.key, null)}>Remove override</button>
     </div>
@@ -62,21 +67,25 @@ export function SigningSettings({ path }: { path: string }) {
   }
   return <div className="settings-field">
     <span className="settings-field-label">Repository signing</span>
-    <p className="settings-hint">Git uses your existing GPG/SSH agents and configured signing program.
-      Strand stores key references, never private keys or passphrases. SSH verification
-      uses Git’s allowed signers file. Removing an override restores inherited config.</p>
-    <label className="clone-field"><span className="lbl">Write scope</span>
-      <select className="clone-input" aria-label="Signing scope" value={scope} disabled={busy}
+    <p className="settings-hint">Choose when Git signs commits and tags. Removing an override restores your existing Git settings.</p>
+    <label className="clone-field"><span className="lbl">Apply settings to</span>
+      <Select className="clone-input" aria-label="Signing scope" value={scope} disabled={busy}
         onChange={(e) => setScope(e.target.value as SigningScope)}>
         <option value="local">Repository (shared by linked worktrees)</option>
         <option value="worktree" disabled={!settings?.worktree_enabled}>This worktree</option>
-      </select>
+      </Select>
     </label>
     {settings && !settings.worktree_enabled && <p className="settings-hint">
-      Worktree scope is available when Git’s extensions.worktreeConfig is enabled.</p>}
-    {settings ? fields.map((field) => <SettingRow key={`${scope}:${field.key}`} field={field}
-      current={settings[scope][field.key]} effective={settings.effective[field.key]} busy={busy}
-      save={(key, value) => void save(key, value)} />) : <p className="settings-hint">Loading signing settings…</p>}
+      Separate worktree settings need to be enabled in Git first.</p>}
+    {settings ? <>
+      {fields.slice(0, 3).map((field) => <SettingRow key={`${scope}:${field.key}`} field={field}
+        current={settings[scope][field.key]} effective={settings.effective[field.key]} busy={busy} save={(key, value) => void save(key, value)} />)}
+      <details className="settings-disclosure"><summary>Signing key and verification</summary>
+        <p className="settings-hint">Git uses your existing signing program and GPG or SSH agent. Strand stores key references, never private keys or passphrases.</p>
+        {fields.slice(3).map((field) => <SettingRow key={`${scope}:${field.key}`} field={field}
+          current={settings[scope][field.key]} effective={settings.effective[field.key]} busy={busy} save={(key, value) => void save(key, value)} />)}
+      </details>
+    </> : <p className="settings-hint">Loading signing settings…</p>}
     {error && <p className="clone-error" role="alert">{error}</p>}
   </div>;
 }

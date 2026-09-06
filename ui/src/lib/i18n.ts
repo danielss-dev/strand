@@ -247,6 +247,7 @@ export const en = {
   'settings.git': 'Git',
   'settings.hosting': 'Hosting',
   'settings.integrations': 'Integrations',
+  'settings.userActions': 'User actions',
   'settings.defaultShell': 'Default shell',
   'settings.embeddedShell': 'Embedded terminal shell',
   'settings.embeddedShellHint': 'Used only by Work terminals. External “Open in terminal” remains in Integrations.',

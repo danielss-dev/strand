@@ -29,9 +29,19 @@ describe('hosted provider capabilities', () => {
     for (const provider of ['git_hub', 'azure_dev_ops'] as const) {
       const html = renderToStaticMarkup(createElement(PullRequestMergeControl, { path: '/fixture', provider, pr, disabledReason: '', onMerged: () => {}, onToast: () => {} }));
       expect(html).toContain('Merge pull request');
-      expect(html).toContain('Choose merge strategy');
+      expect(html).toContain('Merge options');
     }
     expect(providerName('git_lab')).toBe('GitLab');
     expect(providerName('bitbucket')).toBe('Bitbucket Cloud');
+  });
+  it.each([true, false])('keeps queue state reachable when immediate merge is unavailable (can cancel: %s)', (canCancel) => {
+    const html = renderToStaticMarkup(createElement(PullRequestMergeControl, {
+      path: '/fixture', provider: 'git_hub', pr: { ...pr, completion: {
+        kind: 'github_queue', status: 'queued', can_enable: false, can_cancel: canCancel, strategies: [], blockers: [], position: 2, source_commit: pr.source_commit,
+      } }, disabledReason: 'Waiting for checks', onMerged: () => {}, onToast: () => {},
+    }));
+    expect(html).toContain('In merge queue');
+    expect(html).toContain('aria-label="Merge options"');
+    expect(html).not.toContain('disabled=""');
   });
 });

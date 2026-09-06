@@ -38,22 +38,22 @@ export function RepositoryIdentity({ path }: { path: string }) {
 
   return <div className="settings-field">
     <span className="settings-field-label">Repository identity</span>
-    <p className="settings-hint settings-path">{path}</p>
-    <p className="settings-hint">Effective identity for new commits. Amend keeps the original author.
-      Local overrides are shared by this repository’s linked worktrees. Higher-priority
-      worktree, conditional, or environment values remain effective.</p>
+    <p className="settings-hint">Choose the name and email used for new commits in this repository and its linked worktrees. Amending a commit keeps its original author.</p>
     {identity ? <>
       {(['author', 'committer'] as const).map((role) => <div className="settings-field" key={role}>
         <strong>{role === 'author' ? 'Author' : 'Committer'}: {identity[role].identity ?? 'Not configured'}</strong>
-        <p className="settings-hint">Name: <ConfigSource value={identity[role].name_source} /><br />
-          Email: <ConfigSource value={identity[role].email_source} /></p>
+        <details className="settings-disclosure"><summary>Where this identity comes from</summary>
+          <p className="settings-hint">Name: <ConfigSource value={identity[role].name_source} /><br />
+            Email: <ConfigSource value={identity[role].email_source} /></p>
+          <p className="settings-hint">Worktree settings, conditional Git settings or environment variables may take precedence over the values below.</p>
+        </details>
         {identity[role].error && <p className="clone-error">{identity[role].error}</p>}
       </div>)}
       {(['name', 'email'] as const).map((field) => <div className="settings-row" key={field}>
         <label className="clone-field">
-          <span className="lbl">Local {field}</span>
-          <input className="clone-input" aria-label={`Repository ${field}`} disabled={busy}
-            value={field === 'name' ? name : email} placeholder="Inherited"
+          <span className="lbl">Commit {field}</span>
+          <input className="clone-input" aria-label={`Commit ${field}`} disabled={busy}
+            value={field === 'name' ? name : email} placeholder="Use existing Git setting"
             onChange={(event) => (field === 'name' ? setName : setEmail)(event.target.value)} />
         </label>
         <button type="button" className="btn" disabled={busy || !(field === 'name' ? name : email).trim()}

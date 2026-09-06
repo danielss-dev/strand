@@ -63,6 +63,7 @@ export function TagDialog({
       title="New tag"
       icon="tag"
       size="sm"
+      className="clone-options-dialog"
       busy={busy}
       onClose={onClose}
       footer={
@@ -78,7 +79,7 @@ export function TagDialog({
     >
       <div className="clone-body">
         <p className="stash-blurb">
-          Tag <code>{targetLabel}</code>. Signed tags require an annotation. Leave the message empty for an unsigned lightweight tag.
+          Create a tag at <code>{targetLabel}</code>. Add a message to create an annotated tag.
         </p>
 
         <label className="clone-field">
@@ -108,10 +109,12 @@ export function TagDialog({
           />
         </label>
 
-        {activePath && <SigningChoice path={activePath} kind="tag" settingsLink={false} annotated={annotated} value={signing}
-          disabled={busy} onChange={setSigning} />}
+        {activePath && <details className="settings-disclosure"><summary>Advanced options{signing !== 'inherit' ? ` (${signing === 'sign' ? 'signed' : 'unsigned'})` : ''}</summary>
+          <SigningChoice path={activePath} kind="tag" settingsLink={false} annotated={annotated} value={signing}
+            disabled={busy} onChange={setSigning} />
+        </details>}
         <div className="stash-note">
-          {annotated ? 'Creates an annotated tag with the selected signing policy.' : 'A message is required if the selected policy signs this tag.'}
+          {annotated ? 'Creates an annotated tag.' : 'Without a message, creates a lightweight tag. Signing requires a message.'}
         </div>
 
         {error ? <div className="clone-error">{error}</div> : null}

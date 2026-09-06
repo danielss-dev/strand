@@ -29,23 +29,23 @@ Network operations shell out to your system git, so SSH keys, credential helpers
 
 ### Clone options
 
-Expand **Clone options** before starting:
+Expand **Advanced options** before starting:
 
 - **Branch** chooses the initial branch; blank uses the remote default.
-- **History depth** limits ancestry. Blank downloads all history. Older history,
+- **Number of recent commits (optional)** limits ancestry. Blank downloads all history. Older history,
   blame and merge bases may be unavailable in a shallow clone.
-- **Fetch only the selected branch** also limits future fetches. Depth and
+- **Download only this branch** also limits future fetches. Depth and
   single-branch fetching are independent choices.
-- **File contents on demand (blob:none)** keeps historical file contents out of
+- **Download file contents when needed** keeps historical file contents out of
   the initial transfer when the server supports filtering. Checkout still
   downloads current files; older content, diffs and blame can require a network
   connection. A server that ignores filtering may send all objects.
-- **Initialize submodules recursively** clones nested modules too. Their
+- **Also clone submodules** clones nested modules too. Their
   downloads and credentials are separate; the parent's depth and filter do not
   apply to them.
 
-Use **Repository history and downloads…** in the topbar network menu or command
-palette to inspect shallow state, remote filters and fetch refspecs. In a shallow
+Use **Fetch → Download more history…** in the topbar network menu, or
+**Repository history and downloads…** in the command palette to inspect shallow state, remote filters and fetch refspecs. In a shallow
 repository, choose a remote and **Download more history** or **Download full
 history**. These fetch ancestry without switching branches or altering local
 edits. They preserve the current branch refspecs and partial-clone filter; a
@@ -54,7 +54,8 @@ offers **Cancel download**. This also works for repositories cloned outside Stra
 
 ### Sparse checkout
 
-Choose **Sparse checkout…** from the topbar network menu or command palette.
+Open **File actions** beside the Files search field and choose **Choose checked-out
+folders…**, also available in the command palette.
 Filter the tracked directories, tick those to keep, and choose **Enable sparse
 checkout** or **Apply selection**. Selection uses directories in HEAD. Root files
 and files beside a selected directory or its ancestors remain included; an empty
@@ -63,7 +64,7 @@ included. Sparse checkout changes populated files, independently of clone depth
 and object filtering.
 
 Sparse-excluded paths remain tracked in Git. The Files pane omits those absent
-paths and shows a **Manage** notice; they do not appear as deleted in Local
+paths and shows a compact **Sparse checkout** link; they do not appear as deleted in Local
 Changes. Actual deletions inside included directories retain their normal status.
 Historical commit trees still show every file at that revision.
 
@@ -99,7 +100,7 @@ Both layouts share the same behavior:
 
 - Color-dot pills / icon tiles, with a close action on hover.
 - Middle-click a tab or rail tile to close it.
-- A `+` menu for open, clone, and recent repositories.
+- A `+` menu for open, initialize, clone, SSH, and recent repositories.
 - Right-click a repo to customize its icon and color, or close it.
 - When the tab strip overflows it scrolls, and a ▾ jump menu lists every open repo.
 - Linked [worktrees](worktrees.md) group with their parent repository (shared color, worktree glyph) rather than appearing as unrelated tabs.
@@ -122,7 +123,8 @@ All of these are rebindable in Settings → Keyboard; "Next repository" and "Pre
 ## Publish a hosted repository
 
 With a local repository open, run **Publish repository…** from the command
-palette, or **Publish repository** beneath Remotes in the Git sidebar.
+palette, or use **Remote actions → Publish repository…** in the Git sidebar.
+Repositories with no remotes also show **Publish repository** beneath Remotes.
 
 1. Choose GitHub, GitLab or Bitbucket Cloud, enter the host, then **Load account
    and destinations**. GitHub Enterprise and custom GitLab hosts are supported.

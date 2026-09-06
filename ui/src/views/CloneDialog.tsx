@@ -147,23 +147,23 @@ export function CloneDialog({
           </label>
 
           <details className="clone-advanced">
-            <summary>Clone options</summary>
-            <label className="clone-field"><span className="lbl">Branch (blank uses remote default)</span>
+            <summary>Advanced options</summary>
+            <label className="clone-field"><span className="lbl">Branch (optional)</span>
               <input className="clone-input" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
             </label>
-            <label className="clone-field"><span className="lbl">History depth (blank keeps all history)</span>
+            <label className="clone-field"><span className="lbl">Number of recent commits (optional)</span>
               <input className="clone-input" type="number" min="1" max="4294967295" step="1" value={depth} onChange={(e) => setDepth(e.target.value)} placeholder="All commits" />
             </label>
-            {depth && positiveDepth(depth) === null && <p className="clone-error" role="alert">Enter a positive whole number up to 4294967295.</p>}
-            <label><input type="checkbox" checked={singleBranch} onChange={(e) => setSingleBranch(e.target.checked)} /> Fetch only the selected branch</label>
+            {depth && positiveDepth(depth) === null && <p className="clone-error" role="alert">Enter a whole number greater than zero.</p>}
+            <label><input type="checkbox" checked={singleBranch} onChange={(e) => setSingleBranch(e.target.checked)} /> Download only this branch</label>
             <p className="stash-blurb">Shallow history uses less bandwidth and disk. Older history, blame and merge bases may be unavailable until you deepen or download full history. A single-branch clone only fetches that branch on future fetches.</p>
             <label className="clone-field"><span className="lbl">Objects to download</span>
               <Select className="clone-input" value={filter ?? ''} onChange={(e) => setFilter(e.target.value ? 'blob-none' : null)}>
-                <option value="">All objects</option><option value="blob-none">File contents on demand (blob:none)</option>
+                <option value="">All objects</option><option value="blob-none">Download file contents when needed</option>
               </Select>
             </label>
             <p className="stash-blurb">On-demand contents require server support. Checkout still downloads current files; reading older contents may need a network connection. A server that ignores filtering can send all objects.</p>
-            <label><input type="checkbox" checked={recursive} onChange={(e) => setRecursive(e.target.checked)} /> Initialize submodules recursively</label>
+            <label><input type="checkbox" checked={recursive} onChange={(e) => setRecursive(e.target.checked)} /> Also clone submodules</label>
             <p className="stash-blurb">Submodules clone their own repositories and may require additional downloads and credentials. Depth and filter choices above apply to the parent repository.</p>
           </details>
 

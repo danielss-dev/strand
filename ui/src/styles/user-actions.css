@@ -6,8 +6,7 @@
 .user-action-preview { border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
 .user-action-preview li { white-space: pre-wrap; overflow-wrap: anywhere; padding: 3px; }
 .user-action-body pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-panel); padding: 10px; }
-.user-actions-editor { border-top: 1px solid var(--border); padding-top: 16px; gap: 10px; }
-.user-actions-editor textarea { width: 100%; resize: vertical; font-family: var(--font-mono); }
+.user-actions-editor { gap: 10px; }
 .user-actions-buttons { display: flex; gap: 8px; }
 .user-actions-editor .settings-select, .user-action-body .settings-select { width: 100%; }
 .user-actions-editor h3 { margin: 0; }

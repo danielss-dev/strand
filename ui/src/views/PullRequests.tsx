@@ -1,3 +1,4 @@
+import { suggestionBlocks } from '../lib/hostedReview';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import type { DiffLineAnnotation, FileDiffMetadata, SelectedLineRange } from '@pierre/diffs';
@@ -64,8 +65,7 @@ import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
 import { HostedReviewTools } from './HostedReviewTools';
-import { PullRequestCompletionControl } from './PullRequestCompletionControl';
-import { PullRequestDataLoader } from './PullRequestDataLoader';
+import { PullRequestDataLoader, PullRequestPages } from './PullRequestDataLoader';
 import { PullRequestInboxLoader } from './PullRequestInboxLoader';
 import { appendPullRequestPage, uniqueBy } from '../lib/pullRequestPages';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
@@ -410,7 +410,7 @@ function PullRequestSummary({
         <div><dt><Icon name="branch" size={14} /> Branch</dt><dd><code>{pr.source_branch}</code><Icon name="chev-right" size={11} /><code>{pr.target_branch}</code></dd></div>
         <div><dt><Icon name="blame" size={14} /> Reviewers</dt><dd>{reviewers}</dd></div>
         <div><dt><Icon name="changes" size={14} /> Comments</dt><dd>{pr.comment_count || 'No comments'}</dd></div>
-        <div><dt><Icon name="history" size={14} /> Commits</dt><dd>{pr.commit_count || pr.commits.length || 'No commits reported'}</dd></div>
+        <div><dt><Icon name="history" size={14} /> Commits</dt><dd>{pr.commit_count || pr.commits.length || 'No commits reported'}<PullRequestDataLoader kinds={['commits']} /></dd></div>
         <div><dt><Icon name="changes" size={14} /> Code</dt><dd>{[
           pr.changed_files != null ? `${pr.changed_files} file${pr.changed_files === 1 ? '' : 's'}` : null,
           pr.additions != null ? `+${pr.additions}` : null,
@@ -437,6 +437,7 @@ function PullRequestSummary({
               ))}
             </ul>
           ) : <p className="pr-muted">No checks reported.</p>}
+          <PullRequestDataLoader kinds={['checks']} />
         </div>
       </details>
 
@@ -454,11 +455,13 @@ function PullRequestSummary({
               onToast={onToast}
             />
           )) : <p className="pr-muted">No submitted reviews.</p>}
+          <PullRequestDataLoader kinds={['reviews']} />
         </div>
       </details>
 
       <section className="pr-summary-comments">
         <h3>Comments <span>{pr.comments.length}</span></h3>
+        <PullRequestDataLoader kinds={['comments']} />
         {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
           <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
         ) : (
@@ -668,6 +671,7 @@ function PullRequestTimeline({
           );
         })}
       </div>
+      <PullRequestDataLoader kinds={['comments', 'commits', 'reviews', 'threads']} />
       {isOpenPullRequest(pr) && (pr.capabilities?.can_comment ?? true) ? (
         <PullRequestCommentComposer path={path} pr={pr} draft={draft} onDraft={onDraft} onUpdated={onUpdated} />
       ) : (
@@ -687,6 +691,7 @@ function fileGitStatus(file: FileDiffMetadata): GitStatusEntry['status'] {
 function PullRequestInlineThread({
   thread,
   prUrl,
+  canSuggest,
   canWrite,
   replying,
   replyDraft,
@@ -701,6 +706,7 @@ function PullRequestInlineThread({
 }: {
   thread: PullRequestReviewThread;
   prUrl: string;
+  canSuggest: boolean;
   canWrite: boolean;
   replying: boolean;
   replyDraft: string;
@@ -785,9 +791,14 @@ function PullRequestInlineThread({
               ) : <time dateTime={comment.created_at}>{dateLabel(comment.created_at)}</time>}
             </div>
             <ProviderMarkdown source={comment.body} baseUrl={commentUrl || prUrl} />
+            {canSuggest && !thread.is_resolved && suggestionBlocks(comment.body).map((_, index, suggestions) => <button
+              key={index} type="button" className="btn" onClick={() => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', {
+                detail: { action: 'suggestions', candidate: JSON.stringify([thread.id, comment.id, index]) },
+              }))}>Preview suggestion{suggestions.length > 1 ? ' ' + (index + 1) : ''}…</button>)}
           </section>
         );
       })}
+      <PullRequestDataLoader kinds={['replies']} threadId={thread.id} />
       {message && (
         <div className={`pr-thread-message ${message.tone}`} role={message.tone === 'error' ? 'alert' : 'status'}>
           {message.text}
@@ -1468,6 +1479,11 @@ function PullRequestChanges({
         <span><Icon name="branch" size={12} /><code>{pr.source_branch}</code><Icon name="chev-right" size={10} /><code>{pr.target_branch}</code></span>
         <span>{pr.commit_count || pr.commits.length} {pr.commit_count === 1 || pr.commits.length === 1 ? 'commit' : 'commits'}</span>
         <span>{viewedCount}/{files.length} viewed</span>
+        <PullRequestDataLoader kinds={['threads']} />
+        {(provider === 'git_hub' || provider === 'azure_dev_ops') && <>
+          <button type="button" className="h-link" onClick={() => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'compare' }))}>Changes since last review…</button>
+          <button type="button" className="h-link" onClick={() => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'mark' }))}>Mark reviewed</button>
+        </>}
         <span>{unresolvedCount} unresolved {unresolvedCount === 1 ? 'thread' : 'threads'}</span>
         <span className="stat-add">+{pr.additions ?? parsedTotals.additions}</span>
         <span className="stat-del">−{pr.deletions ?? parsedTotals.deletions}</span>
@@ -1641,7 +1657,7 @@ function PullRequestChanges({
                 {!collapsed && selectedThreads.filter(thread => thread.end_line === 0).map(thread => (
                           <PullRequestInlineThread key={thread.id}
                             thread={thread}
-                            prUrl={pr.url}
+                            prUrl={pr.url} canSuggest={provider === 'git_hub' || provider === 'azure_dev_ops'}
                             canWrite={openForReview}
                             replying={replyingThreadId === thread.id}
                             replyDraft={replyDrafts[thread.id] ?? ''}
@@ -1671,7 +1687,7 @@ function PullRequestChanges({
                         return (
                           <PullRequestInlineThread
                             thread={thread}
-                            prUrl={pr.url}
+                            prUrl={pr.url} canSuggest={provider === 'git_hub' || provider === 'azure_dev_ops'}
                             canWrite={openForReview}
                             replying={replyingThreadId === thread.id}
                             replyDraft={replyDrafts[thread.id] ?? ''}
@@ -1987,6 +2003,9 @@ function PullRequestDetails({
         onSelect: () => { void setLifecycle(lifecycleAction); },
       });
     }
+    if (provider === 'git_hub' || provider === 'azure_dev_ops') items.push({
+      label: 'Export unresolved feedback…', onSelect: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'feedback' })),
+    });
     setLifecycleMenu({
       x: rect.right,
       y: rect.bottom,
@@ -2010,14 +2029,14 @@ function PullRequestDetails({
   }, []);
 
   return (
-    <article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
+    <PullRequestPages path={path} pr={pr} onPage={onPage}><article className="pr-detail" aria-label={`Pull request ${pr.id}: ${pr.title}`}>
       <header className="pr-detail-head">
         <div>
           <div className="pr-detail-kicker">{pr.author} · {relativeTimeLabel(pr.created_at)} · {displayState(pr)}</div>
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
-          {(provider === 'git_hub' || provider === 'azure_dev_ops') && <HostedReviewTools path={path} provider={provider} pr={pr} />}
+          {(provider === 'git_hub' || provider === 'azure_dev_ops') && <HostedReviewTools path={path} provider={provider} pr={pr} onToast={onToast} />}
           <button
             type="button"
             className={`btn pr-follow${followed ? ' on' : ''}`}
@@ -2087,8 +2106,6 @@ function PullRequestDetails({
           </details>
         )}
       </div>
-      <PullRequestCompletionControl path={path} pr={pr} onUpdated={onUpdated} />
-      <PullRequestDataLoader path={path} pr={pr} onPage={onPage} />
       {lifecycleMenu && (
         <ContextMenu
           x={lifecycleMenu.x}
@@ -2136,7 +2153,7 @@ function PullRequestDetails({
           />
         )}
       </div>
-    </article>
+    </article></PullRequestPages>
   );
 }
 
@@ -2568,7 +2585,6 @@ export function PullRequests({
                   </>
                 }
               />
-              {path && <PullRequestInboxLoader path={path} data={data} onPage={(page) => setData((current) => current ? { ...page, pull_requests: uniqueBy(current.pull_requests, page.pull_requests, (pr) => pr.id) } : page)} />}
               <div className="pr-inbox-controls">
                 <label className="pr-inbox-search" htmlFor="pr-inbox-search">
                   <Icon name="search" size={17} />
@@ -2592,6 +2608,7 @@ export function PullRequests({
                     </button>
                   )}
                 </label>
+                {data.next_cursor && <span className="pr-search-scope">Search covers loaded pull requests</span>}
                 <div
                   className="pr-inbox-filters"
                   role="tablist"
@@ -2687,6 +2704,7 @@ export function PullRequests({
                   </div>
                 )}
               </div>
+              {path && <PullRequestInboxLoader path={path} data={data} onPage={(page) => setData((current) => current ? { ...page, pull_requests: uniqueBy(current.pull_requests, page.pull_requests, (pr) => pr.id) } : page)} />}
             </div>
           ) : detail && path ? (
             <PullRequestDetails
