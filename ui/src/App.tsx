@@ -22,6 +22,7 @@ import { ToastViewport, type ToastMessage } from './components/ToastViewport';
 import { FONTS, useSettings } from './stores/settings';
 import { usePullRequests } from './stores/pullRequests';
 import { useRepo, type View } from './stores/repo';
+import { useRemoteRepos } from './stores/remoteRepos';
 import { useRepoIcons } from './stores/repoIcons';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
@@ -121,6 +122,7 @@ const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ de
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
+const RemoteReposDialog = lazy(() => import('./views/RemoteReposDialog').then((m) => ({ default: m.RemoteReposDialog })));
 
 /** Whole-UI zoom bounds + step for the browser-style Ctrl/⌘ +/− shortcuts.
  *  Ctrl+= / Ctrl++ zoom in, Ctrl+- out, Ctrl+0 resets to 100%. */
@@ -333,6 +335,8 @@ export function App() {
   const [workbenchEditing, setWorkbenchEditing] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [remoteReposOpen, setRemoteReposOpen] = useState(false);
+  const remoteHealth = useRemoteRepos((state) => state.health);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
   const [initRepoOpen, setInitRepoOpen] = useState(false);
@@ -1166,7 +1170,7 @@ export function App() {
       openSettingsAt('updates');
       void useUpdates.getState().check();
     },
-    openPalette: () => setPaletteOpen((o) => !o),
+    openPalette: () => { if (!remoteReposOpen) setPaletteOpen((o) => !o); },
     showView: (v) => {
       if (v === 'work') setWorkbenchEditing(false);
       setView(v);
@@ -1184,7 +1188,7 @@ export function App() {
     openInEditor,
     openInTerminal,
   };
-  const hasRepo = Boolean(meta);
+  const hasRepo = Boolean(meta) && !remoteReposOpen;
   useEffect(() => {
     if (!isTauri()) return;
     // Accelerators track the resolved bindings, so a remap in Settings updates
@@ -1370,6 +1374,9 @@ export function App() {
       // Esc always closes the palette / repo switcher (their own handlers cover
       // the focused case; this is the global fallback).
       if (e.key === 'Escape') { setPaletteOpen(false); setRepoSwitcherOpen(false); return; }
+      // SSH inspection has its own focus model. A remote keypress must never
+      // dispatch a mutation against the local repository behind the dialog.
+      if (document.querySelector('.remote-repo-context')) return;
       // Browser-style UI zoom — Ctrl/⌘ with +, −, or 0. These sit outside the
       // rebindable registry: + / = (plus their Shift and numpad variants) don't
       // map to a single canonical binding, and zoom keys are conventionally
@@ -1656,6 +1663,9 @@ export function App() {
     const base: PaletteAction[] = [
       { id: 'open',    label: 'Open repository…',  group: 'Actions', shortcut: keyHint('open-repo'), run: () => { void openViaDialog(); } },
       { id: 'install-cli', label: 'Install strand command…', group: 'Actions', keywords: 'terminal PATH launcher companion', run: () => { setSettingsSection('integrations'); setSettingsOpen(true); } },
+      { id: 'ssh-repositories', label: 'Open repository on SSH host…', group: 'Actions', keywords: 'remote daemon read status log diff review', run: () => setRemoteReposOpen(true) },
+      { id: 'ssh-reconnect', label: 'Reconnect SSH repository…', group: 'Actions', run: () => setRemoteReposOpen(true) },
+      { id: 'ssh-disconnect', label: 'Disconnect SSH repository', group: 'Actions', run: () => { void useRemoteRepos.getState().disconnect(); } },
       { id: 'init',    label: 'Initialize repository…', group: 'Actions', keywords: 'new create git init local repository', run: () => setInitRepoOpen(true) },
       { id: 'clone',   label: t('clone.paletteAction'), group: 'Actions', shortcut: keyHint('clone-repo'), run: () => setCloneOpen(true) },
       { id: 'switch-repo', label: 'Switch repository…', group: 'Actions', shortcut: keyHint('switch-repo'), keywords: 'switch repo repository jump active picker quick open', run: () => setRepoSwitcherOpen(true) },
@@ -2162,6 +2172,8 @@ export function App() {
       <PullRequestMonitor />
       <div className="strand-window">
         <Topbar
+          onOpenRemote={() => setRemoteReposOpen(true)}
+          remoteHealth={remoteHealth}
           onOpenPalette={() => setPaletteOpen(true)}
           onFetch={onFetch}
           onPull={onPull}
@@ -2352,6 +2364,7 @@ export function App() {
       </div>
 
       {paletteOpen && <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />}
+      {remoteReposOpen && <Suspense fallback={null}><RemoteReposDialog onClose={() => setRemoteReposOpen(false)} /></Suspense>}
 
       <Suspense fallback={null}>
       {repoSwitcherOpen && (

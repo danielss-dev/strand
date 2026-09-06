@@ -1,5 +1,25 @@
 # Learnings
 
+## SSH reads must stay isolated and bounded (2026-09-06)
+
+Remote identities never enter local filesystem commands. The first SSH surface
+is an isolated read-only inspector; suspend local repository shortcuts and
+native repository menu actions while it owns focus. Keep the system SSH command
+fixed and pass repository paths in JSON, with strict host-key checking and
+terminal-owned authentication. Local reads must never acquire transport locks.
+
+Retain cancellation slots until native workers actually stop. Desktop
+cancellation kills the whole host connection and drains its waiters; EOF,
+timeouts and protocol errors use the same teardown. Register pending requests
+under the drain lock and recheck liveness there to avoid an EOF race. Watch
+coalescing needs trailing invalidation and UI generations, including when an
+already-modified file changes again.
+
+JSON-RPC `result: null` is a successful response. Serde `Option<Value>` normally
+collapses it into a missing field: use presence-preserving deserialization and
+keep the null-result regression. File chunk metadata tokens detect ordinary
+edits; they are not content hashes or atomic snapshots.
+
 ## Desktop launch arguments need an inbox (2026-09-06)
 
 Single-instance events can arrive before React subscribes or while persisted

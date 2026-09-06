@@ -10,6 +10,7 @@ mod path_env;
 mod pull_requests;
 mod state;
 mod terminal;
+mod remote_repos;
 
 use tauri::Manager;
 
@@ -136,6 +137,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(launcher::LaunchInbox::default())
+        .manage(std::sync::Arc::new(remote_repos::RemoteRepos::default()))
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             launcher::receive(app, &args, std::path::Path::new(&cwd));
         }))
@@ -155,6 +157,10 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             launcher::app_take_open_requests,
             launcher::app_install_cli,
+            remote_repos::remote_repo_read,
+            remote_repos::remote_repo_cancel,
+            remote_repos::remote_repo_watch,
+            remote_repos::remote_repo_disconnect,
             commands::repo_open,
             commands::microsoft_store_update_available,
             commands::microsoft_store_open_product,
@@ -378,6 +384,7 @@ fn main() {
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
                 app.state::<state::AppState>().terminals.close_all(None);
+                app.state::<std::sync::Arc<remote_repos::RemoteRepos>>().stop_all();
             }
         });
 }

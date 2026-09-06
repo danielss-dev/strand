@@ -1,11 +1,13 @@
 //! Shared read allowlist. No operation here mutates Git state or fetches objects.
 //! Local desktop hot paths can keep calling typed functions without serializing.
+pub mod protocol;
+pub mod remote;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 use strand_core::{
     diff::FileDiff,
-    file::{FileContent, FileHistoryEntry},
+    file::{FileChunk, FileContent, FileHistoryEntry},
     log::Commit,
     repo::RepoMeta,
     snapshot::Snapshot,
@@ -84,6 +86,12 @@ pub enum ReadOp {
         path: String,
         revision: Option<String>,
     },
+    FileChunk {
+        path: String,
+        offset: u64,
+        length: usize,
+        version: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -116,6 +124,24 @@ pub enum ReadResult {
     Diff(Vec<FileDiff>),
     Review(Review),
     File(FileContent),
+    FileChunk(FileChunk),
+}
+
+impl ReadOp {
+    pub fn accepts(&self, result: &ReadResult) -> bool {
+        matches!(
+            (self, result),
+            (Self::Meta {}, ReadResult::Meta(_))
+                | (Self::Status {}, ReadResult::Status(_))
+                | (Self::Snapshot {}, ReadResult::Snapshot(_))
+                | (Self::Log { .. }, ReadResult::Log(_))
+                | (Self::FileHistory { .. }, ReadResult::FileHistory(_))
+                | (Self::Diff { .. }, ReadResult::Diff(_))
+                | (Self::Review { .. }, ReadResult::Review(_))
+                | (Self::File { .. }, ReadResult::File(_))
+                | (Self::FileChunk { .. }, ReadResult::FileChunk(_))
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -216,6 +242,15 @@ pub fn execute(request: &ReadRequest) -> Result<Envelope> {
         ReadOp::File { path, revision } => {
             relative_path(path)?;
             ReadResult::File(repo.file_content(path, revision.as_deref())?)
+        }
+        ReadOp::FileChunk {
+            path,
+            offset,
+            length,
+            version,
+        } => {
+            relative_path(path)?;
+            ReadResult::FileChunk(repo.file_chunk(path, *offset, *length, version.as_deref())?)
         }
     };
     Ok(Envelope {

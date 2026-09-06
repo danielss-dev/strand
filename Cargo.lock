@@ -6056,12 +6056,12 @@ dependencies = [
 name = "strand-ops"
 version = "1.5.1"
 dependencies = [
+ "percent-encoding",
  "schemars 0.8.22",
  "serde",
  "serde_json",
  "strand-core",
  "tempfile",
- "url",
 ]
 
 [[package]]

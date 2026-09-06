@@ -2148,7 +2148,10 @@ and Store certification remain external gates.
   destination. With no saved layout it is the existing full-size Work surface;
   customization composes registered Strand surfaces into nested panes with
   per-workspace persistence, templates, and one stable live Work runtime.
-- **Remote repos over SSH** — open a repo on a remote machine (agent
+- ◐ **Remote repos over SSH** — read-only inspector, shared stdio companion,
+  bounded watches/files and system-SSH lifecycle shipped locally 2026-09-06.
+  Automatic installation/distribution and ordinary remote tabs remain open.
+  Target: open a repo on a remote machine (agent
   devbox, VPS) and use Strand locally against it. Headless `strandd`
   daemon over JSON-RPC/stdio, system `ssh` for auth/transport (Strand
   never touches credentials). Designed 2026-06-12: `docs/remote-ssh.md`
@@ -2822,6 +2825,18 @@ full-context review, and derived JSON schemas. Machine results share the
 desktop serde types in schema-v1 envelopes; errors and output limits are
 explicit, with no Git mutation or implicit lazy fetch. Terminal syntax colors,
 blame/conflicts and standalone distribution remain in the expanded CLI backlog.
+
+**F17 SSH read foundation shipped locally (2026-09-06):** The same companion
+now serves protocol-v1 JSON-RPC on stdio. `RemoteRepos` uses system OpenSSH with
+strict host checking, multiplexed bounded reads, keepalives, retry deadlines and
+process-tree cancellation. The read-only inspector shows status, history,
+full-context diffs/reviews and versioned file chunks, with coalesced watching,
+visible execution context, recents and manual reconnect. Local commands remain
+in process. Windows WebView2 and real system-SSH loopback verification covered
+watch changes, stale chunks, reconnection, malformed peers, cancellation and
+host-key rejection; see `docs/cli-ssh-verification-2026-09-06.md`. Native host
+release validation, signed static artifacts/SFTP bootstrap and ordinary remote
+tabs remain explicitly open.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

@@ -1,4 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { RemoteEnvelope, RemoteReadOp } from './remoteRepos';
 
 import type {
   AiProvider,
@@ -115,6 +116,10 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  remoteRepoRead: (address: string, op: RemoteReadOp, requestId: string) => invoke<RemoteEnvelope>('remote_repo_read', { address, op, requestId }),
+  remoteRepoCancel: (requestId: string) => invoke<void>('remote_repo_cancel', { requestId }),
+  remoteRepoWatch: (address: string, enabled: boolean) => invoke<void>('remote_repo_watch', { address, enabled }),
+  remoteRepoDisconnect: (address: string) => invoke<void>('remote_repo_disconnect', { address }),
   appTakeOpenRequests: () => invoke<string[]>('app_take_open_requests'),
   appInstallCli: () => invoke<string>('app_install_cli'),
   microsoftStoreUpdateAvailable: () =>

@@ -2483,39 +2483,50 @@ ships** (ROADMAP §1.1+).
 - ◐ P2 Extract command handlers from `strand-tauri` into a
   transport-agnostic `strand-ops` crate (typed meta/status/snapshot shared with
   the desktop; read-only companion allowlist implemented; writes remain local)
-- ☐ P2 `strandd` headless binary: `strand-ops` behind JSON-RPC over
+- ☑ P2 `strandd` headless binary: `strand-ops` behind JSON-RPC over
   stdio; versioned handshake with capability flags; strict serde
-  (`deny_unknown_fields`), per-frame size limits
-- ☐ P2 Remote watcher: `watch.rs` runs inside `strandd`, events stream
-  back as notifications, remote-side debounce/coalescing
+  (`deny_unknown_fields`), per-frame size limits (`strand-cli --stdio`, protocol 1,
+  four read workers, 8 MiB frames; same read-only binary as CLI)
+- ☑ P2 Remote watcher: `watch.rs` runs inside `strandd`, events stream
+  back as notifications, remote-side debounce/coalescing (`daemon::serve`,
+  bounded watch/output queues with trailing invalidation)
+- ☑ P2 Bounded remote file reads (core `file_chunk`, 64 KiB reads and metadata
+  version checks; inspector caps accumulated previews at 1 MiB)
 - ☐ P2 Static builds of `strandd`: linux x86_64/aarch64 (musl) + darwin;
   SHA-256 manifest baked into the signed app bundle
 
 ### Transport & lifecycle
 
-- ☐ P2 Transport router in `strand-tauri`: plain path → in-proc (zero
+- ◐ P2 Transport router in `strand-tauri`: plain path → in-proc (zero
   overhead, no hot-path regression); `ssh://host/path` → host's stdio
-  channel
-- ☐ P2 SSH connection manager: spawn system `ssh` (inherits
+  channel (read-only `RemoteRepos` transport and isolated inspector shipped;
+  ordinary remote tab integration remains open)
+- ☑ P2 SSH connection manager: spawn system `ssh` (inherits
   `~/.ssh/config`, known_hosts, agent, ProxyJump — Strand never touches
   credentials, never auto-accepts host keys); keepalives; one multiplexed
-  connection per host
+  connection per host (`remote_repos::Session`, strict host checking,
+  bounded diagnostics/pending requests and process-tree shutdown)
 - ☐ P2 Bootstrap: probe/upload `strandd` over SFTP, verify SHA-256
   before exec, re-bootstrap on version mismatch
-- ☐ P2 Reconnect: exponential backoff; reads retry transparently,
+- ◐ P2 Reconnect: exponential backoff; reads retry transparently,
   writes never auto-retry (re-query state, user confirms); per-op-class
-  timeouts; kill + respawn a hung daemon
-- ☐ P2 Connection health UI: topbar indicator, disconnected state for
+  timeouts; kill + respawn a hung daemon (read retries/deadlines/cancellation
+  implemented; remote writes remain outside the foundation)
+- ◐ P2 Connection health UI: topbar indicator, disconnected state for
   remote tabs, manual "reconnect now"; local repos unaffected by a dead
-  link
+  link (`RemoteReposDialog` + topbar/palette health and reconnect shipped;
+  ordinary remote tabs remain open)
 
 ### UI surface
 
-- ☐ P2 Connect-to-host flow (host list from `~/.ssh/config` aliases) +
-  remote repo open; `ssh://` paths in recents/tabs
+- ◐ P2 Connect-to-host flow (host list from `~/.ssh/config` aliases) +
+  remote repo open; `ssh://` paths in recents/tabs (explicit alias/address input
+  and inspector recents shipped; alias discovery and ordinary tabs remain)
 - ☐ P2 Remote directory browser (native dialogs can't browse remote FS)
-- ☐ P2 Capability-flag gating: hide `external.rs` ops for remote repos
-  (v1); evaluate "open terminal" → `ssh -t` later
+- ◐ P2 Capability-flag gating: hide `external.rs` ops for remote repos
+  (v1); evaluate "open terminal" → `ssh -t` later (read-only inspector exposes
+  only negotiated reads and blocks local repository shortcuts; future remote
+  tab routing still needs a full capability audit)
 
 ---
 
@@ -2598,7 +2609,8 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 
 - ◐ P2 `strand-headless` crate: clap front-end over `strand-ops` with
   `cli` + `--stdio` (daemon) entry modes; one static artifact, one hash
-  manifest shared with remote-SSH bootstrap
+  manifest shared with remote-SSH bootstrap (both entry modes implemented;
+  signed static host-artifact matrix and bootstrap manifest remain)
 - ◐ P2 Read commands: `status` (+ `--snapshot`), `diff` (`--staged`,
   `--commit`, `--between`, `--since`, `--full-context` via the `*_full`
   review ops), `log`, `blame`, `conflicts` (`cli.rs` implements status/diff/log

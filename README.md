@@ -294,6 +294,11 @@ the resolved app appearance automatically.
   Review findings are structured, path/line-validated, stale-diff guarded, and
   require explicit acceptance before they become notes; repository files are
   never changed by an AI review.
+- **Read-only SSH repositories** — inspect remote status, history, full-context
+  reviews and bounded file snapshots through system OpenSSH, with watching,
+  connection health, cancellation and reconnect. Requires a manually installed
+  compatible companion on the POSIX host; see the
+  [setup guide](./website/docs/remote-repositories.md).
 - **Fast by design** — reads go through [gix](https://github.com/GitoxideLabs/gitoxide),
   writes through git2 and your system `git`. Performance targets live in
   [`PRD.md`](./PRD.md) §8 and are measured in

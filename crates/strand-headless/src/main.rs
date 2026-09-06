@@ -1,4 +1,5 @@
 mod cli;
+mod daemon;
 mod launcher;
 
 fn main() {
@@ -8,7 +9,8 @@ fn main() {
     strand_core::init();
     let args: Vec<_> = std::env::args().collect();
     let json = args.iter().any(|arg| arg == "--json");
-    if let Err(error) = cli::run(args) {
+    let result = if args.get(1).is_some_and(|arg| arg == "--stdio") && args.len() == 2 { daemon::serve() } else { cli::run(args) };
+    if let Err(error) = result {
         if json {
             eprintln!("{}", serde_json::to_string(&error).unwrap());
         } else {
