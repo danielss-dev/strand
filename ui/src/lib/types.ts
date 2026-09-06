@@ -276,6 +276,7 @@ export interface PullRequestReviewer {
 }
 
 export interface PullRequestCheck {
+  id?: string;
   name: string;
   status: string;
 }
@@ -302,6 +303,8 @@ export interface PullRequestComment {
 }
 
 export interface PullRequestReviewThread {
+  suggestion_range_valid?: boolean;
+  iteration_id?: number | null;
   id: string;
   path: string;
   start_line: number;
@@ -325,6 +328,7 @@ export interface PullRequestReviewThreadUpdate {
 }
 
 export interface PullRequestReview {
+  source_commit?: string | null;
   id: string;
   author: string;
   avatar_url: string | null;
@@ -338,7 +342,21 @@ export interface PullRequestReview {
   can_dismiss: boolean;
 }
 
+export interface PullRequestCompletion {
+  kind: 'github_queue' | 'github_auto_merge' | 'azure_auto_complete';
+  status: 'disabled' | 'queued' | 'waiting_for_policies' | 'merged' | 'closed';
+  source_commit: string;
+  position: number | null;
+  can_enable: boolean;
+  can_cancel: boolean;
+  blockers: string[];
+  strategies: PullRequestMergeStrategy[];
+}
+
 export interface PullRequest {
+  completion?: PullRequestCompletion | null;
+  data_pages?: PullRequestPageCursor[];
+
   capabilities?: { can_comment: boolean; can_review: boolean; can_request_changes: boolean; can_close: boolean; can_reopen: boolean; merge_strategies: PullRequestMergeStrategy[] };
   id: number;
   title: string;
@@ -375,6 +393,8 @@ export interface PullRequest {
 }
 
 export interface PullRequestList {
+  next_cursor?: string | null;
+  total_count?: number | null;
   repository: PullRequestRepository;
   pull_requests: PullRequest[];
 }
@@ -972,6 +992,36 @@ export type AiGenerationOutcome<T> =
       coverage: AiInputCoverage;
       provider: AiProvider;
     };
+
+export interface PullRequestPageCursor {
+  kind: 'comments' | 'commits' | 'reviews' | 'threads' | 'replies' | 'checks';
+  thread_id: string | null;
+  cursor: string | null;
+  total: number | null;
+  error: string | null;
+}
+export interface PullRequestDataPage {
+  source_commit: string;
+  request: PullRequestPageCursor;
+  pending: PullRequestPageCursor[];
+  comments: PullRequestComment[];
+  commits: PullRequestCommit[];
+  reviews: PullRequestReview[];
+  review_threads: PullRequestReviewThread[];
+  checks: PullRequestCheck[];
+}
+
+export interface PullRequestBoundary { head: string; label: string; iteration: number | null }
+export interface PullRequestComparison { from: string; to: string; history_rewritten: boolean; diffs: FileDiff[] }
+export interface PullRequestFeedback { source_commit: string; threads: PullRequestReviewThread[] }
+export interface PullRequestSuggestionRequest {
+  thread_id: string; comment_id: string; suggestion_index: number;
+  expected_head: string; expected_body: string;
+}
+export interface PullRequestSuggestionPreview {
+  path: string; start_line: number; end_line: number;
+  before: string; after: string; expected_file: string;
+}
 
 export interface RemoteHostingProvider { remote: string; url: string; provider: string }
 export interface PublishDestination { id: string; label: string; kind: string }

@@ -2822,6 +2822,26 @@ implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
+**Hosted GitHub pagination shipped (2026-09-06, F06):** Inbox and activated
+review data now use cursor pages, including independent thread replies and
+checks. Partial counts, retry/cancel controls and palette actions preserve
+loaded content and drafts. Page appends deduplicate provider IDs and reject
+head changes; inbox navigation remains shallow and hosted patches remain lazy.
+
+**Deferred hosted completion shipped (2026-09-06, F12):** GitHub queue and
+auto-merge plus Azure auto-complete now expose capability-gated enable/cancel,
+queue versus policy-wait states, and refresh after head changes. Immediate
+GitHub merge uses the guarded REST endpoint. Azure Server adds protocol 7
+`SetAutoComplete`; its signed helper channel must ship with this app change.
+
+**Hosted review evolution shipped (2026-09-06, F13):** Review tools preserves a
+locally marked reviewed head, compares exact trees across rebases/force pushes,
+loads GitHub review commits or Azure iterations, exports complete unresolved
+feedback, and previews standard suggestions before guarded local application.
+Full discussion reads are explicit and cancellable; stale heads, bodies,
+coordinates and dirty files cannot reuse a preview. WebView2 and live GitHub
+read IPC checks pass; live Azure iteration/suggestion validation remains tracked.
+
 **Advanced refs and Git-flow shipped (2026-09-06):** Added lazy Git notes and
 replacement-ref management, explicit unsigned tag retarget/re-annotation with
 current/new target review and remote publication checks, and opt-in Git-flow

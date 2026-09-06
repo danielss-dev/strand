@@ -576,6 +576,50 @@ pub async fn repo_pull_requests(path: String) -> CmdResult<PullRequestList> {
     .await
 }
 
+#[tauri::command(async)]
+pub async fn repo_pull_request_completion(path: String, id: u64, enable: bool, strategy: pull_requests::PullRequestMergeStrategy, expected_head: String) -> CmdResult<()> {
+    run_blocking("pull request completion", move || pull_requests::completion::set(&path, id, enable, strategy, &expected_head).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_boundaries(path: String, id: u64, expected_head: String, request_id: String) -> CmdResult<Vec<pull_requests::evolution::Boundary>> {
+    run_blocking("pull request boundaries", move || pull_requests::evolution::boundaries(&path, id, &expected_head, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_compare_review(path: String, id: u64, from: String, expected_head: String) -> CmdResult<pull_requests::evolution::Comparison> {
+    run_blocking("pull request compare_review", move || pull_requests::evolution::compare(&path, id, &from, &expected_head).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_feedback(path: String, id: u64, expected_head: String, request_id: String) -> CmdResult<pull_requests::evolution::Feedback> {
+    run_blocking("pull request feedback", move || pull_requests::evolution::feedback(&path, id, &expected_head, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_suggestion_preview(path: String, id: u64, request: pull_requests::evolution::SuggestionRequest, request_id: String) -> CmdResult<pull_requests::evolution::SuggestionPreview> {
+    run_blocking("pull request suggestion_preview", move || pull_requests::evolution::preview(&path, id, &request, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_suggestion_apply(path: String, id: u64, request: pull_requests::evolution::SuggestionRequest, expected_preview: pull_requests::evolution::SuggestionPreview, request_id: String) -> CmdResult<String> {
+    run_blocking("pull request suggestion_apply", move || pull_requests::evolution::apply(&path, id, &request, &expected_preview, &request_id).map_err(|message| CmdError { message })).await
+}
+
+/// One bounded provider page; cancellation never affects provider writes.
+#[tauri::command(async)]
+pub async fn repo_pull_request_inbox_page(path: String, cursor: Option<String>, request_id: String) -> CmdResult<PullRequestList> {
+    run_blocking("pull request inbox page", move || pull_requests::pages::inbox(&path, cursor.as_deref(), &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_pull_request_data_page(path: String, id: u64, expected_head: String, request: pull_requests::pages::Cursor, request_id: String) -> CmdResult<pull_requests::pages::Page> {
+    run_blocking("pull request data page", move || pull_requests::pages::read(&path, id, &expected_head, request, &request_id).map_err(|message| CmdError { message })).await
+}
+
+#[tauri::command]
+pub fn repo_pull_request_cancel_read(request_id: String) { pull_requests::pages::cancel(&request_id); }
+
 /// Active pull request for one checked-out branch. This targeted query lets
 /// automatic following work without loading the full hosted-PR workspace.
 #[tauri::command(async)]

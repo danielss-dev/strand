@@ -30,6 +30,10 @@ use uuid::Uuid;
 use crate::ai::bin::{base_command, resolve_cli};
 use crate::azdo_helper;
 
+pub mod pages;
+pub mod completion;
+pub mod evolution;
+
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
 const MAX_THREAD_ID_BYTES: usize = 512;
@@ -47,8 +51,8 @@ const GITHUB_LIST_FIELDS: &str = concat!(
 );
 const GITHUB_DETAIL_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
-    "closedAt,mergedAt,url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
-    "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
+    "closedAt,mergedAt,url,body,mergeStateStatus,reviewDecision,additions,deletions,",
+    "changedFiles,reviewRequests,labels,headRefOid"
 );
 const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -61,48 +65,11 @@ const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $n
       }
       statusCheckRollup {
         contexts(first: 100) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             __typename
             ... on CheckRun { databaseId name status conclusion }
             ... on StatusContext { id context state }
-          }
-        }
-      }
-    }
-  }
-}"#;
-const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $number) {
-      viewerCanUpdate
-      reviews(last: 100) {
-        nodes {
-          id
-          body
-          state
-          submittedAt
-          url
-          viewerCanUpdate
-          viewerDidAuthor
-          author { login avatarUrl }
-        }
-      }
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          isOutdated
-          viewerCanReply
-          viewerCanResolve
-          viewerCanUnresolve
-          path
-          line
-          startLine
-          originalLine
-          originalStartLine
-          diffSide
-          comments(first: 100) {
-            nodes { id body createdAt url author { login avatarUrl } }
           }
         }
       }
@@ -203,6 +170,7 @@ pub struct PullRequestReviewer {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestReview {
+    pub source_commit: Option<String>,
     pub id: String,
     pub author: String,
     pub avatar_url: Option<String>,
@@ -216,6 +184,7 @@ pub struct PullRequestReview {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestCheck {
+    pub id: String,
     pub name: String,
     pub status: String,
 }
@@ -244,6 +213,8 @@ pub struct PullRequestComment {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestReviewThread {
+    pub suggestion_range_valid: bool,
+    pub iteration_id: Option<u32>,
     pub id: String,
     pub path: String,
     pub start_line: u32,
@@ -285,6 +256,9 @@ pub struct PullRequestCapabilities {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct PullRequest {
+    pub completion: Option<completion::Completion>,
+    pub data_pages: Vec<pages::Cursor>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<PullRequestCapabilities>,
     pub id: u64,
@@ -321,6 +295,8 @@ pub struct PullRequest {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestList {
+    pub next_cursor: Option<String>,
+    pub total_count: Option<u64>,
     pub repository: PullRequestRepository,
     pub pull_requests: Vec<PullRequest>,
 }
@@ -949,49 +925,8 @@ fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
 }
 
 fn list_github(cwd: &GitHubContext<'_>, remote: String, owner: String, repo: String) -> Result<PullRequestList> {
-    let slug = cwd.slug(&owner, &repo);
-    // Keep the list query shallow. Asking GraphQL to expand nested comments,
-    // commits, reviews, and checks across 100 PRs can exceed GitHub's 500k
-    // possible-node cap even for a modest repository. Rich fields load only
-    // for the selected PR via `detail_github`.
-    let (output, viewer) = thread::scope(|scope| {
-        let viewer = scope.spawn(|| github_viewer(cwd));
-        let output = github_command(
-            cwd,
-            "gh",
-            &[
-                "pr",
-                "list",
-                "--repo",
-                &slug,
-                "--state",
-                "all",
-                "--limit",
-                "100",
-                "--json",
-                GITHUB_LIST_FIELDS,
-            ],
-            &[("GH_PROMPT_DISABLED", "1")],
-        );
-        let viewer = viewer.join().ok().and_then(Result::ok);
-        (output, viewer)
-    });
-    let output = output?;
-    let values: Vec<Value> = serde_json::from_slice(&output)
-        .map_err(|e| format!("GitHub CLI returned invalid JSON: {e}"))?;
-    let pull_requests = values
-        .iter()
-        .filter_map(|value| parse_github_pr(value, viewer.as_deref()))
-        .collect();
-    Ok(PullRequestList {
-        repository: PullRequestRepository {
-            provider: PullRequestProvider::GitHub,
-            remote,
-            label: slug,
-            viewer,
-        },
-        pull_requests,
-    })
+    let _ = (remote, owner, repo);
+    pages::inbox(cwd.path, None, &Uuid::new_v4().to_string())
 }
 
 fn for_branch_github(
@@ -1036,16 +971,6 @@ fn for_branch_github(
             },
             pull_request,
         }))
-}
-
-fn github_viewer(cwd: &GitHubContext<'_>) -> Result<String> {
-    let output = github_command(
-        cwd,
-        "gh",
-        &["api", "user", "--jq", ".login"],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
-    non_empty_text(&output, "GitHub CLI returned no signed-in account")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1145,8 +1070,10 @@ fn activity_github(
     let pull_request = value
         .pointer("/data/repository/pullRequest")
         .ok_or_else(|| format!("GitHub returned no activity data for PR #{id}"))?;
+    let mut pull_request = pull_request.clone();
+    pages::activity_checks(cwd, &owner, &repo, id, &mut pull_request)?;
     parse_github_activity(
-        pull_request,
+        &pull_request,
         PullRequestRepository {
             provider: PullRequestProvider::GitHub,
             remote,
@@ -1177,27 +1104,13 @@ fn detail_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64) 
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
     let mut pull_request = parse_github_pr(&value, None)
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
+    pages::initial(cwd, &owner, &repo, &mut pull_request);
     for commit in &mut pull_request.commits {
         commit.url = Some(format!(
             "https://{}/{owner}/{repo}/commit/{}",
             cwd.host, commit.id
         ));
     }
-    pull_request.checks_complete = true;
-    let (review_threads, reviews, can_mark_ready) =
-        github_review_threads(cwd, &owner, &repo, id)?;
-    pull_request.can_mark_ready = pull_request.is_draft && can_mark_ready;
-    pull_request.reviews = reviews;
-    pull_request.comments.extend(
-        review_threads
-            .iter()
-            .flat_map(|thread| thread.comments.iter().cloned()),
-    );
-    pull_request
-        .comments
-        .sort_by(|left, right| left.created_at.cmp(&right.created_at));
-    pull_request.comment_count = pull_request.comments.len();
-    pull_request.review_threads = review_threads;
     if cwd.host != "github.com" {
         let scope = |avatar: &mut Option<String>| cwd.scope_avatar(avatar);
         for comment in &mut pull_request.comments { scope(&mut comment.avatar_url); }
@@ -1208,33 +1121,6 @@ fn detail_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64) 
         }
     }
     Ok(pull_request)
-}
-
-fn github_review_threads(
-    cwd: &GitHubContext<'_>,
-    owner: &str,
-    repo: &str,
-    id: u64,
-) -> Result<(Vec<PullRequestReviewThread>, Vec<PullRequestReview>, bool)> {
-    let query = format!("query={GITHUB_REVIEW_THREADS_QUERY}");
-    let owner = format!("owner={owner}");
-    let repo = format!("repo={repo}");
-    let number = format!("number={id}");
-    let output = github_command(
-        cwd,
-        "gh",
-        &[
-            "api", "graphql", "-f", &query, "-F", &owner, "-F", &repo, "-F", &number,
-        ],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
-    let value: Value = serde_json::from_slice(&output)
-        .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))?;
-    Ok((
-        parse_github_review_threads(&value),
-        parse_github_reviews(&value),
-        parse_github_can_mark_ready(&value),
-    ))
 }
 
 fn diff_github(cwd: &GitHubContext<'_>, owner: String, repo: String, id: u64) -> Result<String> {
@@ -1531,23 +1417,13 @@ fn merge_github(
     strategy: PullRequestMergeStrategy,
     expected_head: &str,
 ) -> Result<()> {
-    let slug = cwd.slug(owner, repo);
-    let id = id.to_string();
-    github_command(
-        cwd,
-        "gh",
-        &[
-            "pr",
-            "merge",
-            &id,
-            "--repo",
-            &slug,
-            github_merge_flag(strategy),
-            "--match-head-commit",
-            expected_head,
-        ],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
+    let endpoint = format!("repos/{owner}/{repo}/pulls/{id}/merge");
+    let input = serde_json::to_vec(&completion::github_merge_payload(strategy, expected_head)).map_err(|e| e.to_string())?;
+    let output = github_command_input(cwd, "gh", &["api", &endpoint, "--method", "PUT", "--input", "-"], &[("GH_PROMPT_DISABLED", "1")], Some(&input))?;
+    let value: Value = serde_json::from_slice(&output).map_err(|e| e.to_string())?;
+    if value["merged"].as_bool() != Some(true) {
+        return Err(text(value.get("message")).unwrap_or_else(|| "GitHub did not merge the pull request".into()));
+    }
     Ok(())
 }
 
@@ -1628,6 +1504,8 @@ fn list_azure(
         })
         .collect();
     Ok(PullRequestList {
+        next_cursor: None,
+        total_count: None,
         repository: PullRequestRepository {
             provider: PullRequestProvider::AzureDevOps,
             remote,
@@ -1673,6 +1551,8 @@ fn list_azure_server(
         })
         .collect();
     Ok(PullRequestList {
+        next_cursor: None,
+        total_count: None,
         repository: PullRequestRepository {
             provider: PullRequestProvider::AzureDevOps,
             remote,
@@ -1794,12 +1674,14 @@ fn detail_azure_server(
         pull_request.checks = checks
             .iter()
             .map(|check| PullRequestCheck {
+                id: check.id.clone(),
                 name: check.name.clone(),
                 status: check.status.clone(),
             })
             .collect();
         pull_request.checks_complete = true;
     }
+    pull_request.completion = Some(completion::azure(&value, viewer.as_deref()));
     Ok(pull_request)
 }
 
@@ -2467,12 +2349,14 @@ fn detail_azure(
         pull_request.checks = checks
             .iter()
             .map(|check| PullRequestCheck {
+                id: check.id.clone(),
                 name: check.name.clone(),
                 status: check.status.clone(),
             })
             .collect();
         pull_request.checks_complete = true;
     }
+    pull_request.completion = Some(completion::azure(&value, viewer.as_deref()));
     Ok(pull_request)
 }
 
@@ -3392,6 +3276,20 @@ fn run_command_input(
     envs: &[(&str, &str)],
     stdin_data: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
+    run_command_input_cancellable(cwd, program, args, envs, stdin_data, None)
+}
+
+fn run_command_input_cancellable(
+    cwd: &str,
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin_data: Option<&[u8]>,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Vec<u8>> {
+    if cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
+        return Err("Read cancelled".into());
+    }
     // Resolve strictly through PATH before setting the untrusted repository as
     // cwd. On Windows, CreateProcess otherwise searches cwd and could execute
     // a repository-owned `gh.exe`/`az.exe`. Reuse the AI CLI resolver so batch
@@ -3463,7 +3361,7 @@ fn run_command_input(
                 return Err(format!("{program} wait failed: {error}"));
             }
         }
-        if started.elapsed() >= COMMAND_TIMEOUT {
+        if started.elapsed() >= COMMAND_TIMEOUT || cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
             let _ = child.kill();
             let _ = child.wait();
             let _ = stdout_reader.join();
@@ -3471,7 +3369,7 @@ fn run_command_input(
             if let Some(writer) = stdin_writer.take() {
                 let _ = writer.join();
             }
-            return Err(format!("{program} timed out after 30 seconds"));
+            return Err(if cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) { "Read cancelled".into() } else { format!("{program} timed out after 30 seconds") });
         }
         thread::sleep(Duration::from_millis(25));
     };
@@ -3717,13 +3615,6 @@ fn validate_commit(commit: &str) -> Result<()> {
     Ok(())
 }
 
-fn github_merge_flag(strategy: PullRequestMergeStrategy) -> &'static str {
-    match strategy {
-        PullRequestMergeStrategy::MergeCommit => "--merge",
-        PullRequestMergeStrategy::Squash => "--squash",
-        PullRequestMergeStrategy::Rebase => "--rebase",
-    }
-}
 
 fn github_lifecycle_verb(action: PullRequestLifecycleAction) -> &'static str {
     match action {
@@ -3967,7 +3858,7 @@ fn parse_github_activity(
         comments,
         reviews,
         checks,
-        checks_complete: true,
+        checks_complete: value.pointer("/statusCheckRollup/contexts/pageInfo/hasNextPage").and_then(Value::as_bool) == Some(false) || value.get("statusCheckRollup") == Some(&Value::Null),
     })
 }
 
@@ -4093,6 +3984,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         .iter()
         .filter_map(|check| {
             Some(PullRequestCheck {
+                id: text(check.get("id")).unwrap_or_default(),
                 name: text(check.get("name")).or_else(|| text(check.get("context")))?,
                 status: text(check.get("conclusion"))
                     .filter(|status| !status.is_empty())
@@ -4102,6 +3994,9 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         })
         .collect();
     Some(PullRequest {
+        data_pages: Vec::new(),
+        completion: None,
+
         capabilities: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
@@ -4186,6 +4081,7 @@ fn parse_github_reviews(value: &Value) -> Vec<PullRequestReview> {
         .filter_map(|review| {
             let state = text(review.get("state")).unwrap_or_else(|| "unknown".into());
             Some(PullRequestReview {
+                source_commit: text(review.pointer("/commit/oid")),
                 id: text(review.get("id"))?,
                 author: text(review.pointer("/author/login"))
                     .unwrap_or_else(|| "unknown".into()),
@@ -4217,16 +4113,16 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
             let end_line = thread
                 .get("line")
                 .and_then(Value::as_u64)
-                .or_else(|| thread.get("originalLine").and_then(Value::as_u64))?
+                .or_else(|| thread.get("originalLine").and_then(Value::as_u64)).unwrap_or(0)
                 as u32;
             let start_line = thread
-                .get("startLine")
+                .get(if thread.get("line").and_then(Value::as_u64).is_some() { "startLine" } else { "originalStartLine" })
                 .and_then(Value::as_u64)
-                .or_else(|| thread.get("originalStartLine").and_then(Value::as_u64))
                 .unwrap_or(u64::from(end_line)) as u32;
-            let side = match text(thread.get("diffSide"))?.as_str() {
+            let side = match text(thread.get("diffSide")).unwrap_or_default().as_str() {
                 "LEFT" => PullRequestDiffSide::Deletions,
                 "RIGHT" => PullRequestDiffSide::Additions,
+                _ if end_line == 0 => PullRequestDiffSide::Additions,
                 _ => return None,
             };
             let comments = thread
@@ -4255,6 +4151,9 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
                 return None;
             }
             Some(PullRequestReviewThread {
+                suggestion_range_valid: thread.get("line").and_then(Value::as_u64).is_some_and(|n| n > 0)
+                    && (thread.get("startLine").and_then(Value::as_u64).is_none() || text(thread.get("startDiffSide")).as_deref() == Some("RIGHT")),
+                iteration_id: None,
                 id: text(thread.get("id"))?,
                 path,
                 start_line,
@@ -4390,6 +4289,7 @@ fn parse_azure_pr(
             };
             let reviewer_identity = text(reviewer.get("uniqueName"));
             Some(PullRequestReview {
+                source_commit: None,
                 id: text(reviewer.get("id"))?,
                 author: text(reviewer.get("displayName")).unwrap_or_else(|| "unknown".into()),
                 avatar_url: text(reviewer.get("imageUrl")),
@@ -4422,6 +4322,9 @@ fn parse_azure_pr(
         "review required".into()
     };
     Some(PullRequest {
+        data_pages: Vec::new(),
+        completion: None,
+
         capabilities: None,
         id,
         title: text(value.get("title")).unwrap_or_default(),
@@ -4589,12 +4492,9 @@ fn parse_azure_review_threads(
         })
         .filter_map(|thread| {
             let thread_id = thread.get("id").and_then(Value::as_u64)?;
-            let path = text(thread.pointer("/threadContext/filePath"))?
+            let path = text(thread.pointer("/threadContext/filePath")).unwrap_or_default()
                 .trim_start_matches('/')
                 .to_string();
-            if path.is_empty() {
-                return None;
-            }
             let right_start = thread.pointer("/threadContext/rightFileStart/line").and_then(Value::as_u64);
             let right_end = thread.pointer("/threadContext/rightFileEnd/line").and_then(Value::as_u64);
             let left_start = thread.pointer("/threadContext/leftFileStart/line").and_then(Value::as_u64);
@@ -4602,9 +4502,10 @@ fn parse_azure_review_threads(
             let (start_line, end_line, side) = if right_start.is_some() || right_end.is_some() {
                 let end = right_end.or(right_start)?;
                 (right_start.unwrap_or(end), end, PullRequestDiffSide::Additions)
-            } else {
-                let end = left_end.or(left_start)?;
+            } else if let Some(end) = left_end.or(left_start) {
                 (left_start.unwrap_or(end), end, PullRequestDiffSide::Deletions)
+            } else {
+                (0, 0, PullRequestDiffSide::Additions)
             };
             let comments = array(thread, "comments")
                 .iter()
@@ -4620,6 +4521,9 @@ fn parse_azure_review_threads(
                 .find_map(|comment| comment.get("id").and_then(Value::as_u64))?;
             let is_resolved = azure_thread_resolved(thread, false);
             Some(PullRequestReviewThread {
+                suggestion_range_valid: thread.pointer("/threadContext/rightFileStart/offset").and_then(Value::as_u64) == Some(1)
+                    && thread.pointer("/threadContext/rightFileEnd/offset").and_then(Value::as_u64) == Some(1),
+                iteration_id: thread.pointer("/pullRequestThreadContext/iterationContext/secondComparingIteration").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()),
                 id: azure_thread_id(pull_request_id, thread_id, parent_comment_id),
                 path,
                 start_line: u32::try_from(start_line).ok()?,
@@ -5124,7 +5028,7 @@ mod tests {
         }
         for nested in ["comments", "commits", "latestReviews", "statusCheckRollup"] {
             assert!(!GITHUB_LIST_FIELDS.contains(nested));
-            assert!(GITHUB_DETAIL_FIELDS.contains(nested));
+            assert!(!GITHUB_DETAIL_FIELDS.contains(nested));
         }
         assert_eq!(
             auth_hint(
@@ -5225,7 +5129,7 @@ mod tests {
             "viewerCanResolve",
             "viewerCanUnresolve",
         ] {
-            assert!(GITHUB_REVIEW_THREADS_QUERY.contains(field));
+            assert!(pages::review_query_contract().contains(field));
         }
     }
 
@@ -5248,7 +5152,7 @@ mod tests {
             "reviewThreads": { "nodes": [{ "comments": { "nodes": [
                 { "id": "PRRC_1", "author": { "login": "linus" } }
             ] } }] },
-            "statusCheckRollup": { "contexts": { "nodes": [
+            "statusCheckRollup": { "contexts": { "pageInfo": {"hasNextPage":false}, "nodes": [
                 { "__typename": "CheckRun", "databaseId": 99, "name": "CI", "status": "COMPLETED", "conclusion": "FAILURE" },
                 { "__typename": "StatusContext", "id": "SC_1", "context": "lint", "state": "SUCCESS" }
             ] } }
@@ -5373,7 +5277,9 @@ mod tests {
 
         let discussion = parse_azure_discussion(&value, "https://dev.azure.com/acme/pr/7", 7);
         assert_eq!(discussion.comments.len(), 4);
-        assert_eq!(discussion.review_threads.len(), 2);
+        assert_eq!(discussion.review_threads.len(), 3);
+        assert_eq!(discussion.review_threads[2].path, "");
+        assert_eq!(discussion.review_threads[2].end_line, 0);
         let added = &discussion.review_threads[0];
         assert_eq!(added.id, "azure:7:9:1");
         assert_eq!(added.path, "src/lib.rs");
@@ -5604,12 +5510,12 @@ mod tests {
         assert!(validate_commit("0123456").is_err());
         assert!(validate_commit("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").is_err());
         assert_eq!(
-            github_merge_flag(PullRequestMergeStrategy::MergeCommit),
-            "--merge"
+            completion::github_merge_payload(PullRequestMergeStrategy::MergeCommit, "head")["merge_method"],
+            "merge"
         );
         assert_eq!(
-            github_merge_flag(PullRequestMergeStrategy::Squash),
-            "--squash"
+            completion::github_merge_payload(PullRequestMergeStrategy::Squash, "head")["merge_method"],
+            "squash"
         );
         assert_eq!(
             azure_merge_strategy(PullRequestMergeStrategy::MergeCommit),

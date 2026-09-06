@@ -7,7 +7,7 @@ use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
 pub const MAX_REQUEST_BYTES: usize = 128 * 1024;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -174,6 +174,15 @@ pub enum Operation {
         id: u64,
         reviewer_id: String,
         vote: ReviewVote,
+    },
+    SetAutoComplete {
+        project: String,
+        repository: String,
+        id: u64,
+        enabled: bool,
+        viewer_id: String,
+        expected_head: String,
+        strategy: MergeStrategy,
     },
     Complete {
         project: String,

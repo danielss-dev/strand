@@ -61,7 +61,8 @@ export function PullRequestMergeControl({
   const selectedIndex = Math.max(0, strategies.findIndex((item) => item.value === strategy));
   const selected = strategies[selectedIndex] ?? strategies[0] ?? STRATEGIES[0];
   const markReady = canMarkPullRequestReady(pr);
-  const disabled = (markReady ? false : (Boolean(disabledReason) || strategies.length === 0)) || busy;
+  const deferred = pr.completion?.kind === 'github_queue' || pr.completion?.status === 'waiting_for_policies';
+  const disabled = deferred || (markReady ? false : (Boolean(disabledReason) || strategies.length === 0)) || busy;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -194,7 +195,7 @@ export function PullRequestMergeControl({
           type="button"
           className="pr-merge-main"
           disabled={disabled}
-          title={disabledReason || `${selected.buttonLabel} using ${providerName(provider)}`}
+          title={deferred ? 'Use the deferred completion controls below' : disabledReason || `${selected.buttonLabel} using ${providerName(provider)}`}
           onClick={() => void submit()}
         >
           {busy ? 'Merging…' : selected.buttonLabel}

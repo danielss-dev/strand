@@ -82,7 +82,10 @@ alternate retry does not change the provider selected in Settings.
 
 ## Browse PRs
 
-The list contains up to the latest 100 open, closed, and merged pull requests.
+The GitHub inbox initially loads 100 open, closed, and merged pull requests.
+Choose **Load more pull requests** to continue through older pages. The loaded
+count and total stay visible; search and filters apply to loaded rows. Azure
+DevOps retains its existing latest-100 inbox.
 Use the local search field to match a PR number, title, author, source branch,
 or target branch without starting another provider request. The filter tabs are:
 
@@ -102,6 +105,15 @@ Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
 use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
 toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
+
+GitHub detail also loads reviews, threads, replies, comments, commits and checks
+in bounded pages. **Partial data** lists the connections with more to load;
+counts describe loaded items, and incomplete checks cannot report readiness.
+Choose **Load more** to fetch the next page, or **Cancel loading** to stop its
+read. Loaded items and drafts survive a failed or cancelled page. A source push
+requires Refresh before continuing to prevent mixing review coordinates. Both
+actions are available through “Pull Requests: load next data page” and
+“Pull Requests: cancel loading page” in Quick Launch.
 
 ## Follow PR activity
 
@@ -152,6 +164,28 @@ exact source commit currently displayed in the merge request; if the branch
 changes before the action reaches the provider, the stale merge is refused and
 Strand asks you to refresh. The source branch is not deleted automatically.
 
+Below readiness, GitHub repositories that require a queue expose **Join merge
+queue**, queue position when reported, and **Leave merge queue**. Other GitHub
+repositories expose **Enable auto-merge** and **Cancel auto-merge** when the
+provider permits them. Choose an allowed merge strategy before enabling.
+Immediate Merge uses GitHub's guarded merge endpoint; it does not silently
+queue the request.
+
+Azure exposes **Enable auto-complete** and **Cancel auto-complete**, with a
+**waiting for policies** state instead of a queue position. Strand exposes
+Azure enablement conservatively to the signed-in PR author, and cancellation
+to that author or the existing auto-complete owner; Azure enforces current
+permissions. Azure Server requires helper protocol 7 with the new completion
+operation. Release distribution of that helper must accompany this app change.
+
+Deferred completion remains controlled by provider policies and can include
+later source pushes. GitHub enable/enqueue requests carry an atomic expected
+head; Azure enablement rechecks the head and includes `lastMergeSourceCommit`.
+Cancellation never merges code. Controls refresh after each request and when
+activity reports a changed head. A failed request or refresh stays visible next
+to the controls. Run “Pull Requests: merge queue or auto-complete…” in Quick
+Launch to focus this surface.
+
 The adjacent **Pull request actions** menu closes an active PR behind a second
 confirmation. A closed GitHub or abandoned Azure DevOps PR shows **Reopen pull
 request** there instead. Merged/completed PRs have no lifecycle or merge action.
@@ -179,6 +213,46 @@ Lightweight activity reloads rich detail only when something changed. The
 opened PR uses the full content width, starts directly beneath the compact PR
 toolbar, and keeps its three tabs centered there. Use `Left`/`Right`, `Home`,
 and `End` while the tab bar is focused.
+
+### Review tools
+
+Open **Review tools…** in the detail header. **Mark head reviewed** saves the
+currently displayed source commit on this device, independently of file viewed
+marks and review drafts. Under **Changes since review**, choose that boundary
+or **Load review commits** (GitHub) / **Load iterations** (Azure). **Compare to
+current head** shows a keyboard-navigable file list and one diff at a time.
+Arrow keys, Home and End move through files.
+
+Comparisons use the exact two commit trees, including after a rebase or force
+push. Strand labels rewritten history and fetches missing objects without
+checking out a branch. If the provider no longer retains the old commit, the
+error leaves the boundary and previous comparison intact. A changed source
+head labels the previous result until you compare again.
+
+Choose **Unresolved feedback**, then **Load all unresolved feedback**. This
+explicit read traverses GitHub thread and reply pages; errors prevent a partial
+export from being presented as complete. **Cancel read** or closing the dialog
+stops further paging. Preview and **Copy feedback** include provider links,
+source commit, thread/comment IDs, authors, full replies, file and line-side
+context, and outdated/iteration markers. File-level feedback is included;
+GitHub top-level comments have no resolution state and are outside this export.
+The clipboard text is ready to paste into an external agent.
+
+Under **Suggestions**, load feedback, choose a standard suggestion block, and
+**Preview local change**. Use **Open branch in worktree…** first: the local HEAD
+must be the exact provider source commit, and the file must have no staged or
+unstaged changes. **Apply locally** rechecks the head, comment body, range and
+previewed file content before writing. It preserves line endings and leaves the
+change unstaged for review. It does not submit a provider comment or commit.
+
+Outdated, old-side, mixed-side, column or offset-form suggestions cannot be
+applied automatically. Azure suggestions also require the current iteration;
+unknown or old iteration coordinates are refused. Errors preserve the preview
+and review drafts. Source changes require reloading feedback and a new preview.
+
+Quick Launch offers **compare reviewed head…**, **mark head reviewed…**,
+**export unresolved feedback…**, and **preview suggestions…** under Pull
+Requests. All open the same keyboard-operable dialog.
 
 ### Summary
 

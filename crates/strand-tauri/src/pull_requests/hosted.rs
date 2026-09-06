@@ -133,6 +133,8 @@ impl HostedRepo {
             pages(api, &query, self.bb())?
         };
         Ok(PullRequestList {
+            next_cursor: None,
+            total_count: Some(values.len() as u64),
             repository: self.repository(remote, Some(self.viewer_name(&viewer))),
             pull_requests: values
                 .iter()
@@ -325,6 +327,7 @@ impl HostedRepo {
             pr.checks = checks
                 .iter()
                 .map(|c| PullRequestCheck {
+                    id: field(c, "/key"),
                     name: field(c, "/name"),
                     status: field(c, "/state"),
                 })
@@ -334,6 +337,7 @@ impl HostedRepo {
         } else {
             if let Some(pipeline) = v.get("head_pipeline").filter(|p| !p.is_null()) {
                 pr.checks.push(PullRequestCheck {
+                    id: pipeline["id"].to_string(),
                     name: "Head pipeline".into(),
                     status: field(pipeline, "/status"),
                 });
@@ -349,6 +353,7 @@ impl HostedRepo {
                 pr.reviews = array(&approval, "approved_by")
                     .iter()
                     .map(|r| PullRequestReview {
+                        source_commit: None,
                         id: format!("gitlab:{id}:{}", r["user"]["id"]),
                         author: self.viewer_name(&r["user"]),
                         avatar_url: text(r["user"].get("avatar_url")),
@@ -469,6 +474,8 @@ impl HostedRepo {
                 field(v, "/id")
             };
             pr.review_threads.push(PullRequestReviewThread {
+                iteration_id: None,
+                suggestion_range_valid: false,
                 id: format!("{}:{}:{discussion_id}", self.provider, pr.id),
                 path: field(
                     position,
@@ -873,6 +880,7 @@ impl HostedRepo {
             pr.checks = pages(api, &format!("{}/statuses", self.pr(id)), true)?
                 .iter()
                 .map(|c| PullRequestCheck {
+                    id: field(c, "/key"),
                     name: field(c, "/name"),
                     status: field(c, "/state"),
                 })
@@ -881,6 +889,7 @@ impl HostedRepo {
                 .iter()
                 .filter(|r| r["approved"] == true || r["state"] == "changes_requested")
                 .map(|r| PullRequestReview {
+                        source_commit: None,
                     id: field(r, "/user/uuid"),
                     author: self.viewer_name(&r["user"]),
                     avatar_url: None,
@@ -900,6 +909,7 @@ impl HostedRepo {
         } else {
             if let Some(pipeline) = value.get("head_pipeline").filter(|v| !v.is_null()) {
                 pr.checks.push(PullRequestCheck {
+                    id: pipeline["id"].to_string(),
                     name: "Head pipeline".into(),
                     status: field(pipeline, "/status"),
                 });
@@ -908,6 +918,7 @@ impl HostedRepo {
                 pr.reviews = array(&approval, "approved_by")
                     .iter()
                     .map(|r| PullRequestReview {
+                        source_commit: None,
                         id: r["user"]["id"].to_string(),
                         author: self.viewer_name(&r["user"]),
                         avatar_url: None,

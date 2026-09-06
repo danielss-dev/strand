@@ -1896,16 +1896,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     batched submission use GitHub's atomic review payload or Azure's bounded
     latest-iteration/change-tracking resolver (`azure_review_coordinates`,
     `azure_server_review_coordinates`).
-  - ☐ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
+  - ☑ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
     reviews, threads/replies and check contexts beyond the current bounded
     queries; expose partial/error states, deduplicate pages and test 101+
-    entries while keeping initial queries shallow.
+    entries while keeping initial queries shallow (`pull_requests::pages`,
+    `PullRequestDataLoader`, `PullRequestInboxLoader`; 34 Rust / 38 frontend
+    tests and WebView2 101-row/review, failure, cancellation and stale-head pass).
   - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails (`pullRequestReview` drafts,
     `PullRequestChanges` review composer, `repo_pull_request_submit_review`).
   - ☑ Searchable repository PR inbox (`filterPullRequests`, `.pr-inbox-*`):
-    All, Authored, and Completed filter the shallow latest-100 list locally;
+    All, Authored, and Completed filter the loaded shallow inbox pages locally;
     search covers number/title/author/source/target branches; provider-account
     identity drives Authored without hiding All when identity lookup fails;
     selection, j/k/arrows/Home/End/Enter, focus restoration, and palette search
@@ -1921,20 +1923,32 @@ tree: watch the agent work, review fast, accept or reject safely.
     worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
     from target** are shipped (`repo_pull_request_prepare_checkout`,
     `repo_pull_request_update_branch`, `PullRequestDetails.openBranchInWorktree`).
-    Reliable “since my last review” compare where the provider exposes a
-    boundary, suggestions, and unresolved-feedback export for external agents
-    remain 1.1 work.
-  - ☐ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
+    Reviewed-head comparisons, suggestions and unresolved-feedback export
+    ship in F13 below.
+  - ☑ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
     comparison, validated suggestion application and unresolved-feedback export;
-    handle rebases and force pushes without reusing stale coordinates.
+    handle rebases and force pushes without reusing stale coordinates
+    (`evolution::{boundaries,compare,feedback,preview,apply}`, `HostedReviewTools`,
+    41 hosted Rust tests / 43 frontend tests and WebView2 comparison/export/
+    suggestion/failure/cancellation/head-refresh pass; live GitHub read IPC).
+  - ☐ **F13 provider validation.** Exercise Azure Services/Server iteration
+    comparison and current-iteration suggestions with a live authenticated
+    fixture. Local coordinate/payload tests pass; hosted writes were not used.
   - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
-    remain neutral. Merge queue/auto-complete and richer required-review detail
-    remain 1.1 work.
-  - ☐ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
+    remain neutral. Merge queue/auto-complete controls ship in F12 below; richer
+    required-review detail remains later work.
+  - ☑ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
     enable/cancel, queued versus merged state, policy blockers and head refresh;
-    preserve GitHub queue versus Azure auto-complete semantics.
+    preserve GitHub queue versus Azure auto-complete semantics
+    (`completion::set`, `PullRequestCompletionControl`, helper protocol 7
+    `SetAutoComplete`; 36 hosted Rust tests, 12 helper/protocol tests, WebView2
+    enable/cancel/position/policy/head-refresh pass).
+  - ☐ **F12 release validation.** Publish the signed protocol-7 helper channel
+    with the desktop build and exercise queue/auto-complete against a live
+    policy-controlled GitHub and Azure Services/Server PR. Local tests use
+    provider payloads and WebView2 fixtures; no live hosted writes were made.
   - ☑ Hosted PR lifecycle actions.
     - ☑ Mark permission-backed drafts ready for review
       (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer

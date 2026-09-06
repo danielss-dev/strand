@@ -165,7 +165,7 @@ the resolved app appearance automatically.
   Codex or Claude Code subscription can inspect that exact review set for
   possible defects. Findings stay pending until you explicitly add selected
   ones as severity-labelled notes; AI review never edits repository files.
-- **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
+- **Hosted pull requests** — browse GitHub PRs with cursor pages or the latest 100 Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
   opening and being followed automatically even before the PR view is opened.
   Create a PR or draft for the checked-out branch from the toolbar or command
@@ -199,6 +199,12 @@ the resolved app appearance automatically.
   drafts expose **Ready for review** in place of Merge; active PRs merge with
   merge-commit, squash, or rebase through a GitHub-style split control and can
   update their source from the target on GitHub with an expected-head guard.
+  Explicit GitHub merge queue/auto-merge and Azure auto-complete controls show
+  provider capability, enable/cancel, policy state and queue position separately
+  from a completed merge.
+  **Review tools** saves a reviewed head, compares exact trees across pushes or
+  rebases, exports all unresolved feedback with replies, and previews validated
+  standard suggestions before applying them to a clean local file.
   Every GitHub or Azure PR can open its exact provider head in a new worktree
   without changing local refs or `FETCH_HEAD`. Active PRs can be closed from a
   confirmed overflow action. Closed PRs can be reopened;

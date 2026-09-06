@@ -60,6 +60,8 @@ import type {
   Progress,
   PullMode,
   PullRequest,
+  PullRequestPageCursor,
+  PullRequestDataPage,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
   PullRequestCheckoutPreparation,
@@ -69,6 +71,8 @@ import type {
   PullRequestLifecycleAction,
   PullRequestMergeStrategy,
   PullRequestPendingComment,
+  PullRequestBoundary, PullRequestComparison, PullRequestFeedback,
+  PullRequestSuggestionRequest, PullRequestSuggestionPreview,
   PullRequestReviewEvent,
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
@@ -256,6 +260,11 @@ export const tauri = {
   repoCommitExportPatch: (path: string, oids: string[], destination: string) =>
     invoke<number>('repo_commit_export_patch', { path, oids, destination }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
+  repoPullRequestInboxPage: (path: string, cursor: string | null, requestId: string) =>
+    invoke<PullRequestList>('repo_pull_request_inbox_page', { path, cursor, requestId }),
+  repoPullRequestDataPage: (path: string, id: number, expectedHead: string, request: PullRequestPageCursor, requestId: string) =>
+    invoke<PullRequestDataPage>('repo_pull_request_data_page', { path, id, expectedHead, request, requestId }),
+  repoPullRequestCancelRead: (requestId: string) => invoke<void>('repo_pull_request_cancel_read', { requestId }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
   repoPullRequestForBranch: (path: string, branch: string) =>
     invoke<PullRequestBranchMatch | null>('repo_pull_request_for_branch', { path, branch }),
@@ -342,6 +351,18 @@ export const tauri = {
     invoke<PullRequestReviewThreadUpdate>('repo_pull_request_thread_resolve', {
       path, threadId, resolved,
     }),
+  repoPullRequestBoundaries: (path: string, id: number, expectedHead: string, requestId: string) =>
+    invoke<PullRequestBoundary[]>('repo_pull_request_boundaries', { path, id, expectedHead, requestId }),
+  repoPullRequestCompareReview: (path: string, id: number, from: string, expectedHead: string) =>
+    invoke<PullRequestComparison>('repo_pull_request_compare_review', { path, id, from, expectedHead }),
+  repoPullRequestFeedback: (path: string, id: number, expectedHead: string, requestId: string) =>
+    invoke<PullRequestFeedback>('repo_pull_request_feedback', { path, id, expectedHead, requestId }),
+  repoPullRequestSuggestionPreview: (path: string, id: number, request: PullRequestSuggestionRequest, requestId: string) =>
+    invoke<PullRequestSuggestionPreview>('repo_pull_request_suggestion_preview', { path, id, request, requestId }),
+  repoPullRequestSuggestionApply: (path: string, id: number, request: PullRequestSuggestionRequest, expectedPreview: PullRequestSuggestionPreview, requestId: string) =>
+    invoke<string>('repo_pull_request_suggestion_apply', { path, id, request, expectedPreview, requestId }),
+  repoPullRequestCompletion: (path: string, id: number, enable: boolean, strategy: PullRequestMergeStrategy, expectedHead: string) =>
+    invoke<void>('repo_pull_request_completion', { path, id, enable, strategy, expectedHead }),
   repoPullRequestMerge: (
     path: string,
     id: number,

@@ -302,6 +302,12 @@ export const repoPullMode = {
  * head-SHA + file-patch fingerprint, so a provider update invalidates only
  * the files whose review evidence is stale. */
 export const pullRequestReview = {
+  getBoundary(reviewKey: string): Promise<{ head: string; reviewedAt: string } | null> {
+    return settings.get(`pull-request-boundary:${reviewKey}`);
+  },
+  setBoundary(reviewKey: string, boundary: { head: string; reviewedAt: string }): Promise<void> {
+    return settings.set(`pull-request-boundary:${reviewKey}`, boundary);
+  },
   getViewed(reviewKey: string): Promise<Record<string, string> | null> {
     return settings.get<Record<string, string>>(`pull-request-reviewed:${reviewKey}`);
   },

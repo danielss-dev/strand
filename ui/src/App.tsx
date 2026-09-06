@@ -341,6 +341,8 @@ export function App() {
   const customWorkspaceReady = customRestored
     && customWorkspaceId === workbenchWorkspaceId;
   const activePullRequestKey = usePullRequests((s) => s.active?.key ?? null);
+  const activePullRequestHasReviewTools = usePullRequests((s) =>
+    s.active?.repository.provider === 'git_hub' || s.active?.repository.provider === 'azure_dev_ops');
   const activePullRequestFollowed = usePullRequests((s) =>
     activePullRequestKey ? Boolean(s.followed[activePullRequestKey]) : false);
   const activePullRequestCanUpdateBranch = usePullRequests((s) =>
@@ -1798,13 +1800,41 @@ export function App() {
         } satisfies PaletteAction] : []),
         ...(view === 'pull-requests' ? [
           {
+            id: 'pull-request-load-more',
+            label: 'Pull Requests: load next data page',
+            group: 'Actions',
+            keywords: 'pr pagination inbox reviews threads replies checks more partial',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-load-more')),
+          } satisfies PaletteAction,
+          {
+            id: 'pull-request-cancel-read',
+            label: 'Pull Requests: cancel loading page',
+            group: 'Actions',
+            keywords: 'pr stop pagination',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-cancel-read')),
+          } satisfies PaletteAction,
+          {
             id: 'pull-request-search',
             label: 'Pull Requests: search…',
             group: 'Actions',
             keywords: 'pr inbox find filter authored completed',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-search')),
           } satisfies PaletteAction,
-          ...(activePullRequestKey ? [{
+          ...(activePullRequestKey ? [
+          ...(activePullRequestHasReviewTools ? [
+          { id: 'pull-request-review-tools-compare', label: 'Pull Requests: compare reviewed head…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'compare' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-mark', label: 'Pull Requests: mark head reviewed…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'mark' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-feedback', label: 'Pull Requests: export unresolved feedback…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'feedback' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-suggestions', label: 'Pull Requests: preview suggestions…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'suggestions' })) } satisfies PaletteAction,
+          {
+            id: 'pull-request-completion',
+            label: 'Pull Requests: merge queue or auto-complete…',
+            group: 'Actions',
+            keywords: 'pr github azure enable cancel auto merge queue status policies',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-completion')),
+          } satisfies PaletteAction,
+          ] : []),
+          {
             id: 'pull-request-merge',
             label: 'Pull Requests: merge or mark ready…',
             group: 'Actions',
@@ -2124,7 +2154,7 @@ export function App() {
       unstagedCount, stagedCount, copyFreshDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
-      activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
+      activePullRequestKey, activePullRequestHasReviewTools, activePullRequestFollowed, activePullRequestCanUpdateBranch,
       toggleActivePullRequest, customCommands, customCommandContext,
       customizeWorkbench, openWorkbench, showWorkbenchWork, workbenchEditing, userActions, paletteOpen]);
 

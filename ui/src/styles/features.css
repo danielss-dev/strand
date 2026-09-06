@@ -9560,6 +9560,35 @@ select.clone-input {
   .plugin-heroi-select-thinking,
   .plugin-heroi-select-permission { display: none; }
 }
+
+.pr-data-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; border-bottom: 1px solid var(--border); }
+
+.pr-data-status strong, .pr-data-status .h-link { color: var(--text); }
+.pr-data-status [role="alert"] { color: var(--del); }
+
+/* Hosted review tools share the revision comparison surface. */
+.hosted-review-dialog { display: flex; flex-direction: column; }
+.hosted-review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.hosted-review-toolbar label, .hosted-review-suggestions > label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hosted-review-toolbar .select-control { max-width: 370px; min-width: 120px; }
+.hosted-review-dialog .compare-refs-message { padding: 8px 12px; color: var(--text-muted); }
+.hosted-review-status { padding: 0 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.hosted-review-status:not(:empty) { padding-block: 8px; }
+.hosted-review-status [role="alert"] { display: block; color: var(--del); }
+.hosted-review-dialog .compare-refs-body { flex: 1; }
+.hosted-review-dialog .compare-refs-file { grid-template-columns: minmax(0, 1fr) auto; }
+.hosted-review-export, .hosted-review-preview textarea { resize: none; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font-mono); padding: 12px; line-height: 1.5; }
+.hosted-review-export { flex: 1; min-height: 0; margin: 12px; }
+.hosted-review-suggestions { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.hosted-review-suggestions p { margin: 0; color: var(--text-muted); }
+.hosted-review-suggestions .select-control { flex: 1; min-width: 0; }
+.hosted-review-suggestions .hosted-review-toolbar { padding: 0 0 12px; }
+.hosted-review-preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); flex: 1; gap: 12px; min-height: 150px; }
+.hosted-review-preview label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.hosted-review-preview textarea { flex: 1; width: 100%; min-height: 100px; }
+
+.hosted-review-dialog .select-control select { width: 100%; min-width: 0; height: 30px; padding: 0 28px 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elev); color: var(--text); }
+
 .publish-review { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; }
 .publish-review dt { color: var(--text-muted); }
 .publish-review dd { margin: 0; overflow-wrap: anywhere; }

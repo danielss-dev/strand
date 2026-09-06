@@ -1500,7 +1500,8 @@ PR number alone can then integrate code the user never saw. Provider policies
 also contain information Strand may not have loaded (especially in Azure
 DevOps), so client-side green checks are not sufficient authorization.
 
-**How to apply.** GitHub merge commands use `--match-head-commit`; Azure
+**How to apply.** GitHub immediate merges use REST `sha`; queue/auto-merge mutations use
+`expectedHeadOid`. Azure
 completion requests include `lastMergeSourceCommit`. Keep required checks,
 reviews, queues, and branch policies provider-authoritative, preserve their
 failure text next to the initiating control, and refresh the PR after a
@@ -2580,6 +2581,49 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+## Hosted connection pages carry completeness and reviewed heads (2026-09-06)
+
+GitHub connection continuations carry their opaque cursor and the activated
+head SHA. Reject missing/repeated cursors and head mismatches; deduplicate by
+provider ID when appending, and keep already loaded data on failures. A thread
+page fetches only its root comment; replies have independent cursors. Counts
+remain explicitly partial until their connections are exhausted. Background
+check snapshots traverse check pages without patch or comment-body reads.
+
+## Deferred completion retains provider semantics (2026-09-06)
+
+GitHub queue membership, GitHub auto-merge and Azure auto-complete are separate
+states. Enabling carries the loaded head; cancellation targets the existing
+provider intent and remains possible after source changes. Do not call
+`gh pr merge` for immediate completion because it may silently enqueue. Azure
+auto-complete follows subsequent source pushes under server policies; its
+waiting state is not a queue position. Helper operations advance the protocol
+channel and need a corresponding signed helper release.
+
+
+## Hosted evolution uses immutable boundaries and exact local files (2026-09-06)
+
+A saved reviewed head is a commit ID scoped to the provider PR URL; never replace
+it with a branch name or a new merge base after force pushes. Compare the two
+explicit trees, retain failed/unavailable boundaries, and label an old result
+when the displayed provider head changes. GitHub review commits and Azure
+iteration source commits are provider boundaries, not proof that the viewer
+reviewed every file. The local **Mark head reviewed** is an explicit action.
+
+Suggestion application re-reads the provider discussion and head and checks the
+exact comment body, current full-line source range, local HEAD, index and file
+contents. Revalidate the complete preview before writing through the existing
+file compare-and-swap operation. Unknown/old Azure iterations, column ranges,
+mixed sides, outdated lines and offset-form fences fail closed. Empty and
+blank-line suggestions differ; keep the parsed trailing newline to preserve
+that distinction. No staging, commits, pushes or provider writes are implicit.
+
+Unresolved export is an explicit discussion traversal with cancellation, stable
+ID deduplication and source context. Include file-level threads without inventing
+line zero annotations; they render above the file diff. Keep this traversal out
+of inbox and background monitoring. A read error must not produce a supposedly
+complete export or overwrite a review draft.
 
 **Hosted provider writes preserve host and commit scope (2026-09-06).**
 Custom GitHub remotes need an explicit adapter and host-scoped CLI calls; keep

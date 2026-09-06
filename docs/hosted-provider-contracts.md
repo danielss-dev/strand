@@ -1,5 +1,12 @@
 # Hosted provider contracts
 
+PR integration (2026-09-06): GitHub connection pages and deferred completion
+retain the selected custom host, including commit links and avatars. New
+provider adapters expose complete list counts and stable check IDs without
+claiming unsupported suggestion coordinates or review-commit boundaries.
+Review evolution and deferred completion controls remain GitHub/Azure-only.
+The combined hosted Rust suite passes 60 tests.
+
 Implemented September 6, 2026 in `pull_requests/hosted.rs` and
 `pull_requests/transport.rs`. GitHub and Azure retain their existing adapters;
 custom GitHub hosts pass through `GitHubContext` with an explicit hostname.
