@@ -34,6 +34,7 @@ import { treeFileOrder } from '../lib/treeOrder';
 import { resolveActiveTreeTargets } from '../lib/treeSelection';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
+import { useRepoDiffs } from '../lib/useRepoDiffs';
 import { useSettings } from '../stores/settings';
 import type { AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
 import { MergeResolver } from './MergeResolver';
@@ -65,6 +66,7 @@ export function LocalChanges({
   explorerOnly?: boolean;
   onOpenFileChanges?: (path: string) => void;
 }) {
+  useRepoDiffs('local');
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
   const status = useRepo((s) => s.status);
@@ -825,6 +827,7 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
  * and falls back to staged, so a fully-staged path still renders.
  */
 export function WholeFileDiff({ path }: { path: string }) {
+  useRepoDiffs('local');
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
   const unstagedDiff = unstaged.find((d) => d.path === path);

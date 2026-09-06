@@ -2459,3 +2459,38 @@ binary can be corrupt or otherwise broken while still reporting expected
 metadata. Sharing an updater fast path with explicit Retry made recovery a
 no-op; requiring a protocol-compatible helper to remove its own state trapped
 users after a breaking IPC change.
+
+## Performance evidence must separate status, patches, and paint (2026-09-06)
+
+A fast `repo_snapshot` does not establish a fast refresh: the frontend can
+concurrently generate all staged/unstaged and full-context Review patches, then
+parse and render them. Measure these costs independently and capture actual
+visible paint before claiming a PRD interaction target. Diff virtualization
+bounds mounted rows, not native patch generation or IPC payload size.
+
+When reducing refresh work, identical status metadata is not a content revision:
+an already-modified file can change again while retaining the same status row.
+Use explicit invalidation/generations and preserve equal diff objects only after
+comparing their content and metadata. Coalescing must retain a trailing refresh
+for writes during an in-flight read, and reject superseded responses for the
+same repository as well as responses belonging to another active tab.
+
+Patch consumers include Work's Changes document, composed Review/Local Changes
+panes, clipboard exports, and reviewed-file staging. Status-only controls
+(stash checklists, fixup availability, navigation badges) must use status;
+rename-aware staging targets come from index-to-workdir deltas, never from a
+pinned historical review baseline. Files inventories have per-repository
+versions that survive tab activation; file contents alone do not invalidate
+ignored-boundary listings.
+
+Pierre's theme/language resolvers reject worker contexts. Resolve their
+registrations on the window side, then pass them to a worker-owned Shiki core
+for tokenization. Test actual colored tokens, not only worker creation or
+plain-text fallback: silent fallback hid this integration error during the
+September pass.
+
+Browser dependencies in Node tests need explicit globals **before import**.
+Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
+`navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
+after the test, while retaining real integration assertions. Reproduce this
+class of failure locally with `--no-experimental-global-navigator`.

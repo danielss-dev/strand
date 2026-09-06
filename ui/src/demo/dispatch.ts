@@ -136,6 +136,7 @@ export const handlers: Record<string, Handler> = {
 
   // ---- diffs / files -----------------------------------------------------
   repo_diff_unstaged: (a) => repo.diffUnstaged(wtOf(a)),
+  repo_diff_unstaged_paths: (a) => repo.diffUnstaged(wtOf(a)).map(({ path, old_path }) => ({ path, old_path })),
   repo_diff_unstaged_full: (a) => repo.diffUnstaged(wtOf(a), true),
   repo_diff_staged: (a) => repo.diffStaged(wtOf(a)),
   repo_diff_since: (a) => repo.diffSince(wtOf(a), str(a.baseline)),

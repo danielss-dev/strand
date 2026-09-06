@@ -2,6 +2,11 @@
 
 Last reviewed: 2026-07-18
 
+Historical 1.0 planning record. For current implementation status and the
+remaining feature list, use the
+[2026-09-06 code audit](./git-client-feature-audit-2026-09-06.md); several gaps
+and the active-milestone statements below have since been superseded.
+
 ## Goal and bar
 
 Strand 1.0 should replace Fork, GitKraken, Tower, or the Git CLI for a

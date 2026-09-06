@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import { applyLocalTreeMutation, retainLoadedIgnoredChildren } from '../lib/localTreeMutation';
 import { errMessage, isTauri, tauri } from '../lib/tauri';
 import { workTreeGitStatus } from '../lib/workTreeGitStatus';
+import { pathKey } from '../lib/repoIdentity';
 import { useRepo } from '../stores/repo';
 import { useWork } from '../stores/work';
 import { RenameFileDialog } from '../views/RenameFileDialog';
@@ -56,7 +57,7 @@ export function RepositoryFiles({
   const selectedFileIsDirectory = useRepo((state) => state.selectedFileIsDirectory);
   const meta = useRepo((state) => state.meta);
   const workTree = useRepo((state) => state.workTree);
-  const filesTreeRevision = useRepo((state) => state.filesTreeRevision);
+  const filesTreeRevision = useRepo((state) => meta ? state.filesTreeVersions[pathKey(meta.path)] ?? 0 : 0);
   const filesTreeMutation = useRepo((state) => state.filesTreeMutation);
   const selectedCommit = useRepo((state) => state.selectedCommit);
   const refreshLocalChanges = useRepo((state) => state.refreshLocalChanges);
@@ -69,6 +70,7 @@ export function RepositoryFiles({
 
   const [treeLoading, setTreeLoading] = useState(false);
   const [revisionTree, setRevisionTree] = useState<typeof workTree | null>(null);
+  const loadedLocalInventory = useRef<string | null>(null);
   const [localTreeCache, setLocalTreeCache] = useState<{
     repoPath: string;
     entries: typeof workTree;
@@ -84,7 +86,7 @@ export function RepositoryFiles({
   const [createMenu, setCreateMenu] = useState<{ x: number; y: number } | null>(null);
   const fileCreateButtonRef = useRef<HTMLButtonElement>(null);
   const mutationTargetsRepo = filesTreeMutation?.repoPath === meta?.path;
-  const workingTreeRevision = selectedCommit || !mutationTargetsRepo ? 0 : filesTreeRevision;
+  const workingTreeRevision = selectedCommit ? 0 : filesTreeRevision;
 
   const showWork = useCallback(() => {
     if (onOpenWork) onOpenWork();
@@ -158,6 +160,12 @@ export function RepositoryFiles({
   // mounted on its Git tab so toggling back to Files reuses the cached tree.
   useEffect(() => {
     if (!active || !meta?.path || !isTauri()) return;
+    const inventoryKey = `${meta.path}:${workingTreeRevision}`;
+    if (!selectedCommit && loadedLocalInventory.current === inventoryKey) {
+      setTreeLoading(false);
+      setTreeError(null);
+      return;
+    }
     let cancelled = false;
     setTreeLoading(true);
     setTreeError(null);
@@ -168,6 +176,7 @@ export function RepositoryFiles({
         })
       : tauri.repoTree(meta.path, true).then((tree) => {
           if (!cancelled) {
+            loadedLocalInventory.current = inventoryKey;
             setLocalTreeCache((current) => ({
               repoPath: meta.path,
               entries: current?.repoPath === meta.path

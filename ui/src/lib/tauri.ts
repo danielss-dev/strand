@@ -298,6 +298,8 @@ export const tauri = {
       path, id, expectedHead,
     }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
+  repoDiffUnstagedPaths: (path: string) =>
+    invoke<Pick<FileDiff, 'path' | 'old_path'>[]>('repo_diff_unstaged_paths', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
   repoDiffBetween: (path: string, from: string, to: string) =>
     invoke<FileDiff[]>('repo_diff_between', { path, from, to }),

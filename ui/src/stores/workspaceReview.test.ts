@@ -6,6 +6,7 @@ const tauri = vi.hoisted(() => ({
   repoMeta: vi.fn(),
   repoDiffSinceFull: vi.fn(),
   repoDiffUnstaged: vi.fn(),
+  repoDiffUnstagedPaths: vi.fn(),
   repoDiffUnstagedFull: vi.fn(),
 }));
 
@@ -101,6 +102,38 @@ describe('workspaceReview store: members deleted from disk', () => {
 
     expect(memberPaths()).toEqual(['/r/live']);
     expect(useWorkspaceReview.getState().members[0].error).toBeNull();
+  });
+
+  it('uses current index rename targets independently of a pinned review baseline', async () => {
+    useWorkspace(['/rename']);
+    tauri.repoMeta.mockResolvedValue(meta('/rename'));
+    reviewSession.getBaseline.mockResolvedValue({ oid: 'baseline', short: 'base', setAt: 1 });
+    tauri.repoDiffSinceFull.mockResolvedValue([
+      { path: 'current.txt', old_path: 'baseline-name.txt', patch: 'review', status: 'renamed' },
+    ]);
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([
+      { path: 'current.txt', old_path: 'index-name.txt' },
+    ]);
+    await useWorkspaceReview.getState().refreshAll();
+    expect(useWorkspaceReview.getState().members[0].unstaged).toEqual([
+      { path: 'current.txt', old_path: 'index-name.txt' },
+    ]);
+    expect(tauri.repoDiffUnstaged).not.toHaveBeenCalled();
+  });
+
+  it('bounds a 20-member refresh and drops queued reads when the pane closes', async () => {
+    useWorkspace(Array.from({ length: 20 }, (_, i) => `/bounded/${i}`));
+    tauri.repoMeta.mockImplementation((path: string) => Promise.resolve(meta(path)));
+    const release: (() => void)[] = [];
+    tauri.repoDiffUnstagedFull.mockImplementation(() => new Promise((resolve) => {
+      release.push(() => resolve([]));
+    }));
+    const pending = useWorkspaceReview.getState().refreshAll();
+    await vi.waitFor(() => expect(release).toHaveLength(2));
+    useWorkspaceReview.getState().setActive(false);
+    release.forEach((resolve) => resolve());
+    await pending;
+    expect(tauri.repoDiffUnstagedFull).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a vanished member out of later refreshes, and it rejoins when the path returns', async () => {

@@ -205,8 +205,11 @@ pub fn repo_watch(
         &workdir,
         &git_dir,
         std::time::Duration::from_millis(400),
-        move || {
+        move |files_changed| {
             let _ = app.emit("repo://changed", &event_path);
+            if files_changed {
+                let _ = app.emit("repo://files-changed", &event_path);
+            }
         },
     )?;
     if let Ok(mut watchers) = state.watchers.lock() {
@@ -653,6 +656,11 @@ pub async fn repo_pull_request_prepare_checkout(
 #[tauri::command(async)]
 pub async fn repo_diff_unstaged(path: String) -> CmdResult<Vec<FileDiff>> {
     run_blocking("diff", move || Ok(Repo::discover(&path)?.diff_unstaged()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_diff_unstaged_paths(path: String) -> CmdResult<Vec<strand_core::diff::DiffPath>> {
+    run_blocking("unstaged paths", move || Ok(Repo::discover(&path)?.diff_unstaged_paths()?)).await
 }
 
 #[tauri::command(async)]

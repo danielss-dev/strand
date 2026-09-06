@@ -31,8 +31,6 @@ export function StashDialog({
   keepIndex = false,
   onClose,
 }: StashDialogOptions & { onClose: () => void }) {
-  const unstaged = useRepo((s) => s.unstagedDiffs);
-  const staged = useRepo((s) => s.stagedDiffs);
   const status = useRepo((s) => s.status);
   const localSelection = useRepo((s) => s.localSelection);
   const localTreeSelection = useRepo((s) => s.localTreeSelection);
@@ -62,12 +60,12 @@ export function StashDialog({
   }, [status]);
 
   const unstagedView = useMemo(
-    () => unstaged.filter((d) => !conflictSet.has(d.path)),
-    [unstaged, conflictSet],
+    () => status.filter((entry) => !entry.staged && !conflictSet.has(entry.path)),
+    [status, conflictSet],
   );
   const stagedView = useMemo(
-    () => staged.filter((d) => !conflictSet.has(d.path)),
-    [staged, conflictSet],
+    () => status.filter((entry) => entry.staged && !conflictSet.has(entry.path)),
+    [status, conflictSet],
   );
 
   const fileRows = useMemo((): StashFileRow[] => {

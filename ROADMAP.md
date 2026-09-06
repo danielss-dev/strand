@@ -2796,9 +2796,44 @@ inline text, and keyboard focus publishes the full path to the status bar.
 Dashboard metrics, chips, row actions, compare selection, and archive UI were
 removed from the pane; palette cleanup remains wired to its confirmation.
 
+**Git-client feature audit kick (2026-09-06):** Rechecked the 1.5.1 source
+against native operations, IPC, UI actions and existing plans. The new
+`docs/git-client-feature-audit-2026-09-06.md` lists 19 missing/partial feature
+families with code evidence and completion criteria. Next priorities are
+unsigned-commit hook parity, scoped repository identity/signing, complete
+large-PR pagination, LFS compatibility/management and submodule lifecycle.
+Advanced clone options, patch interchange, sparse checkout, bisect and provider
+expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
+implementation rows while the July audit is labeled historical. This is a
+planning update, not a claim that these features shipped; existing local Git,
+GitHub/Azure review, Workbench and performance work retain their own status.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
+
+**Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on
+Windows against the 100k-commit and 10k-file fixtures. Fresh snapshots remain
+~36ms and discover+log(5000) ~76ms; the costly paths are 501-file patch
+generation (~548ms), ignored-boundary Files listing (~466ms), and worktree
+statistics (~243ms per fixture checkout). The production entry is 2.13MB
+minified. `docs/performance-audit-2026-09-06.md` ranks refresh coordination,
+demand-driven patches, Files inventory reuse, bounded workspace loading,
+startup imports, Heroi persistence, and Blame tokenization. The benchmark now
+reports Review payloads and advisory worktree scans; implementation and a fresh
+production WebView2 pass are tracked in TASKS. No app speedup or new PRD pass is
+claimed from this engine/build audit.
+
+**Performance implementation (2026-09-06):** Implemented refresh coalescing
+and stale-response guards, visible-pane patch demand, rename-aware path-only
+staging reads, Files inventory caching/invalidation, bounded checkout reads,
+lazy optional surfaces, buffered Heroi saves, and Blame worker tokenization.
+Files boundary enumeration fell from 466ms to 34ms on 10k tracked files;
+path-only staging targets take 13ms and the initial JS chunk shrank 8.2%.
+Live checks covered Files mutations, 11 checkouts, terminal persistence,
+Settings focus, a 100-event synthetic Heroi stream, and colored 5k-line Blame.
+Full-patch materialization and complete PRD release certification remain
+explicit follow-ups in TASKS; see the audit report for measurement limits.
 
 - **Security & signing.** ☑ Windows uses the Partner Center-signed Microsoft
   Store MSIX; macOS uses Developer ID signing + notarization; Linux AppImages

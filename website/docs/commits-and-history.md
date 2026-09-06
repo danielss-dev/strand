@@ -121,4 +121,8 @@ Two pickers — **Base** and **Compare** — list the file's revisions; the diff
 
 Per-line authorship for the whole file. Click a line to jump to the commit that last touched it; a back bar returns you to the file view on the same tab.
 
+Blame stays readable while syntax colors load in the background. Files over
+1 MB of UTF-8 text, over 12,000 lines, or with a line longer than 10,000
+characters use plain text so very large inputs stay responsive.
+
 Diffs in the detail panel, file history, and compare respect your default diff layout (Stacked or Split) — see [Settings](settings.md). For shortcuts across the whole app, see [Keyboard & palette](keyboard-and-palette.md).

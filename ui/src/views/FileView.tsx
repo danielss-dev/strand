@@ -31,7 +31,7 @@ import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { pierreThemeOptions } from '../lib/pierreTheme';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
+import { FileHighlighter, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
@@ -156,11 +156,10 @@ export function FileDocument({
 
   const previewable = !isDirectory && isPreviewablePath(path);
   // The Changes tab lenses the working tree, so it only exists for working-
-  // tree files that actually differ from HEAD. Reads the active repo's diff
-  // lists — a background tab of another repo re-evaluates once that repo
-  // activates and refreshes them.
+  // tree files with local changes. Status makes the tab available before
+  // opening it requests patches; each active document owns that demand.
   const hasWorkTreeChanges = useRepo((s) => !revision && (
-    s.unstagedDiffs.some((d) => d.path === path) || s.stagedDiffs.some((d) => d.path === path)
+    s.status.some((entry) => entry.path === path)
   ));
   const tabs = (isDirectory
     ? [{ ...TABS[0], label: 'Contents', icon: 'folder-open' as const }]
@@ -1022,6 +1021,8 @@ function BlameList({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(0);
   const [tokens, setTokens] = useState<HlToken[][] | null>(null);
+  const [highlighter] = useState(() => new FileHighlighter());
+  useEffect(() => () => highlighter.dispose(), [highlighter]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1038,9 +1039,9 @@ function BlameList({
   useEffect(() => {
     let cancelled = false;
     setTokens(null);
-    void tokenizeFile(code, path, hlTheme).then((t) => { if (!cancelled) setTokens(t); });
+    void highlighter.tokenize(code, path, hlTheme).then((t) => { if (!cancelled) setTokens(t); });
     return () => { cancelled = true; };
-  }, [code, path, hlTheme]);
+  }, [code, path, hlTheme, highlighter]);
 
   const total = lines.length;
   const start = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN);

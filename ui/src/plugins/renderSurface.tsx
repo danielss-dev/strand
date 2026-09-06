@@ -1,4 +1,4 @@
-import { HeroiView } from './builtins/heroi/HeroiView';
+import { lazy, Suspense } from 'react';
 import { HEROI_SURFACE_ID } from './builtins/heroi/manifest';
 import { QuickNotesView } from './builtins/quickNotes/QuickNotesView';
 import { QUICK_NOTES_SURFACE_ID } from './builtins/quickNotes/manifest';
@@ -9,6 +9,8 @@ import type { SurfaceRenderRequest } from '../workbench/SurfaceHost';
 import { renderMarkdown } from '../lib/markdown';
 import { t } from '../lib/i18n';
 import type { ReactNode } from 'react';
+
+const HeroiView = lazy(() => import('./builtins/heroi/HeroiView').then((m) => ({ default: m.HeroiView })));
 
 function DeclarativePluginView({
   view,
@@ -57,7 +59,9 @@ export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
 
   if (render.kind === 'builtin') {
     if (request.contribution.id === HEROI_SURFACE_ID) {
-      return <HeroiView request={request} broker={broker} />;
+      return <Suspense fallback={<div className="custom-empty" role="status">Loading…</div>}>
+        <HeroiView request={request} broker={broker} />
+      </Suspense>;
     }
     if (request.contribution.id === QUICK_NOTES_SURFACE_ID) {
       return <QuickNotesView />;

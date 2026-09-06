@@ -19,7 +19,8 @@
 
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::time::{Duration, Instant};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -37,16 +38,23 @@ pub fn watch(
     workdir: &Path,
     git_dir: &Path,
     quiet: Duration,
-    on_change: impl Fn() + Send + 'static,
+    on_change: impl Fn(bool) + Send + 'static,
 ) -> Result<RepoWatcher> {
+    let watched_git_dir = git_dir.to_path_buf();
     let git_dir = git_dir.to_path_buf();
-    let (tx, rx) = mpsc::channel::<()>();
+    // A build storm needs one wakeup, not an unbounded allocation per event.
+    let (tx, rx) = mpsc::sync_channel::<()>(1);
+    let files_changed = Arc::new(AtomicBool::new(false));
+    let pending_files = files_changed.clone();
 
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         let Ok(event) = res else { return };
         if is_relevant(&event, &git_dir) {
+            if changes_file_inventory(&event, &git_dir) {
+                pending_files.store(true, Ordering::Relaxed);
+            }
             // The receiver disappearing just means we've been dropped.
-            let _ = tx.send(());
+            let _ = tx.try_send(());
         }
     })
     .map_err(|e| Error::Other(format!("start watcher: {e}")))?;
@@ -54,6 +62,11 @@ pub fn watch(
     watcher
         .watch(workdir, RecursiveMode::Recursive)
         .map_err(|e| Error::Other(format!("watch {}: {e}", workdir.display())))?;
+    // Linked worktrees keep their real index/HEAD outside the working tree.
+    if !watched_git_dir.starts_with(workdir) {
+        watcher.watch(&watched_git_dir, RecursiveMode::Recursive)
+            .map_err(|e| Error::Other(format!("watch git dir: {e}")))?;
+    }
 
     // Trailing debounce: first event arms the timer, then we keep absorbing
     // events until `quiet` elapses with none, and fire once.
@@ -61,19 +74,36 @@ pub fn watch(
         match rx.recv() {
             Err(_) => return,
             Ok(()) => {
+                let started = Instant::now();
                 loop {
-                    match rx.recv_timeout(quiet) {
+                    let remaining = Duration::from_secs(2).saturating_sub(started.elapsed());
+                    if remaining.is_zero() { break; }
+                    match rx.recv_timeout(quiet.min(remaining)) {
                         Ok(()) => continue,
                         Err(mpsc::RecvTimeoutError::Timeout) => break,
                         Err(mpsc::RecvTimeoutError::Disconnected) => return,
                     }
                 }
-                on_change();
+                on_change(files_changed.swap(false, Ordering::Relaxed));
             }
         }
     });
 
     Ok(RepoWatcher { _watcher: watcher })
+}
+
+fn changes_file_inventory(event: &notify::Event, git_dir: &Path) -> bool {
+    let structural = matches!(event.kind, notify::EventKind::Create(_) | notify::EventKind::Remove(_)
+        | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+        | notify::EventKind::Any);
+    event.paths.iter().any(|path| {
+        if let Ok(relative) = path.strip_prefix(git_dir) {
+            // Ref/index replacements do not change the Files inventory.
+            relative == Path::new("info/exclude") || relative == Path::new("config")
+        } else {
+            structural || path.file_name().is_some_and(|name| name == ".gitignore")
+        }
+    })
 }
 
 /// Decide whether an FS event should trigger a refresh.
@@ -116,6 +146,8 @@ fn relevant_path(path: &Path, git_dir: &Path) -> bool {
             | "REVERT_HEAD"
             | "rebase-merge"
             | "rebase-apply"
+            | "info"
+            | "config"
     )
 }
 
@@ -165,6 +197,25 @@ mod tests {
     }
 
     #[test]
+    fn files_inventory_only_invalidates_for_paths_and_ignore_rules() {
+        use notify::event::{CreateKind, DataChange, ModifyKind};
+        let data = notify::EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let create = notify::EventKind::Create(CreateKind::File);
+        for (kind, path, expected) in [
+            (data, "/repo/src/main.rs", false),
+            (create, "/repo/src/new.rs", true),
+            (data, "/repo/src/.gitignore", true),
+            (data, "/repo/.git/info/exclude", true),
+            (data, "/repo/.git/config", true),
+            (create, "/repo/.git/index", false),
+            (create, "/repo/.git/refs/heads/main", false),
+        ] {
+            let event = notify::Event::new(kind).add_path(PathBuf::from(path));
+            assert_eq!(changes_file_inventory(&event, &git_dir()), expected, "{path}");
+        }
+    }
+
+    #[test]
     fn debounce_collapses_a_burst_into_one_callback() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
@@ -179,7 +230,7 @@ mod tests {
 
         let fired = Arc::new(AtomicUsize::new(0));
         let fired2 = fired.clone();
-        let _w = watch(&dir, &dir.join(".git"), Duration::from_millis(150), move || {
+        let _w = watch(&dir, &dir.join(".git"), Duration::from_millis(150), move |_| {
             fired2.fetch_add(1, Ordering::SeqCst);
         })
         .unwrap();

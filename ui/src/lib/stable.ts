@@ -40,3 +40,14 @@ export function jsonEqual(a: unknown, b: unknown): boolean {
 export function stable<T>(prev: T, next: T): T {
   return jsonEqual(prev, next) ? prev : next;
 }
+
+/** Keep unchanged row identities even when another row was edited or moved. */
+export function stableRows<T>(prev: T[], next: T[], key: (row: T) => string): T[] {
+  const byKey = new Map(prev.map((row) => [key(row), row]));
+  const rows = next.map((row) => {
+    const old = byKey.get(key(row));
+    return old === undefined ? row : stable(old, row);
+  });
+  return rows.length === prev.length && rows.every((row, index) => row === prev[index])
+    ? prev : rows;
+}

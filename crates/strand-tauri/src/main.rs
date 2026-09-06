@@ -205,6 +205,7 @@ fn main() {
             commands::repo_pull_request_update_branch,
             commands::repo_pull_request_prepare_checkout,
             commands::repo_diff_unstaged,
+            commands::repo_diff_unstaged_paths,
             commands::repo_diff_staged,
             commands::repo_diff_between,
             commands::repo_diff_commit,

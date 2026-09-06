@@ -242,6 +242,12 @@ fn ignored_boundaries(
             let Ok(file_type) = child.file_type() else {
                 continue;
             };
+            // The index/status walk already classified these files. Besides
+            // avoiding one ignore lookup per tracked file, this keeps a tracked
+            // file tracked when a later .gitignore rule matches its name.
+            if !file_type.is_dir() && map.contains_key(&relative) {
+                continue;
+            }
             if repo.status_should_ignore(std::path::Path::new(&relative))? {
                 let path = if file_type.is_dir() && !file_type.is_symlink() {
                     format!("{relative}/")
@@ -384,6 +390,19 @@ mod tests {
             .iter()
             .all(|entry| entry.path != "settings.local" && entry.path != "target/nested/cache.bin"));
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn ignored_boundary_scan_preserves_tracked_files_matching_ignore_rules() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("settings.local"), "tracked\n").unwrap();
+        repo.stage_paths(&["settings.local".into()]).unwrap();
+        std::fs::write(dir.join(".gitignore"), "*.local\n").unwrap();
+        let entries = repo.work_tree_with_ignored(true).unwrap();
+        let tracked = entries.iter().find(|entry| entry.path == "settings.local").unwrap();
+        assert!(!tracked.ignored);
+        assert_eq!(tracked.status, Some(StatusKind::Added));
         let _ = std::fs::remove_dir_all(dir);
     }
 

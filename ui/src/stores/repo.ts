@@ -15,7 +15,8 @@ import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
 import { reviewNoteScope } from '../lib/reviewExport';
-import { jsonEqual, stable } from '../lib/stable';
+import { jsonEqual, stable, stableRows } from '../lib/stable';
+import { RefreshQueue } from '../lib/refreshQueue';
 import { errMessage, tauri } from '../lib/tauri';
 import { useSettings, type DiffMode } from './settings';
 import type {
@@ -108,6 +109,7 @@ export interface RepoState {
 
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
+  localDiffsDirty: boolean;
   localSelection: LocalSelection | null;
   /** Pierre multi-select per side, with selected folders expanded to their files. */
   localTreeSelection: { unstaged: string[]; staged: string[] };
@@ -215,6 +217,7 @@ export interface RepoState {
    * can refresh its ignored-inclusive cache without re-walking ignored
    * directories after ordinary status-only updates. */
   filesTreeRevision: number;
+  filesTreeVersions: Record<string, number>;
   filesTreeMutation: FilesTreeMutation | null;
   markFilesTreeChanged(repoPath: string, change: FilesTreeMutationChange): void;
 
@@ -272,6 +275,7 @@ export interface RepoState {
   refreshStatus(): Promise<void>;
   refreshLog(limit?: number): Promise<void>;
   refreshDiffs(): Promise<void>;
+  retainDiffs(path: string, kind: 'local' | 'review'): () => void;
   refreshRefs(): Promise<void>;
   /** Re-read the working-tree file listing (Files tab). */
   refreshTree(): Promise<void>;
@@ -692,6 +696,16 @@ const EMPTY_REFS: Refs = {
   tags: [],
 };
 
+const refreshes = new RefreshQueue();
+let activation = 0;
+const diffConsumers = new Map<string, { local: number; review: number }>();
+function needsDiffs(path: string, kind: 'local' | 'review', view: View): boolean {
+  const consumers = diffConsumers.get(pathKey(path));
+  return kind === 'review'
+    ? view === 'review' || !!consumers?.review
+    : view === 'local' || view === 'review' || !!consumers?.local || !!consumers?.review;
+}
+
 /**
  * Whether two filesystem paths point at the same directory, tolerating
  * separator (`\` vs `/`), trailing-slash, and Windows verbatim-prefix
@@ -835,6 +849,7 @@ const EMPTY_ACTIVE = {
   commitSearchResults: [] as Commit[],
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
+  localDiffsDirty: true,
   localSelection: null as LocalSelection | null,
   localTreeSelection: { unstaged: [] as string[], staged: [] as string[] },
   baseline: null as StoredBaseline | null,
@@ -914,6 +929,7 @@ async function persistSession(state: RepoState): Promise<void> {
 export const useRepo = create<RepoState>((set, get) => ({
   tabs: [],
   activeTabPath: null,
+  filesTreeVersions: {},
 
   ...EMPTY_ACTIVE,
   recents: [],
@@ -931,9 +947,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   ignoreDraft: null,
 
   markFilesTreeChanged: (repoPath, change) => set((state) => {
-    const revision = state.filesTreeRevision + 1;
+    const revision = Math.max(state.filesTreeRevision, state.filesTreeVersions[pathKey(repoPath)] ?? 0) + 1;
     return {
       filesTreeRevision: revision,
+      filesTreeVersions: { ...state.filesTreeVersions, [pathKey(repoPath)]: revision },
       filesTreeMutation: { ...change, repoPath, revision } as FilesTreeMutation,
     };
   }),
@@ -1104,96 +1121,129 @@ export const useRepo = create<RepoState>((set, get) => ({
   async refreshStatus() {
     const path = get().activePath;
     if (!path) return;
-    const status = await tauri.repoStatus(path);
-    // Bail if the active repo changed while the request was in flight, or we'd
-    // paint another tab's status into this one (see refreshTree).
-    if (get().activePath !== path) return;
-    set({ status: stable(get().status, status) });
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshStatus`, async (current) => {
+      if (epoch !== activation) return;
+      const status = await tauri.repoStatus(path);
+      // Bail if the active repo changed while the request was in flight, or we'd
+      // paint another tab's status into this one (see refreshTree).
+      if (!current() || epoch !== activation || get().activePath !== path) return;
+      set({ status: stable(get().status, status) });
+    });
   },
   async refreshLog(limit) {
     const path = get().activePath;
     if (!path) return;
-    const commits = await timed('log', () => tauri.repoLog(path, limit ?? 500));
-    if (get().activePath !== path) return;
-    set({ commits });
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:log`, async (current) => {
+      if (epoch !== activation) return;
+      const commits = await timed('log', () => tauri.repoLog(path, limit ?? Math.max(500, get().commits.length)));
+      if (!current() || epoch !== activation || get().activePath !== path) return;
+      set({ commits: stableRows(get().commits, commits, (commit) => commit.hash) });
+    });
+  },
+  retainDiffs(path, kind) {
+    const key = pathKey(path);
+    const counts = diffConsumers.get(key) ?? { local: 0, review: 0 };
+    counts[kind]++;
+    diffConsumers.set(key, counts);
+    return () => {
+      counts[kind]--;
+      if (!counts.local && !counts.review) diffConsumers.delete(key);
+    };
   },
   async refreshDiffs() {
     const path = get().activePath;
     if (!path) return;
-    const [unstaged, staged] = await timed('diffs', () =>
-      Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
-    );
-    if (get().activePath !== path) return;
-    set({ unstagedDiffs: unstaged, stagedDiffs: staged, diffsTick: get().diffsTick + 1 });
+    const epoch = activation;
+    set({ localDiffsDirty: true });
+    await refreshes.run(`${pathKey(path)}:diffs`, async (current) => {
+      if (epoch !== activation) return;
+      const [unstaged, staged] = await timed('diffs', () =>
+        Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
+      );
+      if (!current() || epoch !== activation || get().activePath !== path) return;
+      set({
+        unstagedDiffs: stableRows(get().unstagedDiffs, unstaged, (diff) => diff.path),
+        stagedDiffs: stableRows(get().stagedDiffs, staged, (diff) => diff.path),
+        localDiffsDirty: false,
+        diffsTick: get().diffsTick + 1,
+      });
 
-    // If the selected file is no longer present (it was just staged in full,
-    // for example) move the selection to a sibling so the middle pane keeps
-    // showing something useful.
-    const sel = get().localSelection;
-    if (sel?.all) {
-      // A "show all" selection stays valid as long as its side has files;
-      // if the side emptied, drop it so the view re-defaults (see LocalChanges).
-      if ((sel.staged ? staged : unstaged).length === 0) set({ localSelection: null });
-    } else if (sel) {
-      const stillThere = (sel.staged ? staged : unstaged).some((f) => f.path === sel.file);
-      if (!stillThere) {
-        const alt = (sel.staged ? unstaged : staged).find((f) => f.path === sel.file);
-        set({ localSelection: alt ? { file: alt.path, staged: !sel.staged } : null });
+      // If the selected file is no longer present (it was just staged in full,
+      // for example) move the selection to a sibling so the middle pane keeps
+      // showing something useful.
+      const sel = get().localSelection;
+      if (sel?.all) {
+        // A "show all" selection stays valid as long as its side has files;
+        // if the side emptied, drop it so the view re-defaults (see LocalChanges).
+        if ((sel.staged ? staged : unstaged).length === 0) set({ localSelection: null });
+      } else if (sel) {
+        const stillThere = (sel.staged ? staged : unstaged).some((f) => f.path === sel.file);
+        if (!stillThere) {
+          const alt = (sel.staged ? unstaged : staged).find((f) => f.path === sel.file);
+          set({ localSelection: alt ? { file: alt.path, staged: !sel.staged } : null });
+        }
       }
-    }
+    });
   },
 
   // Snapshot-based: one statuses walk covers status + work tree + meta +
   // refs + submodules, so every write op's refresh also keeps the topbar
   // (ahead/behind), sidebar, and Files tab in sync for free.
   async refreshLocalChanges() {
-    // The review pool follows along live while a session baseline is pinned,
-    // or while the Review view itself is on screen (inbox mode). Otherwise
-    // skip it — full-context diffs are strictly review-view payload.
-    const reviewLive = get().baseline != null || get().view === 'review';
+    const { activePath, view } = get();
+    if (!activePath) return;
+    set({ localDiffsDirty: true });
     await Promise.all([
       get().refreshSnapshot(),
-      get().refreshDiffs(),
-      ...(reviewLive ? [get().refreshReviewDiffs()] : []),
+      ...(needsDiffs(activePath, 'local', view) ? [get().refreshDiffs()] : []),
+      ...(needsDiffs(activePath, 'review', view) ? [get().refreshReviewDiffs()] : []),
     ]);
   },
 
   async refreshSnapshot() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const snap = await timed('snapshot', () => tauri.repoSnapshot(path));
-      logColdStart();
-      if (get().activePath !== path) {
-        // Tab switched mid-flight — still patch the per-tab meta.
-        set((s) => ({ tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t)) }));
-        return;
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:snapshot`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const snap = await timed('snapshot', () => tauri.repoSnapshot(path));
+        logColdStart();
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        const historyChanged = get().commits.length > 0 && (
+          get().meta?.head_oid !== snap.meta.head_oid || !jsonEqual(get().refs, snap.refs)
+        );
+        // Keep-if-equal per slice: a refresh where a slice didn't change keeps
+        // that slice's previous reference, so downstream memos and selector
+        // subscribers (sidebar ref trees, palette index, Files tree) don't
+        // rebuild or re-render for identical data. A stage toggle only really
+        // changes `status`/`workTree`; `refs`/`submodules`/`meta` stay put.
+        set((s) => ({
+          meta: stable(s.meta, snap.meta),
+          status: stable(s.status, snap.status),
+          workTree: stable(s.workTree, snap.work_tree),
+          refs: stable(s.refs, snap.refs),
+          submodules: stable(s.submodules, snap.submodules),
+          // Editors and binary previews still refresh when no diff pane is mounted.
+          diffsTick: s.diffsTick + 1,
+          tabs: s.tabs.some((t) => t.path === path && !jsonEqual(t.meta, snap.meta))
+            ? s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t))
+            : s.tabs,
+        }));
+        if (historyChanged) await get().refreshLog();
+      } catch (e) {
+        console.warn('repoSnapshot failed', e);
       }
-      // Keep-if-equal per slice: a refresh where a slice didn't change keeps
-      // that slice's previous reference, so downstream memos and selector
-      // subscribers (sidebar ref trees, palette index, Files tree) don't
-      // rebuild or re-render for identical data. A stage toggle only really
-      // changes `status`/`workTree`; `refs`/`submodules`/`meta` stay put.
-      set((s) => ({
-        meta: stable(s.meta, snap.meta),
-        status: stable(s.status, snap.status),
-        workTree: stable(s.workTree, snap.work_tree),
-        refs: stable(s.refs, snap.refs),
-        submodules: stable(s.submodules, snap.submodules),
-        tabs: s.tabs.some((t) => t.path === path && !jsonEqual(t.meta, snap.meta))
-          ? s.tabs.map((t) => (t.path === path ? { ...t, meta: snap.meta } : t))
-          : s.tabs,
-      }));
-    } catch (e) {
-      console.warn('repoSnapshot failed', e);
-    }
+    });
   },
 
   async handleExternalChange(path) {
     // Only the active tab repaints; a background tab catches up when
     // activated (setActiveTab refreshes everything anyway).
-    if (get().activePath !== path) return;
-    await Promise.all([get().refreshLocalChanges(), get().refreshLog()]);
+    if (!get().activePath || !samePath(get().activePath!, path)) return;
+    await get().refreshLocalChanges();
   },
 
   async setBaseline(at) {
@@ -1262,50 +1312,44 @@ export const useRepo = create<RepoState>((set, get) => ({
     const path = get().activePath;
     if (!path) return;
     const baseline = get().baseline;
-    if (baseline) {
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:review`, async (current) => {
+      const valid = () => current() && epoch === activation && get().activePath === path
+        && get().baseline?.oid === baseline?.oid;
+      if (!valid()) return;
       try {
-        const diffs = await tauri.repoDiffSinceFull(path, baseline.oid);
-        if (get().activePath !== path || get().baseline?.oid !== baseline.oid) return;
-        set({ baselineDiffs: diffs, diffsTick: get().diffsTick + 1 });
+        const diffs = await timed('review', () => tauri.repoDiffSinceFull(path, baseline?.oid ?? 'HEAD'));
+        if (!valid()) return;
+        const key = baseline ? 'baselineDiffs' : 'reviewUnstagedDiffs';
+        set({ [key]: stableRows(get()[key], diffs, (diff) => diff.path), diffsTick: get().diffsTick + 1 });
       } catch (e) {
-        // Typical cause: the baseline commit was rebased/gc'd away. Surface by
-        // clearing — the chip disappears rather than showing stale data.
         console.warn('repoDiffSinceFull failed', e);
-        if (get().activePath === path) void get().clearBaseline();
+        if (baseline && valid()) void get().clearBaseline();
       }
-      return;
-    }
-    try {
-      // HEAD → index + worktree keeps a file visible after staging and
-      // combines partially staged files into the exact on-disk result.
-      const diffs = await tauri.repoDiffSinceFull(path, 'HEAD');
-      if (get().activePath !== path || get().baseline != null) return;
-      set({ reviewUnstagedDiffs: diffs, diffsTick: get().diffsTick + 1 });
-    } catch (e) {
-      console.warn('repoDiffSinceFull(HEAD) failed', e);
-    }
+    });
   },
 
   async loadReviewSession() {
     const path = get().activePath;
     if (!path) return;
+    const epoch = activation;
     try {
       const [baseline, reviewed] = await Promise.all([
         reviewSession.getBaseline(path),
         reviewSession.getReviewed(path),
       ]);
-      if (get().activePath !== path) return;
+      if (epoch !== activation || get().activePath !== path) return;
       const effectiveBaseline = baseline ?? null;
       const scope = activeReviewNoteScope(get(), effectiveBaseline?.oid ?? null);
       const notes = await reviewSession.getNotes(path, scope);
       if (
-        get().activePath !== path ||
+        epoch !== activation || get().activePath !== path ||
         activeReviewNoteScope(get(), effectiveBaseline?.oid ?? null) !== scope
       ) {
         return;
       }
       set({ baseline: baseline ?? null, reviewed: reviewed ?? {}, reviewNotes: notes ?? {} });
-      if (baseline) await get().refreshReviewDiffs();
+      if (needsDiffs(path, 'review', get().view)) await get().refreshReviewDiffs();
     } catch (e) {
       console.warn('review session load failed', e);
     }
@@ -1374,6 +1418,9 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageReviewed() {
     const path = get().activePath;
     if (!path) return;
+    const baselineOid = get().baseline?.oid;
+    await Promise.all([get().refreshDiffs(), get().refreshReviewDiffs()]);
+    if (get().activePath !== path || get().baseline?.oid !== baselineOid) return;
     const reviewed = get().reviewed;
     // Marks hash the review pool's whole-file patches; stage the matching
     // files that are actually unstaged right now.
@@ -1408,52 +1455,68 @@ export const useRepo = create<RepoState>((set, get) => ({
   async refreshRefs() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const refs = await tauri.repoRefs(path);
-      if (get().activePath !== path) return;
-      set({ refs: stable(get().refs, refs) });
-    } catch (e) {
-      console.warn('repoRefs failed', e);
-    }
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshRefs`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const refs = await tauri.repoRefs(path);
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        set({ refs: stable(get().refs, refs) });
+      } catch (e) {
+        console.warn('repoRefs failed', e);
+      }
+    });
   },
 
   async refreshTree() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const tree = await tauri.repoTree(path);
-      // Bail if the active repo changed while the listing was in flight.
-      if (get().activePath !== path) return;
-      set({ workTree: stable(get().workTree, tree) });
-    } catch (e) {
-      console.warn('repoTree failed', e);
-    }
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshTree`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const tree = await tauri.repoTree(path);
+        // Bail if the active repo changed while the listing was in flight.
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        set({ workTree: stable(get().workTree, tree) });
+      } catch (e) {
+        console.warn('repoTree failed', e);
+      }
+    });
   },
 
   async refreshSubmodules() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const submodules = await tauri.repoSubmodules(path);
-      // Bail if the active repo changed while the listing was in flight.
-      if (get().activePath !== path) return;
-      set({ submodules: stable(get().submodules, submodules) });
-    } catch (e) {
-      console.warn('repoSubmodules failed', e);
-    }
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshSubmodules`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const submodules = await tauri.repoSubmodules(path);
+        // Bail if the active repo changed while the listing was in flight.
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        set({ submodules: stable(get().submodules, submodules) });
+      } catch (e) {
+        console.warn('repoSubmodules failed', e);
+      }
+    });
   },
 
   async refreshReflog() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const reflog = await tauri.repoReflog(path);
-      // Bail if the active repo changed while the read was in flight.
-      if (get().activePath !== path) return;
-      set({ reflog });
-    } catch (e) {
-      console.warn('repoReflog failed', e);
-    }
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshReflog`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const reflog = await tauri.repoReflog(path);
+        // Bail if the active repo changed while the read was in flight.
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        set({ reflog });
+      } catch (e) {
+        console.warn('repoReflog failed', e);
+      }
+    });
   },
 
   async submoduleUpdate(paths, init, recursive, onProgress) {
@@ -1469,14 +1532,18 @@ export const useRepo = create<RepoState>((set, get) => ({
   async refreshWorktrees() {
     const path = get().activePath;
     if (!path) return;
-    try {
-      const worktrees = await tauri.repoWorktrees(path);
-      // Bail if the active repo changed while the listing was in flight.
-      if (get().activePath !== path) return;
-      set({ worktrees });
-    } catch (e) {
-      console.warn('repoWorktrees failed', e);
-    }
+    const epoch = activation;
+    await refreshes.run(`${pathKey(path)}:refreshWorktrees`, async (current) => {
+      if (epoch !== activation) return;
+      try {
+        const worktrees = await tauri.repoWorktrees(path);
+        // Bail if the active repo changed while the listing was in flight.
+        if (!current() || epoch !== activation || get().activePath !== path) return;
+        set({ worktrees: stable(get().worktrees, worktrees) });
+      } catch (e) {
+        console.warn('repoWorktrees failed', e);
+      }
+    });
   },
   async addWorktree(dest, branch, newBranch, startPoint, track) {
     const path = get().activePath;
@@ -1581,12 +1648,15 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageMany(files) {
     const path = get().activePath;
     if (!path || files.length === 0) return;
+    const epoch = activation;
+    const diffs = get().localDiffsDirty ? await tauri.repoDiffUnstagedPaths(path) : get().unstagedDiffs;
+    if (epoch !== activation || get().activePath !== path) return;
     // A renamed file's diff carries old_path; staging only the new path
     // records the add but leaves the old path's deletion unstaged (and it
     // was invisible — rename detection had folded it into the R row).
     // Stage both halves so the rename lands atomically.
     const expand = new Set(files);
-    for (const d of get().unstagedDiffs) {
+    for (const d of diffs) {
       if (d.old_path && expand.has(d.path)) expand.add(d.old_path);
     }
     await tauri.repoStageMany(path, [...expand]);
@@ -1705,8 +1775,11 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageAll() {
     const path = get().activePath;
     if (!path) return;
+    const epoch = activation;
+    const diffs = get().localDiffsDirty ? await tauri.repoDiffUnstagedPaths(path) : get().unstagedDiffs;
+    if (epoch !== activation || get().activePath !== path) return;
     // Include rename sources (see stageMany).
-    const files = get().unstagedDiffs.flatMap((d) =>
+    const files = diffs.flatMap((d) =>
       d.old_path ? [d.path, d.old_path] : [d.path],
     );
     if (files.length === 0) return;
@@ -1716,7 +1789,10 @@ export const useRepo = create<RepoState>((set, get) => ({
   async unstageAll() {
     const path = get().activePath;
     if (!path) return;
-    const files = get().stagedDiffs.map((d) => d.path);
+    const epoch = activation;
+    const status = await tauri.repoStatus(path);
+    if (epoch !== activation || get().activePath !== path) return;
+    const files = status.filter((entry) => entry.staged).map((entry) => entry.path);
     if (files.length === 0) return;
     await tauri.repoUnstageMany(path, files);
     await get().refreshLocalChanges();
@@ -2343,3 +2419,8 @@ export const useRepo = create<RepoState>((set, get) => ({
     set({ selectedFile: target, view: 'file', fileReturn: null });
   },
 }));
+
+// A path check alone misses A → B → A while A's old read is still pending.
+useRepo.subscribe((state, previous) => {
+  if (state.activePath !== previous.activePath) activation++;
+});

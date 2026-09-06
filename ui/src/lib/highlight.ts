@@ -1,58 +1,83 @@
-/**
- * Tokenizer for the Blame view's code column — reuses **Pierre's own
- * highlighter and themes** so blame is colored identically to the Content tab
- * (which renders through Pierre's `<File>`). `getSharedHighlighter` returns the
- * same Shiki instance Pierre uses, and `getFiletypeFromFileName` is the same
- * language detection, so the tokens match what Content shows. Anything that
- * fails degrades to plain text (`null`).
- */
-import { getFiletypeFromFileName, getSharedHighlighter } from '@pierre/diffs';
+import BlameWorker from './highlight.worker?worker';
+import { getFiletypeFromFileName, resolveLanguage, resolveTheme } from '@pierre/diffs';
 
-/** One highlighted token — the subset of Shiki's `ThemedToken` we render. */
-export interface HlToken {
-  content: string;
-  color?: string;
+export interface HlToken { content: string; color?: string }
+export type HlTheme = 'pierre-dark' | 'pierre-light';
+export interface HighlightRequest {
+  id: number;
+  code: string;
+  theme: Awaited<ReturnType<typeof resolveTheme>>;
+  language: Awaited<ReturnType<typeof resolveLanguage>> | null;
+}
+export interface HighlightResponse { id: number; tokens: HlToken[][] | null }
+
+/** Bound UTF-8 bytes, lines and individual lines before transferring to a worker. */
+export function canHighlight(code: string): boolean {
+  if (code.length > 1_000_000) return false;
+  let bytes = 0;
+  let lines = 1;
+  let lineLength = 0;
+  for (let i = 0; i < code.length; i++) {
+    const c = code.charCodeAt(i);
+    bytes += c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
+    if (c >= 0xd800 && c <= 0xdbff && code.charCodeAt(i + 1) >= 0xdc00 && code.charCodeAt(i + 1) <= 0xdfff) {
+      bytes++;
+      i++;
+    }
+    if (c === 10) { lines++; lineLength = 0; }
+    else lineLength++;
+    if (bytes > 1_000_000 || lines > 12_000 || lineLength > 10_000) return false;
+  }
+  return true;
 }
 
-/** Pierre theme names, matched to the app's resolved light/dark theme — the
- *  same values the Content tab / diffs pass to Pierre. */
-export type HlTheme = 'pierre-dark' | 'pierre-light';
+/** Owned by the mounted Blame list; grammar state stays in its lazy worker. */
+export class FileHighlighter {
+  private worker: Worker | null = null;
+  private sequence = 0;
+  private resolve: ((tokens: HlToken[][] | null) => void) | null = null;
 
-/** Don't tokenize files larger than this many lines — Shiki tokenizes the whole
- *  buffer at once, which gets expensive, and blame is capped at 50k anyway. */
-const MAX_HL_LINES = 12_000;
-
-/**
- * Tokenize `code` for `filename` under `theme`, returning one token array per
- * line (aligned 1:1 with the lines of `code`), or `null` to fall back to plain
- * text (too large, or any error).
- */
-export async function tokenizeFile(
-  code: string,
-  filename: string,
-  theme: HlTheme,
-): Promise<HlToken[][] | null> {
-  // Cheap line count without allocating a split array.
-  let lineCount = 1;
-  for (let i = 0; i < code.length; i++) if (code.charCodeAt(i) === 10) lineCount++;
-  if (lineCount > MAX_HL_LINES) return null;
-
-  try {
-    const lang = getFiletypeFromFileName(filename);
-    const langs = lang && lang !== 'text' ? [lang] : [];
-    // The shared highlighter Pierre uses — already has the file's language +
-    // pierre theme loaded once the Content tab (or any diff) has rendered.
-    const hl = await getSharedHighlighter({ themes: [theme], langs });
-    if (!hl.getLoadedThemes().includes(theme)) await hl.loadTheme(theme);
-    let useLang = 'text';
-    if (lang && lang !== 'text') {
-      if (!hl.getLoadedLanguages().includes(lang)) {
-        try { await hl.loadLanguage(lang); } catch { /* unknown grammar */ }
+  async tokenize(code: string, filename: string, theme: HlTheme): Promise<HlToken[][] | null> {
+    this.resolve?.(null);
+    this.resolve = null;
+    const id = ++this.sequence;
+    if (!canHighlight(code)) { this.dispose(); return Promise.resolve(null); }
+    try {
+      // Pierre resolves its grammar/theme registry in the window context.
+      // Only tokenization belongs in the worker, as in Pierre's own pool.
+      const lang = getFiletypeFromFileName(filename);
+      const [resolvedTheme, language] = await Promise.all([
+        resolveTheme(theme),
+        lang && lang !== 'text' && lang !== 'ansi' ? resolveLanguage(lang).catch(() => null) : null,
+      ]);
+      if (id !== this.sequence) return null;
+      if (!this.worker) {
+        this.worker = new BlameWorker();
+        this.worker.onmessage = ({ data }: MessageEvent<HighlightResponse>) => {
+          if (data.id !== this.sequence) return;
+          this.resolve?.(data.tokens);
+          this.resolve = null;
+        };
+        this.worker.onerror = () => this.dispose();
+        this.worker.onmessageerror = () => this.dispose();
       }
-      if (hl.getLoadedLanguages().includes(lang)) useLang = lang;
+      return new Promise((resolve) => {
+        this.resolve = resolve;
+        try {
+          this.worker!.postMessage({ id, code, theme: resolvedTheme, language } satisfies HighlightRequest);
+        } catch { this.dispose(); }
+      });
+    } catch {
+      if (id === this.sequence) this.dispose();
+      return Promise.resolve(null);
     }
-    return hl.codeToTokens(code, { lang: useLang, theme }).tokens;
-  } catch {
-    return null;
+  }
+
+  dispose(): void {
+    this.sequence++;
+    this.resolve?.(null);
+    this.resolve = null;
+    this.worker?.terminate();
+    this.worker = null;
   }
 }
