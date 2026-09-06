@@ -304,9 +304,8 @@ export function App() {
   // Length-only selectors: they gate the "Copy … diff" palette actions without
   // re-rendering App on every diff-content refresh (the actions read the
   // actual diffs from the store at run time).
-  const unstagedCount = useRepo((s) => s.unstagedDiffs.length);
-  const stagedCount = useRepo((s) => s.stagedDiffs.length);
-  const baselineDiffCount = useRepo((s) => s.baselineDiffs.length);
+  const unstagedCount = useRepo((s) => s.status.filter((entry) => !entry.staged).length);
+  const stagedCount = useRepo((s) => s.status.filter((entry) => entry.staged).length);
   // Workspace list + active id feed the palette's Workspaces group — a
   // handful of user-created entries, so subscribing whole is cheap.
   const workspaces = useWorkspaces((s) => s.workspaces);
@@ -654,6 +653,22 @@ export function App() {
     },
     [showToast],
   );
+
+  const copyFreshDiffs = useCallback(async (side: 'unstaged' | 'staged' | 'review', markdown: boolean) => {
+    const state = useRepo.getState();
+    const path = state.activePath;
+    const baselineOid = state.baseline?.oid;
+    try {
+      await (side === 'review' ? state.refreshReviewDiffs() : state.refreshDiffs());
+      const fresh = useRepo.getState();
+      if (fresh.activePath !== path || (side === 'review' && fresh.baseline?.oid !== baselineOid)) return;
+      copyDiffs(side === 'review' ? fresh.baselineDiffs
+        : side === 'staged' ? fresh.stagedDiffs : fresh.unstagedDiffs, markdown,
+      side === 'unstaged' ? 'Unstaged changes' : undefined);
+    } catch (error) {
+      showToast(`Copy diff failed: ${errMessage(error)}`, 'error');
+    }
+  }, [copyDiffs, showToast]);
 
   // Flash a button's check pulse for ~1.6s. The duration outlasts the
   // pop-in animation so the check lingers briefly before reverting.
@@ -1286,7 +1301,13 @@ export function App() {
       void useRepo.getState().handleExternalChange(event.payload);
       useWorkspaceReview.getState().handleExternalChange(event.payload);
     });
-    return () => { void unlisten.then((fn) => fn()); };
+    const unlistenFiles = listen<string>('repo://files-changed', (event) => {
+      useRepo.getState().markFilesTreeChanged(event.payload, { kind: 'refresh' });
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+      void unlistenFiles.then((fn) => fn());
+    };
   }, []);
 
   // Fallback freshness signal: refresh when the user returns to the app, in
@@ -1304,7 +1325,6 @@ export function App() {
       const { activePath } = useRepo.getState();
       if (!activePath) return;
       void refreshLocalChanges();
-      void refreshLog();
     };
     const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -1790,7 +1810,11 @@ export function App() {
         } },
         // Notes → one Markdown prompt to paste back into the coding agent.
         ...(reviewNoteCount > 0 ? [
-          { id: 'review-copy-feedback', label: 'Review: copy feedback as prompt', group: 'Actions', keywords: 'ai agent review notes feedback prompt export clipboard', run: () => {
+          { id: 'review-copy-feedback', label: 'Review: copy feedback as prompt', group: 'Actions', keywords: 'ai agent review notes feedback prompt export clipboard', run: async () => {
+            const path = useRepo.getState().activePath;
+            const baselineOid = useRepo.getState().baseline?.oid;
+            await useRepo.getState().refreshReviewDiffs();
+            if (path !== useRepo.getState().activePath || baselineOid !== useRepo.getState().baseline?.oid) return;
             const st = useRepo.getState();
             const pool = st.baseline ? st.baselineDiffs : st.reviewUnstagedDiffs;
             // Union: pool files with notes + noted paths outside the pool
@@ -1818,12 +1842,12 @@ export function App() {
         // Diff export — paste a patch into an AI agent / PR comment. Markdown
         // for staged/review stays reachable via the file-tree context menus.
         ...(unstagedCount > 0 ? [
-          { id: 'copy-unstaged-diff', label: 'Copy unstaged diff', group: 'Actions', keywords: 'patch clipboard export unstaged', run: () => copyDiffs(useRepo.getState().unstagedDiffs, false) } satisfies PaletteAction,
-          { id: 'copy-unstaged-diff-md', label: 'Copy unstaged diff as Markdown', group: 'Actions', keywords: 'patch clipboard export unstaged markdown', run: () => copyDiffs(useRepo.getState().unstagedDiffs, true, 'Unstaged changes') } satisfies PaletteAction,
+          { id: 'copy-unstaged-diff', label: 'Copy unstaged diff', group: 'Actions', keywords: 'patch clipboard export unstaged', run: () => copyFreshDiffs('unstaged', false) } satisfies PaletteAction,
+          { id: 'copy-unstaged-diff-md', label: 'Copy unstaged diff as Markdown', group: 'Actions', keywords: 'patch clipboard export unstaged markdown', run: () => copyFreshDiffs('unstaged', true) } satisfies PaletteAction,
         ] : []),
-        ...(stagedCount > 0 ? [{ id: 'copy-staged-diff', label: 'Copy staged diff', group: 'Actions', keywords: 'patch clipboard export staged', run: () => copyDiffs(useRepo.getState().stagedDiffs, false) } satisfies PaletteAction] : []),
-        ...(baseline && baselineDiffCount > 0
-          ? [{ id: 'copy-review-diff', label: `Copy review diff (since ${baseline.short})`, group: 'Actions', keywords: 'patch clipboard export review baseline session', run: () => copyDiffs(useRepo.getState().baselineDiffs, false) } satisfies PaletteAction]
+        ...(stagedCount > 0 ? [{ id: 'copy-staged-diff', label: 'Copy staged diff', group: 'Actions', keywords: 'patch clipboard export staged', run: () => copyFreshDiffs('staged', false) } satisfies PaletteAction] : []),
+        ...(baseline
+          ? [{ id: 'copy-review-diff', label: `Copy review diff (since ${baseline.short})`, group: 'Actions', keywords: 'patch clipboard export review baseline session', run: () => copyFreshDiffs('review', false) } satisfies PaletteAction]
           : []),
         { id: 'open-editor', label: 'Open in editor', group: 'Actions', shortcut: keyHint('open-editor'), keywords: 'external code reveal vscode editor', run: openInEditor },
         { id: 'open-terminal', label: 'Open in terminal', group: 'Actions', shortcut: keyHint('open-terminal'), keywords: 'shell console cwd iterm terminal', run: openInTerminal },
@@ -1998,7 +2022,7 @@ export function App() {
       requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, setBranchBaseline, clearBaseline, stageReviewed, commits, resetTo,
-      unstagedCount, stagedCount, baselineDiffCount, copyDiffs,
+      unstagedCount, stagedCount, copyFreshDiffs,
       reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,

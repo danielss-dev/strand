@@ -33,7 +33,27 @@ pub struct FileDiff {
     pub patch: String,
 }
 
+/// Rename-aware staging targets without generating or transferring patch bodies.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DiffPath {
+    pub path: String,
+    pub old_path: Option<String>,
+}
+
 impl Repo {
+    pub fn diff_unstaged_paths(&self) -> Result<Vec<DiffPath>> {
+        let repo = self.git2()?;
+        let mut diff = repo.diff_index_to_workdir(None, Some(&mut diff_options()))?;
+        let mut find = git2::DiffFindOptions::new();
+        diff.find_similar(Some(find.renames(true).copies(true)))?;
+        Ok(diff.deltas().map(|delta| DiffPath {
+            path: delta.new_file().path().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+            old_path: if matches!(delta.status(), git2::Delta::Renamed | git2::Delta::Copied) {
+                delta.old_file().path().map(|p| p.to_string_lossy().into_owned())
+            } else { None },
+        }).collect())
+    }
+
     /// Working tree vs index — the "unstaged" diff shown above the
     /// commit-form in Local Changes.
     pub fn diff_unstaged(&self) -> Result<Vec<FileDiff>> {
@@ -284,6 +304,29 @@ mod tests {
         let tree = repo.find_tree(tree_oid).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
         (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    #[test]
+    fn path_only_diff_matches_patch_targets() {
+        let (repo, dir) = scratch_repo();
+        for name in ["edit.txt", "delete.txt", "move.txt"] {
+            std::fs::write(dir.join(name), format!("original contents of {name}\n")).unwrap();
+        }
+        repo.stage_paths(&["edit.txt".into(), "delete.txt".into(), "move.txt".into()]).unwrap();
+        repo.commit("initial files", None, false).unwrap();
+        std::fs::write(dir.join("edit.txt"), "changed\n").unwrap();
+        std::fs::remove_file(dir.join("delete.txt")).unwrap();
+        std::fs::rename(dir.join("move.txt"), dir.join("moved.txt")).unwrap();
+        std::fs::write(dir.join("new.txt"), "new\n").unwrap();
+        std::fs::write(dir.join("binary.bin"), [0, 1, 2, 0]).unwrap();
+        let patches = repo.diff_unstaged().unwrap();
+        let expected: Vec<_> = patches.into_iter().map(|diff| DiffPath {
+            path: diff.path, old_path: diff.old_path,
+        }).collect();
+        assert_eq!(repo.diff_unstaged_paths().unwrap(), expected);
+        assert!(expected.iter().any(|diff| diff.path == "moved.txt"));
+        assert!(expected.iter().any(|diff| diff.path == "binary.bin"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

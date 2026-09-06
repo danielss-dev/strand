@@ -93,7 +93,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
   // "Create fixup! commit" commits the staged set against a graph commit.
   // Boolean selector, not the array — the graph must not re-render on every
   // diff-content refresh just to gate one menu item.
-  const hasStaged = useRepo((s) => s.stagedDiffs.length > 0);
+  const hasStaged = useRepo((s) => s.status.some((entry) => entry.staged));
   const commit = useRepo((s) => s.commit);
   const revealCommit = useRepo((s) => s.revealCommit);
   const clearReveal = useRepo((s) => s.clearReveal);

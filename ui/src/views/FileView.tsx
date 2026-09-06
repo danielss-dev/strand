@@ -156,11 +156,10 @@ export function FileDocument({
 
   const previewable = !isDirectory && isPreviewablePath(path);
   // The Changes tab lenses the working tree, so it only exists for working-
-  // tree files that actually differ from HEAD. Reads the active repo's diff
-  // lists — a background tab of another repo re-evaluates once that repo
-  // activates and refreshes them.
+  // tree files with local changes. Status makes the tab available before
+  // opening it requests patches; each active document owns that demand.
   const hasWorkTreeChanges = useRepo((s) => !revision && (
-    s.unstagedDiffs.some((d) => d.path === path) || s.stagedDiffs.some((d) => d.path === path)
+    s.status.some((entry) => entry.path === path)
   ));
   const tabs = (isDirectory
     ? [{ ...TABS[0], label: 'Contents', icon: 'folder-open' as const }]

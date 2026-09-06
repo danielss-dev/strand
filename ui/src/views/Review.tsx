@@ -34,6 +34,7 @@ import type {
   FileDiff,
 } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { useRepoDiffs } from '../lib/useRepoDiffs';
 import { useSettings } from '../stores/settings';
 import { treeFileOrder } from '../lib/treeOrder';
 import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
@@ -67,7 +68,6 @@ export function Review({
   onOpenFileInEditor,
   onToast,
   active = true,
-  embedded = false,
 }: {
   onOpenFileInEditor: (file: string) => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
@@ -109,18 +109,7 @@ export function Review({
   const anthropicCli = useSettings((s) => s.anthropicCli);
   const layout = diffMode === 'split' ? 'split' : 'unified';
 
-  // The pool only auto-refreshes while this view is open (or a baseline is
-  // pinned) — pull it on entry, and again whenever the baseline moves.
-  useEffect(() => {
-    void refreshReviewDiffs();
-  }, [baseline, refreshReviewDiffs]);
-
-  const embeddedUnstagedRef = useRef(unstagedDiffs);
-  useEffect(() => {
-    const changed = embeddedUnstagedRef.current !== unstagedDiffs;
-    embeddedUnstagedRef.current = unstagedDiffs;
-    if (embedded && baseline == null && changed) void refreshReviewDiffs();
-  }, [baseline, embedded, refreshReviewDiffs, unstagedDiffs]);
+  useRepoDiffs('review');
 
   const sessionMode = baseline != null;
   const pool: FileDiff[] = sessionMode ? baselineDiffs : reviewUnstagedDiffs;
