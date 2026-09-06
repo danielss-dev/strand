@@ -135,7 +135,7 @@ the resolved app appearance automatically.
   Codex or Claude Code subscription can inspect that exact review set for
   possible defects. Findings stay pending until you explicitly add selected
   ones as severity-labelled notes; AI review never edits repository files.
-- **Hosted pull requests** — browse the latest 100 GitHub or Azure DevOps PRs
+- **Hosted pull requests** — browse GitHub PRs with cursor pages or the latest 100 Azure DevOps PRs
   for the active repository, with the active PR for your checked-out branch
   opening and being followed automatically even before the PR view is opened.
   Create a PR or draft for the checked-out branch from the toolbar or command

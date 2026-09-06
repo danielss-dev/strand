@@ -2808,6 +2808,12 @@ implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
+**Hosted GitHub pagination shipped (2026-09-06, F06):** Inbox and activated
+review data now use cursor pages, including independent thread replies and
+checks. Partial counts, retry/cancel controls and palette actions preserve
+loaded content and drafts. Page appends deduplicate provider IDs and reject
+head changes; inbox navigation remains shallow and hosted patches remain lazy.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

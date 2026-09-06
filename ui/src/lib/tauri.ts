@@ -40,6 +40,8 @@ import type {
   Progress,
   PullMode,
   PullRequest,
+  PullRequestPageCursor,
+  PullRequestDataPage,
   PullRequestActivitySnapshot,
   PullRequestBranchMatch,
   PullRequestCheckoutPreparation,
@@ -195,6 +197,11 @@ export const tauri = {
   repoCommitExportPatch: (path: string, oids: string[], destination: string) =>
     invoke<number>('repo_commit_export_patch', { path, oids, destination }),
   repoRefs: (path: string) => invoke<Refs>('repo_refs', { path }),
+  repoPullRequestInboxPage: (path: string, cursor: string | null, requestId: string) =>
+    invoke<PullRequestList>('repo_pull_request_inbox_page', { path, cursor, requestId }),
+  repoPullRequestDataPage: (path: string, id: number, expectedHead: string, request: PullRequestPageCursor, requestId: string) =>
+    invoke<PullRequestDataPage>('repo_pull_request_data_page', { path, id, expectedHead, request, requestId }),
+  repoPullRequestCancelRead: (requestId: string) => invoke<void>('repo_pull_request_cancel_read', { requestId }),
   repoPullRequests: (path: string) => invoke<PullRequestList>('repo_pull_requests', { path }),
   repoPullRequestForBranch: (path: string, branch: string) =>
     invoke<PullRequestBranchMatch | null>('repo_pull_request_for_branch', { path, branch }),

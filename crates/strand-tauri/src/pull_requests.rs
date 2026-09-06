@@ -26,6 +26,8 @@ use uuid::Uuid;
 use crate::ai::bin::{base_command, resolve_cli};
 use crate::azdo_helper;
 
+pub mod pages;
+
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
 const MAX_THREAD_ID_BYTES: usize = 512;
@@ -43,8 +45,8 @@ const GITHUB_LIST_FIELDS: &str = concat!(
 );
 const GITHUB_DETAIL_FIELDS: &str = concat!(
     "number,title,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,",
-    "closedAt,mergedAt,url,body,mergeStateStatus,reviewDecision,comments,commits,additions,deletions,",
-    "changedFiles,reviewRequests,latestReviews,labels,statusCheckRollup,headRefOid"
+    "closedAt,mergedAt,url,body,mergeStateStatus,reviewDecision,additions,deletions,",
+    "changedFiles,reviewRequests,labels,headRefOid"
 );
 const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -57,48 +59,11 @@ const GITHUB_ACTIVITY_QUERY: &str = r#"query($owner: String!, $repo: String!, $n
       }
       statusCheckRollup {
         contexts(first: 100) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             __typename
             ... on CheckRun { databaseId name status conclusion }
             ... on StatusContext { id context state }
-          }
-        }
-      }
-    }
-  }
-}"#;
-const GITHUB_REVIEW_THREADS_QUERY: &str = r#"query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $number) {
-      viewerCanUpdate
-      reviews(last: 100) {
-        nodes {
-          id
-          body
-          state
-          submittedAt
-          url
-          viewerCanUpdate
-          viewerDidAuthor
-          author { login avatarUrl }
-        }
-      }
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          isOutdated
-          viewerCanReply
-          viewerCanResolve
-          viewerCanUnresolve
-          path
-          line
-          startLine
-          originalLine
-          originalStartLine
-          diffSide
-          comments(first: 100) {
-            nodes { id body createdAt url author { login avatarUrl } }
           }
         }
       }
@@ -210,6 +175,7 @@ pub struct PullRequestReview {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestCheck {
+    pub id: String,
     pub name: String,
     pub status: String,
 }
@@ -269,6 +235,7 @@ struct AzureDiscussion {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequest {
+    pub data_pages: Vec<pages::Cursor>,
     pub id: u64,
     pub title: String,
     pub state: String,
@@ -303,6 +270,8 @@ pub struct PullRequest {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestList {
+    pub next_cursor: Option<String>,
+    pub total_count: Option<u64>,
     pub repository: PullRequestRepository,
     pub pull_requests: Vec<PullRequest>,
 }
@@ -911,49 +880,8 @@ fn host_for_path(path: &str) -> Result<(String, HostRepo)> {
 }
 
 fn list_github(cwd: &str, remote: String, owner: String, repo: String) -> Result<PullRequestList> {
-    let slug = format!("{owner}/{repo}");
-    // Keep the list query shallow. Asking GraphQL to expand nested comments,
-    // commits, reviews, and checks across 100 PRs can exceed GitHub's 500k
-    // possible-node cap even for a modest repository. Rich fields load only
-    // for the selected PR via `detail_github`.
-    let (output, viewer) = thread::scope(|scope| {
-        let viewer = scope.spawn(|| github_viewer(cwd));
-        let output = run_command(
-            cwd,
-            "gh",
-            &[
-                "pr",
-                "list",
-                "--repo",
-                &slug,
-                "--state",
-                "all",
-                "--limit",
-                "100",
-                "--json",
-                GITHUB_LIST_FIELDS,
-            ],
-            &[("GH_PROMPT_DISABLED", "1")],
-        );
-        let viewer = viewer.join().ok().and_then(Result::ok);
-        (output, viewer)
-    });
-    let output = output?;
-    let values: Vec<Value> = serde_json::from_slice(&output)
-        .map_err(|e| format!("GitHub CLI returned invalid JSON: {e}"))?;
-    let pull_requests = values
-        .iter()
-        .filter_map(|value| parse_github_pr(value, viewer.as_deref()))
-        .collect();
-    Ok(PullRequestList {
-        repository: PullRequestRepository {
-            provider: PullRequestProvider::GitHub,
-            remote,
-            label: slug,
-            viewer,
-        },
-        pull_requests,
-    })
+    let _ = (remote, owner, repo);
+    pages::inbox(cwd, None, &Uuid::new_v4().to_string())
 }
 
 fn for_branch_github(
@@ -998,16 +926,6 @@ fn for_branch_github(
             },
             pull_request,
         }))
-}
-
-fn github_viewer(cwd: &str) -> Result<String> {
-    let output = run_command(
-        cwd,
-        "gh",
-        &["api", "user", "--jq", ".login"],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
-    non_empty_text(&output, "GitHub CLI returned no signed-in account")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1107,8 +1025,10 @@ fn activity_github(
     let pull_request = value
         .pointer("/data/repository/pullRequest")
         .ok_or_else(|| format!("GitHub returned no activity data for PR #{id}"))?;
+    let mut pull_request = pull_request.clone();
+    pages::activity_checks(cwd, &owner, &repo, id, &mut pull_request)?;
     parse_github_activity(
-        pull_request,
+        &pull_request,
         PullRequestRepository {
             provider: PullRequestProvider::GitHub,
             remote,
@@ -1139,55 +1059,8 @@ fn detail_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<Pull
         .map_err(|error| format!("GitHub CLI returned invalid JSON: {error}"))?;
     let mut pull_request = parse_github_pr(&value, None)
         .ok_or_else(|| format!("GitHub CLI returned no data for PR #{id}"))?;
-    for commit in &mut pull_request.commits {
-        commit.url = Some(format!(
-            "https://github.com/{owner}/{repo}/commit/{}",
-            commit.id
-        ));
-    }
-    pull_request.checks_complete = true;
-    let (review_threads, reviews, can_mark_ready) =
-        github_review_threads(cwd, &owner, &repo, id)?;
-    pull_request.can_mark_ready = pull_request.is_draft && can_mark_ready;
-    pull_request.reviews = reviews;
-    pull_request.comments.extend(
-        review_threads
-            .iter()
-            .flat_map(|thread| thread.comments.iter().cloned()),
-    );
-    pull_request
-        .comments
-        .sort_by(|left, right| left.created_at.cmp(&right.created_at));
-    pull_request.comment_count = pull_request.comments.len();
-    pull_request.review_threads = review_threads;
+    pages::initial(cwd, &owner, &repo, &mut pull_request);
     Ok(pull_request)
-}
-
-fn github_review_threads(
-    cwd: &str,
-    owner: &str,
-    repo: &str,
-    id: u64,
-) -> Result<(Vec<PullRequestReviewThread>, Vec<PullRequestReview>, bool)> {
-    let query = format!("query={GITHUB_REVIEW_THREADS_QUERY}");
-    let owner = format!("owner={owner}");
-    let repo = format!("repo={repo}");
-    let number = format!("number={id}");
-    let output = run_command(
-        cwd,
-        "gh",
-        &[
-            "api", "graphql", "-f", &query, "-F", &owner, "-F", &repo, "-F", &number,
-        ],
-        &[("GH_PROMPT_DISABLED", "1")],
-    )?;
-    let value: Value = serde_json::from_slice(&output)
-        .map_err(|error| format!("GitHub CLI returned invalid review-thread JSON: {error}"))?;
-    Ok((
-        parse_github_review_threads(&value),
-        parse_github_reviews(&value),
-        parse_github_can_mark_ready(&value),
-    ))
 }
 
 fn diff_github(cwd: &str, owner: String, repo: String, id: u64) -> Result<String> {
@@ -1579,6 +1452,8 @@ fn list_azure(
         })
         .collect();
     Ok(PullRequestList {
+        next_cursor: None,
+        total_count: None,
         repository: PullRequestRepository {
             provider: PullRequestProvider::AzureDevOps,
             remote,
@@ -1624,6 +1499,8 @@ fn list_azure_server(
         })
         .collect();
     Ok(PullRequestList {
+        next_cursor: None,
+        total_count: None,
         repository: PullRequestRepository {
             provider: PullRequestProvider::AzureDevOps,
             remote,
@@ -1745,6 +1622,7 @@ fn detail_azure_server(
         pull_request.checks = checks
             .iter()
             .map(|check| PullRequestCheck {
+                id: check.id.clone(),
                 name: check.name.clone(),
                 status: check.status.clone(),
             })
@@ -2418,6 +2296,7 @@ fn detail_azure(
         pull_request.checks = checks
             .iter()
             .map(|check| PullRequestCheck {
+                id: check.id.clone(),
                 name: check.name.clone(),
                 status: check.status.clone(),
             })
@@ -3343,6 +3222,20 @@ fn run_command_input(
     envs: &[(&str, &str)],
     stdin_data: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
+    run_command_input_cancellable(cwd, program, args, envs, stdin_data, None)
+}
+
+fn run_command_input_cancellable(
+    cwd: &str,
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin_data: Option<&[u8]>,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Vec<u8>> {
+    if cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
+        return Err("Read cancelled".into());
+    }
     // Resolve strictly through PATH before setting the untrusted repository as
     // cwd. On Windows, CreateProcess otherwise searches cwd and could execute
     // a repository-owned `gh.exe`/`az.exe`. Reuse the AI CLI resolver so batch
@@ -3414,7 +3307,7 @@ fn run_command_input(
                 return Err(format!("{program} wait failed: {error}"));
             }
         }
-        if started.elapsed() >= COMMAND_TIMEOUT {
+        if started.elapsed() >= COMMAND_TIMEOUT || cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
             let _ = child.kill();
             let _ = child.wait();
             let _ = stdout_reader.join();
@@ -3422,7 +3315,7 @@ fn run_command_input(
             if let Some(writer) = stdin_writer.take() {
                 let _ = writer.join();
             }
-            return Err(format!("{program} timed out after 30 seconds"));
+            return Err(if cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) { "Read cancelled".into() } else { format!("{program} timed out after 30 seconds") });
         }
         thread::sleep(Duration::from_millis(25));
     };
@@ -3916,7 +3809,7 @@ fn parse_github_activity(
         comments,
         reviews,
         checks,
-        checks_complete: true,
+        checks_complete: value.pointer("/statusCheckRollup/contexts/pageInfo/hasNextPage").and_then(Value::as_bool) == Some(false) || value.get("statusCheckRollup") == Some(&Value::Null),
     })
 }
 
@@ -4042,6 +3935,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         .iter()
         .filter_map(|check| {
             Some(PullRequestCheck {
+                id: text(check.get("id")).unwrap_or_default(),
                 name: text(check.get("name")).or_else(|| text(check.get("context")))?,
                 status: text(check.get("conclusion"))
                     .filter(|status| !status.is_empty())
@@ -4051,6 +3945,7 @@ fn parse_github_pr(value: &Value, viewer: Option<&str>) -> Option<PullRequest> {
         })
         .collect();
     Some(PullRequest {
+        data_pages: Vec::new(),
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("state"))
@@ -4370,6 +4265,7 @@ fn parse_azure_pr(
         "review required".into()
     };
     Some(PullRequest {
+        data_pages: Vec::new(),
         id,
         title: text(value.get("title")).unwrap_or_default(),
         state: text(value.get("status"))
@@ -5016,7 +4912,7 @@ mod tests {
         }
         for nested in ["comments", "commits", "latestReviews", "statusCheckRollup"] {
             assert!(!GITHUB_LIST_FIELDS.contains(nested));
-            assert!(GITHUB_DETAIL_FIELDS.contains(nested));
+            assert!(!GITHUB_DETAIL_FIELDS.contains(nested));
         }
         assert_eq!(
             auth_hint(
@@ -5117,7 +5013,7 @@ mod tests {
             "viewerCanResolve",
             "viewerCanUnresolve",
         ] {
-            assert!(GITHUB_REVIEW_THREADS_QUERY.contains(field));
+            assert!(pages::review_query_contract().contains(field));
         }
     }
 
@@ -5140,7 +5036,7 @@ mod tests {
             "reviewThreads": { "nodes": [{ "comments": { "nodes": [
                 { "id": "PRRC_1", "author": { "login": "linus" } }
             ] } }] },
-            "statusCheckRollup": { "contexts": { "nodes": [
+            "statusCheckRollup": { "contexts": { "pageInfo": {"hasNextPage":false}, "nodes": [
                 { "__typename": "CheckRun", "databaseId": 99, "name": "CI", "status": "COMPLETED", "conclusion": "FAILURE" },
                 { "__typename": "StatusContext", "id": "SC_1", "context": "lint", "state": "SUCCESS" }
             ] } }

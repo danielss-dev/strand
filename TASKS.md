@@ -1867,16 +1867,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     batched submission use GitHub's atomic review payload or Azure's bounded
     latest-iteration/change-tracking resolver (`azure_review_coordinates`,
     `azure_server_review_coordinates`).
-  - ☐ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
+  - ☑ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
     reviews, threads/replies and check contexts beyond the current bounded
     queries; expose partial/error states, deduplicate pages and test 101+
-    entries while keeping initial queries shallow.
+    entries while keeping initial queries shallow (`pull_requests::pages`,
+    `PullRequestDataLoader`, `PullRequestInboxLoader`; 34 Rust / 38 frontend
+    tests and WebView2 101-row/review, failure, cancellation and stale-head pass).
   - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails (`pullRequestReview` drafts,
     `PullRequestChanges` review composer, `repo_pull_request_submit_review`).
   - ☑ Searchable repository PR inbox (`filterPullRequests`, `.pr-inbox-*`):
-    All, Authored, and Completed filter the shallow latest-100 list locally;
+    All, Authored, and Completed filter the loaded shallow inbox pages locally;
     search covers number/title/author/source/target branches; provider-account
     identity drives Authored without hiding All when identity lookup fails;
     selection, j/k/arrows/Home/End/Enter, focus restoration, and palette search

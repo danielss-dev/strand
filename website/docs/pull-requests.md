@@ -72,7 +72,10 @@ alternate retry does not change the provider selected in Settings.
 
 ## Browse PRs
 
-The list contains up to the latest 100 open, closed, and merged pull requests.
+The GitHub inbox initially loads 100 open, closed, and merged pull requests.
+Choose **Load more pull requests** to continue through older pages. The loaded
+count and total stay visible; search and filters apply to loaded rows. Azure
+DevOps retains its existing latest-100 inbox.
 Use the local search field to match a PR number, title, author, source branch,
 or target branch without starting another provider request. The filter tabs are:
 
@@ -92,6 +95,15 @@ Closed and merged PRs never auto-open. Otherwise, click a row to inspect it, or
 use `Up`/`Down` or `j`/`k` and press `Enter`. **Pull Requests** in the detail
 toolbar returns to the list and restores its keyboard focus. **Open on host**
 hands the active PR to the provider website.
+
+GitHub detail also loads reviews, threads, replies, comments, commits and checks
+in bounded pages. **Partial data** lists the connections with more to load;
+counts describe loaded items, and incomplete checks cannot report readiness.
+Choose **Load more** to fetch the next page, or **Cancel loading** to stop its
+read. Loaded items and drafts survive a failed or cancelled page. A source push
+requires Refresh before continuing to prevent mixing review coordinates. Both
+actions are available through “Pull Requests: load next data page” and
+“Pull Requests: cancel loading page” in Quick Launch.
 
 ## Follow PR activity
 

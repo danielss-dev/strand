@@ -275,6 +275,7 @@ export interface PullRequestReviewer {
 }
 
 export interface PullRequestCheck {
+  id?: string;
   name: string;
   status: string;
 }
@@ -338,6 +339,7 @@ export interface PullRequestReview {
 }
 
 export interface PullRequest {
+  data_pages?: PullRequestPageCursor[];
   id: number;
   title: string;
   state: string;
@@ -373,6 +375,8 @@ export interface PullRequest {
 }
 
 export interface PullRequestList {
+  next_cursor?: string | null;
+  total_count?: number | null;
   repository: PullRequestRepository;
   pull_requests: PullRequest[];
 }
@@ -927,3 +931,21 @@ export type AiGenerationOutcome<T> =
       coverage: AiInputCoverage;
       provider: AiProvider;
     };
+
+export interface PullRequestPageCursor {
+  kind: 'comments' | 'commits' | 'reviews' | 'threads' | 'replies' | 'checks';
+  thread_id: string | null;
+  cursor: string | null;
+  total: number | null;
+  error: string | null;
+}
+export interface PullRequestDataPage {
+  source_commit: string;
+  request: PullRequestPageCursor;
+  pending: PullRequestPageCursor[];
+  comments: PullRequestComment[];
+  commits: PullRequestCommit[];
+  reviews: PullRequestReview[];
+  review_threads: PullRequestReviewThread[];
+  checks: PullRequestCheck[];
+}

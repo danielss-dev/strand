@@ -1721,6 +1721,20 @@ export function App() {
         } satisfies PaletteAction] : []),
         ...(view === 'pull-requests' ? [
           {
+            id: 'pull-request-load-more',
+            label: 'Pull Requests: load next data page',
+            group: 'Actions',
+            keywords: 'pr pagination inbox reviews threads replies checks more partial',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-load-more')),
+          } satisfies PaletteAction,
+          {
+            id: 'pull-request-cancel-read',
+            label: 'Pull Requests: cancel loading page',
+            group: 'Actions',
+            keywords: 'pr stop pagination',
+            run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-cancel-read')),
+          } satisfies PaletteAction,
+          {
             id: 'pull-request-search',
             label: 'Pull Requests: search…',
             group: 'Actions',

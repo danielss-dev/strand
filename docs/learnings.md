@@ -2494,3 +2494,12 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+## Hosted connection pages carry completeness and reviewed heads (2026-09-06)
+
+GitHub connection continuations carry their opaque cursor and the activated
+head SHA. Reject missing/repeated cursors and head mismatches; deduplicate by
+provider ID when appending, and keep already loaded data on failures. A thread
+page fetches only its root comment; replies have independent cursors. Counts
+remain explicitly partial until their connections are exhausted. Background
+check snapshots traverse check pages without patch or comment-body reads.

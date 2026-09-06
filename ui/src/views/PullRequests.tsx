@@ -52,6 +52,7 @@ import type {
   PullRequestCheck,
   PullRequestComment,
   PullRequestCreateOutcome,
+  PullRequestDataPage,
   PullRequestList,
   PullRequestPendingComment,
   PullRequestReview,
@@ -62,6 +63,9 @@ import type {
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
+import { PullRequestDataLoader } from './PullRequestDataLoader';
+import { PullRequestInboxLoader } from './PullRequestInboxLoader';
+import { appendPullRequestPage, uniqueBy } from '../lib/pullRequestPages';
 import { PullRequestMergeControl } from './PullRequestMergeControl';
 import { PullRequestCreateDialog } from './PullRequestCreateDialog';
 
@@ -423,7 +427,7 @@ function PullRequestSummary({
       </details>
 
       <details className="pr-summary-section" open>
-        <summary>Checks <span>{pr.checks.length}</span></summary>
+        <summary>Checks <span>{pr.checks.length}{!pr.checks_complete ? '+' : ''}</span></summary>
         <div className="pr-summary-section-body">
           {pr.checks.length > 0 ? (
             <ul className="pr-facts">
@@ -436,7 +440,7 @@ function PullRequestSummary({
       </details>
 
       <details className="pr-summary-section" open>
-        <summary>Reviews <span>{(pr.reviews ?? []).length}</span></summary>
+        <summary>Reviews <span>{(pr.reviews ?? []).length}{pr.data_pages?.some((p) => p.kind === 'reviews') ? '+' : ''}</span></summary>
         <div className="pr-summary-section-body pr-existing-reviews">
           {(pr.reviews ?? []).length > 0 ? (pr.reviews ?? []).map((review) => (
             <PullRequestReviewCard
@@ -1799,6 +1803,7 @@ function PullRequestDetails({
   pr,
   tab,
   onTabChange,
+  onPage,
   onUpdated,
   onToast,
   followed,
@@ -1811,6 +1816,7 @@ function PullRequestDetails({
   pr: PullRequest;
   tab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
+  onPage: (page: PullRequestDataPage) => void;
   onUpdated: (next: PullRequest) => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
   followed: boolean;
@@ -2062,6 +2068,7 @@ function PullRequestDetails({
           </details>
         )}
       </div>
+      <PullRequestDataLoader path={path} pr={pr} onPage={onPage} />
       {lifecycleMenu && (
         <ContextMenu
           x={lifecycleMenu.x}
@@ -2166,13 +2173,11 @@ export function PullRequests({
       const preferredId = branchPullRequest?.id ?? next.pull_requests[0]?.id ?? null;
       const autoOpenContext = `${path}\0${currentBranch ?? '<detached>'}`;
       const shouldAutoOpen = autoOpenedContext.current !== autoOpenContext;
-      setData(next);
+      setData((current) => current ? { ...next, pull_requests: uniqueBy(next.pull_requests, current.pull_requests.filter((item) => !next.pull_requests.some((pr) => pr.id === item.id)), (pr) => pr.id) } : next);
       setSelectedId((selected) =>
-        !shouldAutoOpen && next.pull_requests.some((pr) => pr.id === selected)
+        !shouldAutoOpen && selected != null
           ? selected
           : preferredId);
-      setOpenedId((opened) =>
-        next.pull_requests.some((pr) => pr.id === opened) ? opened : null);
       if (shouldAutoOpen) {
         autoOpenedContext.current = autoOpenContext;
         setOpenedId(branchPullRequest?.id ?? null);
@@ -2528,7 +2533,7 @@ export function PullRequests({
         <EmptyState
           icon="check"
           title="No pull requests found"
-          hint="This repository has no open, closed, or merged pull requests in the latest 100."
+          hint="No pull requests were returned by the provider."
         />
       ) : data ? (
         <div className="pr-main">
@@ -2543,6 +2548,7 @@ export function PullRequests({
                   </>
                 }
               />
+              {path && <PullRequestInboxLoader path={path} data={data} onPage={(page) => setData((current) => current ? { ...page, pull_requests: uniqueBy(current.pull_requests, page.pull_requests, (pr) => pr.id) } : page)} />}
               <div className="pr-inbox-controls">
                 <label className="pr-inbox-search" htmlFor="pr-inbox-search">
                   <Icon name="search" size={17} />
@@ -2671,6 +2677,7 @@ export function PullRequests({
               tab={detailTab}
               onTabChange={setDetailTab}
               onUpdated={updatePullRequest}
+              onPage={(page) => setDetail((current) => current ? appendPullRequestPage(current, page) : current)}
               onToast={onToast}
               followed={Boolean(openedFollowed)}
               notificationPermission={notificationPermission}
