@@ -868,6 +868,7 @@ const EMPTY_ACTIVE = {
   fileReturn: null as string | null,
   workFileReturn: null as { repoPath: string; tabId: string; path: string } | null,
   selectedCommit: null as string | null,
+  selectedRef: null as string | null,
   selectedCommitDiffs: [] as FileDiff[],
   selectedCommitDiffsLoading: false,
   revealCommit: null as string | null,
@@ -938,7 +939,6 @@ export const useRepo = create<RepoState>((set, get) => ({
 
   view: useSettings.getState().startupSpace,
   fileTab: 'content',
-  selectedRef: null,
   commitSearchFocus: false,
   commitSearchMode: null,
   diffSearchSignal: false,
@@ -2370,6 +2370,7 @@ export const useRepo = create<RepoState>((set, get) => ({
       ? {}
       : {
           selectedCommit: null,
+          selectedRef: null,
           selectedCommitDiffs: [],
           selectedCommitDiffsLoading: false,
         }),

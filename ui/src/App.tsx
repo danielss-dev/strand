@@ -99,6 +99,7 @@ import { WorktreeMergeDialog } from './views/WorktreeMergeDialog';
 import { ForcePushDialog } from './views/ForcePushDialog';
 import { BranchNetworkDialog, type BranchNetworkDialogMode } from './views/BranchNetworkDialog';
 import { CommandPalette, type PaletteAction } from './views/Palette';
+import { USER_ACTION_EVENT, userActionPalette, type ActionRequest } from './lib/userActions';
 import { RepoSwitcher } from './views/RepoSwitcher';
 import type {
   CrashCheck,
@@ -127,6 +128,8 @@ const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => (
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const UserActionDialog = lazy(() => import('./views/UserActionDialog').then((m) => ({ default: m.UserActionDialog })));
+
 const LfsDialog = lazy(() => import('./views/LfsDialog').then((m) => ({ default: m.LfsDialog })));
 const SubmoduleDialog = lazy(() => import('./views/SubmoduleDialog').then((m) => ({ default: m.SubmoduleDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
@@ -368,6 +371,14 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const userActions = useSettings((state) => state.userActions);
+  const [userActionRequest, setUserActionRequest] = useState<(ActionRequest & { key: string }) | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => setUserActionRequest({ ...(event as CustomEvent<ActionRequest>).detail, key: crypto.randomUUID() });
+    window.addEventListener(USER_ACTION_EVENT, open);
+    return () => window.removeEventListener(USER_ACTION_EVENT, open);
+  }, []);
+
   const [lfsAction, setLfsAction] = useState<{ repoPath: string; action: LfsAction['action'] } | null>(null);
   const [submoduleDialog, setSubmoduleDialog] = useState<{ repoPath: string; path: string; action: SubmoduleDialogAction } | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
@@ -2070,7 +2081,9 @@ export function App() {
       icon: 'history',
       run: () => { void openByPath(r.path); },
     }));
-    return [...base, ...repoActions, ...workspaceActions, ...recentActions];
+    return [...base, { id: 'manage-user-actions', label: 'Manage user actions…', group: 'Actions',
+      keywords: 'custom scripts executable templates repository ref file', run: () => openSettingsAt('user-actions') } satisfies PaletteAction,
+      ...(paletteOpen ? userActionPalette(userActions, () => showToast('Selection changed. Open Quick Launch again.', 'error')) : []), ...repoActions, ...workspaceActions, ...recentActions];
   }, [setView, selectFile, onFetch, onSync, onPull, onPush, onPushAllTags, openViaDialog, openByPath, setTheme, recents,
       showToast, meta, abortOperation, requestCommitSearch,
       requestDiffSearch, requestSuggestCommitMessage, requestSelectSinceBaseline, openInEditor, openInTerminal, openSettingsAt,
@@ -2081,7 +2094,7 @@ export function App() {
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestFollowed, activePullRequestCanUpdateBranch,
       toggleActivePullRequest, customCommands, customCommandContext,
-      customizeWorkbench, openWorkbench, showWorkbenchWork, workbenchEditing]);
+      customizeWorkbench, openWorkbench, showWorkbenchWork, workbenchEditing, userActions, paletteOpen]);
 
   const surfaceRenderers = useMemo(() => new Map<CustomSurfaceId, (
     request: SurfaceRenderRequest,
@@ -2444,6 +2457,12 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
+      {userActionRequest && (
+        <UserActionDialog key={userActionRequest.key} request={userActionRequest}
+          onClose={() => setUserActionRequest(null)}
+          onManage={() => { setUserActionRequest(null); openSettingsAt('user-actions'); }} />
+      )}
+
       {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} onClose={() => setLfsAction(null)} />}
       {submoduleDialog && <SubmoduleDialog path={submoduleDialog.repoPath} initialPath={submoduleDialog.path} initialAction={submoduleDialog.action} onClose={() => setSubmoduleDialog(null)} />}
 

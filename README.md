@@ -71,6 +71,10 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Personal user actions** — define repository, ref, and working-tree file
+  commands in Settings → Integrations. Menu and palette entries open an exact
+  executable/argument/working-directory preview, with bounded output and cancellation.
+
 - **Repository size controls** — clone a chosen branch with optional depth,
   single-branch fetching, on-demand file contents (`blob:none`), and recursive
   submodules. Inspect clone scope and download more or full history from the

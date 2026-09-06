@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { userActionMenu } from '../lib/userActions';
 
 import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
 import { ignorePatterns } from '../lib/ignore';
@@ -317,6 +318,7 @@ export function RepositoryFiles({
       },
     ];
     if (!selectedCommit && actionPaths.length === 1) {
+      if (meta && !rowIsDirectory) items.push(userActionMenu({ path: meta.path, target: { kind: 'file', file: rowPath } }));
       items.push(
         { label: 'Open in editor', icon: 'external', onSelect: () => onOpenFileInEditor(rowPath) },
         {

@@ -32,6 +32,7 @@ pub mod maintenance;
 pub mod lfs;
 pub mod conflict;
 pub mod external;
+pub mod user_actions;
 pub mod gitconfig;
 mod git_output;
 pub mod history;

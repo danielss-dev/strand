@@ -498,15 +498,34 @@ fn join_stream_thread(handle: Option<std::thread::JoinHandle<usize>>) -> usize {
     handle.and_then(|thread| thread.join().ok()).unwrap_or(0)
 }
 
-struct CapturedOutput {
-    text: String,
-    exceeded: bool,
+pub(crate) struct CapturedOutput {
+    pub(crate) text: String,
+    pub(crate) exceeded: bool,
 }
 
 fn drain_pipe<R: Read + Send + 'static>(
+    pipe: R,
+    max_bytes: usize,
+    output_exceeded: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<CapturedOutput> {
+    drain_pipe_impl(pipe, max_bytes, output_exceeded, true)
+}
+
+/// User-command transcripts preserve whitespace; provider parsers keep their
+/// existing trimmed output through `drain_pipe`.
+pub(crate) fn drain_pipe_untrimmed<R: Read + Send + 'static>(
+    pipe: R,
+    max_bytes: usize,
+    output_exceeded: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<CapturedOutput> {
+    drain_pipe_impl(pipe, max_bytes, output_exceeded, false)
+}
+
+fn drain_pipe_impl<R: Read + Send + 'static>(
     mut pipe: R,
     max_bytes: usize,
     output_exceeded: Arc<AtomicBool>,
+    trim: bool,
 ) -> std::thread::JoinHandle<CapturedOutput> {
     std::thread::spawn(move || {
         let mut retained = Vec::new();
@@ -525,14 +544,15 @@ fn drain_pipe<R: Read + Send + 'static>(
                 }
             }
         }
+        let text = String::from_utf8_lossy(&retained);
         CapturedOutput {
-            text: String::from_utf8_lossy(&retained).trim().to_string(),
+            text: if trim { text.trim().to_string() } else { text.into_owned() },
             exceeded,
         }
     })
 }
 
-fn join_pipe(handle: Option<std::thread::JoinHandle<CapturedOutput>>) -> CapturedOutput {
+pub(crate) fn join_pipe(handle: Option<std::thread::JoinHandle<CapturedOutput>>) -> CapturedOutput {
     handle
         .and_then(|h| h.join().ok())
         .unwrap_or(CapturedOutput {
@@ -626,6 +646,24 @@ pub(crate) struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl WindowsJob {
+    pub(crate) fn kill_on_close(&self) -> Result<(), String> {
+        use windows_sys::Win32::System::JobObjects::{
+            SetInformationJobObject, JobObjectExtendedLimitInformation,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        };
+        // SAFETY: the initialized structure and live job handle match the API.
+        unsafe {
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            if SetInformationJobObject(self.0, JobObjectExtendedLimitInformation,
+                (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32) == 0 {
+                return Err("Could not configure action cleanup on app exit".into());
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn assign(child: &Child) -> Result<Self, String> {
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};

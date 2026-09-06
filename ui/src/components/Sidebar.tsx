@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { userActionMenu } from '../lib/userActions';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard } from './PierreTree';
 import { RepositoryFiles } from './RepositoryFiles';
@@ -503,6 +504,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
   };
 
   const branchMenu = (b: Branch): MenuItem[] => {
+    const actionItem = userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: b.full_name, oid: b.target } });
     const newBranchItem: MenuItem = {
       label: 'New branch from here…',
       icon: 'plus',
@@ -546,6 +548,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
             { label: 'Force with lease…', danger: true, onSelect: onForcePush },
           ],
         },
+        actionItem,
         newBranchItem,
         newWorktreeItem,
         renameItem,
@@ -596,12 +599,13 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
       { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
     );
     items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) });
+    items.push(actionItem);
     return items;
   };
 
   const remoteMenu = (rb: RemoteBranch): MenuItem[] => {
     const local = localByUpstream.get(rb.name);
-    const items: MenuItem[] = [];
+    const items: MenuItem[] = [userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: rb.full_name, oid: rb.target } })];
     items.push({ label: 'Fetch this branch', icon: 'arrow-down', onSelect: () => onFetchBranch(rb) });
     if (currentBranch) {
       items.push({
@@ -747,6 +751,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
+      userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: tg.full_name, oid: tg.target } }),
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
@@ -933,7 +938,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
           if (wt) void openWorktree(wt.path);
           else void runBranchOp(() => checkout(b.name));
         }}
-        onSelect={() => revealInGraph(b.target)}
+        onSelect={() => { revealInGraph(b.target); useRepo.getState().selectRef(b.full_name); }}
         onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
       />
     );
@@ -965,7 +970,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
               : createBranch(localBranchName(rb), rb.name, true),
           )
         }
-        onSelect={() => revealInGraph(rb.target)}
+        onSelect={() => { revealInGraph(rb.target); useRepo.getState().selectRef(rb.full_name); }}
         onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
       />
     );
@@ -980,7 +985,7 @@ export function Sidebar({ onManageSubmodules, onManageLfs, onOpenWorkbench, onOp
       meta={tg.annotated ? 'annotated' : undefined}
       title={`${leafName(tg.name)} — click to reveal, double-click to check out`}
       onActivate={() => void runBranchOp(() => checkoutCommit(tg.target))}
-      onSelect={() => revealInGraph(tg.target)}
+      onSelect={() => { revealInGraph(tg.target); useRepo.getState().selectRef(tg.full_name); }}
       onMenu={(x, y) => openMenu(x, y, tagMenu(tg))}
     />
   );
