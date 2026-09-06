@@ -162,6 +162,7 @@ export interface ReviewNote {
 export interface CommitOutcome {
   oid: string;
   amended: boolean;
+  output: string;
 }
 
 export interface UpstreamRef {

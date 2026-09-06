@@ -89,10 +89,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   (`docs/git-client-feature-audit-2026-09-06.md`: 19 missing/partial feature
   families, code evidence, priorities, fallbacks, and acceptance criteria).
   Priorities below are current recommendations, not historical PRD release gates.
-- ☐ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
+- ☑ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
   git2 commit-policy versus Git-hook contract tension; honor `core.hooksPath`,
   rejection and message rewriting, preserve drafts and bounded diagnostics,
-  and measure the no-hook path (`commit.rs`; signed commits already use Git).
+  and measure the no-hook path (`Repo::commit`, bounded `git_output`, checkout
+  `commitDrafts`; evidence in `docs/hooks-identity-signing-validation-2026-09-06.md`).
 - ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
   the current author/committer identity, set/remove repo-local name/email
   without changing global/conditional config, and verify linked worktrees.

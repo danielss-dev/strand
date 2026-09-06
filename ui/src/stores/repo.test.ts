@@ -144,3 +144,35 @@ describe('AI review notes', () => {
     }]);
   });
 });
+
+
+describe('commit outcome boundary', () => {
+  it('propagates a hook rejection and refreshes its index changes', async () => {
+    const refresh = vi.fn(async () => {});
+    const failure = { message: 'commit-msg rejected' };
+    vi.spyOn(tauri, 'repoCommit').mockRejectedValue(failure);
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh });
+    await expect(useRepo.getState().commit('draft', 'body', true)).rejects.toBe(failure);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a completed commit successful if refresh fails', async () => {
+    const outcome = { oid: 'abc', amended: false, output: 'hook accepted' };
+    vi.spyOn(tauri, 'repoCommit').mockResolvedValue(outcome);
+    const refresh = vi.fn(async () => { throw new Error('refresh failed'); });
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh,
+      refreshLog: refresh, refreshStashes: refresh, refreshMeta: refresh, refreshRefs: refresh });
+    await expect(useRepo.getState().commit('draft', null, false)).resolves.toEqual(outcome);
+  });
+
+  it('does not refresh a different checkout after a slow hook completes', async () => {
+    const refresh = vi.fn(async () => {});
+    vi.spyOn(tauri, 'repoCommit').mockImplementation(async () => {
+      useRepo.setState({ activePath: '/other' });
+      return { oid: 'abc', amended: false, output: '' };
+    });
+    useRepo.setState({ activePath: '/repo', refreshLocalChanges: refresh, refreshLog: refresh });
+    await useRepo.getState().commit('draft', null, false);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

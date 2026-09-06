@@ -2810,6 +2810,15 @@ GitHub/Azure review, Workbench and performance work retain their own status.
 
 ---
 
+**Commit hook parity shipped (2026-09-06, F01):** Signed and unsigned commit/amend
+now run system Git’s applicable hooks and honor custom hooksPath, rejection
+and rewritten messages. Checkout session drafts survive rejection/navigation;
+expandable output retains bounded diagnostics. Native Ctrl+Enter flows and
+core/store regressions passed; the loaded-host no-hook cost is recorded in
+`docs/hooks-identity-signing-validation-2026-09-06.md`. Index/status paths are
+unchanged; the commit-policy exception is explicit in PRD and learnings.
+
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

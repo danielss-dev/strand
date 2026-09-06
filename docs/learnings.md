@@ -359,7 +359,13 @@ the existing pattern better than a forced shared abstraction.
 behaviour matters more than staying pure-git2: **conflicts** (git leaves markers
 + the in-progress state on disk), **GPG/SSH signing**, and **hooks** — none of
 which git2's `merge`/`cherrypick`/`revert` do for free, and git2 has no rebase
-driver. Index/commit ops still use git2. After any history op, the store refresh
+driver. Index operations still use git2; commit/amend always use system Git
+(F01, 2026-09-06), including unsigned commits, so Git owns hook discovery,
+rejection, message rewriting, merge parents and effective identity. No hook
+existence shortcut: conditional/worktree config and installed hooks can change
+between operations. Capture bounded stdout/stderr, preserve checkout drafts on
+failure, and do not report post-success refresh errors as commit failures.
+After any history op, the store refresh
 tail is meta + local-changes + log + refs (`refreshAfterHistoryOp`), and a paused
 op is detected via `Repo::operation_in_progress` reading `.git/` markers
 (`rebase-merge`/`rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_HEAD`,

@@ -2,6 +2,12 @@
 
 Strand is a complete daily-driver Git client alongside its review features. This page covers staging and committing in Local Changes, syncing with remotes, the sidebar's branch/tag/stash/remote/submodule sections, history operations like cherry-pick and interactive rebase, and conflict resolution.
 
+Commit and amend run system Git’s hooks, including a configured `core.hooksPath`.
+A rejecting hook leaves your subject, body and amend selection in the checkout’s
+session draft. Drafts also survive view/repository switches. Failures show Git’s
+diagnostics; successful commits offer expandable **Commit output**. Output keeps
+the first and last 8 KiB of each stream when a hook is verbose.
+
 ## Local Changes (`Mod+2`)
 
 Local Changes is a pure staging workspace: an Unstaged pane and a Staged pane (hierarchical file trees with status badges), a diff pane, and the commit form.

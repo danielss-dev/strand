@@ -44,7 +44,7 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
 - **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. This is the author identity for new commits everywhere, not just in Strand.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
-Everything else about git — credentials, SSH keys, commit signing — is inherited from your existing git setup: network operations (push, pull, fetch, clone) go through your system `git`, and when `commit.gpgSign` is on, commits do too — picking up your signing config and running your `pre-commit` / `commit-msg` hooks, just like plain `git commit`. Unsigned commits (the default) are written in-process and do not run commit hooks. There is nothing to configure in Strand for those.
+Everything else about git — credentials, SSH keys, commit signing — is inherited from your existing git setup: network operations (push, pull, fetch, clone) go through your system `git`, and every commit/amend does too. Signed and unsigned commits honor hooks (including `core.hooksPath`), rejecting policies and message rewrites. A rejection preserves your checkout’s draft; expandable commit output retains bounded hook diagnostics. Signing continues to use your existing Git config and agents.
 
 ## Hosting
 

@@ -899,13 +899,15 @@ pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResul
 }
 
 #[tauri::command(async)]
-pub fn repo_commit(
+pub async fn repo_commit(
     path: String,
     subject: String,
     body: Option<String>,
     amend: bool,
 ) -> CmdResult<CommitOutcome> {
-    Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+    run_blocking("commit", move || {
+        Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+    }).await
 }
 
 // Network commands run on a blocking thread (they shell out to `git`, which

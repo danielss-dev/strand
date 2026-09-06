@@ -23,6 +23,7 @@ import type {
   BaseBranch,
   CodeReviewFinding,
   Commit,
+  CommitOutcome,
   BranchPushRequest,
   CommitSearchMode,
   FileDiff,
@@ -431,7 +432,7 @@ export interface RepoState {
   loadRepoDiffMode(): Promise<void>;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
-  commit(subject: string, body: string | null, amend: boolean): Promise<void>;
+  commit(subject: string, body: string | null, amend: boolean): Promise<CommitOutcome>;
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
@@ -1799,13 +1800,23 @@ export const useRepo = create<RepoState>((set, get) => ({
   },
   async commit(subject, body, amend) {
     const path = get().activePath;
-    if (!path) return;
-    await tauri.repoCommit(path, subject, body, amend);
-    await Promise.all([
-      get().refreshLocalChanges(),
-      get().refreshLog(),
-      get().refreshStashes(),
-    ]);
+    if (!path) throw new Error('No repository selected.');
+    let outcome: CommitOutcome;
+    try {
+      outcome = await tauri.repoCommit(path, subject, body, amend);
+    } catch (error) {
+      // Hooks can edit the index/worktree even when they reject the commit.
+      if (get().activePath === path) await get().refreshLocalChanges().catch(() => {});
+      throw error;
+    }
+    if (get().activePath === path) {
+      // A failed refresh cannot turn a completed commit into a retryable failure.
+      await Promise.allSettled([
+        get().refreshLocalChanges(), get().refreshLog(), get().refreshStashes(),
+        get().refreshMeta(), get().refreshRefs(),
+      ]);
+    }
+    return outcome;
   },
 
   async refreshMeta() {

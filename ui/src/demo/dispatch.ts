@@ -209,7 +209,7 @@ export const handlers: Record<string, Handler> = {
   repo_apply_patch: (a) => repo.applyPatchTo(wtOf(a), str(a.patch), a.target as 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir'),
   repo_commit: (a) => {
     const c = repo.commitIndex(wtOf(a), str(a.subject), a.body == null ? null : str(a.body), Boolean(a.amend));
-    return { oid: c.hash, amended: Boolean(a.amend) };
+    return { oid: c.hash, amended: Boolean(a.amend), output: 'Demo commit created.' };
   },
 
   // ---- branches / tags / remotes -----------------------------------------
