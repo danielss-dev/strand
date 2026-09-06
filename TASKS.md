@@ -83,6 +83,57 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ## strand-core (Rust git engine)
 
+### Git-client feature audit follow-ups (2026-09-06)
+
+- ☑ Audit the current Git-client feature surface against implementation
+  (`docs/git-client-feature-audit-2026-09-06.md`: 19 missing/partial feature
+  families, code evidence, priorities, fallbacks, and acceptance criteria).
+  Priorities below are current recommendations, not historical PRD release gates.
+- ☐ **F01 / P1 — Hook parity for unsigned commit/amend.** Resolve the recorded
+  git2 commit-policy versus Git-hook contract tension; honor `core.hooksPath`,
+  rejection and message rewriting, preserve drafts and bounded diagnostics,
+  and measure the no-hook path (`commit.rs`; signed commits already use Git).
+- ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
+  the current author/committer identity, set/remove repo-local name/email
+  without changing global/conditional config, and verify linked worktrees.
+- ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
+  signing/verification; add scoped format/key controls and signed-tag creation
+  with agent delegation and visible signing failures.
+- ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
+  correctness across single/bulk staging, checkout, commit and network flows;
+  then add setup/tracking/status/locks/progress. System-Git networking alone
+  does not establish end-to-end LFS support.
+- ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
+  with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
+  `.gitmodules` and index changes, plus cancellable network operations.
+- ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
+  patch export and hunk apply with preview/validation, explicit targets,
+  mailbox continue/skip/abort and bundle prerequisites/ref summaries.
+- ☐ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
+  compatibility fixtures for excluded paths, dirty trees and sparse indexes.
+- ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
+  partial-clone filter and recursive-submodule options; deepen/unshallow,
+  progress/cancellation, and safe argument construction.
+- ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
+  session resume and safe reset to the original checkout; defer test-command
+  execution until the manual workflow is complete.
+- ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
+  selection, concrete destination review, remote configuration and explicit
+  initial push, with recovery from partial failure.
+- ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
+  argv templates, exact context, palette/menu discovery, preview, bounded output
+  and cancellation; editor/terminal templates and internal registries already exist.
+- ☐ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
+  tag retarget/re-annotation with current/new target review. Signed tags are F03;
+  existing local Review notes are separate from Git notes.
+- ☐ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
+  inspectable start/finish feature/release/hotfix flows with conflict recovery.
+
+Hosted-review F06/F11–F13 stay in the Pull requests backlog below. CLI/deep-link
+F16 and remote-SSH F17 keep their existing Platform / CLI companion / Remote
+repos task breakdowns. The audit separates file metadata/session restoration,
+community plugins, performance and platform certification from Git feature gaps.
+
 ### Reads
 - ☑ `Repo::discover`
 - ☑ `Repo::meta` (branch + real ahead/behind via `git2::graph_ahead_behind`;
@@ -1816,8 +1867,10 @@ tree: watch the agent work, review fast, accept or reject safely.
     batched submission use GitHub's atomic review payload or Azure's bounded
     latest-iteration/change-tracking resolver (`azure_review_coordinates`,
     `azure_server_review_coordinates`).
-  - ☐ 1.1: Paginate GitHub review threads and replies beyond the current
-    bounded 100-thread / 100-comment detail query.
+  - ☐ **F06 / P1 — Complete large-PR pagination.** Paginate GitHub inbox,
+    reviews, threads/replies and check contexts beyond the current bounded
+    queries; expose partial/error states, deduplicate pages and test 101+
+    entries while keeping initial queries shallow.
   - ☑ Batched review submission: pending comments plus Comment / Approve /
     Request changes, summary preview, exact-head stale guard, and draft
     preservation when a provider write fails (`pullRequestReview` drafts,
@@ -1842,11 +1895,17 @@ tree: watch the agent work, review fast, accept or reject safely.
     Reliable “since my last review” compare where the provider exposes a
     boundary, suggestions, and unresolved-feedback export for external agents
     remain 1.1 work.
+  - ☐ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
+    comparison, validated suggestion application and unresolved-feedback export;
+    handle rebases and force pushes without reusing stale coordinates.
   - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls
     remain neutral. Merge queue/auto-complete and richer required-review detail
     remain 1.1 work.
+  - ☐ **F12 / P2 — Merge queue / auto-complete controls.** Provider capability,
+    enable/cancel, queued versus merged state, policy blockers and head refresh;
+    preserve GitHub queue versus Azure auto-complete semantics.
   - ☑ Hosted PR lifecycle actions.
     - ☑ Mark permission-backed drafts ready for review
       (`PullRequest.can_mark_ready`, `repo_pull_request_ready`, GitHub viewer
@@ -1861,6 +1920,9 @@ tree: watch the agent work, review fast, accept or reject safely.
       `Operation::SetStatus`; keyboard-operable confirmed overflow action).
   - ☐ 1.1: GitLab merge-request adapter.
   - ☐ 1.1: Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
+  - ☐ **F11 / P2 — GitHub enterprise/custom-host adapter.** Model host/API/auth
+    scope instead of hardcoding GitHub.com; keep the GitLab/Bitbucket adapter
+    rows above as the other F11 deliverables.
   - ☐ 1.1: Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
     to provider CLIs (blocked on Platform → per-platform credential storage).
 

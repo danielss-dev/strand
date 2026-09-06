@@ -2,6 +2,9 @@
 
 Project documentation.
 
+- [`git-client-feature-audit-2026-09-06.md`](./git-client-feature-audit-2026-09-06.md)
+  — current code-backed list of 19 missing/partial Git-client feature families,
+  priorities, workarounds, and completion criteria.
 - [`learnings.md`](./learnings.md) — durable rules learned while building
   Strand. Read before touching the UI; append when you discover something
   future work has to respect.

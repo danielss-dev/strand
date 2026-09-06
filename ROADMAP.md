@@ -2796,6 +2796,18 @@ inline text, and keyboard focus publishes the full path to the status bar.
 Dashboard metrics, chips, row actions, compare selection, and archive UI were
 removed from the pane; palette cleanup remains wired to its confirmation.
 
+**Git-client feature audit kick (2026-09-06):** Rechecked the 1.5.1 source
+against native operations, IPC, UI actions and existing plans. The new
+`docs/git-client-feature-audit-2026-09-06.md` lists 19 missing/partial feature
+families with code evidence and completion criteria. Next priorities are
+unsigned-commit hook parity, scoped repository identity/signing, complete
+large-PR pagination, LFS compatibility/management and submodule lifecycle.
+Advanced clone options, patch interchange, sparse checkout, bisect and provider
+expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
+implementation rows while the July audit is labeled historical. This is a
+planning update, not a claim that these features shipped; existing local Git,
+GitHub/Azure review, Workbench and performance work retain their own status.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)
