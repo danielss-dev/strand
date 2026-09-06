@@ -945,3 +945,20 @@ export interface RepositoryIdentity {
   committer: EffectiveIdentity;
   local: GlobalIdentity;
 }
+
+export type SigningMode = 'inherit' | 'sign' | 'unsigned';
+export type SigningScope = 'local' | 'worktree';
+export interface SigningSettings {
+  effective: Record<string, ScopedValue>;
+  local: Record<string, ScopedValue>;
+  worktree: Record<string, ScopedValue>;
+  worktree_enabled: boolean;
+  commit_sign: boolean;
+  tag_sign: boolean;
+  tag_force_annotated: boolean;
+}
+export interface TagVerification {
+  oid: string;
+  status: 'unsigned' | 'verified' | 'failed';
+  output: string;
+}

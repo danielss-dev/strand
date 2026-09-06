@@ -1,6 +1,6 @@
 # Settings
 
-Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; git identity and Azure DevOps Server profiles have explicit save actions.
+Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; Git identity, signing, and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.
 
@@ -46,10 +46,26 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
   **Remove name/email override** edit only direct local config. Linked worktrees
   share these local values; existing worktree, conditional and environment
   precedence remains visible. Amend preserves the original author.
-- **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. This is the author identity for new commits everywhere, not just in Strand.
+- **Repository signing** — Choose the write scope: repository config shared by
+  linked worktrees, or this worktree when `extensions.worktreeConfig` is already
+  enabled. Each setting shows its effective value and source. Save or remove
+  overrides for commit/tag signing defaults, annotated-tag signing, signing
+  format (OpenPGP, SSH, or X.509), key ID/path, and SSH allowed signers file.
+  Removing an override restores inheritance; global and included files are
+  unchanged. The palette action **Settings: Repository identity and signing**
+  opens this section.
+- **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. These defaults apply to Git outside Strand too; repository, worktree, conditional and environment overrides can take precedence.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
-Everything else about git — credentials, SSH keys, commit signing — is inherited from your existing git setup: network operations (push, pull, fetch, clone) go through your system `git`, and every commit/amend does too. Signed and unsigned commits honor hooks (including `core.hooksPath`), rejecting policies and message rewrites. A rejection preserves your checkout’s draft; expandable commit output retains bounded hook diagnostics. Signing continues to use your existing Git config and agents.
+Network operations, commit/amend and tag creation use your system Git.
+Credentials, signing programs and GPG/SSH agents come from your existing setup.
+Strand stores key references, never private keys or passphrases. SSH verification
+uses Git’s allowed signers file. Commit and tag forms offer **Inherit Git config**,
+**Sign this commit/tag**, and **Do not sign this commit/tag**; these choices apply
+only to that operation. Signed and unsigned commits honor hooks (including
+`core.hooksPath`), rejection and message rewrites. A rejection preserves your
+checkout’s draft and signing choice; expandable commit output retains bounded
+hook diagnostics.
 
 ## Hosting
 

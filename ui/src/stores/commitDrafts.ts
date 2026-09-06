@@ -1,16 +1,18 @@
+import type { SigningMode } from '../lib/types';
 import { create } from 'zustand';
 
 interface CommitDraft {
   subject: string;
   body: string;
   amend: boolean;
+  signing: SigningMode;
   submitting: boolean;
   output: string;
   error: string | null;
 }
 
 export const emptyCommitDraft: CommitDraft = {
-  subject: '', body: '', amend: false, submitting: false, output: '', error: null,
+  subject: '', body: '', amend: false, signing: 'inherit', submitting: false, output: '', error: null,
 };
 
 /** Session drafts belong to a checkout, including while a hook is running. */

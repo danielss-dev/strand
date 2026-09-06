@@ -176,3 +176,23 @@ describe('commit outcome boundary', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+describe('tag outcome boundary', () => {
+  it('keeps a created signed tag successful if refresh fails', async () => {
+    vi.spyOn(tauri, 'repoTagCreate').mockResolvedValue(undefined);
+    const refresh = vi.fn(async () => { throw new Error('refresh failed'); });
+    useRepo.setState({ activePath: '/repo', refreshRefs: refresh, refreshLog: refresh });
+    await expect(useRepo.getState().createTag('release', null, 'annotation', 'sign')).resolves.toBeUndefined();
+    expect(tauri.repoTagCreate).toHaveBeenCalledWith('/repo', 'release', null, 'annotation', false, 'sign');
+  });
+
+  it('does not refresh another checkout after the signer completes', async () => {
+    const refresh = vi.fn(async () => {});
+    vi.spyOn(tauri, 'repoTagCreate').mockImplementation(async () => {
+      useRepo.setState({ activePath: '/other' });
+    });
+    useRepo.setState({ activePath: '/repo', refreshRefs: refresh, refreshLog: refresh });
+    await useRepo.getState().createTag('release', null, 'annotation');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

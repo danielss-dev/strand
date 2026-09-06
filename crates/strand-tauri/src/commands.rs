@@ -19,6 +19,8 @@ use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     commit_metadata::CommitSignature,
+    signing::{SigningMode, SigningScope, SigningSettings},
+    tag::TagVerification,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
     gitconfig::{self, GlobalIdentity, RepositoryIdentity},
     init::{init_repository, InitOutcome},
@@ -904,9 +906,10 @@ pub async fn repo_commit(
     subject: String,
     body: Option<String>,
     amend: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<CommitOutcome> {
     run_blocking("commit", move || {
-        Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+        Ok(Repo::discover(&path)?.commit_with_signing(&subject, body.as_deref(), amend, signing.unwrap_or_default())?)
     }).await
 }
 
@@ -1499,15 +1502,32 @@ pub async fn repo_maintenance(
 }
 
 #[tauri::command(async)]
-pub fn repo_tag_create(
+pub async fn repo_tag_create(
     path: String,
     name: String,
     target: Option<String>,
     message: Option<String>,
     force: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<()> {
-    Repo::discover(&path)?.create_tag(&name, target.as_deref(), message.as_deref(), force)?;
-    Ok(())
+    run_blocking("tag", move || {
+        Ok(Repo::discover(&path)?.create_tag_with_signing(&name, target.as_deref(), message.as_deref(), force, signing.unwrap_or_default())?)
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_tag_verify(path: String, name: String) -> CmdResult<TagVerification> {
+    run_blocking("verify-tag", move || Ok(Repo::discover(&path)?.verify_tag(&name)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_signing_settings(path: String) -> CmdResult<SigningSettings> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.signing_settings()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_signing_config(path: String, scope: SigningScope, key: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.set_signing_config(scope, &key, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]

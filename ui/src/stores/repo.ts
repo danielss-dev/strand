@@ -24,6 +24,7 @@ import type {
   CodeReviewFinding,
   Commit,
   CommitOutcome,
+  SigningMode,
   BranchPushRequest,
   CommitSearchMode,
   FileDiff,
@@ -432,7 +433,7 @@ export interface RepoState {
   loadRepoDiffMode(): Promise<void>;
   stageAll(): Promise<void>;
   unstageAll(): Promise<void>;
-  commit(subject: string, body: string | null, amend: boolean): Promise<CommitOutcome>;
+  commit(subject: string, body: string | null, amend: boolean, signing?: SigningMode): Promise<CommitOutcome>;
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
@@ -542,7 +543,7 @@ export interface RepoState {
    * Create a tag at `target` (any revspec; null ⇒ HEAD). A non-empty
    * `message` makes it an annotated tag, otherwise lightweight.
    */
-  createTag(name: string, target: string | null, message: string | null): Promise<void>;
+  createTag(name: string, target: string | null, message: string | null, signing?: SigningMode): Promise<void>;
   /** Delete a tag by short name. */
   deleteTag(name: string): Promise<void>;
   /**
@@ -1798,12 +1799,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     await tauri.repoUnstageMany(path, files);
     await get().refreshLocalChanges();
   },
-  async commit(subject, body, amend) {
+  async commit(subject, body, amend, signing = 'inherit') {
     const path = get().activePath;
     if (!path) throw new Error('No repository selected.');
     let outcome: CommitOutcome;
     try {
-      outcome = await tauri.repoCommit(path, subject, body, amend);
+      outcome = await tauri.repoCommit(path, subject, body, amend, signing);
     } catch (error) {
       // Hooks can edit the index/worktree even when they reject the commit.
       if (get().activePath === path) await get().refreshLocalChanges().catch(() => {});
@@ -2119,12 +2120,12 @@ export const useRepo = create<RepoState>((set, get) => ({
     await get().refreshLocalChanges();
   },
 
-  async createTag(name, target, message) {
+  async createTag(name, target, message, signing = 'inherit') {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
-    await tauri.repoTagCreate(path, name, target, message, false);
+    await tauri.repoTagCreate(path, name, target, message, false, signing);
     // Refresh refs (sidebar list) and the log (graph chips read from refs).
-    await Promise.all([get().refreshRefs(), get().refreshLog()]);
+    if (get().activePath === path) await Promise.allSettled([get().refreshRefs(), get().refreshLog()]);
   },
   async deleteTag(name) {
     const path = get().activePath;

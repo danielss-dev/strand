@@ -87,6 +87,7 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  onVerifyTag: (name: string) => void;
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
   onCreateBranch: (start: string | null, label: string) => void;
@@ -176,7 +177,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -770,6 +771,7 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
       { label: 'Copy tag name', icon: 'file', onSelect: () => { void copyToClipboard(tg.name); onToast('Tag name copied'); } },
       { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(tg.target); onToast('Commit SHA copied'); } },
     );
+    items.push({ label: 'Verify tag signature…', icon: 'tag', onSelect: () => onVerifyTag(tg.name) });
     items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteTag(tg.name)) });
     return items;
   };

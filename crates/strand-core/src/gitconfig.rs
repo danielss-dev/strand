@@ -31,11 +31,11 @@ pub struct RepositoryIdentity {
     pub local: GlobalIdentity,
 }
 
-type ConfigValues = std::collections::BTreeMap<String, ScopedValue>;
+pub(crate) type ConfigValues = std::collections::BTreeMap<String, ScopedValue>;
 
-fn config_values(repo: &Repo, local: bool, pattern: &str) -> Result<ConfigValues> {
+pub(crate) fn config_values(repo: &Repo, scope: Option<&str>, pattern: &str) -> Result<ConfigValues> {
     let mut args = vec!["config", "--null", "--show-scope", "--show-origin"];
-    if local { args.extend(["--local", "--no-includes"]); }
+    if let Some(scope) = scope { args.extend([scope, "--no-includes"]); }
     else { args.push("--includes"); }
     args.extend(["--get-regexp", pattern]);
     let out = config_git(repo, &args)?;
@@ -50,8 +50,13 @@ fn config_values(repo: &Repo, local: bool, pattern: &str) -> Result<ConfigValues
     let mut values = ConfigValues::new();
     while let Some(scope) = fields.next() {
         let origin = fields.next().ok_or_else(|| Error::Other("Invalid Git config origin".into()))?;
-        let (key, value) = fields.next().and_then(|entry| entry.split_once('\n'))
-            .ok_or_else(|| Error::Other("Invalid Git config value".into()))?;
+        let entry = fields.next().ok_or_else(|| Error::Other("Invalid Git config value".into()))?;
+        let (key, value) = entry.split_once('\n').map_or((entry, None), |(key, value)| (key, Some(value)));
+        // Git distinguishes a valueless boolean (true) from an explicitly
+        // empty value (false). Keep both editable as actual signing states.
+        let value = if matches!(key, "commit.gpgsign" | "tag.gpgsign" | "tag.forcesignannotated") {
+            match value { None => "true", Some("") => "false", Some(value) => value }
+        } else { value.unwrap_or_default() };
         values.insert(key.to_owned(), ScopedValue {
             value: value.to_owned(), scope: scope.to_owned(), origin: origin.to_owned(),
         });
@@ -84,8 +89,8 @@ impl Repo {
     /// includes, worktree config, author/committer overrides and environment.
     /// Only queried on the settings surface, never on status/log refresh.
     pub fn repository_identity(&self) -> Result<RepositoryIdentity> {
-        let values = config_values(self, false, "^(user|author|committer)\\.(name|email)$")?;
-        let local = config_values(self, true, "^user\\.(name|email)$")?;
+        let values = config_values(self, None, "^(user|author|committer)\\.(name|email)$")?;
+        let local = config_values(self, Some("--local"), "^user\\.(name|email)$")?;
         let identity = |role: &str| -> Result<EffectiveIdentity> {
             let variable = format!("GIT_{}_IDENT", role.to_uppercase());
             let out = config_git(self, &["var", &variable])?;
@@ -117,7 +122,7 @@ impl Repo {
         self.set_scoped_config("--local", key, value)
     }
 
-    fn set_scoped_config(&self, scope: &str, key: &str, value: Option<&str>) -> Result<()> {
+    pub(crate) fn set_scoped_config(&self, scope: &str, key: &str, value: Option<&str>) -> Result<()> {
         if value.is_some_and(|v| v.trim().is_empty() || v.len() > 4096 || v.contains(['\0', '\r', '\n'])) {
             return Err(Error::Other("Use a non-empty, single-line config value (up to 4096 bytes), or remove the override".into()));
         }

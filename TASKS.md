@@ -98,9 +98,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   the current author/committer identity, set/remove repo-local name/email
   without changing global/conditional config, and verify linked worktrees
   (`repository_identity` / `repo_set_identity`, Settings → Git source display).
-- ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
+- ☑ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
-  with agent delegation and visible signing failures.
+  with agent delegation and visible signing failures (`signing_settings` /
+  `set_signing_config`, commit/tag `SigningChoice`, `TagVerificationDialog`;
+  real GPG/SSH and native Windows evidence in the F01–F03 validation note).
 - ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
   correctness across single/bulk staging, checkout, commit and network flows;
   then add setup/tracking/status/locks/progress. System-Git networking alone
@@ -1475,6 +1477,11 @@ community plugins, performance and platform certification from Git feature gaps.
   and focus-restore to the opener on close (captured pre-`autoFocus`).
 
 ### Cross-cutting
+- ☐ Investigate Windows watcher burst timing: unchanged
+  `watch::tests::debounce_collapses_a_burst_into_one_callback` observed two
+  callbacks instead of one in the 2026-09-06 F01–F03 final full run and isolated
+  retry, after earlier full-suite passes. Reproduce and distinguish OS event
+  delivery from debounce/test timing before changing production behavior.
 - ☑ Resizable panes everywhere (`react-resizable-panels`); sizes
   persisted per-region via `autoSaveId` (`strand:body`, `strand:lc-main`,
   `strand:lc-files`)

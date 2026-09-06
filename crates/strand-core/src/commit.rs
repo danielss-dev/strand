@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{Error, Result},
     repo::Repo,
+    signing::SigningMode,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,20 +22,29 @@ pub struct CommitOutcome {
 /// git2. This deliberately supersedes the old unsigned git2 fast path.
 impl Repo {
     pub fn commit(&self, subject: &str, body: Option<&str>, amend: bool) -> Result<CommitOutcome> {
+        self.commit_with_signing(subject, body, amend, SigningMode::Inherit)
+    }
+
+    pub fn commit_with_signing(&self, subject: &str, body: Option<&str>, amend: bool, signing: SigningMode) -> Result<CommitOutcome> {
         let message = match body.map(str::trim).filter(|b| !b.is_empty()) {
             Some(b) => format!("{}\n\n{}\n", subject.trim(), b),
             None => format!("{}\n", subject.trim()),
         };
-        let output = self.commit_via_git(&message, amend)?;
+        let output = self.commit_via_git(&message, amend, signing)?;
         let oid = self.git2()?.head()?.peel_to_commit()?.id().to_string();
         Ok(CommitOutcome { oid, amended: amend, output })
     }
 
-    fn commit_via_git(&self, message: &str, amend: bool) -> Result<String> {
+    fn commit_via_git(&self, message: &str, amend: bool, signing: SigningMode) -> Result<String> {
         let file = temp_message_file(message)?;
         let file_arg = file.to_string_lossy().into_owned();
         let mut args = vec!["commit", "-F", file_arg.as_str(), "--cleanup=verbatim"];
         if amend { args.push("--amend"); }
+        match signing {
+            SigningMode::Inherit => {},
+            SigningMode::Sign => args.push("--gpg-sign"),
+            SigningMode::Unsigned => args.push("--no-gpg-sign"),
+        }
         let res = run_git(&self.path, &args);
         let _ = std::fs::remove_file(&file);
         res
@@ -47,7 +57,7 @@ impl Repo {
 /// refuses to open a path that already exists — including a pre-planted
 /// symlink in the shared temp dir (local TOCTOU) — so a collision just bumps
 /// the counter and retries (bounded).
-fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
+pub(crate) fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -249,7 +259,7 @@ mod tests {
         git(&dir, &["commit", "-q", "-m", "base"]);
 
         stage(&dir, "a.txt", "a\n");
-        repo.commit_via_git("subject\n\nbody line\n", false).unwrap();
+        repo.commit_via_git("subject\n\nbody line\n", false, SigningMode::Inherit).unwrap();
         assert_eq!(git(&dir, &["log", "-1", "--format=%B"]), "subject\n\nbody line");
         assert_eq!(git(&dir, &["rev-list", "--count", "HEAD"]), "2");
 
@@ -257,7 +267,7 @@ mod tests {
         // author and only updates the committer — assert that parity here.
         git(&dir, &["config", "user.name", "Other"]);
         git(&dir, &["config", "user.email", "other@example.com"]);
-        repo.commit_via_git("amended subject\n", true).unwrap();
+        repo.commit_via_git("amended subject\n", true, SigningMode::Inherit).unwrap();
         assert_eq!(git(&dir, &["log", "-1", "--format=%B"]), "amended subject");
         assert_eq!(git(&dir, &["rev-list", "--count", "HEAD"]), "2", "amend replaces, not adds");
         assert_eq!(

@@ -2512,3 +2512,21 @@ through an include. Show both the saved local values and the effective values:
 a later conditional include or a worktree/environment override can still win.
 Linked worktrees share local config; `--worktree` writes must never silently
 fall back to `--local` when `extensions.worktreeConfig` is disabled.
+
+## Signing policy must remain Git-compatible (2026-09-06)
+
+Signing settings store only key references and existing-agent configuration.
+Operation-level inherit/sign/unsigned choices never rewrite config, and signing
+or hook failures retain the draft. Tag creation runs system Git too: `--file`
+already creates an annotated tag, while explicit `--annotate` suppresses
+`tag.forceSignAnnotated`. Use that override only for an explicitly unsigned
+annotation, alongside `--no-sign`. With verbatim cleanup, ensure a final newline
+before Git appends the signature or the result cannot be verified.
+
+Verify tags lazily against their immutable object ID. Display Git's verification
+output and distinguish unsigned, valid and failed results; do not turn signature
+validity into an unconditional claim of signer trust. Keep config reads and
+signature verification out of status/snapshot and graph-wide refresh paths.
+In `git config --null --get-regexp` output, a valueless boolean has no newline
+separator and means true; a newline followed by an empty value means false.
+Preserve that distinction in settings displays and scoped editing.

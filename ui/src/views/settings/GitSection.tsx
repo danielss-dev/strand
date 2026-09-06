@@ -1,3 +1,4 @@
+import { SigningSettings } from './SigningSettings';
 import { useRepo } from '../../stores/repo';
 import { RepositoryIdentity } from './RepositoryIdentity';
 import { useEffect, useState } from 'react';
@@ -61,6 +62,7 @@ export function GitSection() {
   return (
     <section className="settings-section" aria-label="Git">
       {activePath && <RepositoryIdentity key={activePath} path={activePath} />}
+      {activePath && <SigningSettings key={`signing:${activePath}`} path={activePath} />}
       <div className="settings-field">
         <span className="settings-field-label">Global identity</span>
         <p className="settings-hint">

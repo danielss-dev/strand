@@ -2156,7 +2156,8 @@ and Store certification remain external gates.
   everything through the `commands.rs` seam) are active now.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
 - Git LFS (status badges + progress)
-- GPG / SSH commit signing UI
+- ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
+  choices; signed-tag creation and verification, 2026-09-06).
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
@@ -2827,6 +2828,16 @@ worktree overrides remain effective. Conditional, two-repository and linked
 worktree fixtures passed; native settings save/remove and repository switching
 were exercised with isolated fixtures.
 
+
+**Signing controls and signed tags shipped (2026-09-06, F03):** Repository and
+enabled worktree settings show effective signing defaults, format, key and SSH
+allowed-signers sources. Commit/amend and tag forms offer inherited, signed or
+unsigned operations without changing defaults. Signed tags require an
+annotation; lazy verification displays the immutable object and Git trust
+diagnostics. Real GPG/SSH fixtures cover hooks, amend, linked worktrees,
+unsigned overrides, tampering and failed signers. Native Windows settings,
+commit/amend and palette tag flows passed; validation and platform limits are
+recorded in `docs/hooks-identity-signing-validation-2026-09-06.md`.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

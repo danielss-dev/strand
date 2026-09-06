@@ -82,7 +82,15 @@ height so it does not crowd the diff. `Mod+Enter` in either field commits (the
 Commit button shows the same chip); plain Enter still inserts a newline in the
 description. An **amend** checkbox rewrites the previous commit instead.
 
-**Commit signing honors your existing setup**: if `commit.gpgSign=true` is configured, Strand runs your real `git commit`, so GPG or SSH signing happens automatically and pre-commit/commit-msg hooks fire as they would on the command line. With signing off, commits are made by Strand's own engine and hooks are not run.
+Every commit and amend runs your real `git commit`, including applicable hooks,
+`core.hooksPath`, rejecting policies and message rewrites. The **Signature**
+selector defaults to **Inherit Git config** and shows whether Git will sign.
+**Sign this commit** and **Do not sign this commit** override that operation
+without changing config. **Signing settings…** opens scoped defaults and key
+references in Settings → Git. Signing uses your existing GPG/SSH agents; hook
+or signing failures retain the subject, description, amend and signing choices
+for retry, including when you leave this view and return during the session.
+Expandable **Commit output** shows bounded diagnostics after success.
 
 ### AI commit message suggestions
 
@@ -130,7 +138,17 @@ Each remote is a tree rooted at its name, showing all remote-tracking branches. 
 
 ### Tags
 
-Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
+Clicking a tag reveals the tagged commit in the graph; double-click (or `Enter`) checks it out (detached). The menu offers Checkout, create a branch or worktree from the tag, Push to a remote, Delete on the remote (grayed out for tags the remote doesn't have), Verify tag signature, copy the tag name or target SHA, and Delete tag. The section `+` opens the tag dialog — adding a message creates an annotated tag. Tags can also be created from a commit's detail panel ("Tag…") and the palette ("Create tag…", "Push all tags").
+
+The tag dialog offers **Inherit Git config**, **Sign this tag**, and **Do not sign
+this tag**. Inherited signing honors `tag.gpgSign` and `tag.forceSignAnnotated`.
+A signed tag requires an annotation; unsigned tags with no message are
+lightweight. A failed signing attempt keeps the form open with your draft and
+Git’s error. To inspect a signature, use the tag menu or the palette’s **Verify
+tag signature…**. The dialog verifies the selected tag object on demand and
+shows its immutable object ID, unsigned/valid/failed status, and Git’s verification
+output. Review that output for trust details; a valid signature alone does not
+establish that you trust the signer.
 
 ### Stashes
 
