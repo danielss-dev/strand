@@ -9546,6 +9546,7 @@ select.clone-input {
 .git-tool-body { overflow-y: auto; min-height: 0; max-height: 70vh; }
 .git-tool-body > .btn { align-self: flex-start; }
 .git-tool-body p { overflow-wrap: anywhere; }
+.git-tool-review li { overflow-wrap: anywhere; }
 .git-tool-review { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .git-tool-review pre, .git-tool-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; font: 11px var(--font-mono); }
 .git-tool-actions { display: flex; flex-wrap: wrap; gap: 8px; }

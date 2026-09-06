@@ -34,6 +34,7 @@ pub mod maintenance;
 pub mod conflict;
 pub mod external;
 pub mod gitconfig;
+pub mod gitflow;
 pub mod history;
 pub mod ignore;
 pub mod stash;

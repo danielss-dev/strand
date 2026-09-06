@@ -2154,7 +2154,8 @@ and Store certification remain external gates.
   never touches credentials). Designed 2026-06-12: `docs/remote-ssh.md`
   + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
   everything through the `commands.rs` seam) are active now.
-- Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
+- ☑ Git-flow (F19: opt-in Git-flow AVH detection/configuration, reviewed
+  feature/release/hotfix start/finish and recovery from partial completion)
 - Git LFS (status badges + progress)
 - GPG / SSH commit signing UI
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
@@ -2812,6 +2813,17 @@ expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
 implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
+
+**Advanced refs and Git-flow shipped (2026-09-06):** Added lazy Git notes and
+replacement-ref management, explicit unsigned tag retarget/re-annotation with
+current/new target review and remote publication checks, and opt-in Git-flow
+AVH configuration plus feature/release/hotfix start/finish. Stale external refs,
+checkout/config changes and unresolved conflicts block reviewed writes.
+Git-flow streams bounded output and preserves completed merges/tags when a
+later merge is aborted. Native WebView2 exercised notes, replacements, tag
+edits, all three workflow types, external-session recovery and keyboard focus.
+The core suite passed (174 normal tests plus three explicit AVH integrations),
+as did the frontend typecheck and five focused frontend tests.
 
 ---
 

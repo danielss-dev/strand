@@ -70,6 +70,27 @@ impl From<strand_core::Error> for CmdError {
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
 
 #[tauri::command]
+pub async fn repo_gitflow_detect() -> CmdResult<strand_core::gitflow::FlowTool> {
+    run_blocking("detect Git-flow", || strand_core::gitflow::detect().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_state(path: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("inspect Git-flow", move || Repo::discover(path)?.gitflow_state().map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_configure(path: String, config: strand_core::gitflow::FlowConfig, enabled: bool, token: String) -> CmdResult<strand_core::gitflow::FlowState> {
+    run_blocking("configure Git-flow", move || Repo::discover(path)?.configure_gitflow(config, enabled, &token).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_plan(path: String, kind: strand_core::gitflow::FlowKind, action: strand_core::gitflow::FlowAction, name: String) -> CmdResult<strand_core::gitflow::FlowPlan> {
+    run_blocking("review Git-flow", move || Repo::discover(path)?.plan_gitflow(kind, action, &name).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn repo_gitflow_run(path: String, plan: strand_core::gitflow::FlowPlan, on_event: Channel<String>) -> CmdResult<strand_core::gitflow::FlowOutcome> {
+    run_blocking("run Git-flow", move || Repo::discover(path)?.run_gitflow(plan, |text| { let _ = on_event.send(text); }).map_err(Into::into)).await
+}
+
+#[tauri::command]
 pub async fn repo_advanced_refs(
     path: String,
     notes_ref: String,

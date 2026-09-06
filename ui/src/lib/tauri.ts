@@ -1,3 +1,4 @@
+import type { FlowAction, FlowConfig, FlowKind, FlowOutcome, FlowPlan, FlowState, FlowTool } from './gitflow';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
 import type { BisectAction, BisectState, BisectOutcome } from './bisect';
@@ -118,6 +119,14 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoGitflowDetect: () => invoke<FlowTool>('repo_gitflow_detect'),
+  repoGitflowState: (path: string) => invoke<FlowState>('repo_gitflow_state', { path }),
+  repoGitflowConfigure: (path: string, config: FlowConfig, enabled: boolean, token: string) => invoke<FlowState>('repo_gitflow_configure', { path, config, enabled, token }),
+  repoGitflowPlan: (path: string, kind: FlowKind, action: FlowAction, name: string) => invoke<FlowPlan>('repo_gitflow_plan', { path, kind, action, name }),
+  repoGitflowRun: (path: string, plan: FlowPlan, onProgress: (output: string) => void) => {
+    const onEvent = new Channel<string>(); onEvent.onmessage = onProgress;
+    return invoke<FlowOutcome>('repo_gitflow_run', { path, plan, onEvent });
+  },
   repoAdvancedRefs: (path: string, notesRef: string) => invoke<AdvancedRefs>('repo_advanced_refs', { path, notesRef }),
   repoGitNote: (path: string, notesRef: string, revision: string) => invoke<GitNote>('repo_git_note', { path, notesRef, revision }),
   repoGitNoteWrite: (path: string, notesRef: string, object: string, expected: string | null, message: string | null) => invoke<void>('repo_git_note_write', { path, notesRef, object, expected, message }),

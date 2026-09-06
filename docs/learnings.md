@@ -2529,3 +2529,16 @@ changes that namespace. Replacement inspection uses raw object IDs because
 libgit2/gix readers do not apply Git's replace refs. Tag retargeting and
 re-annotation are separate operations with compare-and-swap of the raw tag ref,
 not its peeled commit. Never drop an existing tag signature during an edit.
+
+
+### Git-flow finish is a resumable sequence, not a transaction (2026-09-06)
+
+Git-flow AVH can finish its production merge and tag before a develop merge
+conflicts. Abort must be described as aborting only that current merge; it must
+never reset earlier completed stages. Retain workflow branches and use exact
+names so a later finish can resume. AVH flags can default from Git config:
+explicitly negate every publication flag (including release pushproduction,
+pushdevelop and pushtag), not just push. AVH builds its tag command with shell
+`eval`; use reviewed generated annotation text from validated names rather
+than interpolating arbitrary editor text. Keep tool detection and all of this
+metadata off repository-open and graph/diff hot paths.

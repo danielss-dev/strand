@@ -120,6 +120,7 @@ const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').the
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
 const InterchangeDialog = lazy(() => import('./views/InterchangeDialog').then((m) => ({ default: m.InterchangeDialog })));
+const GitflowDialog = lazy(() => import('./views/GitflowDialog').then((m) => ({ default: m.GitflowDialog })));
 const AdvancedRefsDialog = lazy(() => import('./views/AdvancedRefsDialog').then((m) => ({ default: m.AdvancedRefsDialog })));
 const BisectDialog = lazy(() => import('./views/BisectDialog').then((m) => ({ default: m.BisectDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
@@ -355,6 +356,7 @@ export function App() {
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [interchangePath, setInterchangePath] = useState<string | null>(null);
+  const [gitflowPath, setGitflowPath] = useState<string | null>(null);
   const [advancedRefs, setAdvancedRefs] = useState<{ path: string; mode: 'notes' | 'replace' | 'retarget' | 'reannotate'; tag?: string } | null>(null);
   const [bisectPath, setBisectPath] = useState<string | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
@@ -1168,6 +1170,7 @@ export function App() {
     openInEditor,
     openInTerminal,
     openInterchange: () => { const path = useRepo.getState().activePath; if (path) setInterchangePath(path); },
+    openGitflow: () => { const path = useRepo.getState().activePath; if (path) setGitflowPath(path); },
     openAdvancedRefs: () => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode: 'notes' }); },
     openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
   };
@@ -1889,6 +1892,7 @@ export function App() {
         { id: 'git-replace', label: 'Replace refs…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'replace' }); } },
         { id: 'git-retarget', label: 'Retarget tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'retarget' }); } },
         { id: 'git-reannotate', label: 'Re-annotate tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'reannotate' }); } },
+        { id: 'gitflow', label: 'Git-flow workflows…', group: 'Actions', keywords: 'AVH feature release hotfix start finish resume configuration', run: () => { setPaletteOpen(false); setGitflowPath(meta.path); } },
         { id: 'git-bisect', label: 'Guided bisect…', group: 'Actions', keywords: 'good bad skip regression culprit test resume reset', run: () => { setPaletteOpen(false); setBisectPath(meta.path); } },
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
@@ -2403,6 +2407,7 @@ export function App() {
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
       {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} path={interchangePath} onClose={() => setInterchangePath(null)} /></Suspense>}
+      {gitflowPath && <Suspense fallback={null}><GitflowDialog key={gitflowPath} path={gitflowPath} onClose={() => setGitflowPath(null)} /></Suspense>}
       {advancedRefs && <Suspense fallback={null}><AdvancedRefsDialog key={advancedRefs.path} path={advancedRefs.path} initialMode={advancedRefs.mode} initialTag={advancedRefs.tag} onClose={() => setAdvancedRefs(null)} /></Suspense>}
       {bisectPath && <Suspense fallback={null}><BisectDialog key={bisectPath} path={bisectPath} onClose={() => setBisectPath(null)} /></Suspense>}
 

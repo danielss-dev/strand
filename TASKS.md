@@ -132,8 +132,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
   existing local Review notes are separate from Git notes. (`AdvancedRefsDialog`,
   locked notes updates, replace refs and compare-and-swap tag edits; native verified.)
-- ☐ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
+- ☑ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
   inspectable start/finish feature/release/hotfix flows with conflict recovery.
+  (`GitflowDialog`, AVH command review/streaming, locked opt-in configuration
+  and merge-only recovery; all three flows and stale state verified natively.)
 
 Hosted-review F06/F11–F13 stay in the Pull requests backlog below. CLI/deep-link
 F16 and remote-SSH F17 keep their existing Platform / CLI companion / Remote

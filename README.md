@@ -235,6 +235,9 @@ the resolved app appearance automatically.
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
   import into a new branch, and export full or incremental bundles.
+- **Git-flow workflows** — opt-in Git-flow AVH detection and repository
+  configuration, reviewed feature/release/hotfix start and finish, streamed
+  output, and merge recovery that retains already completed stages.
 - **Advanced Git refs** — inspect and edit Git notes and replacement refs;
   retarget or re-annotate existing unsigned tags with old/new targets and
   optional remote publication checks. External edits require a fresh review.
