@@ -162,6 +162,7 @@ export interface ReviewNote {
 export interface CommitOutcome {
   oid: string;
   amended: boolean;
+  output: string;
 }
 
 export interface UpstreamRef {
@@ -927,3 +928,37 @@ export type AiGenerationOutcome<T> =
       coverage: AiInputCoverage;
       provider: AiProvider;
     };
+
+export interface ScopedValue {
+  value: string;
+  scope: string;
+  origin: string;
+}
+export interface EffectiveIdentity {
+  identity: string | null;
+  error: string | null;
+  name_source: ScopedValue;
+  email_source: ScopedValue;
+}
+export interface RepositoryIdentity {
+  author: EffectiveIdentity;
+  committer: EffectiveIdentity;
+  local: GlobalIdentity;
+}
+
+export type SigningMode = 'inherit' | 'sign' | 'unsigned';
+export type SigningScope = 'local' | 'worktree';
+export interface SigningSettings {
+  effective: Record<string, ScopedValue>;
+  local: Record<string, ScopedValue>;
+  worktree: Record<string, ScopedValue>;
+  worktree_enabled: boolean;
+  commit_sign: boolean;
+  tag_sign: boolean;
+  tag_force_annotated: boolean;
+}
+export interface TagVerification {
+  oid: string;
+  status: 'unsigned' | 'verified' | 'failed';
+  output: string;
+}

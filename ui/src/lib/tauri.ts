@@ -25,6 +25,11 @@ import type {
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
+  RepositoryIdentity,
+  SigningMode,
+  SigningScope,
+  SigningSettings,
+  TagVerification,
   HostingConnectionStatus,
   HeroiAgentEvent,
   HeroiAgentOutcome,
@@ -360,8 +365,8 @@ export const tauri = {
     patch: string,
     target: 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir',
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
-  repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
-    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
+  repoCommit: (path: string, subject: string, body: string | null, amend: boolean, signing: SigningMode = 'inherit') =>
+    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend, signing }),
   repoFetch: (
     path: string,
     remote: string | null,
@@ -575,7 +580,8 @@ export const tauri = {
     target: string | null,
     message: string | null,
     force: boolean,
-  ) => invoke<void>('repo_tag_create', { path, name, target, message, force }),
+    signing: SigningMode = 'inherit',
+  ) => invoke<void>('repo_tag_create', { path, name, target, message, force, signing }),
   repoTagDelete: (path: string, name: string) =>
     invoke<void>('repo_tag_delete', { path, name }),
   repoTagPush: (
@@ -640,6 +646,13 @@ export const tauri = {
     invoke<void>('repo_open_in_editor', { path, file, line, template }),
   repoOpenInTerminal: (path: string, template: string) =>
     invoke<void>('repo_open_in_terminal', { path, template }),
+  repoTagVerify: (path: string, name: string) => invoke<TagVerification>('repo_tag_verify', { path, name }),
+  repoSigningSettings: (path: string) => invoke<SigningSettings>('repo_signing_settings', { path }),
+  repoSetSigningConfig: (path: string, scope: SigningScope, key: string, value: string | null) =>
+    invoke<void>('repo_set_signing_config', { path, scope, key, value }),
+  repoIdentity: (path: string) => invoke<RepositoryIdentity>('repo_identity', { path }),
+  repoSetIdentity: (path: string, field: 'name' | 'email', value: string | null) =>
+    invoke<void>('repo_set_identity', { path, field, value }),
   gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
   gitSetGlobalIdentity: (name: string, email: string) =>
     invoke<void>('git_set_global_identity', { name, email }),
