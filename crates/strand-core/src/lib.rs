@@ -45,6 +45,7 @@ pub mod reflog;
 pub mod rename;
 pub mod reset;
 pub mod snapshot;
+pub mod sparse;
 pub mod watch;
 
 pub use error::{Error, Result};

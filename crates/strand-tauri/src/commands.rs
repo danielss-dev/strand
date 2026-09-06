@@ -24,7 +24,7 @@ use strand_core::{
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
-    network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
+    network::{clone_with_options as core_clone, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
@@ -1094,6 +1094,7 @@ pub async fn repo_branch_pull(
 pub async fn repo_clone(
     url: String,
     dest: String,
+    options: Option<CloneOptions>,
     op_id: Option<String>,
     on_event: Channel<Progress>,
     state: State<'_, AppState>,
@@ -1104,6 +1105,7 @@ pub async fn repo_clone(
         core_clone(
             &url,
             &dest,
+            &options.unwrap_or_default(),
             |p| {
                 let _ = on_event.send(p);
             },
@@ -1112,6 +1114,44 @@ pub async fn repo_clone(
         .map_err(CmdError::from)
     })
     .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_clone_scope(path: String) -> CmdResult<CloneScope> {
+    run_blocking("clone scope", move || Ok(Repo::discover(path)?.clone_scope()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_sparse_checkout(path: String) -> CmdResult<strand_core::sparse::SparseCheckout> {
+    run_blocking("sparse checkout", move || Ok(Repo::discover(path)?.sparse_checkout()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_sparse_checkout(path: String, directories: Vec<String>, sparse_index: bool) -> CmdResult<String> {
+    run_blocking("set sparse checkout", move || Ok(Repo::discover(path)?.set_sparse_checkout(&directories, sparse_index)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_disable_sparse_checkout(path: String) -> CmdResult<String> {
+    run_blocking("disable sparse checkout", move || Ok(Repo::discover(path)?.disable_sparse_checkout()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_expand_history(
+    path: String,
+    remote: String,
+    expansion: HistoryExpansion,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("expand history", move || {
+        Ok(Repo::discover(path)?.expand_history(&remote, expansion, |p| { let _ = on_event.send(p); }, Some(&cancel))?)
+    }).await;
     deregister_op(&state, &op_id);
     result
 }

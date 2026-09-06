@@ -87,9 +87,7 @@ impl Repo {
                 let entry = tree.get_path(Path::new(rel_path)).map_err(|_| {
                     Error::Other(format!("{rel_path} does not exist at {spec}"))
                 })?;
-                let blob = repo
-                    .find_blob(entry.id())
-                    .map_err(|_| Error::Other(format!("{rel_path} is not a file at {spec}")))?;
+                let blob = self.find_blob(entry.id())?;
                 Ok(build_content(rel_path, blob.content(), blob.is_binary()))
             }
         }
@@ -161,9 +159,7 @@ impl Repo {
                     .index()?
                     .get_path(Path::new(rel_path), 0)
                     .ok_or_else(|| Error::Other(format!("{rel_path} is not in the index")))?;
-                let blob = repo
-                    .find_blob(entry.id)
-                    .map_err(|_| Error::Other(format!("{rel_path} is not a file in the index")))?;
+                let blob = self.find_blob(entry.id)?;
                 Ok(build_blob(blob.content()))
             }
             BlobSource::Rev(spec) => {
@@ -172,9 +168,7 @@ impl Repo {
                 let entry = tree.get_path(Path::new(rel_path)).map_err(|_| {
                     Error::Other(format!("{rel_path} does not exist at {spec}"))
                 })?;
-                let blob = repo
-                    .find_blob(entry.id())
-                    .map_err(|_| Error::Other(format!("{rel_path} is not a file at {spec}")))?;
+                let blob = self.find_blob(entry.id())?;
                 Ok(build_blob(blob.content()))
             }
         }

@@ -41,7 +41,7 @@ impl Repo {
             None => format!("{}\n", subject.trim()),
         };
 
-        let oid = if signing_enabled(repo) {
+        let oid = if signing_enabled(repo) || self.sparse_enabled() {
             self.commit_via_git(&message, amend)?;
             repo.head()?.peel_to_commit()?.id()
         } else {

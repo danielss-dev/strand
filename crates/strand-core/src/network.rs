@@ -43,8 +43,14 @@ impl CancelHandle {
     pub fn cancel(&self) {
         let mut inner = self.0.lock().expect("cancel handle lock");
         inner.cancelled = true;
-        if let Some(child) = inner.child.as_mut() {
-            let _ = child.kill();
+        if inner.child.is_some() {
+            let handle = self.clone();
+            // Recursive clones have child Git/SSH processes holding the pipes.
+            // Kill their tree off the IPC thread so cancellation stays immediate.
+            std::thread::spawn(move || {
+                let mut inner = handle.0.lock().expect("cancel handle lock");
+                if let Some(child) = inner.child.as_mut() { kill_git_tree(child); }
+            });
         }
     }
 
@@ -75,6 +81,61 @@ pub struct CloneOutcome {
     pub path: String,
     /// Combined git output, trimmed.
     pub output: String,
+}
+
+fn kill_git_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            let _ = std::process::Command::new(Path::new(&root).join("System32/taskkill.exe"))
+                .creation_flags(0x0800_0000).args(["/PID", &child.id().to_string(), "/T", "/F"])
+                .stdout(Stdio::null()).stderr(Stdio::null()).status();
+        }
+    }
+    #[cfg(unix)]
+    {
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-TERM", "--", &format!("-{}", child.id())])
+            .stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    let _ = child.kill();
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloneFilter {
+    BlobNone,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CloneOptions {
+    pub branch: Option<String>,
+    pub depth: Option<u32>,
+    pub single_branch: bool,
+    pub filter: Option<CloneFilter>,
+    pub recurse_submodules: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneScope {
+    pub shallow: bool,
+    pub remotes: Vec<CloneRemote>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneRemote {
+    pub name: String,
+    pub filter: Option<String>,
+    pub fetch_refspecs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum HistoryExpansion {
+    Deepen { commits: u32 },
+    Unshallow,
 }
 
 /// One progress update parsed from `git`'s stderr while a network op runs.
@@ -116,6 +177,42 @@ pub enum PushMode {
 }
 
 impl Repo {
+    /// On-demand inspection, including repositories cloned outside Strand.
+    pub fn clone_scope(&self) -> Result<CloneScope> {
+        let repo = self.git2()?;
+        let config = repo.config()?;
+        let mut remotes = Vec::new();
+        for name in repo.remotes()?.iter().flatten() {
+            let remote = repo.find_remote(name)?;
+            remotes.push(CloneRemote {
+                name: name.to_owned(),
+                filter: config.get_string(&format!("remote.{name}.partialclonefilter")).ok(),
+                fetch_refspecs: remote.fetch_refspecs()?.iter().flatten().map(str::to_owned).collect(),
+            });
+        }
+        Ok(CloneScope { shallow: repo.is_shallow(), remotes })
+    }
+
+    /// Fetch more ancestry without changing HEAD, the index or local edits.
+    pub fn expand_history(
+        &self,
+        remote: &str,
+        expansion: HistoryExpansion,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        self.ensure_remote(remote)?;
+        if !self.git2()?.is_shallow() {
+            return Err(Error::Other("This repository already has complete history.".into()));
+        }
+        let option = match expansion {
+            HistoryExpansion::Deepen { commits: 0 } => return Err(Error::Other("Depth must be greater than zero.".into())),
+            HistoryExpansion::Deepen { commits } => format!("--deepen={commits}"),
+            HistoryExpansion::Unshallow => "--unshallow".into(),
+        };
+        run_git_streaming(&self.path, &["fetch", "--progress", &option, "--", remote], on_progress, cancel)
+    }
+
     /// Fetch provider-reported branch tips for a read-only comparison without
     /// updating FETCH_HEAD or any local/remote-tracking ref. Hosted PR views
     /// use this when a provider exposes commit IDs but not a unified patch.
@@ -502,6 +599,16 @@ pub fn clone(
     on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<CloneOutcome> {
+    clone_with_options(url, dest, &CloneOptions::default(), on_progress, cancel)
+}
+
+pub fn clone_with_options(
+    url: &str,
+    dest: &str,
+    options: &CloneOptions,
+    on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<CloneOutcome> {
     // The URL is pasted by the user. Make sure git can't read it as an option
     // (`--upload-pack=…`, `-c …`) or as a command-executing transport
     // (`ext::`, `fd::`). The `--` end-of-options separator below is the belt
@@ -513,7 +620,8 @@ pub fn clone(
     // Run from the destination's parent so a relative `dest` still lands in
     // the right place; an absolute `dest` ignores the cwd anyway.
     let cwd = dest_path.parent().filter(|p| !p.as_os_str().is_empty());
-    let args = ["clone", "--progress", "--", url, dest];
+    let owned_args = clone_args(url, dest, options)?;
+    let args = owned_args.iter().map(String::as_str).collect::<Vec<_>>();
     let outcome = match cwd {
         Some(parent) => run_git_streaming(parent, &args, on_progress, cancel),
         None => run_git_streaming(Path::new("."), &args, on_progress, cancel),
@@ -522,6 +630,31 @@ pub fn clone(
         path: dest.to_string(),
         output: outcome.output,
     })
+}
+
+fn clone_args(url: &str, dest: &str, options: &CloneOptions) -> Result<Vec<String>> {
+    validate_remote_arg(url, "clone URL")?;
+    let mut args = vec!["clone".into(), "--progress".into()];
+    if let Some(branch) = &options.branch {
+        validate_branch_ref(branch, "clone branch")?;
+        args.push(format!("--branch={branch}"));
+    }
+    if let Some(depth) = options.depth {
+        if depth == 0 {
+            return Err(Error::Other("Depth must be greater than zero.".into()));
+        }
+        args.push(format!("--depth={depth}"));
+    }
+    // Git implies single-branch for --depth. Make the independent UI choice explicit.
+    args.push(if options.single_branch { "--single-branch" } else { "--no-single-branch" }.into());
+    if let Some(CloneFilter::BlobNone) = options.filter {
+        args.push("--filter=blob:none".into());
+    }
+    if options.recurse_submodules {
+        args.push("--recurse-submodules".into());
+    }
+    args.extend(["--".into(), url.into(), dest.into()]);
+    Ok(args)
 }
 
 /// Reject a user-supplied remote/URL that git would mis-read as an option or
@@ -593,8 +726,14 @@ pub(crate) fn run_git_streaming_transcript(
     mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<GitRunTranscript> {
-    let mut child = crate::git_command()
-        .current_dir(cwd)
+    if cancel.is_some_and(CancelHandle::is_cancelled) { return Err(Error::Cancelled); }
+    let mut command = crate::git_command();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command.current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Neutralize repo-local config that would run code as a side effect.
         .args(crate::GIT_SAFE_CONFIG)
@@ -623,7 +762,7 @@ pub(crate) fn run_git_streaming_transcript(
     {
         let mut inner = handle.0.lock().expect("cancel handle lock");
         if inner.cancelled {
-            let _ = child.kill();
+            kill_git_tree(&mut child);
             let _ = child.wait();
             return Err(Error::Cancelled);
         }
