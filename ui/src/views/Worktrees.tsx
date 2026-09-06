@@ -9,6 +9,7 @@ import { repoFamilyName, worktreeName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import type { Worktree, WorktreeHealth, WorktreeStats } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { backgroundRead } from '../lib/backgroundReads';
 
 interface WtStats {
   loading: boolean;
@@ -27,6 +28,8 @@ const EMPTY_STATS: WtStats = {
   health: null,
   fs: null,
 };
+
+const advisoryStats = new Map<string, { at: number; value: WorktreeStats }>();
 
 /** Compact worktree switcher and state summary. */
 export function Worktrees({
@@ -65,8 +68,10 @@ export function Worktrees({
       return Object.fromEntries(Object.entries(prev).filter(([path]) => live.has(path)));
     });
 
-    for (const w of worktrees) {
-      void (async () => {
+    const ordered = [...worktrees].sort((a, b) => Number(b.is_current) - Number(a.is_current));
+    for (const w of ordered) {
+      void backgroundRead(async () => {
+        if (cancelled) return;
         try {
           const [status, log, health] = await Promise.all([
             tauri.repoStatus(w.path),
@@ -92,15 +97,18 @@ export function Worktrees({
             setStats((current) => ({ ...current, [w.path]: { ...EMPTY_STATS, loading: false } }));
           }
         }
-      })();
-
-      void tauri.repoWorktreeStats(w.path).then((fs) => {
         if (cancelled) return;
-        setStats((current) => ({
-          ...current,
-          [w.path]: { ...(current[w.path] ?? EMPTY_STATS), fs },
-        }));
-      }).catch(() => {});
+        const cached = advisoryStats.get(w.path);
+        try {
+          const fs = cached && Date.now() - cached.at < 30_000
+            ? cached.value : await tauri.repoWorktreeStats(w.path);
+          if (fs !== cached?.value) advisoryStats.set(w.path, { at: Date.now(), value: fs });
+          if (advisoryStats.size > 100) advisoryStats.delete(advisoryStats.keys().next().value!);
+          if (!cancelled) setStats((current) => ({
+            ...current, [w.path]: { ...(current[w.path] ?? EMPTY_STATS), fs },
+          }));
+        } catch { /* Advisory statistics do not gate the checkout row. */ }
+      });
     }
 
     return () => { cancelled = true; };
@@ -161,6 +169,15 @@ export function Worktrees({
       const errors: string[] = [];
       for (const w of cleanupCandidates) {
         try {
+          // The list is cached/advisory; cleanup always revalidates native state.
+          const registry = await tauri.repoWorktrees(path!);
+          const live = registry.find((item) => item.path === w.path);
+          if (!live || live.is_locked || live.is_current || live.is_main || live.is_prunable) continue;
+          const [status, health] = await Promise.all([
+            tauri.repoStatus(w.path),
+            tauri.repoWorktreeHealth(w.path, w.branch!),
+          ]);
+          if (status.length || !health.merged || live.branch !== w.branch) continue;
           await removeWorktree(w.path, true);
           if (w.branch) await tauri.repoBranchDelete(path, w.branch, true);
           removed += 1;

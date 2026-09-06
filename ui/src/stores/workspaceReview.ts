@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { backgroundRead } from '../lib/backgroundReads';
+import { RefreshQueue } from '../lib/refreshQueue';
+import { stableRows } from '../lib/stable';
 
 import { reviewSession, type StoredBaseline } from '../lib/db';
 import { pathKey, repoFamilyName, tabWorktreeName } from '../lib/repoIdentity';
@@ -127,6 +130,7 @@ interface WorkspaceReviewState {
 
 /** Stale-response guard: bumped on every {@link WorkspaceReviewState.refreshAll}. */
 let generation = 0;
+const memberRefreshes = new RefreshQueue();
 
 /**
  * Member paths whose discovery failed — the directory is gone (deleted,
@@ -169,8 +173,9 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
    * refresh generation — a fan-out superseded by a newer `refreshAll` drops
    * its results instead of racing them into the fresh member list.
    */
-  const loadMember = async (res: MemberResolution, gen: number): Promise<void> => {
+  const readMember = async (res: MemberResolution, gen: number, current: () => boolean): Promise<void> => {
     const { path } = res;
+    if (gen !== generation || !current()) return;
     // Always read fresh meta — a background member's tab meta is frozen at
     // open time, so its branch label would lie after an agent checkout. A
     // failed read means the directory is gone (dropped below); the IPC is
@@ -183,8 +188,8 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       // tab meta has nothing behind it to review. Drop the slice (and
       // remember the path so refreshes skip it) rather than rendering a
       // dead error section.
+      if (gen !== generation || !current()) return;
       missing.set(pathKey(path), path);
-      if (gen !== generation) return;
       const key = pathKey(path);
       set((s) => ({
         members: s.members.filter((m) => pathKey(m.path) !== key),
@@ -194,17 +199,18 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     }
 
     const baseline = await reviewSession.getBaseline(path).catch(() => null);
+    if (gen !== generation || !current()) return;
     let diffs: FileDiff[] = [];
     let unstaged: { path: string; old_path: string | null }[] = [];
     let error: string | null = null;
     try {
       if (baseline) {
-        const [since, unstagedDiffs] = await Promise.all([
+        const [since, paths] = await Promise.all([
           tauri.repoDiffSinceFull(path, baseline.oid),
-          tauri.repoDiffUnstaged(path),
+          tauri.repoDiffUnstagedPaths(path),
         ]);
         diffs = since;
-        unstaged = unstagedDiffs.map((d) => ({ path: d.path, old_path: d.old_path }));
+        unstaged = paths;
       } else {
         diffs = await tauri.repoDiffUnstagedFull(path);
         unstaged = diffs.map((d) => ({ path: d.path, old_path: d.old_path }));
@@ -241,7 +247,8 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       ? repoState.reviewNotes
       : ((await reviewSession.getNotes(path, noteScope).catch(() => null)) ?? {});
 
-    if (gen !== generation) return;
+    if (gen !== generation || !current()) return;
+    const previous = get().members.find((member) => pathKey(member.path) === pathKey(path));
     patchMember(path, {
       name: repoFamilyName(meta),
       // Re-derive from fresh meta: an agent checkout in the worktree moves
@@ -250,7 +257,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       branch: meta.detached ? `${meta.branch} (detached)` : meta.branch,
       commonDir: meta.common_dir,
       baseline,
-      diffs,
+      diffs: stableRows(previous?.diffs ?? [], diffs, (diff) => diff.path),
       unstaged,
       reviewed,
       notes,
@@ -260,13 +267,21 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     });
   };
 
+  const loadMember = (res: MemberResolution, gen: number) => memberRefreshes.run(
+    pathKey(res.path),
+    (current) => backgroundRead(() => readMember(res, gen, current)),
+  );
+
   return {
     active: false,
     members: [],
     selection: null,
     tick: 0,
 
-    setActive: (active) => set({ active }),
+    setActive: (active) => {
+      if (!active) generation++;
+      set({ active });
+    },
     select: (selection) => set({ selection }),
 
     async refreshAll() {
@@ -277,17 +292,19 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       // rest stay out of the seeded list entirely.
       if (missing.size > 0) {
         await Promise.all(
-          [...missing].map(async ([key, path]) => {
+          [...missing].map(([key, path]) => backgroundRead(async () => {
+            if (gen !== generation) return;
             try {
               await tauri.repoMeta(path);
               missing.delete(key);
             } catch {
               // still gone
             }
-          }),
+          })),
         );
         resolved = resolved.filter((r) => !missing.has(pathKey(r.path)));
       }
+      if (gen !== generation) return;
       // Seed the next member list immediately (so the view lays out its
       // sections), carrying over the previous slice's data where the member
       // survives — a refresh repaints in place instead of flashing empty.

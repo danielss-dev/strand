@@ -14,6 +14,11 @@ Each checkout has a two-line row, ordered current first, then the main checkout,
 
 Click a row to select it. The action bar offers **Open worktree** (disabled for the current checkout, which is already open) and, for linked checkouts, **Review vs base**. Double-click or press `Enter` to open it directly. Selection has its own highlight, separate from the current-checkout label. The selected path also appears in the status bar. Missing directories cannot be opened; repair or prune them through the sidebar.
 
+Rows fill in progressively, starting with the current checkout. Line-count
+and last-activity estimates may be reused for up to 30 seconds when you
+reopen the pane. Cleanup checks the checkout's current status and merge
+state again before removing it.
+
 | Key | Action |
 |---|---|
 | `↑` / `↓` | Select the previous / next worktree |
