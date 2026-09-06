@@ -1059,7 +1059,7 @@ fn create_github(
     description: &str,
     is_draft: bool,
 ) -> Result<PullRequestCreateOutcome> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let source_branch = branch_name(source_branch.to_string());
     let target_branch = branch_name(target_branch.to_string());
     let mut args = vec![
@@ -1312,7 +1312,7 @@ fn submit_review_github(
 }
 
 fn github_current_head(cwd: &GitHubContext<'_>, owner: &str, repo: &str, id: u64) -> Result<String> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
     let output = github_command(
         cwd, "gh", &["pr", "view", &id, "--repo", &slug, "--json", "headRefOid"],
@@ -1352,7 +1352,7 @@ fn prepare_checkout_github(
     id: u64,
     expected_head: &str,
 ) -> Result<PullRequestCheckoutPreparation> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let number = id.to_string();
     let output = github_command(
         cwd,
@@ -1531,7 +1531,7 @@ fn merge_github(
     strategy: PullRequestMergeStrategy,
     expected_head: &str,
 ) -> Result<()> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
     github_command(
         cwd,
@@ -1552,7 +1552,7 @@ fn merge_github(
 }
 
 fn mark_ready_github(cwd: &GitHubContext<'_>, owner: &str, repo: &str, id: u64) -> Result<()> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
     github_command(
         cwd,
@@ -1570,7 +1570,7 @@ fn set_lifecycle_github(
     id: u64,
     action: PullRequestLifecycleAction,
 ) -> Result<()> {
-    let slug = cwd.slug(&owner, &repo);
+    let slug = cwd.slug(owner, repo);
     let id = id.to_string();
     let verb = github_lifecycle_verb(action);
     github_command(
