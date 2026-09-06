@@ -38,4 +38,7 @@ dirty work rather than implicitly stashing it; they show busy state and Git's
 warnings. Streamed progress and cancellation apply to clone/history downloads.
 Partial content reads can require network access. Live execution and transport
 cancellation validation was Windows only.
-`nPR integration validation (2026-09-06): the combined LFS/sparse-index fixture`npasses pointer staging, filtered discard, and partial-patch rejection without`nexpanding the on-disk sparse index. Rust checks and TypeScript pass.
+
+PR integration validation (2026-09-06): the combined LFS/sparse-index fixture
+passes pointer staging, filtered discard, and partial-patch rejection without
+expanding the on-disk sparse index. Rust checks and TypeScript pass.
