@@ -1,5 +1,9 @@
 # Performance baseline — strand-core read path
 
+Latest codebase audit: [`performance-audit-2026-09-06.md`](./performance-audit-2026-09-06.md)
+records fresh Windows engine and production-bundle measurements, with ranked
+follow-ups. The webview measurements below remain the June/July baseline.
+
 First measured baseline for the 0.5 performance pass (PRD §8). The prime
 directive forbids regressing a hot path blind; this captures the "before"
 numbers so any optimization can be checked against a real figure.

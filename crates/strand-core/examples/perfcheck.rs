@@ -88,7 +88,7 @@ fn main() {
         Repo::discover(&path).expect("discover").log(5000).expect("log")
     });
 
-    // --- status + work_tree (the post-change refresh; both run per refresh) ---
+    // --- Standalone status + tree reads (snapshot shares their walk) ---
     bench("status", 30, || repo.status().expect("status"));
     bench("work_tree", 30, || repo.work_tree().expect("work_tree"));
     bench("work_tree+ignored roots", 30, || {
@@ -97,12 +97,42 @@ fn main() {
     });
 
     // --- diffs (Local Changes) ---
+    bench("diff_unstaged_paths", 20, || {
+        repo.diff_unstaged_paths().expect("diff_unstaged_paths")
+    });
     bench("diff_unstaged", 20, || {
         repo.diff_unstaged().expect("diff_unstaged")
     });
     bench("diff_staged", 20, || {
         repo.diff_staged().expect("diff_staged")
     });
+
+    // Whole-file Review payloads and Worktrees' advisory scan are separate
+    // from status and viewport rendering; measure them rather than inferring
+    // their cost from the cheap snapshot or the number of mounted rows.
+    bench("diff_since_full(HEAD)", 5, || {
+        Repo::discover(&path)
+            .expect("discover")
+            .diff_since_full("HEAD")
+            .expect("diff_since_full")
+    });
+    bench("discover+worktree_stats", 5, || {
+        Repo::discover(&path)
+            .expect("discover")
+            .worktree_stats()
+            .expect("worktree_stats")
+    });
+    for (label, diffs) in [
+        ("unstaged", repo.diff_unstaged().expect("diff_unstaged")),
+        ("review", repo.diff_since_full("HEAD").expect("diff_since_full")),
+    ] {
+        println!(
+            "  {label} payload: {} files, {} patch bytes, {} JSON bytes",
+            diffs.len(),
+            diffs.iter().map(|diff| diff.patch.len()).sum::<usize>(),
+            serde_json::to_vec(&diffs).expect("serialize diffs").len(),
+        );
+    }
 
     println!();
 }

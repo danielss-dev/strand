@@ -71,6 +71,10 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Responsive refreshes** — repository updates coalesce during bursts of
+  agent edits, hidden diff panes load patches when opened, and Files reuses
+  its inventory until paths or ignore rules change. Workspace scans run with
+  bounded concurrency; Blame highlights code off the UI thread.
 - **Workbench (⌘1)** — Strand's default workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane

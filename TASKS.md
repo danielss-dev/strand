@@ -1988,8 +1988,8 @@ tree: watch the agent work, review fast, accept or reject safely.
 
 First engine baseline measured 2026-06-08 on M1 Pro — see `docs/perf-baseline.md`
 and the `crates/strand-core/examples/perfcheck.rs` harness (100k-commit + 10k-file
-synthetic fixtures). Engine-measurable targets pass; webview/app targets still need
-a running-app pass.
+synthetic fixtures). The historical app results below were measured in June/July;
+the September codebase audit rechecks the engine and tracks a fresh app pass.
 
 - ☑ Cold start < 1.0s (measured on the running app 2026-06-29, Win 11 /
   Ryzen 7 7700X — `docs/perf-baseline.md` § webview): **~407ms** launch→shell
@@ -2055,6 +2055,47 @@ a running-app pass.
   light DOM (not virtualized) — pre-existing, unchanged, and far cheaper than the
   highlighted code rows this fixed; a possible future trim.
 - ☑ Installer < 25MB per platform (macOS DMG ~10MB, Windows MSI 10.5MB — recorded)
+
+### Performance audit follow-ups (2026-09-06)
+
+- ☑ Audit current main and repeat Windows engine/build measurements
+  (`docs/performance-audit-2026-09-06.md`; `perfcheck` now measures full-context
+  Review diffs, worktree statistics, and diff payload bytes). No app speedup
+  claimed: fresh snapshot ~36ms, 501-file patches ~548ms, Files boundaries
+  ~466ms, worktree statistics ~243ms, initial JS 2.13MB.
+- ☑ **P1 — Coalesce repository refreshes and reject superseded responses.**
+  (`RefreshQueue`, activation guards, HEAD/ref-driven history refresh,
+  bounded native watcher; race tests and one snapshot for 20 live requests.)
+- ☑ **P1 — Load patches by visible consumer and preserve unchanged diff/log
+  objects.** (`useRepoDiffs`, including composed panes and Work Changes;
+  `stableRows`; explicit export/review reads; `repo_diff_unstaged_paths` for
+  hidden staging; status-backed stash/fixup controls.)
+- ☑ **P1 — Reduce repeated Files boundary enumeration.** (`ignored_boundaries`
+  skips already-classified files: 466→34ms; `RepositoryFiles` inventory cache,
+  per-repo versions, and `repo://files-changed` path/ignore invalidation.)
+- ☑ **P2 — Bound Worktrees/Workspace Review fan-out.** (`backgroundRead` limits
+  two jobs; current checkout first, 30-second advisory cache, cleanup
+  revalidation; 11 live checkouts and a 20-member cancellation test.)
+- ☑ **P2 — Lazy-load optional startup surfaces.** (`App` dialog/provider
+  boundaries and lazy `HeroiView`; entry 2.13→1.96MB, Settings focus and
+  persistent terminal runtime verified.)
+- ☑ **P2 — Coalesce Heroi transcript saves and serialize writes per state key.**
+  (`BufferedWrites`, transition/unmount flushes, memoized `MessageRow` and
+  Markdown; 100 live synthetic events → seven saves with complete restoration.)
+- ☑ **P2 — Worker-backed Blame tokenization with byte/line-length bounds.**
+  (`FileHighlighter`, `highlight.worker`; real colored 5k-line output in both
+  themes, 70 mounted rows, multiline-grammar and stale-reply tests.)
+- ◐ Re-run production WebView2 PRD §8 checks on September main. Release
+  status refresh median 50.4ms, Review/Local Changes first-use observations,
+  IPC counts, Files mutations, terminal identity, Settings focus, synthetic
+  Heroi, and Blame verified (`docs/performance-audit-2026-09-06.md`). Full
+  cold-launch/first-use distributions, installer/idle-memory targets, sustained
+  multi-agent work, and reliable long-task tracing remain un-certified.
+- ☐ **P1 — Selected-file/near-viewport patch protocol.** Full 501-file patches
+  still cost ~0.5s natively; first Local Changes opening was 3.4s in the live
+  pass. Profile native diff, grammar startup, and first render separately,
+  then bound patch materialization while preserving search/export and hunk,
+  rename, staged/unstaged, and review-baseline semantics.
 
 ### Perf-pass leads (2026-06-08 baseline)
 
