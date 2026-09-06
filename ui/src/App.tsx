@@ -32,6 +32,9 @@ import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { t } from './lib/i18n';
+import { LFS_ACTIONS } from './lib/lfs';
+import { SUBMODULE_ACTIONS, type SubmoduleDialogAction } from './lib/submodules';
+import type { LfsAction } from './lib/types';
 import { plural } from './lib/plural';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
@@ -120,6 +123,8 @@ const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => (
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const LfsDialog = lazy(() => import('./views/LfsDialog').then((m) => ({ default: m.LfsDialog })));
+const SubmoduleDialog = lazy(() => import('./views/SubmoduleDialog').then((m) => ({ default: m.SubmoduleDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
 
@@ -292,7 +297,6 @@ export function App() {
   const submodules = useRepo((s) => s.submodules);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
-  const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const baseline = useRepo((s) => s.baseline);
   const setBaseline = useRepo((s) => s.setBaseline);
@@ -353,6 +357,8 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [lfsAction, setLfsAction] = useState<{ repoPath: string; action: LfsAction['action'] } | null>(null);
+  const [submoduleDialog, setSubmoduleDialog] = useState<{ repoPath: string; path: string; action: SubmoduleDialogAction } | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
@@ -1547,8 +1553,8 @@ export function App() {
         keywords: `submodule init update ${sm.path}`,
         meta: sm.status,
         run: () => {
-          void submoduleUpdate([sm.path], true, true).catch((e) =>
-            showToast(`Submodule update failed: ${errMessage(e)}`, 'error'));
+          setPaletteOpen(false);
+          setSubmoduleDialog({ repoPath: meta!.path, path: sm.path, action: 'update' });
         },
       });
     }
@@ -1556,7 +1562,7 @@ export function App() {
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
       createBranch, revealInGraph, selectCommit, selectFile, showToast, showWorkbenchWork,
-      stashApply, stashPop, submoduleUpdate]);
+      stashApply, stashPop]);
 
   const runCustomAction = useCallback((
     action: (state: ReturnType<typeof useCustomView.getState>) => void,
@@ -1882,6 +1888,8 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        ...SUBMODULE_ACTIONS.map(([action, label]) => ({ id: `submodule-${action}`, label: `Submodules: ${label}…`, group: 'Actions', keywords: 'submodule lifecycle url nested status add remove deinit sync', run: () => { setPaletteOpen(false); setSubmoduleDialog({ repoPath: meta.path, path: '', action }); } } satisfies PaletteAction)),
+        ...LFS_ACTIONS.map(([action, label]) => ({ id: `lfs-${action}`, label: `Git LFS: ${label}…`, group: 'Actions', keywords: 'large file storage lfs objects filters patterns transfers locks', run: () => { setPaletteOpen(false); setLfsAction({ repoPath: meta.path, action }); } } satisfies PaletteAction)),
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
           setMaintenanceOpen(true);
@@ -2231,6 +2239,8 @@ export function App() {
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onManageRemote={(mode) => setRemoteDialog(mode)}
+                onManageLfs={() => { if (meta) setLfsAction({ repoPath: meta.path, action: 'environment' }); }}
+                onManageSubmodules={(path = '', action = 'inspect') => { if (meta) setSubmoduleDialog({ repoPath: meta.path, path, action }); }}
                 onRenameBranch={(name) => setRenameBranchDialog({ name })}
                 onManageBranchNetwork={(mode) => setBranchNetworkDialog(mode)}
                 onPull={onPull}
@@ -2398,6 +2408,8 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
+      {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} onClose={() => setLfsAction(null)} />}
+      {submoduleDialog && <SubmoduleDialog path={submoduleDialog.repoPath} initialPath={submoduleDialog.path} initialAction={submoduleDialog.action} onClose={() => setSubmoduleDialog(null)} />}
 
       {fileEntryDialog && meta && (
         <FileEntryDialog

@@ -55,6 +55,10 @@ impl Repo {
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
         let tree = branch.get().peel_to_tree()?;
+        if self.lfs_checkout_needed(&tree)? {
+            self.run_lfs_filtered(&["checkout", name, "--"])?;
+            return Ok(CheckoutOutcome { branch: name.to_string() });
+        }
         let mut opts = git2::build::CheckoutBuilder::new();
         opts.safe();
         repo.checkout_tree(tree.as_object(), Some(&mut opts))?;
@@ -153,6 +157,11 @@ impl Repo {
         let commit = repo.revparse_single(rev)?.peel_to_commit()?;
 
         let tree = commit.tree()?;
+        if self.lfs_checkout_needed(&tree)? {
+            let oid = commit.id().to_string();
+            self.run_lfs_filtered(&["checkout", "--detach", &oid, "--"])?;
+            return Ok(CheckoutOutcome { branch: oid[..7].to_string() });
+        }
         let mut opts = git2::build::CheckoutBuilder::new();
         opts.safe();
         repo.checkout_tree(tree.as_object(), Some(&mut opts))?;

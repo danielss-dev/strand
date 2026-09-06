@@ -6,6 +6,35 @@ that future work (yours or another agent's) needs to respect.
 
 ---
 
+## LFS files need Git's external clean/smudge filters (2026-09-06)
+
+The real Git LFS fixture proved git2 `index.add_path` stored raw asset bytes
+instead of the pointer produced by `git hash-object --path`. The historical
+index-on-git2 policy has an LFS exception: detect `filter=lfs` attributes and
+stage the complete batch with one literal, NUL-delimited Git pathspec input.
+Enforce `filter.lfs.required` so missing tooling cannot silently store raw data.
+Whole-file checkout/discard and hard reset use Git for LFS; partial patches are refused.
+Ordinary status must not start LFS subprocesses. Management reads are explicit,
+transcripts bounded, and cancellation must terminate LFS/submodule descendants
+that otherwise keep pipes open. Tracking edits attributes, never history.
+
+---
+
+## Submodule removal must preserve ignored local data (2026-09-06)
+
+Git's non-forced submodule deinit can remove ignored files, and a parent status
+does not report ignored files inside nested modules. Before remove/deinit,
+inspect ignored files and recorded commits in each initialized descendant;
+refuse the action when local data remains. Keep this work at the explicit
+mutation boundary. Nested browsing reads metadata one level/page at a time,
+without adding recursive dirty scans to repository refreshes.
+
+Opening a module from a dialog must go through `useWorkspaces.openRepoInActive`.
+Calling `useRepo.openRepo` directly omits workspace membership, and the workspace
+reconciler can immediately clear the active repository.
+
+---
+
 ## Closeable tabs follow browser closing conventions
 
 **Rule.** Every closeable repository or Work tab supports its visible close

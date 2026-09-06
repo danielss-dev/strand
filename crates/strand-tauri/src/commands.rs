@@ -25,12 +25,13 @@ use strand_core::{
     gitconfig::{self, GlobalIdentity, RepositoryIdentity},
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
+    lfs::LfsAction,
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone as core_clone, CancelHandle, CloneOutcome, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
-    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry,
+    status::FileStatus, submodule::{Submodule, SubmoduleAction, SubmodulePage}, tree::WorkTreeEntry,
     worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats}, Repo,
 };
 use tauri::ipc::Channel;
@@ -1190,15 +1191,37 @@ pub async fn repo_submodule_update(
     init: bool,
     recursive: bool,
     on_event: Channel<Progress>,
+    op_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    run_blocking("submodule update", move || {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule update", move || {
         let repo = Repo::discover(&path)?;
         repo.submodule_update(&paths, init, recursive, |p| {
             let _ = on_event.send(p);
-        })
+        }, Some(&cancel))
         .map_err(CmdError::from)
     })
-    .await
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_children(path: String, parent: String, offset: usize) -> CmdResult<SubmodulePage> {
+    run_blocking("submodule children", move || Ok(Repo::discover(&path)?.submodule_children(&parent, offset)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_action(path: String, action: SubmoduleAction, op_id: Option<String>, on_event: Channel<Progress>, state: State<'_, AppState>) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule lifecycle", move || {
+        Repo::discover(&path)?.submodule_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 #[tauri::command(async)]
@@ -1497,6 +1520,23 @@ pub async fn repo_maintenance(
             .map_err(CmdError::from)
     })
     .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_lfs_action(
+    path: String,
+    action: LfsAction,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("Git LFS", move || {
+        Repo::discover(&path)?.lfs_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
     deregister_op(&state, &op_id);
     result
 }

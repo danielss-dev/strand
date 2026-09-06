@@ -2155,7 +2155,9 @@ and Store certification remain external gates.
   + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
   everything through the `commands.rs` seam) are active now.
 - Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
-- Git LFS (status badges + progress)
+- ☑ Git LFS — filter-correct staging/checkout/discard/hard reset and explicit
+  setup, patterns, object/transfer status and server locks (`LfsDialog`,
+  `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
 - ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
   choices; signed-tag creation and verification, 2026-09-06).
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
@@ -2165,7 +2167,9 @@ and Store certification remain external gates.
 - Guided Git bisect
 - Sparse checkout (cone mode first)
 - Patch import/mailbox and Git bundle workflows
-- Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
+- ☑ Expanded submodule lifecycle — guarded add/remove/deinit/sync/URL, paged
+  nested inspection and cancellable updates (`SubmoduleDialog`); real Git
+  preservation fixtures and native lifecycle/keyboard checks pass.
 - Repository/ref/file custom actions with safe argv templates
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
@@ -2808,6 +2812,21 @@ expansion follow; CLI/remote SSH remain designed work. TASKS now has explicit
 implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
+
+**LFS implementation shipped (2026-09-06):** Real fixtures exposed raw asset
+blobs from git2 staging. LFS paths now stage in one literal NUL-delimited Git
+batch; checkout, discard and hard reset honor required filters, and partial
+pointer patches are rejected. The lazy sidebar/palette dialog exposes setup,
+patterns, objects, transfers and server locks with bounded output and process
+tree cancellation. Exact pointer/commit/network/lock fixtures and native
+setup, staging, keyboard, cancellation and recovery checks pass.
+
+**Submodule lifecycle shipped (2026-09-06):** Added explicit add/remove/deinit,
+URL changes/sync, lazy paged nested inspection, repository opening and
+cancellable updates through the sidebar and palette. Removal and deinit retain
+Git history and refuse dirty, unrecorded or ignored local data, including nested
+modules. Real Git and native UI checks cover registration/index preservation,
+network cancellation, URL edits, nesting, confirmations and reinitialization.
 
 ---
 

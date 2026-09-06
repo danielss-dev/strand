@@ -103,13 +103,18 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   with agent delegation and visible signing failures (`signing_settings` /
   `set_signing_config`, commit/tag `SigningChoice`, `TagVerificationDialog`;
   real GPG/SSH and native Windows evidence in the F01–F03 validation note).
-- ☐ **F04 / P1 — LFS compatibility and management.** First prove pointer/filter
-  correctness across single/bulk staging, checkout, commit and network flows;
-  then add setup/tracking/status/locks/progress. System-Git networking alone
-  does not establish end-to-end LFS support.
-- ☐ **F05 / P1 — Submodule lifecycle.** Extend existing open/status/init/update
-  with add/remove/deinit/sync/URL/nested inspection; verify dirty-state handling,
-  `.gitmodules` and index changes, plus cancellable network operations.
+- ☑ **F04 / P1 — LFS compatibility and management.** Filter-aware single/bulk
+  staging, discard, checkout and hard reset; exact pointer/commit/push/pull and
+  missing-filter fixtures pass (`lfs.rs`). Local setup, patterns, object/transfer
+  status, bounded locks and cancellable transfers are exposed in `LfsDialog`.
+  Real lock-API fixtures and native setup/staging/palette/cancellation/recovery
+  checks pass; no eager LFS network or status subprocesses.
+- ☑ **F05 / P1 — Submodule lifecycle.** Add/remove/deinit/sync/URL changes,
+  paged nested inspection and cancellable updates (`SubmoduleDialog`,
+  `Repo::{submodule_action,submodule_children}`). Real Git transport, dirty,
+  ignored and nested files, unrecorded commits and `.gitmodules`/index
+  preservation fixtures pass. Native lifecycle, keyboard/palette, module
+  opening, destructive guards and cancellation checks pass.
 - ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
@@ -117,7 +122,9 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   compatibility fixtures for excluded paths, dirty trees and sparse indexes.
 - ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
   partial-clone filter and recursive-submodule options; deepen/unshallow,
-  progress/cancellation, and safe argument construction.
+  progress/cancellation, and safe argument construction. Include a real LFS
+  clone-checkout fixture: Git 2.45.1 / LFS 3.5.1 rejects the hook installed
+  during checkout (`docs/git-assets-validation-2026-09-06.md`).
 - ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
   execution until the manual workflow is complete.

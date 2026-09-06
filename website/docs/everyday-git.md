@@ -118,7 +118,36 @@ The first push of a new local branch creates the same-named branch on `origin` a
 | `Mod+Shift+Y` | Fetch |
 | `Mod+Shift+S` | Sync (fetch + pull + push) |
 
-Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own. Content filters configured in your git (such as Git LFS) run as they do on the command line, though Strand has no dedicated LFS UI yet.
+Network operations shell out to your system git, so **credential helpers, SSH keys and agents, and proxy settings just work** — Strand never asks for credentials of its own.
+
+### Git LFS
+
+Open **Git LFS** in the sidebar or search **Git LFS:** in the command palette.
+Select an action, fill its fields, then choose **Run action**. Reads are explicit:
+opening the dialog does not start an object scan or contact the remote.
+
+- **Installation and configuration** shows the installed version and effective
+  LFS environment. Install Git LFS separately if Git reports it missing.
+- **Set up this repository** runs `git lfs install --local`, including the
+  pre-push hook. Existing conflicting hooks are reported, never overwritten.
+- **Tracked patterns**, **Track a pattern**, and **Stop tracking a pattern**
+  inspect/edit `.gitattributes`. Review and stage that file and the intended
+  assets in Local Changes. Tracking does not rewrite existing commits.
+- **Object and transfer status** shows Git LFS's queued changes; **List objects
+  and sizes** lists current LFS files (`*` is full content, `-` is a pointer).
+- **Download objects**, **Download and check out objects**, and **Upload objects**
+  use the named Git remote. Downloads can be retried after cancellation; completed
+  objects remain in the local LFS cache.
+- **List locks**, **Lock a file**, and **Unlock by ID** use the server's lock API.
+  The list is limited to 100; filter by an exact path to inspect other files.
+  Unsupported locking, authentication failures and offline errors remain visible.
+
+Whole-file staging (including Stage all), discard, hard reset and branch/revision checkout
+run the required LFS filters. Missing filters fail rather than stage raw assets.
+LFS files cannot be partially staged or discarded: use the whole-file action.
+Operations show bounded output/progress and **Cancel operation**. After an error,
+inspect status, correct the installation/configuration or remote access, and retry.
+There is no LFS history migration operation in Strand.
 
 ## The sidebar Git tab
 
@@ -156,7 +185,44 @@ Single-clicking a stash switches to All Commits, reveals its graph node, and ope
 
 ### Submodules
 
-Submodules list with status badges (uninitialized, out of date, modified). Double-click opens the submodule as its own repository tab; the menu offers Open, Update (or Init & update), and Copy path. The section header action runs "Update all" (`--init --recursive`) with streamed progress.
+Submodules list with status badges (uninitialized, out of date, modified).
+Double-click opens the module as its own repository tab. The menu offers Open,
+Update (or Init & update), Copy path, and **Manage / inspect nested modules…**.
+The section header's **Manage submodules** control also works in repositories
+with no submodules. Every management action is searchable as **Submodules:**
+in the command palette.
+
+Choose an action and a module, then **Run action**:
+
+- **Add submodule** clones a URL into a new relative path and stages its
+  `.gitmodules` entry and gitlink. Existing directories are preserved.
+- **Initialize / update submodule** and **Initialize / update all submodules**
+  use Git's configured update behavior. The nested checkbox controls recursion.
+- **Change submodule URL** edits `.gitmodules` and synchronizes local URL config.
+  Review and stage `.gitmodules` in Local Changes before committing.
+  **Sync configured URLs** reapplies the recorded URLs, optionally recursively.
+- **Deinitialize submodule** removes its working directory and local registration
+  while retaining `.gitmodules` and the index for later initialization.
+- **Remove submodule** removes its working directory and stages removal of its
+  gitlink and `.gitmodules` entry. Git retains module history in its modules directory.
+
+Removal and deinitialization need a second confirmation. Dirty/untracked or ignored files,
+nested changes and checked-out commits that differ from the index block those
+actions. Updates also refuse dirty modules. Commit or stash the module's changes,
+and stage/commit the intended gitlink before retrying. Add/remove/URL changes
+refuse pending `.gitmodules` edits so they cannot stage or overwrite unrelated work.
+
+The manager loads one level and up to 100 modules per page. Its list compares
+recorded and checked-out commits; **Inspect working-tree status** explicitly
+checks local and nested files. **Inspect nested modules** descends into an
+initialized module; **Repository root** returns to the original repository.
+Use **Previous page** / **Next page** for larger lists and **Open repository**
+to work in a module's own tab.
+
+Progress and errors remain visible. **Cancel operation** stops Git and its
+helpers. Completed clones and local objects remain available: refresh, inspect
+the current state, correct the error and retry. Git's transport restrictions
+still apply, including restrictions on local-file submodule URLs.
 
 ## Repository maintenance
 
