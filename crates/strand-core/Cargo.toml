@@ -13,3 +13,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+schemars = { version = "0.8", optional = true }
+
+[features]
+schema = ["dep:schemars"]

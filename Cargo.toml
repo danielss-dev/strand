@@ -5,6 +5,7 @@ members = [
     "crates/strand-azdo-protocol",
     "crates/strand-core",
     "crates/strand-headless",
+    "crates/strand-ops",
     "crates/strand-tauri",
 ]
 

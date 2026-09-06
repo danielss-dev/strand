@@ -7,6 +7,7 @@ use crate::{error::Result, repo::Repo};
 /// What happened to a file between two trees / index states.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum DiffStatus {
     Added,
     Modified,
@@ -23,6 +24,7 @@ pub enum DiffStatus {
 /// don't parse hunks on the Rust side until we need to (hunk-level staging
 /// in A3 will look at `patch` and a per-hunk index).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileDiff {
     pub path: String,
     pub old_path: Option<String>,

@@ -71,7 +71,10 @@ the resolved app appearance automatically.
 
 ## Features
 
-- **Command line launcher** — Settings → Integrations installs `strand` in
+- **Read-only command line companion** — `strand status/log/diff/review`
+  works without the desktop; `--json` emits a versioned typed payload and
+  `strand schema` describes it. Full-file review context uses the same engine
+  as the app. Settings → Integrations installs `strand` in
   your user command directory. `strand PATH` opens and focuses a repository
   in the existing desktop instance, including paths with spaces.
 - **Responsive refreshes** — repository updates coalesce during bursts of
@@ -354,6 +357,7 @@ strand/
 ├── crates/
 │   ├── strand-core/           # Git engine (gix for reads, git2 for writes)
 │   ├── strand-headless/       # CLI launcher, read-only companion and stdio engine
+│   ├── strand-ops/            # Shared read operations and versioned wire types
 │   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
 │   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands

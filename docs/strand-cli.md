@@ -1,10 +1,20 @@
 # `strand` CLI — feature design
 
-Status (2026-09-06): **launcher implemented; read commands and daemon in progress**.
+Status (2026-09-06): **launcher and read-only status/log/diff/review implemented**.
 The desktop bundles `strand-cli` (the GUI executable already owns `strand`);
 Settings → Integrations installs it as the user's `strand` command. Startup
 and subsequent argv requests share a bounded inbox drained after session restore.
-The remaining sections describe the staged target. Originally scheduled post-1.0 (ROADMAP §1.1+,
+`strand-ops` owns the read allowlist and schema-v1 envelope, sharing core serde
+types with the desktop. `--json` has stable error codes and an 8 MiB output
+limit; `schema` derives its JSON schemas from these types. `status --snapshot`
+uses today's desktop Snapshot (metadata, status, files, refs, submodules;
+history is intentionally separate). `review` pins its base to an OID and
+reports HEAD before/after; it is a sequence of reads, not an atomic disk snapshot.
+`diff --full-context` applies to unstaged/`--since`, matching existing core ops.
+Human output is plain, terminal-control-safe text. Syntax colors/pager,
+blame/structured conflicts, standalone release artifacts, and remote bootstrap
+remain staged work. The remaining sections record the target design.
+Originally scheduled post-1.0 (ROADMAP §1.1+,
 where "CLI companion binary" has been a bullet since the start — this doc
 fleshes it out). Shares its foundation with
 [`remote-ssh.md`](./remote-ssh.md): both consume the transport-agnostic

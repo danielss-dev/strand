@@ -25,6 +25,7 @@ const MAX_CONTENT_BYTES: usize = 2_000_000;
 const MAX_BLOB_BYTES: usize = 8_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileContent {
     pub path: String,
     /// File text (empty when `binary`). Truncated to [`MAX_CONTENT_BYTES`].
@@ -57,6 +58,7 @@ pub enum BlobSource<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileHistoryEntry {
     pub hash: String,
     pub short_hash: String,

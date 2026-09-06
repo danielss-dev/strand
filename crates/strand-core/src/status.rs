@@ -4,6 +4,7 @@ use crate::{error::Result, repo::Repo};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum StatusKind {
     Modified,
     Added,
@@ -14,6 +15,7 @@ pub enum StatusKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileStatus {
     pub path: String,
     pub kind: StatusKind,

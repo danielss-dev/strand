@@ -197,6 +197,7 @@ impl Repo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RepoMeta {
     pub name: String,
     pub path: String,

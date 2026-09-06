@@ -2480,8 +2480,9 @@ ships** (ROADMAP §1.1+).
 
 ### Engine & daemon
 
-- ☐ P2 Extract command handlers from `strand-tauri` into a
-  transport-agnostic `strand-ops` crate (shared by Tauri shell + daemon)
+- ◐ P2 Extract command handlers from `strand-tauri` into a
+  transport-agnostic `strand-ops` crate (typed meta/status/snapshot shared with
+  the desktop; read-only companion allowlist implemented; writes remain local)
 - ☐ P2 `strandd` headless binary: `strand-ops` behind JSON-RPC over
   stdio; versioned handshake with capability flags; strict serde
   (`deny_unknown_fields`), per-frame size limits
@@ -2595,22 +2596,24 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
 
 ### Binary & commands
 
-- ☐ P2 `strand-headless` crate: clap front-end over `strand-ops` with
+- ◐ P2 `strand-headless` crate: clap front-end over `strand-ops` with
   `cli` + `--stdio` (daemon) entry modes; one static artifact, one hash
   manifest shared with remote-SSH bootstrap
-- ☐ P2 Read commands: `status` (+ `--snapshot`), `diff` (`--staged`,
+- ◐ P2 Read commands: `status` (+ `--snapshot`), `diff` (`--staged`,
   `--commit`, `--between`, `--since`, `--full-context` via the `*_full`
-  review ops), `log`, `blame`, `conflicts`
+  review ops), `log`, `blame`, `conflicts` (`cli.rs` implements status/diff/log
+  and file history; blame and structured conflict commands remain)
 - ☐ P2 Terminal diff renderer: Rust-native — `syntect` highlighting +
   truecolor ANSI through a pager (the `delta` model), theme ported from
   `tokens.css`. Decided: no JS runtime in the binary; OpenTUI/Pierre
   rejected for in-process use (see `docs/strand-cli.md` open questions)
-- ☐ P2 `review` command: one payload (full-context diffs since base +
-  log + status) for agent/reviewer consumption
-- ☐ P2 Machine output contract: `--json` reusing IPC serde types,
+- ☑ P2 `review` command: one payload (full-context diffs since a pinned base +
+  recent HEAD log + status, before/after HEAD; `strand_ops::execute`)
+- ◐ P2 Machine output contract: `--json` reusing IPC serde types,
   `schemaVersion` envelope, `strand schema` dump, NDJSON progress
   streaming, JSON errors on stderr + stable exit codes, no pager/locale
-  variance
+  variance (`Envelope`, derived `schema`, bounded encoding and stable errors
+  shipped; progress is reserved until a streaming operation exists)
 
 ### App integration
 

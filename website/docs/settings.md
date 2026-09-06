@@ -13,6 +13,30 @@ otherwise the desktop starts and opens the repository after session restore.
 Quote paths containing spaces. Existing unrelated `strand` executables in the
 installation directory are never replaced.
 
+The companion also works headlessly. These commands only read Git state:
+
+```sh
+strand -C /path/to/repo status --snapshot --json
+strand log -n 50 --json
+strand log --file src/main.rs --json
+strand diff --staged
+strand diff --commit HEAD --json
+strand diff --between main HEAD --json
+strand diff --since main --full-context --json
+strand review --since main --json
+strand schema
+```
+
+`--json` emits one `{schemaVersion: 1, repository, result: {kind, data}}`
+envelope. The data uses Strand's desktop types. Errors produce no stdout and
+one `{code, message}` object on stderr: exit 2 for invalid requests, 3 for
+repository errors, 4 for the 8 MiB output limit, and 5 for output errors.
+Log limits range from 1–1,000. Full context is available for unstaged diffs and
+`--since`; incompatible selectors fail explicitly. Snapshot excludes history;
+Review includes recent HEAD history and reports its before/after HEAD because
+concurrent repository changes can occur between reads. No command stages,
+commits, fetches, pushes or invokes a pager.
+
 Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; git identity and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.

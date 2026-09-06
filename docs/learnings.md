@@ -10,6 +10,18 @@ paths against the sending process's cwd. The desktop binary already owns the
 the user command installation maps it to `strand` with an absolute desktop
 locator, avoiding shell interpolation of repository paths.
 
+## Headless reads are a versioned allowlist (2026-09-06)
+
+`strand-ops::ReadOp` is shared by the companion and remote engine. Do not route
+arbitrary Tauri command names or shell commands through it. Local meta/status/
+snapshot calls stay typed and in process. Output schemas derive from the core
+serde types behind the `schema` feature; changing an existing shape is a public
+contract change. Serde's internally tagged unit variants can ignore extra
+fields even with `deny_unknown_fields`: use empty struct variants and retain
+the unknown-field regression test. The headless process disables Git lazy
+fetch before starting threads, so reads of partial clones cannot initiate a
+network write as a hidden side effect.
+
 Things we've learned while building Strand that aren't otherwise obvious from
 the PRD / ROADMAP / TASKS files. Append here when you discover something
 that future work (yours or another agent's) needs to respect.

@@ -2816,6 +2816,13 @@ and the palette. A single-instance argv inbox opens requested repositories
 after session restore and focuses the existing window. Read commands and SSH
 transport follow in separately verified changes.
 
+**F16 read companion shipped locally (2026-09-06):** `strand-ops` and the clap
+front-end provide headless status/snapshot, log/file history, diff variants,
+full-context review, and derived JSON schemas. Machine results share the
+desktop serde types in schema-v1 envelopes; errors and output limits are
+explicit, with no Git mutation or implicit lazy fetch. Terminal syntax colors,
+blame/conflicts and standalone distribution remain in the expanded CLI backlog.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on
