@@ -2519,3 +2519,13 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+
+### Advanced refs preserve reviewed identities (2026-09-06)
+
+Git notes must use a locked namespace tip and publish the prepared notes tree
+atomically; a stale note editor must retain its draft when another worktree
+changes that namespace. Replacement inspection uses raw object IDs because
+libgit2/gix readers do not apply Git's replace refs. Tag retargeting and
+re-annotation are separate operations with compare-and-swap of the raw tag ref,
+not its peeled commit. Never drop an existing tag signature during an edit.

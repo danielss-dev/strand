@@ -50,6 +50,7 @@ export interface MenuHandlers {
   openInTerminal(): void;
   openInterchange(): void;
   openBisect(): void;
+  openAdvancedRefs(): void;
 }
 
 let preemptsKeydown = false;
@@ -198,6 +199,7 @@ export async function installAppMenu(
     text: 'Repository',
     items: [
       await item({ id: 'git-interchange', text: 'Patches, Mailboxes & Bundles…', enabled: hasRepo, action: () => handlers().openInterchange() }),
+      await item({ id: 'git-advanced-refs', text: 'Git Notes, Replacements & Tag Editing…', enabled: hasRepo, action: () => handlers().openAdvancedRefs() }),
       await item({ id: 'git-bisect', text: 'Guided Bisect…', enabled: hasRepo, action: () => handlers().openBisect() }),
       await item({
         id: 'sync',

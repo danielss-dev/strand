@@ -128,9 +128,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F15 / P2 — User-defined repository/ref/file actions.** Safe executable/
   argv templates, exact context, palette/menu discovery, preview, bounded output
   and cancellation; editor/terminal templates and internal registries already exist.
-- ☐ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
+- ☑ **F18 / P3 — Advanced refs.** Git notes/replace-ref management and explicit
   tag retarget/re-annotation with current/new target review. Signed tags are F03;
-  existing local Review notes are separate from Git notes.
+  existing local Review notes are separate from Git notes. (`AdvancedRefsDialog`,
+  locked notes updates, replace refs and compare-and-swap tag edits; native verified.)
 - ☐ **F19 / P3 — Git-flow orchestration.** Opt-in tool/config detection and
   inspectable start/finish feature/release/hotfix flows with conflict recovery.
 

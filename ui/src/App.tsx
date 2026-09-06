@@ -120,6 +120,7 @@ const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').the
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
 const InterchangeDialog = lazy(() => import('./views/InterchangeDialog').then((m) => ({ default: m.InterchangeDialog })));
+const AdvancedRefsDialog = lazy(() => import('./views/AdvancedRefsDialog').then((m) => ({ default: m.AdvancedRefsDialog })));
 const BisectDialog = lazy(() => import('./views/BisectDialog').then((m) => ({ default: m.BisectDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
@@ -354,6 +355,7 @@ export function App() {
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [interchangePath, setInterchangePath] = useState<string | null>(null);
+  const [advancedRefs, setAdvancedRefs] = useState<{ path: string; mode: 'notes' | 'replace' | 'retarget' | 'reannotate'; tag?: string } | null>(null);
   const [bisectPath, setBisectPath] = useState<string | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
   // null = closed; otherwise the branch to rename.
@@ -1166,6 +1168,7 @@ export function App() {
     openInEditor,
     openInTerminal,
     openInterchange: () => { const path = useRepo.getState().activePath; if (path) setInterchangePath(path); },
+    openAdvancedRefs: () => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode: 'notes' }); },
     openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
   };
   const hasRepo = Boolean(meta);
@@ -1882,6 +1885,10 @@ export function App() {
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'git-interchange', label: 'Patches, mailboxes & bundles…', group: 'Actions', keywords: 'import export apply index working tree am continue skip abort author bundle verify prerequisites', run: () => { setPaletteOpen(false); setInterchangePath(meta.path); } },
+        { id: 'git-notes', label: 'Git notes…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'notes' }); } },
+        { id: 'git-replace', label: 'Replace refs…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'replace' }); } },
+        { id: 'git-retarget', label: 'Retarget tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'retarget' }); } },
+        { id: 'git-reannotate', label: 'Re-annotate tag…', group: 'Actions', keywords: 'advanced refs objects notes replacements tag annotation', run: () => { setPaletteOpen(false); setAdvancedRefs({ path: meta.path, mode: 'reannotate' }); } },
         { id: 'git-bisect', label: 'Guided bisect…', group: 'Actions', keywords: 'good bad skip regression culprit test resume reset', run: () => { setPaletteOpen(false); setBisectPath(meta.path); } },
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
@@ -2219,6 +2226,7 @@ export function App() {
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
+                onEditTag={(tag, mode) => { if (meta) setAdvancedRefs({ path: meta.path, mode, tag }); }}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
                 onBranchFromStash={(index) => setBranchDialog({
                   start: `stash@{${index}}`,
@@ -2395,6 +2403,7 @@ export function App() {
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
       {interchangePath && <Suspense fallback={null}><InterchangeDialog key={interchangePath} path={interchangePath} onClose={() => setInterchangePath(null)} /></Suspense>}
+      {advancedRefs && <Suspense fallback={null}><AdvancedRefsDialog key={advancedRefs.path} path={advancedRefs.path} initialMode={advancedRefs.mode} initialTag={advancedRefs.tag} onClose={() => setAdvancedRefs(null)} /></Suspense>}
       {bisectPath && <Suspense fallback={null}><BisectDialog key={bisectPath} path={bisectPath} onClose={() => setBisectPath(null)} /></Suspense>}
 
       {fileEntryDialog && meta && (

@@ -87,6 +87,7 @@ interface SidebarProps {
   onCreateStash: () => void;
   /** Open the New-tag dialog targeting HEAD. */
   onCreateTag: () => void;
+  onEditTag: (name: string, kind: 'retarget' | 'reannotate') => void;
   /** Open the New-branch dialog from `start` (`null` ⇒ HEAD); `label` is the
    * human name shown in the blurb. */
   onCreateBranch: (start: string | null, label: string) => void;
@@ -176,7 +177,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onEditTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -745,6 +746,8 @@ export function Sidebar({ onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpen
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
+      { label: 'Retarget tag…', onSelect: () => onEditTag(tg.name, 'retarget') },
+      { label: 'Re-annotate tag…', onSelect: () => onEditTag(tg.name, 'reannotate') },
       { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },

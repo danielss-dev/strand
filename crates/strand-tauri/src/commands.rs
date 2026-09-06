@@ -70,6 +70,116 @@ impl From<strand_core::Error> for CmdError {
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
 
 #[tauri::command]
+pub async fn repo_advanced_refs(
+    path: String,
+    notes_ref: String,
+) -> CmdResult<strand_core::advanced_refs::AdvancedRefs> {
+    run_blocking("inspect advanced refs", move || {
+        Repo::discover(path)?
+            .advanced_refs(&notes_ref)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note(
+    path: String,
+    notes_ref: String,
+    revision: String,
+) -> CmdResult<strand_core::advanced_refs::GitNote> {
+    run_blocking("read Git note", move || {
+        Repo::discover(path)?
+            .git_note(&notes_ref, &revision)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_git_note_write(
+    path: String,
+    notes_ref: String,
+    object: String,
+    expected: Option<String>,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write Git note", move || {
+        Repo::discover(path)?
+            .write_git_note(&notes_ref, &object, expected.as_deref(), message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_review(
+    path: String,
+    original: String,
+    replacement: String,
+) -> CmdResult<strand_core::advanced_refs::ReplaceReview> {
+    run_blocking("review replacement", move || {
+        Repo::discover(path)?
+            .review_replacement(&original, &replacement)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_replace_write(
+    path: String,
+    original: String,
+    replacement: Option<String>,
+    expected: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("write replacement", move || {
+        Repo::discover(path)?
+            .write_replacement(&original, replacement.as_deref(), expected.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit_review(
+    path: String,
+    name: String,
+    target: String,
+) -> CmdResult<strand_core::advanced_refs::TagEditReview> {
+    run_blocking("review tag edit", move || {
+        Repo::discover(path)?
+            .review_tag_edit(&name, &target)
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_edit(
+    path: String,
+    name: String,
+    target: String,
+    expected: String,
+    kind: strand_core::advanced_refs::TagEditKind,
+    message: Option<String>,
+) -> CmdResult<()> {
+    run_blocking("edit tag", move || {
+        Repo::discover(path)?
+            .edit_tag(&name, &target, &expected, kind, message.as_deref())
+            .map_err(Into::into)
+    })
+    .await
+}
+#[tauri::command]
+pub async fn repo_tag_published(
+    path: String,
+    remote: String,
+    name: String,
+) -> CmdResult<strand_core::advanced_refs::PublishedTag> {
+    run_blocking("check published tag", move || {
+        Repo::discover(path)?
+            .published_tag(&remote, &name)
+            .map_err(Into::into)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn repo_bisect_state(path: String) -> CmdResult<strand_core::bisect::BisectState> {
     run_blocking("bisect state", move || Repo::discover(path)?.bisect_state().map_err(Into::into)).await
 }

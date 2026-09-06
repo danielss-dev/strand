@@ -235,6 +235,9 @@ the resolved app appearance automatically.
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
   import into a new branch, and export full or incremental bundles.
+- **Advanced Git refs** — inspect and edit Git notes and replacement refs;
+  retarget or re-annotate existing unsigned tags with old/new targets and
+  optional remote publication checks. External edits require a fresh review.
 - **Guided bisect** — start from known good/bad revisions, test and mark
   good/bad/skip, inspect remaining candidates and the culprit, resume external
   sessions, and reset to the original checkout while protecting test edits.

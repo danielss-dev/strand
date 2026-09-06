@@ -265,3 +265,29 @@ Strand reads repositories with its own fast engine, but the operations where you
 - **External merge tool** — your configured `git mergetool`.
 
 If it works in your terminal, it works in Strand.
+
+## Git notes, replacements and tag editing
+
+Open **Repository → Git Notes, Replacements & Tag Editing**, or use the
+**Git notes**, **Replace refs**, **Retarget tag** or **Re-annotate tag** palette
+commands. Tag rows also offer retarget/re-annotate in their context menu
+(including the keyboard context-menu key).
+
+Git notes live in a selected `refs/notes/…` namespace and are separate from
+Strand's local Review notes. Inspect an object, edit its note, then Save.
+Removing a note requires confirmation. An external namespace change refuses
+Save and keeps your draft; use **Inspect note / reload draft** to review the
+current note before retrying. Notes are shared by linked worktrees.
+
+Replacement review shows the full original/replacement object IDs and types.
+Both types must match; cycles and excessive replacement chains are refused.
+Replacement-aware Git commands read the replacement; Strand's normal
+in-process graph and diff readers continue to show original objects.
+
+Tag editing shows current and proposed commit IDs, subjects and changed-file
+count. Retarget preserves an unsigned tag's annotation or lightweight kind;
+re-annotation keeps its target. Check any configured remote explicitly to
+inspect whether its tag matches the local tag. Acknowledgement applies to the
+local edit only: other repositories' copies remain unchanged and no push is
+performed. Signed tags require a new signature and are refused by this editor.
+External tag changes require reviewing the targets again.

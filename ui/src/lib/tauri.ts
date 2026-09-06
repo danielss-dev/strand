@@ -1,4 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
 import type { BisectAction, BisectState, BisectOutcome } from './bisect';
 import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
 
@@ -117,6 +118,14 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoAdvancedRefs: (path: string, notesRef: string) => invoke<AdvancedRefs>('repo_advanced_refs', { path, notesRef }),
+  repoGitNote: (path: string, notesRef: string, revision: string) => invoke<GitNote>('repo_git_note', { path, notesRef, revision }),
+  repoGitNoteWrite: (path: string, notesRef: string, object: string, expected: string | null, message: string | null) => invoke<void>('repo_git_note_write', { path, notesRef, object, expected, message }),
+  repoReplaceReview: (path: string, original: string, replacement: string) => invoke<ReplaceReview>('repo_replace_review', { path, original, replacement }),
+  repoReplaceWrite: (path: string, original: string, replacement: string | null, expected: string | null) => invoke<void>('repo_replace_write', { path, original, replacement, expected }),
+  repoTagEditReview: (path: string, name: string, target: string) => invoke<TagEditReview>('repo_tag_edit_review', { path, name, target }),
+  repoTagEdit: (path: string, name: string, target: string, expected: string, kind: TagEditKind, message: string | null) => invoke<void>('repo_tag_edit', { path, name, target, expected, kind, message }),
+  repoTagPublished: (path: string, remote: string, name: string) => invoke<PublishedTag>('repo_tag_published', { path, remote, name }),
   repoBisectState: (path: string) => invoke<BisectState>('repo_bisect_state', { path }),
   repoBisectStart: (path: string, good: string, bad: string, token: string) => invoke<BisectOutcome>('repo_bisect_start', { path, good, bad, token }),
   repoBisectAction: (path: string, action: BisectAction, token: string) => invoke<BisectOutcome>('repo_bisect_action', { path, action, token }),

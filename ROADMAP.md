@@ -2163,6 +2163,8 @@ and Store certification remain external gates.
   retention policy, and backend justify adding it
 - ☑ Guided Git bisect (F10: manual good/bad/skip, progress/culprit,
   external-session resume, clean-tree reset and reviewed original target)
+- ☑ Advanced refs (F18: Git notes, replace refs, explicit tag retarget/re-annotation
+  with stale-write guards and remote publication checks; native desktop verified)
 - Sparse checkout (cone mode first)
 - ☑ Patch import/mailbox and Git bundle workflows (F07: `InterchangeDialog`,
   validation, author-preserving mailbox recovery and new-branch bundle import;
