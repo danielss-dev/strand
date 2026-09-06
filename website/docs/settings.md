@@ -144,6 +144,10 @@ The status row shows the installed helper and protocol versions; **Retry
 installation** always downloads and replaces the helper from Strand's current
 protocol channel, including when the existing binary reports the same version,
 and installs it only after signature and SHA-256 verification.
+If installation says no compatible helper release was found, the download for
+this Strand build's protocol is unavailable. Retry after that helper release
+is published. An incomplete-release error means its signature or archive is
+missing. Removing credentials will not repair either download problem.
 Disabling keeps profiles and credentials. **Remove helper and credentials** is
 confirmed separately and removes the binary, profiles, imported certificates,
 and vault entries even when the installed helper is broken or uses an older

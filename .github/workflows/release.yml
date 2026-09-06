@@ -226,6 +226,9 @@ jobs:
       - name: Verify release tag matches Strand version
         run: node scripts/check-release-version.mjs
 
+      - name: Verify compatible helper downloads are published
+        run: pnpm release:check-helper
+
       - name: Install Cosign
         if: matrix.platform == 'ubuntu-22.04'
         uses: sigstore/cosign-installer@v4.1.2

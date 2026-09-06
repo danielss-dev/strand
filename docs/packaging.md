@@ -192,6 +192,14 @@ versions are independent from Strand versions. Run `pnpm version:azdo patch`
 matching `strand-azdo-vX.Y.Z` tag. Normal `vX.Y.Z` Strand releases do not rebuild
 or renumber the helper.
 
+Before a desktop release, `pnpm release:check-helper` reads its compiled
+protocol from the shared contract and checks the public channel manifest,
+signature, and all three platform archives. The desktop release jobs require
+this check before building installers. Publish a compatible helper first when
+the protocol changes; bumping only Strand otherwise leaves Install helper
+pointing at a 404. The check covers availability; the desktop installer still
+enforces the signature and archive/binary hashes.
+
 The helper tag builds universal macOS, Windows x86_64, and Linux x86_64
 `.zip`/`.tar.gz` archives. Each runner executes its built binary's
 `version --json`; the metadata and manifest jobs fail unless all three binaries
@@ -202,8 +210,8 @@ manifest to a draft versioned helper release, publishes it as a prerelease, and
 then promotes the identical
 artifacts to `strand-azdo-protocol-N`. Strand constructs that channel from its
 compiled protocol version, so publishing protocol N+1 cannot break reinstall
-for an older Strand release. The current thread-lifecycle contract is protocol
-6. Protocol 5 is additionally promoted to the legacy
+for an older Strand release. The current deferred-completion contract is protocol
+7. Protocol 5 is additionally promoted to the legacy
 `strand-azdo-latest` channel used by already-published Strand 1.2 clients. A
 post-promotion Linux smoke job downloads through the protocol channel, executes
 the published helper, and rechecks its version, protocol, archive/binary hashes,

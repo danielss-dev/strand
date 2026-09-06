@@ -223,7 +223,8 @@ the resolved app appearance automatically.
   independently versioned and updated, signed `strand-azdo` REST helper from
   a protocol-specific release channel, configured in Settings → Hosting;
   installation shows an explicit download and verification indicator, and
-  Retry force-replaces a broken or protocol-incompatible installed helper;
+  Retry force-replaces a broken or protocol-incompatible installed helper.
+  Unavailable helper releases are identified in the installation error.
   PATs live only in the native credential vault, and Windows can use integrated
   Negotiate/NTLM authentication. Its collection URL automatically matches HTTPS
   repository remotes and supplies the project/repository coordinates used by the

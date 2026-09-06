@@ -2589,6 +2589,13 @@ metadata. Sharing an updater fast path with explicit Retry made recovery a
 no-op; requiring a protocol-compatible helper to remove its own state trapped
 users after a breaking IPC change.
 
+**Protocol changes require publication before desktop release (2026-09-06).**
+Changing the shared protocol makes Install helper request a new release URL.
+Desktop tags do not build helpers. Run `release:check-helper` before desktop
+packaging and publish a newly versioned helper first if that channel is
+missing; keep prior channels available for shipped clients. Never redirect an
+unpublished protocol to global latest or weaken verification to hide a 404.
+
 ## Performance evidence must separate status, patches, and paint (2026-09-06)
 
 A fast `repo_snapshot` does not establish a fast refresh: the frontend can

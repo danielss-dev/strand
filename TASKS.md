@@ -2058,6 +2058,18 @@ tree: watch the agent work, review fast, accept or reject safely.
   promoted to `strand-azdo-protocol-5` plus the legacy `strand-azdo-latest`
   channel; hosted post-promotion Linux smoke passed and all three manifests
   matched byte-for-byte (`Release` run `30427932365`; 2026-07-29).
+- ◐ Repair missing Azure helper downloads (2026-09-06): protocol 7 has no
+  published channel; helper 1.3.0 is prepared locally. Desktop release builds
+  now require the matching public manifest, signature, and all three archives
+  (`check-azdo-channel.mjs`); installer 404s explain a missing or incomplete
+  release (`azdo_helper::download`). Signed publication of
+  `strand-azdo-v1.3.0` / `strand-azdo-protocol-7` and installation verification
+  remain pending. Local validation: 19 Rust helper/lifecycle/protocol tests,
+  9 release-script tests, Rust check, TypeScript check, and release security
+  policy passed; the built Windows helper reports version 1.3.0 / protocol 7.
+- ☐ Backfill the signed protocol-6 helper channel for already-published Strand
+  1.5.1 from its compatible source, with a new immutable helper version/tag;
+  publishing protocol 7 cannot repair protocol-6 clients (2026-09-06).
 - ☑ DAN-64 helper lifecycle recovery (`azdo_helper::download_and_install` force
   mode + protocol-only manifest gating, direct vault cleanup, and removable
   incompatible-binary status; 2026-09-02): Hosting Retry always replaces the

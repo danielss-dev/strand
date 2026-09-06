@@ -11,6 +11,7 @@ Run from the repository root on the exact candidate commit:
 pnpm install --frozen-lockfile
 pnpm release:check-security
 pnpm release:test-helper
+pnpm release:check-helper
 pnpm store:check
 pnpm --filter ./ui exec tsc --noEmit
 pnpm --filter ./ui exec vitest run
@@ -32,6 +33,9 @@ to the matching
 `strand-azdo-protocol-N` channel. The post-promotion smoke job must download
 through that channel and match the running Linux binary and archive to the
 manifest. A normal Strand tag must not renumber or publish the helper.
+Before building a desktop release, its exact protocol channel must already
+serve the manifest, signature, and all supported platform archives. Publish
+the matching helper first; retain older channels for already-shipped apps.
 
 ## Publisher and update trust
 
