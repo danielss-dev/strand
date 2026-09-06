@@ -2585,4 +2585,7 @@ signature verification out of status/snapshot and graph-wide refresh paths.
 In `git config --null --get-regexp` output, a valueless boolean has no newline
 separator and means true; a newline followed by an empty value means false.
 Preserve that distinction in settings displays and scoped editing.
-`nLFS guards must run before sparse-index mutation dispatch. Refresh an attached`nmemory-only sparse index through `sparse_read_index`, never `Index::read` from`ndisk; keep one process-tree cancellation helper when composing Git workflows.
+
+LFS guards must run before sparse-index mutation dispatch. Refresh an attached
+memory-only sparse index through `sparse_read_index`, never `Index::read` from
+disk; keep one process-tree cancellation helper when composing Git workflows.
