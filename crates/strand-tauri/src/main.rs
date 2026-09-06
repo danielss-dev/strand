@@ -245,6 +245,8 @@ fn main() {
             commands::repo_tree_at,
             commands::repo_submodules,
             commands::repo_submodule_update,
+            commands::repo_submodule_children,
+            commands::repo_submodule_action,
             commands::repo_worktrees,
             commands::repo_worktree_add,
             commands::repo_worktree_remove,

@@ -4317,6 +4317,11 @@ textarea.clone-input {
   min-height: 0;
   overflow-y: auto;
 }
+.submodule-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .maintenance-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

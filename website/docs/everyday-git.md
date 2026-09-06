@@ -161,7 +161,44 @@ Single-clicking a stash switches to All Commits, reveals its graph node, and ope
 
 ### Submodules
 
-Submodules list with status badges (uninitialized, out of date, modified). Double-click opens the submodule as its own repository tab; the menu offers Open, Update (or Init & update), and Copy path. The section header action runs "Update all" (`--init --recursive`) with streamed progress.
+Submodules list with status badges (uninitialized, out of date, modified).
+Double-click opens the module as its own repository tab. The menu offers Open,
+Update (or Init & update), Copy path, and **Manage / inspect nested modules…**.
+The section header's **Manage submodules** control also works in repositories
+with no submodules. Every management action is searchable as **Submodules:**
+in the command palette.
+
+Choose an action and a module, then **Run action**:
+
+- **Add submodule** clones a URL into a new relative path and stages its
+  `.gitmodules` entry and gitlink. Existing directories are preserved.
+- **Initialize / update submodule** and **Initialize / update all submodules**
+  use Git's configured update behavior. The nested checkbox controls recursion.
+- **Change submodule URL** edits `.gitmodules` and synchronizes local URL config.
+  Review and stage `.gitmodules` in Local Changes before committing.
+  **Sync configured URLs** reapplies the recorded URLs, optionally recursively.
+- **Deinitialize submodule** removes its working directory and local registration
+  while retaining `.gitmodules` and the index for later initialization.
+- **Remove submodule** removes its working directory and stages removal of its
+  gitlink and `.gitmodules` entry. Git retains module history in its modules directory.
+
+Removal and deinitialization need a second confirmation. Dirty/untracked or ignored files,
+nested changes and checked-out commits that differ from the index block those
+actions. Updates also refuse dirty modules. Commit or stash the module's changes,
+and stage/commit the intended gitlink before retrying. Add/remove/URL changes
+refuse pending `.gitmodules` edits so they cannot stage or overwrite unrelated work.
+
+The manager loads one level and up to 100 modules per page. Its list compares
+recorded and checked-out commits; **Inspect working-tree status** explicitly
+checks local and nested files. **Inspect nested modules** descends into an
+initialized module; **Repository root** returns to the original repository.
+Use **Previous page** / **Next page** for larger lists and **Open repository**
+to work in a module's own tab.
+
+Progress and errors remain visible. **Cancel operation** stops Git and its
+helpers. Completed clones and local objects remain available: refresh, inspect
+the current state, correct the error and retry. Git's transport restrictions
+still apply, including restrictions on local-file submodule URLs.
 
 ## Repository maintenance
 

@@ -608,6 +608,16 @@ export interface Submodule {
   status: SubmoduleState;
 }
 
+export type SubmoduleAction =
+  | { action: 'add' | 'set-url'; path: string; url: string }
+  | { action: 'remove' | 'deinit' | 'inspect'; path: string }
+  | { action: 'sync' | 'update'; path: string; recursive: boolean };
+
+export interface SubmodulePage {
+  modules: Submodule[];
+  next_offset: number | null;
+}
+
 /** One entry in the repository's worktree registry (`git worktree list`). */
 export interface Worktree {
   /** Absolute worktree directory, forward-slashed. */

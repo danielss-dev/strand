@@ -36,6 +36,8 @@ import type {
   MaintenanceOutcome,
   MaintenanceTask,
   LfsAction,
+  SubmoduleAction,
+  SubmodulePage,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -454,6 +456,9 @@ export const tauri = {
   repoTreeAt: (path: string, rev: string) =>
     invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
+  repoSubmoduleChildren: (path: string, parent: string, offset: number) => invoke<SubmodulePage>('repo_submodule_children', { path, parent, offset }),
+  repoSubmoduleAction: (path: string, action: SubmoduleAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_submodule_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
   repoLfsAction: (path: string, action: LfsAction, opId: string, onProgress?: (p: Progress) => void) =>
     invoke<NetworkOutcome>('repo_lfs_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
   repoSubmoduleUpdate: (
@@ -462,6 +467,7 @@ export const tauri = {
     init: boolean,
     recursive: boolean,
     onProgress?: (p: Progress) => void,
+    opId?: string,
   ) =>
     invoke<NetworkOutcome>('repo_submodule_update', {
       path,
@@ -469,6 +475,7 @@ export const tauri = {
       init,
       recursive,
       onEvent: progressChannel(onProgress),
+      opId,
     }),
   repoWorktrees: (path: string) => invoke<Worktree[]>('repo_worktrees', { path }),
   // `startPoint` (branch/tag/commit; null = HEAD) and `track` (set upstream to

@@ -75,6 +75,9 @@ the resolved app appearance automatically.
   downloads/uploads and server locks from the sidebar and command palette.
   Whole-file staging, checkout, discard and hard reset honor LFS filters;
   history is never migrated.
+- **Submodule lifecycle** — add, remove, deinitialize, synchronize URLs, and
+  inspect nested modules in pages. Network work is cancellable; dirty module
+  contents, ignored files and unrecorded commits block removal/deinitialization.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with

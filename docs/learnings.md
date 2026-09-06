@@ -20,6 +20,21 @@ that otherwise keep pipes open. Tracking edits attributes, never history.
 
 ---
 
+## Submodule removal must preserve ignored local data (2026-09-06)
+
+Git's non-forced submodule deinit can remove ignored files, and a parent status
+does not report ignored files inside nested modules. Before remove/deinit,
+inspect ignored files and recorded commits in each initialized descendant;
+refuse the action when local data remains. Keep this work at the explicit
+mutation boundary. Nested browsing reads metadata one level/page at a time,
+without adding recursive dirty scans to repository refreshes.
+
+Opening a module from a dialog must go through `useWorkspaces.openRepoInActive`.
+Calling `useRepo.openRepo` directly omits workspace membership, and the workspace
+reconciler can immediately clear the active repository.
+
+---
+
 ## Closeable tabs follow browser closing conventions
 
 **Rule.** Every closeable repository or Work tab supports its visible close

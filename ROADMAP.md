@@ -2166,7 +2166,9 @@ and Store certification remain external gates.
 - Guided Git bisect
 - Sparse checkout (cone mode first)
 - Patch import/mailbox and Git bundle workflows
-- Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
+- ☑ Expanded submodule lifecycle — guarded add/remove/deinit/sync/URL, paged
+  nested inspection and cancellable updates (`SubmoduleDialog`); real Git
+  preservation fixtures and native lifecycle/keyboard checks pass.
 - Repository/ref/file custom actions with safe argv templates
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
@@ -2817,6 +2819,13 @@ pointer patches are rejected. The lazy sidebar/palette dialog exposes setup,
 patterns, objects, transfers and server locks with bounded output and process
 tree cancellation. Exact pointer/commit/network/lock fixtures and native
 setup, staging, keyboard, cancellation and recovery checks pass.
+
+**Submodule lifecycle shipped (2026-09-06):** Added explicit add/remove/deinit,
+URL changes/sync, lazy paged nested inspection, repository opening and
+cancellable updates through the sidebar and palette. Removal and deinit retain
+Git history and refuse dirty, unrecorded or ignored local data, including nested
+modules. Real Git and native UI checks cover registration/index preservation,
+network cancellation, URL edits, nesting, confirmations and reinitialization.
 
 ---
 
