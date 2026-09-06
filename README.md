@@ -71,6 +71,13 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **More hosting providers** — GitLab merge requests and Bitbucket Cloud pull
+  requests use the review workspace, with paged lists, comments, inline threads
+  and supported review decisions. GitHub Enterprise/custom hosts use their own
+  CLI authentication scope; select custom adapters in Settings → Hosting.
+  GitLab merges guard the reviewed head and follow project settings. Bitbucket
+  merge, GitLab request-changes and Bitbucket draft transitions remain
+  provider-site actions. Bitbucket Server is not supported.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with

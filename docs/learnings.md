@@ -2494,3 +2494,14 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+**Hosted provider writes preserve host and commit scope (2026-09-06).**
+Custom GitHub remotes need an explicit adapter and host-scoped CLI calls; keep
+GitHub.com's existing owner/repo identity so saved follows and drafts survive.
+GitLab inline coordinates use the diff version's base/start/head and both
+paths across a rename. A preflight head read is not an atomic merge guard:
+Bitbucket Cloud merge stays unavailable until its API accepts an expected
+head. Cloud comment/review races must report that a write may have happened,
+and partial batches must retain drafts with reconciliation guidance. Never
+reuse another provider's credentials; Cloud API tokens are scoped to
+api.bitbucket.org through the system Git credential helper.

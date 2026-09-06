@@ -177,6 +177,8 @@ fn main() {
             commands::repo_refs,
             commands::azdo_helper_status,
             commands::hosting_connection_status,
+            commands::repo_hosting_providers,
+            commands::repo_set_hosting_provider,
             commands::azdo_helper_enable,
             commands::azdo_helper_disable,
             commands::azdo_helper_remove,

@@ -2148,3 +2148,12 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+#[tauri::command(async)]
+pub async fn repo_hosting_providers(path: String) -> CmdResult<Vec<pull_requests::RemoteHostingProvider>> {
+    run_blocking("remote hosting providers", move || pull_requests::hosting_providers(&path).map_err(|message| CmdError { message })).await
+}
+#[tauri::command(async)]
+pub async fn repo_set_hosting_provider(path: String, remote: String, provider: String) -> CmdResult<()> {
+    run_blocking("configure remote provider", move || pull_requests::set_hosting_provider(&path, &remote, &provider).map_err(|message| CmdError { message })).await
+}

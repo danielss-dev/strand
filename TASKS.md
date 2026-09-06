@@ -1918,11 +1918,18 @@ tree: watch the agent work, review fast, accept or reject safely.
     - ☑ Close/reopen the PR (`repo_pull_request_lifecycle`; GitHub `gh pr`,
       Azure Services `az repos pr update`, and Azure Server helper protocol v2
       `Operation::SetStatus`; keyboard-operable confirmed overflow action).
-  - ☐ 1.1: GitLab merge-request adapter.
-  - ☐ 1.1: Bitbucket Cloud pull-request adapter; scope Bitbucket Server separately.
-  - ☐ **F11 / P2 — GitHub enterprise/custom-host adapter.** Model host/API/auth
+  - ☑ 1.1: GitLab merge-request adapter (`HostedRepo`, paged collections,
+    versioned inline coordinates, approvals, lifecycle and SHA-guarded merge).
+  - ☑ 1.1: Bitbucket Cloud pull-request adapter (`HostedRepo`, opaque pagination,
+    replies/ranges, approval/request-changes and capability-gated actions).
+  - ☐ Bitbucket Server adapter; Cloud merge remains a provider-site action
+    until an atomic expected-head guard is available. GitLab request-changes
+    and Bitbucket discussion resolution/draft transitions also remain
+    provider-site actions.
+  - ☑ **F11 / P2 — GitHub enterprise/custom-host adapter.** Model host/API/auth
     scope instead of hardcoding GitHub.com; keep the GitLab/Bitbucket adapter
-    rows above as the other F11 deliverables.
+    rows above as the other F11 deliverables (`GitHubContext`, host-scoped CLI
+    routing and per-remote adapter selection in Settings → Hosting).
   - ☐ 1.1: Direct OAuth + OS-keychain credentials if/when Strand stops delegating auth
     to provider CLIs (blocked on Platform → per-platform credential storage).
 

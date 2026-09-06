@@ -1,3 +1,4 @@
+import type { RemoteHostingProvider } from './types';
 import { Channel, invoke } from '@tauri-apps/api/core';
 
 import type {
@@ -126,6 +127,8 @@ export const tauri = {
     createInitialCommit: boolean,
   ) => invoke<InitOutcome>('repo_init', { path, initialBranch, gitignore, createInitialCommit }),
   azdoHelperStatus: () => invoke<AzdoHelperStatus>('azdo_helper_status'),
+  repoHostingProviders: (path: string) => invoke<RemoteHostingProvider[]>('repo_hosting_providers', { path }),
+  repoSetHostingProvider: (path: string, remote: string, provider: string) => invoke<void>('repo_set_hosting_provider', { path, remote, provider }),
   hostingConnectionStatus: () => invoke<HostingConnectionStatus>('hosting_connection_status'),
   azdoHelperEnable: () => invoke<AzdoHelperStatus>('azdo_helper_enable'),
   azdoHelperDisable: () => invoke<AzdoHelperStatus>('azdo_helper_disable'),

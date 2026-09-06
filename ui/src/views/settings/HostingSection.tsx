@@ -13,6 +13,7 @@ import type {
   ProviderConnectionStatus,
 } from '../../lib/types';
 import { useRepo } from '../../stores/repo';
+import { RemoteProviderSettings } from './RemoteProviderSettings';
 
 const emptyStatus: AzdoHelperStatus = {
   enabled: false,
@@ -193,13 +194,14 @@ export function HostingSection() {
       <div className="hosting-heading">
         <div>
           <span className="settings-section-label">Hosting connections</span>
-          <p className="settings-hint">Strand uses each provider’s existing CLI authentication.</p>
+          <p className="settings-hint">Strand uses provider CLIs or your system credential helper for authentication.</p>
         </div>
         <button type="button" className="icon-btn" aria-label="Refresh hosting connections" disabled={!desktop || connectionsLoading} onClick={() => void refresh()}>
           <Icon name="refresh" className={connectionsLoading ? 'spin' : ''} />
         </button>
       </div>
 
+      <RemoteProviderSettings />
       <div className="hosting-providers">
         <ProviderAccordion
           id="github"
