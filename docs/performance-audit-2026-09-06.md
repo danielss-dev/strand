@@ -350,3 +350,9 @@ Validation: 425 frontend tests across 75 files, 162 core Rust tests, TypeScript,
 native checks, Clippy with warnings denied for core/Tauri, production Vite
 builds, and release app compilation. Temporary
 CDP binaries/profiles are verification artifacts, not release configuration.
+
+PR CI exposed a test-environment difference: Node 20 has no built-in
+`navigator`, unlike the local Node 22 runtime. The Blame integration test now
+stubs it before importing Pierre and restores all globals afterward. All 425
+frontend tests also pass locally with `--no-experimental-global-navigator`;
+the real grammar/color assertions remain enabled.

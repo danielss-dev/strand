@@ -2488,3 +2488,9 @@ registrations on the window side, then pass them to a worker-owned Shiki core
 for tokenization. Test actual colored tokens, not only worker creation or
 plain-text fallback: silent fallback hid this integration error during the
 September pass.
+
+Browser dependencies in Node tests need explicit globals **before import**.
+Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
+`navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
+after the test, while retaining real integration assertions. Reproduce this
+class of failure locally with `--no-experimental-global-navigator`.

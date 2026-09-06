@@ -2085,6 +2085,9 @@ the September codebase audit rechecks the engine and tracks a fresh app pass.
 - ☑ **P2 — Worker-backed Blame tokenization with byte/line-length bounds.**
   (`FileHighlighter`, `highlight.worker`; real colored 5k-line output in both
   themes, 70 mounted rows, multiline-grammar and stale-reply tests.)
+- ☑ Make the real Blame worker integration test portable to CI's Node 20
+  (`highlight.worker.test.ts` explicitly stubs browser globals before importing
+  Pierre; all 425 frontend tests pass with native `navigator` disabled).
 - ◐ Re-run production WebView2 PRD §8 checks on September main. Release
   status refresh median 50.4ms, Review/Local Changes first-use observations,
   IPC counts, Files mutations, terminal identity, Settings focus, synthetic
