@@ -2808,6 +2808,16 @@ implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
+**Sparse checkout and clone controls shipped (2026-09-06, F08/F09):** Clone now
+offers branch, independent depth/single-branch choices, blob filtering and
+recursive submodules. Repository history controls inspect external clones and
+deepen/unshallow with progress and cancellation. Cone sparse selections can be
+inspected, changed and disabled, with dirty/ignored-file guards and compatible
+reads and mutations for external sparse indexes. Excluded files no longer look
+deleted. Windows native UI verification and 13 integration fixtures cover
+these workflows; normal repositories retain their existing in-process paths.
+See `docs/sparse-clone-verification.md` for validation and supported boundaries.
+
 ---
 
 ## Cross-cutting tracks (run in parallel with all milestones)

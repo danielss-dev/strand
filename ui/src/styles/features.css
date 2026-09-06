@@ -3447,6 +3447,19 @@ button {
 }
 
 /* ─── Clone dialog ─── */
+.clone-options-dialog { max-height: calc(100vh - 100px); }
+.clone-options-dialog > .clone-body { overflow: auto; min-height: 0; overflow-wrap: anywhere; }
+.clone-options-dialog > .clone-body > * { flex-shrink: 0; }
+.clone-options-dialog > .clone-head, .clone-options-dialog > .clone-foot { flex-shrink: 0; }
+.clone-advanced { display: flex; flex-direction: column; }
+.clone-advanced > summary { cursor: pointer; font-weight: 600; }
+.clone-advanced > :not(summary) { margin-top: 12px; }
+.clone-scope-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sparse-directory-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; }
+.sparse-directory-list label { display: flex; align-items: center; gap: 8px; }
+.sparse-directory-list label span { flex: 1; overflow-wrap: anywhere; }
+.sparse-directory-list small { color: var(--text-muted); }
+.sparse-patterns { white-space: pre-wrap; overflow-wrap: anywhere; }
 .clone-dialog {
   width: 520px;
   max-width: calc(100vw - 64px);

@@ -12,6 +12,10 @@ import type {
   BranchPushRequest,
   CheckoutOutcome,
   CloneOutcome,
+  CloneOptions,
+  CloneScope,
+  SparseCheckout,
+  HistoryExpansion,
   Commit,
   CommitSignature,
   CommitMessageSuggestion,
@@ -440,8 +444,15 @@ export const tauri = {
       opId,
       onEvent: progressChannel(onProgress),
     }),
-  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void, opId?: string) =>
-    invoke<CloneOutcome>('repo_clone', { url, dest, opId, onEvent: progressChannel(onProgress) }),
+  repoClone: (url: string, dest: string, onProgress?: (p: Progress) => void, opId?: string, options?: CloneOptions) =>
+    invoke<CloneOutcome>('repo_clone', { url, dest, options, opId, onEvent: progressChannel(onProgress) }),
+  repoCloneScope: (path: string) => invoke<CloneScope>('repo_clone_scope', { path }),
+  repoSparseCheckout: (path: string) => invoke<SparseCheckout>('repo_sparse_checkout', { path }),
+  repoSetSparseCheckout: (path: string, directories: string[], sparseIndex: boolean) =>
+    invoke<string>('repo_set_sparse_checkout', { path, directories, sparseIndex }),
+  repoDisableSparseCheckout: (path: string) => invoke<string>('repo_disable_sparse_checkout', { path }),
+  repoExpandHistory: (path: string, remote: string, expansion: HistoryExpansion, onProgress?: (p: Progress) => void, opId?: string) =>
+    invoke<NetworkOutcome>('repo_expand_history', { path, remote, expansion, opId, onEvent: progressChannel(onProgress) }),
   repoCheckout: (path: string, branch: string) =>
     invoke<CheckoutOutcome>('repo_checkout', { path, branch }),
   repoCheckoutCommit: (path: string, rev: string) =>

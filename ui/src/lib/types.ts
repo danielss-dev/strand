@@ -539,6 +539,30 @@ export interface CloneOutcome {
   output: string;
 }
 
+export interface CloneOptions {
+  branch: string | null;
+  depth: number | null;
+  single_branch: boolean;
+  filter: 'blob-none' | null;
+  recurse_submodules: boolean;
+}
+
+export interface CloneScope {
+  shallow: boolean;
+  remotes: { name: string; filter: string | null; fetch_refspecs: string[] }[];
+}
+
+export type HistoryExpansion = { kind: 'deepen'; commits: number } | { kind: 'unshallow' };
+
+export interface SparseCheckout {
+  enabled: boolean;
+  cone: boolean;
+  sparse_index: boolean;
+  directories: string[];
+  available: string[];
+  patterns: string;
+}
+
 /** One file in the working-tree view (Files sidebar tab). */
 export interface WorkTreeEntry {
   path: string;
@@ -546,6 +570,7 @@ export interface WorkTreeEntry {
   status: StatusKind | null;
   /** Git-ignored local file; intentionally not represented as a change status. */
   ignored: boolean;
+  excluded?: boolean;
 }
 
 /** Shell used by Work's embedded terminal. Commands are tokenized into argv

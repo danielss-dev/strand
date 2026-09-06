@@ -109,11 +109,13 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F07 / P2 — Patch/mailbox/bundle import and interchange.** Build on exact
   patch export and hunk apply with preview/validation, explicit targets,
   mailbox continue/skip/abort and bundle prerequisites/ref summaries.
-- ☐ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
-  compatibility fixtures for excluded paths, dirty trees and sparse indexes.
-- ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
+- ☑ **F08 / P2 — Sparse checkout.** Cone-directory inspect/change/disable and
+  compatibility fixtures for excluded paths, dirty trees and sparse indexes
+  (`Repo::set_sparse_checkout`, `SparseCheckoutDialog`, `sparse_checkout.rs` fixtures).
+- ☑ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
   partial-clone filter and recursive-submodule options; deepen/unshallow,
-  progress/cancellation, and safe argument construction.
+  progress/cancellation, and safe argument construction (`clone_with_options`,
+  `repo_expand_history`, `CloneScopeDialog`; `docs/sparse-clone-verification.md`).
 - ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
   execution until the manual workflow is complete.

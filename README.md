@@ -71,6 +71,12 @@ the resolved app appearance automatically.
 
 ## Features
 
+- **Repository size controls** — clone a chosen branch with optional depth,
+  single-branch fetching, on-demand file contents (`blob:none`), and recursive
+  submodules. Inspect clone scope and download more or full history from the
+  network menu or palette. Sparse checkout selects cone directories, distinguishes
+  excluded files from deletions, and preserves external sparse indexes on reads.
+  Selection changes refuse dirty trees and ignored-file removal.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with
