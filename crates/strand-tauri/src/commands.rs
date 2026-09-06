@@ -70,6 +70,21 @@ impl From<strand_core::Error> for CmdError {
 pub(crate) type CmdResult<T> = std::result::Result<T, CmdError>;
 
 #[tauri::command]
+pub async fn repo_bisect_state(path: String) -> CmdResult<strand_core::bisect::BisectState> {
+    run_blocking("bisect state", move || Repo::discover(path)?.bisect_state().map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_start(path: String, good: String, bad: String, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("start bisect", move || Repo::discover(path)?.bisect_start(&good, &bad, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn repo_bisect_action(path: String, action: strand_core::bisect::BisectAction, token: String) -> CmdResult<strand_core::bisect::BisectOutcome> {
+    run_blocking("bisect action", move || Repo::discover(path)?.bisect_action(action, &token).map_err(Into::into)).await
+}
+
+#[tauri::command]
 pub async fn repo_patch_preview(path: String, source: String, target: strand_core::interchange::PatchTarget) -> CmdResult<strand_core::interchange::PatchPreview> {
     run_blocking("preview patch", move || Repo::discover(path)?.preview_patch_import(Path::new(&source), target).map_err(Into::into)).await
 }

@@ -235,6 +235,9 @@ the resolved app appearance automatically.
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
   import into a new branch, and export full or incremental bundles.
+- **Guided bisect** — start from known good/bad revisions, test and mark
+  good/bad/skip, inspect remaining candidates and the culprit, resume external
+  sessions, and reset to the original checkout while protecting test edits.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
   resizable commit detail panel with lazy GPG/SSH/X.509 verification,

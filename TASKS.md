@@ -117,9 +117,11 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 - ☐ **F09 / P2 — Advanced clone options.** Branch, depth/single-branch,
   partial-clone filter and recursive-submodule options; deepen/unshallow,
   progress/cancellation, and safe argument construction.
-- ☐ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
+- ☑ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
-  execution until the manual workflow is complete.
+  execution (`bisect.rs`, `BisectDialog`, Repository menu/palette and banner;
+  three native fixtures, two frontend tests and native WebView2 keyboard,
+  external-resume, dirty-reset and original-target checks).
 - ☐ **F14 / P2 — Publish a new hosted repository.** Provider/account/visibility
   selection, concrete destination review, remote configuration and explicit
   initial push, with recovery from partial failure.

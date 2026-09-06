@@ -128,6 +128,8 @@ impl Repo {
             Some("revert".into())
         } else if has("MERGE_HEAD") {
             Some("merge".into())
+        } else if has("BISECT_START") {
+            Some("bisect".into())
         } else {
             None
         }

@@ -1,4 +1,5 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import type { BisectAction, BisectState, BisectOutcome } from './bisect';
 import type { PatchTarget, PatchPreview, MailboxState, InterchangeOutcome, BundlePreview } from './interchange';
 
 import type {
@@ -116,6 +117,9 @@ export function errMessage(e: unknown): string {
  * frontend never calls `invoke` with a string literal.
  */
 export const tauri = {
+  repoBisectState: (path: string) => invoke<BisectState>('repo_bisect_state', { path }),
+  repoBisectStart: (path: string, good: string, bad: string, token: string) => invoke<BisectOutcome>('repo_bisect_start', { path, good, bad, token }),
+  repoBisectAction: (path: string, action: BisectAction, token: string) => invoke<BisectOutcome>('repo_bisect_action', { path, action, token }),
   repoPatchPreview: (path: string, source: string, target: PatchTarget) => invoke<PatchPreview>('repo_patch_preview', { path, source, target }),
   repoPatchImport: (path: string, source: string, target: PatchTarget, token: string) => invoke<InterchangeOutcome>('repo_patch_import', { path, source, target, token }),
   repoMailboxState: (path: string) => invoke<MailboxState | null>('repo_mailbox_state', { path }),

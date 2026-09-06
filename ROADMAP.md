@@ -2161,7 +2161,8 @@ and Store certification remain external gates.
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
   retention policy, and backend justify adding it
-- Guided Git bisect
+- ☑ Guided Git bisect (F10: manual good/bad/skip, progress/culprit,
+  external-session resume, clean-tree reset and reviewed original target)
 - Sparse checkout (cone mode first)
 - ☑ Patch import/mailbox and Git bundle workflows (F07: `InterchangeDialog`,
   validation, author-preserving mailbox recovery and new-branch bundle import;
@@ -2820,6 +2821,14 @@ targets, mailbox authors/recovery and missing bundle prerequisites. Rust
 checks, five fixtures and three frontend IPC tests pass. Native WebView2
 verified palette/focus, worktree/index targets, mailbox authors and conflict
 continuation, and bundle verification/import/incremental export.
+
+**Guided bisect shipped (2026-09-06):** The Repository menu, palette and
+operation banner open a manual bisect dialog backed by worktree-local Git
+state. It shows remaining candidates, final/ambiguous outcomes, custom
+external terms and no-checkout sessions. Stale ratings and dirty checkout/
+reset transitions are refused. Three native fixtures, two frontend tests,
+Rust checks/typecheck and native WebView2 rating/resume/reset/keyboard flows
+pass. Automated test-command execution remains a separate later slice.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

@@ -1,5 +1,18 @@
 # Learnings
 
+## Bisect ratings belong to the expected revision (2026-09-06)
+
+Read `BISECT_*` and refs from Git for every dialog refresh/action; these are
+worktree-local and may be driven by another client. Map custom terms and
+`BISECT_HEAD` for no-checkout sessions, distinguish skipped ambiguity from a
+culprit, and reject a rating when HEAD differs from `BISECT_EXPECTED_REV`.
+Require a clean tree/index before checkout transitions and reset; test edits
+must not be discarded. Review the original ref's current target again before
+reset. A bisect marker remaining after a successful merge/rebase does not mean
+that sequencer is still paused. Dialogs that remain open after a busy action
+must restore focus once controls are enabled again; disabling the focused
+button can move focus out of the modal even with a correct Tab trap.
+
 ## Interchange state comes from Git, not a saved UI session (2026-09-06)
 
 `rebase-apply/applying` identifies `git am`; `rebase-apply` alone can mean a
