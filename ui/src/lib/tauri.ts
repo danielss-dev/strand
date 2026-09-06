@@ -25,6 +25,7 @@ import type {
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
+  RepositoryIdentity,
   HostingConnectionStatus,
   HeroiAgentEvent,
   HeroiAgentOutcome,
@@ -640,6 +641,9 @@ export const tauri = {
     invoke<void>('repo_open_in_editor', { path, file, line, template }),
   repoOpenInTerminal: (path: string, template: string) =>
     invoke<void>('repo_open_in_terminal', { path, template }),
+  repoIdentity: (path: string) => invoke<RepositoryIdentity>('repo_identity', { path }),
+  repoSetIdentity: (path: string, field: 'name' | 'email', value: string | null) =>
+    invoke<void>('repo_set_identity', { path, field, value }),
   gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
   gitSetGlobalIdentity: (name: string, email: string) =>
     invoke<void>('git_set_global_identity', { name, email }),

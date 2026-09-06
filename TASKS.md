@@ -94,9 +94,10 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
   rejection and message rewriting, preserve drafts and bounded diagnostics,
   and measure the no-hook path (`Repo::commit`, bounded `git_output`, checkout
   `commitDrafts`; evidence in `docs/hooks-identity-signing-validation-2026-09-06.md`).
-- ☐ **F02 / P1 — Effective repository identity and scoped overrides.** Show
+- ☑ **F02 / P1 — Effective repository identity and scoped overrides.** Show
   the current author/committer identity, set/remove repo-local name/email
-  without changing global/conditional config, and verify linked worktrees.
+  without changing global/conditional config, and verify linked worktrees
+  (`repository_identity` / `repo_set_identity`, Settings → Git source display).
 - ☐ **F03 / P1 — Signing controls and signed tags.** Keep configured commit
   signing/verification; add scoped format/key controls and signed-tag creation
   with agent delegation and visible signing failures.

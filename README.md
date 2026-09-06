@@ -211,7 +211,8 @@ the resolved app appearance automatically.
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box. Stale entries whose directories are already gone prune immediately.
 - **Everyday Git** — hook-aware signed/unsigned commit and amend with checkout
-  session drafts and bounded output; stage, unstage, or recoverably discard whole change
+  session drafts and bounded output; effective repository author/committer identity
+  with local overrides in Settings → Git; stage, unstage, or recoverably discard whole change
   blocks or individually selected lines inline in the diff; bulk tree actions
   include every selected file and every changed file beneath selected folders;
   initialize a repository with an initial branch, optional

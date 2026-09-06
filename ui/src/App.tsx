@@ -1946,6 +1946,7 @@ export function App() {
     base.push(
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
+      { id: 'settings-git', label: 'Settings: Repository identity and Git', group: 'Actions', keywords: 'author committer name email local override config', run: () => openSettingsAt('git') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
       { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },

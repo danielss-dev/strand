@@ -2819,6 +2819,15 @@ core/store regressions passed; the loaded-host no-hook cost is recorded in
 unchanged; the commit-policy exception is explicit in PRD and learnings.
 
 
+**Repository identity shipped (2026-09-06, F02):** Settings → Git and its palette
+entry show effective author/committer identity with per-field source/scope.
+Individual local name/email overrides can be saved or removed without editing
+global or included files. Linked worktrees share local values; existing
+worktree overrides remain effective. Conditional, two-repository and linked
+worktree fixtures passed; native settings save/remove and repository switching
+were exercised with isolated fixtures.
+
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

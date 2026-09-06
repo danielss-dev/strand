@@ -2500,3 +2500,15 @@ Pierre reads `navigator.userAgent` during module evaluation; Node 22's built-in
 `navigator` hid a failure on CI's Node 20. Stub browser globals and restore them
 after the test, while retaining real integration assertions. Reproduce this
 class of failure locally with `--no-experimental-global-navigator`.
+
+
+## Repository identity must use the commit resolver
+
+Effective author/committer reads use system Git, including conditional includes,
+worktree config and environment overrides. Keep these reads on the explicit
+settings surface; do not add subprocesses to snapshot/status paths. Local
+identity edits target the direct common repository config, never a file reached
+through an include. Show both the saved local values and the effective values:
+a later conditional include or a worktree/environment override can still win.
+Linked worktrees share local config; `--worktree` writes must never silently
+fall back to `--local` when `extensions.worktreeConfig` is disabled.

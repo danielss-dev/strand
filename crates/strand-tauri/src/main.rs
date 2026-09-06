@@ -293,6 +293,8 @@ fn main() {
             commands::repo_open_mergetool,
             commands::repo_open_in_editor,
             commands::repo_open_in_terminal,
+            commands::repo_identity,
+            commands::repo_set_identity,
             commands::git_global_identity,
             commands::git_set_global_identity,
             commands::workspace_file_read,

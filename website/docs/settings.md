@@ -41,6 +41,11 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
 
 ## Git
 
+- **Repository identity** — The active checkout’s effective author and committer,
+  with the scope and source of each name/email. **Save name/email** and
+  **Remove name/email override** edit only direct local config. Linked worktrees
+  share these local values; existing worktree, conditional and environment
+  precedence remains visible. Amend preserves the original author.
 - **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. This is the author identity for new commits everywhere, not just in Strand.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 

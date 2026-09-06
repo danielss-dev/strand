@@ -69,6 +69,13 @@ export const handlers: Record<string, Handler> = {
   microsoft_store_update_available: () => false,
   microsoft_store_open_product: () => unavailable('The Microsoft Store'),
   crash_report_check: () => ({ path: '', len: 0, entry: null }),
+  repo_identity: () => {
+    const source = (value: string) => ({ value, scope: 'demo', origin: 'Demo identity' });
+    const identity = { identity: `${repo.identity.name} <${repo.identity.email}>`, error: null,
+      name_source: source(repo.identity.name), email_source: source(repo.identity.email) };
+    return { author: identity, committer: identity, local: { name: null, email: null } };
+  },
+  repo_set_identity: () => unavailable('Repository identity overrides'),
   git_global_identity: () => ({ name: repo.identity.name, email: repo.identity.email }),
   git_set_global_identity: ({ name, email }) => { repo.identity = { name: str(name), email: str(email) }; },
   workspace_file_read: () => unavailable('Reading .code-workspace files'),

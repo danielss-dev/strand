@@ -1,3 +1,5 @@
+import { useRepo } from '../../stores/repo';
+import { RepositoryIdentity } from './RepositoryIdentity';
 import { useEffect, useState } from 'react';
 
 import { pickDirectory } from '../../lib/dialog';
@@ -11,6 +13,7 @@ import { useSettings } from '../../stores/settings';
  * reads, so no half-typed names should land there live.
  */
 export function GitSection() {
+  const activePath = useRepo((s) => s.activePath);
   const defaultCloneDir = useSettings((s) => s.defaultCloneDir);
   const set = useSettings((s) => s.set);
 
@@ -57,11 +60,11 @@ export function GitSection() {
 
   return (
     <section className="settings-section" aria-label="Git">
+      {activePath && <RepositoryIdentity key={activePath} path={activePath} />}
       <div className="settings-field">
         <span className="settings-field-label">Global identity</span>
         <p className="settings-hint">
-          Written to your global git config — used as the author of new commits
-          everywhere, not just in Strand.
+          Written to your global git config. Repositories can override these defaults.
         </p>
         <div className="settings-row">
           <input

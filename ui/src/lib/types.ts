@@ -928,3 +928,20 @@ export type AiGenerationOutcome<T> =
       coverage: AiInputCoverage;
       provider: AiProvider;
     };
+
+export interface ScopedValue {
+  value: string;
+  scope: string;
+  origin: string;
+}
+export interface EffectiveIdentity {
+  identity: string | null;
+  error: string | null;
+  name_source: ScopedValue;
+  email_source: ScopedValue;
+}
+export interface RepositoryIdentity {
+  author: EffectiveIdentity;
+  committer: EffectiveIdentity;
+  local: GlobalIdentity;
+}

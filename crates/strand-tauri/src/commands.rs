@@ -20,7 +20,7 @@ use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     commit_metadata::CommitSignature,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
-    gitconfig::{self, GlobalIdentity},
+    gitconfig::{self, GlobalIdentity, RepositoryIdentity},
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
@@ -1659,6 +1659,16 @@ pub fn repo_open_in_editor(
 #[tauri::command(async)]
 pub fn repo_open_in_terminal(path: String, template: String) -> CmdResult<()> {
     Ok(Repo::discover(&path)?.open_in_terminal(&template)?)
+}
+
+#[tauri::command(async)]
+pub async fn repo_identity(path: String) -> CmdResult<RepositoryIdentity> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.repository_identity()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_identity(path: String, field: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.set_repository_identity(&field, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]
