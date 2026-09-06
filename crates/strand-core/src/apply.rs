@@ -45,6 +45,14 @@ impl Repo {
                 }
             }
         }
+        if self.sparse_enabled() {
+            let mut args = vec!["apply", "--whitespace=nowarn"];
+            if matches!(target, ApplyTarget::Index | ApplyTarget::IndexReverse) { args.push("--cached"); }
+            if matches!(target, ApplyTarget::IndexReverse | ApplyTarget::WorkdirReverse) { args.push("--reverse"); }
+            args.push("-");
+            self.sparse_git(&args, Some(patch.as_bytes()))?;
+            return Ok(());
+        }
         repo.apply(&diff, location, None)?;
         Ok(())
     }

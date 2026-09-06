@@ -1,5 +1,31 @@
 # Learnings
 
+## Sparse indexes and promised blobs require Git-aware paths (2026-09-06)
+
+libgit2 1.8 cannot read the mandatory sparse-directory index extension and
+reports absent skip-worktree entries as deletions even with a full index.
+For sparse repositories, use Git for status, working diffs and index mutations;
+the compatibility index attached to libgit2 is expanded in memory for readers
+only. Never rewrite the user's index merely by opening it. Normal repositories
+retain their existing in-process paths. This is a scoped exception to the older
+index/commit-engine rule, required by F08's sparse-index semantics.
+
+Sparse selection must go directly through `sparse-checkout set --cone`; an
+init-then-set sequence can remove files between steps. Git may delete ignored
+files when excluding a directory. Refuse dirty/untracked work and any ignored
+boundary the new cone would exclude; do not stash, clean or discard implicitly.
+Use worktree-specific Git configuration and preserve external non-cone patterns
+until the user explicitly disables them.
+After the guard passes, refresh index stat data before changing the cone:
+a clean file restored by an editor can otherwise be retained as "not up to
+date". Keep Git's successful warnings visible when it retains files.
+
+Partial-clone fixtures must actually omit objects (`rev-list --missing=print`).
+A successful open is insufficient: historical content, diffs and blame need
+Git's lazy object fetching; shallow blame needs Git's boundary semantics.
+Keep those reads on demand. Recursive clone cancellation must terminate the
+transport/submodule child processes too, because they hold the progress pipes.
+
 Things we've learned while building Strand that aren't otherwise obvious from
 the PRD / ROADMAP / TASKS files. Append here when you discover something
 that future work (yours or another agent's) needs to respect.
@@ -2559,3 +2585,7 @@ signature verification out of status/snapshot and graph-wide refresh paths.
 In `git config --null --get-regexp` output, a valueless boolean has no newline
 separator and means true; a newline followed by an empty value means false.
 Preserve that distinction in settings displays and scoped editing.
+
+LFS guards must run before sparse-index mutation dispatch. Refresh an attached
+memory-only sparse index through `sparse_read_index`, never `Index::read` from
+disk; keep one process-tree cancellation helper when composing Git workflows.

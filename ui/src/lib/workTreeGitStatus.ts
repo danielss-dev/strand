@@ -38,6 +38,7 @@ export function workTreeGitStatus(
   const directoryCounts = new Map<string, { total: number; ignored: number }>();
 
   for (const entry of entries) {
+    if (entry.excluded) continue;
     let separator = entry.path.indexOf('/');
     while (separator >= 0) {
       const directory = entry.path.slice(0, separator);
@@ -62,6 +63,7 @@ export function workTreeGitStatus(
   }));
 
   for (const entry of entries) {
+    if (entry.excluded) continue;
     if (entry.ignored) {
       if (!hasAncestor(entry.path, ignoredRoots)) {
         statuses.push({ path: entry.path, status: 'ignored' });

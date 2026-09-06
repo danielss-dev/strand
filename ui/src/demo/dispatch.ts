@@ -118,6 +118,11 @@ export const handlers: Record<string, Handler> = {
   repo_refs: (a) => repo.refs(wtOf(a)),
   repo_submodules: () => [],
   repo_submodule_update: () => unavailable('Submodule updates'),
+  repo_clone_scope: () => ({ shallow: false, remotes: [{ name: 'origin', filter: null, fetch_refspecs: ['+refs/heads/*:refs/remotes/origin/*'] }] }),
+  repo_expand_history: () => unavailable('History downloads'),
+  repo_sparse_checkout: () => unavailable('Sparse checkout'),
+  repo_set_sparse_checkout: () => unavailable('Sparse checkout'),
+  repo_disable_sparse_checkout: () => unavailable('Sparse checkout'),
   repo_maintenance: async ({ task }) => {
     await sleep(600);
     const command = task === 'garbage-collect' ? 'git gc' : task === 'integrity-check' ? 'git fsck --no-dangling' : 'git maintenance run';

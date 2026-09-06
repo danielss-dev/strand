@@ -154,7 +154,11 @@ impl Repo {
         if !transcript.success {
             return Err(Error::Other(transcript.output));
         }
-        self.git2()?.index()?.read(true)?;
+        if self.sparse_enabled() {
+            self.sparse_read_index(self.git2()?)?;
+        } else {
+            self.git2()?.index()?.read(true)?;
+        }
         Ok(())
     }
 
@@ -201,7 +205,11 @@ impl Repo {
         filtered.extend_from_slice(args);
         run_git_streaming(&self.path, &filtered, |_| {}, None)?;
         // In-process fixtures and chained operations may reuse this handle.
-        self.git2()?.index()?.read(true)?;
+        if self.sparse_enabled() {
+            self.sparse_read_index(self.git2()?)?;
+        } else {
+            self.git2()?.index()?.read(true)?;
+        }
         Ok(())
     }
 }
@@ -244,6 +252,32 @@ mod tests {
         git(&dir, &["lfs", "install", "--local"]);
         git(&dir, &["lfs", "track", "*.bin"]);
         (Repo::discover(&dir).unwrap(), dir)
+    }
+
+    #[test]
+    fn sparse_index_staging_discard_and_partial_patch_keep_lfs_guards() {
+        let (repo, dir) = fixture();
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::create_dir_all(dir.join("excluded")).unwrap();
+        std::fs::write(dir.join("assets/one.bin"), b"first asset\n").unwrap();
+        std::fs::write(dir.join("excluded/file.txt"), b"excluded\n").unwrap();
+        git(&dir, &["add", "."]);
+        repo.commit("base", None, false).unwrap();
+        git(&dir, &["sparse-checkout", "set", "--cone", "--sparse-index", "assets"]);
+        let repo = Repo::discover(&dir).unwrap();
+        std::fs::write(dir.join("assets/one.bin"), b"second asset\n").unwrap();
+        repo.stage_path("assets/one.bin").unwrap();
+        let pointer = git(&dir, &["show", ":assets/one.bin"]);
+        assert!(pointer.starts_with("version https://git-lfs.github.com/spec/v1\n"));
+        std::fs::write(dir.join("assets/one.bin"), b"discard this\n").unwrap();
+        repo.discard_path("assets/one.bin").unwrap();
+        assert_eq!(std::fs::read(dir.join("assets/one.bin")).unwrap(), b"second asset\n");
+        let patch = git(&dir, &["diff", "--cached", "--", "assets/one.bin"]);
+        assert!(repo.apply_patch(&(patch + "\n"), crate::apply::ApplyTarget::IndexReverse)
+            .unwrap_err().to_string().contains("whole file"));
+        assert_eq!(git(&dir, &["show", ":assets/one.bin"]), pointer);
+        assert!(git(&dir, &["ls-files", "--sparse", "-t"]).contains("S excluded/"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

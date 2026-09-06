@@ -30,6 +30,11 @@ impl Repo {
     /// check goes through the worktree registry; a registry read failure
     /// falls through (the rollback below still protects the repo).
     pub fn checkout_branch(&self, name: &str) -> Result<CheckoutOutcome> {
+        if self.sparse_enabled() || self.is_partial_clone() {
+            self.git2()?.find_branch(name, git2::BranchType::Local)?;
+            crate::network::run_git_streaming(&self.path, &["switch", "--", name], |_| {}, None)?;
+            return Ok(CheckoutOutcome { branch: name.into() });
+        }
         if let Some(wt) = self
             .worktrees()
             .unwrap_or_default()
@@ -155,6 +160,12 @@ impl Repo {
     pub fn checkout_commit(&self, rev: &str) -> Result<CheckoutOutcome> {
         let repo = self.git2()?;
         let commit = repo.revparse_single(rev)?.peel_to_commit()?;
+
+        if self.sparse_enabled() || self.is_partial_clone() {
+            let oid = commit.id().to_string();
+            crate::network::run_git_streaming(&self.path, &["switch", "--detach", &oid], |_| {}, None)?;
+            return Ok(CheckoutOutcome { branch: oid[..7].into() });
+        }
 
         let tree = commit.tree()?;
         if self.lfs_checkout_needed(&tree)? {

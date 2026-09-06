@@ -105,6 +105,8 @@ import type {
   BranchPushRequest,
   FileDiff,
   Progress,
+  CloneOptions,
+  HistoryExpansion,
   PullMode,
   PushMode,
   RepoMeta,
@@ -118,6 +120,8 @@ const waitForPaint = () =>
   new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
 const CloneDialog = lazy(() => import('./views/CloneDialog').then((m) => ({ default: m.CloneDialog })));
+const CloneScopeDialog = lazy(() => import('./views/CloneScopeDialog').then((m) => ({ default: m.CloneScopeDialog })));
+const SparseCheckoutDialog = lazy(() => import('./views/SparseCheckoutDialog').then((m) => ({ default: m.SparseCheckoutDialog })));
 const InitRepoDialog = lazy(() => import('./views/InitRepoDialog').then((m) => ({ default: m.InitRepoDialog })));
 const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
@@ -340,6 +344,13 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance');
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneScopePath, setCloneScopePath] = useState<string | null>(null);
+  const [sparsePath, setSparsePath] = useState<string | null>(null);
+  useEffect(() => {
+    const open = () => setSparsePath(useRepo.getState().activePath);
+    window.addEventListener('strand:open-sparse-checkout', open);
+    return () => window.removeEventListener('strand:open-sparse-checkout', open);
+  }, []);
   const [initRepoOpen, setInitRepoOpen] = useState(false);
   // null = closed; otherwise the flavour the dialog opens in (snapshot vs stash).
   const [stashDialog, setStashDialog] = useState<{ snapshot: boolean; keepIndex: boolean } | null>(null);
@@ -735,7 +746,7 @@ export function App() {
   // same popup (one op id) switches in place from "Cloning" to "Opening" — no
   // flicker. The Clone dialog closes the moment this starts; failures surface
   // as a toast (there's no dialog to return to).
-  const runClone = useCallback(async (url: string, dest: string) => {
+  const runClone = useCallback(async (url: string, dest: string, options: CloneOptions) => {
     const id = ++opGen.current;
     const cancelId = nextOpId();
     setCloneCancelId(cancelId);
@@ -770,7 +781,7 @@ export function App() {
         }
         const detail = pct != null ? `${p.phase || 'Working'} ${pct}%` : p.raw || p.phase || 'Cloning…';
         setOpProgress((cur) => (cur && cur.id === id && cur.kind === 'clone' ? { ...cur, percent: pct, detail, eta } : cur));
-      }, cancelId);
+      }, cancelId, options);
       clonedPath = res.path;
     } catch (e) {
       setCloneCancelId(null);
@@ -873,6 +884,25 @@ export function App() {
     const next = ordered[(base + delta + ordered.length) % ordered.length];
     void setActiveTab(next.path);
   }, []);
+
+  const onExpandHistory = useCallback(async (path: string, remote: string, expansion: HistoryExpansion) => {
+    if (syncing || pulling || pushing) throw new Error('Another network operation is running.');
+    setSyncing(true);
+    setNetProgress('Downloading history…');
+    const opId = nextOpId();
+    setNetOpId(opId);
+    try {
+      await tauri.repoExpandHistory(path, remote, expansion, (p) => setNetProgress(p.raw), opId);
+      showToast('History download completed');
+    } finally {
+      setSyncing(false);
+      setNetProgress(null);
+      setNetOpId(null);
+      if (useRepo.getState().activePath === path) {
+        await Promise.all([useRepo.getState().refreshSnapshot(), useRepo.getState().refreshLog()]);
+      }
+    }
+  }, [syncing, pulling, pushing, nextOpId, showToast]);
 
   const onFetch = useCallback(async (prune?: boolean) => {
     if (syncing || pulling || pushing) return;
@@ -1482,6 +1512,7 @@ export function App() {
 
     // Files — explicit palette selection opens a pinned Work document.
     for (const f of workTree) {
+      if (f.excluded) continue;
       out.push({
         id: `file:${f.path}`,
         label: f.path,
@@ -1888,6 +1919,9 @@ export function App() {
             ]
           : []),
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
+        { id: 'clone-scope', label: 'Repository history and downloads…', group: 'Actions', keywords: 'clone shallow partial filter deepen unshallow single branch', run: () => setCloneScopePath(meta.path) },
+        { id: 'sparse-checkout', label: 'Sparse checkout…', group: 'Actions', keywords: 'cone directories select inspect change disable excluded sparse index', run: () => setSparsePath(meta.path) },
+
         ...SUBMODULE_ACTIONS.map(([action, label]) => ({ id: `submodule-${action}`, label: `Submodules: ${label}…`, group: 'Actions', keywords: 'submodule lifecycle url nested status add remove deinit sync', run: () => { setPaletteOpen(false); setSubmoduleDialog({ repoPath: meta.path, path: '', action }); } } satisfies PaletteAction)),
         ...LFS_ACTIONS.map(([action, label]) => ({ id: `lfs-${action}`, label: `Git LFS: ${label}…`, group: 'Actions', keywords: 'large file storage lfs objects filters patterns transfers locks', run: () => { setPaletteOpen(false); setLfsAction({ repoPath: meta.path, action }); } } satisfies PaletteAction)),
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
@@ -2192,6 +2226,8 @@ export function App() {
           onInitRepo={() => setInitRepoOpen(true)}
           onOpenRecent={openByPath}
           onClone={() => setCloneOpen(true)}
+          onCloneScope={() => { if (meta) setCloneScopePath(meta.path); }}
+          onSparseCheckout={() => { if (meta) setSparsePath(meta.path); }}
           onCustomize={openIconDialog}
           onManageWorkspaces={() => setWorkspaceManagerOpen(true)}
           onWorktreeReview={reviewWorktreeTab}
@@ -2410,6 +2446,12 @@ export function App() {
       )}
       {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} onClose={() => setLfsAction(null)} />}
       {submoduleDialog && <SubmoduleDialog path={submoduleDialog.repoPath} initialPath={submoduleDialog.path} initialAction={submoduleDialog.action} onClose={() => setSubmoduleDialog(null)} />}
+
+      {cloneScopePath && <CloneScopeDialog key={cloneScopePath} path={cloneScopePath}
+        busy={syncing || pulling || pushing} progress={netProgress} onExpand={onExpandHistory}
+        onCancel={() => { if (netOpId) void tauri.repoCancelOp(netOpId); }}
+        onClose={() => setCloneScopePath(null)} />}
+      {sparsePath && <SparseCheckoutDialog key={sparsePath} path={sparsePath} onClose={() => setSparsePath(null)} />}
 
       {fileEntryDialog && meta && (
         <FileEntryDialog

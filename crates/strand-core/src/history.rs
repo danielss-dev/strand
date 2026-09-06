@@ -415,6 +415,7 @@ impl Repo {
 
     /// Whether the index currently holds unmerged (conflicted) entries.
     fn has_conflicts(&self) -> Result<bool> {
+        if self.sparse_enabled() { return Ok(!self.sparse_git(&["ls-files", "--unmerged", "-z"], None)?.is_empty()); }
         Ok(self.git2()?.index()?.has_conflicts())
     }
 

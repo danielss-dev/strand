@@ -278,3 +278,10 @@ the commit graph when pressed again.
 See [Worktrees](worktrees.md).
 
 On macOS, shortcut chips render as tight glyphs (`⌘⇧P`); on Windows and Linux they render as words (`Ctrl+Shift+P`). Either way the bindings are identical modulo `Mod`.
+
+**Clone repository…**, **Repository history and downloads…**, and **Sparse
+checkout…** are searchable palette actions. Within these dialogs, Tab moves
+between fields and buttons, Space toggles a checkbox or expands Clone options,
+and Enter activates a focused button. Sparse-directory search bounds the visible
+list to 100 matches. Escape closes an idle dialog; a running download exposes
+**Cancel download** instead.
