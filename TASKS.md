@@ -2069,15 +2069,13 @@ tree: watch the agent work, review fast, accept or reject safely.
   promoted to `strand-azdo-protocol-5` plus the legacy `strand-azdo-latest`
   channel; hosted post-promotion Linux smoke passed and all three manifests
   matched byte-for-byte (`Release` run `30427932365`; 2026-07-29).
-- ◐ Repair missing Azure helper downloads (2026-09-06): protocol 7 has no
-  published channel; helper 1.3.0 is prepared locally. Desktop release builds
-  now require the matching public manifest, signature, and all three archives
-  (`check-azdo-channel.mjs`); installer 404s explain a missing or incomplete
-  release (`azdo_helper::download`). Signed publication of
-  `strand-azdo-v1.3.0` / `strand-azdo-protocol-7` and installation verification
-  remain pending. Local validation: 19 Rust helper/lifecycle/protocol tests,
-  9 release-script tests, Rust check, TypeScript check, and release security
-  policy passed; the built Windows helper reports version 1.3.0 / protocol 7.
+- ◐ Repair missing Azure helper downloads (2026-09-07): signed helper 1.3.0
+  is published under `strand-azdo-v1.3.0` and `strand-azdo-protocol-7`
+  (`Release` run `34063960498`). All three builds, signed manifest publication,
+  channel promotion, and the Linux download smoke passed. A fresh Windows
+  channel download passed the app's Minisign verifier, archive/binary hashes,
+  and version/protocol metadata checks. Desktop availability gate
+  `check-azdo-channel.mjs` now passes. In-app installation verification remains.
 - ☐ Backfill the signed protocol-6 helper channel for already-published Strand
   1.5.1 from its compatible source, with a new immutable helper version/tag;
   publishing protocol 7 cannot repair protocol-6 clients (2026-09-06).
@@ -2467,17 +2465,23 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ☐ Publish `v1.5.1` through GitHub Releases and Microsoft Store (manifests
   synchronized at 1.5.1; tag, signed desktop release, and Store submission
   remain).
-- ◐ Recover the failed `v1.6.0` release (2026-09-07): synchronize desktop
-  manifests and all five workspace-versioned crates at 1.6.0; include
-  `strand-headless` and `strand-ops` in `bump-version.mjs`. The published tag
-  still points to 1.5.1 source and has no assets. Publish the prepared signed
-  protocol-7 helper, correct the release tag to the repaired commit, and
-  complete desktop/Store builds before promoting the release.
-- ◐ Repair the desktop companion packaging hook (2026-09-07): Tauri starts
+- ☑ Recover the failed `v1.6.0` release (2026-09-07): desktop manifests and
+  all five workspace-versioned crates are at 1.6.0; `bump-version.mjs` includes
+  `strand-headless` and `strand-ops`. The signed tag points to `7d4cc02`.
+  Release run `34064724088` passed on macOS, Windows, and Linux; all 13 assets
+  are published as latest stable. Fresh downloads passed all five updater
+  signature checks and all ten updater entries target this release; the
+  public stable endpoint serves the same verified manifest.
+- ◐ Submit repaired `v1.6.0` to Microsoft Store (2026-09-07): publication
+  triggered run `34066047506` from `7d4cc02`; Store build, Partner Center
+  acceptance, and certification remain pending.
+- ☑ Repair the desktop companion packaging hook (2026-09-07): Tauri starts
   the release hook from `crates/`; `build:desktop` runs via pnpm's workspace
   root so `build-companion.mjs` resolves its script, artifacts, and bundle
   destinations consistently for desktop and Store builds. The macOS release
   imports its existing Apple certificate before the hook signs the companion.
+  Nested-directory production build passed locally; all three desktop release
+  jobs passed in run `34064724088`.
 - ☑ Landing page at `strandgit.com` + downloads + auto-update manifest
   (site built: `website/` — static output, design tokens + fonts lifted
   from the app, interactive app-replica demo + ⌘K palette, AGPL/honor-system

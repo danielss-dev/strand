@@ -3013,6 +3013,17 @@ copy paths anchored to the repository on every platform.
 The macOS release also imports its existing Apple certificate before the hook
 signs the companion; Tauri's own keychain is created later during bundling.
 
+**Strand 1.6.0 released (2026-09-07):** The signed `v1.6.0` tag now points to
+`7d4cc02`, including the version bump and companion packaging fixes. Release
+run `34064724088` passed on all three platforms and published 13 assets as
+latest stable. Independent downloads verified all five updater signatures
+against the embedded key and all ten platform entries; the public stable
+endpoint serves that verified 1.6.0 manifest. Signed helper 1.3.0 and protocol-7
+downloads were published first by run `34063960498`, with Linux channel smoke
+and independent Windows signature/hash/metadata checks passing. Publication
+started Microsoft Store run `34066047506`; its build and submission remain
+pending, followed by Partner Center certification.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on
