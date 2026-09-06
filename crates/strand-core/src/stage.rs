@@ -6,6 +6,9 @@ impl Repo {
     /// Stage `path` — adds new/modified files, records deletions. Mirrors
     /// `git add <path>` for one path at a time.
     pub fn stage_path(&self, path: &str) -> Result<()> {
+        if self.is_lfs_path(Path::new(path))? {
+            return self.stage_lfs_paths(&[path.to_owned()]);
+        }
         if self.sparse_enabled() { return self.stage_paths(&[path.into()]); }
         let repo = self.git2()?;
         let mut index = repo.index()?;
@@ -30,6 +33,11 @@ impl Repo {
     pub fn stage_paths(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
+        }
+        for path in paths {
+            if self.is_lfs_path(Path::new(path))? {
+                return self.stage_lfs_paths(paths);
+            }
         }
         if self.sparse_enabled() {
             let mut args = vec!["--literal-pathspecs", "add", "--"];
@@ -110,6 +118,11 @@ impl Repo {
             }
         }
         if !tracked.is_empty() {
+            for path in &tracked {
+                if self.is_lfs_path(Path::new(path))? {
+                    return self.discard_lfs_paths(&tracked);
+                }
+            }
             if self.sparse_enabled() {
                 let mut args = vec!["--literal-pathspecs", "checkout-index", "--force", "--"];
                 args.extend(tracked);

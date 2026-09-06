@@ -28,14 +28,6 @@ impl Repo {
     /// already have. Reverse targets flip the patch via [`reverse_patch`]
     /// before applying.
     pub fn apply_patch(&self, patch: &str, target: ApplyTarget) -> Result<()> {
-        if self.sparse_enabled() {
-            let mut args = vec!["apply", "--whitespace=nowarn"];
-            if matches!(target, ApplyTarget::Index | ApplyTarget::IndexReverse) { args.push("--cached"); }
-            if matches!(target, ApplyTarget::IndexReverse | ApplyTarget::WorkdirReverse) { args.push("--reverse"); }
-            args.push("-");
-            self.sparse_git(&args, Some(patch.as_bytes()))?;
-            return Ok(());
-        }
         let repo = self.git2()?;
         let (buf, location) = match target {
             ApplyTarget::Index => (patch.to_owned(), git2::ApplyLocation::Index),
@@ -44,6 +36,23 @@ impl Repo {
             ApplyTarget::Workdir => (patch.to_owned(), git2::ApplyLocation::WorkDir),
         };
         let diff = git2::Diff::from_buffer(buf.as_bytes())?;
+        for delta in diff.deltas() {
+            for file in [delta.old_file(), delta.new_file()] {
+                if let Some(path) = file.path() {
+                    if self.is_lfs_path(path)? {
+                        return Err(crate::Error::Other("LFS files must be staged, unstaged or discarded as a whole file; partial patches would corrupt the pointer.".into()));
+                    }
+                }
+            }
+        }
+        if self.sparse_enabled() {
+            let mut args = vec!["apply", "--whitespace=nowarn"];
+            if matches!(target, ApplyTarget::Index | ApplyTarget::IndexReverse) { args.push("--cached"); }
+            if matches!(target, ApplyTarget::IndexReverse | ApplyTarget::WorkdirReverse) { args.push("--reverse"); }
+            args.push("-");
+            self.sparse_git(&args, Some(patch.as_bytes()))?;
+            return Ok(());
+        }
         repo.apply(&diff, location, None)?;
         Ok(())
     }

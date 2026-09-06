@@ -19,16 +19,19 @@ use strand_azdo_protocol::ServerProfile;
 use strand_core::{
     apply::ApplyTarget, blame::BlameLine, branch::CheckoutOutcome, commit::CommitOutcome,
     commit_metadata::CommitSignature,
+    signing::{SigningMode, SigningScope, SigningSettings},
+    tag::TagVerification,
     diff::FileDiff, file::{BlobSource, FileBlob, FileContent, FileHistoryEntry},
-    gitconfig::{self, GlobalIdentity},
+    gitconfig::{self, GlobalIdentity, RepositoryIdentity},
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
+    lfs::LfsAction,
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
     network::{clone_with_options as core_clone, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
-    status::FileStatus, submodule::Submodule, tree::WorkTreeEntry,
+    status::FileStatus, submodule::{Submodule, SubmoduleAction, SubmodulePage}, tree::WorkTreeEntry,
     worktree::{RestoredWorktree, Worktree, WorktreeArchive, WorktreeHealth, WorktreeStats}, Repo,
 };
 use tauri::ipc::Channel;
@@ -899,13 +902,16 @@ pub fn repo_apply_patch(path: String, patch: String, target: String) -> CmdResul
 }
 
 #[tauri::command(async)]
-pub fn repo_commit(
+pub async fn repo_commit(
     path: String,
     subject: String,
     body: Option<String>,
     amend: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<CommitOutcome> {
-    Ok(Repo::discover(&path)?.commit(&subject, body.as_deref(), amend)?)
+    run_blocking("commit", move || {
+        Ok(Repo::discover(&path)?.commit_with_signing(&subject, body.as_deref(), amend, signing.unwrap_or_default())?)
+    }).await
 }
 
 // Network commands run on a blocking thread (they shell out to `git`, which
@@ -1225,15 +1231,37 @@ pub async fn repo_submodule_update(
     init: bool,
     recursive: bool,
     on_event: Channel<Progress>,
+    op_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> CmdResult<NetworkOutcome> {
-    run_blocking("submodule update", move || {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule update", move || {
         let repo = Repo::discover(&path)?;
         repo.submodule_update(&paths, init, recursive, |p| {
             let _ = on_event.send(p);
-        })
+        }, Some(&cancel))
         .map_err(CmdError::from)
     })
-    .await
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_children(path: String, parent: String, offset: usize) -> CmdResult<SubmodulePage> {
+    run_blocking("submodule children", move || Ok(Repo::discover(&path)?.submodule_children(&parent, offset)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_submodule_action(path: String, action: SubmoduleAction, op_id: Option<String>, on_event: Channel<Progress>, state: State<'_, AppState>) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("submodule lifecycle", move || {
+        Repo::discover(&path)?.submodule_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
+    deregister_op(&state, &op_id);
+    result
 }
 
 #[tauri::command(async)]
@@ -1537,15 +1565,49 @@ pub async fn repo_maintenance(
 }
 
 #[tauri::command(async)]
-pub fn repo_tag_create(
+pub async fn repo_lfs_action(
+    path: String,
+    action: LfsAction,
+    op_id: Option<String>,
+    on_event: Channel<Progress>,
+    state: State<'_, AppState>,
+) -> CmdResult<NetworkOutcome> {
+    let cancel = CancelHandle::new();
+    register_op(&state, &op_id, OperationCancelHandle::Network(cancel.clone()));
+    let result = run_blocking("Git LFS", move || {
+        Repo::discover(&path)?.lfs_action(action, |p| { let _ = on_event.send(p); }, Some(&cancel)).map_err(CmdError::from)
+    }).await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+pub async fn repo_tag_create(
     path: String,
     name: String,
     target: Option<String>,
     message: Option<String>,
     force: bool,
+    signing: Option<SigningMode>,
 ) -> CmdResult<()> {
-    Repo::discover(&path)?.create_tag(&name, target.as_deref(), message.as_deref(), force)?;
-    Ok(())
+    run_blocking("tag", move || {
+        Ok(Repo::discover(&path)?.create_tag_with_signing(&name, target.as_deref(), message.as_deref(), force, signing.unwrap_or_default())?)
+    }).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_tag_verify(path: String, name: String) -> CmdResult<TagVerification> {
+    run_blocking("verify-tag", move || Ok(Repo::discover(&path)?.verify_tag(&name)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_signing_settings(path: String) -> CmdResult<SigningSettings> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.signing_settings()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_signing_config(path: String, scope: SigningScope, key: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("signing-settings", move || Ok(Repo::discover(&path)?.set_signing_config(scope, &key, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]
@@ -1697,6 +1759,16 @@ pub fn repo_open_in_editor(
 #[tauri::command(async)]
 pub fn repo_open_in_terminal(path: String, template: String) -> CmdResult<()> {
     Ok(Repo::discover(&path)?.open_in_terminal(&template)?)
+}
+
+#[tauri::command(async)]
+pub async fn repo_identity(path: String) -> CmdResult<RepositoryIdentity> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.repository_identity()?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_set_identity(path: String, field: String, value: Option<String>) -> CmdResult<()> {
+    run_blocking("identity", move || Ok(Repo::discover(&path)?.set_repository_identity(&field, value.as_deref())?)).await
 }
 
 #[tauri::command(async)]

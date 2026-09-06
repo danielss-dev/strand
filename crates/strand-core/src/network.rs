@@ -13,7 +13,7 @@
 //! callback to an IPC `Channel` so the UI can show a live progress bar; the
 //! core stays UI-agnostic.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -59,6 +59,23 @@ impl CancelHandle {
     }
 }
 
+// Git LFS and submodule helpers inherit the pipes. Killing only git can leave
+// those helpers transferring (and the reader waiting for EOF) after Cancel.
+fn kill_git_tree(child: &mut std::process::Child) {
+    if matches!(child.try_wait(), Ok(Some(_))) { return; }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let system = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+        let _ = std::process::Command::new(Path::new(&system).join("System32/taskkill.exe"))
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .creation_flags(0x0800_0000).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    #[cfg(unix)]
+    unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+    let _ = child.kill();
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkOutcome {
     /// Combined stdout + stderr from `git`, trimmed. Surfaced to the UI so
@@ -81,25 +98,6 @@ pub struct CloneOutcome {
     pub path: String,
     /// Combined git output, trimmed.
     pub output: String,
-}
-
-fn kill_git_tree(child: &mut std::process::Child) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        if let Some(root) = std::env::var_os("SystemRoot") {
-            let _ = std::process::Command::new(Path::new(&root).join("System32/taskkill.exe"))
-                .creation_flags(0x0800_0000).args(["/PID", &child.id().to_string(), "/T", "/F"])
-                .stdout(Stdio::null()).stderr(Stdio::null()).status();
-        }
-    }
-    #[cfg(unix)]
-    {
-        let _ = std::process::Command::new("/bin/kill")
-            .args(["-TERM", "--", &format!("-{}", child.id())])
-            .stdout(Stdio::null()).stderr(Stdio::null()).status();
-    }
-    let _ = child.kill();
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -723,6 +721,16 @@ pub(crate) fn run_git_streaming(
 pub(crate) fn run_git_streaming_transcript(
     cwd: &Path,
     args: &[&str],
+    on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<GitRunTranscript> {
+    run_git_input_transcript(cwd, args, None, on_progress, cancel)
+}
+
+pub(crate) fn run_git_input_transcript(
+    cwd: &Path,
+    args: &[&str],
+    input: Option<Vec<u8>>,
     mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<GitRunTranscript> {
@@ -739,6 +747,7 @@ pub(crate) fn run_git_streaming_transcript(
         .args(crate::GIT_SAFE_CONFIG)
         // Force progress reporting even though stderr isn't a TTY.
         .args(args)
+        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -746,10 +755,17 @@ pub(crate) fn run_git_streaming_transcript(
 
     // Drain stdout on a separate thread so a large stdout can't deadlock us
     // while we're blocked reading stderr (and vice-versa).
+    let input_handle = input.zip(child.stdin.take()).map(|(input, mut stdin)| {
+        std::thread::spawn(move || stdin.write_all(&input))
+    });
     let stdout_handle = child.stdout.take().map(|mut out| {
         std::thread::spawn(move || {
             let mut s = String::new();
-            let _ = out.read_to_string(&mut s);
+            let mut buffer = [0u8; 8192];
+            while let Ok(n) = out.read(&mut buffer) {
+                if n == 0 { break; }
+                append_output(&mut s, &String::from_utf8_lossy(&buffer[..n]));
+            }
             s
         })
     });
@@ -770,21 +786,24 @@ pub(crate) fn run_git_streaming_transcript(
     }
 
     let mut collected = String::new();
+    let mut last_progress = std::time::Instant::now() - std::time::Duration::from_secs(1);
     if let Some(stderr) = stderr {
         // `git` delimits progress updates with '\r' and ends phases with
         // '\n', so we split on either. BufRead::lines would coalesce all the
         // '\r' updates into one line — we want each fragment.
         for_each_fragment(stderr, |frag| {
-            collected.push_str(frag);
-            collected.push('\n');
+            append_output(&mut collected, frag);
+            append_output(&mut collected, "\n");
             let p = parse_progress(frag);
-            if !p.raw.is_empty() {
+            if !p.raw.is_empty() && (p.percent == Some(100) || last_progress.elapsed().as_millis() >= 100) {
                 on_progress(p);
+                last_progress = std::time::Instant::now();
             }
         });
     }
 
     let stdout_str = stdout_handle.and_then(|h| h.join().ok()).unwrap_or_default();
+    if let Some(writer) = input_handle { let _ = writer.join(); }
     // Stderr hit EOF, so the process is done (or killed) — take the child
     // back out and reap it. After this point a late `cancel()` is a no-op.
     let status = {
@@ -804,6 +823,43 @@ pub(crate) fn run_git_streaming_transcript(
         output: combined,
         success: status.success(),
     })
+}
+
+/// Retain a bounded tail, including an explicit marker when output is partial.
+fn append_output(output: &mut String, text: &str) {
+    const LIMIT: usize = 65_536;
+    const MARKER: &str = "[Earlier output omitted; showing bounded tail]\n";
+    output.push_str(text);
+    if output.len() > LIMIT {
+        let mut start = output.len() - (LIMIT - MARKER.len());
+        while !output.is_char_boundary(start) { start += 1; }
+        output.drain(..start);
+        output.insert_str(0, MARKER);
+    }
+}
+
+#[cfg(test)]
+mod bounded_process_tests {
+    use super::*;
+
+    #[test]
+    fn output_tail_stays_bounded_and_marks_partial_unicode_output() {
+        let mut output = String::new();
+        for _ in 0..100 { append_output(&mut output, &"é".repeat(8192)); }
+        assert!(output.len() <= 65_536);
+        assert!(output.starts_with("[Earlier output omitted"));
+    }
+
+    #[test]
+    fn cancellation_kills_helpers_holding_progress_pipes() {
+        let cancel = CancelHandle::new();
+        let mut cancelled_at = None;
+        let result = run_git_streaming(std::env::temp_dir().as_path(),
+            &["-c", "alias.strand-cancel-test=!echo strand-ready >&2; sleep 60", "strand-cancel-test"],
+            |p| { if p.raw.contains("strand-ready") { cancelled_at = Some(std::time::Instant::now()); cancel.cancel(); } }, Some(&cancel));
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(cancelled_at.unwrap().elapsed().as_secs() < 15, "descendants kept pipes open after cancellation");
+    }
 }
 
 /// Pull the meaningful failure out of a git transcript. git streams progress to
@@ -847,6 +903,10 @@ fn for_each_fragment(reader: impl Read, mut sink: impl FnMut(&str)) {
                     }
                 } else {
                     buf.push(b);
+                    if buf.len() == 8192 {
+                        sink(&String::from_utf8_lossy(&buf));
+                        buf.clear();
+                    }
                 }
             }
             Err(_) => break,

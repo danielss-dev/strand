@@ -32,6 +32,9 @@ import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
 import { t } from './lib/i18n';
+import { LFS_ACTIONS } from './lib/lfs';
+import { SUBMODULE_ACTIONS, type SubmoduleDialogAction } from './lib/submodules';
+import type { LfsAction } from './lib/types';
 import { plural } from './lib/plural';
 import { concatPatches, patchesToMarkdown } from './lib/patchExport';
 import { buildReviewFeedback, collectFeedbackFiles } from './lib/reviewExport';
@@ -55,6 +58,7 @@ import type { SettingsSectionId } from './views/SettingsDialog';
 import { StashDialog } from './views/StashDialog';
 import { BranchDialog } from './views/BranchDialog';
 import { TagDialog } from './views/TagDialog';
+import { TagVerificationDialog } from './views/TagVerificationDialog';
 import { MergeDialog } from './views/MergeDialog';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { FileEntryDialog } from './views/FileEntryDialog';
@@ -123,6 +127,8 @@ const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => (
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
+const LfsDialog = lazy(() => import('./views/LfsDialog').then((m) => ({ default: m.LfsDialog })));
+const SubmoduleDialog = lazy(() => import('./views/SubmoduleDialog').then((m) => ({ default: m.SubmoduleDialog })));
 const WorkspaceManagerDialog = lazy(() => import('./views/WorkspaceManagerDialog').then((m) => ({ default: m.WorkspaceManagerDialog })));
 const PullRequests = lazy(() => import('./views/PullRequests').then((m) => ({ default: m.PullRequests })));
 
@@ -295,7 +301,6 @@ export function App() {
   const submodules = useRepo((s) => s.submodules);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
-  const submoduleUpdate = useRepo((s) => s.submoduleUpdate);
   const pruneWorktrees = useRepo((s) => s.pruneWorktrees);
   const baseline = useRepo((s) => s.baseline);
   const setBaseline = useRepo((s) => s.setBaseline);
@@ -352,6 +357,7 @@ export function App() {
   const stashDialogRequest = useRepo((s) => s.stashDialogRequest);
   const clearStashDialogRequest = useRepo((s) => s.clearStashDialogRequest);
   // null = closed; otherwise the tag target (revspec, null ⇒ HEAD) + its label.
+  const [tagVerification, setTagVerification] = useState<{ path: string; name: string | null } | null>(null);
   const [tagDialog, setTagDialog] = useState<{ target: string | null; label: string } | null>(null);
   const [branchDialog, setBranchDialog] = useState<{
     start: string | null;
@@ -362,6 +368,8 @@ export function App() {
   // null = closed; otherwise which remote-management flavour (add/rename/url).
   const [remoteDialog, setRemoteDialog] = useState<RemoteDialogMode | null>(null);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [lfsAction, setLfsAction] = useState<{ repoPath: string; action: LfsAction['action'] } | null>(null);
+  const [submoduleDialog, setSubmoduleDialog] = useState<{ repoPath: string; path: string; action: SubmoduleDialogAction } | null>(null);
   const [fileEntryDialog, setFileEntryDialog] = useState<{ dir: string; directory: boolean } | null>(null);
   // null = closed; otherwise the branch to rename.
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
@@ -499,6 +507,11 @@ export function App() {
     setSettingsSection(section);
     setSettingsOpen(true);
   }, []);
+  useEffect(() => {
+    const open = () => openSettingsAt('git');
+    window.addEventListener('strand:open-git-settings', open);
+    return () => window.removeEventListener('strand:open-git-settings', open);
+  }, [openSettingsAt]);
 
   useEffect(() => {
     void restoreWorkbench(workbenchWorkspaceId);
@@ -1571,8 +1584,8 @@ export function App() {
         keywords: `submodule init update ${sm.path}`,
         meta: sm.status,
         run: () => {
-          void submoduleUpdate([sm.path], true, true).catch((e) =>
-            showToast(`Submodule update failed: ${errMessage(e)}`, 'error'));
+          setPaletteOpen(false);
+          setSubmoduleDialog({ repoPath: meta!.path, path: sm.path, action: 'update' });
         },
       });
     }
@@ -1580,7 +1593,7 @@ export function App() {
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
       createBranch, revealInGraph, selectCommit, selectFile, showToast, showWorkbenchWork,
-      stashApply, stashPop, submoduleUpdate]);
+      stashApply, stashPop]);
 
   const runCustomAction = useCallback((
     action: (state: ReturnType<typeof useCustomView.getState>) => void,
@@ -1908,6 +1921,9 @@ export function App() {
         { id: 'remote-add', label: 'Add remote…', group: 'Actions', keywords: 'remote origin upstream url add', run: () => setRemoteDialog({ kind: 'add' }) },
         { id: 'clone-scope', label: 'Repository history and downloads…', group: 'Actions', keywords: 'clone shallow partial filter deepen unshallow single branch', run: () => setCloneScopePath(meta.path) },
         { id: 'sparse-checkout', label: 'Sparse checkout…', group: 'Actions', keywords: 'cone directories select inspect change disable excluded sparse index', run: () => setSparsePath(meta.path) },
+
+        ...SUBMODULE_ACTIONS.map(([action, label]) => ({ id: `submodule-${action}`, label: `Submodules: ${label}…`, group: 'Actions', keywords: 'submodule lifecycle url nested status add remove deinit sync', run: () => { setPaletteOpen(false); setSubmoduleDialog({ repoPath: meta.path, path: '', action }); } } satisfies PaletteAction)),
+        ...LFS_ACTIONS.map(([action, label]) => ({ id: `lfs-${action}`, label: `Git LFS: ${label}…`, group: 'Actions', keywords: 'large file storage lfs objects filters patterns transfers locks', run: () => { setPaletteOpen(false); setLfsAction({ repoPath: meta.path, action }); } } satisfies PaletteAction)),
         { id: 'repository-maintenance', label: 'Repository maintenance…', group: 'Actions', keywords: 'git gc fsck integrity optimize activity log command output', run: () => {
           setPaletteOpen(false);
           setMaintenanceOpen(true);
@@ -1938,6 +1954,7 @@ export function App() {
             },
           } satisfies PaletteAction] : []),
         ]),
+        { id: 'verify-tag', label: 'Verify tag signature…', group: 'Actions', keywords: 'gpg ssh signed tag trust', run: () => { const path = useRepo.getState().activePath; if (path) setTagVerification({ path, name: null }); } },
         { id: 'tag',      label: 'Create tag…',     group: 'Actions', run: () => setTagDialog({ target: null, label: 'HEAD' }) },
         { id: 'push-tags', label: 'Push all tags', group: 'Actions', keywords: 'push upload publish tags remote', run: onPushAllTags },
         { id: 'fetch',   label: 'Fetch', group: 'Actions', shortcut: keyHint('fetch'), keywords: 'fetch remote refs download', run: onFetch },
@@ -1979,6 +1996,7 @@ export function App() {
     base.push(
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
+      { id: 'settings-git', label: 'Settings: Repository identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => openSettingsAt('git') },
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-plugins', label: 'Settings: Plugins', group: 'Actions', keywords: 'plugins marketplace extensions workbench surfaces install', run: () => openSettingsAt('plugins') },
       { id: 'heroi-new-conversation', label: 'Heroi: New conversation', group: 'Actions', keywords: 'heroi agent chat claude codex cursor', run: () => window.dispatchEvent(new CustomEvent(HEROI_NEW_CONVERSATION_EVENT)) },
@@ -2245,6 +2263,7 @@ export function App() {
                 onOpenRepo={openViaDialog}
                 onOpenRecent={openByPath}
                 onCreateStash={() => setStashDialog({ snapshot: true, keepIndex: false })}
+                onVerifyTag={(name) => { if (activePath) setTagVerification({ path: activePath, name }); }}
                 onCreateTag={() => setTagDialog({ target: null, label: 'HEAD' })}
                 onCreateBranch={(start, label) => setBranchDialog({ start, label })}
                 onBranchFromStash={(index) => setBranchDialog({
@@ -2256,6 +2275,8 @@ export function App() {
                 onMerge={(source, into) => setMergeDialog({ source, into })}
                 onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
                 onManageRemote={(mode) => setRemoteDialog(mode)}
+                onManageLfs={() => { if (meta) setLfsAction({ repoPath: meta.path, action: 'environment' }); }}
+                onManageSubmodules={(path = '', action = 'inspect') => { if (meta) setSubmoduleDialog({ repoPath: meta.path, path, action }); }}
                 onRenameBranch={(name) => setRenameBranchDialog({ name })}
                 onManageBranchNetwork={(mode) => setBranchNetworkDialog(mode)}
                 onPull={onPull}
@@ -2390,6 +2411,8 @@ export function App() {
         />
       )}
 
+      {tagVerification && <TagVerificationDialog path={tagVerification.path} initialName={tagVerification.name}
+        onClose={() => setTagVerification(null)} />}
       {tagDialog && (
         <TagDialog
           target={tagDialog.target}
@@ -2421,6 +2444,8 @@ export function App() {
       {maintenanceOpen && meta && (
         <MaintenanceDialog path={meta.path} onClose={() => setMaintenanceOpen(false)} onToast={showToast} />
       )}
+      {lfsAction && <LfsDialog path={lfsAction.repoPath} initialAction={lfsAction.action} onClose={() => setLfsAction(null)} />}
+      {submoduleDialog && <SubmoduleDialog path={submoduleDialog.repoPath} initialPath={submoduleDialog.path} initialAction={submoduleDialog.action} onClose={() => setSubmoduleDialog(null)} />}
 
       {cloneScopePath && <CloneScopeDialog key={cloneScopePath} path={cloneScopePath}
         busy={syncing || pulling || pushing} progress={netProgress} onExpand={onExpandHistory}

@@ -29,6 +29,11 @@ import type {
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
+  RepositoryIdentity,
+  SigningMode,
+  SigningScope,
+  SigningSettings,
+  TagVerification,
   HostingConnectionStatus,
   HeroiAgentEvent,
   HeroiAgentOutcome,
@@ -39,6 +44,9 @@ import type {
   InitOutcome,
   MaintenanceOutcome,
   MaintenanceTask,
+  LfsAction,
+  SubmoduleAction,
+  SubmodulePage,
   MergeMode,
   NetworkOutcome,
   Progress,
@@ -364,8 +372,8 @@ export const tauri = {
     patch: string,
     target: 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir',
   ) => invoke<void>('repo_apply_patch', { path, patch, target }),
-  repoCommit: (path: string, subject: string, body: string | null, amend: boolean) =>
-    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend }),
+  repoCommit: (path: string, subject: string, body: string | null, amend: boolean, signing: SigningMode = 'inherit') =>
+    invoke<CommitOutcome>('repo_commit', { path, subject, body, amend, signing }),
   repoFetch: (
     path: string,
     remote: string | null,
@@ -464,12 +472,18 @@ export const tauri = {
   repoTreeAt: (path: string, rev: string) =>
     invoke<WorkTreeEntry[]>('repo_tree_at', { path, rev }),
   repoSubmodules: (path: string) => invoke<Submodule[]>('repo_submodules', { path }),
+  repoSubmoduleChildren: (path: string, parent: string, offset: number) => invoke<SubmodulePage>('repo_submodule_children', { path, parent, offset }),
+  repoSubmoduleAction: (path: string, action: SubmoduleAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_submodule_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
+  repoLfsAction: (path: string, action: LfsAction, opId: string, onProgress?: (p: Progress) => void) =>
+    invoke<NetworkOutcome>('repo_lfs_action', { path, action, opId, onEvent: progressChannel(onProgress) }),
   repoSubmoduleUpdate: (
     path: string,
     paths: string[],
     init: boolean,
     recursive: boolean,
     onProgress?: (p: Progress) => void,
+    opId?: string,
   ) =>
     invoke<NetworkOutcome>('repo_submodule_update', {
       path,
@@ -477,6 +491,7 @@ export const tauri = {
       init,
       recursive,
       onEvent: progressChannel(onProgress),
+      opId,
     }),
   repoWorktrees: (path: string) => invoke<Worktree[]>('repo_worktrees', { path }),
   // `startPoint` (branch/tag/commit; null = HEAD) and `track` (set upstream to
@@ -586,7 +601,8 @@ export const tauri = {
     target: string | null,
     message: string | null,
     force: boolean,
-  ) => invoke<void>('repo_tag_create', { path, name, target, message, force }),
+    signing: SigningMode = 'inherit',
+  ) => invoke<void>('repo_tag_create', { path, name, target, message, force, signing }),
   repoTagDelete: (path: string, name: string) =>
     invoke<void>('repo_tag_delete', { path, name }),
   repoTagPush: (
@@ -651,6 +667,13 @@ export const tauri = {
     invoke<void>('repo_open_in_editor', { path, file, line, template }),
   repoOpenInTerminal: (path: string, template: string) =>
     invoke<void>('repo_open_in_terminal', { path, template }),
+  repoTagVerify: (path: string, name: string) => invoke<TagVerification>('repo_tag_verify', { path, name }),
+  repoSigningSettings: (path: string) => invoke<SigningSettings>('repo_signing_settings', { path }),
+  repoSetSigningConfig: (path: string, scope: SigningScope, key: string, value: string | null) =>
+    invoke<void>('repo_set_signing_config', { path, scope, key, value }),
+  repoIdentity: (path: string) => invoke<RepositoryIdentity>('repo_identity', { path }),
+  repoSetIdentity: (path: string, field: 'name' | 'email', value: string | null) =>
+    invoke<void>('repo_set_identity', { path, field, value }),
   gitGlobalIdentity: () => invoke<GlobalIdentity>('git_global_identity'),
   gitSetGlobalIdentity: (name: string, email: string) =>
     invoke<void>('git_set_global_identity', { name, email }),

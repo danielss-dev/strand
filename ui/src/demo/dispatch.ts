@@ -69,6 +69,17 @@ export const handlers: Record<string, Handler> = {
   microsoft_store_update_available: () => false,
   microsoft_store_open_product: () => unavailable('The Microsoft Store'),
   crash_report_check: () => ({ path: '', len: 0, entry: null }),
+  repo_signing_settings: () => ({ effective: {}, local: {}, worktree: {}, worktree_enabled: false,
+    commit_sign: false, tag_sign: false, tag_force_annotated: false }),
+  repo_set_signing_config: () => unavailable('Signing configuration'),
+  repo_tag_verify: () => unavailable('Tag signature verification'),
+  repo_identity: () => {
+    const source = (value: string) => ({ value, scope: 'demo', origin: 'Demo identity' });
+    const identity = { identity: `${repo.identity.name} <${repo.identity.email}>`, error: null,
+      name_source: source(repo.identity.name), email_source: source(repo.identity.email) };
+    return { author: identity, committer: identity, local: { name: null, email: null } };
+  },
+  repo_set_identity: () => unavailable('Repository identity overrides'),
   git_global_identity: () => ({ name: repo.identity.name, email: repo.identity.email }),
   git_set_global_identity: ({ name, email }) => { repo.identity = { name: str(name), email: str(email) }; },
   workspace_file_read: () => unavailable('Reading .code-workspace files'),
@@ -213,8 +224,9 @@ export const handlers: Record<string, Handler> = {
   repo_discard_many: (a) => { const wt = wtOf(a); for (const f of a.files as string[]) repo.discard(wt, f); },
   repo_apply_patch: (a) => repo.applyPatchTo(wtOf(a), str(a.patch), a.target as 'index' | 'index_reverse' | 'workdir_reverse' | 'workdir'),
   repo_commit: (a) => {
+    if (a.signing === 'sign') return unavailable('Commit signing');
     const c = repo.commitIndex(wtOf(a), str(a.subject), a.body == null ? null : str(a.body), Boolean(a.amend));
-    return { oid: c.hash, amended: Boolean(a.amend) };
+    return { oid: c.hash, amended: Boolean(a.amend), output: 'Demo commit created.' };
   },
 
   // ---- branches / tags / remotes -----------------------------------------
@@ -260,7 +272,10 @@ export const handlers: Record<string, Handler> = {
   repo_remote_set_urls: (a) => { const r = repo.remotes.find((x) => x.name === str(a.name)); if (r) { r.url = str(a.url); r.push_url = a.pushUrl == null ? null : str(a.pushUrl); } },
   repo_remote_set_default: (a) => { for (const r of repo.remotes) r.is_default = r.name === str(a.name); },
   repo_remote_tags: () => repo.tags.map((t) => t.name),
-  repo_tag_create: (a) => repo.tagCreate(wtOf(a), str(a.name), a.target == null ? null : str(a.target), a.message == null ? null : str(a.message), Boolean(a.force)),
+  repo_tag_create: (a) => {
+    if (a.signing === 'sign') return unavailable('Tag signing');
+    return repo.tagCreate(wtOf(a), str(a.name), a.target == null ? null : str(a.target), a.message == null ? null : str(a.message), Boolean(a.force));
+  },
   repo_tag_delete: (a) => repo.tagDelete(str(a.name)),
   repo_tag_push: async (a) => {
     await streamProgress(a.onEvent as Channel<Progress>, ['Writing objects'], 'done');
