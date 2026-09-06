@@ -1,6 +1,6 @@
 # Settings
 
-Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; git identity and Azure DevOps Server profiles have explicit save actions.
+Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The dialog has nine sections — Appearance, Diff, Keyboard, Git, Hosting, Integrations, AI, Updates, and Privacy. Most changes apply live; Git identity, signing, and Azure DevOps Server profiles have explicit save actions.
 
 The sidebar is a keyboard-navigable list: `↑`/`↓` move between sections, `Home`/`End` jump to the first or last, and `Escape` closes the dialog.
 
@@ -41,10 +41,31 @@ Below the rebindable list, a **Context shortcuts** card documents the fixed, sur
 
 ## Git
 
-- **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. This is the author identity for new commits everywhere, not just in Strand.
+- **Repository identity** — The active checkout’s effective author and committer,
+  with the scope and source of each name/email. **Save name/email** and
+  **Remove name/email override** edit only direct local config. Linked worktrees
+  share these local values; existing worktree, conditional and environment
+  precedence remains visible. Amend preserves the original author.
+- **Repository signing** — Choose the write scope: repository config shared by
+  linked worktrees, or this worktree when `extensions.worktreeConfig` is already
+  enabled. Each setting shows its effective value and source. Save or remove
+  overrides for commit/tag signing defaults, annotated-tag signing, signing
+  format (OpenPGP, SSH, or X.509), key ID/path, and SSH allowed signers file.
+  Removing an override restores inheritance; global and included files are
+  unchanged. The palette action **Settings: Repository identity and signing**
+  opens this section.
+- **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. These defaults apply to Git outside Strand too; repository, worktree, conditional and environment overrides can take precedence.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
-Everything else about git — credentials, SSH keys, commit signing — is inherited from your existing git setup: network operations (push, pull, fetch, clone) go through your system `git`, and when `commit.gpgSign` is on, commits do too — picking up your signing config and running your `pre-commit` / `commit-msg` hooks, just like plain `git commit`. Unsigned commits (the default) are written in-process and do not run commit hooks. There is nothing to configure in Strand for those.
+Network operations, commit/amend and tag creation use your system Git.
+Credentials, signing programs and GPG/SSH agents come from your existing setup.
+Strand stores key references, never private keys or passphrases. SSH verification
+uses Git’s allowed signers file. Commit and tag forms offer **Inherit Git config**,
+**Sign this commit/tag**, and **Do not sign this commit/tag**; these choices apply
+only to that operation. Signed and unsigned commits honor hooks (including
+`core.hooksPath`), rejection and message rewrites. A rejection preserves your
+checkout’s draft and signing choice; expandable commit output retains bounded
+hook diagnostics.
 
 ## Hosting
 
@@ -142,6 +163,71 @@ Configure Work's embedded terminals separately from external applications.
 
 - **External editor** — a dropdown of per-platform presets, None, or "Custom command…". Custom commands are templates with `{file}`, `{line}`, and `{dir}` placeholders, and a **Test** button lets you verify the command before relying on it.
 - **Terminal** — the same style of picker; the template takes a `{dir}` placeholder and opens the repository folder.
+
+### User actions
+
+In **Settings → Integrations → User actions**, create, edit, or delete personal
+commands. Quick Launch (`Mod+K`) also offers **Manage user actions…**.
+Give each action a name, a context (repository, selected branch/tag, or selected
+working-tree file), an executable, and arguments as a JSON array of strings.
+Each string is exactly one argument; spaces, quotes, and shell metacharacters
+in substituted paths remain inside that argument. An empty string is allowed.
+
+Use an installed command such as `git`, or an absolute executable path without
+surrounding quotes. Windows actions require a native `.exe`; to run a script,
+choose its interpreter as the executable and put the script path in the
+arguments. Strand adds no shell. Do not embed placeholders inside interpreter
+code or shell command strings: pass repository values as script arguments.
+These commands run with your account permissions and can modify files or Git state.
+
+| Placeholder | Meaning | Context |
+| --- | --- | --- |
+| `{repo}` | Absolute working-tree root | All |
+| `{ref}` | Full selected ref, such as `refs/heads/topic` | Ref |
+| `{oid}` | Selected ref's commit ID | Ref |
+| `{file}` | Validated absolute working-tree file path | File |
+| `{relativeFile}` | Selected path relative to the repository root | File |
+
+Double braces (`{{` and `}}`) produce literal braces. Unavailable placeholders
+are errors. The working directory is the repository root, or, for file actions,
+the selected file's parent. Prefer `{file}` with the latter choice.
+
+For example, a **File** action named “Inspect file history” can use executable
+`git`, repository working directory, and arguments:
+
+```json
+["log", "-5", "--oneline", "--", "{relativeFile}"]
+```
+
+Use `--` before path operands where the executable supports it. Git actions
+include Strand's `core.fsmonitor` and pager overrides in the displayed argument
+list; no other arguments are added implicitly.
+
+Open **User actions…** on a repository tab, branch/tag row, or single file in
+the Files tree. The row you invoke owns the target, including an inactive
+repository tab. Historical files, directories, and multiple file selections
+do not offer working-tree file actions. Palette entries named **User action:
+…** use the active Work file or explicitly selected branch/tag in All Commits;
+repository actions use the active repository. Use the existing keyboard context
+menu (`Shift+F10`) on branch/tag and Files rows, or search Quick Launch.
+For a ref palette action, click its branch/tag row to reveal the tip, then press
+Enter in the graph to select that commit before opening Quick Launch.
+
+Choose **Preview command**, inspect the resolved executable, numbered arguments,
+selected target, and working directory, then **Run action**. A changed selection
+invalidates the dialog; a moved ref, missing file, or redirected executable/path
+is checked again before execution. Unsaved editor buffers are not written.
+
+**Cancel action**, Escape, or closing the dialog stops its process tree.
+Cancellation does not undo completed changes. Standard output and standard
+error are displayed separately after the process stops, with status, exit code,
+and duration. Each stream retains at most 128 KiB of source bytes; excess output
+or a ten-minute timeout stops the action. Results remain in the dialog until it
+closes; they are not saved to activity history.
+
+Definitions persist in your personal settings. They are separate from internal
+Workbench commands and bundled plugins; Strand never loads these action
+definitions from repository content or community packages.
 
 ## AI
 

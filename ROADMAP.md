@@ -2154,18 +2154,30 @@ and Store certification remain external gates.
   never touches credentials). Designed 2026-06-12: `docs/remote-ssh.md`
   + task breakdown in TASKS.md. Pre-1.0 guardrails (opaque repo paths,
   everything through the `commands.rs` seam) are active now.
-- Git-flow (start/finish feature/release/hotfix; shells out to `git-flow`)
-- Git LFS (status badges + progress)
-- GPG / SSH commit signing UI
+- ☑ Git-flow (F19: opt-in Git-flow AVH detection/configuration, reviewed
+  feature/release/hotfix start/finish and recovery from partial completion)
+- ☑ Git LFS — filter-correct staging/checkout/discard/hard reset and explicit
+  setup, patterns, object/transfer status and server locks (`LfsDialog`,
+  `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
+- ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
+  choices; signed-tag creation and verification, 2026-09-06).
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
   retention policy, and backend justify adding it
-- Guided Git bisect
+- ☑ Guided Git bisect (F10: manual good/bad/skip, progress/culprit,
+  external-session resume, clean-tree reset and reviewed original target)
+- ☑ Advanced refs (F18: Git notes, replace refs, explicit tag retarget/re-annotation
+  with stale-write guards and remote publication checks; native desktop verified)
 - Sparse checkout (cone mode first)
-- Patch import/mailbox and Git bundle workflows
-- Expanded submodule lifecycle (add/remove/deinit/sync/URL/nested status)
-- Repository/ref/file custom actions with safe argv templates
+- ☑ Patch import/mailbox and Git bundle workflows (F07: `InterchangeDialog`,
+  validation, author-preserving mailbox recovery and new-branch bundle import;
+  native desktop flows verified)
+- ☑ Expanded submodule lifecycle — guarded add/remove/deinit/sync/URL, paged
+  nested inspection and cancellable updates (`SubmoduleDialog`); real Git
+  preservation fixtures and native lifecycle/keyboard checks pass.
+- ☑ Repository/ref/file custom actions with safe argv templates
+  (`UserActionsEditor`, context menus / Quick Launch, `UserActionDialog`)
 - **CLI companion binary (`strand`)** — `strand <path>` opens the repo
   in the app; `strand diff/log/status/review --json` gives AI agents
   typed, full-context data the `git` porcelain can't (same serde types
@@ -2810,6 +2822,17 @@ implementation rows while the July audit is labeled historical. This is a
 planning update, not a claim that these features shipped; existing local Git,
 GitHub/Azure review, Workbench and performance work retain their own status.
 
+**Advanced refs and Git-flow shipped (2026-09-06):** Added lazy Git notes and
+replacement-ref management, explicit unsigned tag retarget/re-annotation with
+current/new target review and remote publication checks, and opt-in Git-flow
+AVH configuration plus feature/release/hotfix start/finish. Stale external refs,
+checkout/config changes and unresolved conflicts block reviewed writes.
+Git-flow streams bounded output and preserves completed merges/tags when a
+later merge is aborted. Native WebView2 exercised notes, replacements, tag
+edits, all three workflow types, external-session recovery and keyboard focus.
+The core suite passed (174 normal tests plus three explicit AVH integrations),
+as did the frontend typecheck and five focused frontend tests.
+
 ---
 
 **Hosted adapters shipped (2026-09-06):** GitLab merge requests and Bitbucket
@@ -2825,6 +2848,88 @@ reviews an authenticated GitHub/Enterprise, GitLab or Bitbucket Cloud destinatio
 creates an empty repository, adds its remote, then separately offers an explicit
 push of the reviewed commit. A local recovery record survives partial failures;
 uncertain creation checks the destination without repeating the create request.
+
+**Patch interchange shipped (2026-09-06):** Added affected-path previews,
+explicit index/worktree targets, validated import, original-author mailboxes
+with Continue/Skip/Abort, and bundle verification/import/export with
+prerequisite/ref summaries. Native fixtures cover stale previews, all patch
+targets, mailbox authors/recovery and missing bundle prerequisites. Rust
+checks, five fixtures and three frontend IPC tests pass. Native WebView2
+verified palette/focus, worktree/index targets, mailbox authors and conflict
+continuation, and bundle verification/import/incremental export.
+
+**Guided bisect shipped (2026-09-06):** The Repository menu, palette and
+operation banner open a manual bisect dialog backed by worktree-local Git
+state. It shows remaining candidates, final/ambiguous outcomes, custom
+external terms and no-checkout sessions. Stale ratings and dirty checkout/
+reset transitions are refused. Three native fixtures, two frontend tests,
+Rust checks/typecheck and native WebView2 rating/resume/reset/keyboard flows
+pass. Automated test-command execution remains a separate later slice.
+
+**Personal user actions shipped (2026-09-06, F15):** Settings → Integrations
+now edits explicit executable/argv definitions for repositories, qualified refs,
+and working-tree files. Context menus and Quick Launch capture the target and
+require a resolved executable/arguments/cwd preview. Native execution revalidates
+paths and ref IDs, preserves argv boundaries, bounds both output streams, and
+cancels the process tree. Definitions stay in personal settings, separate from
+Workbench and plugins. Automated tests and an isolated Windows WebView2 pass
+covered literal spaces/metacharacters, stale selections, exact menu targets,
+nonzero exits, output limits, keyboard operation, and cancellation.
+
+**Sparse checkout and clone controls shipped (2026-09-06, F08/F09):** Clone now
+offers branch, independent depth/single-branch choices, blob filtering and
+recursive submodules. Repository history controls inspect external clones and
+deepen/unshallow with progress and cancellation. Cone sparse selections can be
+inspected, changed and disabled, with dirty/ignored-file guards and compatible
+reads and mutations for external sparse indexes. Excluded files no longer look
+deleted. Windows native UI verification and 13 integration fixtures cover
+these workflows; normal repositories retain their existing in-process paths.
+See `docs/sparse-clone-verification.md` for validation and supported boundaries.
+
+**LFS implementation shipped (2026-09-06):** Real fixtures exposed raw asset
+blobs from git2 staging. LFS paths now stage in one literal NUL-delimited Git
+batch; checkout, discard and hard reset honor required filters, and partial
+pointer patches are rejected. The lazy sidebar/palette dialog exposes setup,
+patterns, objects, transfers and server locks with bounded output and process
+tree cancellation. Exact pointer/commit/network/lock fixtures and native
+setup, staging, keyboard, cancellation and recovery checks pass.
+
+**Submodule lifecycle shipped (2026-09-06):** Added explicit add/remove/deinit,
+URL changes/sync, lazy paged nested inspection, repository opening and
+cancellable updates through the sidebar and palette. Removal and deinit retain
+Git history and refuse dirty, unrecorded or ignored local data, including nested
+modules. Real Git and native UI checks cover registration/index preservation,
+network cancellation, URL edits, nesting, confirmations and reinitialization.
+
+---
+
+**Commit hook parity shipped (2026-09-06, F01):** Signed and unsigned commit/amend
+now run system Git’s applicable hooks and honor custom hooksPath, rejection
+and rewritten messages. Checkout session drafts survive rejection/navigation;
+expandable output retains bounded diagnostics. Native Ctrl+Enter flows and
+core/store regressions passed; the loaded-host no-hook cost is recorded in
+`docs/hooks-identity-signing-validation-2026-09-06.md`. Index/status paths are
+unchanged; the commit-policy exception is explicit in PRD and learnings.
+
+
+**Repository identity shipped (2026-09-06, F02):** Settings → Git and its palette
+entry show effective author/committer identity with per-field source/scope.
+Individual local name/email overrides can be saved or removed without editing
+global or included files. Linked worktrees share local values; existing
+worktree overrides remain effective. Conditional, two-repository and linked
+worktree fixtures passed; native settings save/remove and repository switching
+were exercised with isolated fixtures.
+
+
+**Signing controls and signed tags shipped (2026-09-06, F03):** Repository and
+enabled worktree settings show effective signing defaults, format, key and SSH
+allowed-signers sources. Commit/amend and tag forms offer inherited, signed or
+unsigned operations without changing defaults. Signed tags require an
+annotation; lazy verification displays the immutable object and Git trust
+diagnostics. Real GPG/SSH fixtures cover hooks, amend, linked worktrees,
+unsigned overrides, tampering and failed signers. Native Windows settings,
+commit/amend and palette tag flows passed; validation and platform limits are
+recorded in `docs/hooks-identity-signing-validation-2026-09-06.md`.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

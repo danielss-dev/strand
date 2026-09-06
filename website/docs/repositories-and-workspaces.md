@@ -27,6 +27,59 @@ trust.
 
 Network operations shell out to your system git, so SSH keys, credential helpers, and proxies work exactly as they do on the command line.
 
+### Clone options
+
+Expand **Clone options** before starting:
+
+- **Branch** chooses the initial branch; blank uses the remote default.
+- **History depth** limits ancestry. Blank downloads all history. Older history,
+  blame and merge bases may be unavailable in a shallow clone.
+- **Fetch only the selected branch** also limits future fetches. Depth and
+  single-branch fetching are independent choices.
+- **File contents on demand (blob:none)** keeps historical file contents out of
+  the initial transfer when the server supports filtering. Checkout still
+  downloads current files; older content, diffs and blame can require a network
+  connection. A server that ignores filtering may send all objects.
+- **Initialize submodules recursively** clones nested modules too. Their
+  downloads and credentials are separate; the parent's depth and filter do not
+  apply to them.
+
+Use **Repository history and downloads…** in the topbar network menu or command
+palette to inspect shallow state, remote filters and fetch refspecs. In a shallow
+repository, choose a remote and **Download more history** or **Download full
+history**. These fetch ancestry without switching branches or altering local
+edits. They preserve the current branch refspecs and partial-clone filter; a
+shallow source may not have the entire history. The dialog shows progress and
+offers **Cancel download**. This also works for repositories cloned outside Strand.
+
+### Sparse checkout
+
+Choose **Sparse checkout…** from the topbar network menu or command palette.
+Filter the tracked directories, tick those to keep, and choose **Enable sparse
+checkout** or **Apply selection**. Selection uses directories in HEAD. Root files
+and files beside a selected directory or its ancestors remain included; an empty
+selection keeps root files only. Nested selections label their ancestors as partly
+included. Sparse checkout changes populated files, independently of clone depth
+and object filtering.
+
+Sparse-excluded paths remain tracked in Git. The Files pane omits those absent
+paths and shows a **Manage** notice; they do not appear as deleted in Local
+Changes. Actual deletions inside included directories retain their normal status.
+Historical commit trees still show every file at that revision.
+
+**Use sparse index** retains Git's compressed index format. Strand can read an
+externally created sparse index without rewriting it, and stages, commits and
+switches branches through Git when sparse checkout is active. Older external
+tools may require turning this option off.
+
+Selection changes and **Disable sparse checkout** refuse tracked edits or
+untracked files. Commit or stash edits and move untracked files first. Strand also
+refuses a selection that could remove ignored files: include their directory or
+move those files yourself. Disabling restores all tracked files and may download
+missing contents in a partial clone. Settings apply to the current worktree.
+External non-cone patterns can be inspected and disabled; disable them before
+selecting cone directories. Submodule lifecycle controls are separate.
+
 ### Default clone & open folder
 
 In [Settings](settings.md) → Git, **Default clone & open folder** sets where the clone dialog and the open-repository picker start. Use Choose… to set it and Clear to remove it.

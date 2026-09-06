@@ -392,7 +392,7 @@ export function HeroiView({
       setSkills(discoveredSkills);
     }).catch(() => {
       if (!current) return;
-      setRepoFiles(useRepo.getState().workTree.map((entry) => entry.path));
+      setRepoFiles(useRepo.getState().workTree.filter((entry) => !entry.excluded).map((entry) => entry.path));
       setSkills([]);
     });
     return () => { current = false; };

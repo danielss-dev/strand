@@ -99,7 +99,8 @@ fn changes_file_inventory(event: &notify::Event, git_dir: &Path) -> bool {
     event.paths.iter().any(|path| {
         if let Ok(relative) = path.strip_prefix(git_dir) {
             // Ref/index replacements do not change the Files inventory.
-            relative == Path::new("info/exclude") || relative == Path::new("config")
+            relative == Path::new("info/exclude") || relative == Path::new("info/sparse-checkout")
+                || relative == Path::new("config") || relative == Path::new("config.worktree")
         } else {
             structural || path.file_name().is_some_and(|name| name == ".gitignore")
         }
@@ -148,6 +149,13 @@ fn relevant_path(path: &Path, git_dir: &Path) -> bool {
             | "rebase-apply"
             | "info"
             | "config"
+            | "BISECT_START"
+            | "BISECT_LOG"
+            | "BISECT_TERMS"
+            | "BISECT_HEAD"
+            | "BISECT_EXPECTED_REV"
+
+            | "config.worktree"
     )
 }
 
@@ -176,6 +184,10 @@ mod tests {
             "/repo/.git/refs/heads/main",
             "/repo/.git/MERGE_HEAD",
             "/repo/.git/rebase-merge/done",
+            "/repo/.git/rebase-apply/applying",
+            "/repo/.git/rebase-apply/next",
+            "/repo/.git/BISECT_START",
+            "/repo/.git/BISECT_LOG",
         ] {
             assert!(relevant_path(&PathBuf::from(p), &git_dir()), "{p} should refresh");
         }

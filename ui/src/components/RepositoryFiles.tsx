@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { userActionMenu } from '../lib/userActions';
 
 import { applyEmptyDirectoryMutation } from '../lib/emptyDirectories';
 import { ignorePatterns } from '../lib/ignore';
@@ -112,6 +113,7 @@ export function RepositoryFiles({
           const previous = current.entries[index];
           return previous?.path === entry.path
             && previous.status === entry.status
+            && previous.excluded === entry.excluded
             && previous.ignored === entry.ignored;
         });
       return unchanged ? current : { ...current, entries: next };
@@ -212,7 +214,7 @@ export function RepositoryFiles({
   const displayedTree = selectedCommit ? (revisionTree ?? []) : (localTree ?? []);
   const filePaths = useMemo(
     () => [
-      ...displayedTree.map((entry) => entry.path),
+      ...displayedTree.filter((entry) => !entry.excluded).map((entry) => entry.path),
       ...(selectedCommit ? [] : emptyDirectories),
     ],
     [displayedTree, emptyDirectories, selectedCommit],
@@ -316,6 +318,7 @@ export function RepositoryFiles({
       },
     ];
     if (!selectedCommit && actionPaths.length === 1) {
+      if (meta && !rowIsDirectory) items.push(userActionMenu({ path: meta.path, target: { kind: 'file', file: rowPath } }));
       items.push(
         { label: 'Open in editor', icon: 'external', onSelect: () => onOpenFileInEditor(rowPath) },
         {
@@ -480,6 +483,10 @@ export function RepositoryFiles({
         />
       )}
       {!selectedCommit && localTree && filePaths.length === 0 && fileCreateToolbar}
+      {!selectedCommit && displayedTree.some((entry) => entry.excluded) && <div className="side-files-revision">
+        Sparse-excluded files are omitted.
+        <button className="btn" type="button" onClick={() => window.dispatchEvent(new Event('strand:open-sparse-checkout'))}>Manage</button>
+      </div>}
       {selectedCommit && (
         <div className="side-files-revision" title={`Files at commit ${selectedCommit}`}>
           Files at <code>{selectedCommit.slice(0, 7)}</code>

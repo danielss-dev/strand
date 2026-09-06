@@ -42,6 +42,8 @@ interface Props {
   onOpenRecent: (path: string) => void;
   /** Open the clone dialog (tabs-mode `+` menu). */
   onClone: () => void;
+  onCloneScope: () => void;
+  onSparseCheckout: () => void;
   /** Open the icon-customization dialog for a repo tab. */
   onCustomize: (path: string) => void;
   /** Open the workspace manager dialog (tabs-mode switcher). */
@@ -81,6 +83,8 @@ export function Topbar({
   onInitRepo,
   onOpenRecent,
   onClone,
+  onCloneScope,
+  onSparseCheckout,
   onCustomize,
   onManageWorkspaces,
   onWorktreeReview,
@@ -166,7 +170,9 @@ export function Topbar({
         { label: 'Force with lease…', icon: 'arrow-up', danger: true, onSelect: onForcePush },
       ],
     },
-  ], [fetchPrune, networkBusy, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetFetchPrune, onSetPullAutostash, onSetPullMode, pullAutostash, pullMode, pullModeLabel]);
+    { label: 'Repository history and downloads…', disabled: networkBusy, onSelect: onCloneScope },
+    { label: 'Sparse checkout…', disabled: networkBusy, onSelect: onSparseCheckout },
+  ], [fetchPrune, networkBusy, onCloneScope, onSparseCheckout, onFetch, onForcePush, onPull, onPush, onPushAllTags, onSetFetchPrune, onSetPullAutostash, onSetPullMode, pullAutostash, pullMode, pullModeLabel]);
 
   const inTauri = isTauri();
   // macOS lets the OS draw the traffic lights over our toolbar (`titleBarStyle:

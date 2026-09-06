@@ -1,5 +1,29 @@
 # Commits & History
 
+## Guided bisect
+
+Open **Repository → Guided Bisect…**, or search **Guided bisect** in Quick
+Launch. Enter a known good ancestor and a known bad revision, then Start.
+Git checks out a candidate with detached HEAD. Run your tests yourself and
+choose **Mark good**, **Mark bad**, or **Skip — cannot test**. The dialog shows
+the selected commit, remaining candidate count, and an approximate number of
+tests for linear history without skips. Git’s full bisect log is inspectable.
+
+Once Git identifies the first bad commit, Strand shows its SHA. Skipping too
+many candidates can leave an ambiguous result; Strand reports that separately.
+**Reset bisect…** reviews the original branch/commit and needs a second click
+to return there. Start, ratings and reset refuse dirty working trees or indexes
+so test edits must first be committed or stashed. An external checkout that
+differs from Git’s expected revision cannot be rated accidentally.
+
+Closing the dialog keeps the session. Reopen it or use the bisect banner to
+resume, including sessions started in a terminal. Custom good/bad terms and
+external `--no-checkout` sessions are recognized; in no-checkout mode you test
+`BISECT_HEAD`, while working files stay at HEAD. **Refresh from Git** reloads
+state explicitly; watcher events and focus refresh it while the dialog is open.
+Tab/Shift+Tab move between controls, Enter/Space activate buttons, and Escape
+closes while idle. Automated test-command execution is not included.
+
 Strand gives you three lenses on history: the All Commits graph for reachable history, the Reflog for everywhere `HEAD` has been (including orphaned commits), and a per-file view with follow-renames history, revision compare, and blame.
 
 ## All Commits (`Mod+3`)

@@ -82,6 +82,25 @@ the resolved app appearance automatically.
   Cloud repository after reviewing its account, destination and visibility.
   Add the remote, then explicitly choose whether to push the reviewed commit.
   Interrupted creation and remote setup can be resumed from the same dialog.
+
+- **Personal user actions** — define repository, ref, and working-tree file
+  commands in Settings → Integrations. Menu and palette entries open an exact
+  executable/argument/working-directory preview, with bounded output and cancellation.
+
+- **Repository size controls** — clone a chosen branch with optional depth,
+  single-branch fetching, on-demand file contents (`blob:none`), and recursive
+  submodules. Inspect clone scope and download more or full history from the
+  network menu or palette. Sparse checkout selects cone directories, distinguishes
+  excluded files from deletions, and preserves external sparse indexes on reads.
+  Selection changes refuse dirty trees and ignored-file removal.
+
+- **Git LFS** — repository setup, tracking patterns, object/transfer status,
+  downloads/uploads and server locks from the sidebar and command palette.
+  Whole-file staging, checkout, discard and hard reset honor LFS filters;
+  history is never migrated.
+- **Submodule lifecycle** — add, remove, deinitialize, synchronize URLs, and
+  inspect nested modules in pages. Network work is cancellable; dirty module
+  contents, ignored files and unrecorded commits block removal/deinitialization.
 - **Responsive refreshes** — repository updates coalesce during bursts of
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with
@@ -221,7 +240,11 @@ the resolved app appearance automatically.
   (fetch-first for remote bases) and copies gitignored setup files listed in
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the
   box. Stale entries whose directories are already gone prune immediately.
-- **Everyday Git** — stage, unstage, or recoverably discard whole change
+- **Everyday Git** — hook-aware signed/unsigned commit and amend with checkout
+  session drafts and bounded output; effective repository author/committer identity
+  with local overrides in Settings → Git; repository/worktree signing settings,
+  per-operation signing choices, and signed-tag creation/verification; stage,
+  unstage, or recoverably discard whole change
   blocks or individually selected lines inline in the diff; bulk tree actions
   include every selected file and every changed file beneath selected folders;
   initialize a repository with an initial branch, optional
@@ -242,6 +265,19 @@ the resolved app appearance automatically.
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
   pause/conflict Continue / Abort.
+- **Patch interchange** — preview affected paths and validate patch imports
+  into the working tree, index, or both; import mailboxes with original authors
+  and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
+  import into a new branch, and export full or incremental bundles.
+- **Git-flow workflows** — opt-in Git-flow AVH detection and repository
+  configuration, reviewed feature/release/hotfix start and finish, streamed
+  output, and merge recovery that retains already completed stages.
+- **Advanced Git refs** — inspect and edit Git notes and replacement refs;
+  retarget or re-annotate existing unsigned tags with old/new targets and
+  optional remote publication checks. External edits require a fresh review.
+- **Guided bisect** — start from known good/bad revisions, test and mark
+  good/bad/skip, inspect remaining candidates and the culprit, resume external
+  sessions, and reset to the original checkout while protecting test edits.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
   resizable commit detail panel with lazy GPG/SSH/X.509 verification,

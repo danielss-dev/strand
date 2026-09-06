@@ -64,27 +64,36 @@ impl Repo {
         // push+apply round-trip that can fail on Windows file locks).
         let mut snapshot_oid = None;
         if matches!(mode, ResetMode::Hard) {
-            let dirty = repo
+            let dirty = if self.sparse_enabled() {
+                self.status()?.iter().any(|entry| entry.kind != crate::status::StatusKind::Untracked)
+            } else { repo
                 .statuses(Some(&mut crate::status::status_options()))?
                 .iter()
                 .any(|e| {
                     !(e.status() & !(git2::Status::WT_NEW | git2::Status::IGNORED)).is_empty()
-                });
+                }) };
             if dirty {
                 let msg = format!("Safety: before hard reset to {target_short}");
                 snapshot_oid = self.stash_snapshot(Some(&msg), false)?.oid;
             }
         }
 
-        match mode {
+        if self.sparse_enabled() || self.is_partial_clone() {
+            let flag = match mode { ResetMode::Soft => "--soft", ResetMode::Mixed => "--mixed", ResetMode::Hard => "--hard" };
+            crate::network::run_git_streaming(&self.path, &["reset", flag, &obj.id().to_string(), "--"], |_| {}, None)?;
+        } else { match mode {
             ResetMode::Soft => repo.reset(&obj, git2::ResetType::Soft, None)?,
             ResetMode::Mixed => repo.reset(&obj, git2::ResetType::Mixed, None)?,
             ResetMode::Hard => {
-                let mut co = git2::build::CheckoutBuilder::new();
-                co.force();
-                repo.reset(&obj, git2::ResetType::Hard, Some(&mut co))?;
+                if self.lfs_checkout_needed(&obj.peel_to_tree()?)? {
+                    self.run_lfs_filtered(&["reset", "--hard", &obj.id().to_string(), "--"])?;
+                } else {
+                    let mut co = git2::build::CheckoutBuilder::new();
+                    co.force();
+                    repo.reset(&obj, git2::ResetType::Hard, Some(&mut co))?;
+                }
             }
-        }
+        } }
 
         Ok(ResetOutcome {
             target_short,

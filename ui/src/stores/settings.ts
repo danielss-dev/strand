@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { UserAction } from '../lib/userActions';
 import { persist } from 'zustand/middleware';
 
 import { t } from '../lib/i18n';
@@ -136,6 +137,7 @@ export interface SettingsState {
   defaultCloneDir: string | null;
   editorTool: ExternalTool;
   terminalTool: ExternalTool;
+  userActions: UserAction[];
   /** Global shell used by Work terminals; a repository-family override may
    * replace it through the generic settings table. */
   embeddedShell: EmbeddedShellChoice;
@@ -279,6 +281,7 @@ export const useSettings = create<SettingsState>()(
       defaultCloneDir: null,
       editorTool: null,
       terminalTool: null,
+      userActions: [],
       embeddedShell: { kind: 'system' },
       terminalFont: 'jetbrains',
       terminalFontSize: 16,

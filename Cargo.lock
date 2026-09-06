@@ -5924,9 +5924,11 @@ version = "1.5.1"
 dependencies = [
  "git2",
  "gix",
+ "libc",
  "notify",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
 ]
