@@ -31,7 +31,7 @@ import { isPreviewablePath, isSvgPath } from '../lib/preview';
 import { pierreThemeOptions } from '../lib/pierreTheme';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
-import { tokenizeFile, type HlToken, type HlTheme } from '../lib/highlight';
+import { FileHighlighter, type HlToken, type HlTheme } from '../lib/highlight';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { useWork } from '../stores/work';
@@ -1021,6 +1021,8 @@ function BlameList({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(0);
   const [tokens, setTokens] = useState<HlToken[][] | null>(null);
+  const [highlighter] = useState(() => new FileHighlighter());
+  useEffect(() => () => highlighter.dispose(), [highlighter]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1037,9 +1039,9 @@ function BlameList({
   useEffect(() => {
     let cancelled = false;
     setTokens(null);
-    void tokenizeFile(code, path, hlTheme).then((t) => { if (!cancelled) setTokens(t); });
+    void highlighter.tokenize(code, path, hlTheme).then((t) => { if (!cancelled) setTokens(t); });
     return () => { cancelled = true; };
-  }, [code, path, hlTheme]);
+  }, [code, path, hlTheme, highlighter]);
 
   const total = lines.length;
   const start = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN);
