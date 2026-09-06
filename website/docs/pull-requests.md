@@ -204,6 +204,46 @@ opened PR uses the full content width, starts directly beneath the compact PR
 toolbar, and keeps its three tabs centered there. Use `Left`/`Right`, `Home`,
 and `End` while the tab bar is focused.
 
+### Review tools
+
+Open **Review tools…** in the detail header. **Mark head reviewed** saves the
+currently displayed source commit on this device, independently of file viewed
+marks and review drafts. Under **Changes since review**, choose that boundary
+or **Load review commits** (GitHub) / **Load iterations** (Azure). **Compare to
+current head** shows a keyboard-navigable file list and one diff at a time.
+Arrow keys, Home and End move through files.
+
+Comparisons use the exact two commit trees, including after a rebase or force
+push. Strand labels rewritten history and fetches missing objects without
+checking out a branch. If the provider no longer retains the old commit, the
+error leaves the boundary and previous comparison intact. A changed source
+head labels the previous result until you compare again.
+
+Choose **Unresolved feedback**, then **Load all unresolved feedback**. This
+explicit read traverses GitHub thread and reply pages; errors prevent a partial
+export from being presented as complete. **Cancel read** or closing the dialog
+stops further paging. Preview and **Copy feedback** include provider links,
+source commit, thread/comment IDs, authors, full replies, file and line-side
+context, and outdated/iteration markers. File-level feedback is included;
+GitHub top-level comments have no resolution state and are outside this export.
+The clipboard text is ready to paste into an external agent.
+
+Under **Suggestions**, load feedback, choose a standard suggestion block, and
+**Preview local change**. Use **Open branch in worktree…** first: the local HEAD
+must be the exact provider source commit, and the file must have no staged or
+unstaged changes. **Apply locally** rechecks the head, comment body, range and
+previewed file content before writing. It preserves line endings and leaves the
+change unstaged for review. It does not submit a provider comment or commit.
+
+Outdated, old-side, mixed-side, column or offset-form suggestions cannot be
+applied automatically. Azure suggestions also require the current iteration;
+unknown or old iteration coordinates are refused. Errors preserve the preview
+and review drafts. Source changes require reloading feedback and a new preview.
+
+Quick Launch offers **compare reviewed head…**, **mark head reviewed…**,
+**export unresolved feedback…**, and **preview suggestions…** under Pull
+Requests. All open the same keyboard-operable dialog.
+
 ### Summary
 
 Summary shows the source → target branch, reviewers, comment and commit counts,

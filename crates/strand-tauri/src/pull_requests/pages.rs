@@ -79,7 +79,7 @@ pub struct Page {
 const INFO: &str = "totalCount pageInfo { hasNextPage endCursor }";
 const COMMENT: &str = "id body createdAt url author { login avatarUrl }";
 const REVIEW: &str =
-    "id body state submittedAt url viewerCanUpdate viewerDidAuthor author { login avatarUrl }";
+    "id body state submittedAt url commit { oid } viewerCanUpdate viewerDidAuthor author { login avatarUrl }";
 const CHECK: &str = "__typename ... on CheckRun { id databaseId name status conclusion } ... on StatusContext { id context state }";
 const COMMIT: &str =
     "commit { oid messageHeadline committedDate url author { name avatarUrl user { login } } }";
@@ -91,7 +91,7 @@ fn connection(kind: Kind, after: &str) -> String {
         Kind::Commits => ("commits", COMMIT.to_string()),
         Kind::Checks => ("contexts", CHECK.to_string()),
         // Only the root comment per thread; replies have their own connection.
-        Kind::Threads => ("reviewThreads", format!("id isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve path line startLine originalLine originalStartLine diffSide comments(first: 1) {{ {INFO} nodes {{ {COMMENT} }} }}")),
+        Kind::Threads => ("reviewThreads", format!("id isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve path line startLine originalLine originalStartLine diffSide startDiffSide comments(first: 1) {{ {INFO} nodes {{ {COMMENT} }} }}")),
     };
     let field = format!("{name}(first: 50, after: {after}) {{ {INFO} nodes {{ {fields} }} }}");
     if kind == Kind::Checks {
@@ -320,8 +320,12 @@ pub fn read(
     request: Cursor,
     request_id: &str,
 ) -> Result<Page> {
-    validate_commit(expected_head)?;
     let guard = ReadGuard::new(request_id)?;
+    read_cancellable(path, id, expected_head, request, &guard.cancelled)
+}
+
+pub fn read_cancellable(path: &str, id: u64, expected_head: &str, request: Cursor, cancelled: &AtomicBool) -> Result<Page> {
+    validate_commit(expected_head)?;
     let (_, host) = host_for_path(path)?;
     let HostRepo::GitHub { owner, repo } = host else {
         return Err("Connection pages are unavailable for this provider".into());
@@ -348,7 +352,7 @@ pub fn read(
         path,
         &query_text,
         serde_json::json!({"owner":owner,"repo":repo,"number":id,"cursor":request.cursor,"threadId":request.thread_id}),
-        Some(&guard.cancelled),
+        Some(cancelled),
     )?;
     if request.kind == Kind::Replies
         && (value

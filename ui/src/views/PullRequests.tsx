@@ -63,6 +63,7 @@ import type {
 import { useRepo } from '../stores/repo';
 import { usePullRequests } from '../stores/pullRequests';
 import { useSettings } from '../stores/settings';
+import { HostedReviewTools } from './HostedReviewTools';
 import { PullRequestCompletionControl } from './PullRequestCompletionControl';
 import { PullRequestDataLoader } from './PullRequestDataLoader';
 import { PullRequestInboxLoader } from './PullRequestInboxLoader';
@@ -724,7 +725,7 @@ function PullRequestInlineThread({
       className={`pr-inline-thread${thread.is_resolved ? ' resolved' : ''}${thread.is_outdated ? ' outdated' : ''}`}
     >
       <header>
-        <strong>{thread.side === 'deletions' ? 'Old' : 'New'} line{thread.start_line === thread.end_line ? '' : 's'} {lineLabel}</strong>
+        <strong>{thread.end_line === 0 ? 'File feedback' : `${thread.side === 'deletions' ? 'Old' : 'New'} line${thread.start_line === thread.end_line ? '' : 's'} ${lineLabel}`}</strong>
         <div className="pr-inline-thread-head-actions">
           <div className="pr-inline-thread-labels">
             {thread.is_resolved && <span>Resolved</span>}
@@ -1112,7 +1113,7 @@ function PullRequestChanges({
   }, [pr.id, selectLines]);
 
   const inlineAnnotations = useMemo<DiffLineAnnotation<InlineCommentAnnotation>[]>(() => {
-    const annotations: DiffLineAnnotation<InlineCommentAnnotation>[] = selectedThreads.map((thread) => ({
+    const annotations: DiffLineAnnotation<InlineCommentAnnotation>[] = selectedThreads.filter(thread => thread.end_line > 0).map((thread) => ({
       side: thread.side,
       lineNumber: thread.end_line,
       metadata: { kind: 'thread' as const, thread },
@@ -1638,6 +1639,23 @@ function PullRequestChanges({
                     {commentMessage.text}
                   </div>
                 )}
+                {!collapsed && selectedThreads.filter(thread => thread.end_line === 0).map(thread => (
+                          <PullRequestInlineThread key={thread.id}
+                            thread={thread}
+                            prUrl={pr.url}
+                            canWrite={openForReview}
+                            replying={replyingThreadId === thread.id}
+                            replyDraft={replyDrafts[thread.id] ?? ''}
+                            writeKind={threadWrites[thread.id]}
+                            message={threadMessages[thread.id]}
+                            platform={platform}
+                            onStartReply={() => startThreadReply(thread.id)}
+                            onCancelReply={() => cancelThreadReply(thread.id)}
+                            onReplyDraft={(value) => setThreadReplyDraft(thread.id, value)}
+                            onSubmitReply={() => { void submitThreadReply(thread); }}
+                            onSetResolved={(resolved) => { void setThreadResolved(thread, resolved); }}
+                          />
+                ))}
                 {!collapsed && (
                   <ParsedDiff<InlineCommentAnnotation>
                     fileDiff={selectedFile}
@@ -2000,6 +2018,7 @@ function PullRequestDetails({
           <h2>{pr.title}</h2>
         </div>
         <div className="pr-detail-actions">
+          <HostedReviewTools path={path} provider={provider} pr={pr} />
           <button
             type="button"
             className={`btn pr-follow${followed ? ' on' : ''}`}

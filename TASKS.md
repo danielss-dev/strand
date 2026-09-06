@@ -1894,12 +1894,17 @@ tree: watch the agent work, review fast, accept or reject safely.
     worktree…** for GitHub and Azure plus expected-head GitHub **Update branch
     from target** are shipped (`repo_pull_request_prepare_checkout`,
     `repo_pull_request_update_branch`, `PullRequestDetails.openBranchInWorktree`).
-    Reliable “since my last review” compare where the provider exposes a
-    boundary, suggestions, and unresolved-feedback export for external agents
-    remain 1.1 work.
-  - ☐ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
+    Reviewed-head comparisons, suggestions and unresolved-feedback export
+    ship in F13 below.
+  - ☑ **F13 / P2 — Hosted review evolution.** Explicit reviewed-head/iteration
     comparison, validated suggestion application and unresolved-feedback export;
-    handle rebases and force pushes without reusing stale coordinates.
+    handle rebases and force pushes without reusing stale coordinates
+    (`evolution::{boundaries,compare,feedback,preview,apply}`, `HostedReviewTools`,
+    41 hosted Rust tests / 43 frontend tests and WebView2 comparison/export/
+    suggestion/failure/cancellation/head-refresh pass; live GitHub read IPC).
+  - ☐ **F13 provider validation.** Exercise Azure Services/Server iteration
+    comparison and current-iteration suggestions with a live authenticated
+    fixture. Local coordinate/payload tests pass; hosted writes were not used.
   - ☑ 1.0 checks render provider states as green success, yellow running, red
     failure, or neutral. Azure PR policy evaluations now join readiness and
     background activity when their query succeeds; incomplete policy calls

@@ -2514,3 +2514,27 @@ provider intent and remains possible after source changes. Do not call
 auto-complete follows subsequent source pushes under server policies; its
 waiting state is not a queue position. Helper operations advance the protocol
 channel and need a corresponding signed helper release.
+
+
+## Hosted evolution uses immutable boundaries and exact local files (2026-09-06)
+
+A saved reviewed head is a commit ID scoped to the provider PR URL; never replace
+it with a branch name or a new merge base after force pushes. Compare the two
+explicit trees, retain failed/unavailable boundaries, and label an old result
+when the displayed provider head changes. GitHub review commits and Azure
+iteration source commits are provider boundaries, not proof that the viewer
+reviewed every file. The local **Mark head reviewed** is an explicit action.
+
+Suggestion application re-reads the provider discussion and head and checks the
+exact comment body, current full-line source range, local HEAD, index and file
+contents. Revalidate the complete preview before writing through the existing
+file compare-and-swap operation. Unknown/old Azure iterations, column ranges,
+mixed sides, outdated lines and offset-form fences fail closed. Empty and
+blank-line suggestions differ; keep the parsed trailing newline to preserve
+that distinction. No staging, commits, pushes or provider writes are implicit.
+
+Unresolved export is an explicit discussion traversal with cancellation, stable
+ID deduplication and source context. Include file-level threads without inventing
+line zero annotations; they render above the file diff. Keep this traversal out
+of inbox and background monitoring. A read error must not produce a supposedly
+complete export or overwrite a review draft.

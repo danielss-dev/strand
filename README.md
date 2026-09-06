@@ -172,6 +172,9 @@ the resolved app appearance automatically.
   Explicit GitHub merge queue/auto-merge and Azure auto-complete controls show
   provider capability, enable/cancel, policy state and queue position separately
   from a completed merge.
+  **Review tools** saves a reviewed head, compares exact trees across pushes or
+  rebases, exports all unresolved feedback with replies, and previews validated
+  standard suggestions before applying them to a clean local file.
   Every GitHub or Azure PR can open its exact provider head in a new worktree
   without changing local refs or `FETCH_HEAD`. Active PRs can be closed from a
   confirmed overflow action. Closed PRs can be reopened;

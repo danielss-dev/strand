@@ -28,6 +28,7 @@ use crate::azdo_helper;
 
 pub mod pages;
 pub mod completion;
+pub mod evolution;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_COMMENT_BYTES: usize = 65_536;
@@ -163,6 +164,7 @@ pub struct PullRequestReviewer {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestReview {
+    pub source_commit: Option<String>,
     pub id: String,
     pub author: String,
     pub avatar_url: Option<String>,
@@ -205,6 +207,8 @@ pub struct PullRequestComment {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PullRequestReviewThread {
+    pub suggestion_range_valid: bool,
+    pub iteration_id: Option<u32>,
     pub id: String,
     pub path: String,
     pub start_line: u32,
@@ -4017,6 +4021,7 @@ fn parse_github_reviews(value: &Value) -> Vec<PullRequestReview> {
         .filter_map(|review| {
             let state = text(review.get("state")).unwrap_or_else(|| "unknown".into());
             Some(PullRequestReview {
+                source_commit: text(review.pointer("/commit/oid")),
                 id: text(review.get("id"))?,
                 author: text(review.pointer("/author/login"))
                     .unwrap_or_else(|| "unknown".into()),
@@ -4048,16 +4053,16 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
             let end_line = thread
                 .get("line")
                 .and_then(Value::as_u64)
-                .or_else(|| thread.get("originalLine").and_then(Value::as_u64))?
+                .or_else(|| thread.get("originalLine").and_then(Value::as_u64)).unwrap_or(0)
                 as u32;
             let start_line = thread
-                .get("startLine")
+                .get(if thread.get("line").and_then(Value::as_u64).is_some() { "startLine" } else { "originalStartLine" })
                 .and_then(Value::as_u64)
-                .or_else(|| thread.get("originalStartLine").and_then(Value::as_u64))
                 .unwrap_or(u64::from(end_line)) as u32;
-            let side = match text(thread.get("diffSide"))?.as_str() {
+            let side = match text(thread.get("diffSide")).unwrap_or_default().as_str() {
                 "LEFT" => PullRequestDiffSide::Deletions,
                 "RIGHT" => PullRequestDiffSide::Additions,
+                _ if end_line == 0 => PullRequestDiffSide::Additions,
                 _ => return None,
             };
             let comments = thread
@@ -4086,6 +4091,9 @@ fn parse_github_review_threads(value: &Value) -> Vec<PullRequestReviewThread> {
                 return None;
             }
             Some(PullRequestReviewThread {
+                suggestion_range_valid: thread.get("line").and_then(Value::as_u64).is_some_and(|n| n > 0)
+                    && (thread.get("startLine").and_then(Value::as_u64).is_none() || text(thread.get("startDiffSide")).as_deref() == Some("RIGHT")),
+                iteration_id: None,
                 id: text(thread.get("id"))?,
                 path,
                 start_line,
@@ -4221,6 +4229,7 @@ fn parse_azure_pr(
             };
             let reviewer_identity = text(reviewer.get("uniqueName"));
             Some(PullRequestReview {
+                source_commit: None,
                 id: text(reviewer.get("id"))?,
                 author: text(reviewer.get("displayName")).unwrap_or_else(|| "unknown".into()),
                 avatar_url: text(reviewer.get("imageUrl")),
@@ -4421,12 +4430,9 @@ fn parse_azure_review_threads(
         })
         .filter_map(|thread| {
             let thread_id = thread.get("id").and_then(Value::as_u64)?;
-            let path = text(thread.pointer("/threadContext/filePath"))?
+            let path = text(thread.pointer("/threadContext/filePath")).unwrap_or_default()
                 .trim_start_matches('/')
                 .to_string();
-            if path.is_empty() {
-                return None;
-            }
             let right_start = thread.pointer("/threadContext/rightFileStart/line").and_then(Value::as_u64);
             let right_end = thread.pointer("/threadContext/rightFileEnd/line").and_then(Value::as_u64);
             let left_start = thread.pointer("/threadContext/leftFileStart/line").and_then(Value::as_u64);
@@ -4434,9 +4440,10 @@ fn parse_azure_review_threads(
             let (start_line, end_line, side) = if right_start.is_some() || right_end.is_some() {
                 let end = right_end.or(right_start)?;
                 (right_start.unwrap_or(end), end, PullRequestDiffSide::Additions)
-            } else {
-                let end = left_end.or(left_start)?;
+            } else if let Some(end) = left_end.or(left_start) {
                 (left_start.unwrap_or(end), end, PullRequestDiffSide::Deletions)
+            } else {
+                (0, 0, PullRequestDiffSide::Additions)
             };
             let comments = array(thread, "comments")
                 .iter()
@@ -4452,6 +4459,9 @@ fn parse_azure_review_threads(
                 .find_map(|comment| comment.get("id").and_then(Value::as_u64))?;
             let is_resolved = azure_thread_resolved(thread, false);
             Some(PullRequestReviewThread {
+                suggestion_range_valid: thread.pointer("/threadContext/rightFileStart/offset").and_then(Value::as_u64) == Some(1)
+                    && thread.pointer("/threadContext/rightFileEnd/offset").and_then(Value::as_u64) == Some(1),
+                iteration_id: thread.pointer("/pullRequestThreadContext/iterationContext/secondComparingIteration").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()),
                 id: azure_thread_id(pull_request_id, thread_id, parent_comment_id),
                 path,
                 start_line: u32::try_from(start_line).ok()?,
@@ -5150,7 +5160,9 @@ mod tests {
 
         let discussion = parse_azure_discussion(&value, "https://dev.azure.com/acme/pr/7", 7);
         assert_eq!(discussion.comments.len(), 4);
-        assert_eq!(discussion.review_threads.len(), 2);
+        assert_eq!(discussion.review_threads.len(), 3);
+        assert_eq!(discussion.review_threads[2].path, "");
+        assert_eq!(discussion.review_threads[2].end_line, 0);
         let added = &discussion.review_threads[0];
         assert_eq!(added.id, "azure:7:9:1");
         assert_eq!(added.path, "src/lib.rs");

@@ -302,6 +302,8 @@ export interface PullRequestComment {
 }
 
 export interface PullRequestReviewThread {
+  suggestion_range_valid?: boolean;
+  iteration_id?: number | null;
   id: string;
   path: string;
   start_line: number;
@@ -325,6 +327,7 @@ export interface PullRequestReviewThreadUpdate {
 }
 
 export interface PullRequestReview {
+  source_commit?: string | null;
   id: string;
   author: string;
   avatar_url: string | null;
@@ -960,4 +963,16 @@ export interface PullRequestDataPage {
   reviews: PullRequestReview[];
   review_threads: PullRequestReviewThread[];
   checks: PullRequestCheck[];
+}
+
+export interface PullRequestBoundary { head: string; label: string; iteration: number | null }
+export interface PullRequestComparison { from: string; to: string; history_rewritten: boolean; diffs: FileDiff[] }
+export interface PullRequestFeedback { source_commit: string; threads: PullRequestReviewThread[] }
+export interface PullRequestSuggestionRequest {
+  thread_id: string; comment_id: string; suggestion_index: number;
+  expected_head: string; expected_body: string;
+}
+export interface PullRequestSuggestionPreview {
+  path: string; start_line: number; end_line: number;
+  before: string; after: string; expected_file: string;
 }

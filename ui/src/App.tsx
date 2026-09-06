@@ -1741,7 +1741,12 @@ export function App() {
             keywords: 'pr inbox find filter authored completed',
             run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-search')),
           } satisfies PaletteAction,
-          ...(activePullRequestKey ? [{
+          ...(activePullRequestKey ? [
+          { id: 'pull-request-review-tools-compare', label: 'Pull Requests: compare reviewed head…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'compare' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-mark', label: 'Pull Requests: mark head reviewed…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'mark' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-feedback', label: 'Pull Requests: export unresolved feedback…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'feedback' })) } satisfies PaletteAction,
+          { id: 'pull-request-review-tools-suggestions', label: 'Pull Requests: preview suggestions…', group: 'Actions', keywords: 'pr review evolution iteration boundary feedback suggestions local', run: () => window.dispatchEvent(new CustomEvent('strand:pull-request-review-tools', { detail: 'suggestions' })) } satisfies PaletteAction,
+          {
             id: 'pull-request-completion',
             label: 'Pull Requests: merge queue or auto-complete…',
             group: 'Actions',
