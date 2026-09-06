@@ -330,7 +330,7 @@ function DirectoryTab({
   }, [repoPath, revision]);
 
   const source = revision ? revisionTree : workTree;
-  const entries = useMemo(() => directoryEntries(source ?? [], path), [source, path]);
+  const entries = useMemo(() => directoryEntries((source ?? []).filter((entry) => !entry.excluded), path), [source, path]);
   const folderCount = entries.filter((entry) => entry.kind === 'directory').length;
   const fileCount = entries.length - folderCount;
 

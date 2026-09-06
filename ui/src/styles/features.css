@@ -3447,6 +3447,19 @@ button {
 }
 
 /* ─── Clone dialog ─── */
+.clone-options-dialog { max-height: calc(100vh - 100px); }
+.clone-options-dialog > .clone-body { overflow: auto; min-height: 0; overflow-wrap: anywhere; }
+.clone-options-dialog > .clone-body > * { flex-shrink: 0; }
+.clone-options-dialog > .clone-head, .clone-options-dialog > .clone-foot { flex-shrink: 0; }
+.clone-advanced { display: flex; flex-direction: column; }
+.clone-advanced > summary { cursor: pointer; font-weight: 600; }
+.clone-advanced > :not(summary) { margin-top: 12px; }
+.clone-scope-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sparse-directory-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; }
+.sparse-directory-list label { display: flex; align-items: center; gap: 8px; }
+.sparse-directory-list label span { flex: 1; overflow-wrap: anywhere; }
+.sparse-directory-list small { color: var(--text-muted); }
+.sparse-patterns { white-space: pre-wrap; overflow-wrap: anywhere; }
 .clone-dialog {
   width: 520px;
   max-width: calc(100vw - 64px);
@@ -4316,6 +4329,11 @@ textarea.clone-input {
 .maintenance-body {
   min-height: 0;
   overflow-y: auto;
+}
+.submodule-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .maintenance-actions {
   display: grid;
@@ -9542,3 +9560,15 @@ select.clone-input {
   .plugin-heroi-select-thinking,
   .plugin-heroi-select-permission { display: none; }
 }
+
+/* Git hook transcripts stay selectable and bounded in the commit form. */
+.cb-output, .cb-error { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cb-output { font-size: var(--type-ui-sm); color: var(--text-2); }
+.cb-output pre { white-space: pre-wrap; margin: 6px 0; }
+
+.signing-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: var(--type-ui-sm); color: var(--text-2); }
+.signing-choice label { display: flex; align-items: center; gap: 6px; }
+.signing-choice select { width: auto; padding: 3px 6px; font-size: inherit; }
+.settings-field .settings-hint { overflow-wrap: anywhere; }
+
+.tag-verification-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: var(--type-ui-sm); }

@@ -13,7 +13,7 @@
 //! callback to an IPC `Channel` so the UI can show a live progress bar; the
 //! core stays UI-agnostic.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -43,14 +43,37 @@ impl CancelHandle {
     pub fn cancel(&self) {
         let mut inner = self.0.lock().expect("cancel handle lock");
         inner.cancelled = true;
-        if let Some(child) = inner.child.as_mut() {
-            let _ = child.kill();
+        if inner.child.is_some() {
+            let handle = self.clone();
+            // Recursive clones have child Git/SSH processes holding the pipes.
+            // Kill their tree off the IPC thread so cancellation stays immediate.
+            std::thread::spawn(move || {
+                let mut inner = handle.0.lock().expect("cancel handle lock");
+                if let Some(child) = inner.child.as_mut() { kill_git_tree(child); }
+            });
         }
     }
 
     pub fn is_cancelled(&self) -> bool {
         self.0.lock().expect("cancel handle lock").cancelled
     }
+}
+
+// Git LFS and submodule helpers inherit the pipes. Killing only git can leave
+// those helpers transferring (and the reader waiting for EOF) after Cancel.
+fn kill_git_tree(child: &mut std::process::Child) {
+    if matches!(child.try_wait(), Ok(Some(_))) { return; }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let system = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+        let _ = std::process::Command::new(Path::new(&system).join("System32/taskkill.exe"))
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .creation_flags(0x0800_0000).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    #[cfg(unix)]
+    unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+    let _ = child.kill();
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +98,42 @@ pub struct CloneOutcome {
     pub path: String,
     /// Combined git output, trimmed.
     pub output: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloneFilter {
+    BlobNone,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CloneOptions {
+    pub branch: Option<String>,
+    pub depth: Option<u32>,
+    pub single_branch: bool,
+    pub filter: Option<CloneFilter>,
+    pub recurse_submodules: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneScope {
+    pub shallow: bool,
+    pub remotes: Vec<CloneRemote>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneRemote {
+    pub name: String,
+    pub filter: Option<String>,
+    pub fetch_refspecs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum HistoryExpansion {
+    Deepen { commits: u32 },
+    Unshallow,
 }
 
 /// One progress update parsed from `git`'s stderr while a network op runs.
@@ -116,6 +175,42 @@ pub enum PushMode {
 }
 
 impl Repo {
+    /// On-demand inspection, including repositories cloned outside Strand.
+    pub fn clone_scope(&self) -> Result<CloneScope> {
+        let repo = self.git2()?;
+        let config = repo.config()?;
+        let mut remotes = Vec::new();
+        for name in repo.remotes()?.iter().flatten() {
+            let remote = repo.find_remote(name)?;
+            remotes.push(CloneRemote {
+                name: name.to_owned(),
+                filter: config.get_string(&format!("remote.{name}.partialclonefilter")).ok(),
+                fetch_refspecs: remote.fetch_refspecs()?.iter().flatten().map(str::to_owned).collect(),
+            });
+        }
+        Ok(CloneScope { shallow: repo.is_shallow(), remotes })
+    }
+
+    /// Fetch more ancestry without changing HEAD, the index or local edits.
+    pub fn expand_history(
+        &self,
+        remote: &str,
+        expansion: HistoryExpansion,
+        on_progress: impl FnMut(Progress),
+        cancel: Option<&CancelHandle>,
+    ) -> Result<NetworkOutcome> {
+        self.ensure_remote(remote)?;
+        if !self.git2()?.is_shallow() {
+            return Err(Error::Other("This repository already has complete history.".into()));
+        }
+        let option = match expansion {
+            HistoryExpansion::Deepen { commits: 0 } => return Err(Error::Other("Depth must be greater than zero.".into())),
+            HistoryExpansion::Deepen { commits } => format!("--deepen={commits}"),
+            HistoryExpansion::Unshallow => "--unshallow".into(),
+        };
+        run_git_streaming(&self.path, &["fetch", "--progress", &option, "--", remote], on_progress, cancel)
+    }
+
     /// Fetch provider-reported branch tips for a read-only comparison without
     /// updating FETCH_HEAD or any local/remote-tracking ref. Hosted PR views
     /// use this when a provider exposes commit IDs but not a unified patch.
@@ -502,6 +597,16 @@ pub fn clone(
     on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<CloneOutcome> {
+    clone_with_options(url, dest, &CloneOptions::default(), on_progress, cancel)
+}
+
+pub fn clone_with_options(
+    url: &str,
+    dest: &str,
+    options: &CloneOptions,
+    on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<CloneOutcome> {
     // The URL is pasted by the user. Make sure git can't read it as an option
     // (`--upload-pack=…`, `-c …`) or as a command-executing transport
     // (`ext::`, `fd::`). The `--` end-of-options separator below is the belt
@@ -513,7 +618,8 @@ pub fn clone(
     // Run from the destination's parent so a relative `dest` still lands in
     // the right place; an absolute `dest` ignores the cwd anyway.
     let cwd = dest_path.parent().filter(|p| !p.as_os_str().is_empty());
-    let args = ["clone", "--progress", "--", url, dest];
+    let owned_args = clone_args(url, dest, options)?;
+    let args = owned_args.iter().map(String::as_str).collect::<Vec<_>>();
     let outcome = match cwd {
         Some(parent) => run_git_streaming(parent, &args, on_progress, cancel),
         None => run_git_streaming(Path::new("."), &args, on_progress, cancel),
@@ -522,6 +628,31 @@ pub fn clone(
         path: dest.to_string(),
         output: outcome.output,
     })
+}
+
+fn clone_args(url: &str, dest: &str, options: &CloneOptions) -> Result<Vec<String>> {
+    validate_remote_arg(url, "clone URL")?;
+    let mut args = vec!["clone".into(), "--progress".into()];
+    if let Some(branch) = &options.branch {
+        validate_branch_ref(branch, "clone branch")?;
+        args.push(format!("--branch={branch}"));
+    }
+    if let Some(depth) = options.depth {
+        if depth == 0 {
+            return Err(Error::Other("Depth must be greater than zero.".into()));
+        }
+        args.push(format!("--depth={depth}"));
+    }
+    // Git implies single-branch for --depth. Make the independent UI choice explicit.
+    args.push(if options.single_branch { "--single-branch" } else { "--no-single-branch" }.into());
+    if let Some(CloneFilter::BlobNone) = options.filter {
+        args.push("--filter=blob:none".into());
+    }
+    if options.recurse_submodules {
+        args.push("--recurse-submodules".into());
+    }
+    args.extend(["--".into(), url.into(), dest.into()]);
+    Ok(args)
 }
 
 /// Reject a user-supplied remote/URL that git would mis-read as an option or
@@ -590,16 +721,33 @@ pub(crate) fn run_git_streaming(
 pub(crate) fn run_git_streaming_transcript(
     cwd: &Path,
     args: &[&str],
+    on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<GitRunTranscript> {
+    run_git_input_transcript(cwd, args, None, on_progress, cancel)
+}
+
+pub(crate) fn run_git_input_transcript(
+    cwd: &Path,
+    args: &[&str],
+    input: Option<Vec<u8>>,
     mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<GitRunTranscript> {
-    let mut child = crate::git_command()
-        .current_dir(cwd)
+    if cancel.is_some_and(CancelHandle::is_cancelled) { return Err(Error::Cancelled); }
+    let mut command = crate::git_command();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command.current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Neutralize repo-local config that would run code as a side effect.
         .args(crate::GIT_SAFE_CONFIG)
         // Force progress reporting even though stderr isn't a TTY.
         .args(args)
+        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -607,10 +755,17 @@ pub(crate) fn run_git_streaming_transcript(
 
     // Drain stdout on a separate thread so a large stdout can't deadlock us
     // while we're blocked reading stderr (and vice-versa).
+    let input_handle = input.zip(child.stdin.take()).map(|(input, mut stdin)| {
+        std::thread::spawn(move || stdin.write_all(&input))
+    });
     let stdout_handle = child.stdout.take().map(|mut out| {
         std::thread::spawn(move || {
             let mut s = String::new();
-            let _ = out.read_to_string(&mut s);
+            let mut buffer = [0u8; 8192];
+            while let Ok(n) = out.read(&mut buffer) {
+                if n == 0 { break; }
+                append_output(&mut s, &String::from_utf8_lossy(&buffer[..n]));
+            }
             s
         })
     });
@@ -623,7 +778,7 @@ pub(crate) fn run_git_streaming_transcript(
     {
         let mut inner = handle.0.lock().expect("cancel handle lock");
         if inner.cancelled {
-            let _ = child.kill();
+            kill_git_tree(&mut child);
             let _ = child.wait();
             return Err(Error::Cancelled);
         }
@@ -631,21 +786,24 @@ pub(crate) fn run_git_streaming_transcript(
     }
 
     let mut collected = String::new();
+    let mut last_progress = std::time::Instant::now() - std::time::Duration::from_secs(1);
     if let Some(stderr) = stderr {
         // `git` delimits progress updates with '\r' and ends phases with
         // '\n', so we split on either. BufRead::lines would coalesce all the
         // '\r' updates into one line — we want each fragment.
         for_each_fragment(stderr, |frag| {
-            collected.push_str(frag);
-            collected.push('\n');
+            append_output(&mut collected, frag);
+            append_output(&mut collected, "\n");
             let p = parse_progress(frag);
-            if !p.raw.is_empty() {
+            if !p.raw.is_empty() && (p.percent == Some(100) || last_progress.elapsed().as_millis() >= 100) {
                 on_progress(p);
+                last_progress = std::time::Instant::now();
             }
         });
     }
 
     let stdout_str = stdout_handle.and_then(|h| h.join().ok()).unwrap_or_default();
+    if let Some(writer) = input_handle { let _ = writer.join(); }
     // Stderr hit EOF, so the process is done (or killed) — take the child
     // back out and reap it. After this point a late `cancel()` is a no-op.
     let status = {
@@ -665,6 +823,43 @@ pub(crate) fn run_git_streaming_transcript(
         output: combined,
         success: status.success(),
     })
+}
+
+/// Retain a bounded tail, including an explicit marker when output is partial.
+fn append_output(output: &mut String, text: &str) {
+    const LIMIT: usize = 65_536;
+    const MARKER: &str = "[Earlier output omitted; showing bounded tail]\n";
+    output.push_str(text);
+    if output.len() > LIMIT {
+        let mut start = output.len() - (LIMIT - MARKER.len());
+        while !output.is_char_boundary(start) { start += 1; }
+        output.drain(..start);
+        output.insert_str(0, MARKER);
+    }
+}
+
+#[cfg(test)]
+mod bounded_process_tests {
+    use super::*;
+
+    #[test]
+    fn output_tail_stays_bounded_and_marks_partial_unicode_output() {
+        let mut output = String::new();
+        for _ in 0..100 { append_output(&mut output, &"é".repeat(8192)); }
+        assert!(output.len() <= 65_536);
+        assert!(output.starts_with("[Earlier output omitted"));
+    }
+
+    #[test]
+    fn cancellation_kills_helpers_holding_progress_pipes() {
+        let cancel = CancelHandle::new();
+        let mut cancelled_at = None;
+        let result = run_git_streaming(std::env::temp_dir().as_path(),
+            &["-c", "alias.strand-cancel-test=!echo strand-ready >&2; sleep 60", "strand-cancel-test"],
+            |p| { if p.raw.contains("strand-ready") { cancelled_at = Some(std::time::Instant::now()); cancel.cancel(); } }, Some(&cancel));
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(cancelled_at.unwrap().elapsed().as_secs() < 15, "descendants kept pipes open after cancellation");
+    }
 }
 
 /// Pull the meaningful failure out of a git transcript. git streams progress to
@@ -708,6 +903,10 @@ fn for_each_fragment(reader: impl Read, mut sink: impl FnMut(&str)) {
                     }
                 } else {
                     buf.push(b);
+                    if buf.len() == 8192 {
+                        sink(&String::from_utf8_lossy(&buf));
+                        buf.clear();
+                    }
                 }
             }
             Err(_) => break,

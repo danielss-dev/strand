@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
+import { Select } from '../components/Select';
 import { Icon } from '../components/Icon';
 import { startCloneDialogFocusLifecycle } from '../lib/cloneDialogFocus';
 import { pickDirectory } from '../lib/dialog';
 import { t } from '../lib/i18n';
 import { useSettings } from '../stores/settings';
+import type { CloneOptions } from '../lib/types';
+import { positiveDepth } from '../lib/cloneOptions';
 
 /**
  * Modal for configuring a clone. The user pastes a URL and picks a destination;
@@ -18,13 +21,18 @@ export function CloneDialog({
   onStartClone,
 }: {
   onClose: () => void;
-  onStartClone: (url: string, dest: string) => void;
+  onStartClone: (url: string, dest: string, options: CloneOptions) => void;
 }) {
   const [url, setUrl] = useState('');
   // Seed the destination with the configured default folder (Settings → Git).
   const [parent, setParent] = useState(() => useSettings.getState().defaultCloneDir ?? '');
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
+  const [branch, setBranch] = useState('');
+  const [depth, setDepth] = useState('');
+  const [singleBranch, setSingleBranch] = useState(false);
+  const [filter, setFilter] = useState<CloneOptions['filter']>(null);
+  const [recursive, setRecursive] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   if (openerRef.current === null && document.activeElement instanceof HTMLElement) {
@@ -57,7 +65,7 @@ export function CloneDialog({
     () => (parent && nameValid ? joinPath(parent, trimmedName) : ''),
     [parent, nameValid, trimmedName],
   );
-  const canClone = Boolean(url.trim() && dest);
+  const canClone = Boolean(url.trim() && dest && (!depth || positiveDepth(depth) !== null));
 
   async function chooseParent() {
     const dir = await pickDirectory(t('clone.pickerTitle'), parent || undefined);
@@ -66,13 +74,14 @@ export function CloneDialog({
 
   function start() {
     if (!canClone) return;
-    onStartClone(url.trim(), dest);
+    onStartClone(url.trim(), dest, { branch: branch.trim() || null, depth: positiveDepth(depth), single_branch: singleBranch, filter, recurse_submodules: recursive });
     onClose();
   }
 
   return (
     <Dialog
       title={t('clone.title')}
+      className="clone-options-dialog"
       icon="remote"
       blockEscapeWhileBusy={false}
       initialFocusRef={urlRef}
@@ -136,6 +145,27 @@ export function CloneDialog({
               }}
             />
           </label>
+
+          <details className="clone-advanced">
+            <summary>Clone options</summary>
+            <label className="clone-field"><span className="lbl">Branch (blank uses remote default)</span>
+              <input className="clone-input" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+            </label>
+            <label className="clone-field"><span className="lbl">History depth (blank keeps all history)</span>
+              <input className="clone-input" type="number" min="1" max="4294967295" step="1" value={depth} onChange={(e) => setDepth(e.target.value)} placeholder="All commits" />
+            </label>
+            {depth && positiveDepth(depth) === null && <p className="clone-error" role="alert">Enter a positive whole number up to 4294967295.</p>}
+            <label><input type="checkbox" checked={singleBranch} onChange={(e) => setSingleBranch(e.target.checked)} /> Fetch only the selected branch</label>
+            <p className="stash-blurb">Shallow history uses less bandwidth and disk. Older history, blame and merge bases may be unavailable until you deepen or download full history. A single-branch clone only fetches that branch on future fetches.</p>
+            <label className="clone-field"><span className="lbl">Objects to download</span>
+              <Select className="clone-input" value={filter ?? ''} onChange={(e) => setFilter(e.target.value ? 'blob-none' : null)}>
+                <option value="">All objects</option><option value="blob-none">File contents on demand (blob:none)</option>
+              </Select>
+            </label>
+            <p className="stash-blurb">On-demand contents require server support. Checkout still downloads current files; reading older contents may need a network connection. A server that ignores filtering can send all objects.</p>
+            <label><input type="checkbox" checked={recursive} onChange={(e) => setRecursive(e.target.checked)} /> Initialize submodules recursively</label>
+            <p className="stash-blurb">Submodules clone their own repositories and may require additional downloads and credentials. Depth and filter choices above apply to the parent repository.</p>
+          </details>
 
           {trimmedName && !nameValid ? (
             <div className="clone-error">{t('clone.invalidFolder')}</div>

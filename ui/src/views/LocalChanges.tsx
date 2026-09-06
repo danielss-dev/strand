@@ -1,3 +1,5 @@
+import { SigningChoice } from '../components/SigningChoice';
+import { emptyCommitDraft, useCommitDrafts } from '../stores/commitDrafts';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
@@ -1667,12 +1669,15 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
   const openaiCli = useSettings((s) => s.openaiCli);
   const anthropicCli = useSettings((s) => s.anthropicCli);
   const platform = useSettings((s) => s.platform);
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [amend, setAmend] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const draftPath = activePath ?? '';
+  const draft = useCommitDrafts((s) => s.drafts[draftPath] ?? emptyCommitDraft);
+  const patchDraft = useCommitDrafts((s) => s.patch);
+  const { subject, body, amend, signing, submitting, output, error: commitError } = draft;
+  const setSubject = (subject: string) => patchDraft(draftPath, { subject });
+  const setBody = (body: string) => patchDraft(draftPath, { body });
+  const setAmend = (amend: boolean) => patchDraft(draftPath, { amend });
+  const setCommitError = (error: string | null) => patchDraft(draftPath, { error });
   const [suggesting, setSuggesting] = useState(false);
-  const [commitError, setCommitError] = useState<string | null>(null);
   const [sensitivePrompt, setSensitivePrompt] = useState<{
     fingerprint: string;
     files: AiSensitiveFile[];
@@ -1787,20 +1792,17 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
 
   async function submit() {
     const trimmed = subject.trim();
-    if (!trimmed || submitting) return;
+    if (!trimmed || useCommitDrafts.getState().drafts[draftPath]?.submitting) return;
     if (!canCommit && !amend) return;
-    setSubmitting(true);
-    setCommitError(null);
+    patchDraft(draftPath, { submitting: true, error: null, output: '' });
     try {
-      await commit(trimmed, body.trim() || null, amend);
-      setSubject('');
-      setBody('');
-      setAmend(false);
+      const result = await commit(trimmed, body.trim() || null, amend, signing);
+      patchDraft(draftPath, { subject: '', body: '', amend: false, signing: 'inherit', output: result.output });
     } catch (e) {
       console.error('commit failed', e);
       setCommitError(`Commit failed: ${gitErrorHint(e)}`);
     } finally {
-      setSubmitting(false);
+      patchDraft(draftPath, { submitting: false });
     }
   }
 
@@ -1829,6 +1831,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
             className="subject"
             placeholder="Commit subject"
             value={subject}
+            disabled={submitting}
             onChange={(e) => setSubject(e.target.value)}
             onKeyDown={submitOnShortcut}
           />
@@ -1857,6 +1860,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
           <input
             type="checkbox"
             checked={amend}
+            disabled={submitting}
             onChange={(e) => setAmend(e.target.checked)}
           />{' '}
           <span>Amend</span>
@@ -1886,6 +1890,7 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
         className="cb-body"
         placeholder="Description (optional)"
         value={body}
+        disabled={submitting}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={submitOnShortcut}
       />
@@ -1904,6 +1909,9 @@ function CommitBar({ canCommit, hasChanges }: { canCommit: boolean; hasChanges: 
           </div>
         </div>
       )}
+      {activePath && <SigningChoice key={activePath} path={activePath} kind="commit" value={signing}
+        disabled={submitting} onChange={(signing) => patchDraft(draftPath, { signing })} />}
+      {output && <details className="cb-output"><summary>Commit output</summary><pre>{output}</pre></details>}
       {commitError && (
         <div className="cb-error" role="alert">
           {commitError}

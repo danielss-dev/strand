@@ -85,6 +85,12 @@ integrity check, incremental Git maintenance, or guarded garbage collection.
 Use `Tab` to move between actions and activity entries, `Enter` to run or
 expand one, and `Escape` to close when no operation is running.
 
+Search **Git LFS:** or **Submodules:** for each management action. These dialogs
+focus the action selector; use arrow keys to choose, `Tab` to reach fields and
+buttons, and `Enter` to run or confirm. While work runs, **Cancel operation**
+stops it; `Escape` closes the dialog once it finishes. Submodule navigation,
+pages and **Open repository** are also in the dialog's tab order.
+
 **New file…** and **New folder…** open a focus-trapped path dialog for the
 active repository. The Files sidebar exposes the same actions from its **+**
 menu; use the arrow keys and Enter to choose one, or Escape to close it. Focus a
@@ -272,3 +278,10 @@ the commit graph when pressed again.
 See [Worktrees](worktrees.md).
 
 On macOS, shortcut chips render as tight glyphs (`⌘⇧P`); on Windows and Linux they render as words (`Ctrl+Shift+P`). Either way the bindings are identical modulo `Mod`.
+
+**Clone repository…**, **Repository history and downloads…**, and **Sparse
+checkout…** are searchable palette actions. Within these dialogs, Tab moves
+between fields and buttons, Space toggles a checkbox or expands Clone options,
+and Enter activates a focused button. Sparse-directory search bounds the visible
+list to 100 matches. Escape closes an idle dialog; a running download exposes
+**Cancel download** instead.

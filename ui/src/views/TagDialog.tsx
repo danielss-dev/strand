@@ -1,3 +1,5 @@
+import { SigningChoice } from '../components/SigningChoice';
+import type { SigningMode } from '../lib/types';
 import { useEffect, useRef, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
@@ -24,6 +26,8 @@ export function TagDialog({
   targetLabel: string;
   onClose: () => void;
 }) {
+  const activePath = useRepo((s) => s.activePath);
+  const [signing, setSigning] = useState<SigningMode>('inherit');
   const createTag = useRepo((s) => s.createTag);
 
   const [name, setName] = useState('');
@@ -43,7 +47,7 @@ export function TagDialog({
     setBusy(true);
     setError(null);
     try {
-      await createTag(tagName, target, message.trim() || null);
+      await createTag(tagName, target, message.trim() || null, signing);
       onClose();
     } catch (e) {
       if (mountedRef.current) setError(errMessage(e));
@@ -74,7 +78,7 @@ export function TagDialog({
     >
       <div className="clone-body">
         <p className="stash-blurb">
-          Tag <code>{targetLabel}</code>. Leave the message empty for a lightweight tag.
+          Tag <code>{targetLabel}</code>. Signed tags require an annotation. Leave the message empty for an unsigned lightweight tag.
         </p>
 
         <label className="clone-field">
@@ -104,8 +108,10 @@ export function TagDialog({
           />
         </label>
 
+        {activePath && <SigningChoice path={activePath} kind="tag" settingsLink={false} annotated={annotated} value={signing}
+          disabled={busy} onChange={setSigning} />}
         <div className="stash-note">
-          {annotated ? 'Creates an annotated tag.' : 'Creates a lightweight tag.'}
+          {annotated ? 'Creates an annotated tag with the selected signing policy.' : 'A message is required if the selected policy signs this tag.'}
         </div>
 
         {error ? <div className="clone-error">{error}</div> : null}
