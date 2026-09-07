@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
 import { Diff } from '../components/Diff';
+import { DiffLayoutToggle, toPierreLayout } from '../components/DiffChrome';
 import { ImageDiff } from '../components/ImageDiff';
 import { Select } from '../components/Select';
 import { isImagePath } from '../lib/image';
@@ -37,7 +38,7 @@ export function CompareRefsDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const diffMode = useSettings((state) => state.diffMode);
-  const layout = diffMode === 'split' ? 'split' : 'unified';
+  const layout = toPierreLayout(diffMode);
 
   const uniqueChoices = useMemo(() => {
     const seen = new Set<string>();
@@ -80,6 +81,7 @@ export function CompareRefsDialog({
     <Dialog
       title={title}
       icon="compare"
+      size="wide"
       className="compare-refs-dialog"
       onClose={onClose}
     >
@@ -107,8 +109,13 @@ export function CompareRefsDialog({
         </label>
       </div>
       <div className="compare-refs-message">
-        <div className="compare-refs-summary">
-          {loading ? 'Diffing…' : `${diffs.length} files · +${adds} −${dels}`}
+        <div className="compare-refs-toolbar">
+          <div className="compare-refs-summary">
+            {loading ? 'Diffing…' : `${diffs.length} files · +${adds} −${dels}`}
+          </div>
+          <div className="compare-refs-layout" role="group" aria-label="Diff layout">
+            <DiffLayoutToggle />
+          </div>
         </div>
         {error ? <div className="clone-error compare-refs-error">{error}</div> : null}
       </div>

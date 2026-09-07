@@ -3184,18 +3184,34 @@ button {
 
 /* ─── Commit / branch comparison ───────────────────────────────────────── */
 .compare-refs-dialog {
-  width: min(1120px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 48px));
+  width: calc(100vw - 24px);
+  height: calc(100vh - 24px);
+  max-width: none;
+  align-self: center;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
+.compare-refs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 12px 0;
+  min-height: 28px;
+}
 .compare-refs-summary {
-  margin-left: auto;
+  margin-left: 0;
+  margin-right: auto;
   color: var(--text-dim);
   font-size: 11px;
 }
+.compare-refs-layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 .compare-refs-message .compare-refs-summary {
-  margin: 6px 12px 0;
+  margin: 0;
 }
 .compare-refs-dialog .cd-close {
   margin-left: 4px;
