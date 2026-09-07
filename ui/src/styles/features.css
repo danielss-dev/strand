@@ -3184,18 +3184,31 @@ button {
 
 /* ─── Commit / branch comparison ───────────────────────────────────────── */
 .compare-refs-dialog {
-  width: min(1120px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 48px));
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
+  align-self: center;
+}
+.compare-refs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 12px 0;
+  min-height: 28px;
 }
 .compare-refs-summary {
-  margin-left: auto;
+  margin-left: 0;
+  margin-right: auto;
   color: var(--text-dim);
   font-size: 11px;
 }
+.compare-refs-layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 .compare-refs-message .compare-refs-summary {
-  margin: 6px 12px 0;
+  margin: 0;
 }
 .compare-refs-dialog .cd-close {
   margin-left: 4px;
@@ -3245,6 +3258,12 @@ button {
   overflow: auto;
   border-right: 0.5px solid var(--border);
   padding: 4px;
+}
+.compare-refs-dialog .compare-refs-files {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 .compare-refs-file {
   width: 100%;
@@ -3481,6 +3500,12 @@ button {
   height: min(680px, 88vh);
 }
 .dialog-wide { width: min(1120px, 96vw); }
+.clone-dialog.compare-refs-dialog {
+  width: calc(100vw - 24px);
+  max-width: none;
+  height: calc(100vh - 24px);
+  align-self: center;
+}
 .clone-head {
   display: flex;
   align-items: center;

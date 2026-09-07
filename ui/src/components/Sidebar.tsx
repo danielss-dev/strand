@@ -9,6 +9,7 @@ import { t } from '../lib/i18n';
 import { formatBinding } from '../lib/keys';
 import { customPanes } from '../lib/customView';
 import { pathKey, worktreeName } from '../lib/repoIdentity';
+import { compareBranchDefaults } from '../lib/compareBranchDefaults';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { errMessage, tauri } from '../lib/tauri';
 import { defaultRemote, useRepo } from '../stores/repo';
@@ -255,6 +256,21 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     [refs],
   );
   const [refCompare, setRefCompare] = useState<{ from: string; to: string } | null>(null);
+  const branchCompareDefaults = useMemo(() => compareBranchDefaults({
+    localNames: refs.branches.map((branch) => branch.name),
+    remoteNames: refs.remote_branches.map((branch) => branch.name),
+    currentBranch,
+    upstream: refs.branches.find((branch) => branch.is_head)?.upstream?.name ?? null,
+  }), [refs, currentBranch]);
+  useEffect(() => {
+    const open = () => {
+      if (!meta) return;
+      if (branchCompareDefaults) setRefCompare(branchCompareDefaults);
+      else onToast('At least two branches are needed to compare branches');
+    };
+    window.addEventListener('strand:compare-branches', open);
+    return () => window.removeEventListener('strand:compare-branches', open);
+  }, [meta, branchCompareDefaults, onToast]);
   // Branches that are HEAD of another worktree — checkout here is guaranteed
   // to fail, so their rows badge the fact and open that worktree instead.
   const worktreeByBranch = useMemo(
@@ -498,11 +514,8 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
   };
 
   const compareAgainst = (target: string) => {
-    if (!currentBranch) {
-      onToast('Check out a local branch before comparing refs', 'error');
-      return;
-    }
-    setRefCompare({ from: target, to: currentBranch });
+    const to = currentBranch ?? compareChoices.find((choice) => choice.value !== target)?.value ?? target;
+    setRefCompare({ from: target, to });
   };
 
   const branchMenu = (b: Branch): MenuItem[] => {
@@ -565,11 +578,8 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
         {
           label: 'Compare branch…',
           icon: 'compare',
-          disabled: compareChoices.length < 2,
-          onSelect: () => {
-            const other = compareChoices.find((choice) => choice.value !== b.name);
-            if (other) setRefCompare({ from: other.value, to: b.name });
-          },
+          disabled: !branchCompareDefaults,
+          onSelect: () => setRefCompare(branchCompareDefaults),
         },
         { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
         { label: 'Copy full ref', icon: 'file', onSelect: () => { void copyToClipboard(b.full_name); onToast('Branch ref copied'); } },
@@ -589,8 +599,8 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       newWorktreeItem,
       renameItem,
     ];
+    items.push({ label: currentBranch ? `Compare ${currentBranch} with this…` : 'Compare branch…', icon: 'compare', onSelect: () => compareAgainst(b.name) });
     if (currentBranch) {
-      items.push({ label: `Compare ${currentBranch} with this…`, icon: 'compare', onSelect: () => compareAgainst(b.name) });
       items.push({ label: `Review ${currentBranch} vs this`, icon: 'eye', onSelect: () => reviewAgainst(b.name) });
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
       items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
@@ -609,12 +619,12 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     const local = localByUpstream.get(rb.name);
     const items: MenuItem[] = [userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: rb.full_name, oid: rb.target } })];
     items.push({ label: 'Fetch this branch', icon: 'arrow-down', onSelect: () => onFetchBranch(rb) });
+    items.push({
+      label: currentBranch ? `Compare ${currentBranch} with this…` : 'Compare branch…',
+      icon: 'compare',
+      onSelect: () => compareAgainst(rb.name),
+    });
     if (currentBranch) {
-      items.push({
-        label: `Compare ${currentBranch} with this…`,
-        icon: 'compare',
-        onSelect: () => compareAgainst(rb.name),
-      });
       items.push({
         label: `Pull into ${currentBranch}`,
         icon: 'arrow-down',
@@ -757,9 +767,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
     ];
-    if (currentBranch) {
-      items.push({ label: `Compare ${currentBranch} with this tag…`, icon: 'compare', onSelect: () => compareAgainst(tg.full_name) });
-    }
+    items.push({ label: currentBranch ? `Compare ${currentBranch} with this tag…` : 'Compare tag…', icon: 'compare', onSelect: () => compareAgainst(tg.full_name) });
     if (tagRemote) {
       items.push({ label: `Push to ${tagRemote}`, icon: 'arrow-up', onSelect: () => runTagPush(tg.name) });
       // Gray out remote-delete when we know the remote doesn't have this tag.
@@ -1120,6 +1128,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
               const rect = event.currentTarget.getBoundingClientRect();
               openMenu(rect.left, rect.bottom, [
                 { label: 'New branch…', icon: 'plus', onSelect: () => onCreateBranch(null, 'HEAD') },
+                { label: 'Compare branches…', icon: 'compare', disabled: !branchCompareDefaults, onSelect: () => setRefCompare(branchCompareDefaults) },
                 { label: 'Git-flow…', onSelect: () => openRepositoryTool({ path: meta.path, tool: 'gitflow' }) },
               ]);
             } }}

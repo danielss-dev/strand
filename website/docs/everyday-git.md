@@ -259,10 +259,17 @@ objects.
 - **Merge** ("Merge into <current>" on a branch) opens a dialog with three modes: fast-forward when possible, always create a merge commit (no-FF), or squash — a squash merge leaves the result staged so you write the commit yourself.
 - A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu, behind a confirm step.
 
+Open **Compare branches…** from the command palette (⌘K / Ctrl+K) or the
+**Branches → Branch actions** menu to compare any two local or remote branches.
+It starts with the current branch in **To** and its upstream in **From**, falling
+back to `main`, then `master`, then the first other branch. With detached HEAD,
+it uses the first available pair. Neither branch needs to be checked out.
+
 Local branches, remote branches, and tags also offer **Compare … with this…**
 in their sidebar menus. The comparison dialog lets you swap or change either
-ref, navigate the changed-file list with the arrow keys, and inspect text and
-image diffs without checking anything out.
+ref, navigate the full file tree from both revisions with the arrow keys, and
+inspect text and image diffs without checking anything out. Changed files have
+status badges; selecting an unchanged file shows that it is identical.
 
 If any of these operations hit conflicts, they pause rather than fail — see [Paused operations and conflicts](#paused-operations-and-conflicts) below.
 

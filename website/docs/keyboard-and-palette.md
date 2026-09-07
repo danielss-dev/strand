@@ -249,7 +249,7 @@ ordered full SHAs, subjects, and complete messages. A single commit's menu and
 detail panel expose subject/body copy and native-dialog patch export.
 
 In commit/ref comparison dialogs, `↑` / `↓`, `Home`, and `End` navigate
-the changed-file list; `Escape` closes the dialog. Merge cherry-pick/revert
+the full file tree; `←` / `→` collapse or expand folders, and `Escape` closes the dialog. Merge cherry-pick/revert
 dialogs use the native radio-group arrow keys to choose the mainline parent.
 
 In commit detail, each changed-file row is focusable; `Enter` / `Space` opens

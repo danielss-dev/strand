@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
 import { Diff } from '../components/Diff';
+import { DiffLayoutToggle, toPierreLayout } from '../components/DiffChrome';
 import { ImageDiff } from '../components/ImageDiff';
+import { PierreTree } from '../components/PierreTree';
 import { Select } from '../components/Select';
+import { compareRefsTree } from '../lib/compareRefsTree';
 import { isImagePath } from '../lib/image';
 import { errMessage, tauri } from '../lib/tauri';
-import type { DiffStatus, FileDiff } from '../lib/types';
+import type { FileDiff } from '../lib/types';
 import { useSettings } from '../stores/settings';
 
 export interface CompareChoice {
@@ -14,7 +17,7 @@ export interface CompareChoice {
   label: string;
 }
 
-/** First-class commit-ish comparison with a changed-file list and full diff. */
+/** First-class commit-ish comparison with a full file tree and per-file diff. */
 export function CompareRefsDialog({
   repoPath,
   choices,
@@ -33,11 +36,12 @@ export function CompareRefsDialog({
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [diffs, setDiffs] = useState<FileDiff[]>([]);
+  const [tree, setTree] = useState(() => compareRefsTree([], [], []));
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const diffMode = useSettings((state) => state.diffMode);
-  const layout = diffMode === 'split' ? 'split' : 'unified';
+  const layout = toPierreLayout(diffMode);
 
   const uniqueChoices = useMemo(() => {
     const seen = new Set<string>();
@@ -52,18 +56,25 @@ export function CompareRefsDialog({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void tauri.repoDiffBetween(repoPath, from, to).then(
-      (next) => {
+    void Promise.all([
+      tauri.repoDiffBetween(repoPath, from, to),
+      tauri.repoTreeAt(repoPath, from),
+      tauri.repoTreeAt(repoPath, to),
+    ]).then(
+      ([next, fromTree, toTree]) => {
         if (cancelled) return;
+        const nextTree = compareRefsTree(fromTree, toTree, next);
         setDiffs(next);
+        setTree(nextTree);
         setSelectedFile((current) =>
-          current && next.some((diff) => diff.path === current) ? current : (next[0]?.path ?? null),
+          current && nextTree.paths.includes(current) ? current : (next[0]?.path ?? nextTree.paths[0] ?? null),
         );
         setLoading(false);
       },
       (caught) => {
         if (cancelled) return;
         setDiffs([]);
+        setTree(compareRefsTree([], [], []));
         setSelectedFile(null);
         setError(errMessage(caught));
         setLoading(false);
@@ -72,7 +83,9 @@ export function CompareRefsDialog({
     return () => { cancelled = true; };
   }, [repoPath, from, to]);
 
-  const focused = diffs.find((diff) => diff.path === selectedFile) ?? null;
+  const focused = diffs.find((diff) => diff.path === selectedFile)
+    ?? diffs.find((diff) => diff.status === 'renamed' && diff.old_path === selectedFile)
+    ?? null;
   const adds = diffs.reduce((total, diff) => total + diff.adds, 0);
   const dels = diffs.reduce((total, diff) => total + diff.dels, 0);
 
@@ -107,46 +120,28 @@ export function CompareRefsDialog({
         </label>
       </div>
       <div className="compare-refs-message">
-        <div className="compare-refs-summary">
-          {loading ? 'Diffing…' : `${diffs.length} files · +${adds} −${dels}`}
+        <div className="compare-refs-toolbar">
+          <div className="compare-refs-summary">
+            {loading ? 'Diffing…' : `${tree.paths.length} files · ${diffs.length} changed · +${adds} −${dels}`}
+          </div>
+          <div className="compare-refs-layout" role="group" aria-label="Diff layout">
+            <DiffLayoutToggle />
+          </div>
         </div>
         {error ? <div className="clone-error compare-refs-error">{error}</div> : null}
       </div>
       <div className="compare-refs-body">
-        <div className="compare-refs-files" role="listbox" aria-label="Changed files">
-          {diffs.map((diff) => (
-            <button
-              key={diff.path}
-              type="button"
-              role="option"
-              aria-selected={diff.path === selectedFile}
-              className={'compare-refs-file' + (diff.path === selectedFile ? ' active' : '')}
-              onClick={() => setSelectedFile(diff.path)}
-              onKeyDown={(event) => {
-                if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-                event.preventDefault();
-                const options = Array.from(
-                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('.compare-refs-file') ?? [],
-                );
-                const current = options.indexOf(event.currentTarget);
-                const next =
-                  event.key === 'Home'
-                    ? 0
-                    : event.key === 'End'
-                      ? options.length - 1
-                      : Math.max(0, Math.min(options.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1)));
-                options[next]?.focus();
-                options[next]?.click();
+        <div className="compare-refs-files" role="region" aria-label="Comparison files">
+          {!loading && !error && tree.paths.length > 0 ? (
+            <PierreTree
+              paths={tree.paths}
+              gitStatus={tree.gitStatus}
+              selectedPath={selectedFile}
+              followFocus
+              onSelect={(next, kind) => {
+                if (!next || kind === 'file') setSelectedFile(next);
               }}
-              title={diff.old_path ? `${diff.old_path} → ${diff.path}` : diff.path}
-            >
-              <span className={`stat ${statusLetter(diff.status)}`}>{statusLetter(diff.status)}</span>
-              <span className="path">{diff.path}</span>
-              <span className="counts">+{diff.adds} −{diff.dels}</span>
-            </button>
-          ))}
-          {!loading && !error && diffs.length === 0 ? (
-            <div className="compare-refs-empty">No changes between these revisions.</div>
+            />
           ) : null}
         </div>
         <div className="compare-refs-diff">
@@ -168,19 +163,16 @@ export function CompareRefsDialog({
               <Diff patch={focused.patch} layout={layout} />
             )
           ) : (
-            <div className="compare-refs-empty">Select a changed file to inspect its diff.</div>
+            <div className="compare-refs-empty">
+              {selectedFile
+                ? 'No change to this file between the selected revisions.'
+                : !error && tree.paths.length === 0 && diffs.length === 0
+                  ? 'No changes between these revisions.'
+                  : 'Select a file to compare between the selected revisions.'}
+            </div>
           )}
         </div>
       </div>
     </Dialog>
   );
-}
-
-function statusLetter(status: DiffStatus): string {
-  if (status === 'added') return 'A';
-  if (status === 'deleted') return 'D';
-  if (status === 'renamed') return 'R';
-  if (status === 'copied') return 'C';
-  if (status === 'typechange') return 'T';
-  return 'M';
 }
