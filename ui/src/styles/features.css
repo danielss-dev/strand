@@ -3184,12 +3184,9 @@ button {
 
 /* ─── Commit / branch comparison ───────────────────────────────────────── */
 .compare-refs-dialog {
-  width: calc(100vw - 24px);
-  height: calc(100vh - 24px);
-  max-width: none;
-  align-self: center;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
+  align-self: center;
 }
 .compare-refs-toolbar {
   display: flex;
@@ -3497,6 +3494,12 @@ button {
   height: min(680px, 88vh);
 }
 .dialog-wide { width: min(1120px, 96vw); }
+.clone-dialog.compare-refs-dialog {
+  width: calc(100vw - 24px);
+  max-width: none;
+  height: calc(100vh - 24px);
+  align-self: center;
+}
 .clone-head {
   display: flex;
   align-items: center;

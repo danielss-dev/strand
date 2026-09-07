@@ -81,7 +81,6 @@ export function CompareRefsDialog({
     <Dialog
       title={title}
       icon="compare"
-      size="wide"
       className="compare-refs-dialog"
       onClose={onClose}
     >
