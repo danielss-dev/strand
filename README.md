@@ -300,6 +300,9 @@ the resolved app appearance automatically.
 - **Guided bisect** — use a commit’s Find regression menu to choose working
   and broken revisions; test and mark working/broken/skip, inspect remaining candidates and the culprit, resume external
   sessions, and reset to the original checkout while protecting test edits.
+- **Compare branches** — open from the command palette or Branch actions;
+  choose any two local or remote refs without checkout, with upstream/main/master
+  defaults and the existing changed-file and full-diff dialog.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
   resizable commit detail panel with lazy GPG/SSH/X.509 verification,

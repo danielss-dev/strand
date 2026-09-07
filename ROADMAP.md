@@ -3024,6 +3024,12 @@ and independent Windows signature/hash/metadata checks passing. Publication
 started Microsoft Store run `34066047506`; its build and submission remain
 pending, followed by Partner Center certification.
 
+**Branch comparison discovery shipped (2026-09-07, DAN-67):** Compare branches
+is available from the command palette and Branch actions. Shared defaults choose
+current vs upstream, then main/master, then the first pair; sidebar ref menus
+also work with detached HEAD. All entry points reuse `CompareRefsDialog` and
+`repoDiffBetween` for the changed-file list and full diff.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

@@ -1788,6 +1788,7 @@ export function App() {
     // open, so don't surface them (the network ones would fail confusingly).
     if (meta) {
       base.push(
+        { id: 'compare-branches', label: 'Compare branches…', group: 'Actions', keywords: 'compare refs branches diff', run: () => { window.requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('strand:compare-branches'))); } },
         { id: 'work', label: t('work.paletteShow'), group: 'Actions', shortcut: keyHint('view-work'), keywords: 'files documents embedded terminals shell', run: openWorkbench },
         { id: 'work-new-terminal', label: t('work.newTerminal'), group: 'Actions', keywords: 'work embedded shell prompt console', run: () => { addEmbeddedTerminal(meta.path); showWorkbenchWork(); } },
         { id: 'work-split-right', label: t('work.splitRight'), group: 'Actions', keywords: 'work pane editor group side by side', run: () => {

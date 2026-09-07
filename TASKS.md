@@ -1069,6 +1069,9 @@ community plugins, performance and platform certification from Git feature gaps.
   creation/deletion headers, with Computer Use stage/unstage verification.)
 
 ### Commits view
+- ☑ DAN-67: first-class arbitrary branch comparison (`compareBranchDefaults`,
+  palette `strand:compare-branches`, Branch actions and HEAD menu defaults;
+  detached-HEAD context menus reuse `CompareRefsDialog` / `repoDiffBetween`).
 - ☑ Table from `repo_log`
 - ☑ SVG lane rendering (`ui/src/lib/graph.ts` lane algo + `CommitGraphCell` SVG; multi-color via `--b-1..--b-7`)
 - ◐ Branch / tag / HEAD chips inline in the message cell (`indexRefs` in `Commits.tsx` + `.ref-chip` CSS; right-side chip column still open)
