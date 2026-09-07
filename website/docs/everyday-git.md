@@ -267,8 +267,9 @@ it uses the first available pair. Neither branch needs to be checked out.
 
 Local branches, remote branches, and tags also offer **Compare … with this…**
 in their sidebar menus. The comparison dialog lets you swap or change either
-ref, navigate the changed-file list with the arrow keys, and inspect text and
-image diffs without checking anything out.
+ref, navigate the full file tree from both revisions with the arrow keys, and
+inspect text and image diffs without checking anything out. Changed files have
+status badges; selecting an unchanged file shows that it is identical.
 
 If any of these operations hit conflicts, they pause rather than fail — see [Paused operations and conflicts](#paused-operations-and-conflicts) below.
 

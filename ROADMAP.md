@@ -3028,7 +3028,8 @@ pending, followed by Partner Center certification.
 is available from the command palette and Branch actions. Shared defaults choose
 current vs upstream, then main/master, then the first pair; sidebar ref menus
 also work with detached HEAD. All entry points reuse `CompareRefsDialog` and
-`repoDiffBetween` for the changed-file list and full diff.
+`repoDiffBetween` / `repoTreeAt` for a full union file tree, changed-file badges,
+and per-file comparison, including an identical-file tip for unchanged paths.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
