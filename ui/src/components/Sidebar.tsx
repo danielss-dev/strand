@@ -12,6 +12,14 @@ import { pathKey, worktreeName } from '../lib/repoIdentity';
 import { compareBranchDefaults } from '../lib/compareBranchDefaults';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { errMessage, tauri } from '../lib/tauri';
+import {
+  checkoutCommitProgress,
+  checkoutProgress,
+  deleteRefProgress,
+  stashApplyProgress,
+  stashDropProgress,
+  stashPopProgress,
+} from '../lib/localGitOp';
 import { defaultRemote, useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { useBranchIntegration } from '../stores/branchIntegration';
@@ -122,6 +130,8 @@ interface SidebarProps {
   onOpenFileInEditor: (file: string) => void;
   /** Create a working-tree file/folder inside `dir`. */
   onCreateFileEntry: (dir: string, directory: boolean) => void;
+  /** App-owned local write progress (ToastViewport network-style pill). */
+  onLocalGitOp: (message: string, work: () => Promise<void>) => Promise<void>;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }
@@ -183,7 +193,7 @@ function sortTree<T>(node: TreeNode<T>, leafCmp: (a: T, b: T) => number): void {
 
 // ─── component ──────────────────────────────────────────────────────────
 
-export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onEditTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onToast }: SidebarProps) {
+export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface, onOpenRepo, onOpenRecent, onCreateStash, onCreateTag, onEditTag, onVerifyTag, onCreateBranch, onBranchFromStash, onCreateWorktree, onMerge, onInteractiveRebase, onManageRemote, onRenameBranch, onManageBranchNetwork, onPull, onPush, onForcePush, onFetchBranch, onPullBranch, onOpenFileInEditor, onCreateFileEntry, onLocalGitOp, onToast }: SidebarProps) {
   const view = useRepo((s) => s.view);
   const setView = useRepo((s) => s.setView);
   const selectFile = useRepo((s) => s.selectFile);
@@ -434,11 +444,10 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     );
   }, [submodules, filter]);
 
-  // Branch/tag ops don't toast on success (the sidebar itself updates), but
-  // failures must be loud — a silently refused checkout reads as the app
-  // doing nothing (DAN-12).
-  const runBranchOp = async (fn: () => Promise<void>) => {
-    try { await fn(); } catch (e) { onToast(errMessage(e), 'error'); }
+  // Branch/tag/stash writes reuse App's ToastViewport progress pill (DAN-68).
+  // Success stays silent (the sidebar itself updates); failures stay loud (DAN-12).
+  const runBranchOp = async (message: string, fn: () => Promise<void>) => {
+    try { await onLocalGitOp(message, fn); } catch (e) { onToast(errMessage(e), 'error'); }
   };
 
   // Tag network ops surface success/failure via a toast — a push can fail on
@@ -592,7 +601,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       // offer its worktree tab where Checkout would sit.
       wt
         ? { label: 'Open worktree', icon: 'worktree', onSelect: () => void openWorktree(wt.path) }
-        : { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkout(b.name)) },
+        : { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(checkoutProgress(b.name), () => checkout(b.name)) },
       { label: 'Push to remote…', icon: 'arrow-up', onSelect: () => onManageBranchNetwork({ kind: 'push', branch: b }) },
       { label: b.upstream ? `Change upstream (${b.upstream.name})…` : 'Set upstream…', icon: 'remote', onSelect: () => onManageBranchNetwork({ kind: 'upstream', branch: b }) },
       newBranchItem,
@@ -610,7 +619,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       { label: 'Copy full ref', icon: 'file', onSelect: () => { void copyToClipboard(b.full_name); onToast('Branch ref copied'); } },
       { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(b.target); onToast('Commit SHA copied'); } },
     );
-    items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteBranch(b.name, true)) });
+    items.push({ label: 'Delete branch', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(deleteRefProgress(b.name), () => deleteBranch(b.name, true)) });
     items.push(actionItem);
     return items;
   };
@@ -654,14 +663,14 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       items.push(
         local.is_head
           ? { label: `Tracked by current branch (${local.name})`, disabled: true, onSelect: () => {} }
-          : { label: `Checkout ${local.name}`, icon: 'branch', onSelect: () => void runBranchOp(() => checkout(local.name)) },
+          : { label: `Checkout ${local.name}`, icon: 'branch', onSelect: () => void runBranchOp(checkoutProgress(local.name), () => checkout(local.name)) },
       );
     }
     if (!local) {
       items.push({
         label: 'Create local branch & track',
         icon: 'branch',
-        onSelect: () => void runBranchOp(() => createBranch(localBranchName(rb), rb.name, true)),
+        onSelect: () => void runBranchOp(checkoutProgress(localBranchName(rb)), () => createBranch(localBranchName(rb), rb.name, true)),
       });
     }
     // Same create, but with a chosen name (auto-tracks — core wires upstream
@@ -763,7 +772,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
 
   const tagMenu = (tg: Tag): MenuItem[] => {
     const items: MenuItem[] = [
-      { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(() => checkoutCommit(tg.target)) },
+      { label: 'Checkout', icon: 'branch', onSelect: () => void runBranchOp(checkoutCommitProgress(), () => checkoutCommit(tg.target)) },
       { label: 'New branch from here…', icon: 'plus', onSelect: () => onCreateBranch(tg.full_name, tg.name) },
       { label: 'New worktree from here…', icon: 'worktree', onSelect: () => onCreateWorktree({ ref: tg.full_name, label: tg.name }) },
     ];
@@ -791,7 +800,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       { label: 'Edit message…', onSelect: () => onEditTag(tg.name, 'reannotate') },
     ] }, userActionMenu({ path: meta!.path, target: { kind: 'ref', reference: tg.full_name, oid: tg.target } }));
     items.push({ label: 'Verify tag signature…', icon: 'tag', onSelect: () => onVerifyTag(tg.name) });
-    items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => deleteTag(tg.name)) });
+    items.push({ label: 'Delete tag', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(deleteRefProgress(tg.name), () => deleteTag(tg.name)) });
     return items;
   };
 
@@ -801,12 +810,12 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
 
   const stashMenu = (s: Stash): MenuItem[] => [
     { label: 'Inspect changes', icon: 'search', onSelect: () => inspectStash(s) },
-    { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(() => stashApply(s.index)) },
-    { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(() => stashPop(s.index)) },
+    { label: 'Apply', icon: 'arrow-down', onSelect: () => void runBranchOp(stashApplyProgress(), () => stashApply(s.index)) },
+    { label: 'Pop (apply & remove)', icon: 'arrow-up', onSelect: () => void runBranchOp(stashPopProgress(), () => stashPop(s.index)) },
     { label: 'Create branch from stash…', icon: 'branch', onSelect: () => onBranchFromStash(s.index) },
     { label: 'Copy stash name', icon: 'file', onSelect: () => { void copyToClipboard(`stash@{${s.index}}`); onToast('Stash name copied'); } },
     { label: 'Copy commit SHA', icon: 'file', onSelect: () => { void copyToClipboard(s.oid); onToast('Commit SHA copied'); } },
-    { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(() => stashDrop(s.index)) },
+    { label: 'Drop', icon: 'trash', danger: true, confirm: true, onSelect: () => void runBranchOp(stashDropProgress(), () => stashDrop(s.index)) },
   ];
 
   // Open a submodule's working tree as its own repo tab (via openByPath, which
@@ -955,7 +964,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
         onActivate={() => {
           if (b.is_head) return;
           if (wt) void openWorktree(wt.path);
-          else void runBranchOp(() => checkout(b.name));
+          else void runBranchOp(checkoutProgress(b.name), () => checkout(b.name));
         }}
         onSelect={() => { revealInGraph(b.target); useRepo.getState().selectRef(b.full_name); }}
         onMenu={(x, y) => openMenu(x, y, branchMenu(b))}
@@ -980,15 +989,14 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
             ? `${rb.name} — tracked by ${local.name}; double-click to check ${local.name} out`
             : `${rb.name} — double-click to create a tracking branch`
         }
-        onActivate={() =>
-          void runBranchOp(() =>
-            local
-              ? local.is_head
-                ? Promise.resolve()
-                : checkout(local.name)
-              : createBranch(localBranchName(rb), rb.name, true),
-          )
-        }
+        onActivate={() => {
+          if (local?.is_head) return;
+          const localName = local?.name ?? localBranchName(rb);
+          void runBranchOp(
+            checkoutProgress(localName),
+            () => local ? checkout(local.name) : createBranch(localName, rb.name, true),
+          );
+        }}
         onSelect={() => { revealInGraph(rb.target); useRepo.getState().selectRef(rb.full_name); }}
         onMenu={(x, y) => openMenu(x, y, remoteMenu(rb))}
       />
@@ -1003,7 +1011,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       label={leafName(tg.name)}
       meta={tg.annotated ? 'annotated' : undefined}
       title={`${leafName(tg.name)} — click to reveal, double-click to check out`}
-      onActivate={() => void runBranchOp(() => checkoutCommit(tg.target))}
+      onActivate={() => void runBranchOp(checkoutCommitProgress(), () => checkoutCommit(tg.target))}
       onSelect={() => { revealInGraph(tg.target); useRepo.getState().selectRef(tg.full_name); }}
       onMenu={(x, y) => openMenu(x, y, tagMenu(tg))}
     />
@@ -1186,7 +1194,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
                 meta={s.branch ?? undefined}
                 title={`${stashLabel(s)} — click to inspect; double-click to apply`}
                 onSelect={() => inspectStash(s)}
-                onActivate={() => void runBranchOp(() => stashApply(s.index))}
+                onActivate={() => void runBranchOp(stashApplyProgress(), () => stashApply(s.index))}
                 onMenu={(x, y) => openMenu(x, y, stashMenu(s))}
               />
             ))}

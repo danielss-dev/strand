@@ -53,6 +53,14 @@ import {
   toMudaAccelerator,
   type CommandId,
 } from './lib/keys';
+import {
+  LOCAL_GIT_OP_BUSY,
+  checkoutProgress,
+  createLocalGitOpRunner,
+  stashApplyProgress,
+  stashPopProgress,
+  toastProgressMessage,
+} from './lib/localGitOp';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
 import type { InitRepoRequest } from './views/InitRepoDialog';
@@ -519,6 +527,9 @@ export function App() {
   // Live network-op progress (fetch/pull/push) shown as a pill while a
   // transfer is in flight. Null when idle.
   const [netProgress, setNetProgress] = useState<string | null>(null);
+  // Local checkout/stash writes reuse the same ToastViewport progress slot
+  // without a cancel id (DAN-68). Null when idle.
+  const [localProgress, setLocalProgress] = useState<string | null>(null);
   // Cancellable-op id for the in-flight fetch/pull/push (the pill's ✕).
   const [netOpId, setNetOpId] = useState<string | null>(null);
   const opIdSeq = useRef(0);
@@ -545,6 +556,15 @@ export function App() {
   // latest showToast through this ref instead of re-subscribing.
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
+
+  const runLocalGitOp = useMemo(
+    () => createLocalGitOpRunner({
+      setProgress: setLocalProgress,
+      onBusy: () => showToast(LOCAL_GIT_OP_BUSY, 'error'),
+      waitForPaint,
+    }),
+    [showToast],
+  );
 
   const openSettingsAt = useCallback((section: SettingsSectionId) => {
     setSettingsSection(section);
@@ -1565,7 +1585,7 @@ export function App() {
         icon: b.is_head ? 'check' : 'branch',
         run: () => {
           if (b.is_head) { revealInGraph(b.target); return; }
-          void checkout(b.name).catch((e) =>
+          void runLocalGitOp(checkoutProgress(b.name), () => checkout(b.name)).catch((e) =>
             showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
         },
       });
@@ -1587,8 +1607,10 @@ export function App() {
           // Pass the shorthand (origin/foo), not the full ref — createBranch
           // only auto-tracks when the start point resolves as a remote-tracking
           // *branch*, which git2 finds by shorthand.
-          void createBranch(rb.branch, rb.name, true).catch((e) =>
-            showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
+          void runLocalGitOp(
+            checkoutProgress(rb.branch),
+            () => createBranch(rb.branch, rb.name, true),
+          ).catch((e) => showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
         },
       });
     }
@@ -1644,7 +1666,8 @@ export function App() {
         keywords: `stash apply ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void stashApply(st.index).catch((e) => showToast(`Apply failed: ${errMessage(e)}`, 'error'));
+          void runLocalGitOp(stashApplyProgress(), () => stashApply(st.index))
+            .catch((e) => showToast(`Apply failed: ${errMessage(e)}`, 'error'));
         },
       });
       out.push({
@@ -1654,7 +1677,8 @@ export function App() {
         keywords: `stash pop ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void stashPop(st.index).catch((e) => showToast(`Pop failed: ${errMessage(e)}`, 'error'));
+          void runLocalGitOp(stashPopProgress(), () => stashPop(st.index))
+            .catch((e) => showToast(`Pop failed: ${errMessage(e)}`, 'error'));
         },
       });
       out.push({
@@ -1688,7 +1712,7 @@ export function App() {
 
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
-      createBranch, revealInGraph, selectCommit, selectFile, showToast, showWorkbenchWork,
+      createBranch, revealInGraph, runLocalGitOp, selectCommit, selectFile, showToast, showWorkbenchWork,
       stashApply, stashPop]);
 
   const runCustomAction = useCallback((
@@ -2429,6 +2453,7 @@ export function App() {
                 onPullBranch={onPullBranch}
                 onOpenFileInEditor={openActiveFileInEditor}
                 onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
+                onLocalGitOp={runLocalGitOp}
                 onToast={showToast}
               />
             </Panel>
@@ -2489,7 +2514,7 @@ export function App() {
         <StatusBar onOpenSettings={() => openSettingsAt('appearance')} />
 
         <ToastViewport
-          networkMessage={netProgress}
+          networkMessage={toastProgressMessage(netProgress, localProgress)}
           networkOperationId={netOpId}
           toast={toast}
           onCancelNetwork={(operationId) => { void tauri.repoCancelOp(operationId); }}

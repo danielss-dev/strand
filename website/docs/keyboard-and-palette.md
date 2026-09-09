@@ -14,9 +14,9 @@ Open the palette with `Mod+K`. It is a single fuzzy-matched search over commands
 Results are grouped, in this order:
 
 - **Actions** — every command Strand exposes: initialize/open/clone/switch repository, show any view, fetch/pull/push/sync, stash and snapshot, create branch/tag/remote, clear merged local and matching remote branches, interactive rebase, review actions (AI review, pin/move/clear baseline, copy feedback as prompt), worktree cleanup, settings and theme, **Heroi: New conversation**, and "Abort <operation>" while a merge or rebase is paused.
-- **Branches** — checkout a local branch. Remote branches without a local counterpart appear too; running one creates a local tracking branch. The current branch reveals its tip in the graph instead.
+- **Branches** — checkout a local branch. Remote branches without a local counterpart appear too; running one creates a local tracking branch. The current branch reveals its tip in the graph instead. Checkout shows the same transient progress pill as the sidebar.
 - **Tags** — reveal the tagged commit in the graph (non-destructive).
-- **Stashes** — "Apply stash: …", "Pop stash: …", and "Create branch from stash: …" rows per stash.
+- **Stashes** — "Apply stash: …", "Pop stash: …", and "Create branch from stash: …" rows per stash. Apply and pop reuse the checkout progress pill.
 - **Files** — working-tree files; opens a pinned document in Work.
 - **Commits** — reveal the commit in the graph and open its detail panel.
 - **Workspaces** — one row per workspace (shown once a named workspace exists); running one switches to it. See [Repositories and workspaces](repositories-and-workspaces.md).
