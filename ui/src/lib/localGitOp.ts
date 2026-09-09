@@ -25,41 +25,39 @@ export function deleteRefProgress(name: string): string {
   return `Deleting \`${name}\`…`;
 }
 
-/** Network pills keep cancel/status-bar ownership; local copy fills the same slot when idle. */
-export function toastProgressMessage(
-  networkMessage: string | null,
-  localMessage: string | null,
-): string | null {
-  return networkMessage ?? localMessage;
-}
+export type ProgressUpdate = string | null | ((current: string | null) => string | null);
 
 export interface LocalGitOpRunnerOptions {
-  setProgress: (message: string | null) => void;
+  /** Same setter as App `setNetProgress` — local writes omit `netOpId`. */
+  setProgress: (update: ProgressUpdate) => void;
   onBusy: () => void;
   waitForPaint: () => Promise<void>;
+  /** Network fetch/pull/push already owns the pill — don't steal it. */
+  isBlocked?: () => boolean;
 }
 
 /**
- * Serializes silent local Git writes (checkout, track, stash, …) so the
- * ToastViewport progress pill can paint before the store await, and so a
- * second click does not throw.
+ * Mirrors App network ops: `setNetProgress(label)` → `waitForPaint()` →
+ * await work → `finally` clear. Does not set `netOpId` (no Cancel).
+ * Returns whether work ran; overlap toasts via `onBusy` instead of throwing.
  */
 export function createLocalGitOpRunner(
   options: LocalGitOpRunnerOptions,
-): (message: string, work: () => Promise<void>) => Promise<void> {
+): (message: string, work: () => Promise<void>) => Promise<boolean> {
   let busy = false;
   return async (message, work) => {
-    if (busy) {
+    if (busy || options.isBlocked?.()) {
       options.onBusy();
-      return;
+      return false;
     }
     busy = true;
     options.setProgress(message);
     try {
       await options.waitForPaint();
       await work();
+      return true;
     } finally {
-      options.setProgress(null);
+      options.setProgress((current) => (current === message ? null : current));
       busy = false;
     }
   };

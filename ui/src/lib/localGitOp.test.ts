@@ -12,29 +12,36 @@ import {
   stashApplyProgress,
   stashDropProgress,
   stashPopProgress,
-  toastProgressMessage,
+  type ProgressUpdate,
 } from './localGitOp';
 
 const deferred = () => {
   let resolve!: () => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<void>((done, fail) => {
-    resolve = done;
-    reject = fail;
-  });
-  return { promise, resolve, reject };
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
 };
+
+function progressLog() {
+  const events: string[] = [];
+  let current: string | null = null;
+  const setProgress = (update: ProgressUpdate) => {
+    current = typeof update === 'function' ? update(current) : update;
+    events.push(current ?? 'clear');
+  };
+  return { events, setProgress };
+}
 
 describe('local Git write progress', () => {
   it('paints checkout copy before work and clears after success', async () => {
-    const events: string[] = [];
+    const { events, setProgress } = progressLog();
     const run = createLocalGitOpRunner({
-      setProgress: (message) => events.push(message ?? 'clear'),
+      setProgress,
       onBusy: () => events.push('busy'),
       waitForPaint: async () => { events.push('paint'); },
     });
 
-    await run(checkoutProgress('feature/x'), async () => { events.push('work'); });
+    await expect(run(checkoutProgress('feature/x'), async () => { events.push('work'); }))
+      .resolves.toBe(true);
 
     expect(events).toEqual([
       'Checking out `feature/x`…',
@@ -54,9 +61,9 @@ describe('local Git write progress', () => {
   });
 
   it('clears in-progress copy when the write fails so an error toast can take over', async () => {
-    const events: string[] = [];
+    const { events, setProgress } = progressLog();
     const run = createLocalGitOpRunner({
-      setProgress: (message) => events.push(message ?? 'clear'),
+      setProgress,
       onBusy: () => events.push('busy'),
       waitForPaint: async () => {},
     });
@@ -80,19 +87,39 @@ describe('local Git write progress', () => {
 
     const first = run(checkoutProgress('a'), () => gate.promise);
     await Promise.resolve();
-    await run(checkoutProgress('b'), async () => {
+    await expect(run(checkoutProgress('b'), async () => {
       throw new Error('second write should not start');
-    });
+    })).resolves.toBe(false);
     expect(onBusy).toHaveBeenCalledOnce();
     expect(LOCAL_GIT_OP_BUSY).toMatch(/already running/);
     gate.resolve();
-    await first;
+    await expect(first).resolves.toBe(true);
   });
 
-  it('keeps an in-flight network pill over local copy', () => {
-    expect(toastProgressMessage('Fetching…', checkoutProgress('x'))).toBe('Fetching…');
-    expect(toastProgressMessage(null, checkoutProgress('x'))).toBe('Checking out `x`…');
-    expect(toastProgressMessage(null, null)).toBeNull();
+  it('does not steal an in-flight network pill', async () => {
+    const { events, setProgress } = progressLog();
+    const run = createLocalGitOpRunner({
+      setProgress,
+      onBusy: () => events.push('busy'),
+      waitForPaint: async () => { events.push('paint'); },
+      isBlocked: () => true,
+    });
+
+    await expect(run(checkoutProgress('x'), async () => { events.push('work'); }))
+      .resolves.toBe(false);
+    expect(events).toEqual(['busy']);
+  });
+
+  it('does not clear a newer network label if one arrives during the write', async () => {
+    const { events, setProgress } = progressLog();
+    const run = createLocalGitOpRunner({
+      setProgress,
+      onBusy: () => {},
+      waitForPaint: async () => { setProgress('Fetching…'); },
+    });
+    await run(checkoutProgress('x'), async () => {});
+    expect(events.at(-1)).toBe('Fetching…');
+    expect(events).not.toContain('clear');
   });
 
   it('renders the network-style progress pill without a cancel control', () => {

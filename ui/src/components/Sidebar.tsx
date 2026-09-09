@@ -130,8 +130,8 @@ interface SidebarProps {
   onOpenFileInEditor: (file: string) => void;
   /** Create a working-tree file/folder inside `dir`. */
   onCreateFileEntry: (dir: string, directory: boolean) => void;
-  /** App-owned local write progress (ToastViewport network-style pill). */
-  onLocalGitOp: (message: string, work: () => Promise<void>) => Promise<void>;
+  /** App-owned local write progress (ToastViewport `networkMessage`, no cancel). */
+  onLocalGitOp: (message: string, work: () => Promise<void>) => Promise<boolean>;
   /** Surface a transient message (tag push / remote-delete feedback). */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }

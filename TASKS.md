@@ -874,9 +874,10 @@ community plugins, performance and platform certification from Git feature gaps.
   (opens `MergeDialog`) / Rebase <current> onto this (confirm) / Delete branch
   (confirm). HEAD shows a disabled "Current branch".
 - ☑ DAN-68 in-progress checkout feedback — sidebar (context menu + row
-  activate) and palette checkout / create-from-remote / tag detach / stash
-  apply|pop|drop reuse `ToastViewport`'s network progress pill via
-  `createLocalGitOpRunner` + `localProgress` (`ui/src/lib/localGitOp.ts`).
+  activate), palette, and topbar branch switcher checkout / create-from-remote /
+  tag detach / stash apply|pop|drop reuse `ToastViewport` `networkMessage`
+  via App `setNetProgress` (no `netOpId`) and `createLocalGitOpRunner`
+  (`ui/src/lib/localGitOp.ts`).
 - ☑ Merged-branch indicators (DAN-19 — `refs::Branch.merged` uses commit
   ancestry against the repository's primary branch; sidebar icons and
   commit-graph ref chips also use `providerMergedBranchNames` to mark a local
@@ -1651,9 +1652,9 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Proper notification viewport (`ToastViewport`): timed success/error pills,
   cancellable network progress, one stable assertive live region, and animated
   mount/unmount through `Presence`; error duration remains longer than success.
-  Local checkout / track / tag-detach / stash writes reuse the same progress
-  slot via `localProgress` (`createLocalGitOpRunner`, DAN-68) without a cancel
-  control; overlapping writes toast instead of throwing.
+  Local checkout / track / tag-detach / stash writes reuse the same
+  `netProgress` / `networkMessage` slot via `createLocalGitOpRunner` (DAN-68)
+  without a cancel control; overlapping writes toast instead of throwing.
 - ☑ Empty-state copy audit: every primary panel and dialog has contextual,
   instructive empty/loading/error copy (44 explicit empty-state surfaces; no
   "no data" labels remain in `ui/src`, audited 2026-07-18).

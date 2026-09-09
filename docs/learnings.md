@@ -991,13 +991,14 @@ not invent a sixth.
 ## Local Git writes reuse ToastViewport network progress
 
 **Rule.** Silent local writes (sidebar checkout, create-from-remote, tag/commit
-detach, stash apply/pop/drop) show in-progress copy through App `localProgress`
-fed into `ToastViewport`'s existing `networkMessage` slot
-(`netProgress ?? localProgress`) without a cancel id. `waitForPaint` before
-the store await so the pill is visible for the whole Git write. Overlap toasts
-`LOCAL_GIT_OP_BUSY` instead of throwing. Failures still use the loud DAN-12
-error toast after the pill clears. Do not add a third progress surface or a
-success toast after checkout — the sidebar update is the success cue.
+detach, stash apply/pop/drop) reuse App `setNetProgress` → `waitForPaint()` →
+await → `finally` clear — the same `ToastViewport` `networkMessage` slot as
+fetch/pull/push, **without** `netOpId` (no Cancel). Overlap toasts
+`LOCAL_GIT_OP_BUSY` instead of throwing; in-flight network ops block via
+`isBlocked`. Failures still use the loud DAN-12 error toast after the pill
+clears. Do not add a third progress surface, OpBanner, or ProgressPopup for
+checkout. Sidebar success stays the HEAD/sidebar update; Topbar may still
+toast its existing switch/create copy after the pill.
 
 **Why.** Network ops already had a transient progress pill; clone/open use
 `ProgressPopup`. Local checkout sat in a dead zone and looked idle on large

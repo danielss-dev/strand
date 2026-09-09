@@ -59,7 +59,6 @@ import {
   createLocalGitOpRunner,
   stashApplyProgress,
   stashPopProgress,
-  toastProgressMessage,
 } from './lib/localGitOp';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useTheme } from './lib/theme';
@@ -525,11 +524,9 @@ export function App() {
   // Non-null renders the persistent CrashToast until reported or dismissed.
   const [crashReport, setCrashReport] = useState<CrashCheck | null>(null);
   // Live network-op progress (fetch/pull/push) shown as a pill while a
-  // transfer is in flight. Null when idle.
+  // transfer is in flight. Null when idle. Local checkout reuses this slot
+  // without setting netOpId (no Cancel) — DAN-68.
   const [netProgress, setNetProgress] = useState<string | null>(null);
-  // Local checkout/stash writes reuse the same ToastViewport progress slot
-  // without a cancel id (DAN-68). Null when idle.
-  const [localProgress, setLocalProgress] = useState<string | null>(null);
   // Cancellable-op id for the in-flight fetch/pull/push (the pill's ✕).
   const [netOpId, setNetOpId] = useState<string | null>(null);
   const opIdSeq = useRef(0);
@@ -557,11 +554,14 @@ export function App() {
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
 
-  const runLocalGitOp = useMemo(
+  const networkBusyRef = useRef(false);
+  networkBusyRef.current = syncing || pulling || pushing;
+  const runLocalProgress = useMemo(
     () => createLocalGitOpRunner({
-      setProgress: setLocalProgress,
+      setProgress: setNetProgress,
       onBusy: () => showToast(LOCAL_GIT_OP_BUSY, 'error'),
       waitForPaint,
+      isBlocked: () => networkBusyRef.current,
     }),
     [showToast],
   );
@@ -1585,7 +1585,7 @@ export function App() {
         icon: b.is_head ? 'check' : 'branch',
         run: () => {
           if (b.is_head) { revealInGraph(b.target); return; }
-          void runLocalGitOp(checkoutProgress(b.name), () => checkout(b.name)).catch((e) =>
+          void runLocalProgress(checkoutProgress(b.name), () => checkout(b.name)).catch((e) =>
             showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
         },
       });
@@ -1607,7 +1607,7 @@ export function App() {
           // Pass the shorthand (origin/foo), not the full ref — createBranch
           // only auto-tracks when the start point resolves as a remote-tracking
           // *branch*, which git2 finds by shorthand.
-          void runLocalGitOp(
+          void runLocalProgress(
             checkoutProgress(rb.branch),
             () => createBranch(rb.branch, rb.name, true),
           ).catch((e) => showToast(`Checkout failed: ${errMessage(e)}`, 'error'));
@@ -1666,7 +1666,7 @@ export function App() {
         keywords: `stash apply ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void runLocalGitOp(stashApplyProgress(), () => stashApply(st.index))
+          void runLocalProgress(stashApplyProgress(), () => stashApply(st.index))
             .catch((e) => showToast(`Apply failed: ${errMessage(e)}`, 'error'));
         },
       });
@@ -1677,7 +1677,7 @@ export function App() {
         keywords: `stash pop ${st.branch ?? ''}`,
         meta: `stash@{${st.index}}`,
         run: () => {
-          void runLocalGitOp(stashPopProgress(), () => stashPop(st.index))
+          void runLocalProgress(stashPopProgress(), () => stashPop(st.index))
             .catch((e) => showToast(`Pop failed: ${errMessage(e)}`, 'error'));
         },
       });
@@ -1712,7 +1712,7 @@ export function App() {
 
     return out;
   }, [paletteOpen, meta, refs, workTree, commits, stashes, submodules, checkout,
-      createBranch, revealInGraph, runLocalGitOp, selectCommit, selectFile, showToast, showWorkbenchWork,
+      createBranch, revealInGraph, runLocalProgress, selectCommit, selectFile, showToast, showWorkbenchWork,
       stashApply, stashPop]);
 
   const runCustomAction = useCallback((
@@ -2386,6 +2386,7 @@ export function App() {
           pullDone={pullDone}
           pushDone={pushDone}
           onToast={showToast}
+          onLocalProgress={runLocalProgress}
           onSaveSnapshot={() => setStashDialog({ snapshot: true, keepIndex: false })}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={toggleSidebar}
@@ -2453,7 +2454,7 @@ export function App() {
                 onPullBranch={onPullBranch}
                 onOpenFileInEditor={openActiveFileInEditor}
                 onCreateFileEntry={(dir, directory) => setFileEntryDialog({ dir, directory })}
-                onLocalGitOp={runLocalGitOp}
+                onLocalGitOp={runLocalProgress}
                 onToast={showToast}
               />
             </Panel>
@@ -2514,7 +2515,7 @@ export function App() {
         <StatusBar onOpenSettings={() => openSettingsAt('appearance')} />
 
         <ToastViewport
-          networkMessage={toastProgressMessage(netProgress, localProgress)}
+          networkMessage={netProgress}
           networkOperationId={netOpId}
           toast={toast}
           onCancelNetwork={(operationId) => { void tauri.repoCancelOp(operationId); }}

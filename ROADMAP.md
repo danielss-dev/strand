@@ -3033,8 +3033,8 @@ and per-file comparison, including an identical-file tip for unchanged paths.
 
 **Checkout in-progress feedback shipped (2026-09-09, DAN-68):** Sidebar and
 palette checkout, create-from-remote, tag/commit detach, and stash apply/pop/drop
-reuse `ToastViewport`'s network-style progress pill (`localProgress` into
-`networkMessage`, no cancel id) so the UI is busy before HEAD/sidebar catch up.
+reuse `ToastViewport`'s network-style progress pill (`setNetProgress` into
+`networkMessage`, no `netOpId`) so the UI is busy before HEAD/sidebar catch up.
 Failures still error-toast (DAN-12); overlapping local writes toast instead of
 throwing. Fetch/pull/push progress and clone/open `ProgressPopup` are unchanged.
 
