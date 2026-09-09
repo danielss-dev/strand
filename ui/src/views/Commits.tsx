@@ -7,6 +7,13 @@ import { computeGraph } from '../lib/graph';
 import { pickCommitPatchDestination } from '../lib/dialog';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { selectedCommitsOldestFirst } from '../lib/historySelection';
+import {
+  checkoutCommitProgress,
+  stashApplyProgress,
+  stashDropProgress,
+  stashPopProgress,
+  type LocalGitOp,
+} from '../lib/localGitOp';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { pathKey } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
@@ -63,6 +70,8 @@ interface CommitsProps {
   onCreateWorktree: (start: { ref: string; label: string }) => void;
   /** Surface cherry-pick / revert feedback from the commit-detail panel. */
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  /** App-owned local write progress (ToastViewport `networkMessage`, no cancel). */
+  onLocalGitOp: LocalGitOp;
   /** Override for "Review changes since this" navigation — Workbench routes
    * it to its embedded Review pane instead of the Review tab. Baseline pinning
    * stays here; only the jump is delegated. */
@@ -74,7 +83,7 @@ interface CommitsProps {
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onLocalGitOp, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -270,7 +279,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           label: 'Checkout',
           icon: 'branch',
           onSelect: () => void (async () => {
-            try { await checkoutCommit(c.hash); } catch (e) { fail('Checkout', e); }
+            try {
+              await onLocalGitOp(checkoutCommitProgress(), () => checkoutCommit(c.hash));
+            } catch (e) {
+              fail('Checkout', e);
+            }
           })(),
         },
         { label: 'Tag…', icon: 'tag', onSelect: () => onCreateTag(c.hash, c.short_hash) },
@@ -386,8 +399,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     },
     [bulkBusy, bulkSelection, cherryPick, checkoutCommit, commit, exportCommits,
       hasStaged, meta, multi, onCreateTag, onCreateWorktree, onInteractiveRebase,
-      onResetTo, onReviewNavigate, onToast, revert, runBulkCherryPick, selectFile,
-      setBaseline, setView],
+      onLocalGitOp, onResetTo, onReviewNavigate, onToast, revert, runBulkCherryPick,
+      selectFile, setBaseline, setView],
   );
 
   // Clicking a stash node shows its changes (base→stash diff) in the detail
@@ -404,10 +417,11 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     (s: Stash, x: number, y: number) => {
       // `removes` ops (pop / drop) take the stash off the stack; if it was the
       // one open in the detail panel, close the now-stale panel.
-      const run = (verb: string, op: () => Promise<void>, removes: boolean) =>
+      const run = (verb: string, op: () => Promise<void>, removes: boolean, progress: string) =>
         void (async () => {
           try {
-            await op();
+            const started = await onLocalGitOp(progress, op);
+            if (!started) return;
             onToast(`${verb} stash@{${s.index}}`);
             if (removes && selectedCommit === s.oid) void selectCommit(null);
           } catch (e) {
@@ -415,14 +429,14 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           }
         })();
       const items: MenuItem[] = [
-        { label: 'Apply', icon: 'arrow-down', onSelect: () => run('Applied', () => stashApply(s.index), false) },
-        { label: 'Pop', icon: 'stash', onSelect: () => run('Popped', () => stashPop(s.index), true) },
+        { label: 'Apply', icon: 'arrow-down', onSelect: () => run('Applied', () => stashApply(s.index), false, stashApplyProgress()) },
+        { label: 'Pop', icon: 'stash', onSelect: () => run('Popped', () => stashPop(s.index), true, stashPopProgress()) },
         {
           label: 'Drop',
           icon: 'trash',
           danger: true,
           confirm: true,
-          onSelect: () => run('Dropped', () => stashDrop(s.index), true),
+          onSelect: () => run('Dropped', () => stashDrop(s.index), true, stashDropProgress()),
         },
         {
           label: 'Copy SHA',
@@ -432,7 +446,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
       ];
       setMenu({ x, y, items });
     },
-    [stashApply, stashPop, stashDrop, onToast, selectedCommit, selectCommit],
+    [stashApply, stashPop, stashDrop, onLocalGitOp, onToast, selectedCommit, selectCommit],
   );
   // Commit search. We highlight matches in place and step through them with
   // ‹/› rather than filtering the list — filtering would break the graph's

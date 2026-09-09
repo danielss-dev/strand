@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { RepoTabs } from './RepoTabs';
 import { isTauri } from '../lib/tauri';
+import { checkoutProgress } from '../lib/localGitOp';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { useSettings } from '../stores/settings';
 import { useRepo } from '../stores/repo';
@@ -54,6 +55,8 @@ interface Props {
   /** Collapse/expand the sidebar panel; the chevron flips with the state. */
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  /** Local checkout progress via App `netProgress` (no Cancel). */
+  onLocalProgress: (message: string, work: () => Promise<void>) => Promise<boolean>;
 }
 
 export function Topbar({
@@ -89,6 +92,7 @@ export function Topbar({
   onWorktreeMerge,
   sidebarCollapsed,
   onToggleSidebar,
+  onLocalProgress,
 }: Props) {
   const platform = useSettings((s) => s.platform);
   const repoNav = useSettings((s) => s.repoNav);
@@ -314,6 +318,7 @@ export function Topbar({
         detached={!!meta?.detached}
         hasRepo={!!meta}
         onToast={onToast}
+        onLocalProgress={onLocalProgress}
       />
 
       <button
@@ -563,11 +568,13 @@ function BranchSwitcherButton({
   detached,
   hasRepo,
   onToast,
+  onLocalProgress,
 }: {
   branch: string;
   detached: boolean;
   hasRepo: boolean;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  onLocalProgress: (message: string, work: () => Promise<void>) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -590,12 +597,14 @@ function BranchSwitcherButton({
   );
 
   // Run a branch op, toasting the outcome and closing the menu on success.
-  // Errors keep the menu open so the user can try a different row.
-  const run = async (label: string, fn: () => Promise<void>) => {
+  // Checkout/create go through App `netProgress` (no Cancel) so the pill
+  // paints before HEAD updates; open-worktree stays a tab switch.
+  const run = async (label: string, fn: () => Promise<void>, progress?: string) => {
     if (busy) return;
     setBusy(true);
     try {
-      await fn();
+      const started = progress ? await onLocalProgress(progress, fn) : (await fn(), true);
+      if (!started) return;
       onToast(label);
       setOpen(false);
     } catch (e) {
@@ -698,7 +707,7 @@ function BranchSwitcherButton({
                     onClick={() => {
                       void (wt
                         ? run(`Opened worktree for ${b.name}`, () => openWorktree(wt.path))
-                        : run(`Switched to ${b.name}`, () => checkout(b.name)));
+                        : run(`Switched to ${b.name}`, () => checkout(b.name), checkoutProgress(b.name)));
                     }}
                   >
                     <span className="ico"><Icon name={wt ? 'worktree' : 'branch'} size={13} /></span>
@@ -735,6 +744,7 @@ function BranchSwitcherButton({
                     void run(
                       `Tracking ${rb.name}`,
                       () => createBranch(localName, rb.name, true),
+                      checkoutProgress(localName),
                     );
                   }}
                 >
@@ -756,7 +766,7 @@ function BranchSwitcherButton({
           <CreateBranchField
             existing={allBranchNames}
             disabled={busy}
-            onCreate={(name) => run(`Created ${name}`, () => createBranch(name, null, true))}
+            onCreate={(name) => run(`Created ${name}`, () => createBranch(name, null, true), checkoutProgress(name))}
           />
         </div>,
         document.body,

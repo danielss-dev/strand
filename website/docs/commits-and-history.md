@@ -34,7 +34,7 @@ The All Commits view renders the full commit graph as a virtualized table: an SV
 Rows are decorated with chips:
 
 - **Branch, remote, and tag chips** — every ref pointing at a commit shows inline, with the current `HEAD` branch styled distinctly.
-- **Stash nodes** — stashes appear as synthetic rows in the graph, right above their base commit, labeled `stash@{n}`. Clicking one shows its changes in the detail panel; clicking the matching sidebar stash reveals the same node and detail without applying it. Right-click offers Apply, Pop, Drop, and Copy SHA (see [Everyday Git](everyday-git.md)).
+- **Stash nodes** — stashes appear as synthetic rows in the graph, right above their base commit, labeled `stash@{n}`. Clicking one shows its changes in the detail panel; clicking the matching sidebar stash reveals the same node and detail without applying it. Right-click offers Apply, Pop, Drop, and Copy SHA; Apply/Pop/Drop show the same transient progress pill as the sidebar stash actions (see [Everyday Git](everyday-git.md)).
 - **`ai` chip** — commits co-authored by an AI coding agent (detected from `Co-Authored-By:` trailers left by Claude Code, Copilot, Cursor, Aider, and similar, or bot-flavored authors) get an `ai` chip. Useful for spotting an agent's session at a glance; to review one, see [Reviewing agent changes](reviewing-agent-changes.md).
 
 ### Commit detail panel
@@ -69,7 +69,9 @@ you can choose its mainline parent; copy and patch export still work for them.
 
 Right-click a commit (or use `Shift+F10`) for:
 
-- **Checkout** — detached checkout of the commit.
+- **Checkout** — detached checkout of the commit. Shows the same transient
+  “Checking out commit…” progress pill as a sidebar branch switch until HEAD
+  updates.
 - **Tag…** — create a tag here.
 - **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution;
   merge commits first ask which parent is the mainline.
@@ -104,7 +106,7 @@ The Reflog view is the local, chronological record of where `HEAD` has pointed �
 Unlike the graph, the reflog includes commits orphaned by a reset, rebase, or amend, so it's your recovery path back to "lost" work. Each row shows the `HEAD@{n}` selector, the operation (destructive ops like reset and rebase are color-flagged), the message, time, and target hash.
 
 - **Click a row or press `Enter`** to jump to that commit in the graph.
-- **Right-click** (or `Shift+F10`) for recovery actions: **Jump to in graph**, **Checkout (detached)**, **Create branch here…**, and **Reset HEAD here…**.
+- **Right-click** (or `Shift+F10`) for recovery actions: **Jump to in graph**, **Checkout (detached)** (same “Checking out commit…” progress pill as the graph), **Create branch here…**, and **Reset HEAD here…**.
 
 To recover a commit you lost to a bad reset: open the Reflog, find the entry from before the reset, and either **Create branch here…** to keep it or **Reset HEAD here…** to move your branch back. If the commit is orphaned it won't appear in the graph, but the context menu actions work on it directly.
 
