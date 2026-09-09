@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { useRepo } from '../stores/repo';
+import { checkoutCommitProgress, type LocalGitOp } from '../lib/localGitOp';
 import { errMessage } from '../lib/tauri';
 import type { ReflogEntry } from '../lib/types';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
@@ -21,12 +22,15 @@ export function Reflog({
   onResetTo,
   onCreateBranch,
   onToast,
+  onLocalGitOp,
 }: {
   /** Open the Reset dialog targeting a commit (revspec + label). */
   onResetTo: (target: string, label: string) => void;
   /** Open the New-branch dialog from a start point (revspec + label). */
   onCreateBranch: (start: string, label: string) => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  /** App-owned local write progress (ToastViewport `networkMessage`, no cancel). */
+  onLocalGitOp: LocalGitOp;
 }) {
   const activePath = useRepo((s) => s.activePath);
   const reflog = useRepo((s) => s.reflog);
@@ -55,8 +59,11 @@ export function Reflog({
           icon: 'branch',
           onSelect: () => void (async () => {
             try {
-              await checkoutCommit(entry.new_oid);
-              onToast(`Checked out ${entry.new_short} (detached)`);
+              const started = await onLocalGitOp(
+                checkoutCommitProgress(),
+                () => checkoutCommit(entry.new_oid),
+              );
+              if (started) onToast(`Checked out ${entry.new_short} (detached)`);
             } catch (e) {
               onToast(`Checkout failed: ${errMessage(e)}`, 'error');
             }
@@ -75,7 +82,7 @@ export function Reflog({
       ];
       setMenu({ x, y, items });
     },
-    [revealInGraph, checkoutCommit, onCreateBranch, onResetTo, onToast],
+    [revealInGraph, checkoutCommit, onCreateBranch, onLocalGitOp, onResetTo, onToast],
   );
 
   // Load (and reload on tab switch) whenever this view is mounted. Re-reading on

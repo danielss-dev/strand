@@ -3031,10 +3031,11 @@ also work with detached HEAD. All entry points reuse `CompareRefsDialog` and
 `repoDiffBetween` / `repoTreeAt` for a full union file tree, changed-file badges,
 and per-file comparison, including an identical-file tip for unchanged paths.
 
-**Checkout in-progress feedback shipped (2026-09-09, DAN-68):** Sidebar and
-palette checkout, create-from-remote, tag/commit detach, and stash apply/pop/drop
-reuse `ToastViewport`'s network-style progress pill (`setNetProgress` into
+**Checkout in-progress feedback shipped (2026-09-09, DAN-68):** Sidebar,
+palette, topbar, commit-graph Checkout, and reflog detached checkout reuse
+`ToastViewport`'s network-style progress pill (`setNetProgress` into
 `networkMessage`, no `netOpId`) so the UI is busy before HEAD/sidebar catch up.
+Create-from-remote, tag detach, and stash apply/pop/drop share the same runner.
 Failures still error-toast (DAN-12); overlapping local writes toast instead of
 throwing. Fetch/pull/push progress and clone/open `ProgressPopup` are unchanged.
 

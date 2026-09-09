@@ -51,7 +51,7 @@ describe('local Git write progress', () => {
     ]);
   });
 
-  it('covers remote-track, detached, and stash copy without a success toast', () => {
+  it('covers remote-track, detached, graph/reflog, and stash copy without a success toast', () => {
     expect(checkoutProgress('topic')).toBe('Checking out `topic`…');
     expect(checkoutCommitProgress()).toBe('Checking out commit…');
     expect(stashApplyProgress()).toBe('Applying stash…');

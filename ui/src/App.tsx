@@ -2297,6 +2297,7 @@ export function App() {
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateBranch={(start, label) => setBranchDialog({ start, label })}
             onToast={showToast}
+            onLocalGitOp={runLocalProgress}
           />
     )],
     [BUILT_IN_SURFACE_IDS.worktrees, () => (
@@ -2315,11 +2316,12 @@ export function App() {
             onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
             onWorkNavigate={showWorkbenchWork}
             onToast={showToast}
+            onLocalGitOp={runLocalProgress}
             active={lifecycle.focused}
           />
     )],
   ]), [openActiveFileInEditor, openChangesInWork, openEditorTarget, openReviewInCustom,
-    showWorkbenchWork, showToast]);
+    showWorkbenchWork, showToast, runLocalProgress]);
 
   const renderSurfaceContribution = useCallback((request: SurfaceRenderRequest): React.ReactNode => {
     if (isPluginSurface(request.contribution.id)) {

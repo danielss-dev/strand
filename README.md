@@ -272,7 +272,8 @@ the resolved app appearance automatically.
   initialize a repository with an initial branch, optional
   `.gitignore`, and optional first commit; inspect a stash from the sidebar
   without applying it, or create and check out a branch from it; local checkout,
-  track, tag/commit detach, and stash apply/pop/drop show a transient progress
+  track, tag/commit detach, graph and reflog detached checkout, and stash
+  apply/pop/drop show a transient progress
   pill; fetch / pull /
   push with streaming progress and explicit
   pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,

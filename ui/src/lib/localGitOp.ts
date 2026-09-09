@@ -27,6 +27,9 @@ export function deleteRefProgress(name: string): string {
 
 export type ProgressUpdate = string | null | ((current: string | null) => string | null);
 
+/** App `runLocalProgress` — sets ToastViewport `networkMessage` without Cancel. */
+export type LocalGitOp = (message: string, work: () => Promise<void>) => Promise<boolean>;
+
 export interface LocalGitOpRunnerOptions {
   /** Same setter as App `setNetProgress` — local writes omit `netOpId`. */
   setProgress: (update: ProgressUpdate) => void;
@@ -43,7 +46,7 @@ export interface LocalGitOpRunnerOptions {
  */
 export function createLocalGitOpRunner(
   options: LocalGitOpRunnerOptions,
-): (message: string, work: () => Promise<void>) => Promise<boolean> {
+): LocalGitOp {
   let busy = false;
   return async (message, work) => {
     if (busy || options.isBlocked?.()) {
