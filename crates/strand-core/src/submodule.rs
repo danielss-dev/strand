@@ -748,7 +748,7 @@ mod tests {
             |_| {},
             None,
         );
-        let _ = daemon.kill();
+        crate::network::kill_git_tree(&mut daemon);
         let _ = daemon.wait();
         result.unwrap();
         assert_eq!(
