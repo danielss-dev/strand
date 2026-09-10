@@ -1,5 +1,25 @@
 import { fencedDiff } from './patchExport';
+import { hashPatch } from './patch';
 import type { ReviewNote } from './types';
+
+/** Capture at annotation time, never reinterpret an old line against new code. */
+export function captureReviewNoteAnchor(
+  patch: string,
+  line: number,
+  side: 'new' | 'old' = 'new',
+): NonNullable<ReviewNote['anchor']> {
+  const excerpt = excerptAround(patch, line, side);
+  return {
+    patchHash: hashPatch(patch),
+    excerpt: excerpt && excerpt.length > 4096
+      ? `${excerpt.slice(0, 4096)}\n[Original excerpt truncated]`
+      : excerpt,
+  };
+}
+
+export function reviewNoteOutdated(note: ReviewNote, patchHash: string): boolean {
+  return note.line != null && (!note.anchor?.excerpt || note.anchor.patchHash !== patchHash);
+}
 
 /**
  * Stable identity for one Review comparison. Notes are shared between the
@@ -38,10 +58,9 @@ export interface ReviewFeedbackFile {
 
 /**
  * Assemble the export's file list: every pool file that has notes (with its
- * patch, so line notes can quote an excerpt) PLUS noted paths that have left
- * the pool — a note taken in inbox mode survives the file being staged away,
- * so it must still export (with an empty patch → no excerpt) rather than
- * silently dropping. Pool order first, then orphaned paths sorted.
+ * patch for freshness checks) PLUS noted paths that have left the pool.
+ * Orphaned notes still export their saved original excerpt with an outdated
+ * label. Pool order first, then orphaned paths sorted.
  */
 export function collectFeedbackFiles(
   pool: { path: string; patch: string }[],
@@ -65,8 +84,8 @@ export function collectFeedbackFiles(
 /**
  * Build the feedback prompt: a header naming the repo (and branch / baseline
  * when known), then per noted file a `## path` section where each
- * line-anchored note quotes a ±4-line window of the patch around its NEW-side
- * line in a fenced diff block, and each whole-file note renders as a bullet.
+ * line-anchored note quotes its saved original excerpt in a fenced diff block,
+ * and each whole-file note renders as a bullet.
  * Files without notes are skipped. Ends with a closing instruction line.
  */
 export function buildReviewFeedback(input: {
@@ -132,6 +151,7 @@ export function buildWorkspaceReviewFeedback(input: {
 function fileSection(file: ReviewFeedbackFile, heading: '##' | '###'): string | null {
   if (file.notes.length === 0) return null;
   const parts: string[] = [`${heading} ${file.path}`];
+  const patchHash = hashPatch(file.patch);
   for (const note of file.notes) {
     if (note.line == null) {
       // Whole-file notes are bullets; consecutive ones join into one list.
@@ -140,7 +160,12 @@ function fileSection(file: ReviewFeedbackFile, heading: '##' | '###'): string | 
       else parts.push(`- ${note.text}`);
       continue;
     }
-    const excerpt = excerptAround(file.patch, note.line, note.side ?? 'new');
+    if (reviewNoteOutdated(note, patchHash)) {
+      parts.push(note.anchor
+        ? `Outdated note — original ${note.side === 'old' ? 'old-side ' : ''}line ${note.line}; the file has changed or is unavailable.`
+        : `Outdated note — original ${note.side === 'old' ? 'old-side ' : ''}line ${note.line}; original context was not saved.`);
+    }
+    const excerpt = note.anchor?.excerpt;
     if (excerpt != null) parts.push(fencedDiff(excerpt));
     parts.push(`**Note:** ${note.text}`);
   }

@@ -175,7 +175,10 @@ the resolved app appearance automatically.
   including work the agent already staged or committed — and a change map
   beside the scrollbar shows where every edit sits in the file (click to
   jump). Inline feedback notes persist with their baseline/branch comparison,
-  so switching review targets never mixes two agents' feedback. The selected
+  retaining their original code excerpts when later edits make them outdated.
+  The queue loads selected patches on demand, and Stage reviewed verifies
+  the reviewed text against current Git state before staging captured bytes.
+  Failed reads keep the last comparison and offer Retry. The selected
   Codex or Claude Code subscription can inspect that exact review set for
   possible defects. Findings stay pending until you explicitly add selected
   ones as severity-labelled notes; AI review never edits repository files.
@@ -256,8 +259,9 @@ the resolved app appearance automatically.
   like separate repos. Sidebar and palette commands retain the deeper flows:
   **Merge & clean up** lands a worktree's branch (squash / merge /
   fast-forward, exact commands previewed) and retires the worktree + branch
-  in one motion, and every removal first archives a full snapshot —
-  uncommitted and untracked files included. Creating a worktree can start from
+  in one motion. Removal requires a recovery snapshot preserving staged and
+  unstaged content separately, including non-ignored untracked files; an
+  archive failure stops removal. Creating a worktree can start from
   any branch, remote branch, tag, or commit
   (fetch-first for remote bases) and copies gitignored setup files listed in
   `.worktreeinclude` (`.env`, local settings) so agents can run out of the

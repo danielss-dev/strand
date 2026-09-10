@@ -2144,6 +2144,14 @@ and Store certification remain external gates.
 
 ## 1.1+ — Post-1.0
 
+**Agent-review audit (2026-09-10):**
+[`docs/agent-review-audit-2026-09-10.md`](./docs/agent-review-audit-2026-09-10.md)
+prioritizes worktree recovery, complete/stable review comparisons, staging
+against reviewed content, and durable feedback anchors before new agent
+workflow features. TASKS records R01–R10 and proposed per-run checkpoints,
+feedback resolution, and revision-bound verification. This is planning work;
+the audit does not mark these fixes or proposals shipped.
+
 - ☑ **Configurable Workbench** — Work and the former Custom experiment are one
   destination. With no saved layout it is the existing full-size Work surface;
   customization composes registered Strand surfaces into nested panes with
@@ -3063,6 +3071,20 @@ Live checks covered Files mutations, 11 checkouts, terminal persistence,
 Settings focus, a 100-event synthetic Heroi stream, and colored 5k-line Blame.
 Full-patch materialization and complete PRD release certification remain
 explicit follow-ups in TASKS; see the audit report for measurement limits.
+
+**Agent-review hardening implemented (2026-09-11):** Closed R01–R10 from the
+agent-review audit. Native worktree removal now requires a recovery archive,
+with independent index/worktree restoration and collision-safe refs. Review
+keeps failed comparisons, includes staged Workspace inbox changes and unborn
+repositories, preserves original note excerpts, and stages captured reviewed
+text under Git state locks. Summaries and selected patches replace eager full
+patch loading, with bounded CLI pages/chunks and complete-action error handling.
+On the 501-file fixture, native summary plus three selected patches takes
+154ms in summed medians versus 690ms for the complete read. A Windows CI gate
+exercises review/edit/stage/commit/feedback, restart persistence, recovery
+failure, and 70-file viewport/search loading. Per-run checkpoints, feedback
+resolution and revision-bound checks remain proposals; production paint and
+cross-platform performance certification remain explicit follow-ups.
 
 - **Security & signing.** ☑ Windows uses the Partner Center-signed Microsoft
   Store MSIX; macOS uses Developer ID signing + notarization; Linux AppImages

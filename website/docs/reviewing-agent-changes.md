@@ -13,9 +13,13 @@ Review works in one of two modes, decided by whether a baseline is pinned:
 
 If the view is empty, the placeholder tells you which mode you are in — in session mode it reads "No changes since `<short>`. Let the agent work — this view follows along live."
 
+Inbox review also works before the first commit. If a refresh fails, Strand keeps the pinned baseline, notes, and last successful comparison visible with an error and **Retry**. Treat that comparison as stale until the retry succeeds.
+
 ## Whole-file context diffs
 
 Every file in the review set renders in its entirety, with the edits inline — not as isolated hunks with a few context lines. You always see the code around a change, which is exactly what reviewing agent output needs: agents edit in many places at once, and hunk-sized windows hide the shape of the file. Large files stay fast; the diff pane is virtualized, so a 5,000-line file mounts only the rows on screen.
+
+The file queue loads first, followed by patches for the selected and nearby files. Loading placeholders are not empty diffs or reviewed files. Search, copying a complete diff, and AI review load the patches they need before producing a result; a failed read is reported rather than silently omitting files. Exceptionally large patches can exceed the per-request limit; use the file editor or the [command-line patch chunks](settings.md) to inspect those files.
 
 `Mod+F` opens in-diff search across the whole review set, with wrap-around stepping (`Enter` / `Shift+Enter`) and path + line previews; jumps land centered on the matched line.
 
@@ -34,7 +38,7 @@ The baseline persists per repository, so a session survives restarting Strand. W
 The left side of the view is a file tree of everything in the review set — your queue. It tracks your progress:
 
 - A check decoration marks files you have reviewed.
-- If a file changes again after you reviewed it, its mark flips automatically and the row shows **changed** ("Changed since reviewed — review again"). Reviewed marks are tied to the exact content you saw, so a stale approval can never hide a newer edit.
+- If a file changes again after you reviewed it, its mark flips automatically and the row shows **changed** ("Changed since reviewed — review again"). Marks compare the loaded patch with the version you reviewed; newly changed files must load again before they can be approved.
 - Files with notes carry a `✎N` badge.
 
 Double-click or press `Enter` on a row to toggle its reviewed state; doing this on a folder marks its whole subtree. Right-click a row for Mark reviewed, Stage, Discard, and Copy path. Reviewed marks persist per repository across restarts, and they drive the progress bar in the Review toolbar.
@@ -54,6 +58,8 @@ While reading, attach notes to what you want changed:
   restores the notes you left there.
 
 When you are done, click **Copy feedback (N)** in the toolbar (palette: "Review: copy feedback as prompt"). Strand assembles every note into one Markdown prompt — branch and baseline header, per-file sections, each line note with a fenced diff excerpt of the surrounding lines, and a closing instruction — ready to paste straight back into the agent. "Review: clear notes" wipes the slate for the next round.
+
+Line notes save their original code excerpt when you create them. If the file changes afterward, the note shows **Outdated** and exported feedback keeps that original excerpt, even if the file was renamed or deleted. Notes saved by an older Strand version without an excerpt are labelled outdated instead of quoting current code at the old line number.
 
 ## AI code review
 
@@ -90,7 +96,7 @@ The typical rhythm: `j`, read, `Space`, `j`, read, `m` to leave a note, `Space` 
 
 Once files are marked, the toolbar offers bulk actions:
 
-- **Stage reviewed (n)** — stages every reviewed file that is currently unstaged.
+- **Stage reviewed (n)** — stages the reviewed text of files that are currently unstaged, including both sides of a current rename. Strand verifies the file, HEAD, and index before publishing the staged result. If they changed, review the new version and try again. An edit arriving after capture stays unstaged. Binary files and submodules require the ordinary Stage action because their textual diff cannot establish the reviewed contents.
 - **Discard unreviewed (n)** — throws away unstaged files you did not approve. It appears once two or more unreviewed unstaged files remain (for a single file, use the per-file discard). It is a two-step button: the first click arms it, a second click within a few seconds confirms.
 
 Single-file discards (`d` `d`, or the context-menu Discard) also require the second press to confirm. In inbox mode, discarding an individual change block via its inline button surfaces an Undo toast for a few seconds — clicking Undo applies the discarded slice back to the working tree.
@@ -106,3 +112,5 @@ See [Worktrees](worktrees.md) for creating worktrees, comparing multiple attempt
 ## Reviewing across repositories
 
 If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+7`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. Members whose folder was deleted or moved are skipped until the path is a repository again. See [Repositories and workspaces](repositories-and-workspaces.md).
+
+Each member's inbox includes staged and unstaged changes together. Staging a file keeps it in the queue; partially staged files remain read-only at hunk level. A failed member refresh keeps its last comparison visible with an error and retry action.

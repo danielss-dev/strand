@@ -4,6 +4,7 @@ import {
   buildReviewFeedback,
   buildWorkspaceReviewFeedback,
   collectFeedbackFiles,
+  captureReviewNoteAnchor,
   reviewNoteScope,
 } from './reviewExport';
 import {
@@ -18,6 +19,7 @@ const note = (text: string, line: number | null = null, side?: 'new' | 'old'): R
   text,
   line,
   ...(side ? { side } : {}),
+  ...(line != null ? { anchor: captureReviewNoteAnchor(PATCH, line, side) } : {}),
   createdAt: 0,
 });
 
@@ -119,7 +121,8 @@ describe('buildReviewFeedback', () => {
       baselineShort: null,
       files: [{ path: 'src/a.ts', patch: PATCH, notes: [note('ghost', 999)] }],
     });
-    expect(out).toContain('## src/a.ts\n\n**Note:** ghost\n');
+    expect(out).toContain('**Note:** ghost\n');
+    expect(out).toContain('Outdated note');
     expect(out).not.toContain('```');
   });
 
@@ -143,7 +146,7 @@ describe('buildReviewFeedback', () => {
       repoName: 'r',
       branch: null,
       baselineShort: null,
-      files: [{ path: 'doc.md', patch, notes: [note('fence', 2)] }],
+      files: [{ path: 'doc.md', patch, notes: [{ ...note('fence', 2), anchor: captureReviewNoteAnchor(patch, 2) }] }],
     });
     expect(out).toContain('````diff\n intro\n+```js\n outro\n````');
   });

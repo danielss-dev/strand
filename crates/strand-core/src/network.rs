@@ -61,7 +61,7 @@ impl CancelHandle {
 
 // Git LFS and submodule helpers inherit the pipes. Killing only git can leave
 // those helpers transferring (and the reader waiting for EOF) after Cancel.
-fn kill_git_tree(child: &mut std::process::Child) {
+pub(crate) fn kill_git_tree(child: &mut std::process::Child) {
     if matches!(child.try_wait(), Ok(Some(_))) { return; }
     #[cfg(windows)]
     {

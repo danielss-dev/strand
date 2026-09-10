@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{error::Result, repo::Repo};
 
+pub const EMPTY_TREE_OID: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 /// What happened to a file between two trees / index states.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -43,6 +45,18 @@ pub struct DiffPath {
 }
 
 impl Repo {
+    /// Freeze Review's baseline without writing an empty tree or inventing HEAD.
+    pub fn review_base_oid(&self, baseline: &str) -> Result<String> {
+        if baseline == "HEAD" {
+            match self.git2()?.head() {
+                Err(error) if error.code() == git2::ErrorCode::UnbornBranch => return Ok(EMPTY_TREE_OID.into()),
+                Err(error) => return Err(error.into()),
+                Ok(_) => {},
+            }
+        }
+        self.merge_base(baseline, baseline)
+    }
+
     pub fn diff_unstaged_paths(&self) -> Result<Vec<DiffPath>> {
         if self.sparse_enabled() {
             let bytes = self.sparse_git(&["diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", "--"], None)?;
@@ -164,9 +178,9 @@ impl Repo {
     pub fn diff_since(&self, baseline: &str) -> Result<Vec<FileDiff>> {
         if self.sparse_enabled() || self.is_partial_clone() { return self.sparse_workdir_diff(false, Some(baseline), 3, None); }
         let repo = self.git2()?;
-        let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
+        let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options();
-        let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts))?;
+        let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
         collect(diff)
     }
 
@@ -185,9 +199,9 @@ impl Repo {
     pub fn diff_since_full(&self, baseline: &str) -> Result<Vec<FileDiff>> {
         if self.sparse_enabled() || self.is_partial_clone() { return self.sparse_workdir_diff(false, Some(baseline), WHOLE_FILE_CONTEXT, None); }
         let repo = self.git2()?;
-        let tree = repo.revparse_single(baseline)?.peel_to_commit()?.tree()?;
+        let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
-        let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts))?;
+        let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
         collect(diff)
     }
 
@@ -209,17 +223,30 @@ impl Repo {
     }
 
     fn sparse_workdir_diff(&self, staged: bool, baseline: Option<&str>, context: u32, path: Option<&str>) -> Result<Vec<FileDiff>> {
+        let paths = path.map(|path| vec![path.to_owned()]);
+        self.sparse_workdir_diff_paths(staged, baseline, context, paths.as_deref())
+    }
+
+    pub(crate) fn sparse_workdir_diff_paths(&self, staged: bool, baseline: Option<&str>, context: u32, paths: Option<&[String]>) -> Result<Vec<FileDiff>> {
         let context_arg = format!("--unified={context}");
-        let oid = baseline.map(|rev| self.git2()?.revparse_single(rev)?.peel_to_commit().map(|c| c.id().to_string()).map_err(crate::Error::from)).transpose()?;
+        let oid = baseline.map(|rev| -> Result<String> {
+            let repo = self.git2()?;
+            Ok(match review_baseline_tree(repo, rev)? {
+                Some(tree) => tree.id(),
+                // Git recognizes the empty tree even before it is stored. Hash
+                // without writing an object: a review read must stay read-only.
+                None => git2::Oid::hash_object(git2::ObjectType::Tree, &[])?,
+            }.to_string())
+        }).transpose()?;
         let mut args = vec!["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--binary", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--find-renames", &context_arg];
         if staged { args.push("--cached"); }
         if let Some(oid) = &oid { args.push(oid); }
         args.push("--");
-        if let Some(path) = path { args.push(path); }
+        if let Some(paths) = paths { args.extend(paths.iter().map(String::as_str)); }
         let bytes = self.sparse_git(&args, None)?;
         let mut files = if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?)? };
         if !staged {
-            let untracked: Vec<_> = self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked && path.is_none_or(|path| s.path == path)).collect();
+            let untracked: Vec<_> = self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked && paths.is_none_or(|paths| paths.contains(&s.path))).collect();
             if !untracked.is_empty() {
                 // One path-limited libgit2 walk for all untracked contents;
                 // never spawn a Git process per untracked file.
@@ -257,7 +284,7 @@ fn diff_options() -> git2::DiffOptions {
     diff_options_with(3)
 }
 
-fn diff_options_with(context: u32) -> git2::DiffOptions {
+pub(crate) fn diff_options_with(context: u32) -> git2::DiffOptions {
     let mut opts = git2::DiffOptions::new();
     opts.include_untracked(true)
         .recurse_untracked_dirs(true)
@@ -279,6 +306,17 @@ fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     find.renames(true).copies(true);
     diff.find_similar(Some(&mut find))?;
     collect_ready(diff)
+}
+
+/// Only an unborn HEAD means an empty starting tree. Invalid pinned commits,
+/// unreadable objects, and damaged HEAD references must remain read failures.
+pub(crate) fn review_baseline_tree<'repo>(repo: &'repo git2::Repository, baseline: &str) -> Result<Option<git2::Tree<'repo>>> {
+    if baseline == EMPTY_TREE_OID { return Ok(None); }
+    match repo.revparse_single(baseline) {
+        Ok(object) => Ok(Some(object.peel_to_commit()?.tree()?)),
+        Err(_) if baseline == "HEAD" && repo.head().is_err_and(|error| error.code() == git2::ErrorCode::UnbornBranch) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
@@ -353,7 +391,7 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     Ok(files)
 }
 
-fn map_status(s: git2::Delta) -> DiffStatus {
+pub(crate) fn map_status(s: git2::Delta) -> DiffStatus {
     match s {
         git2::Delta::Added | git2::Delta::Untracked => DiffStatus::Added,
         git2::Delta::Deleted => DiffStatus::Deleted,
@@ -387,6 +425,46 @@ mod tests {
         let tree = repo.find_tree(tree_oid).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
         (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    #[test]
+    fn review_inbox_before_first_commit_includes_staged_and_untracked_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = git2::Repository::init(dir.path()).unwrap();
+        let repo = Repo::discover(dir.path().to_str().unwrap()).unwrap();
+        std::fs::write(dir.path().join("staged.txt"), "staged\n").unwrap();
+        std::fs::write(dir.path().join("loose.txt"), "untracked\n").unwrap();
+        let initial = repo.diff_since_full("HEAD").unwrap();
+        assert_eq!(initial.len(), 2);
+        assert!(initial.iter().all(|diff| diff.status == DiffStatus::Added));
+
+        repo.stage_paths(&["staged.txt".into()]).unwrap();
+        std::fs::write(dir.path().join("staged.txt"), "staged\nmore\n").unwrap();
+        // Exercise both the in-process reader and Git fallback used by sparse
+        // and partial repositories. Neither requires a stored empty tree.
+        for diffs in [repo.diff_since_full("HEAD").unwrap(), repo.sparse_workdir_diff(false, Some("HEAD"), WHOLE_FILE_CONTEXT, None).unwrap()] {
+            assert_eq!(diffs.len(), 2);
+            assert!(diffs.iter().all(|diff| diff.status == DiffStatus::Added));
+            assert!(diffs.iter().find(|diff| diff.path == "staged.txt").unwrap().patch.contains("+more"));
+        }
+        assert!(repo.diff_since("HEAD").is_ok());
+        assert!(repo.diff_since_full("missing-baseline").is_err());
+
+        repo.stage_paths(&["staged.txt".into(), "loose.txt".into()]).unwrap();
+        assert_eq!(repo.diff_since_full("HEAD").unwrap().len(), 2);
+        let tree = git.find_tree(git.index().unwrap().write_tree().unwrap()).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        git.commit(Some("HEAD"), &sig, &sig, "first commit", &tree, &[]).unwrap();
+        assert!(repo.diff_since_full("HEAD").unwrap().is_empty());
+    }
+
+    #[test]
+    fn review_does_not_treat_invalid_head_as_an_empty_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = git2::Repository::init(dir.path()).unwrap();
+        let repo = Repo::discover(dir.path().to_str().unwrap()).unwrap();
+        std::fs::write(git.path().join("HEAD"), "not a valid reference\n").unwrap();
+        assert!(repo.diff_since_full("HEAD").is_err());
     }
 
     #[test]

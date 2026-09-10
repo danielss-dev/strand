@@ -3,6 +3,7 @@ import type { RemoteHostingProvider, PublishAccount, PublishRequest, PublishStat
 import type { FlowAction, FlowConfig, FlowKind, FlowOutcome, FlowPlan, FlowState, FlowTool } from './gitflow';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { RemoteEnvelope, RemoteReadOp } from './remoteRepos';
+import type { ReviewedStageState } from './reviewedStage';
 
 import type { AdvancedRefs, GitNote, ReplaceReview, TagEditReview, TagEditKind, PublishedTag } from './advancedRefs';
 import type { BisectAction, BisectState, BisectOutcome } from './bisect';
@@ -36,6 +37,8 @@ import type {
   FileBlob,
   FileContent,
   FileDiff,
+  DiffSummary,
+  WorkingDiffSource,
   FileHistoryEntry,
   FileStatus,
   GlobalIdentity,
@@ -389,6 +392,10 @@ export const tauri = {
       path, id, expectedHead,
     }),
   repoDiffUnstaged: (path: string) => invoke<FileDiff[]>('repo_diff_unstaged', { path }),
+  repoDiffSummary: (path: string, source: WorkingDiffSource) =>
+    invoke<DiffSummary[]>('repo_diff_summary', { path, source }),
+  repoDiffFiles: (path: string, source: WorkingDiffSource, files: string[], fullContext: boolean) =>
+    invoke<FileDiff[]>('repo_diff_files', { path, source, files, fullContext }),
   repoDiffUnstagedPaths: (path: string) =>
     invoke<Pick<FileDiff, 'path' | 'old_path'>[]>('repo_diff_unstaged_paths', { path }),
   repoDiffStaged: (path: string) => invoke<FileDiff[]>('repo_diff_staged', { path }),
@@ -437,6 +444,9 @@ export const tauri = {
   repoUnstage: (path: string, file: string) => invoke<void>('repo_unstage', { path, file }),
   repoStageMany: (path: string, files: string[]) =>
     invoke<void>('repo_stage_many', { path, files }),
+  repoReviewedStageState: (path: string) => invoke<ReviewedStageState>('repo_reviewed_stage_state', { path }),
+  repoStageReviewed: (path: string, state: ReviewedStageState, baseline: string | null, files: FileDiff[]) =>
+    invoke<void>('repo_stage_reviewed', { path, state, baseline, files }),
   repoUnstageMany: (path: string, files: string[]) =>
     invoke<void>('repo_unstage_many', { path, files }),
   repoDiscardMany: (path: string, files: string[]) =>

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
-use strand_ops::{DiffSource, OpError, ReadOp, ReadRequest, ReadResult, Result};
+use strand_ops::{DiffSource, OpError, ReadOp, ReadRequest, ReadResult, Result, WorkingDiffSource};
 
 #[derive(Parser)]
 #[command(
@@ -50,6 +50,12 @@ enum Action {
         since: Option<String>,
         #[arg(long)]
         full_context: bool,
+        /// Exact repository-relative path; repeat for at most 32 files.
+        #[arg(long = "path")]
+        paths: Vec<String>,
+        /// List changed paths without generating patch bodies.
+        #[arg(long, conflicts_with = "paths")]
+        summary: bool,
     },
     /// Full-context changes since a base, recent HEAD history and status.
     Review {
@@ -57,6 +63,33 @@ enum Action {
         since: String,
         #[arg(short = 'n', long, default_value_t = 50)]
         limit: usize,
+        /// Exact repository-relative path; repeat for at most 32 files.
+        #[arg(long = "path")]
+        paths: Vec<String>,
+        /// List changed paths without generating patch bodies.
+        #[arg(long, conflicts_with = "paths")]
+        summary: bool,
+        /// Use three context lines instead of whole files.
+        #[arg(long)]
+        compact: bool,
+    },
+    /// Read at most 64 KiB of one patch. JSON includes exact bytes and a revision.
+    DiffChunk {
+        #[arg(long)]
+        path: String,
+        #[arg(long, default_value_t = 0)]
+        offset: u64,
+        #[arg(long, default_value_t = 65536)]
+        length: usize,
+        /// Required for continuation; use the revision returned at offset zero.
+        #[arg(long)]
+        revision: Option<String>,
+        #[arg(long, group = "source")]
+        staged: bool,
+        #[arg(long, group = "source")]
+        since: Option<String>,
+        #[arg(long)]
+        full_context: bool,
     },
     /// JSON schemas for the versioned output, request and error types.
     Schema,
@@ -114,13 +147,25 @@ pub fn run(args: Vec<String>) -> Result<()> {
                 head_only: head,
             },
         },
-        Action::Review { since, limit } => ReadOp::Review { since, limit },
+        Action::Review { since, limit, paths, summary, compact } => {
+            if summary { ReadOp::DiffSummary { source: WorkingDiffSource::Review { baseline: since } } }
+            else if !paths.is_empty() || compact { ReadOp::ReviewPaths { since, limit, paths, full_context: !compact } }
+            else { ReadOp::Review { since, limit } }
+        }
+        Action::DiffChunk { path, offset, length, revision, staged, since, full_context } => {
+            let source = if staged { WorkingDiffSource::Staged {} }
+                else if let Some(baseline) = since { WorkingDiffSource::Review { baseline } }
+                else { WorkingDiffSource::Unstaged {} };
+            ReadOp::DiffChunk { source, path, offset, length, full_context, revision }
+        }
         Action::Diff {
             staged,
             commit,
             between,
             since,
             full_context,
+            paths,
+            summary,
         } => {
             if full_context && (staged || commit.is_some() || !between.is_empty()) {
                 return Err(OpError::new(
@@ -145,7 +190,16 @@ pub fn run(args: Vec<String>) -> Result<()> {
             } else {
                 DiffSource::Unstaged { full_context }
             };
-            ReadOp::Diff { source }
+            if summary || !paths.is_empty() {
+                let working = match &source {
+                    DiffSource::Unstaged { .. } => WorkingDiffSource::Unstaged {},
+                    DiffSource::Staged {} => WorkingDiffSource::Staged {},
+                    DiffSource::Since { revision, .. } => WorkingDiffSource::Review { baseline: revision.clone() },
+                    _ => return Err(OpError::new("invalid_request", "--path/--summary support unstaged, --staged and --since diffs.")),
+                };
+                if summary { ReadOp::DiffSummary { source: working } }
+                else { ReadOp::DiffFiles { source: working, paths, full_context } }
+            } else { ReadOp::Diff { source } }
         }
     };
     let envelope = strand_ops::execute(&ReadRequest {
@@ -219,6 +273,9 @@ fn human(result: &ReadResult) -> String {
             human(&ReadResult::Status(review.status.clone())),
             human(&ReadResult::Diff(review.diffs.clone()))
         ),
+        ReadResult::DiffPage(files) => human(&ReadResult::Diff(files.iter().map(|file| file.diff.clone()).collect())),
+        ReadResult::DiffSummary(files) => files.iter().map(|file| format!("{:10?} {}\n", file.status, file.path)).collect(),
+        ReadResult::DiffChunk(chunk) => String::from_utf8_lossy(&chunk.bytes).into_owned(),
         ReadResult::Snapshot(snapshot) => format!(
             "{} · {} · {} ahead / {} behind\n{}",
             snapshot.meta.name,

@@ -52,7 +52,7 @@ If several agent worktrees belong to repositories in one workspace, [Workspace R
 - **Into** — the target base branch. Strand detects it and marks the detected one, but you can pick another.
 - **Mode** — **Squash into one commit** (agent WIP history stays out of the base branch), **Merge commit** (keeps every commit and records the merge), or **Fast-forward only** (available only when the base hasn't moved since the fork; it's the only option when the base branch isn't checked out anywhere).
 - **Preview** — the dialog shows the exact git commands it will run, so there are no surprises.
-- **Remove the worktree and delete the branch** — optional final step. A full snapshot is archived first. (Unavailable for the worktree you're currently in.)
+- **Remove the worktree and delete the branch** — optional final step. A recovery snapshot is archived first; removal stops if the archive fails. (Unavailable for the worktree you're currently in.)
 
 The dialog warns when the worktree still has uncommitted changes, and when its files overlap with another dirty worktree's uncommitted changes — merge order matters in that case.
 
@@ -60,7 +60,9 @@ For bulk retirement, **Clean up…** in the header or the palette action **Clean
 
 ## Removal snapshots
 
-Every worktree removal — including force removals and the bulk clean-up — first archives the worktree's full state: HEAD, staged changes, unstaged changes, and untracked files. Deleting a worktree in Strand is therefore never destructive.
+Before removing an existing worktree — including force removal and bulk clean-up — Strand must successfully archive HEAD, staged changes, unstaged changes, and non-ignored untracked files. The snapshot preserves the index separately, including content that exists only in staging. Restoring a new snapshot restores both staged and unstaged state; older snapshots remain readable with their original restore behavior.
+
+If the archive fails, the worktree stays in place and Strand reports the error. Already-missing directories can still be pruned. Ignored files are excluded, and the snapshot does not stop external processes from writing afterward: stop an active agent before removing its worktree and preserve any ignored setup files you need.
 
 Snapshots are retained behind the scenes and auto-pruned — the newest 10 per worktree are kept, with a 60-day cap — so the archive doesn't grow forever. They are intentionally not shown in the compact Worktrees pane.
 

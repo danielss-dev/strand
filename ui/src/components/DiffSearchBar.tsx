@@ -32,12 +32,15 @@ export function DiffSearchBar({
   onClose,
   placeholder,
   pathLabel,
+  loadingLabel,
 }: {
   /** `tag` rides through to each match (see {@link DiffMatch.tag}). */
   diffs: (Pick<FileDiff, 'path' | 'patch' | 'binary'> & { tag?: unknown })[];
   onJump: (m: DiffMatch) => void;
   onClose: () => void;
   placeholder?: string;
+  /** Partial patch collections must not report incomplete search results. */
+  loadingLabel?: string | null;
   /**
    * Preview-line label for a match; defaults to the file path. Lets a pool
    * spanning several repos (Workspace Review) disambiguate identical paths
@@ -54,7 +57,7 @@ export function DiffSearchBar({
     return () => window.clearTimeout(t);
   }, [query]);
 
-  const result = useMemo(() => searchDiffs(diffs, debounced), [diffs, debounced]);
+  const result = useMemo(() => searchDiffs(loadingLabel ? [] : diffs, debounced), [diffs, debounced, loadingLabel]);
   const matches = result.matches;
 
   // -1 = not navigated yet: the first Enter lands on the first match instead
@@ -86,6 +89,7 @@ export function DiffSearchBar({
       className="diff-search-bar"
       role="search"
       aria-label="Search in diff"
+      aria-busy={!!loadingLabel}
       // On the container, not the input, so Esc also closes while a nav or
       // close button holds focus (Tab + Esc must not strand the bar open).
       onKeyDown={(e) => {
@@ -119,7 +123,7 @@ export function DiffSearchBar({
           }}
         />
         <span className="ds-count" role="status" aria-live="polite">
-          {!debounced.trim()
+          {loadingLabel ? loadingLabel : !debounced.trim()
             ? ''
             : matches.length === 0
               ? 'No results'

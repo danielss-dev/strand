@@ -86,13 +86,17 @@ describe('repository navigation state', () => {
       path: 'staged.ts', old_path: null, status: 'modified', adds: 1, dels: 0,
       patch: '@@ -1 +1 @@\n-old\n+new\n', binary: false,
     }] as const;
-    const diffSince = vi.spyOn(tauri, 'repoDiffSinceFull').mockResolvedValue([...diffs]);
+    const diffSince = vi.spyOn(tauri, 'repoDiffSummary').mockResolvedValue(diffs.map((diff) => ({ ...diff, revision: 'content' })));
+    const page = vi.spyOn(tauri, 'repoDiffFiles').mockResolvedValue([...diffs]);
     useRepo.setState({ activePath: '/repo', baseline: null, reviewUnstagedDiffs: [] });
 
     await useRepo.getState().refreshReviewDiffs();
 
-    expect(diffSince).toHaveBeenCalledWith('/repo', 'HEAD');
-    expect(useRepo.getState().reviewUnstagedDiffs).toEqual(diffs);
+    expect(diffSince).toHaveBeenCalledWith('/repo', { kind: 'review', baseline: 'HEAD' });
+    expect(useRepo.getState().reviewUnstagedDiffs.map((diff) => diff.path)).toEqual(['staged.ts']);
+    expect(page).not.toHaveBeenCalled();
+    await useRepo.getState().loadDiffFiles('review', ['staged.ts']);
+    expect(useRepo.getState().reviewUnstagedDiffs[0].patch).toEqual(diffs[0].patch);
   });
 
   it('pins the initial baseline at the detected branch fork point', async () => {
