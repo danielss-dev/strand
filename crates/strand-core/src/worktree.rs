@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
@@ -101,6 +102,7 @@ pub struct WorktreeStats {
 /// so archives never show up as branches, but still reachable — a snapshot
 /// protects its objects from gc.
 const ARCHIVE_NS: &str = "refs/strand/archive/";
+static ARCHIVE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Auto-prune policy for archive snapshots: keep the newest per slug…
 const ARCHIVE_KEEP_PER_SLUG: usize = 10;
@@ -210,9 +212,38 @@ impl Repo {
     /// local changes — that guard is intentional, so the UI confirms before
     /// forcing. `force` passes the flag twice: git wants `-f -f` for locked
     /// worktrees, and a single `--force` already implies discarding changes,
-    /// so there is no useful middle step to expose.
+    /// so there is no useful middle step to expose. Existing directories must
+    /// have a successful recovery archive before Git may remove them.
     pub fn remove_worktree(&self, dest: &str, force: bool) -> Result<()> {
         reject_dash("worktree path", dest)?;
+        let target = self.path.join(dest);
+        let metadata = match std::fs::symlink_metadata(&target) {
+            Ok(metadata) => Some(metadata),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(Error::Other(format!("cannot inspect worktree before removal: {e}"))),
+        };
+        let canonical = target.canonicalize().ok();
+        let registered = self.worktrees()?.into_iter().find(|worktree| {
+            let path = Path::new(&worktree.path);
+            path == target || canonical.as_ref().is_some_and(|p| path.canonicalize().ok().as_ref() == Some(p))
+        }).ok_or_else(|| Error::Other(format!("not a registered worktree: {dest}")))?;
+        if registered.is_main {
+            return Err(Error::Other("the main worktree cannot be removed".into()));
+        }
+        // A stale/prunable registry flag does not prove that its directory is
+        // gone. Only a filesystem NotFound permits cleanup without an archive.
+        if metadata.is_some() {
+            let worktree = Repo::discover(target.to_string_lossy().as_ref())?;
+            let common = self.gix.common_dir().canonicalize().ok();
+            if canonical.is_none() || worktree.path.canonicalize().ok() != canonical
+                || common.is_none() || worktree.gix.common_dir().canonicalize().ok() != common
+            {
+                return Err(Error::Other(format!("cannot verify worktree identity before removal: {dest}")));
+            }
+            worktree.archive_worktree_state().map_err(|e| Error::Other(format!(
+                "Worktree was not removed because its recovery archive failed: {e}. Fix the archive error and retry."
+            )))?;
+        }
         let mut args = vec!["worktree", "remove"];
         if force {
             args.push("--force");
@@ -479,12 +510,19 @@ impl Repo {
     /// untracked (ignore rules respected) — into a ref under
     /// `refs/strand/archive/`, without touching the working tree or index.
     /// The safety net behind every worktree removal: the snapshot commit's
-    /// tree is the working directory as-is, parented on HEAD, so nothing is
-    /// lost when the directory goes away. Returns the created ref name.
+    /// tree is the working directory, with HEAD as its first parent and a
+    /// commit retaining the original index tree as its second parent.
+    /// Returns the created ref name.
     ///
     /// Must be called on a `Repo` opened *at the worktree being archived*
     /// (the tree is read from `self.path`).
     pub fn archive_worktree_state(&self) -> Result<String> {
+        self.archive_worktree_state_at(SystemTime::now())
+    }
+
+    fn archive_worktree_state_at(&self, now: SystemTime) -> Result<String> {
+        let created = now.duration_since(UNIX_EPOCH).unwrap_or_default();
+        let sequence = ARCHIVE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let head = run_git(&self.path, &["rev-parse", "HEAD"])?;
         // Branch label for the ref slug + subject; detached HEAD has none.
         let label = run_git(&self.path, &["symbolic-ref", "--short", "-q", "HEAD"])
@@ -494,17 +532,34 @@ impl Repo {
 
         // Build the workdir tree in a throwaway index so the real one is
         // never touched. Seed it from the live index when possible — `add -A`
-        // then reuses the stat cache instead of re-hashing every file.
-        let tmp = std::env::temp_dir().join(format!(
-            "strand-archive-index-{}-{}",
+        // then reuses the stat cache instead of re-hashing every file. Keep
+        // the copy beside the real index so split-index links still resolve.
+        let git_dir = std::path::absolute(self.git_dir())
+            .map_err(|e| Error::Other(format!("cannot locate worktree index for archive: {e}")))?;
+        let tmp = git_dir.join(format!(
+            "strand-archive-index-{}-{}-{sequence}",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()
+            created.as_nanos()
         ));
-        let _ = std::fs::copy(self.git_dir().join("index"), &tmp);
+        match std::fs::copy(git_dir.join("index"), &tmp) {
+            Ok(_) => (),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(Error::Other(format!("cannot copy worktree index for archive: {e}")));
+            }
+        }
         let tmp_str = tmp.to_string_lossy().to_string();
 
         let result = (|| {
             let env: &[(&str, &str)] = &[("GIT_INDEX_FILE", &tmp_str)];
+            // Capture the original index before add -A replaces staged-only
+            // bytes with disk contents. The second parent keeps them reachable.
+            let index_tree = run_git_env(&self.path, env, &["write-tree"])?;
+            let index_commit = run_git(
+                &self.path,
+                &["commit-tree", &index_tree, "-p", &head, "-m", "Worktree archive index"],
+            )?;
             run_git_env(&self.path, env, &["add", "-A"])?;
             let tree = run_git_env(&self.path, env, &["write-tree"])?;
             // Always a synthetic commit, even for a clean tree — restore can
@@ -515,11 +570,14 @@ impl Repo {
             let path_note = format!("Path: {}", self.path.to_string_lossy().replace('\\', "/"));
             let commit = run_git(
                 &self.path,
-                &["commit-tree", &tree, "-p", &head, "-m", &subject, "-m", &path_note],
+                &["commit-tree", &tree, "-p", &head, "-p", &index_commit, "-m", &subject, "-m", &path_note],
             )?;
-            let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-            let ref_name = format!("{ARCHIVE_NS}{}/{secs}", slug(&label));
-            run_git(&self.path, &["update-ref", &ref_name, &commit])?;
+            // Fractional time keeps same-second archives ordered; process and
+            // sequence also distinguish snapshots captured at the same instant.
+            let ref_name = format!("{ARCHIVE_NS}{}/{}-{:09}-{}-{sequence:020}",
+                slug(&label), created.as_secs(), created.subsec_nanos(), std::process::id());
+            // An empty expected old OID means create-only, never overwrite.
+            run_git(&self.path, &["update-ref", &ref_name, &commit, ""])?;
             Ok(ref_name)
         })();
         let _ = std::fs::remove_file(&tmp);
@@ -567,13 +625,14 @@ impl Repo {
                 continue;
             };
             let tail = ref_name.strip_prefix(ARCHIVE_NS).unwrap_or(ref_name);
-            // `<slug>/<unix-secs>`; tolerate slugs that contain '/' themselves.
+            // Legacy `<slug>/<unix-secs>` and collision-safe suffixed refs;
+            // tolerate slugs that contain '/' themselves.
             let (name, secs) = tail.rsplit_once('/').unwrap_or((tail, "0"));
             out.push(WorktreeArchive {
                 ref_name: ref_name.to_string(),
                 name: name.to_string(),
                 oid: oid.to_string(),
-                time_unix: secs.parse().unwrap_or(0),
+                time_unix: secs.split('-').next().unwrap_or(secs).parse().unwrap_or(0),
                 subject: subject.to_string(),
             });
         }
@@ -593,7 +652,8 @@ impl Repo {
     ///   re-attached when it still exists, isn't held by another worktree,
     ///   and still points at the archived commit; detached otherwise.
     ///
-    /// The staged/unstaged split is the one thing a snapshot can't preserve.
+    /// New archives restore their original index from the second parent;
+    /// legacy one-parent archives restore their contents as unstaged changes.
     pub fn restore_worktree_archive(
         &self,
         ref_name: &str,
@@ -607,7 +667,10 @@ impl Repo {
         // Recorded identity: subject names the branch, body the original path
         // (older archives lack the path line — they fall through to the
         // caller's destination).
-        let meta = run_git(&self.path, &["show", "-s", "--format=%s%n%b", ref_name])?;
+        let archive = run_git(&self.path, &["rev-parse", "--verify", &format!("{ref_name}^{{commit}}")])?;
+        let parents = run_git(&self.path, &["show", "-s", "--format=%P", &archive])?;
+        let index_commit = parents.split_whitespace().nth(1);
+        let meta = run_git(&self.path, &["show", "-s", "--format=%s%n%b", &archive])?;
         let mut lines = meta.lines();
         let label = lines
             .next()
@@ -623,7 +686,7 @@ impl Repo {
             .ok_or_else(|| Error::Other(format!("destination already exists: {fallback_dest}")))?
             .to_string();
 
-        run_git(&self.path, &["worktree", "add", "--detach", &dest, ref_name])?;
+        run_git(&self.path, &["worktree", "add", "--detach", &dest, &archive])?;
         let dest_dir = Path::new(&dest);
         run_git(dest_dir, &["reset", "--mixed", "HEAD^"])?;
 
@@ -651,6 +714,12 @@ impl Repo {
             if ok {
                 attached = Some(branch);
             }
+        }
+
+        if let Some(index_commit) = index_commit {
+            // read-tree changes only the index; the archived working tree,
+            // including missing staged additions and untracked files, stays put.
+            run_git(dest_dir, &["read-tree", index_commit])?;
         }
 
         Ok(RestoredWorktree { path: dest, branch: attached })
@@ -1230,8 +1299,162 @@ mod tests {
         // Guarded deletion: only archive refs may be deleted.
         assert!(repo.delete_worktree_archive("refs/heads/main").is_err());
         repo.delete_worktree_archive(&ref_name).unwrap();
-        assert!(repo.worktree_archives().unwrap().is_empty());
+        assert!(!repo.worktree_archives().unwrap().iter().any(|a| a.ref_name == ref_name));
 
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn removal_archive_restores_separate_head_index_and_workdir_layers() {
+        let main = setup("archive-layers");
+        git(&main, &["config", "core.autocrlf", "false"]);
+        commit_file(&main, "rename.txt", "original rename\n", "rename source");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let feature = main.parent().unwrap().join("feature");
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
+        let head = git(&feature, &["rev-parse", "HEAD"]);
+
+        std::fs::write(feature.join("a.txt"), "staged-only version\n").unwrap();
+        std::fs::write(feature.join("added.txt"), "staged addition missing from disk\n").unwrap();
+        git(&feature, &["add", "a.txt", "added.txt"]);
+        git(&feature, &["mv", "rename.txt", "renamed.txt"]);
+        std::fs::write(feature.join("a.txt"), "workdir version\n").unwrap();
+        std::fs::remove_file(feature.join("added.txt")).unwrap();
+        std::fs::write(feature.join("renamed.txt"), "unstaged rename edit\n").unwrap();
+        std::fs::write(feature.join("untracked.txt"), "untracked bytes\n").unwrap();
+        // The throwaway index must also resolve Git's shared-index entries.
+        git(&feature, &["update-index", "--split-index"]);
+        let index_tree = git(&feature, &["write-tree"]);
+        let status = git(&feature, &["status", "--porcelain"]);
+        let wt_repo = Repo::discover(feature.to_str().unwrap()).unwrap();
+        let index_bytes = std::fs::read(wt_repo.git_dir().join("index")).unwrap();
+        let archived = wt_repo.archive_worktree_state().unwrap();
+        assert_eq!(std::fs::read(wt_repo.git_dir().join("index")).unwrap(), index_bytes);
+        assert_eq!(git(&feature, &["status", "--porcelain"]), status);
+        assert_eq!(git(&feature, &["rev-parse", &format!("{archived}^2^{{tree}}")]), index_tree);
+        assert_eq!(git(&feature, &["show", &format!("{archived}^2:a.txt")]), "staged-only version");
+
+        repo.remove_worktree(feature.to_str().unwrap(), true).unwrap();
+        let ref_name = repo.worktree_archives().unwrap()[0].ref_name.clone();
+        let fallback = main.parent().unwrap().join("restored");
+        let restored = repo.restore_worktree_archive(&ref_name, fallback.to_str().unwrap()).unwrap();
+        let restored = Path::new(&restored.path);
+        assert_eq!(git(restored, &["rev-parse", "HEAD"]), head);
+        assert_eq!(git(restored, &["write-tree"]), index_tree, "all staged content and modes survived");
+        assert_eq!(git(restored, &["status", "--porcelain"]), status, "staging split survived");
+        assert_eq!(std::fs::read_to_string(restored.join("a.txt")).unwrap(), "workdir version\n");
+        assert!(!restored.join("added.txt").exists(), "staged addition remains deleted on disk");
+        assert!(!restored.join("rename.txt").exists());
+        assert_eq!(std::fs::read_to_string(restored.join("renamed.txt")).unwrap(), "unstaged rename edit\n");
+        assert_eq!(std::fs::read_to_string(restored.join("untracked.txt")).unwrap(), "untracked bytes\n");
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn restore_accepts_legacy_one_parent_archives() {
+        let main = setup("archive-legacy");
+        git(&main, &["config", "core.autocrlf", "false"]);
+        let head = git(&main, &["rev-parse", "HEAD"]);
+        let original_index = git(&main, &["write-tree"]);
+        std::fs::write(main.join("a.txt"), "legacy edit\n").unwrap();
+        std::fs::write(main.join("untracked.txt"), "legacy untracked\n").unwrap();
+        git(&main, &["add", "-A"]);
+        let tree = git(&main, &["write-tree"]);
+        let commit = git(&main, &["commit-tree", &tree, "-p", &head, "-m", "Worktree archive: legacy"]);
+        let ref_name = format!("{ARCHIVE_NS}legacy/123");
+        git(&main, &["update-ref", &ref_name, &commit]);
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let dest = main.parent().unwrap().join("restored");
+        let restored = repo.restore_worktree_archive(&ref_name, dest.to_str().unwrap()).unwrap();
+        let restored = Path::new(&restored.path);
+        assert_eq!(git(restored, &["rev-parse", "HEAD"]), head);
+        assert_eq!(git(restored, &["write-tree"]), original_index);
+        assert_eq!(std::fs::read_to_string(restored.join("a.txt")).unwrap(), "legacy edit\n");
+        assert_eq!(std::fs::read_to_string(restored.join("untracked.txt")).unwrap(), "legacy untracked\n");
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn force_removal_refuses_an_archive_failure_and_keeps_worktree_data() {
+        let main = setup("archive-failure");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let feature = main.parent().unwrap().join("feature");
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
+        std::fs::write(feature.join("a.txt"), "staged-only bytes\n").unwrap();
+        git(&feature, &["add", "a.txt"]);
+        let index_tree = git(&feature, &["write-tree"]);
+        std::fs::write(feature.join("a.txt"), "disk bytes\n").unwrap();
+        std::fs::write(feature.join(".gitattributes"), "a.txt filter=archive-failure\n").unwrap();
+        git(&feature, &["config", "filter.archive-failure.clean", "strand-test-missing-archive-filter"]);
+        git(&feature, &["config", "filter.archive-failure.required", "true"]);
+        let err = repo.remove_worktree(feature.to_str().unwrap(), true).unwrap_err();
+        assert!(err.to_string().contains("recovery archive failed"), "{err}");
+        assert_eq!(std::fs::read_to_string(feature.join("a.txt")).unwrap(), "disk bytes\n");
+        assert_eq!(git(&feature, &["write-tree"]), index_tree);
+        assert!(repo.worktrees().unwrap().iter().any(|w| w.branch.as_deref() == Some("feature")));
+        assert!(repo.worktree_archives().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn removal_only_skips_archive_when_the_registered_directory_is_missing() {
+        let main = setup("archive-missing");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let feature = main.parent().unwrap().join("feature");
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
+        std::fs::write(feature.join("untracked.txt"), "keep me\n").unwrap();
+        std::fs::remove_file(feature.join(".git")).unwrap();
+        assert!(repo.worktrees().unwrap().iter().any(|w| w.is_prunable));
+        assert!(repo.remove_worktree(feature.to_str().unwrap(), true).is_err());
+        assert_eq!(std::fs::read_to_string(feature.join("untracked.txt")).unwrap(), "keep me\n");
+        std::fs::remove_dir_all(&feature).unwrap();
+        repo.remove_worktree(feature.to_str().unwrap(), true).unwrap();
+        assert_eq!(repo.worktrees().unwrap().len(), 1);
+        assert!(repo.worktree_archives().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+    }
+
+    #[test]
+    fn removal_refuses_a_worktree_pointing_at_a_different_repository() {
+        let main = setup("archive-identity");
+        let other = setup("archive-other");
+        let repo = Repo::discover(main.to_str().unwrap()).unwrap();
+        let feature = main.parent().unwrap().join("feature");
+        repo.add_worktree(feature.to_str().unwrap(), "feature", true, None, false).unwrap();
+        std::fs::write(feature.join("untracked.txt"), "keep me\n").unwrap();
+        std::fs::write(feature.join(".git"), format!("gitdir: {}\n", other.join(".git").display())).unwrap();
+        assert!(repo.remove_worktree(feature.to_str().unwrap(), true).is_err());
+        assert_eq!(std::fs::read_to_string(feature.join("untracked.txt")).unwrap(), "keep me\n");
+        assert!(repo.worktree_archives().unwrap().is_empty());
+        assert!(Repo::discover(&other).unwrap().worktree_archives().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(main.parent().unwrap());
+        let _ = std::fs::remove_dir_all(other.parent().unwrap());
+    }
+
+    #[test]
+    fn archives_at_the_same_instant_retain_both_index_and_disk_versions() {
+        let main = setup("archive-collision");
+        git(&main, &["config", "core.autocrlf", "false"]);
+        let repo = Repo::discover(&main).unwrap();
+        let instant = SystemTime::now();
+        std::fs::write(main.join("a.txt"), "first index\n").unwrap();
+        git(&main, &["add", "a.txt"]);
+        std::fs::write(main.join("a.txt"), "first disk\n").unwrap();
+        let first = repo.archive_worktree_state_at(instant).unwrap();
+        std::fs::write(main.join("a.txt"), "second index\n").unwrap();
+        git(&main, &["add", "a.txt"]);
+        std::fs::write(main.join("a.txt"), "second disk\n").unwrap();
+        let second = repo.archive_worktree_state_at(instant).unwrap();
+
+        assert_ne!(first, second);
+        let archives = repo.worktree_archives().unwrap();
+        assert_eq!(archives.len(), 2);
+        assert_eq!(archives[0].ref_name, second, "same-time archives retain creation order");
+        assert_eq!(archives[0].time_unix, archives[1].time_unix);
+        assert_eq!(git(&main, &["show", &format!("{first}^2:a.txt")]), "first index");
+        assert_eq!(git(&main, &["show", &format!("{first}:a.txt")]), "first disk");
+        assert_eq!(git(&main, &["show", &format!("{second}^2:a.txt")]), "second index");
+        assert_eq!(git(&main, &["show", &format!("{second}:a.txt")]), "second disk");
         let _ = std::fs::remove_dir_all(main.parent().unwrap());
     }
 
