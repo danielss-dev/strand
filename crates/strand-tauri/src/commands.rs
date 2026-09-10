@@ -1077,6 +1077,27 @@ pub fn repo_stage_many(path: String, files: Vec<String>) -> CmdResult<()> {
 }
 
 #[tauri::command(async)]
+pub async fn repo_diff_summary(path: String, source: strand_core::diff_page::WorkingDiffSource) -> CmdResult<Vec<strand_core::diff_page::DiffSummary>> {
+    run_blocking("diff inventory", move || Ok(Repo::discover(&path)?.diff_summary(&source)?)).await
+}
+
+#[tauri::command(async)]
+pub async fn repo_diff_files(path: String, source: strand_core::diff_page::WorkingDiffSource, files: Vec<String>, full_context: bool) -> CmdResult<Vec<strand_core::diff_page::DiffPageFile>> {
+    run_blocking("file patches", move || Ok(Repo::discover(&path)?.diff_files(&source, &files, full_context)?)).await
+}
+
+#[tauri::command(async)]
+pub fn repo_reviewed_stage_state(path: String) -> CmdResult<strand_core::reviewed_stage::ReviewedStageState> {
+    Ok(Repo::discover(&path)?.reviewed_stage_state()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_stage_reviewed(path: String, state: strand_core::reviewed_stage::ReviewedStageState, baseline: Option<String>, files: Vec<FileDiff>) -> CmdResult<()> {
+    Repo::discover(&path)?.stage_reviewed(&state, baseline.as_deref(), &files)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub fn repo_unstage_many(path: String, files: Vec<String>) -> CmdResult<()> {
     Repo::discover(&path)?.unstage_paths(&files)?;
     Ok(())

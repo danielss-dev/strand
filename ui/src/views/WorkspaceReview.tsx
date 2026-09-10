@@ -4,6 +4,8 @@ import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parsePatchCached } from '../components/Diff';
+import { PendingDiff } from '../components/PendingDiff';
+import { diffLoaded, diffReviewable } from '../lib/diffPages';
 import { DiffMinimap } from '../components/DiffMinimap';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
@@ -22,7 +24,7 @@ import type { DiffMatch } from '../lib/diffSearch';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
-import { buildWorkspaceReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
+import { buildWorkspaceReviewFeedback, collectFeedbackFiles, reviewNoteOutdated } from '../lib/reviewExport';
 import { groupColor, pathKey } from '../lib/repoIdentity';
 import { gitErrorHint } from '../lib/tauri';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -32,7 +34,7 @@ import { workspaceQueueOrder, type QueueEntry } from '../lib/workspaceReview';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
 import { DEFAULT_WORKSPACE_ID, useWorkspaces } from '../stores/workspaces';
-import { useWorkspaceReview, type MemberReview } from '../stores/workspaceReview';
+import { useWorkspaceReview, workspaceHunkActionsAllowed, type MemberReview } from '../stores/workspaceReview';
 import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
 
 /**
@@ -47,7 +49,7 @@ import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
  * repo's diff can never show what changed there.
  *
  * Each member reviews in the mode its own Review session is in — **session**
- * when that repo has a pinned baseline, **inbox** (unstaged) otherwise — and
+ * when that repo has a pinned baseline, **inbox** (staged + unstaged) otherwise — and
  * reviewed marks are shared with the per-repo session, so the two views are
  * lenses on one review state.
  *
@@ -81,6 +83,10 @@ export function WorkspaceReview({
   const select = useWorkspaceReview((s) => s.select);
   const setActive = useWorkspaceReview((s) => s.setActive);
   const refreshAll = useWorkspaceReview((s) => s.refreshAll);
+  const refreshMember = useWorkspaceReview((s) => s.refreshMember);
+  const loadFiles = useWorkspaceReview((s) => s.loadFiles);
+  const ensureAllFiles = useWorkspaceReview((s) => s.ensureAllFiles);
+  const summaryTick = useWorkspaceReview((s) => s.summaryTick);
   const toggleReviewed = useWorkspaceReview((s) => s.toggleReviewed);
   const addNote = useWorkspaceReview((s) => s.addNote);
   const removeNote = useWorkspaceReview((s) => s.removeNote);
@@ -127,11 +133,11 @@ export function WorkspaceReview({
     const m = new Map<string, { hash: string; verdict: Verdict }>();
     for (const mem of members) {
       for (const d of mem.diffs) {
-        const hash = hashOf(d);
+        const hash = diffReviewable(d) ? hashOf(d) : '';
         const mark = mem.reviewed[d.path];
         m.set(qk(mem.path, d.path), {
           hash,
-          verdict: mark === hash ? 'reviewed' : mark !== undefined ? 'stale' : 'pending',
+          verdict: !diffReviewable(d) ? 'pending' : mark === hash ? 'reviewed' : mark !== undefined ? 'stale' : 'pending',
         });
       }
     }
@@ -175,6 +181,14 @@ export function WorkspaceReview({
   // Whole-file patches are too heavy to mount per keystroke — swap the pane
   // once the queue position settles (single steps stay instant).
   const displayed = useSettled(current);
+  useEffect(() => {
+    if (!selection || !currentMember || currentMember.loading || currentMember.error) return;
+    const order = treeFileOrder(currentMember.diffs.map((diff) => diff.path));
+    const index = order.indexOf(selection.file);
+    const nearby = order.slice(Math.max(0, index - 1), index + 2)
+      .filter((path) => currentMember.diffs.some((diff) => diff.path === path && !diffLoaded(diff) && !diff.patchError));
+    if (nearby.length) void loadFiles(currentMember.path, nearby).catch(() => {});
+  }, [selection, currentMember, loadFiles]);
   // A ⌘F jump whose file isn't displayed yet parks its line target here until
   // the settled pane catches up; consumed — or dropped as stale — below.
   const pendingJumpRef = useRef<{ repo: string; file: string; target: DiffLineTarget } | null>(
@@ -215,7 +229,7 @@ export function WorkspaceReview({
     for (const mem of members) for (const d of mem.diffs) byKey.set(qk(mem.path, d.path), d);
     const idx = Math.max(0, queue.findIndex((e) => sameEntry(e, selection)));
     const primable = (d: FileDiff | undefined): d is FileDiff =>
-      d != null && !d.binary && d.patch.length > 0 && d.patch.length < 1_000_000;
+      d != null && diffLoaded(d) && !d.binary && d.patch.length > 0 && d.patch.length < 1_000_000;
     const targets: FileDiff[] = [];
     for (let i = 1; i < queue.length && targets.length < 3; i++) {
       const e = queue[(idx + i) % queue.length];
@@ -246,7 +260,7 @@ export function WorkspaceReview({
   );
 
   const markReviewed = useCallback(() => {
-    if (!current) return;
+    if (!current || !diffReviewable(current.diff)) return;
     const v = verdicts.get(qk(current.member.path, current.diff.path));
     if (v) toggleReviewed(current.member.path, current.diff.path, v.hash);
   }, [current, verdicts, toggleReviewed]);
@@ -256,6 +270,10 @@ export function WorkspaceReview({
   // boundaries. Each pool entry is tagged with its owning repo path, since a
   // file path alone is ambiguous across members.
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchRefreshing = members.some((member) => member.loading);
+  useEffect(() => {
+    if (searchOpen && !searchRefreshing) void ensureAllFiles().catch(() => {});
+  }, [searchOpen, summaryTick, ensureAllFiles, searchRefreshing]);
   const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
   const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
   useEffect(() => {
@@ -299,6 +317,7 @@ export function WorkspaceReview({
     line: number | null;
     /** Diff side `line` counts on — 'old' for deletion-only blocks. */
     side: 'new' | 'old';
+    sourcePatch?: string;
   } | null>(null);
   const closeNoteEditor = useCallback((el?: HTMLTextAreaElement) => {
     // Blur before unmounting so focus falls back to the window and the
@@ -326,16 +345,23 @@ export function WorkspaceReview({
     () => feedbackRepos.reduce((n, r) => n + r.files.reduce((k, f) => k + f.notes.length, 0), 0),
     [feedbackRepos],
   );
-  const copyFeedback = useCallback(() => {
+  const copyFeedback = useCallback(async () => {
     if (feedbackRepos.length === 0) return;
-    copyToClipboard(buildWorkspaceReviewFeedback({ workspaceName, repos: feedbackRepos }));
+    try {
+    await ensureAllFiles();
+    const repos = useWorkspaceReview.getState().members.map((member) => ({
+      repoName: memberLabel(member), branch: member.branch, baselineShort: member.baseline?.short ?? null,
+      files: collectFeedbackFiles(member.diffs, member.notes),
+    })).filter((repo) => repo.files.length > 0);
+    copyToClipboard(buildWorkspaceReviewFeedback({ workspaceName, repos }));
     const fileCount = feedbackRepos.reduce((n, r) => n + r.files.length, 0);
     onToast(
       `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
         `${fileCount} file${fileCount === 1 ? '' : 's'} in ` +
         `${feedbackRepos.length} repo${feedbackRepos.length === 1 ? '' : 's'}`,
     );
-  }, [feedbackRepos, noteCount, workspaceName, onToast]);
+    } catch (error) { fail('Copy feedback')(error); }
+  }, [feedbackRepos, noteCount, workspaceName, onToast, ensureAllFiles, fail]);
 
   // Two-step confirm for the destructive discard (d d, or double-click the
   // header button).
@@ -501,17 +527,14 @@ export function WorkspaceReview({
 
   const activateFiles = useCallback(
     (member: MemberReview, paths: string[]) => {
-      if (paths.length === 1) {
-        const v = verdicts.get(qk(member.path, paths[0]));
-        if (v) toggleReviewed(member.path, paths[0], v.hash);
-        return;
-      }
-      for (const p of paths) {
-        const v = verdicts.get(qk(member.path, p));
-        if (v && v.verdict !== 'reviewed') toggleReviewed(member.path, p, v.hash);
-      }
+      void loadFiles(member.path, paths).then((diffs) => {
+        for (const diff of diffs.filter(diffReviewable)) {
+          const hash = hashOf(diff);
+          if (paths.length === 1 || member.reviewed[diff.path] !== hash) toggleReviewed(member.path, diff.path, hash);
+        }
+      }).catch(fail('Mark reviewed'));
     },
-    [verdicts, toggleReviewed],
+    [loadFiles, toggleReviewed, fail],
   );
 
   const treeMenuItems = useCallback(
@@ -535,10 +558,12 @@ export function WorkspaceReview({
         label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
         icon: 'check',
         onSelect: () => {
-          for (const p of known) {
-            const v = verdicts.get(qk(member.path, p))!;
-            if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(member.path, p, v.hash);
-          }
+          void loadFiles(member.path, known).then((diffs) => {
+            for (const diff of diffs.filter(diffReviewable)) {
+              const hash = hashOf(diff);
+              if (allReviewed || member.reviewed[diff.path] !== hash) toggleReviewed(member.path, diff.path, hash);
+            }
+          }).catch(fail('Mark reviewed'));
         },
       });
       const unstagedTargets = known.filter((p) => isUnstaged(member, p));
@@ -572,16 +597,17 @@ export function WorkspaceReview({
       const diffs = known
         .map((p) => member.diffs.find((d) => d.path === p))
         .filter((d): d is FileDiff => d != null);
-      if (diffs.some((d) => d.patch.length > 0)) {
+      if (diffs.some((d) => !diffLoaded(d) || d.patch.length > 0)) {
         items.push(
-          { label: 'Copy diff', icon: 'file', onSelect: () => copyToClipboard(concatPatches(diffs)) },
-          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => copyToClipboard(patchesToMarkdown(diffs)) },
+          { label: 'Copy diff', icon: 'file', onSelect: () => void loadFiles(member.path, known).then((loaded) => copyToClipboard(concatPatches(loaded))).catch(fail('Copy diff')) },
+          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => void loadFiles(member.path, known).then((loaded) => copyToClipboard(patchesToMarkdown(loaded))).catch(fail('Copy diff')) },
         );
       }
       return items;
     },
     [
       verdicts,
+      loadFiles,
       toggleReviewed,
       stageFiles,
       discardFiles,
@@ -592,6 +618,7 @@ export function WorkspaceReview({
   );
 
   const anyLoading = members.some((m) => m.loading);
+  const anyError = members.some((m) => m.error);
 
   if (members.length === 0) {
     return (
@@ -655,6 +682,7 @@ export function WorkspaceReview({
                   menuItems={(targets) => treeMenuItems(member, targets)}
                   verdictFor={(file) => verdicts.get(qk(member.path, file))?.verdict ?? null}
                   onOpenInRepo={() => void openInRepo(member.path, null)}
+                  onRetry={() => void refreshMember(member.path)}
                 />
               ))}
             </div>
@@ -673,8 +701,8 @@ export function WorkspaceReview({
                     {memberLabel(displayed.member)}
                   </span>
                   <span className="path">{displayed.diff.path}</span>
-                  <span className="stat-del">−{displayed.diff.dels}</span>
-                  <span className="stat-add">+{displayed.diff.adds}</span>
+                  <span className="stat-del">{diffLoaded(displayed.diff) ? `−${displayed.diff.dels}` : '…'}</span>
+                  <span className="stat-add">{diffLoaded(displayed.diff) ? `+${displayed.diff.adds}` : ''}</span>
                   <span className="rv-head-actions">
                     <button
                       type="button"
@@ -743,6 +771,7 @@ export function WorkspaceReview({
                       }
                       onClick={markReviewed}
                       title="Mark reviewed (Space)"
+                      disabled={!diffReviewable(displayed.diff)}
                     >
                       <Icon name="check" size={12} stroke={2.2} />
                       {verdicts.get(qk(displayed.member.path, displayed.diff.path))?.verdict === 'reviewed'
@@ -766,7 +795,7 @@ export function WorkspaceReview({
                           e.preventDefault();
                           const text = e.currentTarget.value;
                           closeNoteEditor(e.currentTarget);
-                          addNote(noteEditor.repo, noteEditor.path, text, noteEditor.line, noteEditor.side);
+                          addNote(noteEditor.repo, noteEditor.path, text, noteEditor.line, noteEditor.side, noteEditor.sourcePatch);
                         } else if (e.key === 'Escape') {
                           e.preventDefault();
                           closeNoteEditor(e.currentTarget);
@@ -782,8 +811,9 @@ export function WorkspaceReview({
                         {n.line != null && (
                           <span
                             className="rv-note-line"
-                            title={n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
+                            title={reviewNoteOutdated(n, hashOf(displayed.diff)) ? 'Outdated note: original line; feedback preserves saved context.' : n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
                           >
+                            {reviewNoteOutdated(n, hashOf(displayed.diff)) ? 'Outdated · ' : ''}
                             {n.side === 'old' ? '−' : ''}L{n.line}
                           </span>
                         )}
@@ -804,10 +834,11 @@ export function WorkspaceReview({
                 )}
                 <div className="rv-diff-body">
                   <Virtualizer className="rv-diff-scroll">
-                  {displayed.diff.binary && isImagePath(displayed.diff.path) ? (
-                    // Old side: the member's session baseline, or its *index*
-                    // in inbox mode (HEAD would lie for a partially staged
-                    // image). Added files have no old side; new side: worktree.
+                  {!diffLoaded(displayed.diff) ? (
+                    <PendingDiff diff={displayed.diff} layout={layout} onRetry={() => void refreshMember(displayed.member.path)} />
+                  ) : displayed.diff.binary && isImagePath(displayed.diff.path) ? (
+                    // Match the combined textual comparison: the old side is
+                    // the pinned baseline or HEAD, and the new side is disk.
                     <ImageDiff
                       path={displayed.diff.path}
                       repoPath={displayed.member.path}
@@ -817,7 +848,7 @@ export function WorkspaceReview({
                           ? null
                           : displayed.member.baseline
                             ? { rev: displayed.member.baseline.oid }
-                            : { rev: null, index: true }
+                            : { rev: 'HEAD' }
                       }
                       newSrc={displayed.diff.status === 'deleted' ? null : { rev: null }}
                     />
@@ -825,10 +856,9 @@ export function WorkspaceReview({
                     <div className="lc-file-note">
                       {displayed.diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
                     </div>
-                  ) : displayed.member.baseline ? (
-                    // Session diffs span commits — render read-only, like the
-                    // single-repo Review. Keyed by repo + file + content so
-                    // swapping files remounts the virtualized instance.
+                  ) : !workspaceHunkActionsAllowed(displayed.member, displayed.diff.path) ? (
+                    // Historical or combined staged patches are not safe
+                    // index hunks. Keep their explicit file-level controls.
                     <Diff
                       key={`${pathKey(displayed.member.path)}:${displayed.diff.path}:${hashOf(displayed.diff)}`}
                       patch={displayed.diff.patch}
@@ -836,9 +866,8 @@ export function WorkspaceReview({
                       hideFileHeader
                     />
                   ) : (
-                    // Inbox diffs are pure unstaged changes — full per-block
-                    // Stage / Discard applies, routed to the owning member
-                    // repo (which may be a background tab). Same remount key.
+                    // Without staged content HEAD matches the index for this
+                    // file, so per-block actions can target its owning repo.
                     <HunkAnnotatedDiff
                       key={`${pathKey(displayed.member.path)}:${displayed.diff.path}:${hashOf(displayed.diff)}`}
                       diff={displayed.diff}
@@ -853,12 +882,14 @@ export function WorkspaceReview({
                           path: displayed.diff.path,
                           line: m.addRange?.start ?? m.delRange?.start ?? null,
                           side: m.addRange ? 'new' : m.delRange ? 'old' : 'new',
+                          sourcePatch: displayed.diff.patch,
                         })
                       }
                       onApplyBlock={(slice, target) => {
                         const name = displayed.diff.path.split('/').pop() ?? displayed.diff.path;
                         return applyBlock(
                           displayed.member.path,
+                          displayed.diff.path,
                           slice,
                           target,
                           `Discarded a change in ${name} (${memberLabel(displayed.member)})`,
@@ -867,7 +898,7 @@ export function WorkspaceReview({
                     />
                   )}
                   </Virtualizer>
-                  {!displayed.diff.binary && displayed.diff.patch.length > 0 && (
+                  {diffLoaded(displayed.diff) && !displayed.diff.binary && displayed.diff.patch.length > 0 && (
                     <DiffMinimap
                       patch={displayed.diff.patch}
                       layout={layout}
@@ -880,8 +911,8 @@ export function WorkspaceReview({
               <div className="lc-empty">
                 {total === 0 ? (
                   <>
-                    <strong>{anyLoading ? 'Gathering changes…' : 'Workspace is clean'}</strong>
-                    {anyLoading
+                    <strong>{anyError ? 'Couldn’t load every review' : anyLoading ? 'Gathering changes…' : 'Workspace is clean'}</strong>
+                    {anyError ? 'Retry the failed repositories in the review queue.' : anyLoading
                       ? 'Collecting diffs from every member repository.'
                       : 'No changes to review in any member repository. Let the agents work — this view follows along live.'}
                   </>
@@ -896,6 +927,7 @@ export function WorkspaceReview({
             {searchOpen && (
               <DiffSearchBar
                 diffs={searchPool}
+                loadingLabel={anyError ? 'Load failed — retry changes' : members.some((member) => member.diffs.some((diff) => !diffLoaded(diff))) ? `Loading ${members.reduce((count, member) => count + member.diffs.filter(diffLoaded).length, 0)}/${total} files…` : null}
                 onJump={jumpToMatch}
                 onClose={() => setSearchOpen(false)}
                 placeholder="Search workspace diffs…"
@@ -933,7 +965,7 @@ function memberLabel(m: Pick<MemberReview, 'name' | 'worktree'>): string {
 }
 
 function isUnstaged(member: MemberReview, file: string): boolean {
-  return member.unstaged.some((u) => u.path === file);
+  return !member.error && member.unstaged.some((u) => u.path === file);
 }
 
 /** One member repo's section in the queue column: header + its file tree. */
@@ -947,6 +979,7 @@ function MemberSection({
   menuItems,
   verdictFor,
   onOpenInRepo,
+  onRetry,
 }: {
   member: MemberReview;
   collapsed: boolean;
@@ -957,6 +990,7 @@ function MemberSection({
   menuItems: (targets: string[]) => TreeMenuItem[];
   verdictFor: (file: string) => 'pending' | 'reviewed' | 'stale' | null;
   onOpenInRepo: () => void;
+  onRetry: () => void;
 }) {
   const treePaths = useMemo(() => treeFileOrder(member.diffs.map((d) => d.path)), [member.diffs]);
   const treeStatus = useMemo<GitStatusEntry[]>(
@@ -998,7 +1032,7 @@ function MemberSection({
 
   const empty = member.diffs.length === 0;
   const showTree = !collapsed && !empty;
-  const mode = member.baseline ? `since ${member.baseline.short}` : 'unstaged';
+  const mode = member.baseline ? `since ${member.baseline.short}` : 'uncommitted';
 
   return (
     <section
@@ -1030,7 +1064,7 @@ function MemberSection({
           </span>
         )}
         {member.branch && <span className="wsr-branch">{member.branch}</span>}
-        <span className="wsr-mode" title={member.baseline ? 'Session mode — everything since the pinned baseline' : 'Inbox mode — unstaged changes'}>
+        <span className="wsr-mode" title={member.baseline ? 'Session mode — everything since the pinned baseline' : 'Inbox mode — staged and unstaged changes'}>
           {mode}
         </span>
         <span className="wsr-count">
@@ -1048,11 +1082,15 @@ function MemberSection({
           <Icon name="external" size={11} />
         </button>
       </header>
-      {member.error ? (
-        <div className="wsr-note danger" title={member.error}>
-          Couldn’t load changes — {member.error}
+      {member.error && (
+        <div className="wsr-note danger" role="alert" title={member.error}>
+          {empty ? 'Couldn’t load changes' : 'Review is out of date. Showing the last successful comparison'} — {member.error}{' '}
+          <button type="button" className="h-link" disabled={member.loading} onClick={onRetry}>
+            {member.loading ? 'Retrying…' : 'Retry'}
+          </button>
         </div>
-      ) : empty && !collapsed ? (
+      )}
+      {empty && !collapsed && !member.error ? (
         <div className="wsr-note">{member.loading ? 'Loading…' : 'Clean — nothing to review.'}</div>
       ) : showTree ? (
         <div className="wsr-tree">

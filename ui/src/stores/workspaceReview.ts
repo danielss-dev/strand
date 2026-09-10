@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { backgroundRead } from '../lib/backgroundReads';
 import { RefreshQueue } from '../lib/refreshQueue';
 import { stableRows } from '../lib/stable';
+import { diffLoaded, diffReviewable, mergeDiffSummaries, readDiffPages } from '../lib/diffPages';
 
 import { reviewSession, type StoredBaseline } from '../lib/db';
 import { pathKey, repoFamilyName, tabWorktreeName } from '../lib/repoIdentity';
@@ -26,7 +27,7 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './workspaces';
  * Each member reviews in its own mode, exactly like its single-repo Review
  * would: **session** when that repo has a persisted baseline (`diff_since_full`
  * — committed + staged + unstaged since the pin) or **inbox** otherwise
- * (`diff_unstaged_full`). Reviewed marks are read from and written to the same
+ * (`diff_since_full("HEAD")` — staged + unstaged). Reviewed marks are read from and written to the same
  * per-repo `reviewSession` records, so a checkmark set here is set in that
  * repo's own Review view too — one review state, two lenses.
  *
@@ -53,10 +54,12 @@ export interface MemberReview {
   diffs: FileDiff[];
   /**
    * The repo's *unstaged* set (path + rename source) — the pool subset that
-   * file-level Stage / Discard applies to. In inbox mode this mirrors `diffs`;
-   * in session mode it's a separate cheap `diff_unstaged` fetch.
+   * file-level Stage / Discard applies to. Always fetched separately from
+   * the combined review pool so historical rename paths cannot become targets.
    */
   unstaged: { path: string; old_path: string | null }[];
+  /** Current staged paths: combined inbox patches for these are not safe hunks. */
+  staged: string[];
   /** Reviewed marks (`path → reviewed diff hash`), shared with the repo's own
    * Review session persistence. */
   reviewed: Record<string, string>;
@@ -70,6 +73,16 @@ export interface MemberReview {
   error: string | null;
 }
 
+/** Combined review hunks are index patches only when neither side is staged. */
+export function workspaceHunkActionsAllowed(member: MemberReview, file: string): boolean {
+  if (member.error || member.baseline) return false;
+  const unstaged = member.unstaged.find((diff) => diff.path === file);
+  if (!unstaged) return false;
+  const diff = member.diffs.find((diff) => diff.path === file);
+  if (!diff || !diffLoaded(diff)) return false;
+  return !member.staged.some((path) => path === file || path === unstaged.old_path || path === diff?.old_path);
+}
+
 interface WorkspaceReviewState {
   /** True while the Workspace Review view is on screen — gates live-follow. */
   active: boolean;
@@ -80,6 +93,7 @@ interface WorkspaceReviewState {
   /** Bumped on every member data refresh — remount/refetch key for children
    * that can't observe array identity (image blobs). */
   tick: number;
+  summaryTick: number;
 
   setActive(on: boolean): void;
   select(sel: QueueEntry | null): void;
@@ -87,6 +101,8 @@ interface WorkspaceReviewState {
   refreshAll(): Promise<void>;
   /** Refresh one member's slice (watcher-driven, and the write-op tail). */
   refreshMember(path: string): Promise<void>;
+  loadFiles(repoPath: string, files: string[]): Promise<FileDiff[]>;
+  ensureAllFiles(): Promise<void>;
   /**
    * `repo://changed` entry point for live-follow: while the view is active,
    * refresh the matching member — including background members whose events
@@ -105,6 +121,7 @@ interface WorkspaceReviewState {
     text: string,
     line: number | null,
     side?: 'new' | 'old',
+    sourcePatch?: string,
   ): void;
   /** Remove one note from a member's file by id. */
   removeNote(repoPath: string, file: string, id: string): void;
@@ -122,6 +139,7 @@ interface WorkspaceReviewState {
    */
   applyBlock(
     repoPath: string,
+    file: string,
     slice: string,
     target: 'index' | 'index_reverse' | 'workdir_reverse',
     discardLabel: string,
@@ -131,6 +149,7 @@ interface WorkspaceReviewState {
 /** Stale-response guard: bumped on every {@link WorkspaceReviewState.refreshAll}. */
 let generation = 0;
 const memberRefreshes = new RefreshQueue();
+const memberGenerations = new Map<string, number>();
 
 /**
  * Member paths whose discovery failed — the directory is gone (deleted,
@@ -176,6 +195,8 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
   const readMember = async (res: MemberResolution, gen: number, current: () => boolean): Promise<void> => {
     const { path } = res;
     if (gen !== generation || !current()) return;
+    const memberKey = pathKey(path);
+    memberGenerations.set(memberKey, (memberGenerations.get(memberKey) ?? 0) + 1);
     // Always read fresh meta — a background member's tab meta is frozen at
     // open time, so its branch label would lie after an agent checkout. A
     // failed read means the directory is gone (dropped below); the IPC is
@@ -198,27 +219,32 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       return;
     }
 
-    const baseline = await reviewSession.getBaseline(path).catch(() => null);
+    let baseline: StoredBaseline | null;
+    try {
+      baseline = (await reviewSession.getBaseline(path)) ?? null;
+    } catch (error) {
+      if (gen === generation && current()) patchMember(path, { loading: false, error: errMessage(error) });
+      return;
+    }
     if (gen !== generation || !current()) return;
     let diffs: FileDiff[] = [];
     let unstaged: { path: string; old_path: string | null }[] = [];
-    let error: string | null = null;
+    let staged: string[] = [];
     try {
-      if (baseline) {
-        const [since, paths] = await Promise.all([
-          tauri.repoDiffSinceFull(path, baseline.oid),
-          tauri.repoDiffUnstagedPaths(path),
-        ]);
-        diffs = since;
-        unstaged = paths;
-      } else {
-        diffs = await tauri.repoDiffUnstagedFull(path);
-        unstaged = diffs.map((d) => ({ path: d.path, old_path: d.old_path }));
-      }
+      const [since, paths, status] = await Promise.all([
+        tauri.repoDiffSummary(path, { kind: 'review', baseline: baseline?.oid ?? 'HEAD' }),
+        tauri.repoDiffUnstagedPaths(path),
+        baseline ? Promise.resolve([]) : tauri.repoStatus(path),
+      ]);
+      const previous = get().members.find((member) => pathKey(member.path) === memberKey);
+      diffs = mergeDiffSummaries(previous?.diffs ?? [], since);
+      unstaged = paths;
+      staged = status.filter((entry) => entry.staged).map((entry) => entry.path);
     } catch (e) {
-      // Typical session-mode cause: the baseline commit was rebased/gc'd away.
-      // Surface per-member instead of failing the whole aggregation.
-      error = errMessage(e);
+      // Keep the last successful comparison, notes scope, and mutation
+      // metadata together. A failed read must not erase work from the queue.
+      if (gen === generation && current()) patchMember(path, { loading: false, error: errMessage(e) });
+      return;
     }
 
     // Prefer the single-repo store's in-memory marks + notes for the active
@@ -259,12 +285,14 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       baseline,
       diffs: stableRows(previous?.diffs ?? [], diffs, (diff) => diff.path),
       unstaged,
+      staged,
       reviewed,
       notes,
       noteScope,
       loading: false,
-      error,
+      error: null,
     });
+    set((state) => ({ summaryTick: state.summaryTick + 1 }));
   };
 
   const loadMember = (res: MemberResolution, gen: number) => memberRefreshes.run(
@@ -277,6 +305,7 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     members: [],
     selection: null,
     tick: 0,
+    summaryTick: 0,
 
     setActive: (active) => {
       if (!active) generation++;
@@ -321,11 +350,12 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
             baseline: old?.baseline ?? null,
             diffs: old?.diffs ?? [],
             unstaged: old?.unstaged ?? [],
+            staged: old?.staged ?? [],
             reviewed: old?.reviewed ?? {},
             notes: old?.notes ?? {},
             noteScope: old?.noteScope ?? '',
             loading: true,
-            error: null,
+            error: old?.error ?? null,
           };
         }),
       });
@@ -344,6 +374,55 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       );
     },
 
+    async loadFiles(repoPath, files) {
+      const key = pathKey(repoPath);
+      let member = get().members.find((member) => pathKey(member.path) === key);
+      if (member?.loading) {
+        await get().refreshMember(repoPath);
+        member = get().members.find((member) => pathKey(member.path) === key);
+        if (member?.loading) throw new Error('The workspace comparison changed while loading patches. Retry the action.');
+      }
+      if (!member) return [];
+      if (member.error) throw new Error(member.error);
+      const gen = generation;
+      const revision = memberGenerations.get(key) ?? 0;
+      const valid = () => generation === gen && (memberGenerations.get(key) ?? 0) === revision;
+      const wanted = new Set(files);
+      const missing = member.diffs.filter((diff) => wanted.has(diff.path) && !diffLoaded(diff)).map((diff) => diff.path);
+      try {
+        await readDiffPages(member.path, { kind: 'review', baseline: member.baseline?.oid ?? 'HEAD' }, missing, true, revision, (page) => {
+          if (!valid()) throw new Error('The workspace comparison changed while loading patches. Retry the action.');
+          const current = get().members.find((member) => pathKey(member.path) === key);
+          if (!current) return;
+          const loaded = new Map(page.map((diff) => [diff.path, diff]));
+          patchMember(member.path, { diffs: current.diffs.map((diff) => loaded.get(diff.path) ?? diff) });
+        });
+      } catch (error) {
+        if (valid()) {
+          const current = get().members.find((member) => pathKey(member.path) === key);
+          if (current) patchMember(member.path, {
+            error: errMessage(error),
+            diffs: current.diffs.map((diff) => wanted.has(diff.path) && !diffLoaded(diff) ? { ...diff, patchError: errMessage(error) } : diff),
+          });
+        }
+        throw error;
+      }
+      if (!valid()) throw new Error('The workspace comparison changed while loading patches. Retry the action.');
+      return get().members.find((member) => pathKey(member.path) === key)?.diffs.filter((diff) => wanted.has(diff.path)) ?? [];
+    },
+
+    async ensureAllFiles() {
+      const gen = generation;
+      for (const member of get().members) {
+        await get().loadFiles(member.path, member.diffs.map((diff) => diff.path));
+        const current = get().members.find((row) => pathKey(row.path) === pathKey(member.path));
+        if (current?.error) throw new Error(current.error);
+      }
+      if (gen !== generation || get().members.some((member) => member.diffs.some((diff) => !diffLoaded(diff)))) {
+        throw new Error('The workspace comparison changed while loading patches. Retry the action.');
+      }
+    },
+
     handleExternalChange(path) {
       if (!get().active) return;
       const key = pathKey(path);
@@ -354,6 +433,8 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
     toggleReviewed(repoPath, file, hash) {
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
       if (!member) return;
+      const diff = member.diffs.find((diff) => diff.path === file);
+      if (!diff || !diffReviewable(diff)) return;
       const next = { ...member.reviewed };
       // Marked with a matching hash → unmark; anything else → (re)mark at the
       // current hash (covers both "not reviewed" and "stale review").
@@ -369,9 +450,11 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
         .catch((e) => console.warn('workspace review: reviewed persist failed', e));
     },
 
-    addNote(repoPath, file, text, line, side) {
+    addNote(repoPath, file, text, line, side, sourcePatch) {
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
-      const note = makeReviewNote(text, line, side);
+      const diff = member?.diffs.find((diff) => diff.path === file);
+      if (line != null && sourcePatch === undefined && diff && !diffLoaded(diff)) return;
+      const note = makeReviewNote(text, line, side, sourcePatch ?? (diff && diffLoaded(diff) ? diff.patch : undefined));
       if (!member || !note) return;
       const next = { ...member.notes, [file]: [...(member.notes[file] ?? []), note] };
       persistNotes(patchMember, member, next);
@@ -391,12 +474,15 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       if (files.length === 0) return;
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
       if (!member) return;
+      if (member.error) throw new Error('Refresh this review before staging changes.');
+      const targets = new Set(member.unstaged.map((diff) => diff.path));
       // A renamed file's diff carries old_path; stage both halves so the
       // rename lands atomically (mirrors the single-repo stageMany).
-      const expand = new Set(files);
+      const expand = new Set(files.filter((file) => targets.has(file)));
       for (const d of member.unstaged) {
         if (d.old_path && expand.has(d.path)) expand.add(d.old_path);
       }
+      if (expand.size === 0) return;
       await tauri.repoStageMany(member.path, [...expand]);
       await afterWrite(get, member.path);
     },
@@ -405,13 +491,19 @@ export const useWorkspaceReview = create<WorkspaceReviewState>((set, get) => {
       if (files.length === 0) return;
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
       if (!member) return;
-      await tauri.repoDiscardMany(member.path, files);
+      if (member.error) throw new Error('Refresh this review before discarding changes.');
+      const targets = files.filter((file) => member.unstaged.some((diff) => diff.path === file));
+      if (targets.length === 0) return;
+      await tauri.repoDiscardMany(member.path, targets);
       await afterWrite(get, member.path);
     },
 
-    async applyBlock(repoPath, slice, target, discardLabel) {
+    async applyBlock(repoPath, file, slice, target, discardLabel) {
       const member = get().members.find((m) => pathKey(m.path) === pathKey(repoPath));
       if (!member) return;
+      if (!workspaceHunkActionsAllowed(member, file)) {
+        throw new Error('This comparison is not an unstaged patch. Refresh or use Local Changes for hunk actions.');
+      }
       await tauri.repoApplyPatch(member.path, slice, target);
       // Mirror the single-repo discardPatch: stash the exact slice so
       // undoDiscard can forward-apply it back into this member repo.

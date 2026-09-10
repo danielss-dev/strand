@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { RepoMeta } from '../lib/types';
+import type { FileDiff, RepoMeta } from '../lib/types';
 
 const tauri = vi.hoisted(() => ({
   repoMeta: vi.fn(),
-  repoDiffSinceFull: vi.fn(),
+  repoStatus: vi.fn(),
+  repoDiffSummary: vi.fn(),
+  repoDiffFiles: vi.fn(),
   repoDiffUnstaged: vi.fn(),
   repoDiffUnstagedPaths: vi.fn(),
   repoDiffUnstagedFull: vi.fn(),
+  repoStageMany: vi.fn(),
+  repoDiscardMany: vi.fn(),
+  repoApplyPatch: vi.fn(),
 }));
 
 const reviewSession = vi.hoisted(() => ({
@@ -52,7 +57,7 @@ vi.mock('./workspaces', () => ({
   useWorkspaces: { getState: () => wsState.current },
 }));
 
-import { useWorkspaceReview } from './workspaceReview';
+import { useWorkspaceReview, workspaceHunkActionsAllowed } from './workspaceReview';
 
 function meta(path: string): RepoMeta {
   return {
@@ -80,6 +85,10 @@ function useWorkspace(repoPaths: string[]): void {
   };
 }
 
+function diff(path: string, old_path: string | null = null): FileDiff & { revision: string } {
+  return { path, old_path, patch: `patch for ${path}`, status: old_path ? 'renamed' : 'modified', adds: 1, dels: 1, binary: false, revision: `content:${path}` };
+}
+
 describe('workspaceReview store: members deleted from disk', () => {
   beforeEach(() => {
     for (const fn of Object.values(tauri)) fn.mockReset();
@@ -88,6 +97,13 @@ describe('workspaceReview store: members deleted from disk', () => {
     reviewSession.getNotes.mockReset().mockResolvedValue(null);
     repoState.current = { ...repoState.current, tabs: [], activePath: null, meta: null };
     tauri.repoDiffUnstagedFull.mockResolvedValue([]);
+    tauri.repoDiffSummary.mockResolvedValue([]);
+    tauri.repoDiffFiles.mockImplementation(async (path, source, files: string[]) => {
+      const summaries = await tauri.repoDiffSummary(path, source);
+      return summaries.filter((row: FileDiff) => files.includes(row.path));
+    });
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([]);
+    tauri.repoStatus.mockResolvedValue([]);
   });
 
   it('drops a member whose directory is gone instead of rendering a dead error section', async () => {
@@ -108,7 +124,7 @@ describe('workspaceReview store: members deleted from disk', () => {
     useWorkspace(['/rename']);
     tauri.repoMeta.mockResolvedValue(meta('/rename'));
     reviewSession.getBaseline.mockResolvedValue({ oid: 'baseline', short: 'base', setAt: 1 });
-    tauri.repoDiffSinceFull.mockResolvedValue([
+    tauri.repoDiffSummary.mockResolvedValue([
       { path: 'current.txt', old_path: 'baseline-name.txt', patch: 'review', status: 'renamed' },
     ]);
     tauri.repoDiffUnstagedPaths.mockResolvedValue([
@@ -125,7 +141,7 @@ describe('workspaceReview store: members deleted from disk', () => {
     useWorkspace(Array.from({ length: 20 }, (_, i) => `/bounded/${i}`));
     tauri.repoMeta.mockImplementation((path: string) => Promise.resolve(meta(path)));
     const release: (() => void)[] = [];
-    tauri.repoDiffUnstagedFull.mockImplementation(() => new Promise((resolve) => {
+    tauri.repoDiffSummary.mockImplementation(() => new Promise((resolve) => {
       release.push(() => resolve([]));
     }));
     const pending = useWorkspaceReview.getState().refreshAll();
@@ -133,7 +149,81 @@ describe('workspaceReview store: members deleted from disk', () => {
     useWorkspaceReview.getState().setActive(false);
     release.forEach((resolve) => resolve());
     await pending;
-    expect(tauri.repoDiffUnstagedFull).toHaveBeenCalledTimes(2);
+    expect(tauri.repoDiffSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps staged and partially staged files in the combined inbox and gates their hunks', async () => {
+    useWorkspace(['/combined']);
+    tauri.repoMeta.mockResolvedValue(meta('/combined'));
+    const pool = [diff('staged.txt'), diff('partial.txt'), diff('loose.txt')];
+    tauri.repoDiffSummary.mockResolvedValue(pool);
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([
+      { path: 'partial.txt', old_path: null }, { path: 'loose.txt', old_path: null },
+    ]);
+    tauri.repoStatus.mockResolvedValue([
+      { path: 'staged.txt', staged: true }, { path: 'partial.txt', staged: true },
+      { path: 'partial.txt', staged: false }, { path: 'loose.txt', staged: false },
+    ]);
+    await useWorkspaceReview.getState().refreshAll();
+    await useWorkspaceReview.getState().loadFiles('/combined', pool.map((file) => file.path));
+    const member = useWorkspaceReview.getState().members[0];
+    expect(tauri.repoDiffSummary).toHaveBeenCalledWith('/combined', { kind: 'review', baseline: 'HEAD' });
+    expect(tauri.repoDiffUnstagedFull).not.toHaveBeenCalled();
+    expect(member.diffs.map((file) => file.patch)).toEqual(pool.map((file) => file.patch));
+    expect(workspaceHunkActionsAllowed(member, 'staged.txt')).toBe(false);
+    expect(workspaceHunkActionsAllowed(member, 'partial.txt')).toBe(false);
+    expect(workspaceHunkActionsAllowed(member, 'loose.txt')).toBe(true);
+    await expect(useWorkspaceReview.getState().applyBlock('/combined', 'partial.txt', 'patch', 'index', 'unused')).rejects.toThrow('not an unstaged patch');
+    expect(tauri.repoApplyPatch).not.toHaveBeenCalled();
+
+    // Staging the remaining files changes mutation availability, not the pool.
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([]);
+    tauri.repoStatus.mockResolvedValue(pool.map((file) => ({ path: file.path, staged: true })));
+    await useWorkspaceReview.getState().refreshMember('/combined');
+    expect(useWorkspaceReview.getState().members[0].diffs).toBe(member.diffs);
+    await useWorkspaceReview.getState().stageFiles('/combined', ['staged.txt']);
+    expect(tauri.repoStageMany).not.toHaveBeenCalled();
+  });
+
+  it('stages current rename paths and gates hunks when the intermediate name is staged', async () => {
+    useWorkspace(['/rename-chain']);
+    tauri.repoMeta.mockResolvedValue(meta('/rename-chain'));
+    tauri.repoDiffSummary.mockResolvedValue([diff('current.txt', 'head.txt')]);
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([{ path: 'current.txt', old_path: 'index.txt' }]);
+    tauri.repoStatus.mockResolvedValue([{ path: 'index.txt', staged: true }]);
+    await useWorkspaceReview.getState().refreshAll();
+    await useWorkspaceReview.getState().loadFiles('/rename-chain', ['current.txt']);
+    const member = useWorkspaceReview.getState().members[0];
+    expect(workspaceHunkActionsAllowed(member, 'current.txt')).toBe(false);
+    await useWorkspaceReview.getState().stageFiles('/rename-chain', ['current.txt', 'head.txt']);
+    expect(tauri.repoStageMany).toHaveBeenCalledWith('/rename-chain', ['current.txt', 'index.txt']);
+  });
+
+  it('retains the comparison and notes scope after a failed refresh, then clears the error on retry', async () => {
+    useWorkspace(['/retry']);
+    tauri.repoMeta.mockResolvedValue(meta('/retry'));
+    const baseline = { oid: 'pinned', short: 'pinned', setAt: 1 };
+    reviewSession.getBaseline.mockResolvedValue(baseline);
+    tauri.repoDiffSummary.mockResolvedValue([diff('a.txt')]);
+    tauri.repoDiffUnstagedPaths.mockResolvedValue([{ path: 'a.txt', old_path: null }]);
+    reviewSession.getNotes.mockResolvedValue({ 'a.txt': [{ id: 'note', text: 'retain', line: null }] });
+    await useWorkspaceReview.getState().refreshAll();
+    const before = useWorkspaceReview.getState().members[0];
+    tauri.repoDiffSummary.mockRejectedValue(new Error('object unavailable'));
+    await useWorkspaceReview.getState().refreshMember('/retry');
+    const failed = useWorkspaceReview.getState().members[0];
+    expect(failed.baseline).toBe(before.baseline);
+    expect(failed.diffs).toBe(before.diffs);
+    expect(failed.notes).toBe(before.notes);
+    expect(failed.noteScope).toBe(before.noteScope);
+    expect(failed.error).toContain('object unavailable');
+    expect(failed.loading).toBe(false);
+    await expect(useWorkspaceReview.getState().discardFiles('/retry', ['a.txt'])).rejects.toThrow('Refresh');
+    expect(tauri.repoDiscardMany).not.toHaveBeenCalled();
+    tauri.repoDiffSummary.mockResolvedValue([diff('a.txt')]);
+    await useWorkspaceReview.getState().refreshMember('/retry');
+    expect(useWorkspaceReview.getState().members[0].error).toBeNull();
+    expect(tauri.repoDiffSummary).toHaveBeenLastCalledWith('/retry', { kind: 'review', baseline: baseline.oid });
   });
 
   it('keeps a vanished member out of later refreshes, and it rejoins when the path returns', async () => {

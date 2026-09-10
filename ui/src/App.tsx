@@ -772,9 +772,10 @@ export function App() {
     const baselineOid = state.baseline?.oid;
     try {
       await (side === 'review' ? state.refreshReviewDiffs() : state.refreshDiffs());
+      await useRepo.getState().ensureAllDiffs(side === 'review' ? 'review' : 'local');
       const fresh = useRepo.getState();
       if (fresh.activePath !== path || (side === 'review' && fresh.baseline?.oid !== baselineOid)) return;
-      copyDiffs(side === 'review' ? fresh.baselineDiffs
+      copyDiffs(side === 'review' ? (fresh.baseline ? fresh.baselineDiffs : fresh.reviewUnstagedDiffs)
         : side === 'staged' ? fresh.stagedDiffs : fresh.unstagedDiffs, markdown,
       side === 'unstaged' ? 'Unstaged changes' : undefined);
     } catch (error) {
@@ -2014,6 +2015,7 @@ export function App() {
             const path = useRepo.getState().activePath;
             const baselineOid = useRepo.getState().baseline?.oid;
             await useRepo.getState().refreshReviewDiffs();
+            await useRepo.getState().ensureAllDiffs('review');
             if (path !== useRepo.getState().activePath || baselineOid !== useRepo.getState().baseline?.oid) return;
             const st = useRepo.getState();
             const pool = st.baseline ? st.baselineDiffs : st.reviewUnstagedDiffs;

@@ -38,7 +38,9 @@ import { treeFileOrder } from '../lib/treeOrder';
 import { resolveActiveTreeTargets } from '../lib/treeSelection';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
-import { useRepoDiffs } from '../lib/useRepoDiffs';
+import { useCompleteDiffSearch, useRepoDiffs } from '../lib/useRepoDiffs';
+import { diffLoaded } from '../lib/diffPages';
+import { PendingDiff } from '../components/PendingDiff';
 import { useSettings } from '../stores/settings';
 import type { AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
 import { MergeResolver } from './MergeResolver';
@@ -159,6 +161,7 @@ export function LocalChanges({
   // actually contains the match (a partially staged path sits on both sides
   // with different hunks in each).
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchLoading = useCompleteDiffSearch(searchOpen, 'local');
   const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
   const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
   useEffect(() => {
@@ -462,6 +465,7 @@ export function LocalChanges({
               {searchOpen && (
                 <DiffSearchBar
                   diffs={searchPool}
+                  loadingLabel={searchLoading}
                   onJump={(m) => {
                     selectFileRow({ file: m.path, staged: m.tag === true });
                     const target = matchTarget(m);
@@ -704,10 +708,10 @@ function FileSection({
       const diffs = targets
         .map((p) => files.find((f) => f.path === p))
         .filter((f): f is FileDiff => f != null);
-      if (diffs.some((f) => f.patch.length > 0)) {
+      if (diffs.some((f) => !diffLoaded(f) || f.patch.length > 0)) {
         items.push(
-          { label: 'Copy diff', icon: 'file', onSelect: () => copyToClipboard(concatPatches(diffs)) },
-          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => copyToClipboard(patchesToMarkdown(diffs)) },
+          { label: 'Copy diff', icon: 'file', onSelect: () => void useRepo.getState().loadDiffFiles(staged ? 'staged' : 'unstaged', targets).then((loaded) => copyToClipboard(concatPatches(loaded))).catch((error) => console.warn('Copy diff failed', error)) },
+          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => void useRepo.getState().loadDiffFiles(staged ? 'staged' : 'unstaged', targets).then((loaded) => copyToClipboard(patchesToMarkdown(loaded))).catch((error) => console.warn('Copy diff failed', error)) },
         );
       }
       return items;
@@ -767,6 +771,7 @@ function FileSection({
 // ─── Diff pane ──────────────────────────────────────────────────────────────
 
 function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
+  const error = useRepo((state) => state.localDiffsError);
   // The unified/split toggle lives in the main header (App.tsx → MainHeader)
   // and writes to `useSettings.diffMode`. Pierre talks 'unified' | 'split',
   // our setting is 'stacked' | 'split' — map at the boundary.
@@ -795,6 +800,10 @@ function DiffPane({ diffs, staged }: { diffs: FileDiff[]; staged: boolean }) {
 
   return (
     <div className="lc-diff">
+      {error && <div className="lc-file-note" role="alert">
+        Couldn’t load all changes. {error}{' '}
+        <button type="button" className="h-link" onClick={() => void useRepo.getState().refreshDiffs().catch(() => {})}>Retry</button>
+      </div>}
       {diffs.length === 0 ? (
         <div className="lc-diff-scroll">
           <div className="lc-empty">
@@ -834,6 +843,8 @@ export function WholeFileDiff({ path }: { path: string }) {
   useRepoDiffs('local');
   const unstaged = useRepo((s) => s.unstagedDiffs);
   const staged = useRepo((s) => s.stagedDiffs);
+  const error = useRepo((s) => s.localDiffsError);
+  const loading = useRepo((s) => s.localDiffsDirty);
   const unstagedDiff = unstaged.find((d) => d.path === path);
   const stagedDiff = staged.find((d) => d.path === path);
   const diff = unstagedDiff ?? stagedDiff;
@@ -842,8 +853,9 @@ export function WholeFileDiff({ path }: { path: string }) {
       <div className="lc-diff">
         <div className="lc-diff-scroll">
           <div className="lc-empty">
-            <strong>No working-tree changes</strong>
-            This file currently matches HEAD.
+            <strong>{error ? 'Couldn’t load changes' : loading ? 'Loading changes…' : 'No working-tree changes'}</strong>
+            {error ?? (loading ? 'Reading the repository.' : 'This file currently matches HEAD.')}
+            {error && <button type="button" className="h-link" onClick={() => void useRepo.getState().refreshDiffs().catch(() => {})}>Retry</button>}
           </div>
         </div>
       </div>
@@ -870,7 +882,8 @@ function FileDiffSection({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const empty = diff.binary || diff.patch.length === 0;
+  const refreshing = useRepo((state) => state.localDiffsDirty);
+  const empty = diffLoaded(diff) && (diff.binary || diff.patch.length === 0);
   const image = diff.binary && isImagePath(diff.path);
 
   // Viewport-lazy mount: the "show all" view can stack hundreds of files, and
@@ -884,36 +897,47 @@ function FileDiffSection({
   // text diffs so a "show all" stack doesn't fire N fetches on open.
   const blockRef = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
+  const [near, setNear] = useState(false);
   useEffect(() => {
-    if (seen || collapsed || (empty && !image)) return;
+    if (collapsed || (empty && !image)) return;
     const el = blockRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setSeen(true);
-          io.disconnect();
-        }
+        const visible = entries.some((e) => e.isIntersecting);
+        setNear(visible);
+        if (visible) setSeen(true);
       },
       // Pre-mount a screenful early so a fast scroll meets ready content.
       { rootMargin: '900px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [seen, collapsed, empty, image]);
+  }, [collapsed, empty, image]);
+  useEffect(() => {
+    if (near && !collapsed && !refreshing && !diffLoaded(diff) && !diff.patchError) {
+      void useRepo.getState().loadDiffFiles(staged ? 'staged' : 'unstaged', [diff.path]).catch(() => {});
+    }
+  }, [near, collapsed, staged, diff, refreshing]);
 
   // Rough body-height estimate (changed lines, no context) so the placeholder
   // reserves space close to the real diff height.
   const estHeight = useMemo(
-    () => Math.min(1600, Math.max(80, (diff.adds + diff.dels) * 20)),
-    [diff.adds, diff.dels],
+    () => diffLoaded(diff) ? Math.min(1600, Math.max(80, (diff.adds + diff.dels) * 20)) : 400,
+    [diff.adds, diff.dels, diff.patchLoaded],
   );
 
   return (
     <div className="lc-file-block" ref={blockRef}>
       <FileHeaderStrip diff={diff} collapsed={collapsed} onToggle={onToggle} />
       {!collapsed &&
-        (image && !seen ? (
+        (!diffLoaded(diff) && near ? (
+          <div style={{ minHeight: diff.patch ? undefined : estHeight }}>
+            <PendingDiff diff={diff} layout={layout} onRetry={() => void useRepo.getState().refreshDiffs().catch(() => {})} />
+          </div>
+        ) : !diffLoaded(diff) ? (
+          <div className="lc-file-pending" style={{ height: estHeight }} aria-hidden />
+        ) : image && !seen ? (
           <div className="lc-file-pending" style={{ height: 180 }} aria-hidden />
         ) : image ? (
           // Old side: the unstaged diff's base is the *index* (a partially
@@ -1475,8 +1499,8 @@ function FileHeaderStrip({
     >
       <Icon name={collapsed ? 'chev-right' : 'chev-down'} size={12} className="chev" />
       <span className="path">{diff.path}</span>
-      <span className="stat-del">−{diff.dels}</span>
-      <span className="stat-add">+{diff.adds}</span>
+      <span className="stat-del">{diffLoaded(diff) ? `−${diff.dels}` : '…'}</span>
+      <span className="stat-add">{diffLoaded(diff) ? `+${diff.adds}` : ''}</span>
     </button>
   );
 }

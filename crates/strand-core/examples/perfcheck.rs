@@ -103,6 +103,15 @@ fn main() {
     bench("diff_unstaged", 20, || {
         repo.diff_unstaged().expect("diff_unstaged")
     });
+    let review_source = strand_core::diff_page::WorkingDiffSource::Review { baseline: "HEAD".into() };
+    bench("review summary", 20, || repo.diff_summary(&review_source).expect("review summary"));
+    let selected_paths: Vec<_> = repo.diff_summary(&review_source).expect("review summary")
+        .iter().take(3).map(|file| file.path.clone()).collect();
+    bench("review selected(3)", 20, || repo.diff_files(&review_source, &selected_paths, true).expect("selected patches"));
+    let summary = repo.diff_summary(&review_source).expect("review summary");
+    let selected = repo.diff_files(&review_source, &selected_paths, true).expect("selected patches");
+    println!("  summary payload: {} files, {} JSON bytes", summary.len(), serde_json::to_vec(&summary).expect("serialize summary").len());
+    println!("  selected payload: {} files, {} patch bytes, {} JSON bytes", selected.len(), selected.iter().map(|file| file.diff.patch.len()).sum::<usize>(), serde_json::to_vec(&selected).expect("serialize selected").len());
     bench("diff_staged", 20, || {
         repo.diff_staged().expect("diff_staged")
     });

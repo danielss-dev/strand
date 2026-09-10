@@ -10,11 +10,12 @@ import {
   settings as settingsDb,
   type StoredBaseline,
 } from '../lib/db';
-import { hashPatch } from '../lib/patch';
+import { hashFileDiff, hashPatch } from '../lib/patch';
+import { diffLoaded, diffReviewable, mergeDiffSummaries, readDiffPages } from '../lib/diffPages';
 import { logColdStart, timed } from '../lib/perf';
 import { isPreviewablePath } from '../lib/preview';
 import { pathKey, repoFamilyName } from '../lib/repoIdentity';
-import { reviewNoteScope } from '../lib/reviewExport';
+import { captureReviewNoteAnchor, reviewNoteScope } from '../lib/reviewExport';
 import { jsonEqual, stable, stableRows } from '../lib/stable';
 import { RefreshQueue } from '../lib/refreshQueue';
 import { errMessage, tauri } from '../lib/tauri';
@@ -28,6 +29,7 @@ import type {
   BranchPushRequest,
   CommitSearchMode,
   FileDiff,
+  WorkingDiffSource,
   FileStatus,
   FilesTreeMutation,
   FilesTreeMutationChange,
@@ -112,6 +114,7 @@ export interface RepoState {
   unstagedDiffs: FileDiff[];
   stagedDiffs: FileDiff[];
   localDiffsDirty: boolean;
+  localDiffsError: string | null;
   localSelection: LocalSelection | null;
   /** Pierre multi-select per side, with selected folders expanded to their files. */
   localTreeSelection: { unstaged: string[]; staged: string[] };
@@ -137,6 +140,9 @@ export interface RepoState {
    * (or on entry), so the regular local-diff hot path doesn't pay for it.
    */
   reviewUnstagedDiffs: FileDiff[];
+  /** Failed refreshes retain the comparison and its baseline until retry succeeds. */
+  reviewDiffsError: string | null;
+  reviewDiffsLoading: boolean;
 
   /**
    * File selected in the Review view's list, or `null` for "nothing yet" —
@@ -277,6 +283,8 @@ export interface RepoState {
   refreshStatus(): Promise<void>;
   refreshLog(limit?: number): Promise<void>;
   refreshDiffs(): Promise<void>;
+  loadDiffFiles(kind: 'unstaged' | 'staged' | 'review', files: string[]): Promise<FileDiff[]>;
+  ensureAllDiffs(kind: 'local' | 'review'): Promise<void>;
   retainDiffs(path: string, kind: 'local' | 'review'): () => void;
   refreshRefs(): Promise<void>;
   /** Re-read the working-tree file listing (Files tab). */
@@ -367,7 +375,7 @@ export interface RepoState {
   /** Attach a note to `file` (`line` = anchor line, null = whole file;
    * `side` = which diff side the line counts on, default `'new'` — a
    * deletion-only block anchors old-side). Empty text is ignored. */
-  addReviewNote(file: string, text: string, line: number | null, side?: 'new' | 'old'): void;
+  addReviewNote(file: string, text: string, line: number | null, side?: 'new' | 'old', sourcePatch?: string): void;
   /** Remove one note from `file` by id. */
   removeReviewNote(file: string, id: string): void;
   /** Add user-approved AI findings as notes in one persisted write. */
@@ -699,6 +707,7 @@ const EMPTY_REFS: Refs = {
 };
 
 const refreshes = new RefreshQueue();
+const diffGenerations = new Map<string, number>();
 let activation = 0;
 const diffConsumers = new Map<string, { local: number; review: number }>();
 function needsDiffs(path: string, kind: 'local' | 'review', view: View): boolean {
@@ -803,6 +812,7 @@ export function makeReviewNote(
   text: string,
   line: number | null,
   side?: 'new' | 'old',
+  sourcePatch?: string,
 ): ReviewNote | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
@@ -811,6 +821,8 @@ export function makeReviewNote(
     text: trimmed,
     line,
     ...(side === 'old' ? { side } : {}),
+    ...(line != null && sourcePatch !== undefined
+      ? { anchor: captureReviewNoteAnchor(sourcePatch, line, side) } : {}),
     createdAt: Date.now(),
   };
 }
@@ -819,6 +831,7 @@ export function makeReviewNote(
 export function addAiReviewNoteSet(
   current: Record<string, ReviewNote[]>,
   findings: CodeReviewFinding[],
+  pool: FileDiff[] = [],
 ): Record<string, ReviewNote[]> {
   const next: Record<string, ReviewNote[]> = { ...current };
   for (const finding of findings) {
@@ -830,7 +843,7 @@ export function addAiReviewNoteSet(
       && (note.side ?? 'new') === finding.side
       && note.severity === finding.severity);
     if (duplicate) continue;
-    const note = makeReviewNote(text, finding.line, finding.side);
+    const note = makeReviewNote(text, finding.line, finding.side, pool.find((diff) => diff.path === finding.path)?.patch);
     if (!note) continue;
     next[finding.path] = [
       ...(next[finding.path] ?? []),
@@ -852,11 +865,14 @@ const EMPTY_ACTIVE = {
   unstagedDiffs: [] as FileDiff[],
   stagedDiffs: [] as FileDiff[],
   localDiffsDirty: true,
+  localDiffsError: null as string | null,
   localSelection: null as LocalSelection | null,
   localTreeSelection: { unstaged: [] as string[], staged: [] as string[] },
   baseline: null as StoredBaseline | null,
   baselineDiffs: [] as FileDiff[],
   reviewUnstagedDiffs: [] as FileDiff[],
+  reviewDiffsError: null as string | null,
+  reviewDiffsLoading: false,
   reviewSelection: null as string | null,
   reviewed: {} as Record<string, string>,
   reviewNotes: {} as Record<string, ReviewNote[]>,
@@ -1161,14 +1177,20 @@ export const useRepo = create<RepoState>((set, get) => ({
     set({ localDiffsDirty: true });
     await refreshes.run(`${pathKey(path)}:diffs`, async (current) => {
       if (epoch !== activation) return;
+      for (const kind of ['unstaged', 'staged']) {
+        const key = `${pathKey(path)}:${kind}`;
+        diffGenerations.set(key, (diffGenerations.get(key) ?? 0) + 1);
+      }
+      try {
       const [unstaged, staged] = await timed('diffs', () =>
-        Promise.all([tauri.repoDiffUnstaged(path), tauri.repoDiffStaged(path)]),
+        Promise.all([tauri.repoDiffSummary(path, { kind: 'unstaged' }), tauri.repoDiffSummary(path, { kind: 'staged' })]),
       );
       if (!current() || epoch !== activation || get().activePath !== path) return;
       set({
-        unstagedDiffs: stableRows(get().unstagedDiffs, unstaged, (diff) => diff.path),
-        stagedDiffs: stableRows(get().stagedDiffs, staged, (diff) => diff.path),
+        unstagedDiffs: mergeDiffSummaries(get().unstagedDiffs, unstaged),
+        stagedDiffs: mergeDiffSummaries(get().stagedDiffs, staged),
         localDiffsDirty: false,
+        localDiffsError: null,
         diffsTick: get().diffsTick + 1,
       });
 
@@ -1187,7 +1209,68 @@ export const useRepo = create<RepoState>((set, get) => ({
           set({ localSelection: alt ? { file: alt.path, staged: !sel.staged } : null });
         }
       }
+      } catch (error) {
+        if (current() && epoch === activation && get().activePath === path) set({ localDiffsError: errMessage(error) });
+        throw error;
+      }
     });
+  },
+
+  async loadDiffFiles(kind, files) {
+    if (kind === 'review' ? get().reviewDiffsLoading : get().localDiffsDirty) {
+      await (kind === 'review' ? get().refreshReviewDiffs() : get().refreshDiffs());
+    }
+    const error = kind === 'review' ? get().reviewDiffsError : get().localDiffsError;
+    if (error) throw new Error(error);
+    const path = get().activePath;
+    if (!path) return [];
+    const epoch = activation;
+    const baseline = get().baseline?.oid;
+    const source: WorkingDiffSource = kind === 'review' ? { kind, baseline: baseline ?? 'HEAD' } : { kind };
+    const key = kind === 'review' ? (baseline ? 'baselineDiffs' : 'reviewUnstagedDiffs') : kind === 'staged' ? 'stagedDiffs' : 'unstagedDiffs';
+    const generationKey = `${pathKey(path)}:${kind}`;
+    const generation = diffGenerations.get(generationKey) ?? 0;
+    const valid = () => epoch === activation && get().activePath === path
+      && (kind !== 'review' || get().baseline?.oid === baseline)
+      && (diffGenerations.get(generationKey) ?? 0) === generation;
+    const wanted = new Set(files);
+    const missing = get()[key].filter((diff) => wanted.has(diff.path) && !diffLoaded(diff)).map((diff) => diff.path);
+    try {
+      await readDiffPages(path, source, missing, kind === 'review', generation, (page) => {
+        if (!valid()) throw new Error('The comparison changed while loading patches. Retry the action.');
+        const loaded = new Map(page.map((diff) => [diff.path, diff]));
+        set({ [key]: get()[key].map((diff) => loaded.get(diff.path) ?? diff) });
+      });
+    } catch (error) {
+      if (valid()) {
+        const message = errMessage(error);
+        set({
+          [key]: get()[key].map((diff) => wanted.has(diff.path) && !diffLoaded(diff) ? { ...diff, patchError: message } : diff),
+          ...(kind === 'review' ? { reviewDiffsError: message } : { localDiffsError: message }),
+        });
+      }
+      throw error;
+    }
+    if (!valid()) throw new Error('The comparison changed while loading patches. Retry the action.');
+    return get()[key].filter((diff) => wanted.has(diff.path));
+  },
+
+  async ensureAllDiffs(kind) {
+    const state = get();
+    if (kind === 'review') {
+      const pool = state.baseline ? state.baselineDiffs : state.reviewUnstagedDiffs;
+      await state.loadDiffFiles('review', pool.map((diff) => diff.path));
+      if (get().reviewDiffsError) throw new Error(get().reviewDiffsError!);
+      const current = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
+      if (current.some((diff) => !diffLoaded(diff))) throw new Error('The comparison changed while loading patches. Retry the action.');
+    } else {
+      await Promise.all([
+        state.loadDiffFiles('unstaged', state.unstagedDiffs.map((diff) => diff.path)),
+        state.loadDiffFiles('staged', state.stagedDiffs.map((diff) => diff.path)),
+      ]);
+      if (get().localDiffsError) throw new Error(get().localDiffsError!);
+      if ([...get().unstagedDiffs, ...get().stagedDiffs].some((diff) => !diffLoaded(diff))) throw new Error('The comparison changed while loading patches. Retry the action.');
+    }
   },
 
   // Snapshot-based: one statuses walk covers status + work tree + meta +
@@ -1254,7 +1337,7 @@ export const useRepo = create<RepoState>((set, get) => ({
     if (!path || !oid) return;
     const baseline: StoredBaseline = { oid, short: oid.slice(0, 7), setAt: Date.now() };
     const scope = activeReviewNoteScope(get(), oid);
-    set({ baseline });
+    set({ baseline, ...(get().baseline?.oid !== oid ? { baselineDiffs: [], reviewDiffsError: null } : {}) });
     void reviewSession.setBaseline(path, baseline).catch((e) =>
       console.warn('baseline persist failed', e));
     await Promise.all([
@@ -1289,7 +1372,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   async clearBaseline() {
     const path = get().activePath;
     const scope = activeReviewNoteScope(get(), null);
-    set({ baseline: null, baselineDiffs: [] });
+    set({ baseline: null, baselineDiffs: [], reviewDiffsError: null, reviewDiffsLoading: false });
     if (path) {
       void reviewSession.setBaseline(path, null).catch((e) =>
         console.warn('baseline clear failed', e));
@@ -1306,6 +1389,7 @@ export const useRepo = create<RepoState>((set, get) => ({
         console.warn('review notes load failed', e);
       }
     }
+    if (get().activePath === path && get().baseline === null) await get().refreshReviewDiffs();
   },
 
   selectReviewFile: (reviewSelection) => set({ reviewSelection }),
@@ -1319,14 +1403,17 @@ export const useRepo = create<RepoState>((set, get) => ({
       const valid = () => current() && epoch === activation && get().activePath === path
         && get().baseline?.oid === baseline?.oid;
       if (!valid()) return;
+      set({ reviewDiffsLoading: true });
+      const generationKey = `${pathKey(path)}:review`;
+      diffGenerations.set(generationKey, (diffGenerations.get(generationKey) ?? 0) + 1);
       try {
-        const diffs = await timed('review', () => tauri.repoDiffSinceFull(path, baseline?.oid ?? 'HEAD'));
+        const diffs = await timed('review', () => tauri.repoDiffSummary(path, { kind: 'review', baseline: baseline?.oid ?? 'HEAD' }));
         if (!valid()) return;
         const key = baseline ? 'baselineDiffs' : 'reviewUnstagedDiffs';
-        set({ [key]: stableRows(get()[key], diffs, (diff) => diff.path), diffsTick: get().diffsTick + 1 });
+        set({ [key]: mergeDiffSummaries(get()[key], diffs), diffsTick: get().diffsTick + 1, reviewDiffsError: null, reviewDiffsLoading: false });
       } catch (e) {
         console.warn('repoDiffSinceFull failed', e);
-        if (baseline && valid()) void get().clearBaseline();
+        if (valid()) set({ reviewDiffsError: errMessage(e), reviewDiffsLoading: false });
       }
     });
   },
@@ -1360,6 +1447,9 @@ export const useRepo = create<RepoState>((set, get) => ({
   toggleReviewed(file, hash) {
     const path = get().activePath;
     if (!path) return;
+    const pool = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
+    const diff = pool.find((diff) => diff.path === file);
+    if (!diff || !diffReviewable(diff)) return;
     const cur = get().reviewed;
     const next = { ...cur };
     // Marked with a matching hash → unmark; anything else → (re)mark at the
@@ -1371,9 +1461,12 @@ export const useRepo = create<RepoState>((set, get) => ({
       console.warn('reviewed persist failed', e));
   },
 
-  addReviewNote(file, text, line, side) {
+  addReviewNote(file, text, line, side, sourcePatch) {
     const path = get().activePath;
-    const note = makeReviewNote(text, line, side);
+    const pool = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
+    const diff = pool.find((diff) => diff.path === file);
+    if (line != null && sourcePatch === undefined && diff && !diffLoaded(diff)) return;
+    const note = makeReviewNote(text, line, side, sourcePatch ?? (diff && diffLoaded(diff) ? diff.patch : undefined));
     if (!path || !note) return;
     const cur = get().reviewNotes;
     const next = { ...cur, [file]: [...(cur[file] ?? []), note] };
@@ -1401,7 +1494,8 @@ export const useRepo = create<RepoState>((set, get) => ({
   addAiReviewFindings(findings) {
     const path = get().activePath;
     if (!path || findings.length === 0) return;
-    const next = addAiReviewNoteSet(get().reviewNotes, findings);
+    const pool = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
+    const next = addAiReviewNoteSet(get().reviewNotes, findings, pool);
     const scope = activeReviewNoteScope(get());
     set({ reviewNotes: next });
     void reviewSession.setNotes(path, next, scope).catch((e) =>
@@ -1420,19 +1514,23 @@ export const useRepo = create<RepoState>((set, get) => ({
   async stageReviewed() {
     const path = get().activePath;
     if (!path) return;
+    const epoch = activation;
     const baselineOid = get().baseline?.oid;
-    await Promise.all([get().refreshDiffs(), get().refreshReviewDiffs()]);
-    if (get().activePath !== path || get().baseline?.oid !== baselineOid) return;
+    const state = await tauri.repoReviewedStageState(path);
+    if (epoch !== activation || get().activePath !== path || get().baseline?.oid !== baselineOid) return;
+    await get().refreshReviewDiffs();
+    if (epoch !== activation || get().activePath !== path || get().baseline?.oid !== baselineOid) return;
+    if (get().reviewDiffsError) throw new Error(get().reviewDiffsError!);
+    await get().loadDiffFiles('review', Object.keys(get().reviewed));
+    if (epoch !== activation || get().activePath !== path || get().baseline?.oid !== baselineOid) return;
+    if (get().reviewDiffsError) throw new Error(get().reviewDiffsError!);
     const reviewed = get().reviewed;
-    // Marks hash the review pool's whole-file patches; stage the matching
-    // files that are actually unstaged right now.
+    // Native staging proves these complete inspected patches against captured
+    // bytes, and resolves current unstaged/rename targets under the index lock.
     const pool = get().baseline ? get().baselineDiffs : get().reviewUnstagedDiffs;
-    const unstaged = new Set(get().unstagedDiffs.map((d) => d.path));
-    const files = pool
-      .filter((d) => unstaged.has(d.path) && reviewed[d.path] === hashPatch(d.patch))
-      .map((d) => d.path);
+    const files = pool.filter((d) => diffReviewable(d) && reviewed[d.path] === hashFileDiff(d));
     if (files.length === 0) return;
-    await tauri.repoStageMany(path, files);
+    await tauri.repoStageReviewed(path, state, baselineOid ?? null, files);
     await get().refreshLocalChanges();
   },
 

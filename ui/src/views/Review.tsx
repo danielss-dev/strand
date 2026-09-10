@@ -4,6 +4,8 @@ import { Virtualizer, useWorkerPool } from '@pierre/diffs/react';
 import type { GitStatusEntry } from '@pierre/trees';
 
 import { Diff, parsePatchCached } from '../components/Diff';
+import { PendingDiff } from '../components/PendingDiff';
+import { diffLoaded, diffReviewable, reviewDiffPoolKey as reviewPoolKey } from '../lib/diffPages';
 import { DiffMinimap } from '../components/DiffMinimap';
 import { DiffSearchBar, focusDiffSearchInput } from '../components/DiffSearchBar';
 import { Icon } from '../components/Icon';
@@ -23,7 +25,7 @@ import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJ
 import { aiCoverageLabel, aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import { useSettled } from '../lib/useSettled';
 import { concatPatches, patchesToMarkdown } from '../lib/patchExport';
-import { buildReviewFeedback, collectFeedbackFiles } from '../lib/reviewExport';
+import { buildReviewFeedback, collectFeedbackFiles, reviewNoteOutdated } from '../lib/reviewExport';
 import { AI_AUTH_REQUIRED, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
 import type {
   AiInputCoverage,
@@ -34,7 +36,7 @@ import type {
   FileDiff,
 } from '../lib/types';
 import { useRepo } from '../stores/repo';
-import { useRepoDiffs } from '../lib/useRepoDiffs';
+import { useCompleteDiffSearch, useRepoDiffs } from '../lib/useRepoDiffs';
 import { useSettings } from '../stores/settings';
 import { treeFileOrder } from '../lib/treeOrder';
 import { HunkAnnotatedDiff, scrollDiff, stepChangeBlock } from './LocalChanges';
@@ -80,6 +82,8 @@ export function Review({
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
   const reviewUnstagedDiffs = useRepo((s) => s.reviewUnstagedDiffs);
+  const reviewDiffsError = useRepo((s) => s.reviewDiffsError);
+  const reviewDiffsLoading = useRepo((s) => s.reviewDiffsLoading);
   const unstagedDiffs = useRepo((s) => s.unstagedDiffs);
   const reviewed = useRepo((s) => s.reviewed);
   const toggleReviewed = useRepo((s) => s.toggleReviewed);
@@ -93,6 +97,8 @@ export function Review({
   const setBranchBaseline = useRepo((s) => s.setBranchBaseline);
   const clearBaseline = useRepo((s) => s.clearBaseline);
   const refreshReviewDiffs = useRepo((s) => s.refreshReviewDiffs);
+  const loadDiffFiles = useRepo((s) => s.loadDiffFiles);
+  const ensureAllDiffs = useRepo((s) => s.ensureAllDiffs);
   const stageReviewed = useRepo((s) => s.stageReviewed);
   const stageMany = useRepo((s) => s.stageMany);
   const unstageMany = useRepo((s) => s.unstageMany);
@@ -120,11 +126,11 @@ export function Review({
   const verdicts = useMemo(() => {
     const m = new Map<string, { hash: string; verdict: Verdict }>();
     for (const d of pool) {
-      const hash = hashOf(d);
+      const hash = diffReviewable(d) ? hashOf(d) : '';
       const mark = reviewed[d.path];
       m.set(d.path, {
         hash,
-        verdict: mark === hash ? 'reviewed' : mark !== undefined ? 'stale' : 'pending',
+        verdict: !diffReviewable(d) ? 'pending' : mark === hash ? 'reviewed' : mark !== undefined ? 'stale' : 'pending',
       });
     }
     return m;
@@ -186,7 +192,7 @@ export function Review({
     // Huge patches (lockfiles…) are excluded: parsing them here would jank
     // the main thread, and the worker renders them plain-text anyway.
     const primable = (d: FileDiff) =>
-      !d.binary && d.patch.length > 0 && d.patch.length < 1_000_000;
+      diffLoaded(d) && !d.binary && d.patch.length > 0 && d.patch.length < 1_000_000;
     const targets: FileDiff[] = [];
     for (let i = 1; i < pool.length && targets.length < 3; i++) {
       const d = pool[(idx + i) % pool.length];
@@ -210,6 +216,13 @@ export function Review({
   // first, natural sort) — not the diff list's flat path order, which made j/k
   // appear to jump into nested folders out of sequence. Matches the ↑/↓ arrows.
   const navOrder = useMemo(() => treeFileOrder(pool.map((d) => d.path)), [pool]);
+  useEffect(() => {
+    if (!selected || reviewDiffsLoading || reviewDiffsError) return;
+    const index = navOrder.indexOf(selected);
+    const nearby = navOrder.slice(Math.max(0, index - 1), index + 2)
+      .filter((path) => pool.some((diff) => diff.path === path && !diffLoaded(diff) && !diff.patchError));
+    if (nearby.length) void loadDiffFiles('review', nearby).catch(() => {});
+  }, [selected, navOrder, pool, loadDiffFiles, reviewDiffsLoading, reviewDiffsError]);
   const step = useCallback(
     (dir: 1 | -1) => {
       if (navOrder.length === 0) return;
@@ -223,7 +236,7 @@ export function Review({
   /** Toggle the current file's reviewed mark — and stay on the file, so the
    * verdict can be double-checked before moving on with j/k or the arrows. */
   const markReviewed = useCallback(() => {
-    if (!current) return;
+    if (!current || !diffReviewable(current)) return;
     const v = verdicts.get(current.path);
     if (v) toggleReviewed(current.path, v.hash);
   }, [current, verdicts, toggleReviewed]);
@@ -231,6 +244,7 @@ export function Review({
   // In-diff text search (⌘F): floats over the diff pane, searches the whole
   // pool, and a jump selects the matched file in the queue.
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchLoading = useCompleteDiffSearch(searchOpen, 'review');
   const diffSearchSignal = useRepo((s) => s.diffSearchSignal);
   const clearDiffSearch = useRepo((s) => s.clearDiffSearch);
   useEffect(() => {
@@ -255,6 +269,7 @@ export function Review({
     line: number | null;
     /** Diff side `line` counts on — 'old' for deletion-only blocks. */
     side: 'new' | 'old';
+    sourcePatch?: string;
   } | null>(null);
   const closeNoteEditor = useCallback((el?: HTMLTextAreaElement) => {
     // Blur before unmounting so focus falls back to the window and the
@@ -293,8 +308,11 @@ export function Review({
     provider: AiProvider;
     target: string;
     model: string;
+    configuration: string;
   } | null>(null);
   const reviewingWithAiRef = useRef(false);
+  const aiResultKey = useRef<string | null>(null);
+  const aiConfiguration = JSON.stringify([aiProvider, openaiCli, anthropicCli, openaiModel, anthropicModel]);
 
   const cancelAiReview = useCallback(() => {
     const request = aiRequestRef.current;
@@ -304,23 +322,22 @@ export function Review({
     if (request) void tauri.repoCancelOp(request.opId);
   }, []);
 
-  useEffect(
-    () => cancelAiReview,
-    [
-      activePath,
-      aiProvider,
-      openaiCli,
-      anthropicCli,
-      openaiModel,
-      anthropicModel,
-      aiReviewKey,
-      cancelAiReview,
-    ],
-  );
+  useEffect(() => cancelAiReview, [cancelAiReview]);
+  useEffect(() => {
+    const request = aiRequestRef.current;
+    const current = useRepo.getState();
+    // Hydration may render after the request starts. Compare with the live
+    // store, not the previous render whose pool still contained summaries.
+    if (request && (request.configuration !== aiConfiguration || !aiRequestMatches(request, {
+      path: current.activePath ?? '', provider: request.provider, target: currentReviewPoolKey(current),
+    }))) cancelAiReview();
+  }, [activePath, aiConfiguration, aiReviewKey, cancelAiReview]);
 
   useEffect(() => {
-    setPendingAiFindings([]);
-    setAiCoverage(null);
+    if (aiResultKey.current !== currentReviewPoolKey(useRepo.getState())) {
+      setPendingAiFindings([]);
+      setAiCoverage(null);
+    }
   }, [aiReviewKey]);
 
   const runAiReview = useCallback(
@@ -328,7 +345,16 @@ export function Review({
       sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
       provider: AiProvider = aiProvider,
     ) => {
+      const starting = useRepo.getState();
+      if (!starting.activePath || reviewingWithAiRef.current) return;
+      try {
+        await ensureAllDiffs('review');
+      } catch (error) {
+        setAiError(gitErrorHint(error));
+        return;
+      }
       const repoState = useRepo.getState();
+      if (repoState.activePath !== starting.activePath || repoState.baseline?.oid !== starting.baseline?.oid) return;
       const requestPool = repoState.baseline
         ? repoState.baselineDiffs
         : repoState.reviewUnstagedDiffs;
@@ -345,6 +371,7 @@ export function Review({
         provider,
         target: currentReviewPoolKey(repoState),
         model,
+        configuration: aiConfiguration,
       };
       aiRequestRef.current = request;
       reviewingWithAiRef.current = true;
@@ -381,6 +408,7 @@ export function Review({
           return;
         }
         if (outcome.provider !== provider) return;
+        aiResultKey.current = request.target;
         setPendingAiFindings(outcome.suggestion.findings);
         setAiCoverage({ coverage: outcome.coverage, provider: outcome.provider });
         const count = outcome.suggestion.findings.length;
@@ -419,6 +447,8 @@ export function Review({
       openaiCli,
       anthropicCli,
       onToast,
+      ensureAllDiffs,
+      aiConfiguration,
     ],
   );
 
@@ -458,21 +488,27 @@ export function Review({
     () => feedbackFiles.reduce((n, f) => n + f.notes.length, 0),
     [feedbackFiles],
   );
-  const copyFeedback = useCallback(() => {
+  const copyFeedback = useCallback(async () => {
     if (!activePath || feedbackFiles.length === 0) return;
+    try {
+    await ensureAllDiffs('review');
+    const state = useRepo.getState();
+    if (state.activePath !== activePath || state.baseline?.oid !== baseline?.oid) return;
+    const files = collectFeedbackFiles(state.baseline ? state.baselineDiffs : state.reviewUnstagedDiffs, state.reviewNotes);
     copyToClipboard(
       buildReviewFeedback({
         repoName: basename(activePath),
         branch: meta?.branch ?? null,
         baselineShort: baseline?.short ?? null,
-        files: feedbackFiles,
+        files,
       }),
     );
     onToast(
       `Copied feedback — ${noteCount} note${noteCount === 1 ? '' : 's'} across ` +
         `${feedbackFiles.length} file${feedbackFiles.length === 1 ? '' : 's'}`,
     );
-  }, [activePath, feedbackFiles, noteCount, meta, baseline, onToast]);
+    } catch (error) { fail('Copy feedback')(error); }
+  }, [activePath, feedbackFiles, noteCount, meta, baseline, onToast, ensureAllDiffs, fail]);
 
   // Two-step confirms for the destructive actions.
   const [armDiscardAll, setArmDiscardAll] = useState(false);
@@ -545,17 +581,14 @@ export function Review({
   // folder or multi-selection marks everything under it reviewed.
   const activateFiles = useCallback(
     (paths: string[]) => {
-      if (paths.length === 1) {
-        const v = verdicts.get(paths[0]);
-        if (v) toggleReviewed(paths[0], v.hash);
-        return;
-      }
-      for (const p of paths) {
-        const v = verdicts.get(p);
-        if (v && v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
-      }
+      void loadDiffFiles('review', paths).then((diffs) => {
+        for (const diff of diffs.filter(diffReviewable)) {
+          const hash = hashOf(diff);
+          if (paths.length === 1 || useRepo.getState().reviewed[diff.path] !== hash) toggleReviewed(diff.path, hash);
+        }
+      }).catch(fail('Mark reviewed'));
     },
-    [verdicts, toggleReviewed],
+    [loadDiffFiles, toggleReviewed, fail],
   );
 
   const treeMenuItems = useCallback(
@@ -577,10 +610,12 @@ export function Review({
         label: (allReviewed ? 'Mark not reviewed' : 'Mark reviewed') + suffix,
         icon: 'check',
         onSelect: () => {
-          for (const p of known) {
-            const v = verdicts.get(p)!;
-            if (allReviewed || v.verdict !== 'reviewed') toggleReviewed(p, v.hash);
-          }
+          void loadDiffFiles('review', known).then((diffs) => {
+            for (const diff of diffs.filter(diffReviewable)) {
+              const hash = hashOf(diff);
+              if (allReviewed || useRepo.getState().reviewed[diff.path] !== hash) toggleReviewed(diff.path, hash);
+            }
+          }).catch(fail('Mark reviewed'));
         },
       });
       const unstagedTargets = known.filter((p) => unstagedSet.has(p));
@@ -609,15 +644,15 @@ export function Review({
       const diffs = known
         .map((p) => pool.find((d) => d.path === p))
         .filter((d): d is FileDiff => d != null);
-      if (diffs.some((d) => d.patch.length > 0)) {
+      if (diffs.some((d) => !diffLoaded(d) || d.patch.length > 0)) {
         items.push(
-          { label: 'Copy diff', icon: 'file', onSelect: () => copyToClipboard(concatPatches(diffs)) },
-          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => copyToClipboard(patchesToMarkdown(diffs)) },
+          { label: 'Copy diff', icon: 'file', onSelect: () => void loadDiffFiles('review', known).then((loaded) => copyToClipboard(concatPatches(loaded))).catch(fail('Copy diff')) },
+          { label: 'Copy diff as Markdown', icon: 'file', onSelect: () => void loadDiffFiles('review', known).then((loaded) => copyToClipboard(patchesToMarkdown(loaded))).catch(fail('Copy diff')) },
         );
       }
       return items;
     },
-    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor],
+    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor, loadDiffFiles],
   );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
@@ -731,8 +766,15 @@ export function Review({
           onClear={() => void clearBaseline()}
         />
         <div className="lc-empty">
-          <strong>{sessionMode ? 'Session is clean' : 'Nothing to review'}</strong>
-          {sessionMode
+          <strong>{reviewDiffsError ? 'Couldn’t load review' : reviewDiffsLoading ? 'Loading review…' : sessionMode ? 'Session is clean' : 'Nothing to review'}</strong>
+          {reviewDiffsError ? (
+            <>
+              <span role="alert">{reviewDiffsError}</span>
+              <button type="button" className="h-link" disabled={reviewDiffsLoading} onClick={() => void refreshReviewDiffs()}>
+                {reviewDiffsLoading ? 'Retrying…' : 'Retry'}
+              </button>
+            </>
+          ) : reviewDiffsLoading ? 'Reading changes from the repository.' : sessionMode
             ? `No changes since ${baseline!.short}. Let the agent work — this view follows along live.`
             : 'No uncommitted changes. Start a branch baseline to review its committed work too.'}
         </div>
@@ -810,6 +852,15 @@ export function Review({
           </>
         }
       />
+
+      {reviewDiffsError && (
+        <div className="rv-ai-panel danger" role="alert">
+          <span>Review is out of date. Showing the last successful comparison. {reviewDiffsError}</span>
+          <button type="button" className="h-link" disabled={reviewDiffsLoading} onClick={() => void refreshReviewDiffs()}>
+            {reviewDiffsLoading ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
 
       {(aiSensitivePrompt || aiError || aiCoverage || pendingAiFindings.length > 0) && (
         <div className="rv-ai-review">
@@ -951,8 +1002,8 @@ export function Review({
                 <div className="rv-diff">
                   <div className="rv-file-head">
                     <span className="path">{displayed.path}</span>
-                    <span className="stat-del">−{displayed.dels}</span>
-                    <span className="stat-add">+{displayed.adds}</span>
+                    <span className="stat-del">{diffLoaded(displayed) ? `−${displayed.dels}` : '…'}</span>
+                    <span className="stat-add">{diffLoaded(displayed) ? `+${displayed.adds}` : ''}</span>
                     <span className="rv-head-actions">
                       <button
                         type="button"
@@ -998,6 +1049,7 @@ export function Review({
                           'rv-check wide' + (verdicts.get(displayed.path)?.verdict === 'reviewed' ? ' on' : '')
                         }
                         aria-pressed={verdicts.get(displayed.path)?.verdict === 'reviewed'}
+                        disabled={!diffReviewable(displayed)}
                         onClick={markReviewed}
                         title="Mark reviewed (Space)"
                       >
@@ -1021,7 +1073,7 @@ export function Review({
                             e.preventDefault();
                             const text = e.currentTarget.value;
                             closeNoteEditor(e.currentTarget);
-                            addReviewNote(noteEditor.path, text, noteEditor.line, noteEditor.side);
+                            addReviewNote(noteEditor.path, text, noteEditor.line, noteEditor.side, noteEditor.sourcePatch);
                           } else if (e.key === 'Escape') {
                             e.preventDefault();
                             closeNoteEditor(e.currentTarget);
@@ -1042,8 +1094,9 @@ export function Review({
                           {n.line != null && (
                             <span
                               className="rv-note-line"
-                              title={n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
+                              title={reviewNoteOutdated(n, hashOf(displayed)) ? 'Outdated note: original line; feedback preserves saved context.' : n.side === 'old' ? 'Old-side line (deleted block)' : undefined}
                             >
+                              {reviewNoteOutdated(n, hashOf(displayed)) ? 'Outdated · ' : ''}
                               {n.side === 'old' ? '−' : ''}L{n.line}
                             </span>
                           )}
@@ -1068,7 +1121,9 @@ export function Review({
                       map rides beside it as an overview ruler. */}
                   <div className="rv-diff-body">
                     <Virtualizer className="rv-diff-scroll">
-                    {displayed.binary && isImagePath(displayed.path) ? (
+                    {!diffLoaded(displayed) ? (
+                      <PendingDiff diff={displayed} layout={layout} onRetry={() => void refreshReviewDiffs()} />
+                    ) : displayed.binary && isImagePath(displayed.path) ? (
                       // Old side: the session baseline, or HEAD in inbox mode.
                       // The inbox combines staged + unstaged changes against
                       // HEAD, matching the textual diff. New side: worktree.
@@ -1087,7 +1142,7 @@ export function Review({
                       <div className="lc-file-note">
                         {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
                       </div>
-                    ) : sessionMode || stagedSet.has(displayed.path) ? (
+                    ) : sessionMode || reviewDiffsError || stagedSet.has(displayed.path) ? (
                       // Session diffs can span commits, while an inbox file
                       // with staged content is a combined HEAD→worktree patch.
                       // Neither is a safe per-hunk index patch, so render it
@@ -1114,12 +1169,13 @@ export function Review({
                             path: displayed.path,
                             line: m.addRange?.start ?? m.delRange?.start ?? null,
                             side: m.addRange ? 'new' : m.delRange ? 'old' : 'new',
+                            sourcePatch: displayed.patch,
                           })
                         }
                       />
                     )}
                     </Virtualizer>
-                    {!displayed.binary && displayed.patch.length > 0 && (
+                    {diffLoaded(displayed) && !displayed.binary && displayed.patch.length > 0 && (
                       <DiffMinimap
                         patch={displayed.patch}
                         layout={layout}
@@ -1137,6 +1193,7 @@ export function Review({
               {searchOpen && (
                 <DiffSearchBar
                   diffs={pool}
+                  loadingLabel={searchLoading}
                   onJump={(m) => {
                     const target = matchTarget(m);
                     if (target && displayed?.path === m.path) {
@@ -1176,10 +1233,6 @@ export function Review({
 /** Last path segment — the repo's directory name from its absolute path. */
 function basename(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
-}
-
-function reviewPoolKey(baselineOid: string | null, pool: FileDiff[]): string {
-  return `${baselineOid ?? 'uncommitted'}\0${pool.map((diff) => `${diff.path}:${hashOf(diff)}`).join('\0')}`;
 }
 
 function currentReviewPoolKey(state: ReturnType<typeof useRepo.getState>): string {

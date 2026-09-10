@@ -11,13 +11,16 @@ import type {
   AiInputCoverage,
   CodeReviewSuggestion,
   CommitMessageSuggestion,
+  FileDiff,
   HeroiAgentEvent,
   Progress,
   PullRequest,
   PullRequestComment,
   PullRequestSuggestion,
   TerminalEvent,
+  WorkingDiffSource,
 } from '../lib/types';
+import { hashPatch } from '../lib/patch';
 import { buildWorld, MAIN_PATH } from './fixtures';
 import { fakeOid, GitError } from './git';
 import { DemoTerminal } from './terminal';
@@ -33,8 +36,25 @@ const terminals = new Map<string, { term: DemoTerminal; path: string }>();
 
 const str = (v: unknown): string => String(v ?? '');
 const wtOf = (args: Args) => repo.worktree(str(args.path));
+const reviewedStageState = (args: Args) => {
+  const wt = wtOf(args);
+  const meta = repo.meta(wt);
+  return {
+    workdir: wt.path, git_dir: `${wt.path}/.git`, common_dir: meta.common_dir,
+    head_ref: wt.branch ? `refs/heads/${wt.branch}` : null,
+    head_oid: meta.head_oid, index_hash: fakeOid(JSON.stringify([...wt.index].sort())),
+  };
+};
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const unavailable = (what: string) => { throw new DemoUnavailable(`${what} isn't available in the web demo — download Strand to use it on your own repositories.`); };
+
+function demoDiffPage(args: Args) {
+  const source = args.source as WorkingDiffSource;
+  const wt = wtOf(args);
+  const diffs = source.kind === 'review' ? repo.diffSince(wt, source.baseline, true)
+    : source.kind === 'staged' ? repo.diffStaged(wt) : repo.diffUnstaged(wt);
+  return diffs.map((diff) => ({ ...diff, revision: hashPatch(diff.patch) }));
+}
 
 async function streamProgress(channel: Channel<Progress> | undefined, phases: string[], tail: string): Promise<void> {
   for (let i = 0; i < phases.length; i += 1) {
@@ -164,6 +184,11 @@ export const handlers: Record<string, Handler> = {
   repo_detect_base_branch: (a) => repo.detectBaseBranch(str(a.target)),
 
   // ---- diffs / files -----------------------------------------------------
+  repo_diff_summary: (a) => demoDiffPage(a).map(({ path, old_path, status, revision }) => ({ path, old_path, status, revision })),
+  repo_diff_files: (a) => {
+    const files = a.files as string[];
+    return demoDiffPage(a).filter((diff) => files.includes(diff.path));
+  },
   repo_diff_unstaged: (a) => repo.diffUnstaged(wtOf(a)),
   repo_diff_unstaged_paths: (a) => repo.diffUnstaged(wtOf(a)).map(({ path, old_path }) => ({ path, old_path })),
   repo_diff_unstaged_full: (a) => repo.diffUnstaged(wtOf(a), true),
@@ -232,6 +257,16 @@ export const handlers: Record<string, Handler> = {
   repo_stage: (a) => repo.stage(wtOf(a), str(a.file)),
   repo_unstage: (a) => repo.unstage(wtOf(a), str(a.file)),
   repo_stage_many: (a) => { const wt = wtOf(a); for (const f of a.files as string[]) repo.stage(wt, f); },
+  repo_reviewed_stage_state: reviewedStageState,
+  repo_stage_reviewed: (a) => {
+    if (JSON.stringify(a.state) !== JSON.stringify(reviewedStageState(a))) throw new GitError('The repository or index changed. Refresh Review before staging reviewed files.');
+    const wt = wtOf(a);
+    const live = repo.diffSince(wt, a.baseline == null ? 'HEAD' : str(a.baseline), true);
+    const unstaged = new Set(repo.diffUnstaged(wt).map((file) => file.path));
+    const files = (a.files as FileDiff[]).filter((file) => unstaged.has(file.path));
+    if (files.some((file) => !live.some((next) => next.path === file.path && next.patch === file.patch))) throw new GitError('Reviewed contents changed. Refresh Review before staging.');
+    for (const file of files) repo.stage(wt, file.path);
+  },
   repo_unstage_many: (a) => { const wt = wtOf(a); for (const f of a.files as string[]) repo.unstage(wt, f); },
   repo_discard: (a) => repo.discard(wtOf(a), str(a.file)),
   repo_discard_many: (a) => { const wt = wtOf(a); for (const f of a.files as string[]) repo.discard(wt, f); },

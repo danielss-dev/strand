@@ -127,6 +127,15 @@ export type CommitSearchMode = 'message' | 'author' | 'content';
 
 export type DiffStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange';
 
+export type WorkingDiffSource = { kind: 'unstaged' } | { kind: 'staged' } | { kind: 'review'; baseline: string };
+
+export interface DiffSummary {
+  path: string;
+  old_path: string | null;
+  status: DiffStatus;
+  revision: string | null;
+}
+
 export interface FileDiff {
   path: string;
   old_path: string | null;
@@ -136,6 +145,11 @@ export interface FileDiff {
   binary: boolean;
   /** Unified-diff text for this single file. Feed to `<Diff />`. */
   patch: string;
+  /** UI cache state. Absent on legacy full-patch responses, which are loaded. */
+  patchLoaded?: boolean;
+  patchError?: string | null;
+  /** Native content identity tied to the returned patch; null cannot be reused. */
+  revision?: string | null;
 }
 
 /**
@@ -153,6 +167,8 @@ export interface ReviewNote {
    * persisted before this field existed are all new-side.
    */
   side?: 'new' | 'old';
+  /** Original line context; absent on notes saved before anchor tracking. */
+  anchor?: { patchHash: string; excerpt: string | null };
   /** Accepted AI findings stay distinguishable from human-authored notes. */
   source?: 'ai';
   severity?: CodeReviewSeverity;

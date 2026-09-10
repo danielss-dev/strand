@@ -21,7 +21,8 @@ export function hashPatch(text: string): string {
  * per verdicts recompute. Shared by the Review and Workspace Review views.
  */
 const patchHashCache = new WeakMap<{ patch: string }, string>();
-export function hashFileDiff(d: { patch: string }): string {
+export function hashFileDiff(d: { patch: string; binary?: boolean; revision?: string | null }): string {
+  if (d.binary && d.revision != null) return `binary:${d.revision}`;
   let h = patchHashCache.get(d);
   if (h === undefined) {
     h = hashPatch(d.patch);

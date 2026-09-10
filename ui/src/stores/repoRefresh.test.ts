@@ -13,7 +13,7 @@ const meta: RepoMeta = {
   detached: false, operation: null, common_dir: '/repo/.git', is_linked_worktree: false,
 };
 const snapshot = { meta, status: [], work_tree: [], refs: initial.refs, submodules: [] };
-const diff: FileDiff = { path: 'a.ts', old_path: null, status: 'modified', adds: 1, dels: 1, binary: false, patch: 'old' };
+const diff: FileDiff & { revision: string } = { path: 'a.ts', old_path: null, status: 'modified', adds: 1, dels: 1, binary: false, patch: 'old', revision: 'old' };
 
 afterEach(() => { useRepo.setState(initial, true); vi.restoreAllMocks(); });
 
@@ -21,7 +21,7 @@ describe('repository refresh lifecycle', () => {
   it('keeps hidden patches unloaded even with a pinned baseline', async () => {
     vi.spyOn(tauri, 'repoSnapshot').mockResolvedValue(snapshot);
     const local = vi.spyOn(tauri, 'repoDiffUnstaged').mockResolvedValue([]);
-    const review = vi.spyOn(tauri, 'repoDiffSinceFull').mockResolvedValue([]);
+    const review = vi.spyOn(tauri, 'repoDiffSummary').mockResolvedValue([]);
     const log = vi.spyOn(tauri, 'repoLog').mockResolvedValue([]);
     useRepo.setState({ activePath: '/repo', meta, view: 'work', baseline: { oid: 'abc', short: 'abc', setAt: 0 } });
     await useRepo.getState().handleExternalChange('/repo');
@@ -35,13 +35,15 @@ describe('repository refresh lifecycle', () => {
     vi.spyOn(tauri, 'repoSnapshot').mockResolvedValue(snapshot);
     const local = vi.spyOn(tauri, 'repoDiffUnstaged').mockResolvedValue([]);
     vi.spyOn(tauri, 'repoDiffStaged').mockResolvedValue([]);
-    const review = vi.spyOn(tauri, 'repoDiffSinceFull').mockResolvedValue([]);
+    const summaries = vi.spyOn(tauri, 'repoDiffSummary').mockResolvedValue([]);
+    const patches = vi.spyOn(tauri, 'repoDiffFiles').mockResolvedValue([]);
     useRepo.setState({ activePath: '/repo', meta, view: 'work' });
     const release = useRepo.getState().retainDiffs('/repo', 'review');
     try { await useRepo.getState().refreshLocalChanges(); } finally { release(); }
     await useRepo.getState().refreshLocalChanges();
-    expect(local).toHaveBeenCalledOnce();
-    expect(review).toHaveBeenCalledOnce();
+    expect(local).not.toHaveBeenCalled();
+    expect(summaries).toHaveBeenCalledTimes(3);
+    expect(patches).not.toHaveBeenCalled();
   });
 
   it('does not publish an old snapshot after switching A → B → A', async () => {
@@ -78,14 +80,17 @@ describe('repository refresh lifecycle', () => {
 
   it('keeps unchanged diff objects but updates the same modified path when content changes', async () => {
     const unchanged = { ...diff, path: 'b.ts' };
-    const read = vi.spyOn(tauri, 'repoDiffUnstaged').mockResolvedValue([{ ...diff }, { ...unchanged }]);
-    vi.spyOn(tauri, 'repoDiffStaged').mockResolvedValue([]);
+    const read = vi.spyOn(tauri, 'repoDiffSummary').mockImplementation(async (_, source) => source.kind === 'unstaged' ? [diff, unchanged] : []);
+    const patches = vi.spyOn(tauri, 'repoDiffFiles').mockResolvedValue([{ ...diff, patch: 'new', revision: 'new' }]);
     const rows = [diff, unchanged];
     useRepo.setState({ activePath: '/repo', unstagedDiffs: rows });
     await useRepo.getState().refreshDiffs();
     expect(useRepo.getState().unstagedDiffs).toBe(rows);
-    read.mockResolvedValue([{ ...diff, patch: 'new' }, { ...unchanged }]);
+    read.mockImplementation(async (_, source) => source.kind === 'unstaged' ? [{ ...diff, revision: 'new' }, unchanged] : []);
     await useRepo.getState().refreshDiffs();
+    expect(useRepo.getState().unstagedDiffs[0].patchLoaded).toBe(false);
+    expect(patches).not.toHaveBeenCalled();
+    await useRepo.getState().loadDiffFiles('unstaged', [diff.path]);
     expect(useRepo.getState().unstagedDiffs[0].patch).toBe('new');
     expect(useRepo.getState().unstagedDiffs[1]).toBe(unchanged);
   });

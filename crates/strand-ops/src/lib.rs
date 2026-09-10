@@ -2,6 +2,8 @@
 //! Local desktop hot paths can keep calling typed functions without serializing.
 pub mod protocol;
 pub mod remote;
+pub use strand_core::diff_page::WorkingDiffSource;
+use strand_core::diff_page::{DiffChunk, DiffSummary, DiffPageFile};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
@@ -82,6 +84,10 @@ pub enum ReadOp {
         since: String,
         limit: usize,
     },
+    DiffSummary { source: WorkingDiffSource },
+    DiffFiles { source: WorkingDiffSource, paths: Vec<String>, full_context: bool },
+    DiffChunk { source: WorkingDiffSource, path: String, offset: u64, length: usize, full_context: bool, revision: Option<String> },
+    ReviewPaths { since: String, limit: usize, paths: Vec<String>, full_context: bool },
     File {
         path: String,
         revision: Option<String>,
@@ -123,6 +129,9 @@ pub enum ReadResult {
     FileHistory(Vec<FileHistoryEntry>),
     Diff(Vec<FileDiff>),
     Review(Review),
+    DiffSummary(Vec<DiffSummary>),
+    DiffPage(Vec<DiffPageFile>),
+    DiffChunk(DiffChunk),
     File(FileContent),
     FileChunk(FileChunk),
 }
@@ -138,6 +147,10 @@ impl ReadOp {
                 | (Self::FileHistory { .. }, ReadResult::FileHistory(_))
                 | (Self::Diff { .. }, ReadResult::Diff(_))
                 | (Self::Review { .. }, ReadResult::Review(_))
+                | (Self::ReviewPaths { .. }, ReadResult::Review(_))
+                | (Self::DiffSummary { .. }, ReadResult::DiffSummary(_))
+                | (Self::DiffFiles { .. }, ReadResult::DiffPage(_))
+                | (Self::DiffChunk { .. }, ReadResult::DiffChunk(_))
                 | (Self::File { .. }, ReadResult::File(_))
                 | (Self::FileChunk { .. }, ReadResult::FileChunk(_))
         )
@@ -222,12 +235,32 @@ pub fn execute(request: &ReadRequest) -> Result<Envelope> {
                 full_context: false,
             } => repo.diff_since(revision)?,
         }),
-        ReadOp::Review { since, limit: n } => {
+        ReadOp::DiffSummary { source } => ReadResult::DiffSummary(repo.diff_summary(source)?),
+        ReadOp::DiffFiles { source, paths, full_context } => {
+            for path in paths { relative_path(path)?; }
+            ReadResult::DiffPage(repo.diff_files(source, paths, *full_context)?)
+        }
+        ReadOp::DiffChunk { source, path, offset, length, full_context, revision } => {
+            relative_path(path)?;
+            if !(1..=strand_core::diff_page::MAX_PATCH_CHUNK).contains(length) {
+                return Err(OpError::new("invalid_request", "Patch chunk length must be 1–65536 bytes."));
+            }
+            ReadResult::DiffChunk(repo.diff_chunk(source, path, *offset, *length, *full_context, revision.as_deref())?)
+        }
+        ReadOp::Review { since, limit: n } | ReadOp::ReviewPaths { since, limit: n, .. } => {
             let n = limit(*n)?;
             // Freeze a mutable base ref to an OID before building the payload.
-            let base = repo.merge_base(since, since)?;
+            let base = repo.review_base_oid(since)?;
             let before = repo.meta()?.head_oid;
-            let diffs = repo.diff_since_full(&base)?;
+            let diffs = if let ReadOp::ReviewPaths { paths, full_context, .. } = &request.op {
+                for path in paths { relative_path(path)?; }
+                if paths.is_empty() {
+                    if *full_context { repo.diff_since_full(&base)? } else { repo.diff_since(&base)? }
+                } else {
+                    repo.diff_files(&WorkingDiffSource::Review { baseline: base.clone() }, paths, *full_context)?
+                        .into_iter().map(|file| file.diff).collect()
+                }
+            } else { repo.diff_since_full(&base)? };
             let log = repo.log_head(n)?;
             let status = repo.status()?;
             ReadResult::Review(Review {

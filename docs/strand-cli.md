@@ -1,6 +1,6 @@
 # `strand` CLI — feature design
 
-Status (2026-09-06): **launcher and read-only status/log/diff/review implemented**.
+Status (2026-09-11): **launcher and read-only status/log/diff/review implemented**.
 The desktop bundles `strand-cli` (the GUI executable already owns `strand`);
 Settings → Integrations installs it as the user's `strand` command. Startup
 and subsequent argv requests share a bounded inbox drained after session restore.
@@ -17,6 +17,27 @@ remain staged work. The same executable now serves protocol-v1 read-only
 JSON-RPC with `--stdio`; see [remote-ssh.md](./remote-ssh.md) for its negotiated
 capabilities, limits and manual host installation. The remaining sections
 record the target design.
+
+Large-review reads now have additive schema-v1 operations: `diff_summary`
+lists changed paths and content revisions; `diff_files` returns selected
+patches (at most 32 paths and 4 MiB of patch text); `review_paths` preserves
+the review bundle with selected paths or compact context. CLI entry points
+are `diff/review --summary`, repeated `--path`, and `review --compact`.
+Existing default command envelopes remain unchanged, and unborn inbox reviews
+use the empty tree while reporting null HEAD before the first commit.
+
+`strand diff-chunk --path FILE --offset 0 --length 65536 --json` reads a
+bounded byte window from one generated patch. Add `--since BASE` or `--staged`
+to select the source, and `--full-context` for whole-file context. The
+`diff_chunk` result carries `bytes`, `offset`, `next_offset`, `total`,
+`revision`, and `binary`. Every nonzero offset requires `--revision TOKEN`
+from the initial read. A token hashes the complete emitted patch, so changed
+content or context rejects continuation. Join the byte arrays before UTF-8
+decoding; human output is sanitized and is not an exact reconstruction format.
+Chunks bound returned output, but each request still computes the selected
+file's diff; they do not bound libgit2's internal single-file allocation or
+make multiple working-tree reads atomic. The 8 MiB envelope limit still applies.
+
 Originally scheduled post-1.0 (ROADMAP §1.1+,
 where "CLI companion binary" has been a bullet since the start — this doc
 fleshes it out). Shares its foundation with

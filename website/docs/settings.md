@@ -24,6 +24,9 @@ strand diff --commit HEAD --json
 strand diff --between main HEAD --json
 strand diff --since main --full-context --json
 strand review --since main --json
+strand review --since main --summary --json
+strand review --since main --path src/main.rs --compact --json
+strand diff-chunk --since main --path src/main.rs --offset 0 --length 65536 --json
 strand schema
 ```
 
@@ -36,6 +39,25 @@ Log limits range from 1–1,000. Full context is available for unstaged diffs an
 Review includes recent HEAD history and reports its before/after HEAD because
 concurrent repository changes can occur between reads. No command stages,
 commits, fetches, pushes or invokes a pager.
+
+For large reviews, start with `diff --summary` or `review --summary` to list
+changed paths without patch bodies. Repeat `--path` to select up to 32 exact
+repository-relative paths; `review --compact` uses three context lines.
+Summary results have kind `diff_summary`, selected diff results `diff_page`,
+and selected reviews retain the `review` bundle. Path/summary filtering supports
+unstaged, staged, and `--since` comparisons; it does not apply to `--commit`
+or `--between`.
+
+A selected patch page is limited to 4 MiB. If a single patch is larger, use
+`diff-chunk --path FILE`: each JSON result contains up to 65,536 exact bytes as
+an integer array, a total length, `next_offset`, and a `revision` token. Request
+the next section with `--offset NEXT_OFFSET --revision TOKEN`, keeping the
+same path, source and context options. A changed patch rejects continuation;
+restart at offset zero. Concatenate the byte arrays before decoding text,
+because a section can end inside a UTF-8 character. `--full-context` includes
+the whole file, while `--staged` or `--since BASE` select the comparison.
+Binary markers without a revision cannot be continued. The overall 8 MiB
+JSON output limit is unchanged.
 
 Open the Settings dialog with `Mod+,`, the gear button in the status bar, or the command palette ("Settings…"). The sections are Appearance, Terminal, Diff, Keyboard, Git, Hosting, Integrations, User actions, AI, Plugins, Updates, and Privacy. Most changes apply live; Git identity, signing, and Azure DevOps Server profiles have explicit save actions.
 
