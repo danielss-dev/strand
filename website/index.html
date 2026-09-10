@@ -225,7 +225,8 @@
             <h3>Notes that travel back to the agent</h3>
             <p>Leave notes on files as you read. Notes persist with their baseline, so switching
                review targets never mixes two agents' feedback. <em>Copy feedback</em> builds one
-               prompt to paste into the agent. Stage what's good; discard the rest — recoverably.</p>
+               prompt to paste into the agent, keeping the original code excerpt when later edits
+               make a note outdated. Stage what you've reviewed.</p>
             <span class="step-artifact mono">✎ Copy feedback (3) → paste into your agent</span>
           </li>
           <li class="step" style="--node:var(--b-4)" data-reveal>
@@ -270,8 +271,9 @@
           <div class="ledger-row">
             <b>Merge &amp; clean up</b>
             <p>Land a worktree's branch (squash, merge, or fast-forward, exact commands previewed)
-               and retire the worktree and branch in one motion. Every removal first archives a
-               full snapshot — uncommitted and untracked files included — restorable later.</p>
+               and retire the worktree and branch in one motion. Removal requires a recovery
+               snapshot with staged and unstaged content preserved separately, including
+               non-ignored untracked files. An archive failure stops removal.</p>
           </div>
           <div class="ledger-row">
             <b><span class="mono-inline">.worktreeinclude</span></b>

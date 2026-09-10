@@ -1210,11 +1210,12 @@ community plugins, performance and platform certification from Git feature gaps.
   (puts the original identity back: recorded directory when free, branch
   recreated-or-reattached when unambiguous — commit subject carries the exact
   branch, body a `Path:` line — else fallback dir/detached; archived changes
-  return as uncommitted state on the original commit) /
+  return with their original staged/unstaged split for new snapshots) /
   `delete_worktree_archive`; four
-  `repo_worktree_archive*` IPC commands; the store's `removeWorktree` archives
-  best-effort before every removal, and the overview grows a collapsible
-  "Archived snapshots" strip with Restore / Delete. +1 engine test.)
+  `repo_worktree_archive*` IPC commands. Native `remove_worktree` now requires
+  a successful archive before removing an existing checkout (R01/R02 below).
+  Snapshot listing/restore remain native operations; the compact Worktrees
+  pane no longer exposes the former Archived snapshots strip.)
 - ☑ Surface worktree actions beyond the overview (2026-07-08 — sidebar worktree
   context menu grows **Review vs base** (store-shared `reviewWorktree` action,
   same flow as the overview button) and **Merge & clean up…** (fetches
@@ -1671,6 +1672,60 @@ community plugins, performance and platform certification from Git feature gaps.
 Strand's main focus is reviewing changes AI coding agents make to a working
 tree: watch the agent work, review fast, accept or reject safely.
 
+### Agent-review audit follow-ups (2026-09-10)
+
+- ☑ Audit the agent-change review loop against current implementation
+  (`docs/agent-review-audit-2026-09-10.md`: recovery, comparison completeness,
+  concurrent writes, feedback, scale, and concrete verification criteria).
+- ☑ **R01 / P1 — Fail closed when a worktree recovery archive fails.** Do
+  not force-remove an existing dirty worktree after a failed archive; handle
+  already-missing/prunable directories explicitly and test failure dispatch
+  (`Repo::remove_worktree` native guard and `repoWorktreeRecovery.test.ts`).
+- ☑ **R02 / P1 — Preserve staged-only bytes in worktree archives.** Retain
+  an independent index tree and restore staged/unstaged state; verify three
+  distinct HEAD/index/worktree versions and compatibility with old archives
+  (`archive_worktree_state`, second-parent index restore, collision-safe refs).
+- ☑ **R03 / P1 — Retain review boundaries on read errors.** Keep the pinned
+  baseline, notes scope, and last successful diff; show stale/error and Retry
+  instead of persisting a cleared baseline after any diff failure
+  (`reviewDiffsError`, Review/Workspace Retry, `repoReviewRefresh.test.ts`).
+- ☑ **R04 / P1 — Include staged changes in Workspace Review inbox.** Match
+  single-repository HEAD-to-worktree semantics while loading current unstaged
+  targets separately and guarding hunk mutations for combined patches
+  (`workspaceReview` HEAD summaries and `workspaceHunkActionsAllowed`).
+- ☑ **R05 / P1 — Bind Stage reviewed to reviewed content.** Enforce content
+  and index/repository identity at the native write boundary so a concurrent
+  agent edit cannot be staged as reviewed; preserve filters/LFS/sparse behavior
+  (`reviewed_stage.rs`, native captured-blob/index-lock transaction).
+- ☑ **R06 / P2 — Stage both sides of reviewed renames.** Expand current
+  index-to-workdir rename sources in `stageReviewed`, with a regression case
+  (`reviewed_stage_targets`, current/historical rename tests).
+- ☑ **R07 / P2 — Preserve note anchors across agent edits.** Store source
+  context/fingerprints and reanchor safely or show outdated feedback; exports
+  must never quote unrelated current code at an old line number
+  (`ReviewNote.anchor`, captured editor source, `reviewNoteAnchors.test.ts`).
+- ☑ **R08 / P2 — Review repositories before their first commit.** Use an
+  empty-tree inbox comparison for unborn HEAD and distinguish read errors
+  from a successful empty review (`review_baseline_tree`, unborn diff tests).
+- ☑ **R10 / P1 — Automate the agent review integration loop.** Exercise
+  external edits, staging/commits, feedback, fix/re-review, repository switches,
+  restart persistence, and recovery failures in disposable repositories; add
+  native Windows coverage alongside existing platform release validation
+  (`scripts/test-review-native.mjs`, `windows-review` CI job, 16 assertions
+  across two native runs including a 70-file viewport/search scenario).
+- ☐ **O1 / P2 proposal — Per-run review checkpoints.** Capture before-state
+  including pre-existing dirty/index work, associate the agent run, and offer
+  Review this run / Changes since last review. Use isolated worktrees when
+  overlapping runs need reliable attribution; HEAD alone is insufficient.
+- ☐ **O2 / P2 proposal — Feedback resolution and agent handoff.** Prepare
+  feedback in its originating conversation for explicit send, preserve the
+  boundary, and track open/resolved/reopened notes through re-review.
+- ☐ **O3 / P2 proposal — Revision-bound verification results.** Associate
+  user-selected test/build commands and results with reviewed content, and
+  invalidate the result after relevant edits using existing command execution.
+
+### Implemented review workflow
+
 - ☑ Working-tree file watcher (`strand-core/src/watch.rs`, `notify`-based:
   recursive workdir watch, `.git` noise filtered down to HEAD/index/refs/op
   markers, 400ms trailing debounce; `repo_watch`/`repo_unwatch` per open tab
@@ -1746,12 +1801,11 @@ tree: watch the agent work, review fast, accept or reject safely.
   `lib/changeMap.ts` — patch text → rendered-row fractions, layout-aware
   (split collapses mixed runs to the taller column). Shared by Review and
   Workspace Review; Local Changes untouched, its pane concatenates files.)
-- ☑ Bulk verdicts with a safety net: "Stage reviewed (n)" stages files whose
-  review mark still matches; "Discard unreviewed (n)" is two-step-armed; any
-  multi-file `discardMany` takes an automatic snapshot stash first
-  (`Safety: before discarding N files`) and surfaces a 15s Restore toast
-  (`BulkUndoToast`) — and the snapshot stays on the stash stack after the
-  toast, so a missed window is still recoverable.
+- ☑ Bulk verdicts: "Stage reviewed (n)" verifies inspected content and Git
+  state before publishing captured blobs (`stage_reviewed`, R05/R06 above).
+  "Discard unreviewed (n)" is two-step-armed. `discardMany` intentionally
+  does not create an automatic snapshot; use Save snapshot first when needed
+  (documentation corrected 2026-09-11 to match the existing user preference).
 - ☑ AI commit chips in the graph (`isAgentCommit` in `Commits.tsx`:
   `Co-Authored-By` trailer / bot-flavored author → an `ai` chip next to the
   ref chips).
@@ -2239,11 +2293,20 @@ the September codebase audit rechecks the engine and tracks a fresh app pass.
   Heroi, and Blame verified (`docs/performance-audit-2026-09-06.md`). Full
   cold-launch/first-use distributions, installer/idle-memory targets, sustained
   multi-agent work, and reliable long-task tracing remain un-certified.
-- ☐ **P1 — Selected-file/near-viewport patch protocol.** Full 501-file patches
-  still cost ~0.5s natively; first Local Changes opening was 3.4s in the live
-  pass. Profile native diff, grammar startup, and first render separately,
-  then bound patch materialization while preserving search/export and hunk,
-  rename, staged/unstaged, and review-baseline semantics.
+- ☑ **P1 — Selected-file/near-viewport patch protocol (R09).** Native
+  `diff_summary` / `diff_files`, content-validated frontend caching and
+  selected/nearby/viewport demand avoid generating every patch for first paint.
+  Search/export/AI explicitly complete their required reads. Pages cap at 32
+  paths / 4 MiB; CLI `--summary`, `--path`, `--compact` and revision-bound
+  `diff-chunk` (64 KiB) preserve the 8 MiB output cap. Release medians on 501
+  changed files: summary 133.52ms + selected three 20.40ms versus complete
+  Review 689.61ms. Native 70-file viewport/search and chunk/sparse/rename
+  regressions pass (`docs/agent-review-audit-2026-09-10.md`).
+- ☐ **P1 — Certify remaining first-use render costs.** Re-profile grammar
+  startup and visible paint separately in a production build after R09; the
+  historical 3.4s Local Changes first opening is not a current measurement.
+  Engine benchmarks and the development-app regression gate do not certify
+  the PRD's cold-launch, 5,000-line paint or sustained-edit targets.
 
 ### Perf-pass leads (2026-06-08 baseline)
 

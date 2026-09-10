@@ -2829,3 +2829,47 @@ running the script directly from the root misses this failure.
 The companion is signed inside this hook, before Tauri creates its bundling
 keychain. Import the existing Apple certificate before the desktop build step
 so the companion can use the same Developer ID as the app.
+
+## Review integrity and recovery (2026-09-11)
+
+Enforce archive-before-remove in the native worktree removal operation, not
+only its UI caller. Archive failures must retain the checkout. Keep separate
+HEAD, index, and worktree trees: adding the worktree to a temporary index can
+overwrite bytes that exist only in the real index. New archives must restore
+both layers, while old single-parent archives retain their original behavior.
+Archives exclude ignored files and do not freeze external writers. Use unique
+archive refs and create-only writes; whole-second timestamps can collide and
+overwrite earlier recovery data. Keep old timestamp formats readable for retention.
+
+Stage reviewed must consume captured, inspected bytes and validate repository,
+HEAD, and index identity under Git's locks before publishing the index. Never
+validate a patch and then pass its mutable path to `git add`. Run clean filters
+on the captured input, preserve sparse/LFS behavior, and derive rename source
+deletions from current index-to-workdir changes, not a historical baseline.
+After publishing `index.lock`, relinquish ownership: cleanup must not remove a
+new lock acquired by another writer. Git for Windows requires ordinary absolute
+drive/UNC paths in `GIT_INDEX_FILE`; canonical `\\?\` prefixes fail there.
+
+Line notes save the excerpt and patch fingerprint from the displayed source
+when the note editor opens. Later edits make the note outdated; exports retain
+that original excerpt. Legacy notes without saved context must not quote a new
+line that happens to occupy the old line number. Read failures retain the
+pinned review boundary and notes instead of converting an error into inbox mode.
+
+Diff inventories are placeholders, not empty patches. Only reuse a loaded
+patch when a non-null native content revision agrees with the new inventory;
+status, path, size, and modification time alone do not prove equality. Bind
+the loaded patch to its own generated revision, never the earlier inventory
+token. Marking, hunk writes, search, copying and AI submission must handle
+unloaded or failed patches explicitly. Binary approvals need a content token
+because their empty textual patches otherwise hash identically.
+
+Native Windows review tests use an isolated Tauri identifier, WebView2 profile,
+ports, Git configuration and disposable repositories. Drive the existing
+`window.__strand` hooks and inspect rendered code; importing store modules by
+URL can create a second module graph. Wait for WebView2's committed frontend
+document before using localStorage. Stop only processes created by the harness
+and restore the ordinary build configuration after a CDP test build.
+Core tests that spawn Git daemons also need process-tree cleanup: killing Git
+for Windows' parent wrapper alone can leave its daemon alive and prevent the
+test command from returning after all assertions pass.
