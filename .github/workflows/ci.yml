@@ -79,6 +79,53 @@ jobs:
       - name: Compile and test WinHTTP authentication transport
         run: cargo test -p strand-azdo
 
+  windows-review:
+    name: Native agent review (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-native-review-windows
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      # Runtime detection/install follows Microsoft's WebView2 distribution guide:
+      # https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+      - name: Ensure WebView2 runtime
+        shell: pwsh
+        run: |
+          $runtimeKeys = @(
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+            'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          )
+          $installed = $runtimeKeys | ForEach-Object {
+            (Get-ItemProperty -LiteralPath $_ -Name pv -ErrorAction SilentlyContinue).pv
+          } | Where-Object { $_ -and $_ -ne '0.0.0.0' }
+          if (-not $installed) {
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $process = Start-Process -FilePath $installer -ArgumentList '/silent', '/install' -WindowStyle Hidden -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "WebView2 install failed: $($process.ExitCode)" }
+          }
+      # The harness runs the actual Tauri app with an isolated identity/profile.
+      - name: Exercise native review, persistence and recovery twice
+        run: node scripts/test-review-native.mjs --repeat 2 --output target/review-native-ci
+      - name: Retain native screenshots, feedback and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-review-windows
+          path: target/review-native-ci
+          if-no-files-found: warn
+          retention-days: 14
+
   web:
     name: Frontend (tsc + vitest)
     runs-on: ubuntu-22.04
