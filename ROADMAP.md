@@ -2736,7 +2736,9 @@ one collapsible group so the transcript stays chat-first.
 rooted in the active repository (Codex `--cd`) and stream command+output into
 the existing grouped tool block, including Claude Bash `tool_result` and
 Cursor shell calls. The composer can paste or attach PNG/JPEG/GIF/WebP images;
-Claude gets stream-json image blocks, Codex/Cursor get `--image` plus paths.
+Claude gets stream-json image blocks; Codex gets `--image`; Cursor gets
+workspace-staged paths in the prompt. Cursor Build passes `--force` so
+headless `--print` can actually run repo commands (Full also disables sandbox).
 The model picker adds Claude Fable 5.1 (`claude-fable-5-1`, CLI ≥ 2.1.257) and
 surfaces GPT-6 Astra (`gpt-6-astra`) from Codex live `model/list` or Cursor ACP
 when advertised — probe-failure fallbacks stay Sol/Terra/`auto`.

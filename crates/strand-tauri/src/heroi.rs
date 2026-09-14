@@ -210,7 +210,7 @@ pub fn run_agent(
             request.provider.label()
         )
     })?;
-    let images = materialize_images(&request.images)?;
+    let images = materialize_images(&request)?;
     let stdin = stdin_payload(&request, &images.paths);
     let args = build_args(&request, &images.paths);
     let mut parsed = ParseState::default();
@@ -434,12 +434,14 @@ fn add_codex_options(args: &mut Vec<String>, request: &HeroiAgentRequest) {
     }
 }
 
-fn cursor_args(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> Vec<String> {
+fn cursor_args(request: &HeroiAgentRequest, _image_paths: &[PathBuf]) -> Vec<String> {
     let mut args = vec![
         "--print".into(),
         "--output-format".into(),
         "stream-json".into(),
         "--trust".into(),
+        "--workspace".into(),
+        request.path.clone(),
     ];
     if let Some(session_id) = request.session_id.as_deref() {
         args.extend(["--resume".into(), session_id.into()]);
@@ -449,10 +451,14 @@ fn cursor_args(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> Vec<Stri
     }
     if request.agent_mode == "plan" || request.permission_mode == "read" {
         args.extend(["--mode".into(), "plan".into()]);
-    } else if request.permission_mode == "full" {
+    } else {
+        // Headless `--print` only proposes edits and commands unless `--force`.
+        // Build keeps the CLI sandbox; Full disables it.
         args.push("--force".into());
+        if request.permission_mode == "full" {
+            args.extend(["--sandbox".into(), "disabled".into()]);
+        }
     }
-    add_image_flags(&mut args, image_paths);
     args
 }
 
@@ -462,17 +468,17 @@ fn add_image_flags(args: &mut Vec<String>, image_paths: &[PathBuf]) {
     }
 }
 
-fn materialize_images(images: &[HeroiImageAttachment]) -> Result<MaterializedImages, String> {
-    if images.is_empty() {
+fn materialize_images(request: &HeroiAgentRequest) -> Result<MaterializedImages, String> {
+    if request.images.is_empty() || request.provider == HeroiProvider::Claude {
         return Ok(MaterializedImages {
             dir: None,
             paths: Vec::new(),
         });
     }
-    let dir = std::env::temp_dir().join(format!("strand-heroi-{}", uuid::Uuid::new_v4()));
+    let dir = image_staging_dir(request);
     fs::create_dir_all(&dir).map_err(|_| "Heroi could not store attached images.".to_string())?;
-    let mut paths = Vec::with_capacity(images.len());
-    for (index, image) in images.iter().enumerate() {
+    let mut paths = Vec::with_capacity(request.images.len());
+    for (index, image) in request.images.iter().enumerate() {
         let mime = normalize_image_mime(&image.mime_type).unwrap_or("image/png");
         let bytes = BASE64
             .decode(image.data_base64.trim().as_bytes())
@@ -485,6 +491,20 @@ fn materialize_images(images: &[HeroiImageAttachment]) -> Result<MaterializedIma
         dir: Some(dir),
         paths,
     })
+}
+
+fn image_staging_dir(request: &HeroiAgentRequest) -> PathBuf {
+    let name = format!("strand-heroi-{}", uuid::Uuid::new_v4());
+    if request.provider == HeroiProvider::Cursor {
+        let git_dir = Path::new(&request.path).join(".git");
+        let root = if git_dir.is_dir() {
+            git_dir
+        } else {
+            PathBuf::from(&request.path)
+        };
+        return root.join(name);
+    }
+    std::env::temp_dir().join(name)
 }
 
 fn stdin_payload(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> String {
@@ -982,7 +1002,27 @@ mod tests {
         input.agent_mode = "plan".into();
         let args = build_args(&input, &[]);
         assert!(args.windows(2).any(|pair| pair == ["--mode", "plan"]));
+        assert!(args.windows(2).any(|pair| pair == ["--workspace", "."]));
         assert!(!args.contains(&"--force".into()));
+    }
+
+    #[test]
+    fn cursor_build_forces_headless_commands_without_skipping_sandbox() {
+        let args = build_args(&request(HeroiProvider::Cursor), &[]);
+        assert!(args.contains(&"--force".into()));
+        assert!(args.windows(2).any(|pair| pair == ["--workspace", "."]));
+        assert!(!args.windows(2).any(|pair| pair == ["--mode", "plan"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--sandbox", "disabled"]));
+    }
+
+    #[test]
+    fn cursor_full_access_disables_sandbox() {
+        let mut input = request(HeroiProvider::Cursor);
+        input.permission_mode = "full".into();
+        let args = build_args(&input, &[]);
+        assert!(args.contains(&"--force".into()));
+        assert!(args.windows(2).any(|pair| pair == ["--sandbox", "disabled"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--mode", "plan"]));
     }
 
     #[test]
@@ -1110,6 +1150,31 @@ mod tests {
         let stdin = stdin_payload(&codex, std::slice::from_ref(&image_path));
         assert!(stdin.contains("Attached images:"));
         assert!(stdin.contains("/tmp/shot.png"));
+
+        let mut cursor = request(HeroiProvider::Cursor);
+        cursor.images = vec![png_attachment()];
+        let args = build_args(&cursor, std::slice::from_ref(&image_path));
+        assert!(!args.iter().any(|arg| arg == "--image"));
+        assert!(args.windows(2).any(|pair| pair == ["--workspace", "."]));
+        let stdin = stdin_payload(&cursor, std::slice::from_ref(&image_path));
+        assert!(stdin.contains("Attached images:"));
+        assert!(stdin.contains("/tmp/shot.png"));
+    }
+
+    #[test]
+    fn cursor_image_files_stage_inside_the_repo() {
+        let root = std::env::temp_dir().join(format!("strand-heroi-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join(".git")).unwrap();
+        let mut input = request(HeroiProvider::Cursor);
+        input.path = root.to_string_lossy().into_owned();
+        input.images = vec![png_attachment()];
+        let images = materialize_images(&input).unwrap();
+        let staged = images.paths[0].clone();
+        assert!(staged.starts_with(root.join(".git")));
+        assert!(staged.exists());
+        drop(images);
+        assert!(!staged.exists());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

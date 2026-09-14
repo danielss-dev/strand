@@ -111,7 +111,8 @@ fenced code, links), then any added/changed/deleted paths for that turn — clic
 a path to open it in Work's Changes view. Expand the tool group (and a row) to
 inspect bounded command, argument, and output detail. Paste or attach images in
 the composer; they are sent to vision-capable providers and shown as thumbnails
-in the thread. Model and reasoning menus
+in the thread. Cursor Build allows headless commands; Full Access skips its
+sandbox. Model and reasoning menus
 come from the selected provider — Claude's catalog (including Fable 5.1 when
 the CLI is new enough), Codex's live model list (including GPT-6 Astra when
 advertised), or Cursor Agent's available models — including that model's
