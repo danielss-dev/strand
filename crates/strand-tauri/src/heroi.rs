@@ -227,7 +227,9 @@ pub fn run_agent(
         cancel,
         |line| parse_line(request.provider, line, &mut parsed, &on_event),
     );
-    result.map_err(|error| friendly_error(request.provider, &error))?;
+    result.map_err(|error| {
+        friendly_error(request.provider, &error, !request.images.is_empty())
+    })?;
     let _ = on_event.send(HeroiAgentEvent::Status {
         message: "Ready".into(),
     });
@@ -856,12 +858,18 @@ fn format_activity_value(value: &Value) -> String {
     format!("{}\n… output truncated by Heroi", &text[..end])
 }
 
-fn friendly_error(provider: HeroiProvider, raw: &str) -> String {
+fn friendly_error(provider: HeroiProvider, raw: &str, has_images: bool) -> String {
     if raw == "cancelled" {
         return raw.into();
     }
     let prefix = raw.lines().next().unwrap_or_default();
     let normalized = prefix.to_ascii_lowercase();
+    if has_images && image_unsupported(&normalized) {
+        return format!(
+            "{} does not accept images with the selected model or CLI. Remove the attachments or pick a vision-capable model.",
+            provider.label()
+        );
+    }
     if normalized.contains("not logged in")
         || normalized.contains("not authenticated")
         || normalized.contains("authentication")
@@ -882,6 +890,18 @@ fn friendly_error(provider: HeroiProvider, raw: &str) -> String {
         "{} stopped before completing the reply. Check its CLI login and selected model, then try again.",
         provider.label()
     )
+}
+
+fn image_unsupported(normalized: &str) -> bool {
+    normalized.contains("--image")
+        || normalized.contains("does not support image")
+        || normalized.contains("images are not supported")
+        || normalized.contains("vision is not")
+        || normalized.contains("no vision")
+        || ((normalized.contains("unknown option")
+            || normalized.contains("unrecognized option")
+            || normalized.contains("unexpected argument"))
+            && normalized.contains("image"))
 }
 
 #[cfg(test)]
@@ -1111,9 +1131,21 @@ mod tests {
         let error = friendly_error(
             HeroiProvider::Codex,
             "session id: secret\nrepository: C:\\private\nprivate prompt",
+            false,
         );
         assert!(!error.contains("secret"));
         assert!(!error.contains("C:\\private"));
+    }
+
+    #[test]
+    fn image_cli_rejection_is_explicit() {
+        let error = friendly_error(
+            HeroiProvider::Cursor,
+            "error: unknown option '--image'",
+            true,
+        );
+        assert!(error.contains("does not accept images"));
+        assert!(!error.contains("unknown option"));
     }
 
     #[test]

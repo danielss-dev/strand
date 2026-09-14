@@ -512,7 +512,6 @@ fn codex_fallback() -> Vec<HeroiModel> {
         ("xhigh", "Extra High", false),
     ]);
     vec![
-        model("gpt-6-astra", "GPT-6-Astra", false, reasoning.clone()),
         model("gpt-5.6-sol", "GPT-5.6-Sol", true, reasoning.clone()),
         model("gpt-5.6-terra", "GPT-5.6-Terra", false, reasoning.clone()),
         model("gpt-5.4", "GPT-5.4", false, reasoning),
@@ -854,14 +853,13 @@ mod tests {
     }
 
     #[test]
-    fn codex_fallback_includes_confirmed_astra_slug() {
+    fn codex_fallback_omits_astra_until_the_cli_advertises_it() {
         let models = codex_fallback();
-        assert!(models.iter().any(|model| model.slug == "gpt-6-astra"));
+        assert!(!models.iter().any(|model| model.slug == "gpt-6-astra"));
         assert_eq!(
             models.iter().find(|model| model.is_default).map(|model| model.slug.as_str()),
             Some("gpt-5.6-sol")
         );
-        assert!(!models.iter().any(|model| model.slug == "gpt-6-astra" && model.is_default));
     }
 
     #[test]

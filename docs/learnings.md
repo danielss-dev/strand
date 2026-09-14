@@ -2533,7 +2533,8 @@ for a turn belong in one grouped disclosure; command tools (`Bash`, Codex
 and keep command plus bounded output in the expandable row. Spawn cwd is the
 active repository; Codex also passes `--cd`. Model IDs are CLI slugs: Claude
 Fable 5.1 is `claude-fable-5-1` (CLI ≥ 2.1.257), GPT-6 Astra is `gpt-6-astra`
-from Codex `model/list` or Cursor ACP — do not invent dead slugs.
+from Codex `model/list` or Cursor ACP. Do not put Astra in probe-failure
+fallbacks; older CLIs must degrade to Sol/Terra/`auto`.
 
 ---
 
