@@ -2523,9 +2523,17 @@ repository-relative paths. The `/` picker discovers the selected provider's
 user and project skill roots but inserts `$skill-name`, matching the native CLI
 prompt syntax. Files-tree drops must become mentions and must not also trigger
 the tree's move/open behavior. Report drag-hover entry/exit separately from the
-drop so the composer can acknowledge a valid target before release. Tool calls for a turn belong in one grouped disclosure; individual rows expand
-when provider detail exists. Retain bounded command/tool arguments and output,
-never unbounded vendor transcripts or stderr.
+drop so the composer can acknowledge a valid target before release. Paste and
+attach PNG/JPEG/GIF/WebP images in the composer; persist thumbnails as data
+URLs on the user turn and send bytes through `HeroiAgentRequest.images`. Claude
+uses stream-json image blocks; Codex and Cursor Agent get `--image` plus
+absolute temp paths. Never execute remote HTML for those thumbnails. Tool calls
+for a turn belong in one grouped disclosure; command tools (`Bash`, Codex
+`command_execution`, Cursor shell/terminal) use the **Running a command** label
+and keep command plus bounded output in the expandable row. Spawn cwd is the
+active repository; Codex also passes `--cd`. Model IDs are CLI slugs: Claude
+Fable 5.1 is `claude-fable-5-1` (CLI ≥ 2.1.257), GPT-6 Astra is `gpt-6-astra`
+from Codex `model/list` or Cursor ACP — do not invent dead slugs.
 
 ---
 

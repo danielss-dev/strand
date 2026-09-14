@@ -74,4 +74,27 @@ describe('TurnPanels', () => {
     expect(expanded.match(/class="plugin-heroi-tool-group"/g)?.length).toBe(1);
     expect(expanded.match(/class="plugin-heroi-activity /g)?.length).toBe(3);
   });
+
+  it('shows command plus output inside an expanded tool row', () => {
+    const html = renderToStaticMarkup(
+      <TurnToolCalls
+        messageId="m1"
+        activities={[
+          {
+            id: 'cmd-1',
+            label: 'Running a command',
+            detail: 'pnpm test\n\nTests passed',
+            state: 'done',
+          },
+        ]}
+        expanded
+        onToggleGroup={() => undefined}
+        expandedActivities={new Set(['m1:cmd-1'])}
+        onToggleActivity={() => undefined}
+      />,
+    );
+    expect(html).toContain('Running a command');
+    expect(html).toContain('pnpm test');
+    expect(html).toContain('Tests passed');
+  });
 });

@@ -2732,6 +2732,15 @@ added/changed/deleted paths from that turn's mutating tool/activity payloads
 and opens a clicked path in Work's Changes view. Tool calls for a turn live in
 one collapsible group so the transcript stays chat-first.
 
+**Heroi fuller agentic UX shipped (2026-09-14):** Agent command runs stay
+rooted in the active repository (Codex `--cd`) and stream command+output into
+the existing grouped tool block, including Claude Bash `tool_result` and
+Cursor shell calls. The composer can paste or attach PNG/JPEG/GIF/WebP images;
+Claude gets stream-json image blocks, Codex/Cursor get `--image` plus paths.
+The model picker adds Claude Fable 5.1 (`claude-fable-5-1`, CLI ≥ 2.1.257) and
+surfaces GPT-6 Astra (`gpt-6-astra`) from Codex live lists / confirmed
+fallback, or Cursor when ACP advertises it.
+
 **Strand 1.5.0 release kick (2026-08-30):** The five lockstep desktop app
 manifests and Cargo lockfile are synchronized at 1.5.0. The signed desktop
 release and Microsoft Store submission workflows are the remaining promotion

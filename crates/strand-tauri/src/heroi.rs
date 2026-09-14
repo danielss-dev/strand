@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::{collections::BTreeMap, fs, path::PathBuf};
 use std::time::Duration;
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tauri::ipc::Channel;
 
 use crate::ai::bin::{
@@ -88,6 +90,8 @@ mod skill_tests {
 
 const AGENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MAX_PROMPT_BYTES: usize = 128 * 1024;
+const MAX_HEROI_IMAGES: usize = 4;
+const MAX_HEROI_IMAGE_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -119,6 +123,16 @@ pub struct HeroiAgentRequest {
     pub agent_mode: String,
     pub permission_mode: String,
     pub cli_path: Option<String>,
+    #[serde(default)]
+    pub images: Vec<HeroiImageAttachment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeroiImageAttachment {
+    pub name: String,
+    pub mime_type: String,
+    pub data_base64: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -152,6 +166,25 @@ pub enum HeroiAgentEvent {
 struct ParseState {
     session_id: Option<String>,
     emitted_text: bool,
+    pending_tools: HashMap<String, PendingTool>,
+}
+
+struct PendingTool {
+    label: String,
+    detail: Option<String>,
+}
+
+struct MaterializedImages {
+    dir: Option<PathBuf>,
+    paths: Vec<PathBuf>,
+}
+
+impl Drop for MaterializedImages {
+    fn drop(&mut self) {
+        if let Some(dir) = &self.dir {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
 }
 
 pub fn run_agent(
@@ -177,7 +210,9 @@ pub fn run_agent(
             request.provider.label()
         )
     })?;
-    let args = build_args(&request);
+    let images = materialize_images(&request.images)?;
+    let stdin = stdin_payload(&request, &images.paths);
+    let args = build_args(&request, &images.paths);
     let mut parsed = ParseState::default();
     let _ = on_event.send(HeroiAgentEvent::Status {
         message: format!("Starting {}", request.provider.label()),
@@ -187,7 +222,7 @@ pub fn run_agent(
         &program,
         &args,
         Path::new(&request.path),
-        &request.prompt,
+        &stdin,
         AGENT_TIMEOUT,
         cancel,
         |line| parse_line(request.provider, line, &mut parsed, &on_event),
@@ -202,7 +237,7 @@ pub fn run_agent(
 }
 
 fn validate_request(request: &HeroiAgentRequest) -> Result<(), String> {
-    if request.prompt.trim().is_empty() {
+    if request.prompt.trim().is_empty() && request.images.is_empty() {
         return Err("Write a message before sending.".into());
     }
     if request.prompt.len() > MAX_PROMPT_BYTES {
@@ -221,7 +256,56 @@ fn validate_request(request: &HeroiAgentRequest) -> Result<(), String> {
     {
         return Err("The selected agent settings are invalid.".into());
     }
+    validate_images(&request.images)?;
     Ok(())
+}
+
+fn validate_images(images: &[HeroiImageAttachment]) -> Result<(), String> {
+    if images.len() > MAX_HEROI_IMAGES {
+        return Err("Heroi accepts up to 4 images per message.".into());
+    }
+    for image in images {
+        if invalid_image_name(&image.name) {
+            return Err("An attached image has an invalid file name.".into());
+        }
+        if normalize_image_mime(&image.mime_type).is_none() {
+            return Err("Heroi can only attach PNG, JPEG, GIF, or WebP images.".into());
+        }
+        let bytes = BASE64
+            .decode(image.data_base64.trim().as_bytes())
+            .map_err(|_| "Heroi could not read an attached image.".to_string())?;
+        if bytes.is_empty() || bytes.len() > MAX_HEROI_IMAGE_BYTES {
+            return Err("Each attached image must be 4 MiB or smaller.".into());
+        }
+    }
+    Ok(())
+}
+
+fn invalid_image_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    trimmed.is_empty()
+        || trimmed.len() > 128
+        || trimmed.contains(['/', '\\', '\0', '\n', '\r'])
+        || trimmed.contains("..")
+}
+
+fn normalize_image_mime(mime: &str) -> Option<&'static str> {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" | "image/jpg" => Some("image/jpeg"),
+        "image/gif" => Some("image/gif"),
+        "image/webp" => Some("image/webp"),
+        _ => None,
+    }
+}
+
+fn image_extension(mime: &str) -> &'static str {
+    match mime {
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => "png",
+    }
 }
 
 fn valid_setting(value: Option<&str>, max_len: usize) -> bool {
@@ -246,11 +330,11 @@ fn selected(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.trim().is_empty() && !value.eq_ignore_ascii_case("default"))
 }
 
-fn build_args(request: &HeroiAgentRequest) -> Vec<String> {
+fn build_args(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> Vec<String> {
     match request.provider {
         HeroiProvider::Claude => claude_args(request),
-        HeroiProvider::Codex => codex_args(request),
-        HeroiProvider::Cursor => cursor_args(request),
+        HeroiProvider::Codex => codex_args(request, image_paths),
+        HeroiProvider::Cursor => cursor_args(request, image_paths),
     }
 }
 
@@ -261,6 +345,9 @@ fn claude_args(request: &HeroiAgentRequest) -> Vec<String> {
         "stream-json".into(),
         "--verbose".into(),
     ];
+    if !request.images.is_empty() {
+        args.extend(["--input-format".into(), "stream-json".into()]);
+    }
     if let Some(session_id) = request.session_id.as_deref() {
         args.extend(["--resume".into(), session_id.into()]);
     }
@@ -285,8 +372,8 @@ fn claude_args(request: &HeroiAgentRequest) -> Vec<String> {
     args
 }
 
-fn codex_args(request: &HeroiAgentRequest) -> Vec<String> {
-    let mut args = vec!["exec".into()];
+fn codex_args(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> Vec<String> {
+    let mut args = vec!["exec".into(), "--cd".into(), request.path.clone()];
     if let Some(session_id) = request.session_id.as_deref() {
         add_codex_access(&mut args, request);
         args.extend([
@@ -295,6 +382,7 @@ fn codex_args(request: &HeroiAgentRequest) -> Vec<String> {
             "--skip-git-repo-check".into(),
         ]);
         add_codex_options(&mut args, request);
+        add_image_flags(&mut args, image_paths);
         args.extend([session_id.into(), "-".into()]);
         return args;
     }
@@ -306,6 +394,7 @@ fn codex_args(request: &HeroiAgentRequest) -> Vec<String> {
     ]);
     add_codex_options(&mut args, request);
     add_codex_access(&mut args, request);
+    add_image_flags(&mut args, image_paths);
     args.push("-".into());
     args
 }
@@ -343,7 +432,7 @@ fn add_codex_options(args: &mut Vec<String>, request: &HeroiAgentRequest) {
     }
 }
 
-fn cursor_args(request: &HeroiAgentRequest) -> Vec<String> {
+fn cursor_args(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> Vec<String> {
     let mut args = vec![
         "--print".into(),
         "--output-format".into(),
@@ -361,7 +450,88 @@ fn cursor_args(request: &HeroiAgentRequest) -> Vec<String> {
     } else if request.permission_mode == "full" {
         args.push("--force".into());
     }
+    add_image_flags(&mut args, image_paths);
     args
+}
+
+fn add_image_flags(args: &mut Vec<String>, image_paths: &[PathBuf]) {
+    for path in image_paths {
+        args.extend(["--image".into(), path.to_string_lossy().into_owned()]);
+    }
+}
+
+fn materialize_images(images: &[HeroiImageAttachment]) -> Result<MaterializedImages, String> {
+    if images.is_empty() {
+        return Ok(MaterializedImages {
+            dir: None,
+            paths: Vec::new(),
+        });
+    }
+    let dir = std::env::temp_dir().join(format!("strand-heroi-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&dir).map_err(|_| "Heroi could not store attached images.".to_string())?;
+    let mut paths = Vec::with_capacity(images.len());
+    for (index, image) in images.iter().enumerate() {
+        let mime = normalize_image_mime(&image.mime_type).unwrap_or("image/png");
+        let bytes = BASE64
+            .decode(image.data_base64.trim().as_bytes())
+            .map_err(|_| "Heroi could not read an attached image.".to_string())?;
+        let path = dir.join(format!("image-{index}.{}", image_extension(mime)));
+        fs::write(&path, bytes).map_err(|_| "Heroi could not store attached images.".to_string())?;
+        paths.push(path);
+    }
+    Ok(MaterializedImages {
+        dir: Some(dir),
+        paths,
+    })
+}
+
+fn stdin_payload(request: &HeroiAgentRequest, image_paths: &[PathBuf]) -> String {
+    match request.provider {
+        HeroiProvider::Claude if !request.images.is_empty() => claude_image_stdin(request),
+        _ => {
+            let mut text = request.prompt.clone();
+            if request.provider != HeroiProvider::Claude && !image_paths.is_empty() {
+                let list = image_paths
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !text.trim().is_empty() {
+                    text.push_str("\n\n");
+                }
+                text.push_str("Attached images:\n");
+                text.push_str(&list);
+            }
+            text
+        }
+    }
+}
+
+fn claude_image_stdin(request: &HeroiAgentRequest) -> String {
+    let mut content = Vec::new();
+    let text = request.prompt.trim();
+    if !text.is_empty() {
+        content.push(json!({ "type": "text", "text": text }));
+    }
+    for image in &request.images {
+        let mime = normalize_image_mime(&image.mime_type).unwrap_or("image/png");
+        content.push(json!({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": mime,
+                "data": image.data_base64.trim(),
+            }
+        }));
+    }
+    format!(
+        "{}\n",
+        json!({
+            "type": "user",
+            "message": { "role": "user", "content": content },
+            "parent_tool_use_id": Value::Null,
+        })
+    )
 }
 
 fn parse_line(
@@ -381,7 +551,7 @@ fn parse_line(
             });
         }
     }
-    if let Some(activity) = activity_data(provider, &value) {
+    if let Some(activity) = activity_data(provider, &value, state) {
         let _ = on_event.send(HeroiAgentEvent::Activity {
             id: activity.id,
             label: activity.label,
@@ -451,7 +621,7 @@ struct ActivityData {
     done: bool,
 }
 
-fn activity_data(provider: HeroiProvider, value: &Value) -> Option<ActivityData> {
+fn activity_data(provider: HeroiProvider, value: &Value, state: &mut ParseState) -> Option<ActivityData> {
     let event_type = value.get("type").and_then(Value::as_str)?;
     if provider == HeroiProvider::Codex
         && matches!(event_type, "item.started" | "item.completed")
@@ -497,7 +667,7 @@ fn activity_data(provider: HeroiProvider, value: &Value) -> Option<ActivityData>
         let kind = call.keys().next()?.as_str();
         let label = if kind.to_ascii_lowercase().contains("write") {
             "Editing files"
-        } else if kind.to_ascii_lowercase().contains("terminal") {
+        } else if is_command_tool(kind) {
             "Running a command"
         } else {
             "Using a tool"
@@ -510,7 +680,7 @@ fn activity_data(provider: HeroiProvider, value: &Value) -> Option<ActivityData>
                 .unwrap_or(kind)
                 .to_owned(),
             label: label.into(),
-            detail: Some(format_activity_value(call_value)),
+            detail: Some(cursor_activity_detail(call_value)),
             done: value
                 .get("status")
                 .and_then(Value::as_str)
@@ -525,18 +695,149 @@ fn activity_data(provider: HeroiProvider, value: &Value) -> Option<ActivityData>
             .iter()
             .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))?;
         let name = block.get("name")?.as_str()?;
+        let id = block
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or(name)
+            .to_owned();
+        let label = if is_command_tool(name) {
+            "Running a command".into()
+        } else {
+            format!("Using {name}")
+        };
+        let detail = command_from_value(block.get("input"))
+            .or_else(|| block.get("input").map(format_activity_value));
+        state.pending_tools.insert(
+            id.clone(),
+            PendingTool {
+                label: label.clone(),
+                detail: detail.clone(),
+            },
+        );
         return Some(ActivityData {
-            id: block
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or(name)
-                .to_owned(),
-            label: format!("Using {name}"),
-            detail: block.get("input").map(format_activity_value),
+            id,
+            label,
+            detail,
             done: false,
         });
     }
+    if event_type == "user" {
+        let block = value
+            .get("message")?
+            .get("content")?
+            .as_array()?
+            .iter()
+            .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_result"))?;
+        let id = block
+            .get("tool_use_id")
+            .and_then(Value::as_str)
+            .unwrap_or("tool")
+            .to_owned();
+        let output = tool_result_text(block).filter(|text| !text.is_empty());
+        let pending = state.pending_tools.remove(&id);
+        let label = pending
+            .as_ref()
+            .map(|tool| tool.label.clone())
+            .unwrap_or_else(|| "Using a tool".into());
+        let detail = match (pending.and_then(|tool| tool.detail), output) {
+            (Some(command), Some(output)) if !command.is_empty() && !output.is_empty() => {
+                Some(format!("{command}\n\n{output}"))
+            }
+            (Some(command), Some(output)) if command.is_empty() => Some(output),
+            (Some(command), Some(_)) => Some(command),
+            (Some(command), None) => Some(command),
+            (None, Some(output)) => Some(output),
+            (None, None) => None,
+        };
+        return Some(ActivityData {
+            id,
+            label,
+            detail,
+            done: true,
+        });
+    }
     None
+}
+
+fn is_command_tool(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.contains("bash")
+        || lower.contains("shell")
+        || lower.contains("terminal")
+        || lower.contains("powershell")
+        || lower == "command"
+        || lower.contains("command_execution")
+}
+
+fn command_from_value(value: Option<&Value>) -> Option<String> {
+    let value = value?;
+    if let Some(command) = value.get("command").and_then(Value::as_str) {
+        return Some(command.to_string());
+    }
+    if let Some(command) = value.get("cmd").and_then(Value::as_str) {
+        return Some(command.to_string());
+    }
+    find_string_field(value, &["command", "cmd", "shellCommand"])
+}
+
+fn cursor_activity_detail(value: &Value) -> String {
+    let command = command_from_value(Some(value));
+    let output = find_string_field(value, &["aggregated_output", "output", "stdout", "result"])
+        .filter(|text| !text.is_empty());
+    match (command, output) {
+        (Some(command), Some(output)) => format!("{command}\n\n{output}"),
+        (Some(command), None) => command,
+        (None, Some(output)) => output,
+        (None, None) => format_activity_value(value),
+    }
+}
+
+fn find_string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    fn walk(value: &Value, keys: &[&str], depth: usize) -> Option<String> {
+        if depth > 6 {
+            return None;
+        }
+        match value {
+            Value::Object(map) => {
+                for key in keys {
+                    if let Some(Value::String(text)) = map.get(*key) {
+                        if !text.is_empty() {
+                            return Some(text.clone());
+                        }
+                    }
+                }
+                for nested in map.values() {
+                    if let Some(found) = walk(nested, keys, depth + 1) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            Value::Array(items) => items.iter().find_map(|item| walk(item, keys, depth + 1)),
+            _ => None,
+        }
+    }
+    walk(value, keys, 0)
+}
+
+fn tool_result_text(block: &Value) -> Option<String> {
+    let content = block.get("content")?;
+    if let Some(text) = content.as_str() {
+        return Some(text.to_string());
+    }
+    let parts = content.as_array()?;
+    let text = parts
+        .iter()
+        .filter_map(|part| {
+            part.as_str().map(str::to_string).or_else(|| {
+                (part.get("type").and_then(Value::as_str) == Some("text"))
+                    .then(|| part.get("text").and_then(Value::as_str).map(str::to_string))
+                    .flatten()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!text.is_empty()).then_some(text)
 }
 
 fn format_activity_value(value: &Value) -> String {
@@ -598,6 +899,15 @@ mod tests {
             agent_mode: "build".into(),
             permission_mode: "build".into(),
             cli_path: None,
+            images: Vec::new(),
+        }
+    }
+
+    fn png_attachment() -> HeroiImageAttachment {
+        HeroiImageAttachment {
+            name: "shot.png".into(),
+            mime_type: "image/png".into(),
+            data_base64: BASE64.encode([0x89, b'P', b'N', b'G', 0x0D, 0x0A]),
         }
     }
 
@@ -606,19 +916,20 @@ mod tests {
         let mut input = request(HeroiProvider::Codex);
         input.session_id = Some("thread-1".into());
         input.permission_mode = "read".into();
-        let args = build_args(&input);
-        assert_eq!(&args[..3], ["exec", "--sandbox", "read-only"]);
+        let args = build_args(&input, &[]);
+        assert_eq!(&args[..5], ["exec", "--cd", ".", "--sandbox", "read-only"]);
         assert!(args.windows(2).any(|pair| pair == ["resume", "--json"]));
         assert!(args.ends_with(&["thread-1".into(), "-".into()]));
     }
 
     #[test]
     fn claude_build_mode_accepts_edits_without_full_bypass() {
-        let args = build_args(&request(HeroiProvider::Claude));
+        let args = build_args(&request(HeroiProvider::Claude), &[]);
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--permission-mode", "acceptEdits"]));
         assert!(!args.contains(&"--dangerously-skip-permissions".into()));
+        assert!(!args.contains(&"--input-format".into()));
     }
 
     #[test]
@@ -626,14 +937,14 @@ mod tests {
         let mut input = request(HeroiProvider::Claude);
         input.model = Some("opus".into());
         input.thinking = Some("ultrathink".into());
-        let args = build_args(&input);
+        let args = build_args(&input, &[]);
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--model", "claude-opus-5"]));
         assert!(!args.windows(2).any(|pair| pair == ["--effort", "ultrathink"]));
 
         input.thinking = Some("xhigh".into());
-        let args = build_args(&input);
+        let args = build_args(&input, &[]);
         assert!(args.windows(2).any(|pair| pair == ["--effort", "xhigh"]));
     }
 
@@ -649,7 +960,7 @@ mod tests {
     fn cursor_plan_mode_is_explicitly_read_only() {
         let mut input = request(HeroiProvider::Cursor);
         input.agent_mode = "plan".into();
-        let args = build_args(&input);
+        let args = build_args(&input, &[]);
         assert!(args.windows(2).any(|pair| pair == ["--mode", "plan"]));
         assert!(!args.contains(&"--force".into()));
     }
@@ -672,12 +983,14 @@ mod tests {
 
     #[test]
     fn captures_expandable_codex_command_and_output() {
+        let mut state = ParseState::default();
         let started = serde_json::json!({
             "type": "item.started",
             "item": { "id": "cmd-1", "type": "command_execution", "command": "cargo check" }
         });
-        let activity = activity_data(HeroiProvider::Codex, &started).unwrap();
+        let activity = activity_data(HeroiProvider::Codex, &started, &mut state).unwrap();
         assert_eq!(activity.id, "cmd-1");
+        assert_eq!(activity.label, "Running a command");
         assert_eq!(activity.detail.as_deref(), Some("cargo check"));
         assert!(!activity.done);
 
@@ -690,9 +1003,107 @@ mod tests {
                 "aggregated_output": "Finished successfully"
             }
         });
-        let activity = activity_data(HeroiProvider::Codex, &completed).unwrap();
+        let activity = activity_data(HeroiProvider::Codex, &completed, &mut state).unwrap();
         assert_eq!(activity.detail.as_deref(), Some("cargo check\n\nFinished successfully"));
         assert!(activity.done);
+    }
+
+    #[test]
+    fn captures_claude_bash_command_and_tool_result() {
+        let mut state = ParseState::default();
+        let started = serde_json::json!({
+            "type": "assistant",
+            "message": {
+                "content": [{
+                    "type": "tool_use",
+                    "id": "toolu-1",
+                    "name": "Bash",
+                    "input": { "command": "pnpm test" }
+                }]
+            }
+        });
+        let activity = activity_data(HeroiProvider::Claude, &started, &mut state).unwrap();
+        assert_eq!(activity.id, "toolu-1");
+        assert_eq!(activity.label, "Running a command");
+        assert_eq!(activity.detail.as_deref(), Some("pnpm test"));
+        assert!(!activity.done);
+
+        let completed = serde_json::json!({
+            "type": "user",
+            "message": {
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "toolu-1",
+                    "content": "Tests passed"
+                }]
+            }
+        });
+        let activity = activity_data(HeroiProvider::Claude, &completed, &mut state).unwrap();
+        assert_eq!(activity.detail.as_deref(), Some("pnpm test\n\nTests passed"));
+        assert!(activity.done);
+    }
+
+    #[test]
+    fn captures_cursor_terminal_command_and_output() {
+        let mut state = ParseState::default();
+        let event = serde_json::json!({
+            "type": "tool_call",
+            "id": "term-1",
+            "status": "completed",
+            "tool_call": {
+                "shellToolCall": {
+                    "args": { "command": "cargo check" },
+                    "result": { "output": "Finished `dev` profile" }
+                }
+            }
+        });
+        let activity = activity_data(HeroiProvider::Cursor, &event, &mut state).unwrap();
+        assert_eq!(activity.label, "Running a command");
+        assert_eq!(
+            activity.detail.as_deref(),
+            Some("cargo check\n\nFinished `dev` profile")
+        );
+        assert!(activity.done);
+    }
+
+    #[test]
+    fn image_only_messages_are_valid_and_reach_providers() {
+        let mut input = request(HeroiProvider::Claude);
+        input.prompt = String::new();
+        input.images = vec![png_attachment()];
+        assert!(validate_request(&input).is_ok());
+
+        let args = build_args(&input, &[]);
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--input-format", "stream-json"]));
+        let stdin = stdin_payload(&input, &[]);
+        assert!(stdin.contains("\"type\":\"image\""));
+        assert!(stdin.contains("image/png"));
+
+        let image_path = PathBuf::from("/tmp/shot.png");
+        let mut codex = request(HeroiProvider::Codex);
+        codex.images = vec![png_attachment()];
+        let args = build_args(&codex, std::slice::from_ref(&image_path));
+        assert!(args.windows(2).any(|pair| pair == ["--cd", "."]));
+        assert!(args.windows(2).any(|pair| pair == ["--image", "/tmp/shot.png"]));
+        let stdin = stdin_payload(&codex, std::slice::from_ref(&image_path));
+        assert!(stdin.contains("Attached images:"));
+        assert!(stdin.contains("/tmp/shot.png"));
+    }
+
+    #[test]
+    fn rejects_non_image_attachments() {
+        let mut input = request(HeroiProvider::Claude);
+        input.images = vec![HeroiImageAttachment {
+            name: "notes.txt".into(),
+            mime_type: "text/plain".into(),
+            data_base64: BASE64.encode(b"hello"),
+        }];
+        assert_eq!(
+            validate_request(&input).unwrap_err(),
+            "Heroi can only attach PNG, JPEG, GIF, or WebP images."
+        );
     }
 
     #[test]

@@ -13,11 +13,12 @@ const CODEX_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 const CURSOR_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 const MINIMUM_CLAUDE_OPUS_5: (u32, u32, u32) = (2, 1, 219);
+const MINIMUM_CLAUDE_FABLE_5_1: (u32, u32, u32) = (2, 1, 257);
 const MINIMUM_CLAUDE_FABLE_5: (u32, u32, u32) = (2, 1, 169);
 const MINIMUM_CLAUDE_OPUS_4_8: (u32, u32, u32) = (2, 1, 154);
 const MINIMUM_CLAUDE_OPUS_4_7: (u32, u32, u32) = (2, 1, 111);
 
-const PREFERRED_CODEX_DEFAULTS: &[&str] = &["gpt-5.6-sol", "gpt-5.6-terra"];
+const PREFERRED_CODEX_DEFAULTS: &[&str] = &["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"];
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -76,7 +77,13 @@ pub fn normalize_claude_cli_effort(effort: &str, model: Option<&str>) -> Option<
         "xhigh"
             if !matches!(
                 model,
-                Some("claude-fable-5" | "claude-opus-5" | "claude-opus-4-8" | "claude-sonnet-5")
+                Some(
+                    "claude-fable-5-1"
+                        | "claude-fable-5"
+                        | "claude-opus-5"
+                        | "claude-opus-4-8"
+                        | "claude-sonnet-5"
+                )
             ) =>
         {
             Some("max".into())
@@ -157,6 +164,14 @@ fn claude_catalog(version: Option<(u32, u32, u32)>) -> Vec<HeroiModel> {
     ]);
 
     let mut models = Vec::new();
+    if version_at_least(version, MINIMUM_CLAUDE_FABLE_5_1) {
+        models.push(model(
+            "claude-fable-5-1",
+            "Claude Fable 5.1",
+            false,
+            opus_effort.clone(),
+        ));
+    }
     if version_at_least(version, MINIMUM_CLAUDE_FABLE_5) {
         models.push(model(
             "claude-fable-5",
@@ -497,6 +512,7 @@ fn codex_fallback() -> Vec<HeroiModel> {
         ("xhigh", "Extra High", false),
     ]);
     vec![
+        model("gpt-6-astra", "GPT-6-Astra", false, reasoning.clone()),
         model("gpt-5.6-sol", "GPT-5.6-Sol", true, reasoning.clone()),
         model("gpt-5.6-terra", "GPT-5.6-Terra", false, reasoning.clone()),
         model("gpt-5.4", "GPT-5.4", false, reasoning),
@@ -607,17 +623,23 @@ const CLAUDE_ALIASES: &[(&str, &str)] = &[
     ("sonnet", "claude-sonnet-5"),
     ("sonnet-5", "claude-sonnet-5"),
     ("haiku", "claude-haiku-4-5"),
+    ("fable-5.1", "claude-fable-5-1"),
+    ("claude-fable-5.1", "claude-fable-5-1"),
 ];
 
 const CODEX_ALIASES: &[(&str, &str)] = &[
     ("gpt-5-codex", "gpt-5.4"),
     ("5.4", "gpt-5.4"),
     ("gpt-5.6-codex", "gpt-5.6-sol"),
+    ("astra", "gpt-6-astra"),
+    ("gpt-6", "gpt-6-astra"),
 ];
 
 const CURSOR_ALIASES: &[(&str, &str)] = &[
     ("composer", "composer-2"),
     ("default", "auto"),
+    ("astra", "gpt-6-astra"),
+    ("gpt-6", "gpt-6-astra"),
 ];
 
 #[cfg(test)]
@@ -628,11 +650,24 @@ mod tests {
     fn claude_catalog_gates_opus_5_on_cli_version() {
         let unknown = claude_catalog(None);
         assert!(!unknown.iter().any(|model| model.slug == "claude-opus-5"));
+        assert!(!unknown.iter().any(|model| model.slug == "claude-fable-5-1"));
         assert!(unknown.iter().any(|model| model.slug == "claude-sonnet-5"));
 
         let current = claude_catalog(Some((2, 1, 219)));
         assert!(current.iter().any(|model| model.slug == "claude-opus-5"));
         assert!(current.iter().any(|model| model.slug == "claude-fable-5"));
+        assert!(!current.iter().any(|model| model.slug == "claude-fable-5-1"));
+
+        let fable_51 = claude_catalog(Some((2, 1, 257)));
+        assert!(fable_51.iter().any(|model| model.slug == "claude-fable-5-1"));
+        assert_eq!(
+            fable_51
+                .iter()
+                .find(|model| model.slug == "claude-fable-5-1")
+                .map(|model| model.name.as_str()),
+            Some("Claude Fable 5.1")
+        );
+        assert!(fable_51.iter().any(|model| model.slug == "claude-fable-5"));
         let sonnet = current
             .iter()
             .find(|model| model.slug == "claude-sonnet-5")
@@ -649,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_codex_model_list_and_prefers_sol() {
+    fn parses_codex_model_list_and_prefers_astra() {
         let response = json!({
             "data": [
                 {
@@ -675,6 +710,19 @@ mod tests {
                         { "reasoningEffort": "low" },
                         { "reasoningEffort": "high" }
                     ]
+                },
+                {
+                    "model": "gpt-6-astra",
+                    "displayName": "gpt-6-astra",
+                    "hidden": false,
+                    "isDefault": false,
+                    "defaultReasoningEffort": "high",
+                    "supportedReasoningEfforts": [
+                        { "reasoningEffort": "low" },
+                        { "reasoningEffort": "high" },
+                        { "reasoningEffort": "xhigh" },
+                        { "reasoningEffort": "max" }
+                    ]
                 }
             ]
         });
@@ -682,7 +730,10 @@ mod tests {
         assert_eq!(models[0].name, "GPT-5.4");
         assert!(!models[0].is_default);
         assert_eq!(models[1].slug, "gpt-5.6-sol");
-        assert!(models[1].is_default);
+        assert!(!models[1].is_default);
+        assert_eq!(models[2].slug, "gpt-6-astra");
+        assert_eq!(models[2].name, "GPT-6-Astra");
+        assert!(models[2].is_default);
         assert_eq!(
             models[1]
                 .reasoning
@@ -691,6 +742,10 @@ mod tests {
                 .map(|option| option.id.as_str()),
             Some("high")
         );
+        assert!(models[2]
+            .reasoning
+            .iter()
+            .any(|option| option.id == "max"));
         assert_eq!(
             models[0]
                 .reasoning
@@ -708,6 +763,11 @@ mod tests {
                 {
                     "value": "auto",
                     "name": "Auto",
+                    "configOptions": []
+                },
+                {
+                    "value": "gpt-6-astra",
+                    "name": "GPT-6 Astra",
                     "configOptions": []
                 },
                 {
@@ -733,16 +793,18 @@ mod tests {
         let models = parse_cursor_models(&response);
         assert_eq!(models[0].slug, "auto");
         assert!(models[0].reasoning.is_empty());
-        assert_eq!(models[1].slug, "composer-2");
+        assert_eq!(models[1].slug, "gpt-6-astra");
+        assert_eq!(models[1].name, "GPT-6 Astra");
+        assert_eq!(models[2].slug, "composer-2");
         assert_eq!(
-            models[1]
+            models[2]
                 .reasoning
                 .iter()
                 .find(|option| option.is_default)
                 .map(|option| option.id.as_str()),
             Some("high")
         );
-        assert!(models[1]
+        assert!(models[2]
             .reasoning
             .iter()
             .any(|option| option.id == "xhigh"));
@@ -764,6 +826,10 @@ mod tests {
             Some("xhigh")
         );
         assert_eq!(
+            normalize_claude_cli_effort("xhigh", Some("claude-fable-5-1")).as_deref(),
+            Some("xhigh")
+        );
+        assert_eq!(
             apply_claude_prompt_effort("fix the tests", Some("ultrathink")),
             "Ultrathink:\nfix the tests"
         );
@@ -777,7 +843,31 @@ mod tests {
     fn aliases_expand_legacy_picker_values() {
         assert_eq!(canonicalize_model(HeroiProvider::Claude, "opus"), "claude-opus-5");
         assert_eq!(canonicalize_model(HeroiProvider::Claude, "sonnet"), "claude-sonnet-5");
+        assert_eq!(
+            canonicalize_model(HeroiProvider::Claude, "claude-fable-5.1"),
+            "claude-fable-5-1"
+        );
         assert_eq!(canonicalize_model(HeroiProvider::Codex, "gpt-5.6-codex"), "gpt-5.6-sol");
+        assert_eq!(canonicalize_model(HeroiProvider::Codex, "astra"), "gpt-6-astra");
         assert_eq!(canonicalize_model(HeroiProvider::Cursor, "composer"), "composer-2");
+        assert_eq!(canonicalize_model(HeroiProvider::Cursor, "gpt-6"), "gpt-6-astra");
+    }
+
+    #[test]
+    fn codex_fallback_includes_confirmed_astra_slug() {
+        let models = codex_fallback();
+        assert!(models.iter().any(|model| model.slug == "gpt-6-astra"));
+        assert_eq!(
+            models.iter().find(|model| model.is_default).map(|model| model.slug.as_str()),
+            Some("gpt-5.6-sol")
+        );
+        assert!(!models.iter().any(|model| model.slug == "gpt-6-astra" && model.is_default));
+    }
+
+    #[test]
+    fn cursor_fallback_stays_auto_until_the_cli_advertises_astra() {
+        let models = cursor_fallback();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].slug, "auto");
     }
 }

@@ -917,6 +917,13 @@ export interface HeroiAgentRequest {
   agentMode: 'plan' | 'build';
   permissionMode: 'read' | 'build' | 'full';
   cliPath: string | null;
+  images?: HeroiAgentImage[];
+}
+
+export interface HeroiAgentImage {
+  name: string;
+  mimeType: string;
+  dataBase64: string;
 }
 
 export type HeroiAgentEvent =
