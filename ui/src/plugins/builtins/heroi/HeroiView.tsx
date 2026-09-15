@@ -7,6 +7,8 @@ import {
   useState,
   type KeyboardEvent,
   type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
 } from 'react';
 
 import { Icon } from '../../../components/Icon';
@@ -39,6 +41,14 @@ import {
   replaceComposerTrigger,
   type HeroiComposerSuggestion,
 } from './composer';
+import {
+  clipboardImageFiles,
+  composerImageReject,
+  droppedImageFiles,
+  toImagePayload,
+  type ComposerImageReject,
+  type HeroiImageDraft,
+} from './attachments';
 
 export type HeroiProvider = 'claude' | 'codex' | 'cursor';
 type AgentMode = 'plan' | 'build';
@@ -61,6 +71,7 @@ interface HeroiMessage {
   createdAt: number;
   state?: MessageState;
   activities?: HeroiActivity[];
+  images?: HeroiImageDraft[];
 }
 
 const EMPTY_ACTIVITIES: HeroiActivity[] = [];
@@ -88,7 +99,18 @@ const MessageRow = memo(function MessageRow({ message, provider, projectPath, ac
       projectPath={projectPath} toolsExpanded={toolsExpanded}
       onToggleGroup={() => onToggleGroup(message.id, toolsExpanded)} expandedActivities={expandedActivities}
       onToggleActivity={onToggleActivity} onOpenPath={onOpenPath}
-    /> : message.text ? <MessageMarkdown text={message.text} /> : null}
+    /> : (
+      <>
+        {message.images && message.images.length > 0 && (
+          <div className="plugin-heroi-message-images">
+            {message.images.map((image) => (
+              <img key={image.id} src={image.dataUrl} alt={image.name} />
+            ))}
+          </div>
+        )}
+        {message.text ? <MessageMarkdown text={message.text} /> : null}
+      </>
+    )}
   </article>;
 });
 
@@ -131,15 +153,21 @@ const MODEL_ALIASES: Record<HeroiProvider, Record<string, string>> = {
     opus: 'claude-opus-5',
     sonnet: 'claude-sonnet-5',
     haiku: 'claude-haiku-4-5',
+    'fable-5.1': 'claude-fable-5-1',
+    'claude-fable-5.1': 'claude-fable-5-1',
   },
   codex: {
     default: 'gpt-5.6-sol',
     'gpt-5.6-codex': 'gpt-5.6-sol',
     'gpt-5-codex': 'gpt-5.4',
+    astra: 'gpt-6-astra',
+    'gpt-6': 'gpt-6-astra',
   },
   cursor: {
     default: 'auto',
     composer: 'composer-2',
+    astra: 'gpt-6-astra',
+    'gpt-6': 'gpt-6-astra',
   },
 };
 
@@ -179,8 +207,31 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function titleFromText(text: string): string {
-  return text.trim().split('\n')[0]?.slice(0, 52) || t('plugins.heroi.untitled');
+function titleFromText(text: string, images?: readonly HeroiImageDraft[]): string {
+  return text.trim().split('\n')[0]?.slice(0, 52)
+    || images?.[0]?.name
+    || t('plugins.heroi.untitled');
+}
+
+function imageRejectMessage(reason: ComposerImageReject): string {
+  switch (reason) {
+    case 'limit': return t('plugins.heroi.imageLimit');
+    case 'size': return t('plugins.heroi.imageSize');
+    case 'type': return t('plugins.heroi.imageType');
+    default: {
+      const _exhaustive: never = reason;
+      return _exhaustive;
+    }
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function relativeTime(timestamp: number): string {
@@ -225,6 +276,7 @@ export function HeroiView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [composingNew, setComposingNew] = useState(false);
   const [composerText, setComposerText] = useState('');
+  const [composerImages, setComposerImages] = useState<HeroiImageDraft[]>([]);
   const [draftProvider, setDraftProvider] = useState<HeroiProvider>('claude');
   const [draftModel, setDraftModel] = useState('default');
   const [draftThinking, setDraftThinking] = useState('default');
@@ -247,6 +299,7 @@ export function HeroiView({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const stateKey = pluginStateKey('daniels.heroi', request.instanceId);
   const restored = restoredKey === stateKey;
@@ -364,6 +417,7 @@ export function HeroiView({
       setComposingNew(true);
       setActiveConversationId(null);
       setComposerText('');
+      setComposerImages([]);
       setError(null);
       queueMicrotask(() => composerRef.current?.focus());
     };
@@ -550,7 +604,13 @@ export function HeroiView({
 
   const sendMessage = useCallback(async () => {
     const text = composerText.trim();
-    if (!text || !activePath || activeRun) return;
+    const images = composerImages;
+    if ((!text && images.length === 0) || !activePath || activeRun) return;
+    const payloads = images.map(toImagePayload);
+    if (payloads.some((payload) => payload == null)) {
+      setError(t('plugins.heroi.imageReadFailed'));
+      return;
+    }
     try {
       broker.require('repository.read');
       broker.require('ai.invoke');
@@ -571,6 +631,7 @@ export function HeroiView({
     const runId = mintId('heroi-run');
     const userMessage: HeroiMessage = {
       id: mintId('m'), role: 'user', text, createdAt: now, state: 'complete',
+      images: images.length > 0 ? images : undefined,
     };
     const assistantMessage: HeroiMessage = {
       id: assistantMessageId, role: 'assistant', text: '', createdAt: now + 1, state: 'running',
@@ -578,7 +639,7 @@ export function HeroiView({
     const conversation = activeConversation ?? {
       id: conversationId,
       projectPath: activePath,
-      title: titleFromText(text),
+      title: titleFromText(text, images),
       provider,
       model: selectedModel,
       thinking: selectedThinking,
@@ -605,6 +666,7 @@ export function HeroiView({
       setComposingNew(false);
     }
     setComposerText('');
+    setComposerImages([]);
     setError(null);
     setActiveRuns((current) => ({
       ...current,
@@ -626,6 +688,7 @@ export function HeroiView({
       agentMode,
       permissionMode,
       cliPath: cliOverride(provider, openaiCli, anthropicCli),
+      images: payloads.filter((payload): payload is NonNullable<typeof payload> => payload != null),
     };
     try {
       const outcome = await tauri.heroiAgentSend(
@@ -688,6 +751,7 @@ export function HeroiView({
     agentMode,
     anthropicCli,
     broker,
+    composerImages,
     composerText,
     handleAgentEvent,
     meta?.branch,
@@ -699,6 +763,40 @@ export function HeroiView({
     selectedThinking,
     updateConversation,
   ]);
+
+  const addComposerImages = useCallback(async (files: readonly File[]) => {
+    if (files.length === 0) return;
+    const next: HeroiImageDraft[] = [];
+    let reject: ComposerImageReject | null = null;
+    for (const file of files) {
+      const reason = composerImageReject(file, composerImages.length + next.length);
+      if (reason) {
+        reject = reason;
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (!dataUrl.startsWith('data:image/')) {
+          reject = 'type';
+          continue;
+        }
+        next.push({
+          id: mintId('img'),
+          name: file.name || 'image',
+          mimeType: file.type || 'image/png',
+          dataUrl,
+        });
+      } catch {
+        setError(t('plugins.heroi.imageReadFailed'));
+        return;
+      }
+    }
+    if (next.length > 0) {
+      setComposerImages((current) => [...current, ...next]);
+    }
+    if (reject) setError(imageRejectMessage(reject));
+    else if (next.length > 0) setError(null);
+  }, [composerImages.length]);
 
   const stopRun = useCallback(() => {
     if (!activeRun) return;
@@ -754,6 +852,21 @@ export function HeroiView({
     setComposerCursor(event.target.selectionStart);
     setSuggestionIndex(0);
   }, []);
+
+  const onComposerPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = clipboardImageFiles(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void addComposerImages(files);
+  }, [addComposerImages]);
+
+  const onComposerImageDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const files = droppedImageFiles(event.dataTransfer);
+    if (files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void addComposerImages(files);
+  }, [addComposerImages]);
 
   const onComposerKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (suggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -819,6 +932,7 @@ export function HeroiView({
                   setComposingNew(true);
                   setActiveConversationId(null);
                   setComposerText('');
+                  setComposerImages([]);
                   setError(null);
                   queueMicrotask(() => composerRef.current?.focus());
                 }}
@@ -944,6 +1058,12 @@ export function HeroiView({
             <div
               className={'plugin-heroi-composer-wrap' + (fileDropActive ? ' file-drop-active' : '')}
               data-heroi-file-drop="true"
+              onDragOver={(event) => {
+                if (droppedImageFiles(event.dataTransfer).length === 0) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+              }}
+              onDrop={onComposerImageDrop}
             >
               {fileDropActive && (
                 <div className="plugin-heroi-file-drop-callout" role="status">
@@ -995,6 +1115,23 @@ export function HeroiView({
                       ))}
                     </div>
                   )}
+                  {composerImages.length > 0 && (
+                    <div className="plugin-heroi-composer-images">
+                      {composerImages.map((image) => (
+                        <div key={image.id} className="plugin-heroi-composer-image">
+                          <img src={image.dataUrl} alt={image.name} />
+                          <button
+                            type="button"
+                            aria-label={t('plugins.heroi.removeImage', { name: image.name })}
+                            disabled={Boolean(activeRun)}
+                            onClick={() => setComposerImages((current) => current.filter((entry) => entry.id !== image.id))}
+                          >
+                            <Icon name="x" size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <textarea
                     ref={composerRef}
                     rows={3}
@@ -1007,6 +1144,7 @@ export function HeroiView({
                     aria-label={t('plugins.heroi.composerLabel')}
                     aria-controls={suggestions.length > 0 ? 'heroi-composer-suggestions' : undefined}
                     onChange={onComposerChange}
+                    onPaste={onComposerPaste}
                     onSelect={(event) => setComposerCursor(event.currentTarget.selectionStart)}
                     onKeyDown={onComposerKeyDown}
                   />
@@ -1015,6 +1153,28 @@ export function HeroiView({
                   <div className="plugin-heroi-composer-context" title={activePath}>
                     <Icon name="folder" size={11} />
                     <code>{branchLabel}</code>
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      multiple
+                      hidden
+                      onChange={(event) => {
+                        const files = Array.from(event.currentTarget.files ?? []);
+                        event.currentTarget.value = '';
+                        void addComposerImages(files);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="plugin-heroi-attach"
+                      disabled={Boolean(activeRun)}
+                      aria-label={t('plugins.heroi.attachImage')}
+                      title={t('plugins.heroi.attachImage')}
+                      onClick={() => imageInputRef.current?.click()}
+                    >
+                      <Icon name="file-plus" size={12} />
+                    </button>
                   </div>
                   <div className="plugin-heroi-config">
                     <Select
@@ -1073,7 +1233,7 @@ export function HeroiView({
                       <button
                         type="button"
                         className="plugin-heroi-send"
-                        disabled={!composerText.trim()}
+                        disabled={!composerText.trim() && composerImages.length === 0}
                         onClick={() => void sendMessage()}
                       >
                         {t('plugins.heroi.send')} <kbd>{navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl'}+Enter</kbd>

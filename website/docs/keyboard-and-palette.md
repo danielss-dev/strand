@@ -161,7 +161,8 @@ to the active repository:
 | `/` | Search and insert an available agent skill |
 | `↑` / `↓`, `Enter` | Navigate and choose an open mention/skill result |
 
-Files can also be dragged from a Files pane into the Heroi composer. Running
+Paste an image into the composer, or use the attach-image control, to send a
+screenshot with the turn. Files can also be dragged from a Files pane into the Heroi composer. Running
 threads continue in parallel when another conversation is opened or started.
 Each assistant turn starts with one grouped Tool calls control, then the
 Markdown reply, then that turn's added/changed/deleted file list. Expand the

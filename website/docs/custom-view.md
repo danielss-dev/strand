@@ -109,10 +109,14 @@ header shows the current agent, model, and branch; each assistant turn starts
 with one grouped Tool calls control, then the Markdown reply (headings, lists,
 fenced code, links), then any added/changed/deleted paths for that turn — click
 a path to open it in Work's Changes view. Expand the tool group (and a row) to
-inspect bounded command, argument, and output detail. Model and reasoning menus
-come from the selected provider — Claude's catalog, Codex's live model list, or
-Cursor Agent's available models — including that model's advertised reasoning
-levels. Threads run independently, so starting a new conversation does not stop
+inspect bounded command, argument, and output detail. Paste or attach images in
+the composer; they are sent to vision-capable providers and shown as thumbnails
+in the thread. Cursor Build allows headless commands; Full Access skips its
+sandbox. Model and reasoning menus
+come from the selected provider — Claude's catalog (including Fable 5.1 when
+the CLI is new enough), Codex's live model list (including GPT-6 Astra when
+advertised), or Cursor Agent's available models — including that model's
+advertised reasoning levels. Threads run independently, so starting a new conversation does not stop
 or block an agent already working. Type `@` to attach a repository path, type `/`
 to choose an installed or project skill, or drag one or more entries from a
 Files pane into the composer. A chosen skill is sent using the provider-native

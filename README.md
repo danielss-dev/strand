@@ -158,9 +158,12 @@ the resolved app appearance automatically.
   come from the selected provider. Multiple threads can run at once; `@`
   searches repository files, `/` searches installed/project skills, and files
   can be dragged from a Files pane into the composer with live drop feedback.
-  Assistant replies render as Markdown; each turn lists files it added, changed,
-  or deleted; and tool calls collapse into one grouped control (expand a row for
-  bounded output). Its compact thread rail and bottom command deck keep chat
+  Paste or attach PNG/JPEG/GIF/WebP images for vision-capable providers; they
+  show as thumbnails in the thread. Assistant replies render as Markdown; each
+  turn lists files it added, changed, or deleted; and tool calls collapse into
+  one grouped control (expand a row for bounded command and output). Model
+  pickers follow the provider CLI, including Claude Fable 5.1 and GPT-6 Astra
+  when advertised. Its compact thread rail and bottom command deck keep chat
   primary, with **Open review** routing to Strand's Review surface. Declarative
   plugins render from validated manifests; third-party JavaScript does not
   execute in the privileged webview.

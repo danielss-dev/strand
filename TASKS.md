@@ -1421,6 +1421,11 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Heroi readable turns: Markdown replies, per-turn added/changed/deleted
   file list, and grouped tool calls (`MessageMarkdown`, `turnArtifacts`,
   `TurnPanels`, `HEROI_OPEN_FILE_EVENT` — DAN-61).
+- ☑ Heroi fuller agentic UX: repo-cwd command execution with command+output
+  in the grouped tool block (Cursor Build uses `--force` for headless print),
+  composer paste/attach images for vision providers, and catalog/probe for
+  Claude Fable 5.1 (`claude-fable-5-1`) plus GPT-6 Astra (`gpt-6-astra`)
+  (`heroi.rs`, `heroi/models.rs`, `HeroiView`, `attachments.ts` — DAN-70).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
