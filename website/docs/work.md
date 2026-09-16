@@ -126,10 +126,13 @@ one of several owning workspaces, hiding a workspace, or switching away does
 not stop them. App exit drains every terminal without prompting.
 
 While a terminal is focused, shell controls such as Ctrl+C, Ctrl+R, and Ctrl+P
-remain shell-owned. On macOS, Command shortcuts remain app-owned. On Windows
-and Linux, numbered view navigation and the fixed Work-tab
-`Ctrl+PageUp`/`Ctrl+PageDown` shortcuts remain app-owned. Press `F6` to return
-focus to the Work tab strip.
+remain shell-owned. On Windows and Linux, Ctrl+C copies the xterm selection
+when one exists (otherwise it still interrupts the foreground process) and
+Ctrl+V pastes from the clipboard; Ctrl+Shift+C / Ctrl+Shift+V and the native
+Edit menu Copy/Paste continue to work. On macOS, Command shortcuts remain
+app-owned (`⌘C` / `⌘V` copy and paste). On Windows and Linux, numbered view
+navigation and the fixed Work-tab `Ctrl+PageUp`/`Ctrl+PageDown` shortcuts
+remain app-owned. Press `F6` to return focus to the Work tab strip.
 
 ## Shell settings
 

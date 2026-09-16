@@ -2352,6 +2352,14 @@ resolved theme tokens. PowerShell and colorized CLI output remain legible on
 the light cream surface instead of inheriting bright colors tuned for dark
 backgrounds.
 
+**DAN-71 Windows/Linux terminal clipboard shipped (2026-09-16):** Embedded Work
+terminals copy on Ctrl+C when xterm has a selection and otherwise still send
+SIGINT; Ctrl+V pastes through `Terminal.paste`. The handler is
+`attachCustomKeyEventHandler` in `TerminalPane` (`terminalClipboardAction`).
+Ctrl+Shift+C/V, right-click Edit menu Copy/Paste, and macOS ⌘C/⌘V stay on
+their existing paths. App-level shortcuts still do not reclaim Ctrl+C/Ctrl+V
+inside `.work-terminal-host`.
+
 **Terminal repository overrides and Windows PowerShell follow-up (2026-07-20):**
 Settings → Terminal now pairs a repository selector with a shell selector so
 every open repository family remains configurable without a long override

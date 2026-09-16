@@ -129,9 +129,13 @@ the current tab to the previous or next pane, or create a new pane to the left,
 right, above, or below—the keyboard equivalents of dragging a Work tab.
 
 When an embedded terminal owns focus, shell controls such as `Ctrl+C` and
-`Ctrl+R` go to the shell. Command shortcuts remain app-owned on macOS; on
-Windows and Linux the numbered view shortcuts and the fixed Work-tab
-`Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
+`Ctrl+R` go to the shell. On Windows and Linux, `Ctrl+C` copies the current
+xterm selection to the clipboard instead of interrupting, and `Ctrl+V` pastes;
+a bare `Ctrl+C` with no selection still sends SIGINT. `Ctrl+Shift+C` /
+`Ctrl+Shift+V` and the native Edit menu Copy/Paste (including right-click)
+keep working. Command shortcuts remain app-owned on macOS (`⌘C` / `⌘V` copy
+and paste); on Windows and Linux the numbered view shortcuts and the fixed
+Work-tab `Ctrl+PageUp`/`Ctrl+PageDown` pair remain app-owned.
 
 ### Composed Workbench
 

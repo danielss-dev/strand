@@ -1336,6 +1336,8 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ xterm.js + Fit renderer layer with 5,000-line scrollback, roving tab focus,
   F6 escape, fast peer cycling, fitted startup/resize PTY synchronization,
   shell-control ownership, exited transcript, and Relaunch (`Work.tsx`).
+  Windows/Linux Ctrl+C copies the xterm selection else SIGINT; Ctrl+V pastes
+  (`attachCustomKeyEventHandler`, `terminalClipboardAction`; DAN-71).
   Fixed-width tabs wheel-scroll, auto-reveal, expose an overflow selector, and
   render `TreeFileIcon` symbols. Renderers survive view/repository/workspace
   switches. Configurable terminal font/10–32px sizing with a live Settings

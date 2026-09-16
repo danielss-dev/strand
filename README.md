@@ -133,7 +133,8 @@ the resolved app appearance automatically.
   Multiple terminals run at the repository
   root and keep output, scrollback, and selection across view, repository, and
   workspace switches, pane splits, and resizes, and full-screen terminal apps receive the fitted PTY
-  grid. Claude Code starts with its complete dashboard and alternate-screen
+  grid. On Windows and Linux, Ctrl+C copies a terminal selection (else interrupt)
+  and Ctrl+V pastes; macOS keeps ⌘C/⌘V. Claude Code starts with its complete dashboard and alternate-screen
   renderer in a configurable terminal font and size. Work tabs keep their width in a wheel-scrollable strip with an overflow
   selector and tree-matched file icons, and middle-click closes a tab. Only descriptors restore after
   relaunch; selecting one starts a fresh process. The New Terminal split button
