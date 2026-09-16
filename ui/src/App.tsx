@@ -1529,8 +1529,10 @@ export function App() {
       if (!binding) return;
       const cmd = keyMapRef.current.byBinding.get(binding);
       if (!cmd) return;
-      // The shell owns Ctrl+C/Ctrl+R/Ctrl+P and peers. macOS keeps Command
-      // shortcuts app-owned; Windows/Linux keep only numbered view navigation.
+      // The shell owns Ctrl+C/Ctrl+R/Ctrl+P and peers. TerminalPane copies
+      // Ctrl+C when xterm has a selection and pastes Ctrl+V on Windows/Linux.
+      // macOS keeps Command shortcuts app-owned; Windows/Linux keep only
+      // numbered view navigation.
       if (inEmbeddedTerminal) {
         if (osType() === 'macos' && !e.metaKey) return;
         if (osType() !== 'macos' && !/^Mod\+[1-8]$/.test(binding)) return;

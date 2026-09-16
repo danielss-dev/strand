@@ -2212,7 +2212,12 @@ final repository close must confirm first. While xterm owns focus, preserve
 shell controls, keep Command shortcuts app-owned on macOS and only numbered
 view navigation plus the fixed Work `Ctrl+PageUp`/`Ctrl+PageDown` peer cycle
 app-owned on Windows/Linux, with `F6` returning focus to the peer Work tab
-strip. Fit xterm before creating the PTY and explicitly synchronize the native
+strip. On Windows and Linux, `attachCustomKeyEventHandler` copies with Ctrl+C
+when `hasSelection()` is true and otherwise forwards so the PTY still receives
+SIGINT; Ctrl+V pastes via `Terminal.paste` and the existing clipboard read
+path. Do not reclaim Ctrl+C/Ctrl+V inside `.work-terminal-host` for unrelated
+app shortcuts, and leave Ctrl+Shift+C/V plus macOS ⌘C/⌘V on xterm/native Edit
+menu paths. Fit xterm before creating the PTY and explicitly synchronize the native
 grid again once its runtime ID exists; an observer can fire during async startup
 and otherwise leave a full-screen alternate-screen app on the default 80x24
 grid. Claude Code deliberately replaces its complete welcome dashboard with a

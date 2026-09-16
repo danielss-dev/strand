@@ -16,12 +16,15 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import '@xterm/xterm/css/xterm.css';
 
 import { Icon } from '../components/Icon';
+import { copyToClipboard } from '../components/PierreTree';
 import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { repoEmbeddedShell } from '../lib/db';
 import { embeddedShellOptions } from '../lib/embeddedShell';
 import { t } from '../lib/i18n';
+import { osType } from '../lib/integrations';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
+import { consumeTerminalClipboardKey, readClipboardText } from '../lib/terminalClipboard';
 import { terminalTheme } from '../lib/terminalTheme';
 import type { EmbeddedShellChoice, TerminalEvent } from '../lib/types';
 import {
@@ -1154,6 +1157,12 @@ function TerminalPane({
           pendingInput.current = (pendingInput.current + value).slice(-64 * 1024);
         }
       });
+      instance.attachCustomKeyEventHandler((event) => consumeTerminalClipboardKey(
+        event,
+        instance,
+        osType(),
+        { copy: copyToClipboard, read: readClipboardText },
+      ));
       if (visible && tab.lifecycle === 'dormant') void start();
     };
     if (document.fonts) void document.fonts.load(fontSpec).finally(createRenderer);
