@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '../components/Dialog';
 import { Diff } from '../components/Diff';
 import { Select } from '../components/Select';
+import { writeClipboardText } from '../lib/clipboard';
 import { pullRequestReview } from '../lib/db';
 import { exportHostedFeedback, feedbackSuggestions, reviewBoundaries } from '../lib/hostedReview';
 import { errMessage, tauri } from '../lib/tauri';
@@ -118,7 +119,7 @@ function HostedReviewDialog({ path, provider, pr, initialMode, openVersion, init
     </> : <div className="hosted-review-toolbar">
       <button type="button" className="btn" disabled={!!busy} onClick={loadFeedback}>Load all unresolved feedback</button>
       {feedback && <span>{feedback.threads.length} unresolved {feedback.threads.length === 1 ? 'thread' : 'threads'} loaded · {feedback.source_commit.slice(0, 8)}{staleFeedback ? ' · Head changed; reload before using suggestions or copying' : ''}</span>}
-      {mode === 'feedback' && <button type="button" className="btn primary" disabled={!!busy || !feedback || staleFeedback} onClick={() => void run('Copying feedback…', () => navigator.clipboard.writeText(exported), () => setMessage('Unresolved feedback copied.'))}>Copy feedback</button>}
+      {mode === 'feedback' && <button type="button" className="btn primary" disabled={!!busy || !feedback || staleFeedback} onClick={() => void run('Copying feedback…', () => writeClipboardText(exported), () => setMessage('Unresolved feedback copied.'))}>Copy feedback</button>}
     </div>}
     <div className="hosted-review-status" aria-live="polite">
       {busy && <span>{busy} {!applying && <button type="button" className="h-link" onClick={cancel}>Cancel read</button>}</span>}

@@ -1338,6 +1338,10 @@ community plugins, performance and platform certification from Git feature gaps.
   shell-control ownership, exited transcript, and Relaunch (`Work.tsx`).
   Windows/Linux Ctrl+C copies the xterm selection else SIGINT; Ctrl+V pastes
   (`attachCustomKeyEventHandler`, `terminalClipboardAction`; DAN-71).
+  Programmatic clipboard read/write uses `tauri-plugin-clipboard-manager` so OS
+  prompts name Strand (`writeClipboardText` / `readClipboardText` /
+  `copyToClipboard` in `ui/src/lib/clipboard.ts`; DAN-74). Edit-menu Predefined
+  Copy/Paste is unchanged.
   Fixed-width tabs wheel-scroll, auto-reveal, expose an overflow selector, and
   render `TreeFileIcon` symbols. Renderers survive view/repository/workspace
   switches. Configurable terminal font/10–32px sizing with a live Settings

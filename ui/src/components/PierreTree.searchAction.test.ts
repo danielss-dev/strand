@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  writeText: vi.fn(),
+  readText: vi.fn(),
+}));
 
 import { SEARCH_ACTION_CSS, SEARCH_ACTION_SPACE } from './PierreTree';
 

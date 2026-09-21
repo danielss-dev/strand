@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  writeText: vi.fn(),
+  readText: vi.fn(),
+}));
+
 import {
   consumeTerminalClipboardKey,
+  readClipboardText,
   terminalClipboardAction,
   type TerminalClipboardKeyEvent,
   type TerminalClipboardTerminal,
@@ -99,5 +105,9 @@ describe('consumeTerminalClipboardKey', () => {
     consumeTerminalClipboardKey(event({ key: 'v' }), host, 'windows', { copy: vi.fn(), read: async () => '' });
     await Promise.resolve();
     expect(host.paste).not.toHaveBeenCalled();
+  });
+
+  it('still exports readClipboardText for Work terminal paste', () => {
+    expect(typeof readClipboardText).toBe('function');
   });
 });
