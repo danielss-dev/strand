@@ -136,8 +136,9 @@ the resolved app appearance automatically.
   grid. On Windows and Linux, Ctrl+C copies a terminal selection (else interrupt)
   and Ctrl+V pastes; macOS keeps ⌘C/⌘V. Claude Code starts with its complete dashboard and alternate-screen
   renderer in a configurable terminal font and size. Work tabs keep their width in a wheel-scrollable strip with an overflow
-  selector and tree-matched file icons, and middle-click closes a tab. Claude Code and Codex CLI tabs pulse the
-  running status dot while a turn is executing and return to steady green when the agent is idle at a prompt.
+  selector and tree-matched file icons, and middle-click closes a tab. Claude Code and Codex CLI tabs show an amber
+  working dot while a turn is executing and a blue waiting-for-input dot when the agent is idle at a prompt;
+  a clean process exit is green and a failed exit is red.
   Only descriptors restore after
   relaunch; selecting one starts a fresh process. The New Terminal split button
   can launch a one-off native or WSL shell, while Settings → Terminal provides

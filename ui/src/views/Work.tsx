@@ -812,7 +812,7 @@ function WorkTabs({
               )}
               <span>{tab.kind === 'file' ? leaf(tab.path) : tab.label}</span>
               {tab.kind === 'terminal' && (
-                <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity)} aria-label={terminalStatus(tab)} />
+                <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity, tab.exitCode)} aria-label={terminalStatus(tab)} />
               )}
             </button>
             <button
@@ -1031,7 +1031,7 @@ function WorkTabSelector({
                 </span>
                 <span className="label">{label}</span>
                 {tab.kind === 'terminal' && (
-                  <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity)} aria-label={terminalStatus(tab)} />
+                  <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity, tab.exitCode)} aria-label={terminalStatus(tab)} />
                 )}
                 {active && <span className="meta"><Icon name="check" size={12} stroke={2.2} /></span>}
               </button>
@@ -1292,6 +1292,7 @@ function terminalStatus(tab: WorkTerminalTab): string {
     case 'starting':
       return t('work.terminalStarting');
     case 'exited':
+      if ((tab.exitCode ?? 0) === 0) return t('work.terminalDone');
       return t('work.terminalExited', { code: tab.exitCode ?? 0 });
     case 'error':
       return t('work.terminalErrorShort');

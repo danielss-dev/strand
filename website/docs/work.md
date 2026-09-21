@@ -117,15 +117,17 @@ complete dashboard even after setup tips and release notes have already been
 seen. This does not change Strand's repository-root working directory and the
 hints are ignored by other CLI agents.
 
-While the shell is running, the tab-strip and open-tabs menu dots stay gray
-(dormant), green (process alive), amber (starting), or red (exited/error). When
-the terminal is hosting Claude Code or Codex CLI, the green running dot also
-shows agent turn state: a pulsing ring while the agent is executing, and a
-steady green once the turn finishes and the CLI is waiting for input. Screen
-readers hear **Agent executing** or **Agent idle** instead of **Terminal
-running**. Other shells and unknown CLIs keep the process-lifecycle meaning;
-Strand only overlays agent state from OSC titles those CLIs already emit, and
-prefers staying green over a false busy signal.
+While the shell is running, the tab-strip and open-tabs menu dots use this
+palette: gray when dormant, green when a plain shell is alive or a process
+exits cleanly (done), amber while starting or an agent is working, blue when
+an agent is waiting for input, and red on a failed exit or terminal error.
+When the terminal is hosting Claude Code or Codex CLI, the running dot is
+amber (and may pulse) while the agent is working, and blue once the turn
+finishes and the CLI is waiting for input. Screen readers hear **Agent
+working** or **Agent waiting for input** instead of **Terminal running**.
+Other shells and unknown CLIs keep the process-lifecycle meaning; Strand only
+overlays agent state from OSC titles those CLIs already emit, and prefers
+staying on the lifecycle color over a false working signal.
 
 Terminal descriptors restore after restarting Strand, but processes never do.
 Restored tabs are unselected and dormant; explicitly selecting one starts a

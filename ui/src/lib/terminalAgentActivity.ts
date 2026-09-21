@@ -72,9 +72,13 @@ export function consumeTerminalAgentOutput(
 export function terminalIndicatorClass(
   lifecycle: TerminalLifecycle,
   activity: TerminalAgentActivity | null,
+  exitCode: number | null = null,
 ): string {
-  const busy = lifecycle === 'running' && activity === 'busy';
-  return `work-terminal-state ${lifecycle}${busy ? ' agent-busy' : ''}`;
+  const parts = ['work-terminal-state', lifecycle];
+  if (lifecycle === 'running' && activity === 'busy') parts.push('agent-busy');
+  if (lifecycle === 'running' && activity === 'idle') parts.push('agent-idle');
+  if (lifecycle === 'exited' && (exitCode ?? 0) !== 0) parts.push('failed');
+  return parts.join(' ');
 }
 
 function applyOsc(detector: Detector, command: OscCommand): void {

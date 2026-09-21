@@ -27,10 +27,16 @@ describe('Work terminal renderer visibility', () => {
 });
 
 describe('Work terminal agent status indicator', () => {
-  it('pulses the running dot only when the agent-busy overlay is present', () => {
+  it('maps done/waiting/working/failed to add/info/warn/del without pulsing green', () => {
     expect(rule('.work-terminal-state.running')).toContain('var(--add)');
     expect(rule('.work-terminal-state.running')).not.toContain('animation:');
+    expect(rule('.work-terminal-state.exited')).toContain('var(--add)');
+    expect(rule('.work-terminal-state.exited.failed')).toContain('var(--del)');
+    expect(rule('.work-terminal-state.error')).toContain('var(--del)');
+    expect(rule('.work-terminal-state.starting')).toContain('var(--warn)');
+    expect(rule('.work-terminal-state.running.agent-busy')).toContain('var(--warn)');
     expect(rule('.work-terminal-state.running.agent-busy')).toContain('work-terminal-agent-busy');
-    expect(rule('.work-terminal-state.running.agent-busy')).toContain('var(--add-bg-strong)');
+    expect(rule('.work-terminal-state.running.agent-idle')).toContain('var(--info)');
+    expect(rule('.work-terminal-state.running.agent-idle')).not.toContain('animation:');
   });
 });

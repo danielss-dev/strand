@@ -2236,10 +2236,12 @@ OSC 0/2 titles (braille spinner while a turn runs; asterisk idle marker or the
 project-only remainder when waiting at a prompt) onto the existing PTY stream.
 Parse those sequences in the UI output handler and store `agentActivity` on the
 tab. Do not treat OSC 9;4 progress as an agent until the session is already
-recognized — package managers emit it too. False "busy" is worse than staying
-lifecycle-green. Reset the stream when the PTY leaves `running` so a relaunch
-of the same tab id cannot inherit a spinner. Keep the overlay off unknown CLIs
-and ordinary shells.
+recognized — package managers emit it too. Map recognized agent busy to amber
+(`--warn`) and waiting-for-input to blue (`--info`); green (`--add`) is done
+(clean exit or a live non-agent shell), not “agent idle.” False "working" is
+worse than staying on the lifecycle color. Reset the stream when the PTY leaves
+`running` so a relaunch of the same tab id cannot inherit a spinner. Keep the
+overlay off unknown CLIs and ordinary shells.
 
 **Terminal defaults and explicit shell choices have different lifetimes
 (2026-07-20).** The primary New Terminal action follows the repository/global

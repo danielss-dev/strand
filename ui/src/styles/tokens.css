@@ -102,6 +102,8 @@
      warning never shows up tinted green/blue/etc. (consumers fall back to
      --accent when this is undefined, which was the bug). */
   --warn: oklch(0.80 0.135 70);
+  /* Waiting / informational blue — fixed hue like --warn, not the user accent. */
+  --info: oklch(0.74 0.14 250);
 
   --shadow-lg: 0 24px 64px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4);
   --shadow-pop: 0 12px 32px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
@@ -167,6 +169,8 @@
   --mod-bg: oklch(0.93 0.08 85 / 0.55);
   /* Darker amber for contrast on the cream surface. */
   --warn: oklch(0.56 0.15 65);
+  /* Darker informational blue for contrast on the cream surface. */
+  --info: oklch(0.50 0.16 250);
 
   --shadow-lg: 0 24px 64px rgba(60,40,20,0.18), 0 2px 8px rgba(60,40,20,0.08);
   --shadow-pop: 0 12px 32px rgba(60,40,20,0.16), 0 1px 0 rgba(255,255,255,0.5) inset;

@@ -7877,12 +7877,14 @@ textarea.clone-input {
 }
 .work-terminal-state.running { background: var(--add); }
 .work-terminal-state.starting { background: var(--warn); }
-.work-terminal-state.exited,
+.work-terminal-state.exited { background: var(--add); }
+.work-terminal-state.exited.failed { background: var(--del); }
 .work-terminal-state.error { background: var(--del); }
 .work-terminal-state.running.agent-busy {
-  box-shadow: 0 0 0 2px var(--add-bg-strong);
+  background: var(--warn);
   animation: work-terminal-agent-busy 0.9s ease-in-out infinite;
 }
+.work-terminal-state.running.agent-idle { background: var(--info); }
 @keyframes work-terminal-agent-busy {
   50% { opacity: 0.35; transform: scale(1.35); }
 }
