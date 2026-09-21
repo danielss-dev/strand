@@ -10,7 +10,10 @@ read/write must go through `ui/src/lib/clipboard.ts`, which uses
 from UI call sites. Native Edit-menu Predefined Copy/Paste stays on AppKit /
 Win32. Grant exact `clipboard-manager:allow-read-text` and
 `allow-write-text` — the plugin default is empty — and keep them in
-`scripts/check-release-security.mjs`.
+`scripts/check-release-security.mjs`. The native review harness cannot stub
+Tauri `invoke` (those properties are frozen); `writeClipboardText` honors
+`window.__strandCaptureClipboardWrite` so Copy feedback can be captured
+without touching the OS clipboard. Do not remove that seam.
 
 ## SSH reads must stay isolated and bounded (2026-09-06)
 

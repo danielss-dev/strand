@@ -48,6 +48,7 @@ describe('clipboard helpers', () => {
   });
 
   afterEach(() => {
+    delete window.__strandCaptureClipboardWrite;
     stubShell(false);
     vi.unstubAllGlobals();
   });
@@ -58,6 +59,20 @@ describe('clipboard helpers', () => {
 
     copyToClipboard('sha');
     await vi.waitFor(() => expect(mocks.writeText).toHaveBeenCalledWith('sha'));
+    expect(webWrite).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits writes through the native-review capture seam', async () => {
+    stubShell(true);
+    const capture = vi.fn().mockResolvedValue(undefined);
+    window.__strandCaptureClipboardWrite = capture;
+
+    await writeClipboardText('feedback markdown');
+    copyToClipboard('copied notes');
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledWith('copied notes'));
+
+    expect(capture).toHaveBeenCalledWith('feedback markdown');
+    expect(mocks.writeText).not.toHaveBeenCalled();
     expect(webWrite).not.toHaveBeenCalled();
   });
 

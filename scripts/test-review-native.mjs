@@ -198,70 +198,17 @@ async function launch() {
   }
   await waitFor('React stores and workspace persistence', () => evaluate('return !!repo && workspaces.getState().loaded && document.querySelectorAll("#root > *").length > 0;'));
   // Capture Copy feedback without writing the OS clipboard. Desktop writes go
-  // through plugin:clipboard-manager|write_text. Tauri 2 defines invoke/ipc
-  // as non-writable, so assignment is ignored or throws in this async
-  // evaluate; intercept the Windows IPC fetch (and postMessage fallback).
-  // Keep navigator.clipboard as a web/demo fallback.
+  // through writeClipboardText → the clipboard plugin, which never hits
+  // navigator.clipboard. The native-review gate installs
+  // window.__strandCaptureClipboardWrite; keep navigator as a web fallback.
   await evaluate(`
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__reviewFeedback = text; } } });
-    const capture = (cmd, args) => {
-      if (cmd !== 'plugin:clipboard-manager|write_text') return false;
-      if (args && typeof args.text === 'string') window.__reviewFeedback = args.text;
-      return true;
+    window.__strandCaptureClipboardWrite = async (text) => {
+      window.__reviewFeedback = text;
     };
-    const internals = window.__TAURI_INTERNALS__;
-    const wrap = (obj, key, make) => {
-      try {
-        const original = obj[key];
-        if (typeof original !== 'function') return;
-        Object.defineProperty(obj, key, { configurable: true, writable: true, value: make(original) });
-      } catch (_) {}
-    };
-    if (internals) {
-      wrap(internals, 'invoke', (original) => function (cmd, args, options) {
-        if (capture(cmd, args)) return Promise.resolve();
-        return original.call(this, cmd, args, options);
-      });
-      wrap(internals, 'ipc', (original) => function (message) {
-        if (message && capture(message.cmd, message.payload)) {
-          internals.runCallback(message.callback);
-          return;
-        }
-        return original.call(this, message);
-      });
-      wrap(internals, 'postMessage', (original) => function (message) {
-        if (message && capture(message.cmd, message.payload)) {
-          internals.runCallback(message.callback);
-          return;
-        }
-        return original.call(this, message);
-      });
-    }
-    const origFetch = window.fetch.bind(window);
-    window.fetch = (input, init) => {
-      const url = String((typeof input === 'string' ? input : input && input.url) || '');
-      if (url.includes('clipboard-manager') && url.includes('write_text')) {
-        const body = (init && init.body) || '';
-        if (typeof body === 'string') {
-          try { capture('plugin:clipboard-manager|write_text', JSON.parse(body)); } catch (_) {}
-        }
-        return Promise.resolve(new Response('null', { headers: { 'Tauri-Response': 'ok', 'content-type': 'application/json' } }));
-      }
-      return origFetch(input, init);
-    };
-    const webview = window.chrome && window.chrome.webview;
-    if (webview && typeof webview.postMessage === 'function') {
-      const post = webview.postMessage.bind(webview);
-      webview.postMessage = (data) => {
-        let message = data;
-        if (typeof data === 'string') { try { message = JSON.parse(data); } catch (_) {} }
-        if (message && capture(message.cmd, message.payload)) {
-          if (internals && typeof internals.runCallback === 'function') internals.runCallback(message.callback);
-          return;
-        }
-        return post(data);
-      };
-    }
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text) => { window.__reviewFeedback = text; } },
+    });
   `);
 }
 async function initRepo(path, committed = true) {

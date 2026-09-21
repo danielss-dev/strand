@@ -1,5 +1,14 @@
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 
+type ClipboardCapture = (text: string) => void | Promise<void>;
+
+declare global {
+  interface Window {
+    /** Native-review / test harness only: short-circuit clipboard writes. */
+    __strandCaptureClipboardWrite?: ClipboardCapture;
+  }
+}
+
 /** True inside the Tauri webview. Duplicates `isTauri` so this helper does not
  * load the IPC command map on every tree/diff import. */
 function isDesktopShell(): boolean {
@@ -12,6 +21,13 @@ function isDesktopShell(): boolean {
  * denies access — callers that must not surface a rejection should use
  * {@link copyToClipboard}. */
 export async function writeClipboardText(text: string): Promise<void> {
+  const capture = typeof window !== 'undefined'
+    ? window.__strandCaptureClipboardWrite
+    : undefined;
+  if (capture) {
+    await capture(text);
+    return;
+  }
   if (isDesktopShell()) {
     await writeText(text);
     return;
