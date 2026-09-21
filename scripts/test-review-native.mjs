@@ -197,8 +197,19 @@ async function launch() {
     await cdp.send('Page.reload');
   }
   await waitFor('React stores and workspace persistence', () => evaluate('return !!repo && workspaces.getState().loaded && document.querySelectorAll("#root > *").length > 0;'));
-  // Inspect real feedback rendering without writing the user's system clipboard.
-  await evaluate('Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__reviewFeedback = text; } } });');
+  // Capture Copy feedback without writing the OS clipboard. Desktop writes go
+  // through writeClipboardText → the clipboard plugin, which never hits
+  // navigator.clipboard. The native-review gate installs
+  // window.__strandCaptureClipboardWrite; keep navigator as a web fallback.
+  await evaluate(`
+    window.__strandCaptureClipboardWrite = async (text) => {
+      window.__reviewFeedback = text;
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text) => { window.__reviewFeedback = text; } },
+    });
+  `);
 }
 async function initRepo(path, committed = true) {
   await mkdir(path, { recursive: true });

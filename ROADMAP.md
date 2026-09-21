@@ -2368,6 +2368,15 @@ Ctrl+Shift+C/V, right-click Edit menu Copy/Paste, and macOS ⌘C/⌘V stay on
 their existing paths. App-level shortcuts still do not reclaim Ctrl+C/Ctrl+V
 inside `.work-terminal-host`.
 
+**DAN-74 clipboard permission identity shipped (2026-09-21):** Programmatic
+clipboard read/write goes through `tauri-plugin-clipboard-manager`
+(`writeClipboardText` / `readClipboardText` in `ui/src/lib/clipboard.ts`) so
+macOS TCC names Strand instead of the webview origin (`tauri.dev local` /
+localhost). The web demo still uses `navigator.clipboard`. Edit-menu
+Predefined Copy/Paste and DAN-71 Ctrl+C/V routing are unchanged. Least-privilege
+`clipboard-manager:allow-read-text` / `allow-write-text` are on the main
+window allowlist.
+
 **Terminal repository overrides and Windows PowerShell follow-up (2026-07-20):**
 Settings → Terminal now pairs a repository selector with a shell selector so
 every open repository family remains configurable without a long override

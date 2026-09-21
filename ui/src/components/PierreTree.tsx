@@ -20,6 +20,8 @@ import { TREE_ICONS } from '../lib/treeIcons';
 import { expandTreeSelection, resolveTreeActionTargets } from '../lib/treeSelection';
 import type { DiffStatus } from '../lib/types';
 
+export { copyToClipboard } from '../lib/clipboard';
+
 // ─── status mapping ───────────────────────────────────────────────────────
 export function diffStatusToGit(s: DiffStatus): GitStatus {
   switch (s) {
@@ -30,13 +32,6 @@ export function diffStatusToGit(s: DiffStatus): GitStatus {
     case 'typechange': return 'modified';
     case 'copied': return 'added';
   }
-}
-
-/** Write `text` to the clipboard, swallowing the rejection clipboard APIs throw
- * when the webview denies access (so a copy never surfaces an unhandled
- * rejection). */
-export function copyToClipboard(text: string): void {
-  void navigator.clipboard?.writeText(text)?.catch((e) => console.warn('clipboard write failed', e));
 }
 
 // ─── public types ─────────────────────────────────────────────────────────

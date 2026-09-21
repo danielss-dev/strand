@@ -1,5 +1,7 @@
 import type { OsType } from './integrations';
 
+export { readClipboardText } from './clipboard';
+
 export type TerminalClipboardAction = 'copy' | 'paste' | 'forward';
 
 export interface TerminalClipboardKeyEvent {
@@ -70,10 +72,3 @@ export function consumeTerminalClipboardKey(
   }
 }
 
-export function readClipboardText(): Promise<string> {
-  if (!navigator.clipboard?.readText) return Promise.resolve('');
-  return navigator.clipboard.readText().catch((error) => {
-    console.warn('clipboard read failed', error);
-    return '';
-  });
-}

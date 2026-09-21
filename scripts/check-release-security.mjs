@@ -41,6 +41,8 @@ const expectedPermissions = [
   'core:webview:allow-set-webview-zoom',
   'dialog:allow-open',
   'dialog:allow-save',
+  'clipboard-manager:allow-read-text',
+  'clipboard-manager:allow-write-text',
   'notification:allow-is-permission-granted',
   'notification:allow-request-permission',
   'notification:allow-notify',
