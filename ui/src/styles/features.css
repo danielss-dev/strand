@@ -7872,12 +7872,23 @@ textarea.clone-input {
   height: 6px;
   flex: 0 0 6px;
   border-radius: 50%;
+  display: inline-block;
   background: var(--text-dim);
 }
 .work-terminal-state.running { background: var(--add); }
 .work-terminal-state.starting { background: var(--warn); }
 .work-terminal-state.exited,
 .work-terminal-state.error { background: var(--del); }
+.work-terminal-state.running.agent-busy {
+  box-shadow: 0 0 0 2px var(--add-bg-strong);
+  animation: work-terminal-agent-busy 0.9s ease-in-out infinite;
+}
+@keyframes work-terminal-agent-busy {
+  50% { opacity: 0.35; transform: scale(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-terminal-state.running.agent-busy { animation: none; }
+}
 .work-content {
   position: relative;
   flex: 1;

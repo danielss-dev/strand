@@ -2346,6 +2346,14 @@ and fullscreen-renderer compatibility environment, keeping the complete agent
 dashboard visible from a repository-root shell after onboarding notices have
 been consumed.
 
+**DAN-75 agent turn status on Work terminal tabs shipped (2026-09-21):** The
+Workbench tab-strip and overflow-menu dots still use process lifecycle for
+ordinary shells. When Claude Code or Codex CLI is hosting a live PTY, OSC
+titles already on the output stream overlay **agent executing** (pulsing green)
+versus **turn finished / idle** (steady green) without a new IPC stack. Unknown
+CLIs stay lifecycle-only; a false busy signal is treated as worse than remaining
+green.
+
 **DAN-47 light terminal contrast shipped (2026-08-24):** Embedded terminals
 now provide xterm's complete normal and bright ANSI palettes from Strand's
 resolved theme tokens. PowerShell and colorized CLI output remain legible on

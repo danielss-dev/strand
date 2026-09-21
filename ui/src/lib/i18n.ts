@@ -189,6 +189,8 @@ export const en = {
   'work.fileMissingTitle': 'File no longer exists',
   'work.fileMissingBody': '{path} was removed from the working tree. This pinned tab stays open for context.',
   'work.terminalRunning': 'Terminal running',
+  'work.terminalAgentBusy': 'Agent executing',
+  'work.terminalAgentIdle': 'Agent idle',
   'work.terminalStarting': 'Terminal starting',
   'work.terminalDormant': 'Terminal not started',
   'work.terminalExited': 'Process exited with code {code}',

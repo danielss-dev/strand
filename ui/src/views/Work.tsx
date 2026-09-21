@@ -25,6 +25,10 @@ import { osType } from '../lib/integrations';
 import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage, tauri } from '../lib/tauri';
 import { consumeTerminalClipboardKey, readClipboardText } from '../lib/terminalClipboard';
+import {
+  consumeTerminalAgentOutput,
+  terminalIndicatorClass,
+} from '../lib/terminalAgentActivity';
 import { terminalTheme } from '../lib/terminalTheme';
 import type { EmbeddedShellChoice, TerminalEvent } from '../lib/types';
 import {
@@ -808,7 +812,7 @@ function WorkTabs({
               )}
               <span>{tab.kind === 'file' ? leaf(tab.path) : tab.label}</span>
               {tab.kind === 'terminal' && (
-                <span className={`work-terminal-state ${tab.lifecycle}`} aria-label={terminalStatus(tab)} />
+                <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity)} aria-label={terminalStatus(tab)} />
               )}
             </button>
             <button
@@ -1027,7 +1031,7 @@ function WorkTabSelector({
                 </span>
                 <span className="label">{label}</span>
                 {tab.kind === 'terminal' && (
-                  <span className={`work-terminal-state ${tab.lifecycle}`} aria-label={terminalStatus(tab)} />
+                  <span className={terminalIndicatorClass(tab.lifecycle, tab.agentActivity)} aria-label={terminalStatus(tab)} />
                 )}
                 {active && <span className="meta"><Icon name="check" size={12} stroke={2.2} /></span>}
               </button>
@@ -1246,6 +1250,8 @@ function onTerminalEvent(tab: WorkTerminalTab, terminal: Terminal | null, event:
     const binary = atob(event.data);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     terminal?.write(bytes);
+    const update = consumeTerminalAgentOutput(tab.id, bytes);
+    if (update) useWork.getState().setTerminalAgentActivity(tab.repoPath, tab.id, update.activity);
   } else if (event.type === 'exit') {
     useWork.getState().clearTerminalRuntime(tab.repoPath, tab.id);
     useWork.getState().setTerminalState(tab.repoPath, tab.id, 'exited', { exitCode: event.code });
@@ -1278,9 +1284,22 @@ function leaf(path: string): string {
 }
 
 function terminalStatus(tab: WorkTerminalTab): string {
-  if (tab.lifecycle === 'running') return t('work.terminalRunning');
-  if (tab.lifecycle === 'starting') return t('work.terminalStarting');
-  if (tab.lifecycle === 'exited') return t('work.terminalExited', { code: tab.exitCode ?? 0 });
-  if (tab.lifecycle === 'error') return t('work.terminalErrorShort');
-  return t('work.terminalDormant');
+  switch (tab.lifecycle) {
+    case 'running':
+      if (tab.agentActivity === 'busy') return t('work.terminalAgentBusy');
+      if (tab.agentActivity === 'idle') return t('work.terminalAgentIdle');
+      return t('work.terminalRunning');
+    case 'starting':
+      return t('work.terminalStarting');
+    case 'exited':
+      return t('work.terminalExited', { code: tab.exitCode ?? 0 });
+    case 'error':
+      return t('work.terminalErrorShort');
+    case 'dormant':
+      return t('work.terminalDormant');
+    default: {
+      const exhaustive: never = tab.lifecycle;
+      return exhaustive;
+    }
+  }
 }
