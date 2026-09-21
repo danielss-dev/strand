@@ -6155,7 +6155,7 @@ dependencies = [
 
 [[package]]
 name = "strand-azdo-protocol"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -6165,7 +6165,7 @@ dependencies = [
 
 [[package]]
 name = "strand-core"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "git2",
  "gix",
@@ -6181,7 +6181,7 @@ dependencies = [
 
 [[package]]
 name = "strand-headless"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "clap",
  "serde",
@@ -6193,7 +6193,7 @@ dependencies = [
 
 [[package]]
 name = "strand-ops"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "percent-encoding",
  "schemars 0.8.22",
@@ -6205,7 +6205,7 @@ dependencies = [
 
 [[package]]
 name = "strand-tauri"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "base64 0.22.1",
  "flate2",
