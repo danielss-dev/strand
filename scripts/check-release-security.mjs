@@ -6,6 +6,7 @@ const capability = JSON.parse(
 );
 const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8');
 const tauriMain = readFileSync('crates/strand-tauri/src/main.rs', 'utf8');
+const wixTemplate = readFileSync('crates/strand-tauri/wix/main.wxs', 'utf8');
 
 function fail(message) {
   throw new Error(`release security check failed: ${message}`);
@@ -91,6 +92,35 @@ for (const fragment of [
   if (!tauriMain.includes(fragment)) {
     fail(`Windows updater-safe taskbar icon contract is missing: ${fragment}`);
   }
+}
+
+if (config.bundle?.windows?.wix?.template !== 'wix/main.wxs') {
+  fail('Windows MSI custom template is missing');
+}
+const startMenuShortcutStart = wixTemplate.indexOf(
+  '<Shortcut Id="ApplicationStartMenuShortcut"',
+);
+const startMenuShortcutEnd = wixTemplate.indexOf('</Shortcut>', startMenuShortcutStart);
+if (startMenuShortcutStart < 0 || startMenuShortcutEnd < 0) {
+  fail('Windows MSI Start Menu shortcut is missing');
+}
+const startMenuShortcut = wixTemplate.slice(
+  startMenuShortcutStart,
+  startMenuShortcutEnd,
+);
+if (startMenuShortcut.includes('Icon="ProductIcon"')) {
+  fail('Windows MSI Start Menu shortcut uses the upgrade-specific ProductIcon cache');
+}
+if (
+  !wixTemplate.includes('<Property Id="ARPPRODUCTICON" Value="ProductIcon" />'),
+) {
+  fail('Windows MSI Add/Remove Programs icon is missing');
+}
+if (!startMenuShortcut.includes('System.AppUserModel.ID')) {
+  fail('Windows MSI Start Menu shortcut AppUserModelID is missing');
+}
+if (!wixTemplate.includes('<MajorUpgrade Schedule="afterInstallInitialize"')) {
+  fail('Windows MSI major-upgrade behavior is missing');
 }
 
 const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';

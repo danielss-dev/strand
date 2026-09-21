@@ -57,7 +57,12 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Fast, friendly Git client",
-    "longDescription": "Strand is a desktop Git client for macOS, Windows, and Linux."
+    "longDescription": "Strand is a desktop Git client for macOS, Windows, and Linux.",
+    "windows": {
+      "wix": {
+        "template": "wix/main.wxs"
+      }
+    }
   },
   "plugins": {
     "updater": {
