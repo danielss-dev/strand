@@ -197,8 +197,21 @@ async function launch() {
     await cdp.send('Page.reload');
   }
   await waitFor('React stores and workspace persistence', () => evaluate('return !!repo && workspaces.getState().loaded && document.querySelectorAll("#root > *").length > 0;'));
-  // Inspect real feedback rendering without writing the user's system clipboard.
-  await evaluate('Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__reviewFeedback = text; } } });');
+  // Capture Copy feedback without writing the OS clipboard. Desktop writes go
+  // through plugin:clipboard-manager|write_text; keep navigator.clipboard as
+  // a web/demo fallback.
+  await evaluate(`
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__reviewFeedback = text; } } });
+    const internals = window.__TAURI_INTERNALS__;
+    const invoke = internals.invoke.bind(internals);
+    internals.invoke = (cmd, args, options) => {
+      if (cmd === 'plugin:clipboard-manager|write_text') {
+        window.__reviewFeedback = args.text;
+        return Promise.resolve();
+      }
+      return invoke(cmd, args, options);
+    };
+  `);
 }
 async function initRepo(path, committed = true) {
   await mkdir(path, { recursive: true });
