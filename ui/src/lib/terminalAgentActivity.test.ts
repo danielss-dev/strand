@@ -87,15 +87,22 @@ describe('terminal agent activity from PTY OSC', () => {
 });
 
 describe('terminalIndicatorClass', () => {
-  it('keeps lifecycle classes for plain shells and idle agents', () => {
+  it('keeps lifecycle classes for plain shells', () => {
     expect(terminalIndicatorClass('running', null)).toBe('work-terminal-state running');
-    expect(terminalIndicatorClass('running', 'idle')).toBe('work-terminal-state running');
     expect(terminalIndicatorClass('dormant', null)).toBe('work-terminal-state dormant');
     expect(terminalIndicatorClass('starting', 'busy')).toBe('work-terminal-state starting');
     expect(terminalIndicatorClass('exited', null)).toBe('work-terminal-state exited');
+    expect(terminalIndicatorClass('exited', null, 0)).toBe('work-terminal-state exited');
+    expect(terminalIndicatorClass('error', null)).toBe('work-terminal-state error');
   });
 
-  it('adds agent-busy only while the PTY is running', () => {
+  it('overlays agent-busy and agent-idle only while the PTY is running', () => {
     expect(terminalIndicatorClass('running', 'busy')).toBe('work-terminal-state running agent-busy');
+    expect(terminalIndicatorClass('running', 'idle')).toBe('work-terminal-state running agent-idle');
+  });
+
+  it('marks non-zero exits as failed', () => {
+    expect(terminalIndicatorClass('exited', null, 1)).toBe('work-terminal-state exited failed');
+    expect(terminalIndicatorClass('exited', 'idle', 130)).toBe('work-terminal-state exited failed');
   });
 });

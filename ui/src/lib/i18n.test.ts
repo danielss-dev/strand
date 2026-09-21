@@ -6,6 +6,10 @@ describe('i18n', () => {
   it('resolves and interpolates catalog messages', () => {
     expect(t('updates.available', { version: '1.0.0' })).toBe('Version 1.0.0 is available.');
     expect(() => t('updates.available')).toThrow('Missing localization value: version');
+    expect(t('work.terminalAgentBusy')).toBe('Agent working');
+    expect(t('work.terminalAgentIdle')).toBe('Agent waiting for input');
+    expect(t('work.terminalDone')).toBe('Terminal done');
+    expect(t('work.terminalFailed')).toBe('Terminal failed');
   });
 
   it('selects the English plural form', () => {

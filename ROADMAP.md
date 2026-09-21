@@ -2349,10 +2349,11 @@ been consumed.
 **DAN-75 agent turn status on Work terminal tabs shipped (2026-09-21):** The
 Workbench tab-strip and overflow-menu dots still use process lifecycle for
 ordinary shells. When Claude Code or Codex CLI is hosting a live PTY, OSC
-titles already on the output stream overlay **agent executing** (pulsing green)
-versus **turn finished / idle** (steady green) without a new IPC stack. Unknown
-CLIs stay lifecycle-only; a false busy signal is treated as worse than remaining
-green.
+titles already on the output stream overlay **agent working** (pulsing amber)
+versus **waiting for input** (steady blue) without a new IPC stack. Clean
+exits are green; failed exits and errors are red. Unknown CLIs stay
+lifecycle-only; a false busy signal is treated as worse than remaining green
+on a plain shell.
 
 **DAN-47 light terminal contrast shipped (2026-08-24):** Embedded terminals
 now provide xterm's complete normal and bright ANSI palettes from Strand's

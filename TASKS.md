@@ -1352,8 +1352,11 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Workbench terminal tab dots distinguish Claude Code / Codex CLI turn
   execution from turn-idle while the PTY stays `running`, using OSC 0/2
   titles (and OSC 9;4 only after the CLI is recognized) already on the PTY
-  stream (`terminalAgentActivity`, `work-terminal-state.agent-busy`; DAN-75).
-  Plain shells keep dormant/running/starting/exited/error meaning.
+  stream (`terminalAgentActivity`, `work-terminal-state.agent-busy` /
+  `agent-idle`; DAN-75). Daniels palette: green done / plain running
+  (`--add`), blue agent waiting (`--info`), amber agent working + starting
+  (`--warn`, pulse only on busy), red failed exit / error (`--del`). Plain
+  shells stay lifecycle-only; clean exit is green, non-zero is red.
 - ☑ `portable-pty` native runtime and Tauri channels: direct resolved argv,
   recovered PATH, bounded ordered output/input/resize, per-session reader,
   repository cwd/open validation, Unix process groups, Windows kill-on-close
