@@ -45,9 +45,9 @@ describe('Work tabs', () => {
       activePaneId: 'root',
       layout: { kind: 'pane', id: 'root', tabIds: ['a', 'b', 'c'], activeTabId: 'b' },
       tabs: [
-        { kind: 'terminal', id: 'a', repoPath: 'r', label: 'A', shell: null, runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null },
-        { kind: 'terminal', id: 'b', repoPath: 'r', label: 'B', shell: null, runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null },
-        { kind: 'terminal', id: 'c', repoPath: 'r', label: 'C', shell: null, runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null },
+        { kind: 'terminal', id: 'a', repoPath: 'r', label: 'A', shell: null, runtimeId: null, lifecycle: 'dormant', agentActivity: null, exitCode: null, error: null },
+        { kind: 'terminal', id: 'b', repoPath: 'r', label: 'B', shell: null, runtimeId: null, lifecycle: 'dormant', agentActivity: null, exitCode: null, error: null },
+        { kind: 'terminal', id: 'c', repoPath: 'r', label: 'C', shell: null, runtimeId: null, lifecycle: 'dormant', agentActivity: null, exitCode: null, error: null },
       ],
     };
     expect(closeWorkTab(state, 'b').activeTabId).toBe('c');
@@ -176,6 +176,7 @@ describe('Work tabs', () => {
       shell: null,
       runtimeId: null,
       lifecycle: 'dormant' as const,
+      agentActivity: null,
       exitCode: null,
       error: null,
     }));
@@ -197,7 +198,7 @@ describe('Work tabs', () => {
   it('restores terminal descriptors without selecting or starting them', () => {
     const restored = restoreTerminalDescriptors([{ id: 'term', label: 'PowerShell' }]);
     expect(restored.activeTabId).toBeNull();
-    expect(restored.tabs[0]).toMatchObject({ lifecycle: 'dormant', runtimeId: null });
+    expect(restored.tabs[0]).toMatchObject({ lifecycle: 'dormant', runtimeId: null, agentActivity: null });
   });
 
   it('keeps an explicitly selected shell in the persisted descriptor', () => {

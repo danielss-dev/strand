@@ -25,3 +25,12 @@ describe('Work terminal renderer visibility', () => {
     expect(rule('.work-terminal-pane.visible')).toContain('visibility: visible');
   });
 });
+
+describe('Work terminal agent status indicator', () => {
+  it('pulses the running dot only when the agent-busy overlay is present', () => {
+    expect(rule('.work-terminal-state.running')).toContain('var(--add)');
+    expect(rule('.work-terminal-state.running')).not.toContain('animation:');
+    expect(rule('.work-terminal-state.running.agent-busy')).toContain('work-terminal-agent-busy');
+    expect(rule('.work-terminal-state.running.agent-busy')).toContain('var(--add-bg-strong)');
+  });
+});

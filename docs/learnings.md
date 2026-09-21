@@ -2230,6 +2230,17 @@ other shells and cover them as a single tested environment contract. Mount only
 the active file document so terminal continuity does not turn inactive file tabs
 into a background rendering cost.
 
+**Workbench terminal dots overlay agent turn state from OSC titles, never
+from a second IPC path (2026-09-21).** Claude Code and Codex CLI already write
+OSC 0/2 titles (braille spinner while a turn runs; asterisk idle marker or the
+project-only remainder when waiting at a prompt) onto the existing PTY stream.
+Parse those sequences in the UI output handler and store `agentActivity` on the
+tab. Do not treat OSC 9;4 progress as an agent until the session is already
+recognized — package managers emit it too. False "busy" is worse than staying
+lifecycle-green. Reset the stream when the PTY leaves `running` so a relaunch
+of the same tab id cannot inherit a spinner. Keep the overlay off unknown CLIs
+and ordinary shells.
+
 **Terminal defaults and explicit shell choices have different lifetimes
 (2026-07-20).** The primary New Terminal action follows the repository/global
 default at process start; a shell chosen from its split menu is stored in that

@@ -1345,6 +1345,11 @@ community plugins, performance and platform certification from Git feature gaps.
   light/dark 16-color ANSI palettes (`terminalTheme`; DAN-47), and `configure_terminal_environment`
   provides xterm/true-color capability and Claude Code full-dashboard/
   alternate-screen compatibility.
+- ☑ Workbench terminal tab dots distinguish Claude Code / Codex CLI turn
+  execution from turn-idle while the PTY stays `running`, using OSC 0/2
+  titles (and OSC 9;4 only after the CLI is recognized) already on the PTY
+  stream (`terminalAgentActivity`, `work-terminal-state.agent-busy`; DAN-75).
+  Plain shells keep dormant/running/starting/exited/error meaning.
 - ☑ `portable-pty` native runtime and Tauri channels: direct resolved argv,
   recovered PATH, bounded ordered output/input/resize, per-session reader,
   repository cwd/open validation, Unix process groups, Windows kill-on-close

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { settings } from '../lib/db';
 import { t } from '../lib/i18n';
+import { resetTerminalAgentStream } from '../lib/terminalAgentActivity';
 import {
   activateWorkPane,
   activateWorkTab,
@@ -20,6 +21,7 @@ import {
   terminalDescriptors,
   workPanes,
   type RepoWorkTabs,
+  type TerminalAgentActivity,
   type TerminalLifecycle,
   type WorkFileTab,
   type WorkFileMode,
@@ -73,6 +75,7 @@ interface WorkState {
     lifecycle: TerminalLifecycle,
     detail?: { exitCode?: number | null; error?: string | null },
   ): void;
+  setTerminalAgentActivity(repoPath: string, id: string, activity: TerminalAgentActivity | null): void;
   clearTerminalRuntime(repoPath: string, id: string): void;
   reconcile(repoPath: string, change: FilesTreeMutationChange): void;
   setFileDraft(repoPath: string, path: string, draft: WorkFileDraft | null): void;
@@ -154,7 +157,7 @@ export const useWork = create<WorkState>((set, get) => ({
       kind: 'terminal', id, repoPath,
       label: label ?? t('work.terminalLabel', { count: terminalNumber }),
       shell,
-      runtimeId: null, lifecycle: 'dormant', exitCode: null, error: null,
+      runtimeId: null, lifecycle: 'dormant', agentActivity: null, exitCode: null, error: null,
     };
     const next = { ...appendWorkTab(repo, tab, paneId), restored: true };
     set((state) => ({ repos: { ...state.repos, [repoPath]: next } }));
@@ -196,6 +199,7 @@ export const useWork = create<WorkState>((set, get) => ({
         label: t('work.terminalLabel', { count: terminalNumber }),
         runtimeId: null,
         lifecycle: 'dormant',
+        agentActivity: null,
         exitCode: null,
         error: null,
       };
@@ -281,14 +285,38 @@ export const useWork = create<WorkState>((set, get) => ({
   },
 
   setTerminalState(repoPath, id, lifecycle, detail = {}) {
+    if (lifecycle !== 'running') resetTerminalAgentStream(id);
     set((state) => ({
       repos: {
         ...state.repos,
         [repoPath]: mapTab(state.repos[repoPath], id, (tab) => tab.kind === 'terminal'
-          ? { ...tab, lifecycle, exitCode: detail.exitCode ?? tab.exitCode, error: detail.error ?? null }
+          ? {
+            ...tab,
+            lifecycle,
+            agentActivity: lifecycle === 'running' ? tab.agentActivity : null,
+            exitCode: detail.exitCode ?? tab.exitCode,
+            error: detail.error ?? null,
+          }
           : tab),
       },
     }));
+  },
+
+  setTerminalAgentActivity(repoPath, id, activity) {
+    set((state) => {
+      const repo = state.repos[repoPath];
+      const tab = repo?.tabs.find((item) => item.id === id);
+      if (!tab || tab.kind !== 'terminal' || tab.agentActivity === activity) return state;
+      if (activity !== null && tab.lifecycle !== 'running' && tab.lifecycle !== 'starting') return state;
+      return {
+        repos: {
+          ...state.repos,
+          [repoPath]: mapTab(repo, id, (item) => item.kind === 'terminal'
+            ? { ...item, agentActivity: activity }
+            : item),
+        },
+      };
+    });
   },
 
   clearTerminalRuntime(repoPath, id) {

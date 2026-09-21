@@ -16,6 +16,10 @@ export type WorkFileTab = {
 
 export type TerminalLifecycle = 'dormant' | 'starting' | 'running' | 'exited' | 'error';
 
+/** Overlay on a live PTY: agent executing a turn vs waiting at a prompt.
+ * Null means unknown / not a recognized agent CLI — keep lifecycle-only dots. */
+export type TerminalAgentActivity = 'busy' | 'idle';
+
 export type WorkTerminalTab = {
   kind: 'terminal';
   id: string;
@@ -26,6 +30,8 @@ export type WorkTerminalTab = {
   shell: EmbeddedShellChoice | null;
   runtimeId: string | null;
   lifecycle: TerminalLifecycle;
+  /** Runtime-only; not persisted. */
+  agentActivity: TerminalAgentActivity | null;
   exitCode: number | null;
   error: string | null;
 };
@@ -453,6 +459,7 @@ export function restoreTerminalDescriptors(descriptors: TerminalDescriptor[]): R
       shell: descriptor.shell ?? null,
       runtimeId: null,
       lifecycle: 'dormant' as const,
+      agentActivity: null,
       exitCode: null,
       error: null,
     })),
