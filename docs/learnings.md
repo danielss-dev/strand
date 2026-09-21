@@ -2252,9 +2252,13 @@ project-only remainder when waiting at a prompt) onto the existing PTY stream.
 Parse those sequences in the UI output handler and store `agentActivity` on the
 tab. Do not treat OSC 9;4 progress as an agent until the session is already
 recognized — package managers emit it too. False "busy" is worse than staying
-lifecycle-green. Reset the stream when the PTY leaves `running` so a relaunch
-of the same tab id cannot inherit a spinner. Keep the overlay off unknown CLIs
-and ordinary shells.
+lifecycle-green on a plain shell. Reset the stream when the PTY leaves
+`running` so a relaunch of the same tab id cannot inherit a spinner. Keep the
+overlay off unknown CLIs and ordinary shells. Presentation is Daniels' four
+colors: green (`--add`) done / plain running, blue (`--info`, fixed hue — not
+`--accent`) agent waiting, amber (`--warn`) agent working with pulse / starting,
+red (`--del`) failed. Do not pulse green. Clean `exited` with code 0 is green;
+non-zero is red.
 
 **Terminal defaults and explicit shell choices have different lifetimes
 (2026-07-20).** The primary New Terminal action follows the repository/global
