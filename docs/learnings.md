@@ -587,8 +587,12 @@ lives inside a Panel:
 }
 ```
 
-Existing sites: `.body`, `.lc-main`, `.lc-files`, `.main`, `.sidebar`.
-Copy the pattern when adding a new resizable region.
+Existing sites: `.body`, `.lc-main`, `.lc-files`, `.lc-files-section`,
+`.cd-files`, `.cd-diff`, `.main`, `.sidebar`.
+Copy the pattern when adding a new resizable region. The commit-detail
+changed-files list (DAN-79) is the same trap: `.cd-files` used to be
+`flex-shrink: 0` with no overflow, so a tall file list clipped inside
+the upper `Panel` instead of scrolling.
 
 ---
 

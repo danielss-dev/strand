@@ -46,7 +46,8 @@ system ported verbatim. No real feature surface yet.
 - ◐ **Commit graph**
   - ☑ Table view from `repo_log`
   - ☑ SVG lane/edge rendering with branch colors
-  - ☑ Inline commit detail panel (changed files, message body)
+  - ☑ Inline commit detail panel (changed files, message body; file list
+    scrolls in the upper split — DAN-79)
   - ☑ Keyboard navigation (focuses current commit on open; ↑/↓ moves row
     focus; Enter opens details; Esc closes details)
   - ☑ Multi-select (⌘/Ctrl-click toggles, Shift-click ranges, Shift+↑/↓
@@ -3140,6 +3141,12 @@ cross-platform performance certification remain explicit follow-ups.
   5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.
 
+
+**Commit-detail file list scrolls (2026-09-24):** The All Commits detail
+panel's changed-files list now fills the upper vertical split and scrolls
+when a commit touches more paths than fit (`.cd-files` `height: 100%` +
+`overflow-y: auto`; DAN-79). Diff pane scroll and the split resize handle
+are unchanged.
 
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and

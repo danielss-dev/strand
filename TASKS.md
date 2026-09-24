@@ -1086,6 +1086,7 @@ community plugins, performance and platform certification from Git feature gaps.
   exactly two expose Compare, and any selection exposes ordered bulk
   cherry-pick)
 - ☑ Inline commit detail panel (`CommitDetail.tsx` — subject, body, meta, file list, `<Diff />` of the focused file; right-side resizable Panel `strand:commits-split`)
+- ☑ Commit-detail changed-files list scrolls inside the upper vertical split (`.cd-files` `height: 100%` + `min-height: 0` + `overflow-y: auto`; `.cd-diff` fills the lower panel; DAN-79)
 - ☑ Keyboard nav (`Commits` focuses the current commit on open; ↑/↓ move
   row focus; Enter opens details; Esc closes details)
 - ☑ Commit-detail actions: Checkout (detached) + "Tag…" (opens the New-tag

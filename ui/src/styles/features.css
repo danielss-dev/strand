@@ -1444,9 +1444,13 @@
   font-family: var(--font-ui);
 }
 .cd-files {
+  /* Panel children are display:block — height:100% fills the upper split
+   * so overflow-y can scroll when the commit touches more files than fit. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 8px 0;
   border-bottom: 0.5px solid var(--border);
-  flex-shrink: 0;
 }
 .cd-file {
   display: grid;
@@ -1500,12 +1504,15 @@
   color: var(--del);
 }
 .cd-diff {
-  flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .cd-diff-scroll {
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 .cd-head-row {
   display: flex;

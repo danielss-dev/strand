@@ -424,7 +424,7 @@ export function CommitDetail({
         )}
       </div>
       </Panel>
-      <PanelResizeHandle className="rs-handle" />
+      <PanelResizeHandle className="rs-handle horiz" />
       <Panel defaultSize={64} minSize={25}>
       <div className="cd-diff">
         {focused ? (

@@ -318,7 +318,7 @@ the resolved app appearance automatically.
   defaults and the existing changed-file and full-diff dialog.
 - **Commit graph** — SVG lanes with branch/tag chips, revealable inline stash
   nodes with non-mutating diff inspection, a
-  resizable commit detail panel with lazy GPG/SSH/X.509 verification,
+  resizable commit detail panel with a scrollable changed-files list, lazy GPG/SSH/X.509 verification,
   subject/body copy, and exact patch export; in-graph search by message /
   author / hash; a multi-selection toolbar/menu for ordered cherry-pick,
   two-commit comparison, metadata copy, and patch-series export; a
