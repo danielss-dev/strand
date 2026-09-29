@@ -3279,6 +3279,22 @@ fn run_command_input(
     run_command_input_cancellable(cwd, program, args, envs, stdin_data, None)
 }
 
+// Observe exit without releasing the PID: process-group cleanup must happen
+// before Child::wait/try_wait can reap the leader and permit PID reuse.
+#[cfg(unix)]
+fn provider_exited(child: &std::process::Child) -> std::io::Result<bool> {
+    loop {
+        // SAFETY: info is initialized and writable; this queries our own child
+        // without reaping it or waiting for a running process.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let result = unsafe { libc::waitid(libc::P_PID, child.id(), &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT) };
+        if result == 0 { return Ok(unsafe { info.si_pid() } != 0); }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted { return Err(error); }
+    }
+}
+
 fn run_command_input_cancellable(
     cwd: &str,
     program: &str,
@@ -3369,9 +3385,18 @@ fn run_command_input_cancellable(
 
     let started = Instant::now();
     let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
+        #[cfg(unix)]
+        let exited = provider_exited(&child);
+        #[cfg(not(unix))]
+        let exited = child.try_wait().map(|status| status.is_some());
+        match exited {
+            Ok(true) => {
+                // Unix retains the unreaped leader until this signal; Windows
+                // targets the owned job handle, never a recycled numeric PID.
+                stop(&mut child);
+                break child.wait().map_err(|error| format!("{program} wait failed: {error}"))?;
+            }
+            Ok(false) => {}
             Err(error) => {
                 stop(&mut child);
                 let _ = child.wait();
@@ -3395,9 +3420,7 @@ fn run_command_input_cancellable(
         }
         thread::sleep(Duration::from_millis(25));
     };
-    // A CLI can exit while a helper still owns the pipes. Drain only after
-    // stopping the complete owned process tree, also on natural completion.
-    stop(&mut child);
+    // The owned tree has stopped, so helpers cannot hold pipes.
     let stdout = stdout_reader
         .join()
         .map_err(|_| format!("{program} output reader failed"))?;

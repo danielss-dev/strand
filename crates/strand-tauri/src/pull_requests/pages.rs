@@ -621,6 +621,22 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn provider_exit_observation_retains_leader_until_cleanup() {
+        let mut child = std::process::Command::new("/bin/sh")
+            .args(["-c", "exit 7"]).spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !super::super::provider_exited(&child).unwrap() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        // A second observation must still find a waitable child. If the first
+        // reaped it, this returns ECHILD and its PID could already be reused.
+        assert!(super::super::provider_exited(&child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(7));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn natural_exit_stops_helpers_before_joining_provider_output() {
         let start = Instant::now();
         let output = run_command_input_cancellable(
