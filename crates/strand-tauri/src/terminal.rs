@@ -331,24 +331,20 @@ fn terminal_reader(
             RuntimeEvent::ReaderDone(error) => reader_done = Some(error),
             RuntimeEvent::Exit(result) => exit_result = Some(result),
         }
-        if let (Some(result), Some(_)) = (&exit_result, &reader_done) {
-            if !session.closed.load(Ordering::Acquire) {
-                match result {
-                    Ok(code) => {
-                        let _ = on_event.send(TerminalEvent::Exit { code: *code });
-                    }
-                    Err(message) => {
-                        let _ = on_event.send(TerminalEvent::Error {
-                            message: message.clone(),
-                        });
-                    }
-                }
-            }
+        if exit_result.is_some() && reader_done.is_some() {
             break;
         }
     }
     if let Ok(mut all) = sessions.lock() {
         all.remove(&id);
+    }
+    // Observers of Exit must already see this session as stopped.
+    if !session.closed.load(Ordering::Acquire) {
+        match exit_result {
+            Some(Ok(code)) => { let _ = on_event.send(TerminalEvent::Exit { code }); }
+            Some(Err(message)) => { let _ = on_event.send(TerminalEvent::Error { message }); }
+            None => {}
+        }
     }
 }
 
@@ -803,16 +799,23 @@ mod tests {
         );
         #[cfg(unix)]
         let command = "/bin/sh -c 'printf strand-terminal'".to_string();
+        let manager = TerminalManager::default();
+        let observed_manager = manager.clone();
+        let observed_path = dir.path().to_string_lossy().into_owned();
+        let count_at_exit = Arc::new(std::sync::atomic::AtomicUsize::new(usize::MAX));
+        let observed_count = Arc::clone(&count_at_exit);
         let (send, receive) = std::sync::mpsc::channel();
         let channel = Channel::new(move |body| {
             if let tauri::ipc::InvokeResponseBody::Json(json) = body {
                 if let Ok(event) = serde_json::from_str::<TerminalEvent>(&json) {
+                    if matches!(event, TerminalEvent::Exit { .. }) {
+                        observed_count.store(observed_manager.count(&observed_path), Ordering::Release);
+                    }
                     let _ = send.send(event);
                 }
             }
             Ok(())
         });
-        let manager = TerminalManager::default();
         let handle = manager
             .create(
                 dir.path().to_string_lossy().into_owned(),
@@ -850,6 +853,7 @@ mod tests {
             );
         }
         assert!(String::from_utf8_lossy(&output).contains("strand-terminal"));
+        assert_eq!(count_at_exit.load(Ordering::Acquire), 0);
         assert_eq!(manager.count(&dir.path().to_string_lossy()), 0);
         manager.close(&handle.id).unwrap(); // natural exit made close idempotent
     }

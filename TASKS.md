@@ -139,6 +139,9 @@ Evidence and acceptance criteria: [`docs/main-audit-2026-09-29.md`](./docs/main-
   refresh the reset index before collision checks after external Git changes
   (`Index::read(true)`, stale-index and nested-path regressions). The claimed
   Windows separator bug was disproved against git2 0.19's path conversion.
+- ☑ **PR #138 Linux CI follow-up.** Remove naturally exited terminal sessions
+  before publishing Exit/Error, so observers cannot see a dead terminal as
+  active (`terminal_reader`; synchronous count-at-exit regression).
 - ◐ **Planning reconciliation.** Resolved stale PRD licensing/pricing and
   ROADMAP PR-review claims; protocol-7 availability is verified. Current native
   release/performance certification and historical external publication/Store/SEO

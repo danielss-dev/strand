@@ -3114,6 +3114,8 @@ joins an owned Job Object, then resumes so helper cleanup survives leader exit.
 Reset collision checks refresh the index after external Git changes. Nested
 tracked paths, stale-index collisions and dead-leader cleanup have regression
 coverage; Windows CI runs the relevant native test subsets.
+Linux CI also exposed a terminal exit-notification ordering race; the registry
+now removes the completed session before notifying observers.
 Native packaged-app and production performance certification remain open.
 
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on

@@ -326,3 +326,14 @@ job module cross-compiles for x86_64-pc-windows-msvc; runtime verification is
 delegated to the Windows CI reset, cancellation and provider test subsets.
 The preceding PR head passed all five hosted checks; the revised head requires
 a fresh run. No frontend behavior or TypeScript code changed in this follow-up.
+
+The first revised Linux run exposed a pre-existing terminal lifecycle race:
+`pty_streams_ordered_output_then_exit` received Exit while the session count
+was still one. `terminal_reader` now removes the session before publishing
+Exit/Error. The regression observes the count synchronously in the event
+callback, so it no longer relies on the receiving thread winning a race.
+That deterministic test fails against the original implementation and passes
+after the ordering fix. The Windows reset, cancellation and provider regression
+subsets passed on `6e97c73`, including the dead-leader helper test. macOS tests
+and strict Clippy also passed on that head. The terminal ordering fix triggers
+another CI run; packaged-app performance certification remains separate.
