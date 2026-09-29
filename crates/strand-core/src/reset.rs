@@ -59,6 +59,7 @@ impl Repo {
         let mut snapshot_oid = None;
         if matches!(mode, ResetMode::Hard) {
             if self.sparse_enabled() { self.sparse_read_index(repo)?; }
+            else { repo.index()?.read(true)?; }
             guard_reset_tree(repo, &repo.index()?, &obj.peel_to_tree()?, self.path(), std::path::Path::new(""))?;
             let dirty = if self.sparse_enabled() {
                 self.status()?.iter().any(|entry| entry.kind != crate::status::StatusKind::Untracked)
@@ -184,6 +185,39 @@ mod tests {
         git(dir, &["add", file]);
         git(dir, &["commit", "-q", "-m", msg]);
         git(dir, &["rev-parse", "HEAD"])
+    }
+
+    #[test]
+    fn hard_reset_refreshes_index_before_checking_untracked_collisions() {
+        let (repo, dir) = scratch_repo();
+        let target = write_commit(&dir, "collision", "committed", "target");
+        // Prime the cached libgit2 index, then change it through external Git.
+        repo.reset(&target, ResetMode::Hard).unwrap();
+        git(&dir, &["rm", "collision"]);
+        git(&dir, &["commit", "-qm", "remove collision"]);
+        std::fs::write(dir.join("collision"), "keep local").unwrap();
+        let head = git(&dir, &["rev-parse", "HEAD"]);
+        assert!(repo.reset(&target, ResetMode::Hard).is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("collision")).unwrap(), "keep local");
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), head);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn hard_reset_accepts_nested_tracked_paths_and_directory_replacements() {
+        let (repo, dir) = scratch_repo();
+        std::fs::create_dir_all(dir.join("nested/deeper")).unwrap();
+        let first = write_commit(&dir, "nested/deeper/file", "first", "nested base");
+        write_commit(&dir, "nested/deeper/file", "second", "nested update");
+        repo.reset(&first, ResetMode::Hard).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("nested/deeper/file")).unwrap(), "first");
+        // Exercise the other guard: tracked descendants may be replaced by a file.
+        git(&dir, &["rm", "-r", "nested"]);
+        let file_commit = write_commit(&dir, "nested", "replacement", "replace directory");
+        repo.reset(&first, ResetMode::Hard).unwrap();
+        repo.reset(&file_commit, ResetMode::Hard).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("nested")).unwrap(), "replacement");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
