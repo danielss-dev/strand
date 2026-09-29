@@ -232,7 +232,8 @@ Use **Previous page** / **Next page** for larger lists and **Open repository**
 to work in a module's own tab.
 
 Progress and errors remain visible. **Cancel operation** stops Git and its
-helpers. Completed clones and local objects remain available: refresh, inspect
+helpers, including helpers left running after the parent exits on Windows.
+Completed clones and local objects remain available: refresh, inspect
 the current state, correct the error and retry. Git's transport restrictions
 still apply, including restrictions on local-file submodule URLs.
 

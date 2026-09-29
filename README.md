@@ -123,7 +123,8 @@ the resolved app appearance automatically.
   literally, dangling symlinks stage as links, and hard reset refuses collisions
   with untracked or ignored data. Rename/move protects Git metadata, and Ignore
   refuses symlinked `.gitignore` files. Working-tree text previews read a bounded
-  prefix of large files.
+  prefix of large files. Network cancellation stops Git helpers even after
+  their parent exits, including on Windows.
 - **Workbench (⌘1)** — Strand's default workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane

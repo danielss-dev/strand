@@ -642,69 +642,7 @@ pub(crate) fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
 }
 
 #[cfg(windows)]
-pub(crate) struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
-
-#[cfg(windows)]
-impl WindowsJob {
-    pub(crate) fn kill_on_close(&self) -> Result<(), String> {
-        use windows_sys::Win32::System::JobObjects::{
-            SetInformationJobObject, JobObjectExtendedLimitInformation,
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        };
-        // SAFETY: the initialized structure and live job handle match the API.
-        unsafe {
-            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            if SetInformationJobObject(self.0, JobObjectExtendedLimitInformation,
-                (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32) == 0 {
-                return Err("Could not configure action cleanup on app exit".into());
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn assign(child: &Child) -> Result<Self, String> {
-        use windows_sys::Win32::Foundation::CloseHandle;
-        use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
-        use windows_sys::Win32::System::Threading::{
-            OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
-        };
-
-        // SAFETY: Win32 handles are checked and closed on every failure path.
-        unsafe {
-            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if job.is_null() {
-                return Err("Could not create a Windows job for the AI provider".into());
-            }
-            let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, child.id());
-            if process.is_null() {
-                CloseHandle(job);
-                return Err("Could not open the AI provider process for cancellation".into());
-            }
-            let assigned = AssignProcessToJobObject(job, process);
-            CloseHandle(process);
-            if assigned == 0 {
-                CloseHandle(job);
-                return Err("Could not attach the AI provider to its cancellation job".into());
-            }
-            Ok(Self(job))
-        }
-    }
-
-    fn terminate(&self) {
-        // SAFETY: `self.0` is a live job handle owned by this wrapper.
-        unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1) };
-    }
-}
-
-#[cfg(windows)]
-impl Drop for WindowsJob {
-    fn drop(&mut self) {
-        // SAFETY: this wrapper uniquely owns the job handle.
-        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
-    }
-}
+pub(crate) use strand_core::windows_job::WindowsJob;
 
 /// Spawn a CLI detached (login flows that open a browser). Keeps default
 /// console flags: sign-in may need an interactive picker, so unlike
