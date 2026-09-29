@@ -110,8 +110,19 @@ impl Repo {
     pub fn file_content(&self, rel_path: &str, rev: Option<&str>) -> Result<FileContent> {
         match rev {
             None => {
+                use std::io::Read;
                 let full = self.safe_workdir_path(rel_path)?;
-                let bytes = std::fs::read(&full)?;
+                if !std::fs::metadata(&full)?.is_file() {
+                    return Err(Error::Other(format!("{rel_path} is not a regular file")));
+                }
+                let file = std::fs::File::open(&full)?;
+                if !file.metadata()?.is_file() {
+                    return Err(Error::Other(format!("{rel_path} is not a regular file")));
+                }
+                // One extra byte establishes truncation even if the file grows
+                // after stat. Never allocate the complete file to show a prefix.
+                let mut bytes = Vec::new();
+                file.take((MAX_CONTENT_BYTES + 1) as u64).read_to_end(&mut bytes)?;
                 Ok(build_content(rel_path, &bytes, looks_binary(&bytes)))
             }
             Some(spec) => {
@@ -257,7 +268,12 @@ const MARKER: &str = "\u{1e}C\u{1e}";
 
 fn build_content(path: &str, bytes: &[u8], binary: bool) -> FileContent {
     let truncated = bytes.len() > MAX_CONTENT_BYTES;
-    let slice = &bytes[..bytes.len().min(MAX_CONTENT_BYTES)];
+    let mut slice = &bytes[..bytes.len().min(MAX_CONTENT_BYTES)];
+    if truncated {
+        if let Err(error) = std::str::from_utf8(slice) {
+            if error.error_len().is_none() { slice = &slice[..error.valid_up_to()]; }
+        }
+    }
     let text = if binary {
         String::new()
     } else {
@@ -509,4 +525,30 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn content_reads_are_bounded_and_preserve_utf8_boundaries() {
+        use std::io::Write;
+        let (repo, dir) = scratch();
+        let mut file = std::fs::File::create(dir.join("large.txt")).unwrap();
+        file.write_all(&vec![b'x'; MAX_CONTENT_BYTES - 1]).unwrap();
+        file.write_all("😀tail".as_bytes()).unwrap();
+        // Sparse large fixture: a complete read would allocate 1 GiB.
+        file.set_len(1 << 30).unwrap();
+        let content = repo.file_content("large.txt", None).unwrap();
+        assert!(content.truncated);
+        assert!(!content.editable);
+        assert!(!content.binary);
+        assert_eq!(content.text.len(), MAX_CONTENT_BYTES - 1);
+        assert!(!content.text.contains('\u{fffd}'));
+        std::fs::write(dir.join("exact.txt"), vec![b'a'; MAX_CONTENT_BYTES]).unwrap();
+        let exact = repo.file_content("exact.txt", None).unwrap();
+        assert!(exact.editable);
+        assert!(!exact.truncated);
+        std::fs::write(dir.join("binary"), [0, 1, 2]).unwrap();
+        assert!(repo.file_content("binary", None).unwrap().binary);
+        assert!(repo.file_content(".", None).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }
