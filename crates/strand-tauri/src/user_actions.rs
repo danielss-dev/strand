@@ -234,6 +234,9 @@ mod tests {
                 child.stdout(Stdio::inherit()).stderr(Stdio::inherit());
                 child.spawn().unwrap();
                 println!("spawned child");
+                use std::io::Write;
+                std::io::stdout().flush().unwrap();
+                std::fs::write(std::env::var("STRAND_ACTION_READY").unwrap(), "ready").unwrap();
                 std::thread::sleep(Duration::from_secs(60));
             }
             "parent-exit" => {
@@ -324,15 +327,23 @@ mod tests {
     fn cancellation_stops_descendants_and_pre_cancel_never_spawns() {
         let dir = tempfile::tempdir().unwrap();
         let marker = dir.path().join("marker");
+        let ready = dir.path().join("ready");
         let mut command = child_command("descendant");
         command.env("STRAND_ACTION_MARKER", &marker);
+        command.env("STRAND_ACTION_READY", &ready);
         let cancel = AiCancelHandle::new();
         let trigger = cancel.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(700));
+        let watcher = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !ready.exists() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let started = ready.exists();
             trigger.cancel();
+            started
         });
-        let output = capture_command(command, &cancel, Duration::from_secs(10)).unwrap();
+        let output = capture_command(command, &cancel, Duration::from_secs(15)).unwrap();
+        assert!(watcher.join().unwrap(), "child did not reach the cancellation checkpoint: {}", output.stderr);
         assert_eq!(output.status, "cancelled");
         assert!(output.stdout.contains("spawned child"));
         std::thread::sleep(Duration::from_secs(2));

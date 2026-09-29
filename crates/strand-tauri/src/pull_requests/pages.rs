@@ -587,27 +587,46 @@ mod tests {
 
     #[test]
     fn cancellation_terminates_an_active_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
         let cancelled = Arc::new(AtomicBool::new(false));
         let signal = cancelled.clone();
         let worker = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(250));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !ready.exists() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            let started = ready.exists();
+            let cancelled_at = Instant::now();
             signal.store(true, Ordering::Relaxed);
+            assert!(started, "child did not reach its cancellation checkpoint");
+            cancelled_at
         });
-        let start = Instant::now();
         #[cfg(windows)]
         let result = run_command_input_cancellable(
-            ".",
+            dir.path().to_str().unwrap(),
             "powershell",
-            &["-NoProfile", "-Command", "Start-Sleep -Seconds 20"],
+            &["-NoProfile", "-Command", "Set-Content ready ready; Start-Sleep -Seconds 20"],
             &[],
             None,
             Some(&cancelled),
         );
         #[cfg(not(windows))]
         let result =
-            run_command_input_cancellable(".", "sleep", &["20"], &[], None, Some(&cancelled));
-        worker.join().unwrap();
+            run_command_input_cancellable(dir.path().to_str().unwrap(), "/bin/sh", &["-c", "printf ready > ready; sleep 20"], &[], None, Some(&cancelled));
+        let start = worker.join().unwrap();
         assert!(result.unwrap_err().contains("cancelled"));
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn natural_exit_stops_helpers_before_joining_provider_output() {
+        let start = Instant::now();
+        let output = run_command_input_cancellable(
+            ".", "/bin/sh", &["-c", "sleep 30 & printf done"], &[], None, None,
+        ).unwrap();
+        assert_eq!(output, b"done");
+        assert!(start.elapsed() < Duration::from_secs(15));
     }
 }

@@ -3316,6 +3316,10 @@ fn run_command_input_cancellable(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(unix)] {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command.spawn().map_err(|e| {
         let install = if program == "gh" {
             "Install GitHub CLI and run `gh auth login`"
@@ -3324,6 +3328,24 @@ fn run_command_input_cancellable(
         };
         format!("Could not start {program}: {e}. {install}.")
     })?;
+    #[cfg(windows)]
+    let job = match crate::ai::bin::WindowsJob::assign(&child).and_then(|job| {
+        job.kill_on_close()?;
+        Ok(job)
+    }) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
+    let stop = |child: &mut std::process::Child| {
+        #[cfg(unix)]
+        crate::ai::bin::kill_process_tree(child);
+        #[cfg(windows)]
+        crate::ai::bin::kill_process_tree(child, &job);
+    };
 
     let mut stdin_writer = child.stdin.take().map(|mut stdin| {
         let data = stdin_data.unwrap_or_default().to_vec();
@@ -3351,7 +3373,7 @@ fn run_command_input_cancellable(
             Ok(Some(status)) => break status,
             Ok(None) => {}
             Err(error) => {
-                let _ = child.kill();
+                stop(&mut child);
                 let _ = child.wait();
                 let _ = stdout_reader.join();
                 let _ = stderr_reader.join();
@@ -3362,7 +3384,7 @@ fn run_command_input_cancellable(
             }
         }
         if started.elapsed() >= COMMAND_TIMEOUT || cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
-            let _ = child.kill();
+            stop(&mut child);
             let _ = child.wait();
             let _ = stdout_reader.join();
             let _ = stderr_reader.join();
@@ -3373,6 +3395,9 @@ fn run_command_input_cancellable(
         }
         thread::sleep(Duration::from_millis(25));
     };
+    // A CLI can exit while a helper still owns the pipes. Drain only after
+    // stopping the complete owned process tree, also on natural completion.
+    stop(&mut child);
     let stdout = stdout_reader
         .join()
         .map_err(|_| format!("{program} output reader failed"))?;

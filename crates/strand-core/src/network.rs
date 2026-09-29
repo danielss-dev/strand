@@ -62,15 +62,17 @@ impl CancelHandle {
 // Git LFS and submodule helpers inherit the pipes. Killing only git can leave
 // those helpers transferring (and the reader waiting for EOF) after Cancel.
 pub(crate) fn kill_git_tree(child: &mut std::process::Child) {
-    if matches!(child.try_wait(), Ok(Some(_))) { return; }
     #[cfg(windows)]
     {
+        if matches!(child.try_wait(), Ok(Some(_))) { return; }
         use std::os::windows::process::CommandExt;
         let system = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
         let _ = std::process::Command::new(Path::new(&system).join("System32/taskkill.exe"))
             .args(["/PID", &child.id().to_string(), "/T", "/F"])
             .creation_flags(0x0800_0000).stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
+    // On Unix a helper can retain the pipes after Git has exited. Signal the
+    // owned group before reaping its leader, including this natural-exit case.
     #[cfg(unix)]
     unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
     let _ = child.kill();
@@ -855,10 +857,28 @@ mod bounded_process_tests {
         let cancel = CancelHandle::new();
         let mut cancelled_at = None;
         let result = run_git_streaming(std::env::temp_dir().as_path(),
-            &["-c", "alias.strand-cancel-test=!echo strand-ready >&2; sleep 60", "strand-cancel-test"],
+            &["-c", "alias.strand-cancel-test=!sleep 60 & echo strand-ready >&2; wait", "strand-cancel-test"],
             |p| { if p.raw.contains("strand-ready") { cancelled_at = Some(std::time::Instant::now()); cancel.cancel(); } }, Some(&cancel));
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(cancelled_at.unwrap().elapsed().as_secs() < 15, "descendants kept pipes open after cancellation");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_kills_helpers_after_git_exits() {
+        let cancel = CancelHandle::new();
+        let mut cancelled_at = None;
+        let result = run_git_streaming(std::env::temp_dir().as_path(),
+            &["-c", "alias.strand-cancel-test=!sleep 60 & echo strand-ready >&2", "strand-cancel-test"],
+            |p| {
+                if p.raw.contains("strand-ready") {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    cancelled_at = Some(std::time::Instant::now());
+                    cancel.cancel();
+                }
+            }, Some(&cancel));
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(cancelled_at.unwrap().elapsed().as_secs() < 15);
     }
 }
 

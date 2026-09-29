@@ -898,23 +898,27 @@ mod tests {
     ) {
         let cancel = AiCancelHandle::new();
         let worker_cancel = cancel.clone();
-        let (started_tx, started_rx) = std::sync::mpsc::sync_channel(0);
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().to_path_buf();
         let worker = std::thread::spawn(move || {
-            started_tx.send(()).unwrap();
             run_capture_cancellable(
                 Path::new(program),
                 args,
-                None,
+                Some(&cwd),
                 None,
                 SUGGEST_TIMEOUT,
                 Some(&worker_cancel),
             )
         });
-        started_rx.recv().unwrap();
-        std::thread::sleep(Duration::from_millis(100));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let ready = dir.path().join("ready");
+        while !ready.exists() && !worker.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         let cancelled_at = Instant::now();
         cancel.cancel();
         let err = worker.join().unwrap().unwrap_err();
+        assert!(ready.exists(), "child did not reach its cancellation checkpoint: {err}");
         assert_eq!(err, "cancelled");
         assert!(cancelled_at.elapsed() < Duration::from_secs(3));
     }
@@ -922,7 +926,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn run_capture_cancels_process_group() {
-        assert_process_group_cancelled_promptly("/bin/sh", &["-c", "sleep 30 & wait"]);
+        assert_process_group_cancelled_promptly("/bin/sh", &["-c", "sleep 30 & printf ready > ready; wait"]);
     }
 
     #[cfg(windows)]
@@ -930,7 +934,7 @@ mod tests {
     fn run_capture_cancels_process_group() {
         assert_process_group_cancelled_promptly(
             "cmd.exe",
-            &["/C", "ping", "-n", "30", "127.0.0.1"],
+            &["/C", "echo ready>ready & ping -n 30 127.0.0.1"],
         );
     }
 }
