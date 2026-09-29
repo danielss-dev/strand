@@ -1,5 +1,31 @@
 # Learnings
 
+## File actions must preserve literal entries and threatened bytes (2026-09-29)
+
+Audit probes showed that libgit2 checkout/reset pathspecs expand selected
+filenames such as `[id].tsx` to unrelated `i.tsx`. An exact file action needs
+literal matching; `--` only separates options and does not by itself disable
+Git pathspec magic. Keep bulk operations batched when repairing this.
+
+A hard reset can overwrite untracked or ignored entries that obstruct its
+target tree. A tracked-only dirty check/snapshot cannot promise recovery for
+those bytes. Inspect target collisions before destructive dispatch.
+
+Use directory-entry metadata for symlink staging: a missing referent does not
+make the link deleted. Working-tree containment alone also does not exclude
+`.git`, and direct joins for special files such as `.gitignore` bypass the
+existing symlink boundary. Regression coverage must include these cases.
+The git2 0.19 checkout binding does not expose literal-pathspec mode. Keep
+ordinary filenames on the existing in-process path; special-name batches use
+one NUL-delimited Git operation, with `--literal-pathspecs` for reset and exact
+`checkout-index --stdin` filenames for discard.
+
+macOS tests must canonicalize Unix paths used in `includeIf.gitdir`, explicitly
+put accepted test-server sockets into blocking mode, and wait for subprocess
+readiness before measuring cancellation. A timer started before spawn measures
+OS launch latency as well as cancellation. On Unix, signal an owned process
+group even when its leader exited: descendants can still own the pipes.
+
 ## Programmatic clipboard is native so the OS names Strand (2026-09-21)
 
 `navigator.clipboard` in the Tauri webview is attributed to the web origin

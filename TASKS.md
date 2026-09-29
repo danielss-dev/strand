@@ -94,6 +94,50 @@ Detailed comparison and sequencing: [`docs/git-client-1.0-audit.md`](./docs/git-
 
 ## strand-core (Rust git engine)
 
+### Main audit follow-ups (2026-09-29)
+
+Evidence and acceptance criteria: [`docs/main-audit-2026-09-29.md`](./docs/main-audit-2026-09-29.md).
+
+- ☑ Audit latest main for correctness, safety, performance and remaining work
+  (`main-audit-2026-09-29.md`; disposable engine probes, frontend/build checks,
+  Rust failure triage and live protocol-7 availability check).
+- ☑ **A01 / P1 — Literal file targeting.** Prevent discard/unstage from
+  expanding selected filenames as wildcard pathspecs; regress `[id].tsx`
+  alongside `i.tsx` through single and bulk actions (`run_literal_paths`,
+  literal-path regression tests; ordinary batches remain in-process).
+- ☑ **A02 / P1 — Hard-reset collision recovery.** Refuse or preserve
+  untracked/ignored content threatened by the target tree before reset; match
+  the dialog's recovery promise to actual coverage (`guard_reset_tree`,
+  `guard_replaced_directory`, `ResetDialog`; normal/sparse/LFS fixtures).
+- ☑ **A03 / P1 — Ignore-file write boundary.** Refuse symlink/nonregular
+  `.gitignore` targets and external-path writes (`Repo::gitignore_add`).
+- ☑ **A04 / P2 — Dangling-symlink staging.** Use entry existence rather than
+  referent existence (`entry_exists`; new/modified single/batch link regressions).
+- ☑ **A05 / P2 — Bound file content reads.** Enforce the content cap before
+  allocation/read (`file_content` bounded prefix; 1 GiB/UTF-8 regression,
+  18.6 MB peak RSS for the test process).
+- ☑ **A06 / P2 — Administrative rename destinations.** Reject moves into/out
+  of `.git` and its aliases before filesystem mutation (`guard_move_metadata`;
+  ordinary and linked-worktree regression tests).
+- ☑ **A07 / P2 — Missing-worktree path identity.** Make registered missing
+  targets match macOS path aliases without relaxing recovery guards
+  (`resolve_missing_path`; existing macOS removal and archive guard tests pass).
+- ☑ **Validation follow-up.** Fixed signing/identity/LFS test isolation,
+  blocking accepted sockets on macOS, and cancellation readiness; added macOS
+  Rust CI (`ci.yml` matrix, fixture configuration and readiness checkpoints).
+  Full core/integration and Tauri suites pass; optional integrations remain
+  explicitly ignored. Detailed evidence is in the audit implementation update.
+- ☑ **Cancellation follow-up.** Stop Unix Git helpers after leader exit, and
+  own provider-command process trees through cancellation, timeout and natural
+  completion (`kill_git_tree`, `run_command_input_cancellable`; helper regressions).
+- ☐ Bound hosted-provider CLI stdout/stderr while reading, with explicit
+  overflow cancellation (`run_command_input_cancellable` still reads to EOF;
+  separate from the completed process-tree cancellation repair).
+- ◐ **Planning reconciliation.** Resolved stale PRD licensing/pricing and
+  ROADMAP PR-review claims; protocol-7 availability is verified. Current native
+  release/performance certification and historical external publication/Store/SEO
+  rows still require platform or provider evidence (audit implementation update).
+
 ### Git-client feature audit follow-ups (2026-09-06)
 
 - ☑ Audit the current Git-client feature surface against implementation

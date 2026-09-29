@@ -368,7 +368,8 @@ Achieving these is the entire reason for choosing Rust + `gix` + Tauri over the 
 - **GPG / signing:** never store passphrases. Delegate to the user's `gpg-agent` / SSH agent.
 - **Code execution:** hooks run as `git` always has — Strand doesn't sandbox them but warns clearly when a fresh clone has them.
 - **Auto-update:** signed update manifests; refusal to apply unsigned updates.
-- **Open source:** plan to open-source the app (license TBD, likely AGPL or source-available like Sublime Merge). Decided before launch.
+- **Open source:** AGPL-3.0 public source with a dual-license commercial option
+  (decided 2026-06-12). Contributor terms remain a separate release gate.
 
 ---
 
@@ -402,7 +403,7 @@ not block stable.
 | Risk                                                            | Mitigation                                                                                                         |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `@pierre/trees` is still v1.0.0-beta — API may change           | Pin versions; contribute upstream; budget for one major-version migration before 1.0.                              |
-| Pierre libraries' licenses not yet confirmed for commercial use | **Open Q1: verify licenses** before committing. Both are described as "open source" but the exact license matters. |
+| Pierre library licensing | Cleared for use on 2026-05-25; see TASKS Blockers. |
 | `gix` does not yet cover 100% of write operations               | Hybrid with `git2` and shell-out is fine and proven (Sublime Merge does it).                                       |
 | Interactive rebase UX is hard                                   | Plan a custom sequence-editor protocol with the shelled-out `git rebase -i`. Tower's implementation is the bar.    |
 | Windows unmanaged MSI/EXE signing requires an EV/Authenticode identity | Preferred distribution uses the Partner Center-signed Store MSIX; obtain a separate identity only if promoting the unmanaged fallback. |
@@ -411,13 +412,13 @@ not block stable.
 
 ### Open questions
 
-1. **Pierre library licensing** — confirm both libraries are usable in a commercial desktop app, or arrange a license.
-2. **Open source or source-available?** — affects positioning and contribution model. Decide before 0.5.
+1. **Pierre library licensing** — resolved 2026-05-25; both libraries cleared for use.
+2. **Open source or source-available?** — resolved: AGPL-3.0 with a commercial dual-license option; contributor terms remain open.
 3. **AI features?** — commit message suggestions, conflict resolution hints, PR description drafts. Not in v1, but worth designing the extension point now.
 4. **Hosted code review scope.** — Decided 2026-07-13: build a provider-neutral
    PR workspace. GitHub and Azure DevOps ship first; GitLab and Bitbucket are
    follow-on adapters. The provider remains the source of truth.
-5. **Pricing model?** — Tower-style subscription, Sublime Merge-style one-time, or free / OSS. Affects everything downstream.
+5. **Pricing model** — resolved: free for individuals, optional one-time commercial support license for companies, without feature gating or nag dialogs.
 
 ---
 

@@ -16,6 +16,9 @@ Right-click a single file in Local Changes or Review and choose **Open in editor
 
 - The view opens with a "show all" stacked diff of every changed file. Clicking the Unstaged or Staged column title re-selects that side's full changeset, and selecting a folder row aggregates the diffs beneath it.
 - Stage or unstage a whole file from its row, or use **Stage all** / **Unstage all** for the whole side.
+  Filenames such as `[id].tsx` are treated literally; selecting one file does
+  not select other matching names. A symlink can be staged even when its target
+  does not exist.
 - Multi-select files and folders with `Mod`-click or Shift-click. Stage, Unstage, Stash, and Discard act on every selected file plus every changed file beneath each selected folder.
 - **Block and line staging**: each change block in the diff has inline **Stage** and **Discard** buttons (**Unstage** on the staged side). Drag across changed line numbers to act on a contiguous range, or choose **Lines…** for a keyboard-operable checklist that can select any combination of deleted and added lines. The action labels show the selected-line count.
 - **Discarding a change block or selected lines is recoverable**: it shows an Undo toast for a few seconds. Whole-file and bulk discards are immediate and permanent — there is no Undo toast and no automatic safety stash — so stash first if you might want the changes back.
@@ -53,11 +56,15 @@ Open a row's context menu with right-click, the Menu key, or `Shift+F10`:
   folder row.
 - A file can jump directly to **Open file history** or **Open blame**.
 - **New file here…**, **New folder here…**, and **Rename / move…** act relative
-  to the selected row.
+  to the selected row. Rename/move refuses paths inside Git metadata, including
+  aliases into `.git`.
 - Copy one or several relative paths, or native absolute paths suitable for
   the current operating system.
 - **Delete file/folder** requires a second confirmation click. Tracked entries
   become ordinary working-tree deletions; the index is not changed.
+
+**Ignore** refuses to edit a `.gitignore` that is a symlink, so the action
+cannot change the file that link points to.
 
 The Files tree uses the repository's ignored-inclusive local listing directly;
 it does not first substitute the Git snapshot while that listing loads. Current

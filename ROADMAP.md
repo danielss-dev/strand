@@ -3087,6 +3087,28 @@ throwing. Fetch/pull/push progress and clone/open `ProgressPopup` are unchanged.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
+**Main hardening audit kick (2026-09-29):** Audited 1.7.2 at `f5ed9a8` after
+pulling main. Real-repository probes reproduced overly broad discard/unstage,
+unprotected untracked hard-reset collisions, ignore-file symlink writes,
+dangling-link staging and administrative rename destinations. Source review
+also found an unbounded content read; macOS tests reproduce missing-worktree
+path-alias failure. `docs/main-audit-2026-09-29.md` records seven prioritized
+fixes and remaining platform/performance/product work. Frontend tests/build,
+Rust check and release-policy checks pass; Rust test failures are explicitly
+triaged, not declared green. TASKS carries the open fixes and validation work.
+This is an audit/planning milestone; no application fixes shipped in this pass.
+
+**Main audit repairs implemented (2026-09-29):** A01–A07 now have native
+fixes and regression coverage: literal special-name batches, untracked/ignored
+hard-reset collision guards, symlink-safe Ignore edits, dangling-link staging,
+bounded text reads, protected metadata moves and missing-worktree path identity.
+Mac test fixtures now use canonical includeIf paths, local signing/LFS setup,
+blocking accepted sockets and child-readiness checkpoints. Rust CI adds macOS.
+Cancellation also stops Unix helpers after Git exits and complete provider CLI
+process trees before joining pipes. Core/integration, Tauri, frontend, typecheck,
+Rust check and clippy pass locally; the audit records counts and limitations.
+Native packaged-app and production performance certification remain open.
+
 **Performance audit kick (2026-09-06):** Rechecked `main` at `8e83c8c` on
 Windows against the 100k-commit and 10k-file fixtures. Fresh snapshots remain
 ~36ms and discover+log(5000) ~76ms; the costly paths are 501-file patch
@@ -3137,7 +3159,8 @@ cross-platform performance certification remain explicit follow-ups.
   3. ◐ AI features extension point — `CommitMessageGenerator` trait +
      subscription-first commit suggestions (`repo_suggest_commit_message`,
      Settings → AI, CommitBar Suggest, ⌘⇧M / palette).
-  4. ☐ PR review surface — 1.1 candidate.
+  4. ☑ PR review surface — GitHub/Azure workspace implemented; remaining
+     provider validation is tracked separately in TASKS.
   5. ☑ Pricing — free for all, honor-system paid commercial license.
 - **Naming & trademark.** USPTO/EUIPO/WIPO search before 0.5 public launch.
 
