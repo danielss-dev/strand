@@ -1,12 +1,9 @@
 //! `git reset` — move HEAD (and per mode the index / working tree) to a
 //! target commit.
 //!
-//! Hard resets of a dirty tree take a safety snapshot first (the same
-//! stash-based net `discard_paths` callers use), so "discard all changes"
-//! is always recoverable from the stash stack. "Dirty" means tracked
-//! changes only — `git reset --hard` never touches untracked files, so an
-//! untracked-only tree needs no snapshot and the snapshot itself skips
-//! untracked files (the lighter `stash create` path, no working-tree churn).
+//! Hard resets snapshot tracked changes and refuse collisions with untracked
+//! or ignored data. Unrelated untracked entries remain untouched; snapshots
+//! use `stash create` without a working-tree push/apply round trip.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,13 +54,12 @@ impl Repo {
             .and_then(|b| b.as_str().map(str::to_string))
             .unwrap_or_else(|| target.to_string());
 
-        // A hard reset destroys uncommitted *tracked* work — snapshot it onto
-        // the stash stack first, mirroring discardMany's safety net. Untracked
-        // files survive a hard reset untouched, so a pure-WT_NEW entry doesn't
-        // count as dirty and the snapshot skips untracked files (avoiding the
-        // push+apply round-trip that can fail on Windows file locks).
+        // Reject untracked/ignored collisions before even taking a snapshot.
+        // This guard applies to libgit2, sparse, partial-clone and LFS resets.
         let mut snapshot_oid = None;
         if matches!(mode, ResetMode::Hard) {
+            if self.sparse_enabled() { self.sparse_read_index(repo)?; }
+            guard_reset_tree(repo, &repo.index()?, &obj.peel_to_tree()?, self.path(), std::path::Path::new(""))?;
             let dirty = if self.sparse_enabled() {
                 self.status()?.iter().any(|entry| entry.kind != crate::status::StatusKind::Untracked)
             } else { repo
@@ -100,6 +96,53 @@ impl Repo {
             snapshot_oid,
         })
     }
+}
+
+fn collision(path: &std::path::Path) -> Error {
+    Error::Other(format!("Hard reset would overwrite untracked or ignored data at {}. Move or commit it before retrying.", path.display()))
+}
+
+/// Inspect only target paths and directories that would be replaced. In
+/// particular, do not enumerate unrelated ignored build/dependency trees.
+fn guard_reset_tree(repo: &git2::Repository, index: &git2::Index, tree: &git2::Tree<'_>, root: &std::path::Path, parent: &std::path::Path) -> Result<()> {
+    for entry in tree.iter() {
+        #[cfg(unix)]
+        let name = {
+            use std::os::unix::ffi::OsStrExt;
+            std::ffi::OsStr::from_bytes(entry.name_bytes())
+        };
+        #[cfg(not(unix))]
+        let name = entry.name().ok_or_else(|| Error::Other("Cannot safely reset a non-UTF-8 target path".into()))?;
+        let rel = parent.join(name);
+        let metadata = match std::fs::symlink_metadata(root.join(&rel)) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if entry.kind() == Some(git2::ObjectType::Tree) && metadata.is_dir() {
+            guard_reset_tree(repo, index, &repo.find_tree(entry.id())?, root, &rel)?;
+        } else if metadata.is_dir() && entry.kind() != Some(git2::ObjectType::Commit) {
+            guard_replaced_directory(index, root, &rel)?;
+        } else if index.get_path(&rel, 0).is_none() {
+            return Err(collision(&rel));
+        }
+        // A tracked file/symlink blocking a target directory is itself
+        // snapshotted; never follow it to inspect external descendants.
+    }
+    Ok(())
+}
+
+fn guard_replaced_directory(index: &git2::Index, root: &std::path::Path, rel: &std::path::Path) -> Result<()> {
+    for child in std::fs::read_dir(root.join(rel))? {
+        let child = child?;
+        let path = rel.join(child.file_name());
+        if child.file_type()?.is_dir() {
+            guard_replaced_directory(index, root, &path)?;
+        } else if index.get_path(&path, 0).is_none() {
+            return Err(collision(&path));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -197,8 +240,7 @@ mod tests {
         let (repo, dir) = scratch_repo();
         let first = write_commit(&dir, "a.txt", "one\n", "first");
         write_commit(&dir, "a.txt", "two\n", "second");
-        // Untracked-only "dirt": `git reset --hard` never touches untracked
-        // files, so no snapshot is needed (and none should be taken).
+        // An unrelated untracked file survives; no snapshot is needed.
         std::fs::write(dir.join("new.txt"), "untracked\n").unwrap();
 
         let outcome = repo.reset("HEAD~1", ResetMode::Hard).unwrap();
@@ -244,4 +286,61 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
+    #[test]
+    fn hard_reset_refuses_untracked_and_ignored_target_collisions() {
+        // Exercise both the normal and sparse-index dispatches, before any
+        // reset/filter command can modify HEAD, the index or working bytes.
+        for sparse in [false, true] {
+            for ignored in [false, true] {
+                let (_repo, dir) = scratch_repo();
+                std::fs::create_dir_all(dir.join("included")).unwrap();
+                std::fs::create_dir_all(dir.join("excluded")).unwrap();
+                std::fs::write(dir.join("included/file"), "included").unwrap();
+                std::fs::write(dir.join("excluded/file"), "excluded").unwrap();
+                git(&dir, &["add", "included", "excluded"]);
+                write_commit(&dir, "collision", "committed", "target");
+                git(&dir, &["rm", "collision"]);
+                std::fs::write(dir.join("keep"), "keep").unwrap();
+                git(&dir, &["add", "keep"]);
+                git(&dir, &["commit", "-qm", "remove collision"]);
+                if sparse {
+                    git(&dir, &["sparse-checkout", "set", "--cone", "--sparse-index", "included"]);
+                    assert!(git(&dir, &["ls-files", "--sparse"]).contains("excluded/"));
+                }
+                if ignored { std::fs::write(dir.join(".git/info/exclude"), "collision\n").unwrap(); }
+                std::fs::write(dir.join("collision"), "irreplaceable").unwrap();
+                let head = git(&dir, &["rev-parse", "HEAD"]);
+                let index = std::fs::read(dir.join(".git/index")).unwrap();
+                let repo = Repo::discover(&dir).unwrap();
+                let error = repo.reset("HEAD~1", ResetMode::Hard).unwrap_err();
+                assert!(error.to_string().contains("untracked or ignored"), "{error}");
+                assert_eq!(std::fs::read_to_string(dir.join("collision")).unwrap(), "irreplaceable");
+                assert_eq!(git(&dir, &["rev-parse", "HEAD"]), head);
+                assert_eq!(std::fs::read(dir.join(".git/index")).unwrap(), index);
+                assert!(repo.stash_list().unwrap().is_empty());
+                let _ = std::fs::remove_dir_all(dir);
+            }
+        }
+    }
+
+    #[test]
+    fn hard_reset_refuses_file_directory_collisions_but_keeps_unrelated_data() {
+        for target_directory in [false, true] {
+            let (_repo, dir) = scratch_repo();
+            if target_directory { std::fs::create_dir(dir.join("target")).unwrap(); }
+            let path = if target_directory { "target/file" } else { "target" };
+            write_commit(&dir, path, "old", "target");
+            git(&dir, &["rm", "-r", "target"]);
+            git(&dir, &["commit", "-qm", "remove target"]);
+            let untracked = if target_directory { "target" } else { "target/ignored/local" };
+            if !target_directory { std::fs::create_dir_all(dir.join("target/ignored")).unwrap(); }
+            std::fs::write(dir.join(".git/info/exclude"), "target\n").unwrap();
+            std::fs::write(dir.join(untracked), "keep").unwrap();
+            let repo = Repo::discover(&dir).unwrap();
+            assert!(repo.reset("HEAD~1", ResetMode::Hard).is_err());
+            assert_eq!(std::fs::read_to_string(dir.join(untracked)).unwrap(), "keep");
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
 }
