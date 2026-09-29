@@ -1,5 +1,31 @@
 # Learnings
 
+## File actions must preserve literal entries and threatened bytes (2026-09-29)
+
+Audit probes showed that libgit2 checkout/reset pathspecs expand selected
+filenames such as `[id].tsx` to unrelated `i.tsx`. An exact file action needs
+literal matching; `--` only separates options and does not by itself disable
+Git pathspec magic. Keep bulk operations batched when repairing this.
+
+A hard reset can overwrite untracked or ignored entries that obstruct its
+target tree. A tracked-only dirty check/snapshot cannot promise recovery for
+those bytes. Inspect target collisions before destructive dispatch.
+
+Use directory-entry metadata for symlink staging: a missing referent does not
+make the link deleted. Working-tree containment alone also does not exclude
+`.git`, and direct joins for special files such as `.gitignore` bypass the
+existing symlink boundary. Regression coverage must include these cases.
+The git2 0.19 checkout binding does not expose literal-pathspec mode. Keep
+ordinary filenames on the existing in-process path; special-name batches use
+one NUL-delimited Git operation, with `--literal-pathspecs` for reset and exact
+`checkout-index --stdin` filenames for discard.
+
+macOS tests must canonicalize Unix paths used in `includeIf.gitdir`, explicitly
+put accepted test-server sockets into blocking mode, and wait for subprocess
+readiness before measuring cancellation. A timer started before spawn measures
+OS launch latency as well as cancellation. On Unix, signal an owned process
+group even when its leader exited: descendants can still own the pipes.
+
 ## Programmatic clipboard is native so the OS names Strand (2026-09-21)
 
 `navigator.clipboard` in the Tauri webview is attributed to the web origin
@@ -2925,3 +2951,19 @@ and restore the ordinary build configuration after a CDP test build.
 Core tests that spawn Git daemons also need process-tree cleanup: killing Git
 for Windows' parent wrapper alone can leave its daemon alive and prevent the
 test command from returning after all assertions pass.
+
+## Keep process identity until cleanup and refresh safety inputs (2026-09-29)
+
+On Unix, `Child::try_wait` reaps an exited process. Observe provider exit with
+`waitid(WNOWAIT)` and signal its owned group before `wait`, so PID reuse cannot
+redirect cleanup to an unrelated process. Pipe readiness alone does not hold
+that identity. Windows streaming Git needs an owned Job Object: assign while
+the process is suspended, then resume, and terminate the job even after the
+wrapper exits. Share the job wrapper across core and Tauri rather than reopen
+numeric PIDs or duplicate cleanup ownership.
+
+Hard-reset collision guards must refresh the index before trusting tracked
+membership; cached libgit2 indexes can survive external Git writes. Preserve
+sparse expansion through its existing reader. git2 0.19 `Index::get_path`
+already normalizes Windows separators through `path_to_repo_path`; do not add
+lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.

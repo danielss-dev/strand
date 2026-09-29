@@ -58,6 +58,8 @@ pub mod reset;
 pub mod snapshot;
 pub mod sparse;
 pub mod watch;
+#[cfg(windows)]
+pub mod windows_job;
 
 pub use error::{Error, Result};
 pub use repo::Repo;

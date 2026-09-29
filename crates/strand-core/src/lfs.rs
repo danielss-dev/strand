@@ -362,6 +362,7 @@ mod tests {
                 consumer.to_str().unwrap(),
             ],
         );
+        git(&consumer, &["lfs", "install", "--local"]);
         Repo::discover(&consumer)
             .unwrap()
             .checkout_branch("next")
@@ -487,6 +488,8 @@ mod tests {
                         Err(e) => panic!("{e}"),
                     }
                 };
+                // Accepted sockets inherit nonblocking mode on macOS.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(std::time::Duration::from_secs(30)))
                     .unwrap();
@@ -537,4 +540,22 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(dir);
     }
+    #[test]
+    fn hard_reset_refuses_untracked_lfs_collision_before_filtering() {
+        let (repo, dir) = fixture();
+        std::fs::write(dir.join("asset.bin"), "committed asset").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-qm", "asset"]);
+        git(&dir, &["rm", "asset.bin"]);
+        git(&dir, &["commit", "-qm", "remove asset"]);
+        std::fs::write(dir.join("asset.bin"), "local asset").unwrap();
+        let head = git(&dir, &["rev-parse", "HEAD"]);
+        let error = repo.reset("HEAD~1", crate::reset::ResetMode::Hard).unwrap_err();
+        assert!(error.to_string().contains("untracked or ignored"), "{error}");
+        assert_eq!(std::fs::read_to_string(dir.join("asset.bin")).unwrap(), "local asset");
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), head);
+        assert!(repo.stash_list().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }

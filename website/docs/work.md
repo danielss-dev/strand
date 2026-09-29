@@ -59,6 +59,8 @@ buffer and reload the file from disk without writing it. Historical revisions,
 binaries, oversized files, and non-UTF-8 text
 stay read-only. If another tool changes the file while you have unsaved edits,
 Strand refuses the stale save instead of overwriting the newer disk content.
+Large working-tree text files show a read-only preview of their first 2 MB;
+Strand reads only that prefix rather than loading the whole file.
 
 If a file moves through Strand, its tabs follow the new path. A removed preview
 closes; a removed pinned file stays visible with a clear missing-file message.

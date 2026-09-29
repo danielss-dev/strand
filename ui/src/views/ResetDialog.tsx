@@ -105,7 +105,7 @@ export function ResetDialog({
         <div role="radiogroup" aria-label="Reset mode">
           {option('soft', 'Soft', 'keep all changes staged')}
           {option('mixed', 'Mixed', 'keep changes, unstaged')}
-          {option('hard', 'Hard', 'discard all changes (a safety snapshot stash is saved first)', true)}
+          {option('hard', 'Hard', 'discard tracked changes after a safety snapshot; refuse untracked or ignored file collisions', true)}
         </div>
 
         {error ? <div className="clone-error">{error}</div> : null}

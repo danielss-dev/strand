@@ -587,27 +587,62 @@ mod tests {
 
     #[test]
     fn cancellation_terminates_an_active_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
         let cancelled = Arc::new(AtomicBool::new(false));
         let signal = cancelled.clone();
         let worker = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(250));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !ready.exists() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            let started = ready.exists();
+            let cancelled_at = Instant::now();
             signal.store(true, Ordering::Relaxed);
+            assert!(started, "child did not reach its cancellation checkpoint");
+            cancelled_at
         });
-        let start = Instant::now();
         #[cfg(windows)]
         let result = run_command_input_cancellable(
-            ".",
+            dir.path().to_str().unwrap(),
             "powershell",
-            &["-NoProfile", "-Command", "Start-Sleep -Seconds 20"],
+            &["-NoProfile", "-Command", "Set-Content ready ready; Start-Sleep -Seconds 20"],
             &[],
             None,
             Some(&cancelled),
         );
         #[cfg(not(windows))]
         let result =
-            run_command_input_cancellable(".", "sleep", &["20"], &[], None, Some(&cancelled));
-        worker.join().unwrap();
+            run_command_input_cancellable(dir.path().to_str().unwrap(), "/bin/sh", &["-c", "printf ready > ready; sleep 20"], &[], None, Some(&cancelled));
+        let start = worker.join().unwrap();
         assert!(result.unwrap_err().contains("cancelled"));
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn provider_exit_observation_retains_leader_until_cleanup() {
+        let mut child = std::process::Command::new("/bin/sh")
+            .args(["-c", "exit 7"]).spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !super::super::provider_exited(&child).unwrap() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        // A second observation must still find a waitable child. If the first
+        // reaped it, this returns ECHILD and its PID could already be reused.
+        assert!(super::super::provider_exited(&child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(7));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn natural_exit_stops_helpers_before_joining_provider_output() {
+        let start = Instant::now();
+        let output = run_command_input_cancellable(
+            ".", "/bin/sh", &["-c", "sleep 30 & printf done"], &[], None, None,
+        ).unwrap();
+        assert_eq!(output, b"done");
+        assert!(start.elapsed() < Duration::from_secs(15));
     }
 }

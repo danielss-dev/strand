@@ -32,7 +32,13 @@ pub struct CancelHandle(Arc<Mutex<CancelInner>>);
 #[derive(Default)]
 struct CancelInner {
     cancelled: bool,
-    child: Option<std::process::Child>,
+    child: Option<GitChild>,
+}
+
+struct GitChild {
+    process: std::process::Child,
+    #[cfg(windows)]
+    job: crate::windows_job::WindowsJob,
 }
 
 impl CancelHandle {
@@ -49,7 +55,7 @@ impl CancelHandle {
             // Kill their tree off the IPC thread so cancellation stays immediate.
             std::thread::spawn(move || {
                 let mut inner = handle.0.lock().expect("cancel handle lock");
-                if let Some(child) = inner.child.as_mut() { kill_git_tree(child); }
+                if let Some(child) = inner.child.as_mut() { kill_owned_git_tree(child); }
             });
         }
     }
@@ -59,18 +65,31 @@ impl CancelHandle {
     }
 }
 
+// Streaming Git retains a job handle on Windows, so cancellation does not
+// depend on whether the wrapper PID is still running.
+fn kill_owned_git_tree(child: &mut GitChild) {
+    #[cfg(windows)] {
+        child.job.terminate();
+        let _ = child.process.kill();
+    }
+    #[cfg(not(windows))]
+    kill_git_tree(&mut child.process);
+}
+
 // Git LFS and submodule helpers inherit the pipes. Killing only git can leave
 // those helpers transferring (and the reader waiting for EOF) after Cancel.
 pub(crate) fn kill_git_tree(child: &mut std::process::Child) {
-    if matches!(child.try_wait(), Ok(Some(_))) { return; }
     #[cfg(windows)]
     {
+        if matches!(child.try_wait(), Ok(Some(_))) { return; }
         use std::os::windows::process::CommandExt;
         let system = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
         let _ = std::process::Command::new(Path::new(&system).join("System32/taskkill.exe"))
             .args(["/PID", &child.id().to_string(), "/T", "/F"])
             .creation_flags(0x0800_0000).stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
+    // On Unix a helper can retain the pipes after Git has exited. Signal the
+    // owned group before reaping its leader, including this natural-exit case.
     #[cfg(unix)]
     unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
     let _ = child.kill();
@@ -741,7 +760,7 @@ pub(crate) fn run_git_input_transcript(
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    let mut child = command.current_dir(cwd)
+    command.current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         // Neutralize repo-local config that would run code as a side effect.
         .args(crate::GIT_SAFE_CONFIG)
@@ -749,8 +768,11 @@ pub(crate) fn run_git_input_transcript(
         .args(args)
         .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    let (mut child, job) = crate::windows_job::WindowsJob::spawn(&mut command).map_err(Error::Other)?;
+    #[cfg(not(windows))]
+    let mut child = command.spawn()
         .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
 
     // Drain stdout on a separate thread so a large stdout can't deadlock us
@@ -770,6 +792,11 @@ pub(crate) fn run_git_input_transcript(
         })
     });
     let stderr = child.stderr.take();
+    let mut child = GitChild {
+        process: child,
+        #[cfg(windows)]
+        job,
+    };
 
     // Park the child in the cancel handle (pipes already taken) so a
     // concurrent `cancel()` can kill it. A cancel that raced the spawn is
@@ -778,8 +805,8 @@ pub(crate) fn run_git_input_transcript(
     {
         let mut inner = handle.0.lock().expect("cancel handle lock");
         if inner.cancelled {
-            kill_git_tree(&mut child);
-            let _ = child.wait();
+            kill_owned_git_tree(&mut child);
+            let _ = child.process.wait();
             return Err(Error::Cancelled);
         }
         inner.child = Some(child);
@@ -811,6 +838,7 @@ pub(crate) fn run_git_input_transcript(
         taken
             .as_mut()
             .expect("child parked above")
+            .process
             .wait()
             .map_err(|e| Error::Other(format!("git wait failed: {e}")))?
     };
@@ -842,6 +870,52 @@ fn append_output(output: &mut String, text: &str) {
 mod bounded_process_tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_job_fixture() {
+        let Ok(mode) = std::env::var("STRAND_JOB_FIXTURE") else { return; };
+        let ready = std::env::var_os("STRAND_JOB_READY").unwrap();
+        if mode == "helper" {
+            std::fs::write(ready, "ready").unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        } else {
+            let _helper = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "network::bounded_process_tests::windows_job_fixture", "--nocapture"])
+                .env("STRAND_JOB_FIXTURE", "helper")
+                .stdin(Stdio::null()).stdout(Stdio::inherit()).stderr(Stdio::inherit())
+                .spawn().unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while !Path::new(&ready).exists() {
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_cancellation_kills_helpers_after_leader_is_reaped() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command.args(["--exact", "network::bounded_process_tests::windows_job_fixture", "--nocapture"])
+            .env("STRAND_JOB_FIXTURE", "parent").env("STRAND_JOB_READY", dir.path().join("ready"))
+            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+        let (mut process, job) = crate::windows_job::WindowsJob::spawn(&mut command).unwrap();
+        let mut stdout = process.stdout.take().unwrap();
+        let (sent, received) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            stdout.read_to_end(&mut output).unwrap();
+            let _ = sent.send(output);
+        });
+        assert!(process.wait().unwrap().success());
+        assert!(received.try_recv().is_err(), "helper must still hold the pipe");
+        let mut child = GitChild { process, job };
+        kill_owned_git_tree(&mut child);
+        assert!(received.recv_timeout(std::time::Duration::from_secs(5)).is_ok(), "helper survived cancellation");
+        reader.join().unwrap();
+    }
+
     #[test]
     fn output_tail_stays_bounded_and_marks_partial_unicode_output() {
         let mut output = String::new();
@@ -855,10 +929,28 @@ mod bounded_process_tests {
         let cancel = CancelHandle::new();
         let mut cancelled_at = None;
         let result = run_git_streaming(std::env::temp_dir().as_path(),
-            &["-c", "alias.strand-cancel-test=!echo strand-ready >&2; sleep 60", "strand-cancel-test"],
+            &["-c", "alias.strand-cancel-test=!sleep 60 & echo strand-ready >&2; wait", "strand-cancel-test"],
             |p| { if p.raw.contains("strand-ready") { cancelled_at = Some(std::time::Instant::now()); cancel.cancel(); } }, Some(&cancel));
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(cancelled_at.unwrap().elapsed().as_secs() < 15, "descendants kept pipes open after cancellation");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_kills_helpers_after_git_exits() {
+        let cancel = CancelHandle::new();
+        let mut cancelled_at = None;
+        let result = run_git_streaming(std::env::temp_dir().as_path(),
+            &["-c", "alias.strand-cancel-test=!sleep 60 & echo strand-ready >&2", "strand-cancel-test"],
+            |p| {
+                if p.raw.contains("strand-ready") {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    cancelled_at = Some(std::time::Instant::now());
+                    cancel.cancel();
+                }
+            }, Some(&cancel));
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(cancelled_at.unwrap().elapsed().as_secs() < 15);
     }
 }
 

@@ -419,6 +419,7 @@ mod tests {
             let mut cfg = repo.config().unwrap();
             cfg.set_str("user.name", "Test").unwrap();
             cfg.set_str("user.email", "test@example.com").unwrap();
+            cfg.set_bool("commit.gpgsign", false).unwrap();
         }
         let sig = git2::Signature::now("Test", "test@example.com").unwrap();
         let tree_oid = repo.index().unwrap().write_tree().unwrap();

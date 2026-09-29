@@ -3279,6 +3279,22 @@ fn run_command_input(
     run_command_input_cancellable(cwd, program, args, envs, stdin_data, None)
 }
 
+// Observe exit without releasing the PID: process-group cleanup must happen
+// before Child::wait/try_wait can reap the leader and permit PID reuse.
+#[cfg(unix)]
+fn provider_exited(child: &std::process::Child) -> std::io::Result<bool> {
+    loop {
+        // SAFETY: info is initialized and writable; this queries our own child
+        // without reaping it or waiting for a running process.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let result = unsafe { libc::waitid(libc::P_PID, child.id(), &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT) };
+        if result == 0 { return Ok(unsafe { info.si_pid() } != 0); }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted { return Err(error); }
+    }
+}
+
 fn run_command_input_cancellable(
     cwd: &str,
     program: &str,
@@ -3316,6 +3332,10 @@ fn run_command_input_cancellable(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(unix)] {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command.spawn().map_err(|e| {
         let install = if program == "gh" {
             "Install GitHub CLI and run `gh auth login`"
@@ -3324,6 +3344,24 @@ fn run_command_input_cancellable(
         };
         format!("Could not start {program}: {e}. {install}.")
     })?;
+    #[cfg(windows)]
+    let job = match crate::ai::bin::WindowsJob::assign(&child).and_then(|job| {
+        job.kill_on_close()?;
+        Ok(job)
+    }) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
+    let stop = |child: &mut std::process::Child| {
+        #[cfg(unix)]
+        crate::ai::bin::kill_process_tree(child);
+        #[cfg(windows)]
+        crate::ai::bin::kill_process_tree(child, &job);
+    };
 
     let mut stdin_writer = child.stdin.take().map(|mut stdin| {
         let data = stdin_data.unwrap_or_default().to_vec();
@@ -3347,11 +3385,20 @@ fn run_command_input_cancellable(
 
     let started = Instant::now();
     let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
+        #[cfg(unix)]
+        let exited = provider_exited(&child);
+        #[cfg(not(unix))]
+        let exited = child.try_wait().map(|status| status.is_some());
+        match exited {
+            Ok(true) => {
+                // Unix retains the unreaped leader until this signal; Windows
+                // targets the owned job handle, never a recycled numeric PID.
+                stop(&mut child);
+                break child.wait().map_err(|error| format!("{program} wait failed: {error}"))?;
+            }
+            Ok(false) => {}
             Err(error) => {
-                let _ = child.kill();
+                stop(&mut child);
                 let _ = child.wait();
                 let _ = stdout_reader.join();
                 let _ = stderr_reader.join();
@@ -3362,7 +3409,7 @@ fn run_command_input_cancellable(
             }
         }
         if started.elapsed() >= COMMAND_TIMEOUT || cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
-            let _ = child.kill();
+            stop(&mut child);
             let _ = child.wait();
             let _ = stdout_reader.join();
             let _ = stderr_reader.join();
@@ -3373,6 +3420,7 @@ fn run_command_input_cancellable(
         }
         thread::sleep(Duration::from_millis(25));
     };
+    // The owned tree has stopped, so helpers cannot hold pipes.
     let stdout = stdout_reader
         .join()
         .map_err(|_| format!("{program} output reader failed"))?;

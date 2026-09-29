@@ -110,6 +110,12 @@ Unlike the graph, the reflog includes commits orphaned by a reset, rebase, or am
 
 To recover a commit you lost to a bad reset: open the Reflog, find the entry from before the reset, and either **Create branch here…** to keep it or **Reset HEAD here…** to move your branch back. If the commit is orphaned it won't appear in the graph, but the context menu actions work on it directly.
 
+**Hard reset** snapshots tracked changes before discarding them. It refuses to
+overwrite untracked or ignored files that collide with the target commit,
+including file/folder replacements. Move or commit those files before retrying.
+Unrelated untracked files remain in place; a clean reset does not create an
+empty recovery stash.
+
 ## Work file documents
 
 Open any file from the sidebar's **Files** tab or the command palette to get a

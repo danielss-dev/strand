@@ -642,69 +642,7 @@ pub(crate) fn kill_process_tree(child: &mut Child, job: &WindowsJob) {
 }
 
 #[cfg(windows)]
-pub(crate) struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
-
-#[cfg(windows)]
-impl WindowsJob {
-    pub(crate) fn kill_on_close(&self) -> Result<(), String> {
-        use windows_sys::Win32::System::JobObjects::{
-            SetInformationJobObject, JobObjectExtendedLimitInformation,
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        };
-        // SAFETY: the initialized structure and live job handle match the API.
-        unsafe {
-            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            if SetInformationJobObject(self.0, JobObjectExtendedLimitInformation,
-                (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32) == 0 {
-                return Err("Could not configure action cleanup on app exit".into());
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn assign(child: &Child) -> Result<Self, String> {
-        use windows_sys::Win32::Foundation::CloseHandle;
-        use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
-        use windows_sys::Win32::System::Threading::{
-            OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
-        };
-
-        // SAFETY: Win32 handles are checked and closed on every failure path.
-        unsafe {
-            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if job.is_null() {
-                return Err("Could not create a Windows job for the AI provider".into());
-            }
-            let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, child.id());
-            if process.is_null() {
-                CloseHandle(job);
-                return Err("Could not open the AI provider process for cancellation".into());
-            }
-            let assigned = AssignProcessToJobObject(job, process);
-            CloseHandle(process);
-            if assigned == 0 {
-                CloseHandle(job);
-                return Err("Could not attach the AI provider to its cancellation job".into());
-            }
-            Ok(Self(job))
-        }
-    }
-
-    fn terminate(&self) {
-        // SAFETY: `self.0` is a live job handle owned by this wrapper.
-        unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1) };
-    }
-}
-
-#[cfg(windows)]
-impl Drop for WindowsJob {
-    fn drop(&mut self) {
-        // SAFETY: this wrapper uniquely owns the job handle.
-        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
-    }
-}
+pub(crate) use strand_core::windows_job::WindowsJob;
 
 /// Spawn a CLI detached (login flows that open a browser). Keeps default
 /// console flags: sign-in may need an interactive picker, so unlike
@@ -898,23 +836,27 @@ mod tests {
     ) {
         let cancel = AiCancelHandle::new();
         let worker_cancel = cancel.clone();
-        let (started_tx, started_rx) = std::sync::mpsc::sync_channel(0);
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().to_path_buf();
         let worker = std::thread::spawn(move || {
-            started_tx.send(()).unwrap();
             run_capture_cancellable(
                 Path::new(program),
                 args,
-                None,
+                Some(&cwd),
                 None,
                 SUGGEST_TIMEOUT,
                 Some(&worker_cancel),
             )
         });
-        started_rx.recv().unwrap();
-        std::thread::sleep(Duration::from_millis(100));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let ready = dir.path().join("ready");
+        while !ready.exists() && !worker.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         let cancelled_at = Instant::now();
         cancel.cancel();
         let err = worker.join().unwrap().unwrap_err();
+        assert!(ready.exists(), "child did not reach its cancellation checkpoint: {err}");
         assert_eq!(err, "cancelled");
         assert!(cancelled_at.elapsed() < Duration::from_secs(3));
     }
@@ -922,7 +864,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn run_capture_cancels_process_group() {
-        assert_process_group_cancelled_promptly("/bin/sh", &["-c", "sleep 30 & wait"]);
+        assert_process_group_cancelled_promptly("/bin/sh", &["-c", "sleep 30 & printf ready > ready; wait"]);
     }
 
     #[cfg(windows)]
@@ -930,7 +872,7 @@ mod tests {
     fn run_capture_cancels_process_group() {
         assert_process_group_cancelled_promptly(
             "cmd.exe",
-            &["/C", "ping", "-n", "30", "127.0.0.1"],
+            &["/C", "echo ready>ready & ping -n 30 127.0.0.1"],
         );
     }
 }

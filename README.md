@@ -119,6 +119,12 @@ the resolved app appearance automatically.
   agent edits, hidden diff panes load patches when opened, and Files reuses
   its inventory until paths or ignore rules change. Workspace scans run with
   bounded concurrency; Blame highlights code off the UI thread.
+- **Safer file operations** — discard and unstage treat selected filenames
+  literally, dangling symlinks stage as links, and hard reset refuses collisions
+  with untracked or ignored data. Rename/move protects Git metadata, and Ignore
+  refuses symlinked `.gitignore` files. Working-tree text previews read a bounded
+  prefix of large files. Network cancellation stops Git helpers even after
+  their parent exits, including on Windows.
 - **Workbench (⌘1)** — Strand's default workspace combines editable
   working-tree file documents and embedded shells in VS Code-style resizable
   panes. Drag tabs to reorder them, move them between panes, or drop on a pane
@@ -423,6 +429,9 @@ Prerequisites:
 
 - **Rust** stable (`rustup default stable`)
 - **Node** ≥ 20 and **pnpm** ≥ 9
+- **Git LFS** for the Rust integration tests (`brew install git-lfs` on macOS;
+  `sudo apt-get install git-lfs` on Ubuntu). Tests configure disposable
+  repositories locally; no global `git lfs install` is needed.
 - Platform deps for Tauri 2: see <https://v2.tauri.app/start/prerequisites/>
 
 ```sh
@@ -434,6 +443,11 @@ pnpm tauri:build   # installers in target/release/bundle
 
 The frontend detects when it isn't running inside Tauri and disables IPC
 calls, so `pnpm dev` is useful for UI work without a Rust build.
+
+Run `cargo test -p strand-core -p strand-tauri` and
+`pnpm --filter ./ui test` for the engine/shell and frontend suites. Rust CI
+runs on Linux and macOS; optional signing/Git-flow integration tests remain
+explicitly ignored unless their tooling is configured.
 
 ## Project layout
 

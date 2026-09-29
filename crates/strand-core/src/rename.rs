@@ -29,6 +29,8 @@ impl Repo {
 
         let full_from = self.safe_workdir_path(from)?;
         let full_to = self.safe_dest_path(to)?;
+        self.guard_move_metadata(from, &full_from)?;
+        self.guard_move_metadata(to, &full_to)?;
 
         // `exists()` follows symlinks; a dangling in-tree symlink is still a
         // movable entry, so probe with symlink_metadata.
@@ -71,6 +73,27 @@ impl Repo {
         Ok(index
             .iter()
             .any(|e| e.path == exact || e.path.starts_with(&prefix)))
+    }
+
+    fn guard_move_metadata(&self, rel: &str, full: &Path) -> Result<()> {
+        if Path::new(rel).components().any(|part| part.as_os_str().to_str().is_some_and(|part| part.eq_ignore_ascii_case(".git"))) {
+            return Err(Error::Other("working-tree moves cannot modify .git".into()));
+        }
+        // Resolve the nearest existing ancestor for a new destination, and
+        // protect aliases into both the worktree Git dir and shared metadata.
+        let existing = full.ancestors().find(|path| path.exists())
+            .ok_or_else(|| Error::Other("cannot resolve move path".into()))?;
+        let resolved = existing.canonicalize()?;
+        let root = self.path.canonicalize()?;
+        if resolved == root && full == existing {
+            return Err(Error::Other("cannot move the working-tree root".into()));
+        }
+        for git_dir in [self.git_dir(), self.gix.common_dir()] {
+            if resolved.starts_with(git_dir.canonicalize()?) {
+                return Err(Error::Other("working-tree moves cannot modify Git metadata".into()));
+            }
+        }
+        Ok(())
     }
 
     /// [`safe_workdir_path`](Repo::safe_workdir_path) for a destination whose
@@ -220,4 +243,51 @@ mod tests {
         assert!(dir.join("a.txt").exists());
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn rejects_administrative_moves_before_creating_directories() {
+        let (repo, dir) = scratch_repo("metadata");
+        std::fs::write(dir.join("untracked"), "keep").unwrap();
+        let config = std::fs::read(dir.join(".git/config")).unwrap();
+        for (from, to) in [("untracked", ".git/new/entry"), (".git/config", "config"), ("untracked", "nested/.git/new"), (".", "moved-root")] {
+            assert!(repo.move_path(from, to).is_err(), "{from} -> {to}");
+        }
+        assert_eq!(std::fs::read(dir.join(".git/config")).unwrap(), config);
+        assert!(dir.join("untracked").exists());
+        assert!(!dir.join("nested").exists());
+        assert!(!dir.join(".git/new").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_git_directory_aliases() {
+        let (repo, dir) = scratch_repo("metadata-alias");
+        std::fs::write(dir.join("untracked"), "keep").unwrap();
+        std::os::unix::fs::symlink(".git", dir.join("alias")).unwrap();
+        assert!(repo.move_path("untracked", "alias/new/deep").is_err());
+        assert!(repo.move_path("alias/config", "stolen-config").is_err());
+        assert!(dir.join("untracked").exists());
+        assert!(!dir.join(".git/new").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn linked_worktree_moves_cannot_modify_git_file_or_shared_metadata() {
+        let (repo, dir) = scratch_repo("linked-metadata");
+        std::fs::write(dir.join("tracked"), "base").unwrap();
+        commit_all(&dir);
+        let linked_parent = tempfile::tempdir().unwrap();
+        let linked = linked_parent.path().join("linked");
+        repo.add_worktree(linked.to_str().unwrap(), "linked", true, None, false).unwrap();
+        let linked_repo = Repo::discover(&linked).unwrap();
+        std::fs::write(linked.join("untracked"), "keep").unwrap();
+        let git_file = std::fs::read(linked.join(".git")).unwrap();
+        assert!(linked_repo.move_path(".git", "moved-git-file").is_err());
+        assert!(linked_repo.move_path("untracked", ".git/new").is_err());
+        assert_eq!(std::fs::read(linked.join(".git")).unwrap(), git_file);
+        assert!(linked.join("untracked").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }
