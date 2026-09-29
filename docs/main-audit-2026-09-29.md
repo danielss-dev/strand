@@ -290,3 +290,39 @@ branches, production PRD performance certification, and external Store/SEO/
 older-helper publication reconciliation remain open. Product-expansion items
 in the original audit remain separate future work, not implied fixes in this
 hardening change.
+
+## PR #138 review follow-up — 2026-09-29
+
+The eight inline comments repeat four findings. Both Windows separator
+findings are false positives: git2 0.19 `Index::get_path` invokes
+`path_to_repo_path`, whose Windows branch normalizes backslashes before the
+libgit2 lookup. A cross-platform regression exercises nested tracked files and
+tracked-directory replacement without adding lossy path conversion.
+
+Two process findings are valid and repaired:
+
+- Provider success cleanup previously signaled a numeric Unix group after
+  `try_wait` reaped its leader. `provider_exited` now uses `waitid(WNOWAIT)`;
+  cleanup signals the group before `wait` releases the PID. A regression
+  proves repeated exit observations leave the child waitable, while the
+  existing helper-held-pipe test verifies cleanup still completes.
+- Windows streaming Git previously skipped tree cleanup when its leader had
+  exited. It now owns a Job Object assigned while Git is suspended, then
+  resumes the primary thread. Cancellation terminates that job regardless of
+  leader lifetime. The shared wrapper uses owned handles, including the
+  existing process handle for assignment, and is reused by Tauri runners.
+  A Windows regression reaps the leader while its helper retains stdout,
+  then verifies cancellation closes the pipe promptly.
+
+The nested reset regression exposed an additional real bug: a cached index
+could survive an external Git change. The guard now refreshes the normal index
+(and retains sparse expansion), preventing both false collision reports and
+missed untracked collisions. Both cases have regression coverage.
+
+Local follow-up verification: 234 core unit tests, 13 core integration tests,
+and 167 Tauri tests pass (414 total; six existing optional tests ignored).
+Cargo check, strict Clippy and diff whitespace checks pass. The shared Windows
+job module cross-compiles for x86_64-pc-windows-msvc; runtime verification is
+delegated to the Windows CI reset, cancellation and provider test subsets.
+The preceding PR head passed all five hosted checks; the revised head requires
+a fresh run. No frontend behavior or TypeScript code changed in this follow-up.

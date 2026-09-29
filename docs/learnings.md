@@ -2951,3 +2951,19 @@ and restore the ordinary build configuration after a CDP test build.
 Core tests that spawn Git daemons also need process-tree cleanup: killing Git
 for Windows' parent wrapper alone can leave its daemon alive and prevent the
 test command from returning after all assertions pass.
+
+## Keep process identity until cleanup and refresh safety inputs (2026-09-29)
+
+On Unix, `Child::try_wait` reaps an exited process. Observe provider exit with
+`waitid(WNOWAIT)` and signal its owned group before `wait`, so PID reuse cannot
+redirect cleanup to an unrelated process. Pipe readiness alone does not hold
+that identity. Windows streaming Git needs an owned Job Object: assign while
+the process is suspended, then resume, and terminate the job even after the
+wrapper exits. Share the job wrapper across core and Tauri rather than reopen
+numeric PIDs or duplicate cleanup ownership.
+
+Hard-reset collision guards must refresh the index before trusting tracked
+membership; cached libgit2 indexes can survive external Git writes. Preserve
+sparse expansion through its existing reader. git2 0.19 `Index::get_path`
+already normalizes Windows separators through `path_to_repo_path`; do not add
+lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.

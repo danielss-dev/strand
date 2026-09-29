@@ -133,6 +133,12 @@ Evidence and acceptance criteria: [`docs/main-audit-2026-09-29.md`](./docs/main-
 - ☐ Bound hosted-provider CLI stdout/stderr while reading, with explicit
   overflow cancellation (`run_command_input_cancellable` still reads to EOF;
   separate from the completed process-tree cancellation repair).
+- ☑ **PR #138 review follow-up.** Keep provider leaders unreaped until Unix
+  group cleanup (`provider_exited` / `waitid(WNOWAIT)`); own Windows streaming
+  Git helpers in a Job Object assigned before execution (`WindowsJob::spawn`);
+  refresh the reset index before collision checks after external Git changes
+  (`Index::read(true)`, stale-index and nested-path regressions). The claimed
+  Windows separator bug was disproved against git2 0.19's path conversion.
 - ◐ **Planning reconciliation.** Resolved stale PRD licensing/pricing and
   ROADMAP PR-review claims; protocol-7 availability is verified. Current native
   release/performance certification and historical external publication/Store/SEO

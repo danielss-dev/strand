@@ -124,6 +124,15 @@ jobs:
             if ($process.ExitCode -ne 0) { throw "WebView2 install failed: $($process.ExitCode)" }
           }
       # The harness runs the actual Tauri app with an isolated identity/profile.
+      - name: Test Windows reset paths and process cancellation
+        shell: pwsh
+        run: |
+          cargo test -p strand-core reset::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p strand-core network::bounded_process_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p strand-tauri pull_requests::pages::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise native review, persistence and recovery twice
         run: node scripts/test-review-native.mjs --repeat 2 --output target/review-native-ci
       - name: Retain native screenshots, feedback and logs
