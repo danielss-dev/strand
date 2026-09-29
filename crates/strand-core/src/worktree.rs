@@ -15,7 +15,7 @@
 //! only owns the worktree *registry* (list + lifecycle).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
@@ -223,9 +223,11 @@ impl Repo {
             Err(e) => return Err(Error::Other(format!("cannot inspect worktree before removal: {e}"))),
         };
         let canonical = target.canonicalize().ok();
+        let missing_identity = if metadata.is_none() { Some(resolve_missing_path(&target)?) } else { None };
         let registered = self.worktrees()?.into_iter().find(|worktree| {
             let path = Path::new(&worktree.path);
             path == target || canonical.as_ref().is_some_and(|p| path.canonicalize().ok().as_ref() == Some(p))
+                || missing_identity.as_ref().is_some_and(|p| resolve_missing_path(path).ok().as_ref() == Some(p))
         }).ok_or_else(|| Error::Other(format!("not a registered worktree: {dest}")))?;
         if registered.is_main {
             return Err(Error::Other("the main worktree cannot be removed".into()));
@@ -733,6 +735,20 @@ impl Repo {
         }
         run_git(&self.path, &["update-ref", "-d", ref_name])?;
         Ok(())
+    }
+}
+
+/// Canonicalize the existing ancestor of an absent checkout and retain its
+/// missing suffix. This preserves macOS /var → /private/var aliases.
+fn resolve_missing_path(path: &Path) -> std::io::Result<PathBuf> {
+    match path.canonicalize() {
+        Ok(path) => Ok(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = path.parent().ok_or(error)?;
+            let name = path.file_name().ok_or_else(|| std::io::Error::other("invalid missing worktree path"))?;
+            Ok(resolve_missing_path(parent)?.join(name))
+        }
+        Err(error) => Err(error),
     }
 }
 
