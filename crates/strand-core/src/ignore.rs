@@ -5,6 +5,7 @@
 //! status walk.
 
 use crate::{error::Result, repo::Repo, Error};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 impl Repo {
     /// Append `pattern` as its own line to the working-tree root `.gitignore`,
@@ -17,12 +18,32 @@ impl Repo {
             return Err(Error::Other("invalid ignore pattern".into()));
         }
 
-        let file = self.path.join(".gitignore");
-        let existing = match std::fs::read_to_string(&file) {
-            Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        let file = self.safe_workdir_path(".gitignore")?;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true);
+        match std::fs::symlink_metadata(&file) {
+            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {}
+            Ok(_) => return Err(Error::Other(".gitignore must be a regular file, not a symlink".into())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => { options.create_new(true); }
             Err(e) => return Err(e.into()),
-        };
+        }
+        // Keep the read and write on one handle, and do not follow a link
+        // substituted between the metadata check and open.
+        #[cfg(unix)] {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        #[cfg(windows)] {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(0x00200000); // FILE_FLAG_OPEN_REPARSE_POINT
+        }
+        let mut handle = options.open(&file)?;
+        let meta = handle.metadata()?;
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            return Err(Error::Other(".gitignore must be a regular file".into()));
+        }
+        let mut existing = String::new();
+        handle.read_to_string(&mut existing)?;
         // `lines()` strips a trailing `\r`, so this also matches CRLF files.
         if existing.lines().any(|line| line == pattern) {
             return Ok(());
@@ -34,7 +55,9 @@ impl Repo {
         }
         out.push_str(pattern);
         out.push('\n');
-        std::fs::write(&file, out)?;
+        handle.seek(SeekFrom::Start(0))?;
+        handle.write_all(out.as_bytes())?;
+        handle.set_len(out.len() as u64)?;
         Ok(())
     }
 }
@@ -99,4 +122,37 @@ mod tests {
         assert!(!dir.join(".gitignore").exists(), "rejected patterns write nothing");
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_existing_and_dangling_symlink_targets() {
+        let (repo, dir) = scratch_repo();
+        let external = tempfile::tempdir().unwrap();
+        let target = external.path().join("config");
+        for existing in [true, false] {
+            if existing { std::fs::write(&target, "untouched\n").unwrap(); }
+            std::os::unix::fs::symlink(&target, dir.join(".gitignore")).unwrap();
+            assert!(repo.gitignore_add("/build").is_err());
+            if existing {
+                assert_eq!(std::fs::read_to_string(&target).unwrap(), "untouched\n");
+                std::fs::remove_file(&target).unwrap();
+            } else { assert!(!target.exists()); }
+            std::fs::remove_file(dir.join(".gitignore")).unwrap();
+        }
+        // In-tree links are also refused, even though containment passes.
+        std::fs::write(dir.join("local"), "untouched").unwrap();
+        std::os::unix::fs::symlink("local", dir.join(".gitignore")).unwrap();
+        assert!(repo.gitignore_add("/build").is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("local")).unwrap(), "untouched");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn refuses_directory_ignore_file() {
+        let (repo, dir) = scratch_repo();
+        std::fs::create_dir(dir.join(".gitignore")).unwrap();
+        assert!(repo.gitignore_add("/build").is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }
