@@ -201,6 +201,8 @@ mod tests {
         let content = "[user]\nname = Conditional\nemail = conditional@example.com\n";
         std::fs::write(&included, content).unwrap();
         let mut config = repo.git2().unwrap().config().unwrap();
+        #[cfg(unix)]
+        let first = first.canonicalize().unwrap();
         let condition = format!("includeIf.gitdir:{}/.git.path", first.to_string_lossy().replace('\\', "/"));
         config.set_str(&condition, &included.to_string_lossy().replace('\\', "/")).unwrap();
         assert_eq!(repo.repository_identity().unwrap().author.identity.as_deref(), Some("Conditional <conditional@example.com>"));

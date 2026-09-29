@@ -322,6 +322,7 @@ mod tests {
 
         git(&dir, &["config", "commit.gpgsign", "true"]);
         git(&dir, &["config", "gpg.format", "ssh"]);
+        git(&dir, &["config", "gpg.ssh.program", "ssh-keygen"]);
         let missing = dir.join("no-such-key").to_string_lossy().into_owned();
         git(&dir, &["config", "user.signingkey", &missing]);
 

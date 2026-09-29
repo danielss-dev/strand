@@ -17,13 +17,18 @@ concurrency:
 jobs:
   rust:
     name: Rust (test + clippy)
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       # strand-tauri links the full Tauri stack, which needs the webkit/gtk
       # dev packages even for `cargo check`.
       - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -34,6 +39,10 @@ jobs:
             libssl-dev \
             build-essential \
             git-lfs
+
+      - name: Install macOS test dependencies
+        if: runner.os == 'macOS'
+        run: brew list git-lfs >/dev/null 2>&1 || brew install git-lfs
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
