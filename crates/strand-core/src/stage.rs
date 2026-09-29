@@ -14,7 +14,7 @@ impl Repo {
         let mut index = repo.index()?;
 
         let on_disk = repo.workdir().map(|w| w.join(path));
-        let exists = on_disk.as_deref().map(Path::exists).unwrap_or(false);
+        let exists = on_disk.as_deref().map(entry_exists).transpose()?.unwrap_or(false);
 
         if exists {
             index.add_path(Path::new(path))?;
@@ -50,7 +50,7 @@ impl Repo {
         let workdir = repo.workdir().map(Path::to_path_buf);
         for path in paths {
             let p = Path::new(path);
-            let exists = workdir.as_deref().map(|w| w.join(path).exists()).unwrap_or(false);
+            let exists = workdir.as_deref().map(|w| entry_exists(&w.join(path))).transpose()?.unwrap_or(false);
             if exists {
                 index.add_path(p)?;
             } else {
@@ -67,6 +67,12 @@ impl Repo {
     pub fn unstage_paths(&self, paths: &[String]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
+        }
+        if paths.iter().any(|path| needs_literal_pathspec(path)) {
+            return self.run_literal_paths(
+                &["--literal-pathspecs", "reset", "--pathspec-from-file=-", "--pathspec-file-nul"],
+                paths.iter().map(String::as_str),
+            );
         }
         if self.sparse_enabled() {
             let mut args = vec!["--literal-pathspecs", "restore", "--staged", "--"];
@@ -129,6 +135,11 @@ impl Repo {
                 self.sparse_git(&args, None)?;
                 return Ok(());
             }
+            // git2 0.19 does not expose checkout's literal-pathspec flag.
+            // checkout-index consumes exact filenames; ordinary batches stay in-process.
+            if tracked.iter().any(|path| needs_literal_pathspec(path)) {
+                return self.run_literal_paths(&["checkout-index", "--force", "-z", "--stdin"], tracked.into_iter());
+            }
             let mut opts = git2::build::CheckoutBuilder::new();
             // This command opened a fresh repository + index above, so there
             // is nothing stale to refresh. More importantly, libgit2's refresh
@@ -156,7 +167,7 @@ impl Repo {
     /// without touching the working tree. Equivalent to
     /// `git restore --staged <path>`.
     pub fn unstage_path(&self, path: &str) -> Result<()> {
-        if self.sparse_enabled() { return self.unstage_paths(&[path.into()]); }
+        if self.sparse_enabled() || needs_literal_pathspec(path) { return self.unstage_paths(&[path.into()]); }
         let repo = self.git2()?;
         match repo.head().ok().map(|h| h.peel_to_commit()) {
             // No HEAD yet (unborn branch): just drop the index entry.
@@ -173,6 +184,18 @@ impl Repo {
         Ok(())
     }
 
+    fn run_literal_paths<'a>(&self, args: &[&str], paths: impl Iterator<Item = &'a str>) -> Result<()> {
+        let mut input = Vec::new();
+        for path in paths {
+            if path.contains('\0') { return Err(crate::Error::Other("Invalid file path".into())); }
+            input.extend_from_slice(path.as_bytes());
+            input.push(0);
+        }
+        let result = crate::network::run_git_input_transcript(&self.path, args, Some(input), |_| {}, None)?;
+        if !result.success { return Err(crate::Error::Other(result.output)); }
+        Ok(())
+    }
+
     /// Discard working-tree changes for `path` — restore the file from the
     /// index (mirrors `git checkout -- <path>`), or delete it if untracked.
     ///
@@ -180,6 +203,19 @@ impl Repo {
     /// (we don't snapshot here; the toast undo path is a frontend concern).
     pub fn discard_path(&self, path: &str) -> Result<()> {
         self.discard_paths(&[path.to_owned()])
+    }
+}
+
+// libgit2 parses glob characters, leading comments/negation and whitespace.
+fn needs_literal_pathspec(path: &str) -> bool {
+    path.bytes().any(|byte| b"*?[]\\!#:".contains(&byte) || byte.is_ascii_whitespace())
+}
+
+fn entry_exists(path: &Path) -> std::io::Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
     }
 }
 
@@ -227,6 +263,7 @@ mod tests {
             let mut cfg = repo.config().unwrap();
             cfg.set_str("user.name", "Test").unwrap();
             cfg.set_str("user.email", "test@example.com").unwrap();
+            cfg.set_bool("commit.gpgsign", false).unwrap();
         }
         let sig = git2::Signature::now("Test", "test@example.com").unwrap();
         let tree_oid = repo.index().unwrap().write_tree().unwrap();
@@ -358,4 +395,67 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn literal_discard_and_unstage_preserve_unselected_files() {
+        let (repo, dir) = scratch_repo();
+        let names = vec!["[id].tsx", "i.tsx", "!bang", "#hash", "space name"];
+        #[cfg(unix)]
+        let names = [names, vec!["a*.txt", "abc.txt", "q?.txt", "qa.txt", ":(glob)*", "back\\slash"]].concat();
+        let paths: Vec<String> = names.iter().map(|name| (*name).into()).collect();
+        for name in &names { std::fs::write(dir.join(name), "base").unwrap(); }
+        repo.stage_paths(&paths).unwrap();
+        repo.commit("literal base", None, false).unwrap();
+        for name in &names { std::fs::write(dir.join(name), "edited").unwrap(); }
+        repo.discard_path("[id].tsx").unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("[id].tsx")).unwrap(), "base");
+        assert_eq!(std::fs::read_to_string(dir.join("i.tsx")).unwrap(), "edited");
+        let selected: Vec<String> = paths.iter().filter(|name| needs_literal_pathspec(name)).cloned().collect();
+        repo.discard_paths(&selected).unwrap();
+        for name in &selected { assert_eq!(std::fs::read_to_string(dir.join(name)).unwrap(), "base"); }
+        assert_eq!(std::fs::read_to_string(dir.join("i.tsx")).unwrap(), "edited");
+        for name in &names { std::fs::write(dir.join(name), "staged").unwrap(); }
+        repo.stage_paths(&paths).unwrap();
+        repo.unstage_path("[id].tsx").unwrap();
+        let status = repo.status().unwrap();
+        assert!(!staged_paths(&status).contains(&"[id].tsx"));
+        assert!(staged_paths(&status).contains(&"i.tsx"));
+        repo.unstage_paths(&selected).unwrap();
+        let status = repo.status().unwrap();
+        assert!(staged_paths(&status).contains(&"i.tsx"));
+        for name in &selected { assert!(!staged_paths(&status).contains(&name.as_str())); }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn literal_unstage_works_before_first_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        git2::Repository::init(dir.path()).unwrap();
+        let repo = Repo::discover(dir.path()).unwrap();
+        for name in ["[id].tsx", "i.tsx"] { std::fs::write(dir.path().join(name), "new").unwrap(); }
+        repo.stage_paths(&["[id].tsx".into(), "i.tsx".into()]).unwrap();
+        repo.unstage_path("[id].tsx").unwrap();
+        assert_eq!(staged_paths(&repo.status().unwrap()), ["i.tsx"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stages_new_and_modified_dangling_links_singly_and_in_bulk() {
+        let (repo, dir) = scratch_repo();
+        for bulk in [false, true] {
+            let name = if bulk { "bulk-link" } else { "single-link" };
+            for target in ["missing-first", "missing-second"] {
+                let _ = std::fs::remove_file(dir.join(name));
+                std::os::unix::fs::symlink(target, dir.join(name)).unwrap();
+                if bulk { repo.stage_paths(&[name.into()]).unwrap(); }
+                else { repo.stage_path(name).unwrap(); }
+                let entry = repo.git2().unwrap().index().unwrap().get_path(Path::new(name), 0).unwrap();
+                assert_eq!(entry.mode, 0o120000);
+                assert_eq!(repo.git2().unwrap().find_blob(entry.id).unwrap().content(), target.as_bytes());
+                repo.commit("link", None, false).unwrap();
+            }
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }
