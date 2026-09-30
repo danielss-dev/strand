@@ -2628,6 +2628,11 @@ quick-wins from that audit already landed (see ROADMAP changelog).
 - ◐ Submit repaired `v1.6.0` to Microsoft Store (2026-09-07): publication
   triggered run `34066047506` from `7d4cc02`; Store build, Partner Center
   acceptance, and certification remain pending.
+- ☑ Publish `v1.7.3` through GitHub Releases (2026-09-30; PR #139,
+  tag `f34c61d`, release run `36748041912`, all 13 asset hashes, five updater
+  signatures and ten platform entries verified; public updater serves 1.7.3).
+- ◐ Submit `v1.7.3` to Microsoft Store (publication triggered run
+  `36751456162`; Partner Center acceptance and certification remain separate).
 - ☑ Repair the desktop companion packaging hook (2026-09-07): Tauri starts
   the release hook from `crates/`; `build:desktop` runs via pnpm's workspace
   root so `build-companion.mjs` resolves its script, artifacts, and bundle

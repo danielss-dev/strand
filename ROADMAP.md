@@ -3094,11 +3094,15 @@ both application shortcuts have no cached icon reference. Existing affected
 pins need a one-time unpin and re-pin; a real pinned upgrade rehearsal remains
 tracked in TASKS.md.
 
-**Strand 1.7.3 patch candidate prepared (2026-09-30):** Root/UI packages,
-Tauri configuration, workspace version and all workspace-versioned Cargo
-lockfile entries advance together from 1.7.2 to 1.7.3. This candidate contains
-the #135 Windows MSI pinned-icon repair; the signed helper remains independently
-versioned at 1.3.0 on protocol channel 7.
+**Strand 1.7.3 released (2026-09-30):** PR #139 merged the #135 Windows MSI
+pinned-icon repair and synchronized desktop version bump. Tag `v1.7.3` points
+to `f34c61d`; release run `36748041912` passed on Windows, Linux and universal
+macOS, including signing and notarization. All 13 published asset hashes,
+five updater signatures and ten manifest entries passed independent checks;
+the stable updater endpoint serves 1.7.3. The downloaded MSI's shortcut table
+retains the application identity with no cached icon reference. Store release
+run `36751456162` was triggered; Store submission and certification remain
+separate. The helper remains independently versioned at 1.3.0 on protocol 7.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
