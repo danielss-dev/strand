@@ -3085,6 +3085,21 @@ Create-from-remote, tag detach, and stash apply/pop/drop share the same runner.
 Failures still error-toast (DAN-12); overlapping local writes toast instead of
 throwing. Fetch/pull/push progress and clone/open `ProgressPopup` are unchanged.
 
+**Windows MSI pinned-icon repair (2026-09-30, #135):** The Start Menu shortcut
+now uses the installed executable's embedded icon instead of a version-specific
+Windows Installer `ProductIcon` cache. The version-matched Tauri template keeps
+the existing upgrade flow and application identity; direct and fallback Store
+MSI release jobs inspect compiled shortcut tables. A local MSI build confirms
+both application shortcuts have no cached icon reference. Existing affected
+pins need a one-time unpin and re-pin; a real pinned upgrade rehearsal remains
+tracked in TASKS.md.
+
+**Strand 1.7.3 patch candidate prepared (2026-09-30):** Root/UI packages,
+Tauri configuration, workspace version and all workspace-versioned Cargo
+lockfile entries advance together from 1.7.2 to 1.7.3. This candidate contains
+the #135 Windows MSI pinned-icon repair; the signed helper remains independently
+versioned at 1.3.0 on protocol channel 7.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Main hardening audit kick (2026-09-29):** Audited 1.7.2 at `f5ed9a8` after

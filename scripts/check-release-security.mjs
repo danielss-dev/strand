@@ -6,6 +6,7 @@ const capability = JSON.parse(
 );
 const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8');
 const tauriMain = readFileSync('crates/strand-tauri/src/main.rs', 'utf8');
+const wixTemplate = readFileSync('packaging/windows/main.wxs', 'utf8');
 
 function fail(message) {
   throw new Error(`release security check failed: ${message}`);
@@ -93,6 +94,25 @@ for (const fragment of [
   }
 }
 
+if (config.bundle?.windows?.wix?.template !== '../../packaging/windows/main.wxs') {
+  fail('MSI must use the updater-safe shortcut template');
+}
+// Helper-only releases run this check without installing frontend dependencies.
+const cliVersion = readFileSync('pnpm-lock.yaml', 'utf8')
+  .match(/'@tauri-apps\/cli':\s+specifier:[^\r\n]+\r?\n\s+version: ([^\s]+)/)?.[1];
+if (cliVersion !== '2.11.2') {
+  fail('review and synchronize the custom MSI template when upgrading Tauri CLI');
+}
+for (const id of ['ApplicationStartMenuShortcut', 'ApplicationDesktopShortcut']) {
+  const shortcut = wixTemplate.match(new RegExp(`<Shortcut\\s+Id="${id}"[\\s\\S]*?>`))?.[0];
+  if (!shortcut?.includes('Target="[!Path]"') || /\sIcon(?:Index)?=/.test(shortcut)) {
+    fail(`${id} must use the installed executable icon, not the MSI icon cache`);
+  }
+}
+if (!wixTemplate.includes('<ShortcutProperty Key="System.AppUserModel.ID" Value="{{bundle_id}}"/>')) {
+  fail('MSI Start Menu shortcut must retain its application identity');
+}
+
 const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';
 if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {
   fail('release jobs do not all check out the requested tag');
@@ -123,4 +143,4 @@ for (const fragment of [
   }
 }
 
-console.log('Release CSP, capabilities, updater-safe Windows icon, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');
+console.log('Release CSP, capabilities, updater-safe Windows icons and MSI shortcuts, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');

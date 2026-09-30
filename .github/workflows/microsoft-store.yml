@@ -86,6 +86,7 @@ jobs:
         run: |
           $version = '${{ inputs.tag }}'.TrimStart('v')
           $msi = "target/release/bundle/msi/Strand_${version}_x64_en-US.msi"
+          ./scripts/check-msi-shortcuts.ps1 -MsiPath $msi
           ./scripts/verify-microsoft-store-package.ps1 `
             -MsiPath $msi `
             -ExecutablePath target/release/strand.exe

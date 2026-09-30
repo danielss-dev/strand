@@ -572,6 +572,11 @@ community plugins, performance and platform certification from Git feature gaps.
   protocol binary verified maximize → close → relaunch with Computer Use
   (`tauri-plugin-window-state`, 2026-07-18).
 - ☐ Multi-window for "open file detached" if needed
+- ☑ Prevent MSI taskbar pins from retaining a removed installer icon (#135;
+  `packaging/windows/main.wxs` omits the Start Menu shortcut's cached icon,
+  `check-msi-shortcuts.ps1` verifies built artifacts in both MSI release paths).
+- ☐ Rehearse a Windows MSI upgrade with a taskbar pin created from the running
+  app and from Start; check the icon with Strand closed as well as running (#135).
 - ☑ Drag-and-drop folder onto window → opens repo
 - ☐ Deep-link handler (`strand://open?path=…`) for CLI companion
 

@@ -275,6 +275,16 @@ jobs:
       - name: Verify updater signature identity
         run: pnpm release:check-updater-signatures
 
+      - name: Verify Windows MSI shortcut icons
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem target/release/bundle/msi -Filter '*.msi')
+          if (!$packages.Count) { throw 'No MSI artifacts found.' }
+          foreach ($package in $packages) {
+            ./scripts/check-msi-shortcuts.ps1 -MsiPath $package.FullName
+          }
+
       - name: Sign and verify Linux AppImage with Sigstore
         if: matrix.platform == 'ubuntu-22.04'
         shell: bash
