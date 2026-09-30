@@ -392,7 +392,7 @@ the resolved app appearance automatically.
 
 ## Status
 
-Strand **1.5.0 is the current stable release** and works on large real-world
+Strand **1.7.3 is the current stable release** and works on large real-world
 repositories daily. Release CI
 produces updater-signed desktop artifacts,
 notarizes macOS, and keyless-signs Linux AppImages with Sigstore. Microsoft
@@ -407,7 +407,10 @@ check Microsoft's native package-update API on launch, notify when an update is
 available, and hand installation back to the Store. PRI-indexed, DPI-tailored
 icon assets keep the Store taskbar and Start icon as sharp and background-free
 as the direct MSI, while explicit native Windows icon handles keep the taskbar
-identity intact across in-place updates. The standalone GitHub MSI remains unsigned; the
+icon visible while Strand runs. MSI Start Menu shortcuts use the installed
+executable's embedded icon so new taskbar pins survive in-place updates;
+pins created by older installers may need to be unpinned and re-pinned once.
+The standalone GitHub MSI remains unsigned; the
 certificate-backed offline-WebView2 MSI workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-
 content reporting, and release credentials are configured. The first automated
@@ -460,7 +463,7 @@ strand/
 │   ├── strand-azdo-protocol/  # Shared optional-helper JSON contract
 │   ├── strand-azdo/           # Azure DevOps Server REST helper CLI
 │   └── strand-tauri/          # Tauri 2 app shell + IPC commands
-├── packaging/          # Store/distribution manifests assembled around release binaries
+├── packaging/          # Windows MSI template and Store/distribution manifests
 ├── ui/                 # Vite + React + TypeScript frontend
 │   └── src/demo/       # In-browser git backend for the website's live demo
 ├── website/            # strandgit.com: landing page, live demo, pre-rendered user guide

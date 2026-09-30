@@ -13,7 +13,7 @@ Download the latest release from [GitHub Releases](https://github.com/danielss-d
 | Platform | Artifact | Notes |
 |---|---|---|
 | macOS | `.dmg` | Universal binary (Apple Silicon + Intel), Developer ID–signed and notarized |
-| Windows | `.msi` | Windows 11; the installer is not yet code-signed; in-place updates preserve the native taskbar icon |
+| Windows | `.msi` | Windows 11; the installer is not yet code-signed; new taskbar pins use the executable's embedded icon across updates |
 | Linux | `.deb`, `.rpm`, `.AppImage` | Built on Ubuntu 22.04; AppImage includes a keyless Sigstore verification bundle |
 
 The macOS app icon uses Strand's solid-black Circuit S on its rounded white
@@ -115,6 +115,12 @@ them under Settings → Updates: check for updates, download and install, and
 restart to apply. Automatic download-and-install is off by default, and updates
 always apply on the next restart — Strand never restarts itself. Update
 packages are cryptographically signed.
+
+On Windows, new MSI Start Menu shortcuts use the icon embedded in the installed
+executable, keeping taskbar pins independent of the Windows Installer icon
+cache. If a pin created by an older installer shows a blank-page icon after an
+update, unpin Strand, launch the updated app from Start, and pin it again once.
+This replaces the old cached icon reference.
 
 The in-app updater covers the macOS app, direct Windows MSI installs, and the
 Linux AppImage. Microsoft Store MSIX installs check Store availability on
