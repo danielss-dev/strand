@@ -392,6 +392,16 @@ issue in your browser for review before anything is submitted:
 
 Crashes are always logged locally regardless of the toggle; the section shows the crash-log path and notes that logs can include repository paths, so you can review before sharing.
 
+## Plugins
+
+Settings → Plugins lists Strand's bundled experimental marketplace. Install a plugin, then add its surface from Workbench customization (`Mod+8`). Third-party JavaScript never runs inside the privileged webview.
+
+- **Heroi** — repository-scoped coding-agent chat for Claude, Codex, and Cursor Agent.
+- **Agent Session Recap** — files touched, risky paths, and leftover TODOs for the active worktree, next to Review.
+- **Quick Notes** — a per-repository scratchpad stored in Strand's app database.
+
+Remote catalog downloads are not available. See [Customize the Workbench](custom-view.md) for placing plugin surfaces.
+
 ---
 
 All settings persist across launches, along with the rest of your session — open tabs, Work pane sizes, each workspace's Custom pane sizes and feature layout, per-repo diff layouts, and workspaces. For the full shortcut reference, see [Keyboard and palette](keyboard-and-palette.md).

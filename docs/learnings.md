@@ -2979,3 +2979,22 @@ membership; cached libgit2 indexes can survive external Git writes. Preserve
 sparse expansion through its existing reader. git2 0.19 `Index::get_path`
 already normalizes Windows separators through `path_to_repo_path`; do not add
 lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.
+
+## Agent Session Recap is a Strand builtin, not static markdown (2026-10-01)
+
+**Rule.** Community plugins stay data-only (`markdown` / `status`,
+`repository.read` / `ai.invoke`). Live worktree, review-baseline, and loaded
+diff context cannot be expressed as static declarative content, so Agent
+Session Recap ships as `daniels.session-recap` with `render.kind = "builtin"`,
+the same reservation used by Heroi and Quick Notes. It may read the active
+repository store and a bounded local/review diff retainer while visible. It
+must not add `list`/`badge` view types, enable `network.fetch`, duplicate
+Review's diff viewer, or become a background whole-tree patch loader. Empty
+and no-repository states are required. Remote marketplace stays deferred
+(`docs/plugin-marketplace-backlog.md`).
+
+**Why.** Claude research mapped Recap onto today's primitives, but the
+manifest views are snapshots. Pretending a static markdown surface can follow
+an agent worktree would either lie about the API or pollute the privileged
+webview with third-party JS.
+

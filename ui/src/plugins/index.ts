@@ -29,3 +29,4 @@ export {
 } from './registry';
 export { renderPluginSurface, isPluginSurface } from './renderSurface';
 export { HEROI_SURFACE_ID, heroiManifest } from './builtins/heroi/manifest';
+export { SESSION_RECAP_SURFACE_ID, sessionRecapManifest } from './builtins/agentSessionRecap/manifest';

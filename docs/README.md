@@ -5,9 +5,12 @@ Project documentation.
 - [`git-client-feature-audit-2026-09-06.md`](./git-client-feature-audit-2026-09-06.md)
   — current code-backed list of 19 missing/partial Git-client feature families,
   priorities, workarounds, and completion criteria.
+- [`plugin-marketplace-backlog.md`](./plugin-marketplace-backlog.md) — Tier 1–4
+  plugin ideas vs today's declarative model; remote marketplace is deferred.
 - [`learnings.md`](./learnings.md) — durable rules learned while building
   Strand. Read before touching the UI; append when you discover something
   future work has to respect.
+- [`plugin-creation.md`](./plugin-creation.md) — how to author a declarative plugin.
 - [`pull-request-improvements.md`](./pull-request-improvements.md) — competitive
   research and the prioritized UX/UI proposal for the hosted PR workspace.
 - [`release-checklist.md`](./release-checklist.md) — fail-closed 1.0 automated,

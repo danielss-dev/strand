@@ -11,10 +11,10 @@ the trust boundary this format implements.
 - Namespaced surface contributions merged into the Workbench `SurfaceRegistry`
 - Permission-checked capability broker (`repository.read`, `ai.invoke`, `network.fetch`)
 - Declarative surfaces rendered by Strand (`markdown`, `status`)
-- One built-in dogfood plugin: **Heroi** (`daniels.heroi`) — Strand-hosted
-  repository-scoped coding-agent chat with native, streaming Claude, Codex,
-  and Cursor Agent sessions. Files, diffs, git changes, and other tooling stay
-  in their own Workbench surfaces.
+- Strand-maintained builtins: **Heroi** (`daniels.heroi`) for repository-scoped
+  coding-agent chat, **Agent Session Recap** (`daniels.session-recap`) for a
+  files/risky/TODO summary of the active worktree next to Review, and
+  **Quick Notes** (`example.quick-notes`).
 
 Community plugins cannot load arbitrary React, touch Zustand, call Tauri directly,
 or access the DOM. Those capabilities require future isolated runtimes.
@@ -107,9 +107,10 @@ Strand renders both view types with first-party components and theme tokens.
 
 ### Built-in renderers (Strand-maintained only)
 
-Only Strand may ship `render.kind = "builtin"`. Today the allowed module is
-`daniels.heroi.workspace` for the Heroi dogfood plugin. Third-party manifests
-that declare `builtin` are rejected at validation time.
+Only Strand may ship `render.kind = "builtin"`. Today the allowed modules are
+`daniels.heroi.workspace`, `daniels.session-recap.workspace`, and
+`strand-tools.quick-notes.workspace`. Third-party manifests that declare
+`builtin` are rejected at validation time.
 
 ## Validation checklist
 
@@ -178,6 +179,7 @@ pnpm --filter ./ui test
 | `ui/src/plugins/marketplace.ts` | Bundled catalog |
 | `ui/src/plugins/renderSurface.tsx` | Declarative + builtin render routing |
 | `ui/src/plugins/builtins/heroi/` | Heroi dogfood plugin |
+| `ui/src/plugins/builtins/agentSessionRecap/` | Agent Session Recap dogfood plugin |
 | `ui/src/workbench/SurfaceHost.tsx` | Host lifecycle contract |
 
 ## Non-goals (this phase)

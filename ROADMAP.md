@@ -2200,7 +2200,8 @@ the audit does not mark these fixes or proposals shipped.
   registries, shared hosts, and resilient layout-v2 references shipped
   2026-08-28; declarative manifest validation, permission broker, bundled
   marketplace, Heroi dogfood plugin, and `docs/plugin-creation.md` shipped
-  2026-08-29. Typed services/resource leases, quotas, remote install, and
+  2026-08-29; Agent Session Recap and `docs/plugin-marketplace-backlog.md`
+  shipped 2026-10-01. Typed services/resource leases, quotas, remote install, and
   isolated community execution remain open.
 - AI features (writing suggestions, conflict hints) — PRD Q3
   - ☑ Commit message suggestions from staged diffs, or all unstaged changes
@@ -2722,6 +2723,12 @@ with a Strand-owned repository-scoped chat renderer and permission-checked
 sample is now an editable repository-scoped Workbench plugin. Notes are saved
 under a repository-path key in Strand's app-config `strand.db`, never in the
 working tree. The placeholder Repo Status marketplace plugin was removed.
+
+**Agent Session Recap shipped (2026-10-01):** bundled builtin
+`daniels.session-recap` summarizes files touched, risky paths, and leftover
+TODOs in the active repository or worktree. It reuses Review's Open-review
+bridge and degrades to a clear empty state with no repo or no changes. Design
+note: `docs/plugin-marketplace-backlog.md`. Remote marketplace stays deferred.
 
 **Heroi repository agent chat shipped (2026-08-30):** Heroi is now a focused
 Workbench chat surface: it filters persisted conversations to the active
