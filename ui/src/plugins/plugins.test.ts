@@ -4,6 +4,7 @@ import { PluginCapabilityBroker, PluginPermissionError } from './capabilities';
 import { validatePluginManifest, PLUGIN_API_VERSION } from './manifest';
 import { MARKETPLACE_CATALOG } from './marketplace';
 import { PluginRegistry } from './registry';
+import { sessionRecapManifest } from './builtins/agentSessionRecap/manifest';
 import { heroiManifest } from './builtins/heroi/manifest';
 import { quickNotesManifest } from './builtins/quickNotes/manifest';
 
@@ -49,6 +50,13 @@ describe('validatePluginManifest', () => {
       contributes: { surfaces: [] },
     })).toThrow('strand.* namespace is reserved');
   });
+
+  it('reserves the Session Recap builtin module', () => {
+    expect(() => validatePluginManifest({
+      ...sessionRecapManifest,
+      id: 'example.not-recap',
+    })).toThrow('Session Recap builtin module is reserved');
+  });
 });
 
 describe('MARKETPLACE_CATALOG', () => {
@@ -66,9 +74,18 @@ describe('MARKETPLACE_CATALOG', () => {
     expect(heroi?.manifest.description).not.toMatch(/Aider/);
     expect(heroiManifest.contributes.commands?.[0]?.id).toBe('new-conversation');
     expect(ids).toContain('example.quick-notes');
+    expect(ids).toContain('daniels.session-recap');
     expect(ids).not.toContain('example.repo-status');
     expect(MARKETPLACE_CATALOG.find((entry) => entry.manifest.id === 'example.quick-notes')?.builtin).toBe(true);
     expect(quickNotesManifest.contributes.surfaces[0]?.scope).toBe('repository');
+    const recap = MARKETPLACE_CATALOG.find((entry) => entry.manifest.id === 'daniels.session-recap');
+    expect(recap?.builtin).toBe(true);
+    expect(recap?.manifest.permissions).toEqual(['repository.read']);
+    expect(sessionRecapManifest.contributes.surfaces[0]?.render).toEqual({
+      kind: 'builtin',
+      module: 'daniels.session-recap.workspace',
+    });
+    expect(validatePluginManifest(sessionRecapManifest).id).toBe('daniels.session-recap');
   });
 });
 
@@ -79,6 +96,14 @@ describe('PluginRegistry', () => {
     expect(registry.getSurfaceRegistry().get('daniels.heroi.workspace')?.title).toBe('Heroi');
     registry.uninstall('daniels.heroi');
     expect(registry.getSurfaceRegistry().get('daniels.heroi.workspace')).toBeUndefined();
+  });
+
+  it('registers Agent Session Recap as a workbench surface', () => {
+    const registry = new PluginRegistry();
+    registry.install(sessionRecapManifest);
+    expect(registry.getSurfaceRegistry().get('daniels.session-recap.workspace')?.title).toBe('Session Recap');
+    expect(registry.createBroker('daniels.session-recap').has('repository.read')).toBe(true);
+    expect(registry.createBroker('daniels.session-recap').has('ai.invoke')).toBe(false);
   });
 });
 

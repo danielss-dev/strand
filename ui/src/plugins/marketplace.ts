@@ -1,5 +1,6 @@
 import type { PluginManifest } from './manifest';
 import { heroiManifest } from './builtins/heroi/manifest';
+import { sessionRecapManifest } from './builtins/agentSessionRecap/manifest';
 import { quickNotesManifest } from './builtins/quickNotes/manifest';
 
 export interface MarketplaceEntry {
@@ -15,6 +16,11 @@ export const MARKETPLACE_CATALOG: readonly MarketplaceEntry[] = [
     manifest: heroiManifest,
     builtin: true,
     tags: ['agents', 'orchestrator', 'experimental'],
+  },
+  {
+    manifest: sessionRecapManifest,
+    builtin: true,
+    tags: ['agents', 'review'],
   },
   {
     manifest: quickNotesManifest,

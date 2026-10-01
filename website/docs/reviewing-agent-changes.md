@@ -114,3 +114,7 @@ See [Worktrees](worktrees.md) for creating worktrees, comparing multiple attempt
 If your product spans several repositories grouped into a workspace, Workspace Review (`Mod+7`) aggregates every member repository — and every open worktree tab of a member — into one merged review queue with the same keys, notes, and feedback export. Members whose folder was deleted or moved are skipped until the path is a repository again. See [Repositories and workspaces](repositories-and-workspaces.md).
 
 Each member's inbox includes staged and unstaged changes together. Staging a file keeps it in the queue; partially staged files remain read-only at hunk level. A failed member refresh keeps its last comparison visible with an error and retry action.
+
+## Session Recap plugin
+
+Install **Agent Session Recap** from Settings → Plugins and place **Session Recap** in a Workbench pane beside Review. With a dirty worktree or a pinned review baseline it lists files touched, flags auth/secret/migration paths, and scans loaded patches for leftover `TODO` / `FIXME` markers. With no repository or no changes it shows an empty state instead of crashing. It does not replace Review — **Open review** jumps to Strand's Review surface.

@@ -173,7 +173,9 @@ the resolved app appearance automatically.
   one grouped control (expand a row for bounded command and output). Model
   pickers follow the provider CLI, including Claude Fable 5.1 and GPT-6 Astra
   when advertised. Its compact thread rail and bottom command deck keep chat
-  primary, with **Open review** routing to Strand's Review surface. Declarative
+  primary, with **Open review** routing to Strand's Review surface. **Agent
+  Session Recap** summarizes files touched, risky paths, and leftover TODOs
+  in the active worktree and can sit next to Review. Declarative
   plugins render from validated manifests; third-party JavaScript does not
   execute in the privileged webview.
   The bundled **Quick Notes** plugin provides an editable scratchpad for each

@@ -38,7 +38,7 @@ export interface PluginSurfaceManifest {
   lifecycle: SurfaceLifecyclePolicy;
   render:
     | { kind: 'declarative'; view: DeclarativeView }
-    | { kind: 'builtin'; module: 'daniels.heroi.workspace' | 'strand-tools.quick-notes.workspace' };
+    | { kind: 'builtin'; module: 'daniels.heroi.workspace' | 'strand-tools.quick-notes.workspace' | 'daniels.session-recap.workspace' };
 }
 
 export interface PluginCommandManifest {
@@ -155,7 +155,11 @@ function validateSurfaceManifest(manifest: PluginManifest, surface: PluginSurfac
   if (surface.render.kind === 'declarative') {
     validateDeclarativeView(surface.render.view);
   } else if (surface.render.kind === 'builtin') {
-    if (surface.render.module !== 'daniels.heroi.workspace' && surface.render.module !== 'strand-tools.quick-notes.workspace') {
+    if (
+      surface.render.module !== 'daniels.heroi.workspace'
+      && surface.render.module !== 'strand-tools.quick-notes.workspace'
+      && surface.render.module !== 'daniels.session-recap.workspace'
+    ) {
       throw new PluginManifestError(`Unknown builtin module "${String(surface.render.module)}".`);
     }
     if (surface.render.module === 'daniels.heroi.workspace' && manifest.id !== 'daniels.heroi') {
@@ -163,6 +167,9 @@ function validateSurfaceManifest(manifest: PluginManifest, surface: PluginSurfac
     }
     if (surface.render.module === 'strand-tools.quick-notes.workspace' && manifest.id !== 'example.quick-notes') {
       throw new PluginManifestError('The Quick Notes builtin module is reserved for example.quick-notes.');
+    }
+    if (surface.render.module === 'daniels.session-recap.workspace' && manifest.id !== 'daniels.session-recap') {
+      throw new PluginManifestError('The Session Recap builtin module is reserved for daniels.session-recap.');
     }
   } else {
     throw new PluginManifestError(`Surface "${surface.id}" has an invalid render kind.`);

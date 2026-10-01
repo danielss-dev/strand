@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { HEROI_SURFACE_ID } from './builtins/heroi/manifest';
+import { AgentSessionRecapView } from './builtins/agentSessionRecap/AgentSessionRecapView';
 import { QuickNotesView } from './builtins/quickNotes/QuickNotesView';
-import { QUICK_NOTES_SURFACE_ID } from './builtins/quickNotes/manifest';
 import type { DeclarativeView } from './manifest';
 import { pluginRegistry } from './registry';
 import type { PluginCapabilityBroker } from './capabilities';
@@ -31,24 +30,29 @@ function DeclarativePluginView({
     );
   }
 
-  return (
-    <div className="plugin-surface plugin-surface-status" data-surface-id={request.contribution.id}>
-      <header className="plugin-status-head">
-        <strong>{view.title}</strong>
-        {broker.has('repository.read') && request.binding.kind === 'follow-active' && (
-          <span className="plugin-status-badge">{t('plugins.repoContext')}</span>
-        )}
-      </header>
-      <dl className="plugin-status-list">
-        {view.items.map((item) => (
-          <div key={item.label} className="plugin-status-row">
-            <dt>{item.label}</dt>
-            <dd>{item.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
+  if (view.type === 'status') {
+    return (
+      <div className="plugin-surface plugin-surface-status" data-surface-id={request.contribution.id}>
+        <header className="plugin-status-head">
+          <strong>{view.title}</strong>
+          {broker.has('repository.read') && request.binding.kind === 'follow-active' && (
+            <span className="plugin-status-badge">{t('plugins.repoContext')}</span>
+          )}
+        </header>
+        <dl className="plugin-status-list">
+          {view.items.map((item) => (
+            <div key={item.label} className="plugin-status-row">
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    );
+  }
+
+  const exhaustive: never = view;
+  return exhaustive;
 }
 
 export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
@@ -58,22 +62,27 @@ export function renderPluginSurface(request: SurfaceRenderRequest): ReactNode {
   const render = binding.surface.render;
 
   if (render.kind === 'builtin') {
-    if (request.contribution.id === HEROI_SURFACE_ID) {
-      return <Suspense fallback={<div className="custom-empty" role="status">Loading…</div>}>
-        <HeroiView request={request} broker={broker} />
-      </Suspense>;
+    switch (render.module) {
+      case 'daniels.heroi.workspace':
+        return <Suspense fallback={<div className="custom-empty" role="status">Loading…</div>}>
+          <HeroiView request={request} broker={broker} />
+        </Suspense>;
+      case 'strand-tools.quick-notes.workspace':
+        return <QuickNotesView />;
+      case 'daniels.session-recap.workspace':
+        return <AgentSessionRecapView request={request} broker={broker} />;
+      default: {
+        const exhaustive: never = render.module;
+        return (
+          <div className="custom-empty" role="status">
+            <div className="custom-empty-copy">
+              <strong>{t('workbench.surfaceUnavailable')}</strong>
+              <span>{exhaustive}</span>
+            </div>
+          </div>
+        );
+      }
     }
-    if (request.contribution.id === QUICK_NOTES_SURFACE_ID) {
-      return <QuickNotesView />;
-    }
-    return (
-      <div className="custom-empty" role="status">
-        <div className="custom-empty-copy">
-          <strong>{t('workbench.surfaceUnavailable')}</strong>
-          <span>{request.contribution.id}</span>
-        </div>
-      </div>
-    );
   }
 
   return (

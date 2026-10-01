@@ -174,6 +174,10 @@ tool group, then a row, to inspect bounded command details and output. Click a
 path in the file list to open it in Work's Changes view.
 Quick Launch also has **Heroi: New conversation**.
 
+### Session Recap plugin surface
+
+After installing Agent Session Recap from Settings → Plugins, assign **Session Recap** to a Workbench pane. File rows and **Open review** are in the `Tab` order; `Enter` activates the focused control. Quick Launch includes **Workbench: show Session Recap** once the plugin is installed.
+
 ### Repository tabs
 
 When repository navigation uses the horizontal tab strip, focus a tab to use:

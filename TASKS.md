@@ -1474,13 +1474,18 @@ community plugins, performance and platform certification from Git feature gaps.
   permission broker, quotas, diagnostics, and isolated execution boundary;
   do not load third-party code into Strand's privileged webview.
   (manifest validation, capability broker, bundled marketplace, Heroi
-  builtin plugin, `docs/plugin-creation.md` — 2026-08-29; quotas,
+  builtin plugin, `docs/plugin-creation.md` — 2026-08-29; Agent Session Recap
+  and `docs/plugin-marketplace-backlog.md` — 2026-10-01; quotas,
   remote install, and isolated custom UI remain open.)
 - ☑ Bundled plugin marketplace in Settings → Plugins with user-level install
   persistence (`plugins.installed`, `ui/src/plugins/marketplace.ts`).
 - ☑ Repository-scoped Quick Notes plugin with debounced persistence in
   Strand's app database; removed the Repo Status sample plugin
   (`QuickNotesView`, `quick-notes:<repo-path>` — 2026-08-30).
+- ☑ Agent Session Recap plugin (`daniels.session-recap`, `AgentSessionRecapView`,
+  `buildAgentSessionRecap`) — bundled builtin summarizing files touched, risky
+  paths, and TODOs in the active worktree next to Review; empty/unavailable
+  without repo or changes (`docs/plugin-marketplace-backlog.md` — DAN-77).
 - ☑ Heroi Workbench surface (`daniels.heroi.workspace`, `HeroiView`,
   `heroi_agent_send`, `heroi_provider_models` — active-repository-only chat
   with streaming, resumable, cancellable Claude/Codex/Cursor Agent sessions;
@@ -1500,6 +1505,10 @@ community plugins, performance and platform certification from Git feature gaps.
   Claude Fable 5.1 (`claude-fable-5-1`) plus GPT-6 Astra (`gpt-6-astra`)
   (`heroi.rs`, `heroi/models.rs`, `HeroiView`, `attachments.ts` — DAN-70).
 - ☑ Plugin-creation guide for AI/manifest authors (`docs/plugin-creation.md`).
+- ☐ Risk Radar plugin after a declarative `list`/`badge` view (or tree-row
+  slot) exists; do not invent those types in Recap (`docs/plugin-marketplace-backlog.md`).
+- ☐ Remote plugin marketplace / signed index only after isolation is proven,
+  in the order recorded in `docs/plugin-marketplace-backlog.md`.
 - ☐ Run native workspace-scoped Workbench persistence and live-terminal continuity E2E on
   macOS, Windows, and Linux builds (browser QA covers layout, focus, resizing,
   module moves, and overflow; native SQLite/PTYS require packaged app passes).
