@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 
 import { t } from '../../../lib/i18n';
-import type { FileDiff } from '../../../lib/types';
 import { useRepo } from '../../../stores/repo';
 import type { PluginCapabilityBroker } from '../../capabilities';
 import type { SurfaceRenderRequest } from '../../../workbench/SurfaceHost';
@@ -10,15 +9,13 @@ import {
   HEROI_OPEN_REVIEW_EVENT,
   type HeroiOpenFileDetail,
 } from '../heroi/events';
-import { buildAgentSessionRecap, recapKindLabel, RECAP_PATCH_SCAN_LIMIT } from './recap';
-
-function uniqueDiffs(...pools: readonly (readonly FileDiff[])[]): FileDiff[] {
-  const byPath = new Map<string, FileDiff>();
-  for (const pool of pools) {
-    for (const diff of pool) byPath.set(diff.path, diff);
-  }
-  return [...byPath.values()];
-}
+import {
+  buildAgentSessionRecap,
+  recapKindLabel,
+  recapMissingPatchPaths,
+  recapUnloadedPatchKey,
+  unionDiffs,
+} from './recap';
 
 function repoName(path: string): string {
   return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
@@ -41,38 +38,40 @@ export function AgentSessionRecapView({
   const reviewUnstagedDiffs = useRepo((state) => state.reviewUnstagedDiffs);
   const visible = request.lifecycle.visible;
   const canReadRepo = broker.has('repository.read');
+  const reviewPool = baseline ? baselineDiffs : reviewUnstagedDiffs;
+  const unloadedKey = recapUnloadedPatchKey(unstagedDiffs, stagedDiffs, reviewPool);
 
   useEffect(() => {
     if (!visible || !path || !canReadRepo) return;
     const state = useRepo.getState();
     const releaseReview = state.retainDiffs(path, 'review');
     const releaseLocal = state.retainDiffs(path, 'local');
-    let cancelled = false;
     void Promise.all([state.refreshDiffs(), state.refreshReviewDiffs()])
-      .then(() => {
-        if (cancelled || useRepo.getState().activePath !== path) return;
-        const current = useRepo.getState();
-        const missing = uniqueDiffs(current.unstagedDiffs, current.stagedDiffs)
-          .filter((diff) => diff.patchLoaded === false)
-          .slice(0, RECAP_PATCH_SCAN_LIMIT);
-        const unstaged = missing
-          .filter((diff) => current.unstagedDiffs.some((row) => row.path === diff.path))
-          .map((diff) => diff.path);
-        const staged = missing
-          .filter((diff) => current.stagedDiffs.some((row) => row.path === diff.path))
-          .map((diff) => diff.path);
-        return Promise.all([
-          unstaged.length ? current.loadDiffFiles('unstaged', unstaged) : Promise.resolve(),
-          staged.length ? current.loadDiffFiles('staged', staged) : Promise.resolve(),
-        ]);
-      })
-      .catch((error) => console.warn('session recap diff load failed', error));
+      .catch((error) => console.warn('session recap diff refresh failed', error));
     return () => {
-      cancelled = true;
       releaseReview();
       releaseLocal();
     };
   }, [visible, path, baseline?.oid, canReadRepo]);
+
+  useEffect(() => {
+    if (!visible || !path || !canReadRepo) return;
+    const current = useRepo.getState();
+    const review = current.baseline ? current.baselineDiffs : current.reviewUnstagedDiffs;
+    const missing = recapMissingPatchPaths(current.unstagedDiffs, current.stagedDiffs, review);
+    if (!missing.unstaged.length && !missing.staged.length && !missing.review.length) return;
+    let cancelled = false;
+    void Promise.all([
+      missing.unstaged.length ? current.loadDiffFiles('unstaged', missing.unstaged) : Promise.resolve(),
+      missing.staged.length ? current.loadDiffFiles('staged', missing.staged) : Promise.resolve(),
+      missing.review.length ? current.loadDiffFiles('review', missing.review) : Promise.resolve(),
+    ]).catch((error) => {
+      if (!cancelled) console.warn('session recap diff load failed', error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, path, baseline?.oid, canReadRepo, unloadedKey]);
 
   const recap = useMemo(() => {
     const repo = path && canReadRepo
@@ -84,13 +83,12 @@ export function AgentSessionRecapView({
           dirty: status.length > 0,
         }
       : null;
-    const review = baseline ? baselineDiffs : reviewUnstagedDiffs;
     return buildAgentSessionRecap({
       repo,
       linkedWorktree: meta?.is_linked_worktree ?? false,
       baselineShort: baseline?.short ?? null,
       status: canReadRepo ? status : [],
-      diffs: canReadRepo ? uniqueDiffs(unstagedDiffs, stagedDiffs, review) : [],
+      diffs: canReadRepo ? unionDiffs(unstagedDiffs, stagedDiffs, reviewPool) : [],
     });
   }, [
     path,
@@ -99,8 +97,7 @@ export function AgentSessionRecapView({
     baseline,
     unstagedDiffs,
     stagedDiffs,
-    baselineDiffs,
-    reviewUnstagedDiffs,
+    reviewPool,
     canReadRepo,
   ]);
 

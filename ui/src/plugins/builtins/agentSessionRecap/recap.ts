@@ -122,6 +122,77 @@ export function extractTodosFromPatch(path: string, patch: string): RecapTodo[] 
   return todos;
 }
 
+function patchIsLoaded(diff: FileDiff): boolean {
+  return diff.patchLoaded !== false;
+}
+
+/** One row per path. A loaded patch wins over a later summary (`patchLoaded: false`). */
+export function uniqueDiffs(...pools: readonly (readonly FileDiff[])[]): FileDiff[] {
+  const byPath = new Map<string, FileDiff>();
+  for (const pool of pools) {
+    for (const diff of pool) {
+      const previous = byPath.get(diff.path);
+      if (!previous) {
+        byPath.set(diff.path, diff);
+        continue;
+      }
+      if (patchIsLoaded(diff) && !patchIsLoaded(previous)) byPath.set(diff.path, diff);
+    }
+  }
+  return [...byPath.values()];
+}
+
+/** Every pool row, including both sides of a partial stage. */
+export function unionDiffs(...pools: readonly (readonly FileDiff[])[]): FileDiff[] {
+  const rows: FileDiff[] = [];
+  for (const pool of pools) {
+    for (const diff of pool) rows.push(diff);
+  }
+  return rows;
+}
+
+function unloadedPaths(pool: readonly FileDiff[], limit: number): string[] {
+  const paths: string[] = [];
+  for (const diff of pool) {
+    if (diff.patchLoaded !== false) continue;
+    paths.push(diff.path);
+    if (paths.length >= limit) break;
+  }
+  return paths;
+}
+
+/** Per-pool missing patches so a loaded staged side cannot hide an unloaded unstaged side. */
+export function recapMissingPatchPaths(
+  unstaged: readonly FileDiff[],
+  staged: readonly FileDiff[],
+  review: readonly FileDiff[],
+  limit = RECAP_PATCH_SCAN_LIMIT,
+): { unstaged: string[]; staged: string[]; review: string[] } {
+  return {
+    unstaged: unloadedPaths(unstaged, limit),
+    staged: unloadedPaths(staged, limit),
+    review: unloadedPaths(review, limit),
+  };
+}
+
+/** Effect dep: changes when an unloaded path appears or a loaded path is reset. */
+export function recapUnloadedPatchKey(
+  unstaged: readonly FileDiff[],
+  staged: readonly FileDiff[],
+  review: readonly FileDiff[],
+): string {
+  const parts: string[] = [];
+  const push = (kind: string, pool: readonly FileDiff[]) => {
+    for (const diff of pool) {
+      if (diff.patchLoaded === false) parts.push(`${kind}:${diff.path}`);
+    }
+  };
+  push('unstaged', unstaged);
+  push('staged', staged);
+  push('review', review);
+  return parts.sort().join('\0');
+}
+
 function mergeFile(previous: RecapFile | undefined, next: RecapFile): RecapFile {
   if (!previous) return next;
   if (previous.kind === 'conflicted' || next.kind === 'conflicted') {
