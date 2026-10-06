@@ -853,6 +853,7 @@ export function App() {
       startedAt,
     });
     let clonedPath: string | null = null;
+    let lfsWarning: string | null = null;
     try {
       const res = await tauri.repoClone(url, dest, (p: Progress) => {
         if (p.phase && p.phase !== phaseLabel) {
@@ -869,6 +870,7 @@ export function App() {
         setOpProgress((cur) => (cur && cur.id === id && cur.kind === 'clone' ? { ...cur, percent: pct, detail, eta } : cur));
       }, cancelId, options);
       clonedPath = res.path;
+      lfsWarning = res.warning ?? null;
     } catch (e) {
       setCloneCancelId(null);
       // A user cancel just clears the popup; a real failure surfaces in the
@@ -893,7 +895,13 @@ export function App() {
     );
     try {
       await useWorkspaces.getState().openRepoInActive(clonedPath);
-      setOpProgress((cur) => (cur && cur.id === id ? null : cur));
+      if (lfsWarning) {
+        setOpProgress((cur) => (cur && cur.id === id
+          ? { ...cur, kind: 'open', title: 'Git LFS', error: lfsWarning, percent: null, eta: null }
+          : cur));
+      } else {
+        setOpProgress((cur) => (cur && cur.id === id ? null : cur));
+      }
     } catch (e) {
       const msg = errMessage(e);
       setOpProgress((cur) => (cur && cur.id === id ? { ...cur, error: msg } : cur));

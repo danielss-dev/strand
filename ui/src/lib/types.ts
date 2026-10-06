@@ -575,6 +575,8 @@ export interface CloneOutcome {
   /** Absolute path of the cloned working tree, ready to open. */
   path: string;
   output: string;
+  /** Git clone succeeded but Git LFS could not fill working-tree files. */
+  warning?: string | null;
 }
 
 export interface CloneOptions {

@@ -3719,6 +3719,7 @@ textarea.clone-input {
 /* Failure state: persists with the reason + a Dismiss button (keyboard-focused)
    so a dead clone/open is never a popup that just disappears. */
 .op-error {
+  width: min(520px, calc(100vw - 48px));
   box-shadow:
     0 0 0 0.5px var(--del),
     var(--shadow-3);
@@ -3733,14 +3734,11 @@ textarea.clone-input {
   white-space: normal;
 }
 .op-error .op-progress-sub .detail {
-  white-space: normal;
+  white-space: pre-wrap;
   word-break: break-word;
-  /* Keep a long git error readable but bounded — enough lines that a fatal with
-     a long path still shows its tail (e.g. "Out of diskspace"). */
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  max-height: 12em;
+  overflow-y: auto;
 }
 .op-dismiss {
   margin-left: auto;

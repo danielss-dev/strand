@@ -23,7 +23,8 @@ trust.
 
 - Cloning shows a persistent bottom-center progress popup with a determinate bar and per-phase ETA. On success it switches to "Opening" and opens the clone as a new tab.
 - Clones are **cancellable** from the progress popup.
-- Failures become a persistent, dismissible error state with the reason — they never silently vanish.
+- Failures become a persistent, dismissible error state with the reason — they never silently vanish. Git LFS explanations are included, not only `error:` / `fatal:` lines.
+- Repositories that use Git LFS clone as ordinary Git first, then Strand downloads LFS objects. The working tree gets real file contents when that download succeeds. If Git LFS is missing, the LFS server is unreachable, or objects are missing, the clone still opens; files may still be pointer text until you retry with **Git LFS → Download and check out objects**.
 
 Network operations shell out to your system git, so SSH keys, credential helpers, and proxies work exactly as they do on the command line.
 

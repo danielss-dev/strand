@@ -110,6 +110,8 @@ the resolved app appearance automatically.
 - **Git LFS** — repository setup, tracking patterns, object/transfer status,
   downloads/uploads and server locks from repository menus and the command palette.
   File menus prefill a tracking pattern or lock target.
+  Clone skip-smudges, then downloads LFS objects so checkout cannot abort the
+  clone; a failed download still opens the repo and shows Git LFS's own error.
   Whole-file staging, checkout, discard and hard reset honor LFS filters;
   history is never migrated.
 - **Submodule lifecycle** — add, remove, deinitialize, synchronize URLs, and
