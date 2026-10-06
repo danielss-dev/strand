@@ -152,6 +152,16 @@ Ordinary status must not start LFS subprocesses. Management reads are explicit,
 transcripts bounded, and cancellation must terminate LFS/submodule descendants
 that otherwise keep pipes open. Tracking edits attributes, never history.
 
+**Clone.** Do not smudge LFS during `git clone` (`GIT_LFS_SKIP_SMUDGE=1` plus
+disabled `filter.lfs.*` so a missing `git-lfs` binary cannot abort checkout).
+Git LFS 3.5 can also install hooks during smudge, which newer Git clone
+protection refuses. After clone succeeds, `git lfs install --local` and
+`git lfs pull` as a separate cancellable step. If that step fails, keep the
+destination and surface Git LFS's own lines — `error_summary` must retain
+`Error downloading` / `batch response:` / `Failed to fetch some objects`,
+not only `error:` / `fatal:`. Retry from Git LFS → Pull. Never migrate
+history.
+
 ---
 
 ## Submodule removal must preserve ignored local data (2026-09-06)

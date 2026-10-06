@@ -137,6 +137,11 @@ Tracking prefills the selected path; review wildcard patterns before running.
 Select an action, fill its fields, then use the action’s named button. Reads are explicit:
 opening the dialog does not start an object scan or contact the remote.
 
+Cloning a repository that tracks Git LFS files downloads those objects after
+the Git clone finishes. Success leaves real working-tree contents. If Git LFS
+is not installed or the download fails, Strand still opens the clone, shows
+the Git LFS error, and leaves pointer files until you retry from this dialog.
+
 - **Check installation and configuration** shows the installed version and effective
   LFS environment. Install Git LFS separately if Git reports it missing.
 - **Set up this repository** runs `git lfs install --local`, including the

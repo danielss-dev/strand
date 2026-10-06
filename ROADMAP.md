@@ -3206,6 +3206,15 @@ when a commit touches more paths than fit (`.cd-files` `height: 100%` +
 `overflow-y: auto`; DAN-79). Diff pane scroll and the split resize handle
 are unchanged.
 
+**Clone Git LFS (2026-10-06, DAN-80):** `clone_with_options` skip-smudges so an
+LFS download, missing `git-lfs`, or clone-hook protection cannot abort
+checkout. A follow-up `complete_clone_lfs` installs local hooks and pulls
+objects with clone progress/cancel. Success leaves real working-tree bytes
+and a clean status; failure still opens the repo and shows Git LFS's own
+reason plus a Pull retry hint. `error_summary` keeps LFS explanation lines.
+Fixtures in `clone_lfs.rs`. Live check against private Azure DevOps
+`portal-setup` remains on Daniels' machine.
+
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and
 latest commit in separate columns, explicit current/locked indicators, and

@@ -192,8 +192,9 @@ Evidence and acceptance criteria: [`docs/main-audit-2026-09-29.md`](./docs/main-
   partial-clone filter and recursive-submodule options; deepen/unshallow,
   progress/cancellation, and safe argument construction (`clone_with_options`,
   `repo_expand_history`, `CloneScopeDialog`; `docs/sparse-clone-verification.md`).
-  Follow-up: verify real LFS clone checkout on Git 2.45.1 / LFS 3.5.1;
-  see `docs/git-assets-validation-2026-09-06.md` for the hook rejection.
+  ☑ LFS clone checkout (DAN-80): skip smudge during `clone_with_options`, then
+  `git lfs install --local` + `git lfs pull`; missing objects leave a usable
+  repo plus the Git LFS reason (`complete_clone_lfs`, `clone_lfs.rs`).
 - ☑ **F10 / P2 — Guided bisect.** Good/bad/skip, operation progress, external
   session resume and safe reset to the original checkout; defer test-command
   execution (`bisect.rs`, `BisectDialog`, Repository menu/palette and banner;
@@ -458,6 +459,10 @@ community plugins, performance and platform certification from Git feature gaps.
   side thread so neither pipe deadlocks)
 - ☑ Clone (HTTPS / SSH) with streaming progress (`network::clone` shells out
   to `git clone --progress`; returns the dest path to open)
+- ☑ Clone Git LFS repos (DAN-80): skip smudge so checkout cannot abort the
+  clone, then `complete_clone_lfs` pulls real contents; LFS failures open the
+  repo with pointer files, the full Git LFS reason, and a Pull retry hint
+  (`clone_with_options`, `error_summary`, `clone_lfs.rs`)
 - ☑ Push / delete tags on a remote (`Repo::push_tag` /
   `Repo::push_all_tags` — `git push <remote> [--delete] refs/tags/<tag>` and
   `git push <remote> --tags`, shelled out + streamed like the other net ops)

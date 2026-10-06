@@ -214,6 +214,93 @@ impl Repo {
     }
 }
 
+const LFS_RETRY_HINT: &str = "Open Git LFS → Download and check out objects to retry. Completed objects are retained; history is never migrated.";
+
+fn git_lfs_installed() -> bool {
+    crate::git_command()
+        .args(["lfs", "version"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn cancelled_lfs_warning() -> String {
+    format!(
+        "Git LFS download was cancelled. The repository opened with pointer files. {LFS_RETRY_HINT}"
+    )
+}
+
+/// After a skip-smudge clone, install local LFS hooks and pull objects.
+/// Returns `Ok(None)` when there is nothing to do or the working tree has
+/// real contents; `Ok(Some(warning))` when the git clone is usable but LFS
+/// could not finish. Cancellation of this step also returns a warning so
+/// the caller can still open the destination.
+pub(crate) fn complete_clone_lfs(
+    dest: &Path,
+    mut on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<Option<String>> {
+    if cancel.is_some_and(CancelHandle::is_cancelled) {
+        return Ok(Some(cancelled_lfs_warning()));
+    }
+    let repo = match Repo::discover(dest) {
+        Ok(repo) => repo,
+        Err(_) => return Ok(None),
+    };
+    let git2 = repo.git2()?;
+    let Ok(head) = git2.head() else {
+        return Ok(None);
+    };
+    let Ok(tree) = head.peel_to_tree() else {
+        return Ok(None);
+    };
+    if !repo.lfs_checkout_needed(&tree)? {
+        return Ok(None);
+    }
+    if !git_lfs_installed() {
+        return Ok(Some(
+            "Git LFS is not installed, so LFS-tracked files were left as pointers. Install Git LFS, then open Git LFS → Download and check out objects.".into(),
+        ));
+    }
+    on_progress(Progress {
+        phase: "Git LFS".into(),
+        percent: None,
+        raw: "Downloading Git LFS files…".into(),
+    });
+    match run_git_streaming(dest, &["lfs", "install", "--local"], &mut on_progress, cancel) {
+        Ok(_) => {}
+        Err(Error::Cancelled) => return Ok(Some(cancelled_lfs_warning())),
+        Err(_) => {}
+    }
+    let transcript = match crate::network::run_git_streaming_transcript(
+        dest,
+        &["lfs", "pull"],
+        &mut on_progress,
+        cancel,
+    ) {
+        Ok(transcript) => transcript,
+        Err(Error::Cancelled) => return Ok(Some(cancelled_lfs_warning())),
+        Err(error) => {
+            return Ok(Some(format!("{error}\n{LFS_RETRY_HINT}")));
+        }
+    };
+    if cancel.is_some_and(CancelHandle::is_cancelled) {
+        return Ok(Some(cancelled_lfs_warning()));
+    }
+    if transcript.success {
+        return Ok(None);
+    }
+    let detail = transcript.output.trim();
+    let detail = if detail.is_empty() {
+        "git lfs pull failed".to_string()
+    } else {
+        detail.to_string()
+    };
+    Ok(Some(format!("{detail}\n{LFS_RETRY_HINT}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::LfsAction;
@@ -349,8 +436,8 @@ mod tests {
             .unwrap();
         let consumer = dir.join("consumer");
         // Git LFS 3.5 installs post-checkout during smudge, which newer Git's
-        // clone protection refuses. Keep clone configuration in F09's scope:
-        // acquire objects without checkout, then exercise Strand's checkout.
+        // clone protection refuses. Product clone skip-smudges then pulls;
+        // this fixture still isolates Strand checkout from clone.
         git(
             &dir,
             &[

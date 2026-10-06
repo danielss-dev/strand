@@ -117,6 +117,10 @@ pub struct CloneOutcome {
     pub path: String,
     /// Combined git output, trimmed.
     pub output: String,
+    /// Present when `git clone` succeeded but Git LFS could not materialize
+    /// working-tree contents. The destination is still a usable repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -623,7 +627,7 @@ pub fn clone_with_options(
     url: &str,
     dest: &str,
     options: &CloneOptions,
-    on_progress: impl FnMut(Progress),
+    mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<CloneOutcome> {
     // The URL is pasted by the user. Make sure git can't read it as an option
@@ -637,15 +641,30 @@ pub fn clone_with_options(
     // Run from the destination's parent so a relative `dest` still lands in
     // the right place; an absolute `dest` ignores the cwd anyway.
     let cwd = dest_path.parent().filter(|p| !p.as_os_str().is_empty());
-    let owned_args = clone_args(url, dest, options)?;
+    // Skip LFS smudge during clone so a download/auth/hook failure cannot abort
+    // checkout. Filter overrides also cover a missing `git-lfs` binary.
+    // `GIT_LFS_SKIP_SMUDGE` is inherited by recursive submodule clones.
+    let mut owned_args = vec![
+        "-c".into(),
+        "filter.lfs.process=".into(),
+        "-c".into(),
+        "filter.lfs.smudge=".into(),
+        "-c".into(),
+        "filter.lfs.required=false".into(),
+    ];
+    owned_args.extend(clone_args(url, dest, options)?);
     let args = owned_args.iter().map(String::as_str).collect::<Vec<_>>();
-    let outcome = match cwd {
-        Some(parent) => run_git_streaming(parent, &args, on_progress, cancel),
-        None => run_git_streaming(Path::new("."), &args, on_progress, cancel),
-    }?;
+    let lfs_skip = [("GIT_LFS_SKIP_SMUDGE", "1")];
+    let parent = cwd.unwrap_or_else(|| Path::new("."));
+    let transcript = run_git_input_transcript_env(parent, &args, None, &lfs_skip, &mut on_progress, cancel)?;
+    if !transcript.success {
+        return Err(Error::Other(error_summary(&transcript.output, &args)));
+    }
+    let warning = crate::lfs::complete_clone_lfs(dest_path, &mut on_progress, cancel)?;
     Ok(CloneOutcome {
         path: dest.to_string(),
-        output: outcome.output,
+        output: transcript.output,
+        warning,
     })
 }
 
@@ -750,6 +769,17 @@ pub(crate) fn run_git_input_transcript(
     cwd: &Path,
     args: &[&str],
     input: Option<Vec<u8>>,
+    on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<GitRunTranscript> {
+    run_git_input_transcript_env(cwd, args, input, &[], on_progress, cancel)
+}
+
+pub(crate) fn run_git_input_transcript_env(
+    cwd: &Path,
+    args: &[&str],
+    input: Option<Vec<u8>>,
+    extra_env: &[(&str, &str)],
     mut on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<GitRunTranscript> {
@@ -762,6 +792,13 @@ pub(crate) fn run_git_input_transcript(
     }
     command.current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
+        // Clone sets GIT_LFS_SKIP_SMUDGE=1 via extra_env. Force 0 otherwise so a
+        // leaked shell value cannot skip smudge on checkout/discard/reset.
+        .env("GIT_LFS_SKIP_SMUDGE", "0");
+    for &(key, value) in extra_env {
+        command.env(key, value);
+    }
+    command
         // Neutralize repo-local config that would run code as a side effect.
         .args(crate::GIT_SAFE_CONFIG)
         // Force progress reporting even though stderr isn't a TTY.
@@ -959,11 +996,14 @@ mod bounded_process_tests {
 /// noise with the actual `fatal:` / `error:` line buried at the very end —
 /// returning the whole thing makes the UI show the *start* ("Cloning into…"),
 /// not the cause. Surface git's error lines (or, lacking any, the tail).
+/// Git LFS explains itself on lines that do not start with `error:`/`fatal:`
+/// (`Error downloading object`, `batch response:`, `Failed to fetch some
+/// objects`); keep those too so the toast is not just "smudge filter lfs failed".
 fn error_summary(combined: &str, args: &[&str]) -> String {
     let errs: Vec<&str> = combined
         .lines()
         .map(str::trim)
-        .filter(|l| l.starts_with("fatal:") || l.starts_with("error:"))
+        .filter(|l| is_failure_line(l))
         .collect();
     if !errs.is_empty() {
         return errs.join("\n");
@@ -974,6 +1014,23 @@ fn error_summary(combined: &str, args: &[&str]) -> String {
     }
     // No explicit error line — show the last few lines, where the conclusion is.
     lines[lines.len().saturating_sub(4)..].join("\n")
+}
+
+fn is_failure_line(line: &str) -> bool {
+    if line.starts_with("fatal:") || line.starts_with("error:") {
+        return true;
+    }
+    let lower = line.to_ascii_lowercase();
+    lower.starts_with("error downloading")
+        || lower.starts_with("error transferring")
+        || lower.starts_with("smudge error:")
+        || lower.starts_with("batch response:")
+        || lower.starts_with("failed to fetch some objects")
+        || lower.contains("remote missing object")
+        || lower.contains("smudge filter lfs")
+        || lower.contains("git-lfs")
+        || lower.contains("git lfs")
+        || (lower.starts_with("warning:") && lower.contains("checkout failed"))
 }
 
 /// Read `reader` and call `sink` with each fragment delimited by '\r' or
@@ -1205,6 +1262,28 @@ mod tests {
     #[test]
     fn error_summary_empty_names_the_command() {
         assert_eq!(error_summary("", &["push"]), "git push failed");
+    }
+
+    #[test]
+    fn error_summary_keeps_git_lfs_explanation_lines() {
+        let transcript = "Cloning into 'portal-setup'...\n\
+            Receiving objects: 100% (10/10), done.\n\
+            Downloading OnPremiseInstallation/rustfs/rustfs.exe (12 MB)\n\
+            Error downloading object: OnPremiseInstallation/rustfs/rustfs.exe (abc1234): Smudge error: Error downloading OnPremiseInstallation/rustfs/rustfs.exe (abc1234): batch response: Post \"https://dev.azure.com/org/_git/portal-setup.git/info/lfs/objects/batch\": authentication required\n\
+            Errors logged to '/tmp/portal-setup/.git/lfs/logs/20261006.log'.\n\
+            Use `git lfs logs last` to view the log.\n\
+            error: external filter 'git-lfs filter-process' failed\n\
+            fatal: OnPremiseInstallation/rustfs/rustfs.exe: smudge filter lfs failed\n\
+            warning: Clone succeeded, but checkout failed.\n\
+            You can inspect what was checked out with 'git status'";
+        let s = error_summary(transcript, &["clone", "--progress", "--", "url", "dest"]);
+        assert!(s.contains("authentication required"), "{s}");
+        assert!(s.contains("Error downloading object"), "{s}");
+        assert!(s.contains("error: external filter 'git-lfs filter-process' failed"), "{s}");
+        assert!(s.contains("fatal: OnPremiseInstallation/rustfs/rustfs.exe: smudge filter lfs failed"), "{s}");
+        assert!(s.contains("warning: Clone succeeded, but checkout failed."), "{s}");
+        assert!(!s.contains("Cloning into"), "{s}");
+        assert!(!s.contains("Receiving objects"), "{s}");
     }
 
     #[test]
