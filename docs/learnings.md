@@ -2155,6 +2155,7 @@ one-time unpin and re-pin remains the fallback if the icon still looks blank.
 Compile and run the COM path on `windows-latest` (`cargo test -p strand-tauri
 windows_pin` plus clippy in `windows-msi-pin-rehearsal.yml`); Linux CI does
 not typecheck `#[cfg(windows)]` IShellLink code.
+Expand shell-link target and icon environment variables before matching or checking existence; preserve working custom icons.
 
 **Animated notifications need one stable accessibility channel (2026-07-18).**
 Keep visible success/error/network pills `aria-hidden` and mirror the active

@@ -180,16 +180,37 @@ pub(crate) fn heal_pins_in(
 }
 
 #[cfg(windows)]
+fn expand_environment_strings(value: &str) -> String {
+    use windows::{core::PCWSTR, Win32::System::Environment::ExpandEnvironmentStringsW};
+
+    let source: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let required = unsafe { ExpandEnvironmentStringsW(PCWSTR(source.as_ptr()), None) };
+    if required == 0 {
+        return value.to_string();
+    }
+    let mut buffer = vec![0u16; required as usize];
+    let written =
+        unsafe { ExpandEnvironmentStringsW(PCWSTR(source.as_ptr()), Some(buffer.as_mut_slice())) };
+    if written == 0 || written as usize > buffer.len() {
+        return value.to_string();
+    }
+    from_wide(&buffer[..written as usize])
+}
+
+#[cfg(windows)]
 fn heal_one_pin(
     lnk: &Path,
     installed_exe: &str,
     installer_cache_root: &str,
 ) -> windows::core::Result<bool> {
     let shortcut = read_shortcut(lnk)?;
-    let icon_exists = !shortcut.icon_path.is_empty() && Path::new(&shortcut.icon_path).exists();
+    let (icon_path, _) = split_icon_location(&shortcut.icon_path);
+    let icon_path = expand_environment_strings(&icon_path);
+    let target_path = expand_environment_strings(&shortcut.target_path);
+    let icon_exists = !icon_path.is_empty() && Path::new(&icon_path).exists();
     if !should_heal_pin(
-        &shortcut.target_path,
-        &shortcut.icon_path,
+        &target_path,
+        &icon_path,
         installed_exe,
         installer_cache_root,
         icon_exists,
@@ -271,6 +292,16 @@ fn write_shortcut_icon(path: &Path, icon_path: &str, icon_index: i32) -> windows
 
 #[cfg(all(windows, test))]
 fn create_shortcut(path: &Path, target: &Path, icon: &Path) -> windows::core::Result<()> {
+    create_shortcut_with_icon_index(path, target, icon, 0)
+}
+
+#[cfg(all(windows, test))]
+fn create_shortcut_with_icon_index(
+    path: &Path,
+    target: &Path,
+    icon: &Path,
+    icon_index: i32,
+) -> windows::core::Result<()> {
     use windows::{
         core::{Interface, PCWSTR},
         Win32::{
@@ -284,7 +315,7 @@ fn create_shortcut(path: &Path, target: &Path, icon: &Path) -> windows::core::Re
     let icon_wide = wide_path(icon);
     let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }?;
     unsafe { link.SetPath(PCWSTR(target_wide.as_ptr())) }?;
-    unsafe { link.SetIconLocation(PCWSTR(icon_wide.as_ptr()), 0) }?;
+    unsafe { link.SetIconLocation(PCWSTR(icon_wide.as_ptr()), icon_index) }?;
     let persist: IPersistFile = link.cast()?;
     unsafe { persist.Save(PCWSTR(lnk_wide.as_ptr()), true) }?;
     Ok(())
@@ -563,6 +594,68 @@ mod tests {
             &custom_pin.icon_path,
             &custom.to_string_lossy()
         ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn expands_known_environment_variable() {
+        assert_eq!(
+            expand_environment_strings("%SystemRoot%"),
+            std::env::var("SystemRoot").unwrap()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn preserves_environment_custom_icon_and_heals_environment_cache_icon() {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("strand.exe");
+        std::fs::write(&exe, b"fake-strand").unwrap();
+        let custom = temp.path().join("custom.lnk");
+        let broken = temp.path().join("broken.lnk");
+        let custom_icon = r"%SystemRoot%\System32\shell32.dll";
+        let cache_icon = r"%WINDIR%\Installer\{DEADBEEF-0000-0000-0000-000000000000}\ProductIcon";
+        assert!(Path::new(&expand_environment_strings(custom_icon)).exists());
+
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        create_shortcut_with_icon_index(&custom, &exe, Path::new(custom_icon), 4).unwrap();
+        create_shortcut(&broken, &exe, Path::new(cache_icon)).unwrap();
+        assert_eq!(read_shortcut(&custom).unwrap().icon_path, custom_icon);
+        assert_eq!(read_shortcut(&broken).unwrap().icon_path, cache_icon);
+        let custom_before = std::fs::read(&custom).unwrap();
+        let cache_root = installer_cache_root();
+        // Cache icons are selected even when their expanded file still exists.
+        assert!(should_heal_pin(
+            &exe.to_string_lossy(),
+            &expand_environment_strings(cache_icon),
+            &exe.to_string_lossy(),
+            &cache_root.to_string_lossy(),
+            true,
+        ));
+
+        let healed = heal_pins_in(&[temp.path().to_path_buf()], &exe, &cache_root).unwrap();
+        assert_eq!(healed, 1);
+        assert_eq!(read_shortcut(&custom).unwrap().icon_path, custom_icon);
+        assert_eq!(std::fs::read(&custom).unwrap(), custom_before);
+        assert!(windows_paths_equal(
+            &read_shortcut(&broken).unwrap().icon_path,
+            &exe.to_string_lossy()
+        ));
+        with_shell_link(
+            &custom,
+            windows::Win32::System::Com::STGM_READ,
+            |link, _, _| {
+                let mut icon = vec![0u16; 2048];
+                let mut index = 0;
+                unsafe { link.GetIconLocation(&mut icon, std::ptr::addr_of_mut!(index)) }?;
+                assert_eq!(from_wide(&icon), custom_icon);
+                assert_eq!(index, 4);
+                Ok(())
+            },
+        )
+        .unwrap();
     }
 
     /// Rehearsal vehicle: `heal_pins_in` on the runner's real User Pinned dir.
