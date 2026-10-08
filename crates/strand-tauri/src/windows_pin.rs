@@ -169,12 +169,12 @@ fn with_shell_link<T>(
 
 #[cfg(windows)]
 fn read_shortcut(path: &Path) -> windows::core::Result<ShortcutState> {
-    use windows::Win32::{Storage::FileSystem::WIN32_FIND_DATAW, System::Com::STGM_READ};
+    use windows::Win32::System::Com::STGM_READ;
 
     with_shell_link(path, STGM_READ, |link, _, _| {
+        const SLGP_RAWPATH: u32 = 4;
         let mut target = vec![0u16; 2048];
-        let mut find_data = WIN32_FIND_DATAW::default();
-        unsafe { link.GetPath(&mut target, std::ptr::addr_of_mut!(find_data), 0) }?;
+        unsafe { link.GetPath(&mut target, std::ptr::null_mut(), SLGP_RAWPATH) }?;
         let mut icon = vec![0u16; 2048];
         let mut icon_index = 0i32;
         unsafe { link.GetIconLocation(&mut icon, std::ptr::addr_of_mut!(icon_index)) }?;
@@ -188,13 +188,15 @@ fn read_shortcut(path: &Path) -> windows::core::Result<ShortcutState> {
 #[cfg(windows)]
 fn write_shortcut_icon(path: &Path, icon_path: &str, icon_index: i32) -> windows::core::Result<()> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::{core::PCWSTR, Win32::System::Com::STGM_READ};
+    use windows::{core::PCWSTR, Win32::System::Com::STGM_READWRITE};
 
     let wide_icon: Vec<u16> = std::ffi::OsStr::new(icon_path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
-    with_shell_link(path, STGM_READ, |link, persist, wide_path| {
+    // Load read-write so IPersistFile::Save can update the existing .lnk in place.
+    // STGM_READ + Save fails with access denied and would leave broken pins untouched.
+    with_shell_link(path, STGM_READWRITE, |link, persist, wide_path| {
         unsafe { link.SetIconLocation(PCWSTR(wide_icon.as_ptr()), icon_index) }?;
         unsafe { persist.Save(wide_path, true) }?;
         Ok(())
@@ -435,13 +437,29 @@ mod tests {
         create_shortcut(&pin_dir.join("other.lnk"), &other, &missing_icon).unwrap();
         create_shortcut(&pin_dir.join("custom.lnk"), &exe, &custom).unwrap();
 
-        let healed = heal_pins_in(
-            &[pin_dir.clone()],
-            &exe,
-            temp.path().join("Installer").as_path(),
-        )
-        .unwrap();
-        assert_eq!(healed, 1);
+        let cache_root = temp.path().join("Installer");
+        let broken_before = read_shortcut(&pin_dir.join("broken.lnk")).unwrap();
+        assert!(
+            should_heal_pin(
+                &broken_before.target_path,
+                &broken_before.icon_path,
+                &exe.to_string_lossy(),
+                &cache_root.to_string_lossy(),
+                Path::new(&broken_before.icon_path).exists(),
+            ),
+            "broken pin was not selected: target={:?} icon={:?}",
+            broken_before.target_path,
+            broken_before.icon_path
+        );
+
+        let healed = heal_pins_in(&[pin_dir.clone()], &exe, cache_root.as_path()).unwrap();
+        if healed != 1 {
+            let broken = read_shortcut(&pin_dir.join("broken.lnk")).unwrap();
+            panic!(
+                "healed={healed} after write; broken target={:?} icon={:?}",
+                broken.target_path, broken.icon_path
+            );
+        }
 
         let broken = read_shortcut(&pin_dir.join("broken.lnk")).unwrap();
         assert!(windows_paths_equal(
