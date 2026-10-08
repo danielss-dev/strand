@@ -1129,6 +1129,11 @@ community plugins, performance and platform certification from Git feature gaps.
   any file/folder/multi-selection in Local Changes (both sides) and the Review
   queue; palette "Copy unstaged/staged/review diff" actions gated on
   length-only selectors and reading the live arrays via `useRepo.getState()`.)
+- ☑ Open in Workbench from Local Changes (staged + unstaged) and Review
+  trees (DAN-84; `openInWorkbenchMenuItem`, `FileSection.menuItems`,
+  `Review.treeMenuItems`) — pinned working-tree tab via `useWork().openFile`
+  + `showWorkbenchWork`; hidden for deleted files and multi-file selections;
+  folder rows open the directory like Files → Open.
 - ☑ In-diff text search (⌘F in Local Changes + Review, also palette "Search in
   diff…" via the one-shot `diffSearchSignal`/`requestDiffSearch` store signal.
   `searchDiffs` in `lib/diffSearch.ts` scans every patch in the pool — both
@@ -1866,8 +1871,9 @@ tree: watch the agent work, review fast, accept or reject safely.
   Local Changes' hot path doesn't pay for it).
 - ☑ Review queue is a Pierre tree (`PierreTree` with the new
   `rowDecoration` lane: ✓ = reviewed, "changed" = stale; right-click →
-  Mark reviewed / Stage / Discard / Copy path; double-click or Enter
-  toggles the reviewed mark, a folder marks everything under it).
+  Open in Workbench / Open in editor / Mark reviewed / Stage / Discard /
+  Copy path; double-click or Enter toggles the reviewed mark, a folder
+  marks everything under it).
 - ☑ Fast review navigation: Pierre's highlight **worker pool** is mounted
   app-wide (`components/DiffWorkerPool.tsx` + `worker: { format: 'es' }`
   in vite config) so Shiki runs off the main thread; parsed patches carry a

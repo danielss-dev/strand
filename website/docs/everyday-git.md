@@ -12,7 +12,7 @@ the first and last 8 KiB of each stream when a hook is verbose.
 
 Local Changes is a pure staging workspace: an Unstaged pane and a Staged pane (hierarchical file trees with status badges), a diff pane, and the commit form.
 
-Right-click a single file in Local Changes or Review and choose **Open in editor** to open that exact working-tree path with the editor selected in Settings → Integrations. The same action is available in the sidebar Files tree and in each repository inside Workspace Review. Multi-file selections keep their batch actions and omit this single-file command.
+Right-click a file or folder in Local Changes or Review and choose **Open in Workbench** to open the whole working-tree file (or the folder) as a pinned tab in Work — the same destination as Files → Open — then switch to it. **Open in editor** remains next to it and still sends a single selected file to the editor chosen in Settings → Integrations. Deleted files omit **Open in Workbench** because there is no working-tree copy. Multi-file selections keep their batch actions and omit both of these single-target commands (a folder row still offers **Open in Workbench** for that folder). The same **Open in editor** action is available in the sidebar Files tree and in each repository inside Workspace Review.
 
 - The view opens with a "show all" stacked diff of every changed file. Clicking the Unstaged or Staged column title re-selects that side's full changeset, and selecting a folder row aggregates the diffs beneath it.
 - Stage or unstage a whole file from its row, or use **Stage all** / **Unstage all** for the whole side.

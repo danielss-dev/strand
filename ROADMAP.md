@@ -3225,6 +3225,12 @@ when a commit touches more paths than fit (`.cd-files` `height: 100%` +
 `overflow-y: auto`; DAN-79). Diff pane scroll and the split resize handle
 are unchanged.
 
+**Open in Workbench from Local Changes / Review (2026-10-08, DAN-84):** Right-click
+a file or folder in Local Changes (staged or unstaged) or the Review queue and
+choose **Open in Workbench** to pin the whole working-tree path in Work, using
+the same `useWork().openFile` + `showWorkbenchWork` path as Files → Open.
+Deleted files hide the item; multi-select matches Open in editor.
+
 **Clone Git LFS (2026-10-06, DAN-80):** `clone_with_options` skip-smudges so an
 LFS download, missing `git-lfs`, or clone-hook protection cannot abort
 checkout. A follow-up `complete_clone_lfs` installs local hooks and pulls

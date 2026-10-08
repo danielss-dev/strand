@@ -17,9 +17,11 @@ import {
   copyToClipboard,
   diffStatusToGit,
   PierreTree,
+  type TreeMenuContext,
   type TreeMenuItem,
   type TreeRowDecoration,
 } from '../components/PierreTree';
+import { diffStatusForMenuRow, openInWorkbenchMenuItem } from '../lib/openInWorkbench';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
 import { hashFileDiff as hashOf } from '../lib/patch';
 import { matchTarget, scrollToDiffLine, type DiffLineTarget } from '../lib/diffJump';
@@ -37,6 +39,7 @@ import type {
   FileDiff,
 } from '../lib/types';
 import { useRepo } from '../stores/repo';
+import { useWork } from '../stores/work';
 import { useCompleteDiffSearch, useRepoDiffs } from '../lib/useRepoDiffs';
 import { useSettings } from '../stores/settings';
 import { treeFileOrder } from '../lib/treeOrder';
@@ -71,6 +74,7 @@ export function Review({
   onOpenFileInEditor,
   onToast,
   active = true,
+  onOpenWork,
 }: {
   onOpenFileInEditor: (file: string) => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
@@ -79,6 +83,8 @@ export function Review({
   /** Custom stays mounted under a different global view id, so follow ordinary
    * local-diff refreshes explicitly while this surface is embedded. */
   embedded?: boolean;
+  /** Custom keeps navigation inside its Work pane instead of leaving it. */
+  onOpenWork?: () => void;
 }) {
   const baseline = useRepo((s) => s.baseline);
   const baselineDiffs = useRepo((s) => s.baselineDiffs);
@@ -107,6 +113,11 @@ export function Review({
   const selected = useRepo((s) => s.reviewSelection);
   const selectReviewFile = useRepo((s) => s.selectReviewFile);
   const setView = useRepo((s) => s.setView);
+  const openWorkFile = useWork((s) => s.openFile);
+  const showWork = useCallback(() => {
+    if (onOpenWork) onOpenWork();
+    else setView('work');
+  }, [onOpenWork, setView]);
   const stagedDiffs = useRepo((s) => s.stagedDiffs);
   const diffMode = useSettings((s) => s.diffMode);
   const aiProvider = useSettings((s) => s.aiProvider);
@@ -593,13 +604,23 @@ export function Review({
   );
 
   const treeMenuItems = useCallback(
-    (targets: string[]): TreeMenuItem[] => {
+    (targets: string[], context: TreeMenuContext): TreeMenuItem[] => {
       const known = targets.filter((p) => verdicts.has(p));
       if (known.length === 0) return [];
       const n = known.length;
       const suffix = n > 1 ? ` ${n} files` : '';
       const allReviewed = known.every((p) => verdicts.get(p)!.verdict === 'reviewed');
       const items: TreeMenuItem[] = [];
+      const workbench = openInWorkbenchMenuItem({
+        repoPath: meta?.path,
+        path: context.path,
+        kind: context.kind,
+        targetCount: n,
+        status: diffStatusForMenuRow(pool, context.path, context.kind),
+        openFile: openWorkFile,
+        showWork,
+      });
+      if (workbench) items.push(workbench);
       if (n === 1) {
         items.push({
           label: 'Open in editor',
@@ -653,7 +674,7 @@ export function Review({
       }
       return items;
     },
-    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor, loadDiffFiles],
+    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor, loadDiffFiles, meta?.path, openWorkFile, showWork],
   );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────

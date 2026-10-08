@@ -41,7 +41,7 @@ The left side of the view is a file tree of everything in the review set — you
 - If a file changes again after you reviewed it, its mark flips automatically and the row shows **changed** ("Changed since reviewed — review again"). Marks compare the loaded patch with the version you reviewed; newly changed files must load again before they can be approved.
 - Files with notes carry a `✎N` badge.
 
-Double-click or press `Enter` on a row to toggle its reviewed state; doing this on a folder marks its whole subtree. Right-click a row for Mark reviewed, Stage, Discard, and Copy path. Reviewed marks persist per repository across restarts, and they drive the progress bar in the Review toolbar.
+Double-click or press `Enter` on a row to toggle its reviewed state; doing this on a folder marks its whole subtree. Right-click a row for Open in Workbench (the whole working-tree file or folder as a pinned Work tab), Open in editor, Mark reviewed, Stage, Discard, and Copy path. Deleted files omit Open in Workbench. Reviewed marks persist per repository across restarts, and they drive the progress bar in the Review toolbar.
 
 ## Change map
 
