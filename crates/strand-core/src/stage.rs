@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::{error::Result, repo::Repo};
@@ -159,6 +160,11 @@ impl Repo {
                 #[cfg(not(windows))]
                 return Err(error.into());
             }
+            // libgit2 force-checkout skips a workdir file when the *filtered*
+            // OID matches the index, even if the on-disk bytes still differ
+            // (CRLF vs `eol=lf`). Those files stay `M` with an empty patch.
+            // `git checkout-index --force` always writes the smudge form.
+            rewrite_skipped_checkouts(self, &tracked)?;
         }
         Ok(())
     }
@@ -241,6 +247,99 @@ fn checkout_index_with_system_git(repo: &Repo, paths: &[&str]) -> Result<()> {
     let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     repo.run_git(&refs)?;
     Ok(())
+}
+
+/// Rewrite tracked paths git2 still reports as workdir-dirty after libgit2
+/// checkout. Index `file_size` is cached stat data, not the blob size, so a
+/// CLI `git status` / editor refresh while CRLF is on disk makes a size
+/// comparison miss. Status on the discard pathspec is the real leftover signal.
+fn rewrite_skipped_checkouts(repo: &Repo, tracked: &[&str]) -> Result<()> {
+    let skipped = leftover_workdir_paths(repo, tracked)?;
+    if skipped.is_empty() {
+        return Ok(());
+    }
+    invalidate_index_stat_cache(repo, &skipped)?;
+    let refs: Vec<&str> = skipped.iter().map(String::as_str).collect();
+    force_checkout_index(repo, &refs)?;
+    repo.git2()?.index()?.read(true)?;
+    Ok(())
+}
+
+/// `checkout-index --force` still skips a write when cached `file_size` equals
+/// the workdir (the CRLF-on-disk + refreshed-index case). Zero the stat cache
+/// so Git actually smudge-writes.
+fn invalidate_index_stat_cache(repo: &Repo, paths: &[String]) -> Result<()> {
+    let git = repo.git2()?;
+    let mut index = git.index()?;
+    for path in paths {
+        let Some(mut entry) = index.get_path(Path::new(path), 0) else { continue };
+        entry.file_size = 0;
+        entry.mtime = git2::IndexTime::new(0, 0);
+        index.add(&entry)?;
+    }
+    index.write()?;
+    Ok(())
+}
+
+fn leftover_workdir_paths(repo: &Repo, tracked: &[&str]) -> Result<Vec<String>> {
+    if tracked.is_empty() {
+        return Ok(Vec::new());
+    }
+    let git = repo.git2()?;
+    let mut opts = git2::StatusOptions::new();
+    opts.show(git2::StatusShow::Workdir)
+        .include_untracked(false)
+        .include_ignored(false)
+        .include_unmodified(false)
+        .disable_pathspec_match(true);
+    for path in tracked {
+        opts.pathspec(*path);
+    }
+    let mut leftover: HashSet<String> = {
+        let statuses = git.statuses(Some(&mut opts))?;
+        statuses
+            .iter()
+            .filter(|entry| {
+                let status = entry.status();
+                status.is_wt_modified() || status.is_wt_deleted()
+            })
+            .filter_map(|entry| entry.path().map(str::to_owned))
+            .collect()
+    };
+    // Filtered OID can match while on-disk bytes are still CRLF. After a CLI
+    // `git status` refreshes `file_size` to the CRLF length, git2 status is
+    // clean — so also rewrite paths whose workdir and index blob differ only
+    // by CR/LF.
+    if let Some(workdir) = git.workdir() {
+        let index = git.index()?;
+        for path in tracked {
+            if leftover.contains(*path) {
+                continue;
+            }
+            let Some(entry) = index.get_path(Path::new(path), 0) else { continue };
+            if matches!(entry.mode, 0o120000 | 0o160000) {
+                continue;
+            }
+            let Some(disk) = crate::diff::read_regular_workdir_file(
+                &workdir.join(path), crate::diff::WORKDIR_CONTENT_NOTE_MAX_BYTES,
+            ) else { continue };
+            let Ok(blob) = git.find_blob(entry.id) else { continue };
+            if blob.size() as u64 > crate::diff::WORKDIR_CONTENT_NOTE_MAX_BYTES {
+                continue;
+            }
+            if crate::diff::only_line_endings_differ(&disk, blob.content()) {
+                leftover.insert((*path).to_string());
+            }
+        }
+    }
+    Ok(leftover.into_iter().collect())
+}
+
+fn force_checkout_index(repo: &Repo, paths: &[&str]) -> Result<()> {
+    repo.run_literal_paths(
+        &["-c", "core.longpaths=true", "checkout-index", "--force", "-z", "--stdin"],
+        paths.iter().copied(),
+    )
 }
 
 #[cfg(test)]
@@ -438,6 +537,168 @@ mod tests {
         assert_eq!(staged_paths(&repo.status().unwrap()), ["i.tsx"]);
     }
 
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "core.hooksPath=", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    }
+
+    fn git_stdout(dir: &std::path::Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "core.hooksPath=", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    fn eol_lf_crlf_repo() -> (Repo, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        git(root, &["config", "user.name", "Test"]);
+        git(root, &["config", "user.email", "test@example.com"]);
+        git(root, &["config", "core.autocrlf", "false"]);
+        std::fs::write(root.join(".gitattributes"), "* text eol=lf\n").unwrap();
+        std::fs::write(root.join("package.json"), "{\n  \"name\": \"x\"\n}\n").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "lf"]);
+        std::fs::write(root.join("package.json"), "{\r\n  \"name\": \"x\"\r\n}\r\n").unwrap();
+        (Repo::discover(root.to_str().unwrap()).unwrap(), dir)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discard_paths_restores_symlink_without_reading_target() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let (repo, dir) = scratch_repo();
+            // Restoring the original link must not follow its target either.
+            std::os::unix::fs::symlink("/dev/zero", dir.join("target")).unwrap();
+            let link = dir.join("link");
+            std::os::unix::fs::symlink("target", &link).unwrap();
+            repo.stage_paths(&["link".into()]).unwrap();
+            repo.commit("symlink", None, false).unwrap();
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
+            repo.discard_paths(&["link".into()]).unwrap();
+            assert_eq!(std::fs::read_link(&link).unwrap(), Path::new("target"));
+            assert!(leftover_workdir_paths(&repo, &["link"]).unwrap().is_empty());
+            std::fs::remove_dir_all(dir).unwrap();
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(30)).expect("discard followed symlink target");
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn discard_paths_rewrites_crlf_when_attributes_require_lf() {
+        let (repo, dir) = eol_lf_crlf_repo();
+        let root = dir.path();
+        assert_eq!(git_stdout(root, &["status", "--porcelain=v1"]).trim(), "M package.json");
+        assert!(git_stdout(root, &["diff"]).trim().is_empty(), "git diff is empty before discard");
+        let diffs = repo.diff_unstaged().unwrap();
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].path, "package.json");
+        assert_eq!((diffs[0].adds, diffs[0].dels), (0, 0));
+        assert!(diffs[0].patch.is_empty());
+        assert_eq!(diffs[0].note.as_deref(), Some("Only line endings differ"));
+
+        repo.discard_paths(&["package.json".into()]).unwrap();
+        let repo = Repo::discover(root.to_str().unwrap()).unwrap();
+        assert!(repo.status().unwrap().is_empty(), "discard must leave a clean status");
+        assert!(repo.diff_unstaged().unwrap().is_empty());
+        assert!(git_stdout(root, &["status", "--porcelain=v1"]).trim().is_empty());
+        let on_disk = std::fs::read(root.join("package.json")).unwrap();
+        assert_eq!(on_disk, b"{\n  \"name\": \"x\"\n}\n");
+    }
+
+    #[test]
+    fn discard_paths_rewrites_crlf_after_index_stat_refresh() {
+        let (repo, dir) = eol_lf_crlf_repo();
+        let root = dir.path();
+        git(root, &["status", "--porcelain=v1"]);
+        let _ = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["update-index", "--refresh"])
+            .output();
+        {
+            let git2 = repo.git2().unwrap();
+            let mut index = git2.index().unwrap();
+            let mut entry = index.get_path(Path::new("package.json"), 0).unwrap();
+            let size = std::fs::metadata(root.join("package.json")).unwrap().len() as u32;
+            assert_ne!(entry.file_size, size, "index still has the LF blob size before we smash it");
+            entry.file_size = size;
+            index.add(&entry).unwrap();
+            index.write().unwrap();
+            assert_eq!(
+                index.get_path(Path::new("package.json"), 0).unwrap().file_size,
+                size,
+                "cached stat now matches the CRLF workdir; a size heuristic would skip"
+            );
+        }
+        assert_eq!(
+            leftover_workdir_paths(&repo, &["package.json"]).unwrap(),
+            vec!["package.json".to_string()],
+            "CRLF vs LF blob must still be rewritten after the stat cache matches the workdir size"
+        );
+        repo.discard_paths(&["package.json".into()]).unwrap();
+        let repo = Repo::discover(root.to_str().unwrap()).unwrap();
+        assert!(repo.status().unwrap().is_empty());
+        assert!(git_stdout(root, &["status", "--porcelain=v1"]).trim().is_empty());
+        assert_eq!(std::fs::read(root.join("package.json")).unwrap(), b"{\n  \"name\": \"x\"\n}\n");
+    }
+
+    #[test]
+    fn discard_paths_clears_eol_lf_ghosts_in_a_mixed_batch() {
+        let (repo, dir) = eol_lf_crlf_repo();
+        let root = dir.path();
+        let mut paths = vec!["package.json".to_string()];
+        for i in 0..12 {
+            let name = format!("f{i}.txt");
+            std::fs::write(root.join(&name), format!("clean {i}\n")).unwrap();
+            paths.push(name);
+        }
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "batch"]);
+        std::fs::write(root.join("package.json"), "{\r\n  \"name\": \"x\"\r\n}\r\n").unwrap();
+        for i in 0..12 {
+            std::fs::write(root.join(format!("f{i}.txt")), format!("dirty {i}\n")).unwrap();
+        }
+        repo.discard_paths(&paths).unwrap();
+        let repo = Repo::discover(root.to_str().unwrap()).unwrap();
+        assert!(repo.status().unwrap().is_empty());
+        assert!(git_stdout(root, &["status", "--porcelain=v1"]).trim().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discard_paths_restores_mode_only_change() {
+        let (repo, dir) = scratch_repo();
+        std::fs::write(dir.join("script.sh"), "echo hi\n").unwrap();
+        repo.stage_paths(&["script.sh".into()]).unwrap();
+        repo.commit("script", None, false).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(dir.join("script.sh")).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(dir.join("script.sh"), perms).unwrap();
+        let diffs = repo.diff_unstaged().unwrap();
+        assert_eq!(diffs.len(), 1);
+        assert_eq!((diffs[0].adds, diffs[0].dels), (0, 0));
+        assert_eq!(diffs[0].note.as_deref(), Some("File mode changed 100644 → 100755"));
+        repo.discard_paths(&["script.sh".into()]).unwrap();
+        assert!(repo.status().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[cfg(unix)]
     #[test]
     fn stages_new_and_modified_dangling_links_singly_and_in_bulk() {
@@ -457,5 +718,4 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(dir);
     }
-
 }

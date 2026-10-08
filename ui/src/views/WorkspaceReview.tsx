@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon';
 import { PaneHeader } from '../components/PaneHeader';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
+import { emptyDiffMessage } from '../lib/emptyDiff';
 import {
   copyToClipboard,
   diffStatusToGit,
@@ -852,9 +853,9 @@ export function WorkspaceReview({
                       }
                       newSrc={displayed.diff.status === 'deleted' ? null : { rev: null }}
                     />
-                  ) : displayed.diff.binary || displayed.diff.patch.length === 0 ? (
+                  ) : displayed.diff.binary || (displayed.diff.adds === 0 && displayed.diff.dels === 0) ? (
                     <div className="lc-file-note">
-                      {displayed.diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+                      {emptyDiffMessage(displayed.diff)}
                     </div>
                   ) : !workspaceHunkActionsAllowed(displayed.member, displayed.diff.path) ? (
                     // Historical or combined staged patches are not safe

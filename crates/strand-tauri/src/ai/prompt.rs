@@ -254,6 +254,7 @@ mod tests {
             dels: 1,
             binary: false,
             patch: patch.into(),
+            note: None,
         }
     }
 
