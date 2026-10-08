@@ -35,6 +35,9 @@ pub struct FileDiff {
     pub dels: u32,
     pub binary: bool,
     pub patch: String,
+    /// Why Git still lists a modified file when there are no hunks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// Rename-aware staging targets without generating or transferring patch bodies.
@@ -344,6 +347,7 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
                 dels: 0,
                 binary: d.new_file().is_binary() || d.old_file().is_binary(),
                 patch: String::new(),
+                note: None,
             }
         })
         .collect();
@@ -388,7 +392,31 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
         true
     })?;
 
+    for file in &mut files {
+        annotate_empty_diff(file);
+    }
     Ok(files)
+}
+
+/// Classify a modified file that has no textual hunks so the UI can say why
+/// Git still lists it instead of showing a blank "No textual diff."
+pub(crate) fn annotate_empty_diff(file: &mut FileDiff) {
+    if file.binary || file.adds != 0 || file.dels != 0 || file.status != DiffStatus::Modified {
+        return;
+    }
+    if let Some(note) = file_mode_note(&file.patch) {
+        file.note = Some(note);
+        return;
+    }
+    if file.patch.is_empty() || !file.patch.contains("@@") {
+        file.note = Some("Only line endings differ".into());
+    }
+}
+
+fn file_mode_note(patch: &str) -> Option<String> {
+    let old = patch.lines().find_map(|line| line.strip_prefix("old mode "))?;
+    let new = patch.lines().find_map(|line| line.strip_prefix("new mode "))?;
+    Some(format!("File mode changed {old} → {new}"))
 }
 
 pub(crate) fn map_status(s: git2::Delta) -> DiffStatus {

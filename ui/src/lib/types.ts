@@ -145,6 +145,8 @@ export interface FileDiff {
   binary: boolean;
   /** Unified-diff text for this single file. Feed to `<Diff />`. */
   patch: string;
+  /** Set when Git lists a modified file with no hunks (line endings or mode). */
+  note?: string | null;
   /** UI cache state. Absent on legacy full-patch responses, which are loaded. */
   patchLoaded?: boolean;
   patchError?: string | null;

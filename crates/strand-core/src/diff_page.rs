@@ -1,7 +1,7 @@
 //! Changed-file inventories and bounded patch reads for live review surfaces.
 use std::{collections::HashSet, io::Read, process::Stdio};
 use serde::{Deserialize, Serialize};
-use crate::{diff::{diff_options_with, map_status, review_baseline_tree, DiffStatus, FileDiff}, Error, Repo, Result};
+use crate::{diff::{annotate_empty_diff, diff_options_with, map_status, review_baseline_tree, DiffStatus, FileDiff}, Error, Repo, Result};
 
 pub const MAX_PATCH_PATHS: usize = 32;
 pub const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
@@ -184,7 +184,7 @@ impl Repo {
                     // that libgit2's patch parser rejects. The literal path request
                     // and verified inventory supply metadata; retain Git's bytes.
                     let mut file = FileDiff { path: row.path.clone(), old_path: row.old_path.clone(), status: row.status,
-                        adds: 0, dels: 0, binary: scan.binary, patch: String::new() };
+                        adds: 0, dels: 0, binary: scan.binary, patch: String::new(), note: None };
                     let mut in_hunk = false;
                     for line in bytes.split_inclusive(|byte| *byte == b'\n') {
                         if line.starts_with(b"GIT binary patch") || line.starts_with(b"Binary files ") {
@@ -200,6 +200,7 @@ impl Repo {
                         if text.len() > remaining - file.patch.len() { return Err(patch_limit()); }
                         file.patch.push_str(&text);
                     }
+                    annotate_empty_diff(&mut file);
                     vec![DiffPageFile { diff: file, revision: None }]
                 }
             };
@@ -341,7 +342,7 @@ fn pages_from_diff(diff: &git2::Diff<'_>, wanted: &HashSet<&str>, limit: usize) 
         let row = summary(&delta);
         if !wanted.contains(row.path.as_str()) { continue; }
         let mut file = FileDiff { path: row.path, old_path: row.old_path, status: row.status,
-            adds: 0, dels: 0, binary: false, patch: String::new() };
+            adds: 0, dels: 0, binary: false, patch: String::new(), note: None };
         let token;
         if let Some(mut patch) = git2::Patch::from_diff(diff, index)? {
             token = revision(&patch.delta(), patch.delta().new_file().id());
@@ -369,6 +370,7 @@ fn pages_from_diff(diff: &git2::Diff<'_>, wanted: &HashSet<&str>, limit: usize) 
             let computed = diff.get_delta(index).expect("delta in range");
             token = revision(&computed, computed.new_file().id());
         }
+        annotate_empty_diff(&mut file);
         files.push(DiffPageFile { diff: file, revision: token });
     }
     Ok(files)

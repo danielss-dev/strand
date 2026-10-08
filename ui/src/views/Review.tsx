@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon';
 import { PaneHeader } from '../components/PaneHeader';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
+import { emptyDiffMessage } from '../lib/emptyDiff';
 import {
   copyToClipboard,
   diffStatusToGit,
@@ -1138,9 +1139,9 @@ export function Review({
                         }
                         newSrc={displayed.status === 'deleted' ? null : { rev: null }}
                       />
-                    ) : displayed.binary || displayed.patch.length === 0 ? (
+                    ) : displayed.binary || (displayed.adds === 0 && displayed.dels === 0) ? (
                       <div className="lc-file-note">
-                        {displayed.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+                        {emptyDiffMessage(displayed)}
                       </div>
                     ) : sessionMode || reviewDiffsError || stagedSet.has(displayed.path) ? (
                       // Session diffs can span commits, while an inbox file
