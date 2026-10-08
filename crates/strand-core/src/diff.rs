@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{error::Result, repo::Repo};
+
+pub(crate) const EMPTY_DIFF_LINE_ENDINGS: &str = "Only line endings differ";
+pub(crate) const EMPTY_DIFF_MATCHES_INDEX: &str =
+    "Git lists this file as changed, but its content matches the index. Discard again or refresh to clear it.";
 
 pub const EMPTY_TREE_OID: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -96,7 +101,7 @@ impl Repo {
         let repo = self.git2()?;
         let mut opts = diff_options();
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// Index vs HEAD — what `git diff --cached` would show.
@@ -184,7 +189,7 @@ impl Repo {
         let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options();
         let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// `diff_unstaged` with whole-file context: every changed file's patch
@@ -195,7 +200,7 @@ impl Repo {
         let repo = self.git2()?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// `diff_since` with whole-file context — see `diff_unstaged_full`.
@@ -205,7 +210,7 @@ impl Repo {
         let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
         let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// Diff one path's working-tree state against HEAD — the net uncommitted
@@ -222,7 +227,7 @@ impl Repo {
         let mut opts = diff_options();
         opts.pathspec(path);
         let diff = repo.diff_tree_to_workdir(head_tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     fn sparse_workdir_diff(&self, staged: bool, baseline: Option<&str>, context: u32, path: Option<&str>) -> Result<Vec<FileDiff>> {
@@ -247,7 +252,11 @@ impl Repo {
         args.push("--");
         if let Some(paths) = paths { args.extend(paths.iter().map(String::as_str)); }
         let bytes = self.sparse_git(&args, None)?;
-        let mut files = if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?)? };
+        let mut files = {
+            let git = self.git2()?;
+            let workdir: Option<&git2::Repository> = if staged { None } else { Some(git) };
+            if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?, workdir)? }
+        };
         if !staged {
             let untracked: Vec<_> = self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked && paths.is_none_or(|paths| paths.contains(&s.path))).collect();
             if !untracked.is_empty() {
@@ -275,7 +284,7 @@ impl Repo {
             return Err(crate::Error::Other(String::from_utf8_lossy(&output.stderr).trim().into()));
         }
         if output.stdout.is_empty() { return Ok(Vec::new()); }
-        collect_ready(git2::Diff::from_buffer(&output.stdout)?)
+        collect_ready(git2::Diff::from_buffer(&output.stdout)?, None)
     }
 }
 
@@ -304,11 +313,15 @@ pub(crate) fn diff_options_with(context: u32) -> git2::DiffOptions {
 /// go). Line counts are accumulated in the same pass, and deltas are looked
 /// up through a path→index map — a 500-file changeset used to pay a second
 /// full walk plus an O(files×lines) linear search here.
-fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+fn collect(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+    collect_in(diff, None)
+}
+
+fn collect_in(mut diff: git2::Diff<'_>, repo: Option<&git2::Repository>) -> Result<Vec<FileDiff>> {
     let mut find = git2::DiffFindOptions::new();
     find.renames(true).copies(true);
     diff.find_similar(Some(&mut find))?;
-    collect_ready(diff)
+    collect_ready(diff, repo)
 }
 
 /// Only an unborn HEAD means an empty starting tree. Invalid pinned commits,
@@ -322,7 +335,7 @@ pub(crate) fn review_baseline_tree<'repo>(repo: &'repo git2::Repository, baselin
     }
 }
 
-fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+fn collect_ready(diff: git2::Diff<'_>, repo: Option<&git2::Repository>) -> Result<Vec<FileDiff>> {
 
     // Pre-populate one FileDiff per delta so the print callback can index
     // into us by delta_idx.
@@ -393,14 +406,20 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
     })?;
 
     for file in &mut files {
-        annotate_empty_diff(file);
+        annotate_empty_diff(file, repo);
     }
     Ok(files)
 }
 
 /// Classify a modified file that has no textual hunks so the UI can say why
 /// Git still lists it instead of showing a blank "No textual diff."
-pub(crate) fn annotate_empty_diff(file: &mut FileDiff) {
+pub(crate) fn annotate_empty_diff(file: &mut FileDiff, repo: Option<&git2::Repository>) {
+    let owned = repo.and_then(|repo| workdir_and_index_blob(repo, &file.path));
+    let sides = owned.as_ref().map(|(disk, blob)| (disk.as_slice(), blob.as_slice()));
+    annotate_empty_diff_sides(file, sides);
+}
+
+fn annotate_empty_diff_sides(file: &mut FileDiff, sides: Option<(&[u8], &[u8])>) {
     if file.binary || file.adds != 0 || file.dels != 0 || file.status != DiffStatus::Modified {
         return;
     }
@@ -409,8 +428,30 @@ pub(crate) fn annotate_empty_diff(file: &mut FileDiff) {
         return;
     }
     if file.patch.is_empty() || !file.patch.contains("@@") {
-        file.note = Some("Only line endings differ".into());
+        file.note = Some(empty_content_note(sides).into());
     }
+}
+
+fn empty_content_note(sides: Option<(&[u8], &[u8])>) -> &'static str {
+    match sides {
+        Some((left, right)) if only_line_endings_differ(left, right) => EMPTY_DIFF_LINE_ENDINGS,
+        _ => EMPTY_DIFF_MATCHES_INDEX,
+    }
+}
+
+pub(crate) fn only_line_endings_differ(left: &[u8], right: &[u8]) -> bool {
+    left != right
+        && left.iter().copied().filter(|&b| b != b'\r')
+            .eq(right.iter().copied().filter(|&b| b != b'\r'))
+}
+
+fn workdir_and_index_blob(repo: &git2::Repository, path: &str) -> Option<(Vec<u8>, Vec<u8>)> {
+    let workdir = repo.workdir()?;
+    let disk = std::fs::read(workdir.join(path)).ok()?;
+    let index = repo.index().ok()?;
+    let entry = index.get_path(Path::new(path), 0)?;
+    let blob = repo.find_blob(entry.id).ok()?;
+    Some((disk, blob.content().to_vec()))
 }
 
 fn file_mode_note(patch: &str) -> Option<String> {
@@ -454,6 +495,38 @@ mod tests {
         let tree = repo.find_tree(tree_oid).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
         (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    fn empty_modified(path: &str) -> FileDiff {
+        FileDiff {
+            path: path.into(),
+            old_path: None,
+            status: DiffStatus::Modified,
+            adds: 0,
+            dels: 0,
+            binary: false,
+            patch: String::new(),
+            note: None,
+        }
+    }
+
+    #[test]
+    fn annotate_empty_diff_only_claims_line_endings_when_crs_are_the_difference() {
+        let mut eol = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut eol, Some((b"{\r\n  \"name\": \"x\"\r\n}\r\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(eol.note.as_deref(), Some(EMPTY_DIFF_LINE_ENDINGS));
+
+        let mut same = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut same, Some((b"{\n  \"name\": \"x\"\n}\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(same.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
+
+        let mut other = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut other, Some((b"changed\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(other.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
+
+        let mut unknown = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut unknown, None);
+        assert_eq!(unknown.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::{error::Result, repo::Repo};
@@ -163,7 +164,7 @@ impl Repo {
             // OID matches the index, even if the on-disk bytes still differ
             // (CRLF vs `eol=lf`). Those files stay `M` with an empty patch.
             // `git checkout-index --force` always writes the smudge form.
-            rewrite_filter_skipped_checkouts(self, &tracked)?;
+            rewrite_skipped_checkouts(self, &tracked)?;
         }
         Ok(())
     }
@@ -248,34 +249,82 @@ fn checkout_index_with_system_git(repo: &Repo, paths: &[&str]) -> Result<()> {
     Ok(())
 }
 
-/// Rewrite tracked paths whose workdir size still disagrees with the index
-/// after libgit2 checkout. Size is the cheap signal for CRLF vs LF; Git's
-/// `checkout-index --force` applies smudge filters and always writes.
-fn rewrite_filter_skipped_checkouts(repo: &Repo, tracked: &[&str]) -> Result<()> {
-    let skipped = {
-        let git = repo.git2()?;
-        let Some(workdir) = git.workdir() else { return Ok(()); };
-        let index = git.index()?;
-        tracked.iter().copied().filter(|path| {
-            workdir_size_disagrees(workdir, &index, path)
-        }).collect::<Vec<_>>()
-    };
+/// Rewrite tracked paths git2 still reports as workdir-dirty after libgit2
+/// checkout. Index `file_size` is cached stat data, not the blob size, so a
+/// CLI `git status` / editor refresh while CRLF is on disk makes a size
+/// comparison miss. Status on the discard pathspec is the real leftover signal.
+fn rewrite_skipped_checkouts(repo: &Repo, tracked: &[&str]) -> Result<()> {
+    let skipped = leftover_workdir_paths(repo, tracked)?;
     if skipped.is_empty() {
         return Ok(());
     }
-    force_checkout_index(repo, &skipped)?;
+    invalidate_index_stat_cache(repo, &skipped)?;
+    let refs: Vec<&str> = skipped.iter().map(String::as_str).collect();
+    force_checkout_index(repo, &refs)?;
     repo.git2()?.index()?.read(true)?;
     Ok(())
 }
 
-fn workdir_size_disagrees(workdir: &Path, index: &git2::Index, path: &str) -> bool {
-    let Some(entry) = index.get_path(Path::new(path), 0) else { return false };
-    match std::fs::symlink_metadata(workdir.join(path)) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
-        Err(_) => false,
-        Ok(meta) if !meta.is_file() => false,
-        Ok(meta) => meta.len() != u64::from(entry.file_size),
+/// `checkout-index --force` still skips a write when cached `file_size` equals
+/// the workdir (the CRLF-on-disk + refreshed-index case). Zero the stat cache
+/// so Git actually smudge-writes.
+fn invalidate_index_stat_cache(repo: &Repo, paths: &[String]) -> Result<()> {
+    let git = repo.git2()?;
+    let mut index = git.index()?;
+    for path in paths {
+        let Some(mut entry) = index.get_path(Path::new(path), 0) else { continue };
+        entry.file_size = 0;
+        entry.mtime = git2::IndexTime::new(0, 0);
+        index.add(&entry)?;
     }
+    index.write()?;
+    Ok(())
+}
+
+fn leftover_workdir_paths(repo: &Repo, tracked: &[&str]) -> Result<Vec<String>> {
+    if tracked.is_empty() {
+        return Ok(Vec::new());
+    }
+    let git = repo.git2()?;
+    let mut opts = git2::StatusOptions::new();
+    opts.show(git2::StatusShow::Workdir)
+        .include_untracked(false)
+        .include_ignored(false)
+        .include_unmodified(false)
+        .disable_pathspec_match(true);
+    for path in tracked {
+        opts.pathspec(*path);
+    }
+    let mut leftover: HashSet<String> = {
+        let statuses = git.statuses(Some(&mut opts))?;
+        statuses
+            .iter()
+            .filter(|entry| {
+                let status = entry.status();
+                status.is_wt_modified() || status.is_wt_deleted()
+            })
+            .filter_map(|entry| entry.path().map(str::to_owned))
+            .collect()
+    };
+    // Filtered OID can match while on-disk bytes are still CRLF. After a CLI
+    // `git status` refreshes `file_size` to the CRLF length, git2 status is
+    // clean — so also rewrite paths whose workdir and index blob differ only
+    // by CR/LF.
+    if let Some(workdir) = git.workdir() {
+        let index = git.index()?;
+        for path in tracked {
+            if leftover.contains(*path) {
+                continue;
+            }
+            let Some(entry) = index.get_path(Path::new(path), 0) else { continue };
+            let Ok(disk) = std::fs::read(workdir.join(path)) else { continue };
+            let Ok(blob) = git.find_blob(entry.id) else { continue };
+            if crate::diff::only_line_endings_differ(&disk, blob.content()) {
+                leftover.insert((*path).to_string());
+            }
+        }
+    }
+    Ok(leftover.into_iter().collect())
 }
 
 fn force_checkout_index(repo: &Repo, paths: &[&str]) -> Result<()> {
@@ -537,6 +586,43 @@ mod tests {
         assert!(git_stdout(root, &["status", "--porcelain=v1"]).trim().is_empty());
         let on_disk = std::fs::read(root.join("package.json")).unwrap();
         assert_eq!(on_disk, b"{\n  \"name\": \"x\"\n}\n");
+    }
+
+    #[test]
+    fn discard_paths_rewrites_crlf_after_index_stat_refresh() {
+        let (repo, dir) = eol_lf_crlf_repo();
+        let root = dir.path();
+        git(root, &["status", "--porcelain=v1"]);
+        let _ = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["update-index", "--refresh"])
+            .output();
+        {
+            let git2 = repo.git2().unwrap();
+            let mut index = git2.index().unwrap();
+            let mut entry = index.get_path(Path::new("package.json"), 0).unwrap();
+            let size = std::fs::metadata(root.join("package.json")).unwrap().len() as u32;
+            assert_ne!(entry.file_size, size, "index still has the LF blob size before we smash it");
+            entry.file_size = size;
+            index.add(&entry).unwrap();
+            index.write().unwrap();
+            assert_eq!(
+                index.get_path(Path::new("package.json"), 0).unwrap().file_size,
+                size,
+                "cached stat now matches the CRLF workdir; a size heuristic would skip"
+            );
+        }
+        assert_eq!(
+            leftover_workdir_paths(&repo, &["package.json"]).unwrap(),
+            vec!["package.json".to_string()],
+            "CRLF vs LF blob must still be rewritten after the stat cache matches the workdir size"
+        );
+        repo.discard_paths(&["package.json".into()]).unwrap();
+        let repo = Repo::discover(root.to_str().unwrap()).unwrap();
+        assert!(repo.status().unwrap().is_empty());
+        assert!(git_stdout(root, &["status", "--porcelain=v1"]).trim().is_empty());
+        assert_eq!(std::fs::read(root.join("package.json")).unwrap(), b"{\n  \"name\": \"x\"\n}\n");
     }
 
     #[test]

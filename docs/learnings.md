@@ -2271,11 +2271,19 @@ libgit2 force-checkout still skips a workdir file when the *filtered* OID
 matches the index, even if the on-disk bytes differ — the DAN-82 case is
 `eol=lf` (or equivalent) with CRLF on disk. Status then shows `M` while
 `git diff` is empty (`-0 +0` / "No textual diff."). After the in-process
-checkout, rewrite any tracked path whose workdir size still disagrees with
-the index through `checkout-index --force` (stdin pathspecs; Windows also
-passes `-c core.longpaths=true`). Do not change `core.autocrlf` or
+checkout, query git2 status for just those pathspecs (no untracked, no
+ignored) and rewrite any still `WT_MODIFIED` / `WT_DELETED` through
+`checkout-index --force` (stdin pathspecs; Windows also passes
+`-c core.longpaths=true`). Do not compare workdir size to index
+`file_size`: that field is cached stat data, so a CLI `git status` or
+editor refresh while CRLF is on disk makes the sizes match and git2
+status itself can go clean. Also rewrite paths whose workdir and index
+blob differ only by CR/LF, and zero those index stat caches before
+`checkout-index --force` — Git itself skips the write when `file_size`
+already matches the CRLF workdir. Do not change `core.autocrlf` or
 `.gitattributes`. If a modified file still has no hunks, `FileDiff.note`
-must say why (`Only line endings differ` / `File mode changed 100644 → 100755`).
+must say why — and only claim `Only line endings differ` when workdir
+bytes and the index blob differ solely by CR/LF.
 
 **Embedded terminals are process-owned; only their descriptors persist
 (2026-07-20).** Keep PTY runtimes in process-wide native state and xterm

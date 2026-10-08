@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { emptyDiffMessage, hasNoHunks } from './emptyDiff';
 
 describe('emptyDiffMessage', () => {
-  it('explains line-ending-only and mode-only empty diffs', () => {
+  it('explains line-ending-only, matching-index, and mode-only empty diffs', () => {
     expect(emptyDiffMessage({ binary: false, note: 'Only line endings differ' }))
       .toBe('Only line endings differ');
+    expect(emptyDiffMessage({
+      binary: false,
+      note: 'Git lists this file as changed, but its content matches the index. Discard again or refresh to clear it.',
+    })).toBe('Git lists this file as changed, but its content matches the index. Discard again or refresh to clear it.');
     expect(emptyDiffMessage({ binary: false, note: 'File mode changed 100644 → 100755' }))
       .toBe('File mode changed 100644 → 100755');
     expect(emptyDiffMessage({ binary: false })).toBe('No textual diff.');
