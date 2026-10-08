@@ -13,6 +13,7 @@ mod terminal;
 mod remote_repos;
 
 mod user_actions;
+mod windows_pin;
 
 use tauri::Manager;
 
@@ -440,6 +441,11 @@ fn main() {
                     Ok(true) => {}
                     Ok(false) => tracing::warn!("no visible Windows taskbar handle was found"),
                     Err(error) => tracing::warn!("failed to apply Windows taskbar icon: {error}"),
+                }
+                match windows_pin::heal_broken_taskbar_pins() {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!("healed {n} broken Windows taskbar pin(s)"),
+                    Err(error) => tracing::warn!("failed to heal Windows taskbar pins: {error}"),
                 }
             }
             if matches!(

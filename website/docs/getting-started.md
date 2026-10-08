@@ -13,7 +13,7 @@ Download the latest release from [GitHub Releases](https://github.com/danielss-d
 | Platform | Artifact | Notes |
 |---|---|---|
 | macOS | `.dmg` | Universal binary (Apple Silicon + Intel), Developer ID–signed and notarized |
-| Windows | `.msi` | Windows 11; the installer is not yet code-signed; new taskbar pins use the executable's embedded icon across updates |
+| Windows | `.msi` | Windows 11; the installer is not yet code-signed; taskbar pins use the executable's embedded icon, and leftover pre-1.7.3 pins are repaired on launch |
 | Linux | `.deb`, `.rpm`, `.AppImage` | Built on Ubuntu 22.04; AppImage includes a keyless Sigstore verification bundle |
 
 The macOS app icon uses Strand's solid-black Circuit S on its rounded white
@@ -118,9 +118,11 @@ packages are cryptographically signed.
 
 On Windows, new MSI Start Menu shortcuts use the icon embedded in the installed
 executable, keeping taskbar pins independent of the Windows Installer icon
-cache. If a pin created by an older installer shows a blank-page icon after an
-update, unpin Strand, launch the updated app from Start, and pin it again once.
-This replaces the old cached icon reference.
+cache. Strand also repairs leftover pins from older installers on launch when
+they still target `strand.exe` but point at a missing Installer cache file. If
+the taskbar icon still looks like a blank page after that launch, unpin Strand
+and pin it again once — Explorer can keep a cached bitmap until the shell
+restarts.
 
 The in-app updater covers the macOS app, direct Windows MSI installs, and the
 Linux AppImage. Microsoft Store MSIX installs check Store availability on

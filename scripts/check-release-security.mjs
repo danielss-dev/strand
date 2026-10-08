@@ -6,6 +6,7 @@ const capability = JSON.parse(
 );
 const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8');
 const tauriMain = readFileSync('crates/strand-tauri/src/main.rs', 'utf8');
+const tauriPins = readFileSync('crates/strand-tauri/src/windows_pin.rs', 'utf8');
 const wixTemplate = readFileSync('packaging/windows/main.wxs', 'utf8');
 
 function fail(message) {
@@ -88,9 +89,20 @@ for (const fragment of [
   'WM_SETICON',
   'ICON_BIG',
   'ICON_SMALL',
+  'windows_pin::heal_broken_taskbar_pins',
 ]) {
   if (!tauriMain.includes(fragment)) {
     fail(`Windows updater-safe taskbar icon contract is missing: ${fragment}`);
+  }
+}
+for (const fragment of [
+  'fn should_heal_pin',
+  'fn heal_broken_taskbar_pins',
+  'User Pinned',
+  'Installer',
+]) {
+  if (!tauriPins.includes(fragment)) {
+    fail(`Windows taskbar pin heal contract is missing: ${fragment}`);
   }
 }
 

@@ -133,6 +133,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p strand-tauri pull_requests::pages::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p strand-tauri windows_pin
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise native review, persistence and recovery twice
         run: node scripts/test-review-native.mjs --repeat 2 --output target/review-native-ci
       - name: Retain native screenshots, feedback and logs

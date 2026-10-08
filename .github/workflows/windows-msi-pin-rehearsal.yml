@@ -1,0 +1,54 @@
+name: Windows MSI pin rehearsal
+
+# Records Start Menu / running-window taskbar pin IconLocation across published
+# MSI major upgrades. A windows-latest runner cannot prove Explorer's live
+# taskbar bitmap; that remaining check is on a real Windows 11 desktop.
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/windows/**'
+      - 'crates/strand-tauri/src/windows_pin.rs'
+      - 'crates/strand-tauri/src/main.rs'
+      - 'scripts/check-msi-shortcuts.ps1'
+      - 'scripts/rehearse-msi-pins.ps1'
+      - '.github/workflows/windows-msi-pin-rehearsal.yml'
+  workflow_dispatch:
+
+jobs:
+  rehearse:
+    name: MSI upgrade pin rehearsal
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download published Strand MSIs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir msi-rehearsal
+          gh release download v1.7.2 --repo danielss-dev/strand --pattern "Strand_*_x64_en-US.msi" --dir msi-rehearsal
+          gh release download v1.7.3 --repo danielss-dev/strand --pattern "Strand_*_x64_en-US.msi" --dir msi-rehearsal
+          gh release download v1.7.4 --repo danielss-dev/strand --pattern "Strand_*_x64_en-US.msi" --dir msi-rehearsal
+          Get-ChildItem msi-rehearsal | Format-Table Name, Length
+
+      - name: Rehearse 1.7.2 pin through 1.7.3 and 1.7.4 upgrades
+        shell: pwsh
+        run: |
+          ./scripts/rehearse-msi-pins.ps1 `
+            -Msi172 (Resolve-Path msi-rehearsal/Strand_1.7.2_x64_en-US.msi).Path `
+            -Msi173 (Resolve-Path msi-rehearsal/Strand_1.7.3_x64_en-US.msi).Path `
+            -Msi174 (Resolve-Path msi-rehearsal/Strand_1.7.4_x64_en-US.msi).Path `
+            -LogPath msi-pin-rehearsal.log
+
+      - name: Upload rehearsal log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-pin-rehearsal
+          path: msi-pin-rehearsal.log
+          if-no-files-found: warn
+          retention-days: 30

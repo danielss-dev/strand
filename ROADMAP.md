@@ -3097,9 +3097,7 @@ now uses the installed executable's embedded icon instead of a version-specific
 Windows Installer `ProductIcon` cache. The version-matched Tauri template keeps
 the existing upgrade flow and application identity; direct and fallback Store
 MSI release jobs inspect compiled shortcut tables. A local MSI build confirms
-both application shortcuts have no cached icon reference. Existing affected
-pins need a one-time unpin and re-pin; a real pinned upgrade rehearsal remains
-tracked in TASKS.md.
+both application shortcuts have no cached icon reference.
 
 **Strand 1.7.3 released (2026-09-30):** PR #139 merged the #135 Windows MSI
 pinned-icon repair and synchronized desktop version bump. Tag `v1.7.3` points
@@ -3110,6 +3108,15 @@ the stable updater endpoint serves 1.7.3. The downloaded MSI's shortcut table
 retains the application identity with no cached icon reference. Store release
 run `36751456162` was triggered; Store submission and certification remain
 separate. The helper remains independently versioned at 1.3.0 on protocol 7.
+
+**Pre-1.7.3 taskbar pins healed on launch (2026-10-08, DAN-81):** Daniels'
+blank pin predates 1.7.3. Published 1.7.3/1.7.4 MSIs already omit shortcut
+`Icon_`; leftover User Pinned copies still pointed at a deleted ProductIcon
+cache. Strand now rewrites only those `.lnk` files whose target is the
+installed `strand.exe` and whose icon path is missing or under
+`%WINDIR%\Installer`. A Windows CI rehearsal records IconLocation across
+1.7.2 → 1.7.3 → 1.7.4; Explorer's live taskbar bitmap still needs a desktop
+check.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 
