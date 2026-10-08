@@ -317,8 +317,16 @@ fn leftover_workdir_paths(repo: &Repo, tracked: &[&str]) -> Result<Vec<String>> 
                 continue;
             }
             let Some(entry) = index.get_path(Path::new(path), 0) else { continue };
-            let Ok(disk) = std::fs::read(workdir.join(path)) else { continue };
+            if matches!(entry.mode, 0o120000 | 0o160000) {
+                continue;
+            }
+            let Some(disk) = crate::diff::read_regular_workdir_file(
+                &workdir.join(path), crate::diff::WORKDIR_CONTENT_NOTE_MAX_BYTES,
+            ) else { continue };
             let Ok(blob) = git.find_blob(entry.id) else { continue };
+            if blob.size() as u64 > crate::diff::WORKDIR_CONTENT_NOTE_MAX_BYTES {
+                continue;
+            }
             if crate::diff::only_line_endings_differ(&disk, blob.content()) {
                 leftover.insert((*path).to_string());
             }
@@ -564,6 +572,30 @@ mod tests {
         git(root, &["commit", "-qm", "lf"]);
         std::fs::write(root.join("package.json"), "{\r\n  \"name\": \"x\"\r\n}\r\n").unwrap();
         (Repo::discover(root.to_str().unwrap()).unwrap(), dir)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discard_paths_restores_symlink_without_reading_target() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let (repo, dir) = scratch_repo();
+            // Restoring the original link must not follow its target either.
+            std::os::unix::fs::symlink("/dev/zero", dir.join("target")).unwrap();
+            let link = dir.join("link");
+            std::os::unix::fs::symlink("target", &link).unwrap();
+            repo.stage_paths(&["link".into()]).unwrap();
+            repo.commit("symlink", None, false).unwrap();
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
+            repo.discard_paths(&["link".into()]).unwrap();
+            assert_eq!(std::fs::read_link(&link).unwrap(), Path::new("target"));
+            assert!(leftover_workdir_paths(&repo, &["link"]).unwrap().is_empty());
+            std::fs::remove_dir_all(dir).unwrap();
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(30)).expect("discard followed symlink target");
+        worker.join().unwrap();
     }
 
     #[test]
