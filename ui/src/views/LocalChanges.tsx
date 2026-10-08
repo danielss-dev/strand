@@ -385,6 +385,7 @@ export function LocalChanges({
                   actionLabel="Stage"
                   onOpenFileInEditor={onOpenFileInEditor}
                   onOpenWork={onOpenWork}
+                  onOpenWorkError={fail('Open in Workbench')}
                   onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                   isUntracked={(p) => untracked.has(p)}
                   onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
@@ -407,6 +408,7 @@ export function LocalChanges({
                   actionLabel="Unstage"
                   onOpenFileInEditor={onOpenFileInEditor}
                   onOpenWork={onOpenWork}
+                  onOpenWorkError={fail('Open in Workbench')}
                   onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                   bulkLabel="Unstage all"
                 />
@@ -431,6 +433,7 @@ export function LocalChanges({
                     actionLabel="Stage"
                     onOpenFileInEditor={onOpenFileInEditor}
                     onOpenWork={onOpenWork}
+                    onOpenWorkError={fail('Open in Workbench')}
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                     isUntracked={(p) => untracked.has(p)}
                     onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
@@ -453,6 +456,7 @@ export function LocalChanges({
                     actionLabel="Unstage"
                     onOpenFileInEditor={onOpenFileInEditor}
                     onOpenWork={onOpenWork}
+                    onOpenWorkError={fail('Open in Workbench')}
                     onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                     bulkLabel="Unstage all"
                   />
@@ -614,6 +618,7 @@ interface SectionProps {
   onOpenFileInEditor(file: string): void;
   /** Custom keeps navigation inside its Work pane instead of leaving it. */
   onOpenWork?: () => void;
+  onOpenWorkError: (error: unknown) => void;
   /** Discard the given files' working-tree changes — unstaged section only. */
   onDiscard?: (files: string[]) => void;
   /** Whether a path is untracked — gates the .gitignore quick actions
@@ -647,6 +652,7 @@ function FileSection({
   actionLabel,
   onOpenFileInEditor,
   onOpenWork,
+  onOpenWorkError,
   onDiscard,
   isUntracked,
   onIgnore,
@@ -655,6 +661,7 @@ function FileSection({
   bulkLabel,
 }: SectionProps) {
   const repoPath = useRepo((s) => s.meta?.path);
+  const unstagedDiffs = useRepo((s) => s.unstagedDiffs);
   const setView = useRepo((s) => s.setView);
   const openWorkFile = useWork((s) => s.openFile);
   const showWork = useCallback(() => {
@@ -682,9 +689,11 @@ function FileSection({
         path: context.path,
         kind: context.kind,
         targetCount: n,
-        status: diffStatusForMenuRow(files, context.path, context.kind),
+        status: diffStatusForMenuRow(files, context.path, context.kind, unstagedDiffs),
         openFile: openWorkFile,
         showWork,
+        checkPath: tauri.repoFileAbsolutePaths,
+        onError: onOpenWorkError,
       });
       if (workbench) items.push(workbench);
       if (n === 1) {
@@ -754,6 +763,8 @@ function FileSection({
       repoPath,
       openWorkFile,
       showWork,
+      onOpenWorkError,
+      unstagedDiffs,
       onStash,
       onDiscard,
       isUntracked,

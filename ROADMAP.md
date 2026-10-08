@@ -3229,7 +3229,10 @@ are unchanged.
 a file or folder in Local Changes (staged or unstaged) or the Review queue and
 choose **Open in Workbench** to pin the whole working-tree path in Work, using
 the same `useWork().openFile` + `showWorkbenchWork` path as Files → Open.
-Deleted files hide the item; multi-select matches Open in editor.
+Deleted working-tree paths hide the item, including staged modifications with
+unstaged deletions and folders with only absent changed descendants. Selection
+checks `repoFileAbsolutePaths` and reports missing paths without opening a tab;
+multi-select matches Open in editor.
 
 **Clone Git LFS (2026-10-06, DAN-80):** `clone_with_options` skip-smudges so an
 LFS download, missing `git-lfs`, or clone-hook protection cannot abort

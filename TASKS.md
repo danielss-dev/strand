@@ -1132,8 +1132,9 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Open in Workbench from Local Changes (staged + unstaged) and Review
   trees (DAN-84; `openInWorkbenchMenuItem`, `FileSection.menuItems`,
   `Review.treeMenuItems`) — pinned working-tree tab via `useWork().openFile`
-  + `showWorkbenchWork`; hidden for deleted files and multi-file selections;
-  folder rows open the directory like Files → Open.
+  + `showWorkbenchWork`; hidden for deleted working-tree paths (including
+  unstaged deletions and folders with only absent changed descendants) and
+  multi-file selections; `repoFileAbsolutePaths` validates presence before opening.
 - ☑ In-diff text search (⌘F in Local Changes + Review, also palette "Search in
   diff…" via the one-shot `diffSearchSignal`/`requestDiffSearch` store signal.
   `searchDiffs` in `lib/diffSearch.ts` scans every patch in the pool — both

@@ -616,9 +616,11 @@ export function Review({
         path: context.path,
         kind: context.kind,
         targetCount: n,
-        status: diffStatusForMenuRow(pool, context.path, context.kind),
+        status: diffStatusForMenuRow(pool, context.path, context.kind, unstagedDiffs),
         openFile: openWorkFile,
         showWork,
+        checkPath: tauri.repoFileAbsolutePaths,
+        onError: fail('Open in Workbench'),
       });
       if (workbench) items.push(workbench);
       if (n === 1) {
@@ -674,7 +676,7 @@ export function Review({
       }
       return items;
     },
-    [verdicts, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor, loadDiffFiles, meta?.path, openWorkFile, showWork],
+    [verdicts, unstagedDiffs, unstagedSet, toggleReviewed, stageMany, discardMany, fail, pool, onOpenFileInEditor, loadDiffFiles, meta?.path, openWorkFile, showWork],
   );
 
   // ── Keyboard loop ─────────────────────────────────────────────────────
