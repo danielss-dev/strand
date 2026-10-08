@@ -20,7 +20,8 @@ import { handleCommitShortcut, type CommitShortcutEvent } from '../lib/commitSho
 import { matchTarget, scrollToDiffLine } from '../lib/diffJump';
 import { pierreThemeOptions } from '../lib/pierreTheme';
 import { isImagePath } from '../lib/image';
-import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuItem } from '../components/PierreTree';
+import { copyToClipboard, diffStatusToGit, PierreTree, type TreeMenuContext, type TreeMenuItem } from '../components/PierreTree';
+import { diffStatusForMenuRow, openInWorkbenchMenuItem } from '../lib/openInWorkbench';
 import { ignorePatterns } from '../lib/ignore';
 import { repoAiStyle } from '../lib/db';
 import { aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
@@ -38,6 +39,7 @@ import { treeFileOrder } from '../lib/treeOrder';
 import { resolveActiveTreeTargets } from '../lib/treeSelection';
 import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
+import { useWork } from '../stores/work';
 import { useCompleteDiffSearch, useRepoDiffs } from '../lib/useRepoDiffs';
 import { diffLoaded } from '../lib/diffPages';
 import { emptyDiffMessage, hasNoHunks } from '../lib/emptyDiff';
@@ -62,6 +64,7 @@ export function LocalChanges({
   active = true,
   explorerOnly = false,
   onOpenFileChanges,
+  onOpenWork,
 }: {
   onOpenFileInEditor: (file: string) => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
@@ -72,6 +75,8 @@ export function LocalChanges({
    * `onOpenFileChanges` instead of feeding the in-pane diff. */
   explorerOnly?: boolean;
   onOpenFileChanges?: (path: string) => void;
+  /** Custom keeps navigation inside its Work pane instead of leaving it. */
+  onOpenWork?: () => void;
 }) {
   useRepoDiffs('local');
   const unstaged = useRepo((s) => s.unstagedDiffs);
@@ -379,6 +384,8 @@ export function LocalChanges({
                   onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                   actionLabel="Stage"
                   onOpenFileInEditor={onOpenFileInEditor}
+                  onOpenWork={onOpenWork}
+                  onOpenWorkError={fail('Open in Workbench')}
                   onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                   isUntracked={(p) => untracked.has(p)}
                   onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
@@ -400,6 +407,8 @@ export function LocalChanges({
                   onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
                   actionLabel="Unstage"
                   onOpenFileInEditor={onOpenFileInEditor}
+                  onOpenWork={onOpenWork}
+                  onOpenWorkError={fail('Open in Workbench')}
                   onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                   bulkLabel="Unstage all"
                 />
@@ -423,6 +432,8 @@ export function LocalChanges({
                     onAction={(files) => void stageMany(files).catch(fail('Stage'))}
                     actionLabel="Stage"
                     onOpenFileInEditor={onOpenFileInEditor}
+                    onOpenWork={onOpenWork}
+                    onOpenWorkError={fail('Open in Workbench')}
                     onDiscard={(files) => void discardMany(files).catch(fail('Discard'))}
                     isUntracked={(p) => untracked.has(p)}
                     onIgnore={(pattern) => void gitignoreAdd(pattern).catch(fail('Ignore'))}
@@ -444,6 +455,8 @@ export function LocalChanges({
                     onAction={(files) => void unstageMany(files).catch(fail('Unstage'))}
                     actionLabel="Unstage"
                     onOpenFileInEditor={onOpenFileInEditor}
+                    onOpenWork={onOpenWork}
+                    onOpenWorkError={fail('Open in Workbench')}
                     onBulk={() => void unstageAll().catch(fail('Unstage all'))}
                     bulkLabel="Unstage all"
                   />
@@ -603,6 +616,9 @@ interface SectionProps {
   actionLabel: string;
   /** Open a single file in the configured external editor. */
   onOpenFileInEditor(file: string): void;
+  /** Custom keeps navigation inside its Work pane instead of leaving it. */
+  onOpenWork?: () => void;
+  onOpenWorkError: (error: unknown) => void;
   /** Discard the given files' working-tree changes — unstaged section only. */
   onDiscard?: (files: string[]) => void;
   /** Whether a path is untracked — gates the .gitignore quick actions
@@ -635,6 +651,8 @@ function FileSection({
   onAction,
   actionLabel,
   onOpenFileInEditor,
+  onOpenWork,
+  onOpenWorkError,
   onDiscard,
   isUntracked,
   onIgnore,
@@ -642,6 +660,14 @@ function FileSection({
   onBulk,
   bulkLabel,
 }: SectionProps) {
+  const repoPath = useRepo((s) => s.meta?.path);
+  const unstagedDiffs = useRepo((s) => s.unstagedDiffs);
+  const setView = useRepo((s) => s.setView);
+  const openWorkFile = useWork((s) => s.openFile);
+  const showWork = useCallback(() => {
+    if (onOpenWork) onOpenWork();
+    else setView('work');
+  }, [onOpenWork, setView]);
   const paths = useMemo(() => files.map((f) => f.path), [files]);
   const gitStatus = useMemo<GitStatusEntry[]>(
     () => files.map((f) => ({ path: f.path, status: diffStatusToGit(f.status) })),
@@ -654,10 +680,22 @@ function FileSection({
   const allActive = selection?.all === true && selection.staged === staged;
 
   const menuItems = useCallback(
-    (targets: string[]): TreeMenuItem[] => {
+    (targets: string[], context: TreeMenuContext): TreeMenuItem[] => {
       const n = targets.length;
       const suffix = n > 1 ? ` ${n} files` : '';
       const items: TreeMenuItem[] = [];
+      const workbench = openInWorkbenchMenuItem({
+        repoPath,
+        path: context.path,
+        kind: context.kind,
+        targetCount: n,
+        status: diffStatusForMenuRow(files, context.path, context.kind, unstagedDiffs),
+        openFile: openWorkFile,
+        showWork,
+        checkPath: tauri.repoFileAbsolutePaths,
+        onError: onOpenWorkError,
+      });
+      if (workbench) items.push(workbench);
       if (n === 1) {
         items.push({
           label: 'Open in editor',
@@ -722,6 +760,11 @@ function FileSection({
       staged,
       onAction,
       onOpenFileInEditor,
+      repoPath,
+      openWorkFile,
+      showWork,
+      onOpenWorkError,
+      unstagedDiffs,
       onStash,
       onDiscard,
       isUntracked,

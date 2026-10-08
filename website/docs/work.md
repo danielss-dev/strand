@@ -18,7 +18,8 @@ the field shrinks instead of sliding under the button.
 - A single click or keyboard focus opens one italic preview tab. Selecting a
   different file replaces that preview in place.
 - Double-click or press `Enter` to pin the file. **Open**, file selection from
-  the command palette, History, and Blame also open pinned tabs.
+  the command palette, History, Blame, and **Open in Workbench** on a Local
+  Changes or Review row also open pinned tabs.
 - Opening an already pinned file activates it instead of creating a duplicate.
 - A working-tree file that differs from HEAD gains a **Changes** tab: the whole
   file rendered as a full-file diff (unstaged first, staged otherwise), the

@@ -2276,7 +2276,7 @@ export function App() {
           />
     )],
     [BUILT_IN_SURFACE_IDS.localChanges, ({ lifecycle }) => (
-      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} onToast={showToast} active={lifecycle.focused} />
+      <LocalChanges onOpenFileInEditor={openActiveFileInEditor} onToast={showToast} active={lifecycle.focused} onOpenWork={showWorkbenchWork} />
     )],
     [BUILT_IN_SURFACE_IDS.changesExplorer, ({ lifecycle }) => (
           <LocalChanges
@@ -2285,6 +2285,7 @@ export function App() {
             active={lifecycle.focused}
             explorerOnly
             onOpenFileChanges={openChangesInWork}
+            onOpenWork={showWorkbenchWork}
           />
     )],
     [BUILT_IN_SURFACE_IDS.review, ({ lifecycle, host }) => (
@@ -2293,6 +2294,7 @@ export function App() {
         onToast={showToast}
         active={lifecycle.focused}
         embedded={host !== 'main'}
+        onOpenWork={showWorkbenchWork}
       />
     )],
     [BUILT_IN_SURFACE_IDS.pullRequests, () => (

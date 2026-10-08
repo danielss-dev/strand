@@ -1,5 +1,21 @@
 # Learnings
 
+## Local Changes / Review Open in Workbench reuses Files → Open (2026-10-08)
+
+**Rule.** The Local Changes and Review tree menus open a whole working-tree
+file (or folder) with `useWork().openFile(repoPath, path, null, isDirectory,
+'pinned')`, then the same show-Work callback Files uses (`onOpenWork` /
+`showWorkbenchWork`). Do not call `setView('work')` alone from those menus:
+Local Changes and Review can sit in a Workbench pane, and a bare view switch
+leaves that pane selected instead of revealing Work. Hide the item for deleted
+working-tree paths (including unstaged deletions overriding staged status and
+folders with only absent changed descendants) and for multi-file selections
+(same single-target rule as Open in editor). Folder rows already have PierreTree menus; open the
+clicked directory, not its descendant files. Keep the helper in `lib/` —
+view modules cannot be imported from Vitest. Validate presence with
+`repoFileAbsolutePaths` before opening, since status can be stale; report errors
+through the view toast and leave Work tabs unchanged.
+
 ## File actions must preserve literal entries and threatened bytes (2026-09-29)
 
 Audit probes showed that libgit2 checkout/reset pathspecs expand selected

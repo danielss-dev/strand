@@ -134,7 +134,9 @@ the resolved app appearance automatically.
   and replaceable preview. New splits match the 50/50 hover preview, while
   later resizing is remembered for that split. Files retain
   Content, rendered Preview, History, Compare, Blame, image, and directory
-  modes. Content uses Pierre's lightweight edit mode; unsaved drafts survive
+  modes. Local Changes and Review offer **Open in Workbench** for available
+  working-tree paths, checking presence before opening a pinned tab. Content uses
+  Pierre's lightweight edit mode; unsaved drafts survive
   navigation during the app session and reach disk only through Save or `Mod+S`;
   toolbar Undo/Redo controls share Pierre's structure-aware keyboard history,
   and Discard changes resets the current buffer without writing it.
