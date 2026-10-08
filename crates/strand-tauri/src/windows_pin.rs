@@ -71,7 +71,72 @@ fn normalize_windows_path(path: &str) -> String {
     while value.ends_with('\\') && value.len() > 3 {
         value.pop();
     }
+    #[cfg(windows)]
+    {
+        value = expand_short_windows_path(&value);
+    }
     value
+}
+
+/// Expand 8.3 components (`RUNNER~1`, `INSTALL~1`) even when the leaf is missing.
+#[cfg(windows)]
+fn expand_short_windows_path(path: &str) -> String {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows::{core::PCWSTR, Win32::Storage::FileSystem::GetLongPathNameW};
+
+    fn get_long(path: &str) -> Option<String> {
+        if path.is_empty() {
+            return None;
+        }
+        let wide: Vec<u16> = std::ffi::OsStr::new(path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut buf = vec![0u16; 4096];
+        let n = unsafe { GetLongPathNameW(PCWSTR(wide.as_ptr()), Some(buf.as_mut_slice())) };
+        if n == 0 || n as usize >= buf.len() {
+            return None;
+        }
+        Some(
+            std::ffi::OsString::from_wide(&buf[..n as usize])
+                .to_string_lossy()
+                .to_ascii_lowercase(),
+        )
+    }
+
+    if let Some(long) = get_long(path) {
+        return long;
+    }
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = path.to_string();
+    loop {
+        let parent = {
+            let current_path = std::path::Path::new(&current);
+            match current_path.parent() {
+                Some(parent) if parent.as_os_str() != current_path.as_os_str() => {
+                    parent.to_string_lossy().into_owned()
+                }
+                _ => return path.to_string(),
+            }
+        };
+        let Some(name) = std::path::Path::new(&current)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+        else {
+            return path.to_string();
+        };
+        parts.push(name);
+        if let Some(mut long) = get_long(&parent) {
+            for part in parts.iter().rev() {
+                if !long.ends_with('\\') {
+                    long.push('\\');
+                }
+                long.push_str(part);
+            }
+            return long;
+        }
+        current = parent;
+    }
 }
 
 #[cfg(windows)]
@@ -440,17 +505,22 @@ mod tests {
 
         let cache_root = temp.path().join("Installer");
         let broken_before = read_shortcut(&pin_dir.join("broken.lnk")).unwrap();
+        let installed = exe.to_string_lossy();
+        let cache = cache_root.to_string_lossy();
+        let icon_exists = Path::new(&broken_before.icon_path).exists();
         assert!(
             should_heal_pin(
                 &broken_before.target_path,
                 &broken_before.icon_path,
-                &exe.to_string_lossy(),
-                &cache_root.to_string_lossy(),
-                Path::new(&broken_before.icon_path).exists(),
+                &installed,
+                &cache,
+                icon_exists,
             ),
-            "broken pin was not selected: target={:?} icon={:?}",
+            "broken pin was not selected: target={:?} icon={:?} exists={icon_exists} target_match={} cache={}",
             broken_before.target_path,
-            broken_before.icon_path
+            broken_before.icon_path,
+            windows_paths_equal(&broken_before.target_path, &installed),
+            icon_is_installer_cache(&broken_before.icon_path, &cache)
         );
 
         let healed = heal_pins_in(&[pin_dir.clone()], &exe, cache_root.as_path()).unwrap();
