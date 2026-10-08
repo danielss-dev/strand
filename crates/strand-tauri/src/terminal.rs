@@ -341,8 +341,12 @@ fn terminal_reader(
     // Observers of Exit must already see this session as stopped.
     if !session.closed.load(Ordering::Acquire) {
         match exit_result {
-            Some(Ok(code)) => { let _ = on_event.send(TerminalEvent::Exit { code }); }
-            Some(Err(message)) => { let _ = on_event.send(TerminalEvent::Error { message }); }
+            Some(Ok(code)) => {
+                let _ = on_event.send(TerminalEvent::Exit { code });
+            }
+            Some(Err(message)) => {
+                let _ = on_event.send(TerminalEvent::Error { message });
+            }
             None => {}
         }
     }
@@ -498,12 +502,20 @@ fn decode_wsl_output(bytes: &[u8]) -> String {
     let looks_utf16 = bytes.starts_with(&[0xff, 0xfe])
         || (bytes.len() >= 2
             && bytes.len().is_multiple_of(2)
-            && bytes.chunks_exact(2).filter(|pair| pair[1] == 0).count() > bytes.len() / 8);
+            && bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .filter(|pair| pair[1] == 0)
+                .count()
+                > bytes.len() / 8);
     if !looks_utf16 {
         return String::from_utf8_lossy(bytes).into_owned();
     }
     let words = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .skip_while(|word| *word == 0xfeff);
     char::decode_utf16(words)
@@ -809,7 +821,8 @@ mod tests {
             if let tauri::ipc::InvokeResponseBody::Json(json) = body {
                 if let Ok(event) = serde_json::from_str::<TerminalEvent>(&json) {
                     if matches!(event, TerminalEvent::Exit { .. }) {
-                        observed_count.store(observed_manager.count(&observed_path), Ordering::Release);
+                        observed_count
+                            .store(observed_manager.count(&observed_path), Ordering::Release);
                     }
                     let _ = send.send(event);
                 }
