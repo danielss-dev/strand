@@ -20,6 +20,7 @@ import { Select } from '../components/Select';
 import { TreeFileIcon, TreeIconSprite } from '../components/TreeFileIcon';
 import { imageMime, isImagePath } from '../lib/image';
 import { directoryEntries, type DirectoryEntry } from '../lib/directoryEntries';
+import { emptyDiffMessage } from '../lib/emptyDiff';
 import {
   canEditFileContent,
   normalizeEditorText,
@@ -1295,8 +1296,8 @@ function HistoryDiff({
       <FvEmpty>Binary file — no textual diff.</FvEmpty>
     );
   }
-  if (file.patch.length === 0) {
-    return <FvEmpty>No textual diff.</FvEmpty>;
+  if (file.adds === 0 && file.dels === 0) {
+    return <FvEmpty>{emptyDiffMessage(file, 'Binary file — no textual diff.')}</FvEmpty>;
   }
   return (
     <div className="fv-pierre">
@@ -1404,8 +1405,8 @@ function CompareTab({ path, repoPath }: { path: string; repoPath: string | null 
           ) : (
             <FvEmpty>Binary file — no textual diff.</FvEmpty>
           )
-        ) : diff.patch.length === 0 ? (
-          <FvEmpty>No textual diff.</FvEmpty>
+        ) : diff.adds === 0 && diff.dels === 0 ? (
+          <FvEmpty>{emptyDiffMessage(diff, 'Binary file — no textual diff.')}</FvEmpty>
         ) : (
           <Diff patch={diff.patch} layout={layout} />
         )}

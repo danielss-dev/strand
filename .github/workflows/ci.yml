@@ -124,12 +124,20 @@ jobs:
             if ($process.ExitCode -ne 0) { throw "WebView2 install failed: $($process.ExitCode)" }
           }
       # The harness runs the actual Tauri app with an isolated identity/profile.
+      # Discard tests shell out to Git (`checkout-index --force`) and need an identity.
+      - name: Configure git identity for tests
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
       - name: Test Windows reset paths and process cancellation
         shell: pwsh
         run: |
           cargo test -p strand-core reset::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p strand-core network::bounded_process_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p strand-core --lib stage::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p strand-tauri pull_requests::pages::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1099,6 +1099,16 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Local Changes staging shortcuts retain ownership while the Pierre tree
   has focus (`LocalChanges` captures handled keys before shadow-tree typeahead;
   folder `d d` expands descendants and reaches one `discardMany` call)
+- ☑ Discard of line-ending-only leftovers (DAN-82): libgit2 `checkout_index`
+  skips `eol=lf` + CRLF workdir files whose filtered OID matches; after that
+  checkout, `rewrite_skipped_checkouts` force-checkouts any pathspec still
+  `WT_MODIFIED`/`WT_DELETED` (`discard_paths_rewrites_crlf_when_attributes_require_lf`,
+  `discard_paths_rewrites_crlf_after_index_stat_refresh`). Modified files
+  with no hunks get `FileDiff.note` (`Only line endings differ` only when
+  workdir vs index blob differ solely by CR/LF; otherwise matching-index copy)
+  (`emptyDiffMessage`; content checks use `read_regular_workdir_file` with a
+  16 MiB cap, reject special files and symlink/gitlink index entries, and run
+  only for eligible empty diffs; symlink diff/discard regressions covered)
 - ✗ Recent-messages dropdown on the subject field — **removed 2026-07-02**
   (shipped 2026-05-29, cut on user feedback: resurfacing stale old commit
   messages made no sense next to AI suggestions). The `commit_messages`

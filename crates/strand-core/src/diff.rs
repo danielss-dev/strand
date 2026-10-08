@@ -1,8 +1,16 @@
 use std::collections::HashMap;
+use std::io::Read;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{error::Result, repo::Repo};
+
+pub(crate) const WORKDIR_CONTENT_NOTE_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+pub(crate) const EMPTY_DIFF_LINE_ENDINGS: &str = "Only line endings differ";
+pub(crate) const EMPTY_DIFF_MATCHES_INDEX: &str =
+    "Git lists this file as changed, but its content matches the index. Discard again or refresh to clear it.";
 
 pub const EMPTY_TREE_OID: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -35,6 +43,9 @@ pub struct FileDiff {
     pub dels: u32,
     pub binary: bool,
     pub patch: String,
+    /// Why Git still lists a modified file when there are no hunks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// Rename-aware staging targets without generating or transferring patch bodies.
@@ -93,7 +104,7 @@ impl Repo {
         let repo = self.git2()?;
         let mut opts = diff_options();
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// Index vs HEAD — what `git diff --cached` would show.
@@ -181,7 +192,7 @@ impl Repo {
         let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options();
         let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// `diff_unstaged` with whole-file context: every changed file's patch
@@ -192,7 +203,7 @@ impl Repo {
         let repo = self.git2()?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
         let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// `diff_since` with whole-file context — see `diff_unstaged_full`.
@@ -202,7 +213,7 @@ impl Repo {
         let tree = review_baseline_tree(repo, baseline)?;
         let mut opts = diff_options_with(WHOLE_FILE_CONTEXT);
         let diff = repo.diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     /// Diff one path's working-tree state against HEAD — the net uncommitted
@@ -219,7 +230,7 @@ impl Repo {
         let mut opts = diff_options();
         opts.pathspec(path);
         let diff = repo.diff_tree_to_workdir(head_tree.as_ref(), Some(&mut opts))?;
-        collect(diff)
+        collect_in(diff, Some(repo))
     }
 
     fn sparse_workdir_diff(&self, staged: bool, baseline: Option<&str>, context: u32, path: Option<&str>) -> Result<Vec<FileDiff>> {
@@ -244,7 +255,11 @@ impl Repo {
         args.push("--");
         if let Some(paths) = paths { args.extend(paths.iter().map(String::as_str)); }
         let bytes = self.sparse_git(&args, None)?;
-        let mut files = if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?)? };
+        let mut files = {
+            let git = self.git2()?;
+            let workdir: Option<&git2::Repository> = if staged { None } else { Some(git) };
+            if bytes.is_empty() { Vec::new() } else { collect_ready(git2::Diff::from_buffer(&bytes)?, workdir)? }
+        };
         if !staged {
             let untracked: Vec<_> = self.status()?.into_iter().filter(|s| s.kind == crate::status::StatusKind::Untracked && paths.is_none_or(|paths| paths.contains(&s.path))).collect();
             if !untracked.is_empty() {
@@ -272,7 +287,7 @@ impl Repo {
             return Err(crate::Error::Other(String::from_utf8_lossy(&output.stderr).trim().into()));
         }
         if output.stdout.is_empty() { return Ok(Vec::new()); }
-        collect_ready(git2::Diff::from_buffer(&output.stdout)?)
+        collect_ready(git2::Diff::from_buffer(&output.stdout)?, None)
     }
 }
 
@@ -301,11 +316,15 @@ pub(crate) fn diff_options_with(context: u32) -> git2::DiffOptions {
 /// go). Line counts are accumulated in the same pass, and deltas are looked
 /// up through a path→index map — a 500-file changeset used to pay a second
 /// full walk plus an O(files×lines) linear search here.
-fn collect(mut diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+fn collect(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+    collect_in(diff, None)
+}
+
+fn collect_in(mut diff: git2::Diff<'_>, repo: Option<&git2::Repository>) -> Result<Vec<FileDiff>> {
     let mut find = git2::DiffFindOptions::new();
     find.renames(true).copies(true);
     diff.find_similar(Some(&mut find))?;
-    collect_ready(diff)
+    collect_ready(diff, repo)
 }
 
 /// Only an unborn HEAD means an empty starting tree. Invalid pinned commits,
@@ -319,7 +338,7 @@ pub(crate) fn review_baseline_tree<'repo>(repo: &'repo git2::Repository, baselin
     }
 }
 
-fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
+fn collect_ready(diff: git2::Diff<'_>, repo: Option<&git2::Repository>) -> Result<Vec<FileDiff>> {
 
     // Pre-populate one FileDiff per delta so the print callback can index
     // into us by delta_idx.
@@ -344,6 +363,7 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
                 dels: 0,
                 binary: d.new_file().is_binary() || d.old_file().is_binary(),
                 patch: String::new(),
+                note: None,
             }
         })
         .collect();
@@ -388,7 +408,89 @@ fn collect_ready(diff: git2::Diff<'_>) -> Result<Vec<FileDiff>> {
         true
     })?;
 
+    for file in &mut files {
+        annotate_empty_diff(file, repo);
+    }
     Ok(files)
+}
+
+/// Classify a modified file that has no textual hunks so the UI can say why
+/// Git still lists it instead of showing a blank "No textual diff."
+pub(crate) fn annotate_empty_diff(file: &mut FileDiff, repo: Option<&git2::Repository>) {
+    if !needs_content_note(file) {
+        annotate_empty_diff_sides(file, None);
+        return;
+    }
+    let owned = repo.and_then(|repo| workdir_and_index_blob(repo, &file.path));
+    let sides = owned.as_ref().map(|(disk, blob)| (disk.as_slice(), blob.as_slice()));
+    annotate_empty_diff_sides(file, sides);
+}
+
+fn needs_content_note(file: &FileDiff) -> bool {
+    !file.binary
+        && file.adds == 0
+        && file.dels == 0
+        && file.status == DiffStatus::Modified
+        && file_mode_note(&file.patch).is_none()
+        && !file.patch.contains("@@")
+}
+
+fn annotate_empty_diff_sides(file: &mut FileDiff, sides: Option<(&[u8], &[u8])>) {
+    if file.binary || file.adds != 0 || file.dels != 0 || file.status != DiffStatus::Modified {
+        return;
+    }
+    if let Some(note) = file_mode_note(&file.patch) {
+        file.note = Some(note);
+        return;
+    }
+    if file.patch.is_empty() || !file.patch.contains("@@") {
+        file.note = Some(empty_content_note(sides).into());
+    }
+}
+
+fn empty_content_note(sides: Option<(&[u8], &[u8])>) -> &'static str {
+    match sides {
+        Some((left, right)) if only_line_endings_differ(left, right) => EMPTY_DIFF_LINE_ENDINGS,
+        _ => EMPTY_DIFF_MATCHES_INDEX,
+    }
+}
+
+pub(crate) fn only_line_endings_differ(left: &[u8], right: &[u8]) -> bool {
+    left != right
+        && left.iter().copied().filter(|&b| b != b'\r')
+            .eq(right.iter().copied().filter(|&b| b != b'\r'))
+}
+
+fn workdir_and_index_blob(repo: &git2::Repository, path: &str) -> Option<(Vec<u8>, Vec<u8>)> {
+    let workdir = repo.workdir()?;
+    let index = repo.index().ok()?;
+    let entry = index.get_path(Path::new(path), 0)?;
+    if matches!(entry.mode, 0o120000 | 0o160000) {
+        return None;
+    }
+    let disk = read_regular_workdir_file(&workdir.join(path), WORKDIR_CONTENT_NOTE_MAX_BYTES)?;
+    let blob = repo.find_blob(entry.id).ok()?;
+    if blob.size() as u64 > WORKDIR_CONTENT_NOTE_MAX_BYTES {
+        return None;
+    }
+    Some((disk, blob.content().to_vec()))
+}
+
+/// Content-note checks must never follow links or read unbounded workdir data.
+pub(crate) fn read_regular_workdir_file(path: &Path, max_len: u64) -> Option<Vec<u8>> {
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_file() || metadata.len() > max_len {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path).ok()?.take(max_len.checked_add(1)?).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= max_len).then_some(bytes)
+}
+
+fn file_mode_note(patch: &str) -> Option<String> {
+    let old = patch.lines().find_map(|line| line.strip_prefix("old mode "))?;
+    let new = patch.lines().find_map(|line| line.strip_prefix("new mode "))?;
+    Some(format!("File mode changed {old} → {new}"))
 }
 
 pub(crate) fn map_status(s: git2::Delta) -> DiffStatus {
@@ -426,6 +528,106 @@ mod tests {
         let tree = repo.find_tree(tree_oid).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
         (Repo::discover(dir.to_str().unwrap()).unwrap(), dir)
+    }
+
+    fn empty_modified(path: &str) -> FileDiff {
+        FileDiff {
+            path: path.into(),
+            old_path: None,
+            status: DiffStatus::Modified,
+            adds: 0,
+            dels: 0,
+            binary: false,
+            patch: String::new(),
+            note: None,
+        }
+    }
+
+    #[test]
+    fn annotate_empty_diff_only_claims_line_endings_when_crs_are_the_difference() {
+        let mut eol = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut eol, Some((b"{\r\n  \"name\": \"x\"\r\n}\r\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(eol.note.as_deref(), Some(EMPTY_DIFF_LINE_ENDINGS));
+
+        let mut same = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut same, Some((b"{\n  \"name\": \"x\"\n}\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(same.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
+
+        let mut other = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut other, Some((b"changed\n", b"{\n  \"name\": \"x\"\n}\n")));
+        assert_eq!(other.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
+
+        let mut unknown = empty_modified("package.json");
+        annotate_empty_diff_sides(&mut unknown, None);
+        assert_eq!(unknown.note.as_deref(), Some(EMPTY_DIFF_MATCHES_INDEX));
+    }
+
+    #[test]
+    fn content_note_requires_an_empty_modified_text_diff() {
+        let file = empty_modified("file");
+        assert!(needs_content_note(&file));
+        for ineligible in [
+            FileDiff { binary: true, ..file.clone() },
+            FileDiff { adds: 1, ..file.clone() },
+            FileDiff { dels: 1, ..file.clone() },
+            FileDiff { status: DiffStatus::Added, ..file.clone() },
+            FileDiff { status: DiffStatus::Deleted, ..file.clone() },
+            FileDiff { patch: "old mode 100644\nnew mode 100755\n".into(), ..file.clone() },
+            FileDiff { patch: "@@ -1 +1 @@\n".into(), ..file },
+        ] {
+            assert!(!needs_content_note(&ineligible));
+        }
+    }
+
+    #[test]
+    fn regular_workdir_reader_enforces_size_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("file");
+        std::fs::write(&path, b"1234").unwrap();
+        assert_eq!(read_regular_workdir_file(&path, 4), Some(b"1234".to_vec()));
+        assert_eq!(read_regular_workdir_file(&path, 3), None);
+        assert_eq!(read_regular_workdir_file(dir.path(), 4), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_workdir_reader_rejects_symlinks_and_special_files() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let dir = tempfile::tempdir().unwrap();
+            let link = dir.path().join("link");
+            std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
+            assert_eq!(read_regular_workdir_file(&link, 4), None);
+            assert_eq!(read_regular_workdir_file(Path::new("/dev/zero"), 4), None);
+            let fifo = dir.path().join("fifo");
+            assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+            assert_eq!(read_regular_workdir_file(&fifo, 4), None);
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(30)).expect("special-file reader hung");
+        worker.join().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn working_diff_does_not_read_symlink_target() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let (repo, dir) = scratch_repo();
+            std::fs::write(dir.join("target"), "regular file\n").unwrap();
+            let link = dir.join("link");
+            std::os::unix::fs::symlink("target", &link).unwrap();
+            repo.stage_paths(&["link".into()]).unwrap();
+            repo.commit("symlink", None, false).unwrap();
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
+            let diffs = repo.diff_unstaged().unwrap();
+            assert!(diffs.iter().any(|file| file.path == "link" && file.patch.contains("/dev/zero")));
+            std::fs::remove_dir_all(dir).unwrap();
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(30)).expect("working diff followed symlink target");
+        worker.join().unwrap();
     }
 
     #[test]

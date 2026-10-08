@@ -2143,6 +2143,17 @@ and Store certification remain external gates.
 
 ---
 
+**Discard line-ending ghosts shipped (2026-10-08):** Local Changes `d d` no
+longer leaves files listed as `M` with an empty `-0 +0` diff. libgit2
+force-checkout skips workdir files whose filtered OID already matches the
+index (`eol=lf` + CRLF on disk); discard rewrites leftovers that git2 status
+still reports as workdir-dirty, and empty hunks surface `FileDiff.note`
+only when the claim is true (DAN-82). Content checks now run only for eligible
+empty diffs and use bounded regular-file reads; diff and discard never follow
+tracked symlinks during line-ending classification (PR #143, 2026-10-08).
+
+---
+
 ## 1.1+ — Post-1.0
 
 **Agent-review audit (2026-09-10):**

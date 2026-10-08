@@ -40,6 +40,7 @@ import type { LocalSelection } from '../stores/repo';
 import { useRepo } from '../stores/repo';
 import { useCompleteDiffSearch, useRepoDiffs } from '../lib/useRepoDiffs';
 import { diffLoaded } from '../lib/diffPages';
+import { emptyDiffMessage, hasNoHunks } from '../lib/emptyDiff';
 import { PendingDiff } from '../components/PendingDiff';
 import { useSettings } from '../stores/settings';
 import type { AiProvider, AiSensitiveDecision, AiSensitiveFile, FileDiff } from '../lib/types';
@@ -883,7 +884,7 @@ function FileDiffSection({
   onToggle: () => void;
 }) {
   const refreshing = useRepo((state) => state.localDiffsDirty);
-  const empty = diffLoaded(diff) && (diff.binary || diff.patch.length === 0);
+  const empty = diffLoaded(diff) && hasNoHunks(diff);
   const image = diff.binary && isImagePath(diff.path);
 
   // Viewport-lazy mount: the "show all" view can stack hundreds of files, and
@@ -959,7 +960,7 @@ function FileDiffSection({
           />
         ) : empty ? (
           <div className="lc-file-note">
-            {diff.binary ? 'Binary file — no diff shown.' : 'No textual diff.'}
+            {emptyDiffMessage(diff)}
           </div>
         ) : seen ? (
           // Keyed by content hash so a content change remounts the instance

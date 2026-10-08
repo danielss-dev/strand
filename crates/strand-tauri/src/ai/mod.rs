@@ -635,6 +635,7 @@ mod tests {
             patch:
                 "diff --git a/src/lib.rs b/src/lib.rs\n@@ -10,2 +10,2 @@\n-old\n+new\n context\n"
                     .into(),
+            note: None,
         }];
         let mut suggestion = CodeReviewSuggestion {
             findings: vec![

@@ -268,6 +268,7 @@ mod tests {
             dels: 0,
             binary: false,
             patch: patch.into(),
+            note: None,
         }
     }
 
