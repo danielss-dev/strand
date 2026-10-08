@@ -2,7 +2,8 @@
 #
 # A GitHub Actions windows-latest runner has no interactive Explorer/taskbar.
 # This script proves shortcut IconLocation + file existence across msiexec
-# major upgrades. It cannot prove that Explorer's live taskbar bitmap updates.
+# major upgrades, then runs this PR's `heal_pins_in` against the real User
+# Pinned directory. It cannot prove that Explorer's live taskbar bitmap updates.
 param(
     [Parameter(Mandatory = $true)][string]$Msi172,
     [Parameter(Mandatory = $true)][string]$Msi173,
@@ -87,6 +88,84 @@ function Write-LnkDump([string]$Label, [string]$Path) {
     Write-Log ("  {0}: Target={1} (exists={2}) IconLocation={3} iconFileExists={4} AUMID={5}" -f `
         $Label, $dump.TargetPath, $dump.TargetExists, $dump.IconLocation, $dump.IconFileExists, $dump.HasAumid)
     return $dump
+}
+
+function Get-LnkFingerprint([string]$Path) {
+    if (!(Test-Path -LiteralPath $Path)) {
+        return [pscustomobject]@{
+            Path = $Path
+            Exists = $false
+        }
+    }
+    $item = Get-Item -LiteralPath $Path
+    [pscustomobject]@{
+        Path = $Path
+        Exists = $true
+        Sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+        CreationTimeUtc = $item.CreationTimeUtc.ToString('o')
+        LastWriteTimeUtc = $item.LastWriteTimeUtc.ToString('o')
+        Length = $item.Length
+    }
+}
+
+function Write-LnkFingerprint([string]$Label, $Fingerprint) {
+    if (!$Fingerprint.Exists) {
+        Write-Log "  $Label fingerprint MISSING $($Fingerprint.Path)"
+        return
+    }
+    Write-Log ("  {0} fingerprint: sha256={1} created={2} written={3} length={4}" -f `
+        $Label, $Fingerprint.Sha256, $Fingerprint.CreationTimeUtc, $Fingerprint.LastWriteTimeUtc, $Fingerprint.Length)
+}
+
+function New-UnrelatedPin([string]$Destination) {
+    $dir = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $notepad = Join-Path $env:SystemRoot 'System32\notepad.exe'
+    if (!(Test-Path -LiteralPath $notepad)) {
+        throw "notepad.exe missing: $notepad"
+    }
+    $lnk = $shell.CreateShortcut($Destination)
+    $lnk.TargetPath = $notepad
+    $lnk.WorkingDirectory = Split-Path -Parent $notepad
+    $lnk.WindowStyle = 1
+    $lnk.Description = 'Unrelated non-Strand pin'
+    # Stale installer-cache icon on a non-Strand target: heal must leave this alone.
+    $lnk.IconLocation = 'C:\Windows\Installer\{DEADBEEF-0000-0000-0000-000000000000}\ProductIcon,0'
+    $lnk.Save()
+}
+
+function Invoke-PinHeal([string]$PinnedRoot, [string]$InstalledExe) {
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    if (!(Test-Path -LiteralPath (Join-Path $repoRoot 'Cargo.toml'))) {
+        throw "repo root not found from `$PSScriptRoot=$PSScriptRoot"
+    }
+    $env:STRAND_PIN_HEAL_DIR = $PinnedRoot
+    $env:STRAND_PIN_HEAL_EXE = $InstalledExe
+    Write-Log "STRAND_PIN_HEAL_DIR=$PinnedRoot"
+    Write-Log "STRAND_PIN_HEAL_EXE=$InstalledExe"
+    Write-Log 'cargo test -p strand-tauri heals_rehearsal_user_pinned_dir -- --ignored --nocapture'
+    Push-Location $repoRoot
+    try {
+        $outputLines = & cargo test -p strand-tauri heals_rehearsal_user_pinned_dir -- --ignored --nocapture 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    $healed = $null
+    foreach ($line in $outputLines) {
+        $text = [string]$line
+        if ($text) { Write-Log "  cargo: $text" }
+        if ($text -match 'STRAND_PIN_HEAL healed=(\d+)') {
+            $healed = [int]$Matches[1]
+        }
+    }
+    if ($code -ne 0) {
+        throw "heal cargo test failed with exit $code"
+    }
+    if ($null -eq $healed) {
+        throw 'heal cargo test did not print STRAND_PIN_HEAL healed='
+    }
+    return $healed
 }
 
 function Install-Msi([string]$MsiPath, [string]$Label) {
@@ -215,6 +294,52 @@ if ($installerIcon172) {
     Write-Log ("  1.7.2 ProductIcon still exists after 1.7.4? {0}" -f (Test-Path -LiteralPath $installerIcon172))
 }
 
+$unrelatedPin = Join-Path $pinDir 'Notepad-unrelated.lnk'
+New-UnrelatedPin $unrelatedPin
+Write-Log 'Created unrelated non-Strand pin (notepad + missing Installer ProductIcon)'
+$unrelatedBefore = Write-LnkDump 'unrelated-notepad' $unrelatedPin
+
+$pinnedRoot = Join-Path $env:AppData 'Microsoft\Internet Explorer\Quick Launch\User Pinned'
+Write-Log 'Before heal (real User Pinned dir)'
+$null = Write-LnkDump 'pin-from-start' $pinFromStart
+$null = Write-LnkDump 'pin-from-running' $pinFromRunning
+$null = Write-LnkDump 'pin-from-start-1.7.3' $pinFromStart173
+$null = Write-LnkDump 'pin-from-running-1.7.3' $pinFromRunning173
+$null = Write-LnkDump 'unrelated-notepad' $unrelatedPin
+
+$beforeStart = Get-LnkFingerprint $pinFromStart
+$beforeRunning = Get-LnkFingerprint $pinFromRunning
+$beforeStart173 = Get-LnkFingerprint $pinFromStart173
+$beforeRunning173 = Get-LnkFingerprint $pinFromRunning173
+$beforeUnrelated = Get-LnkFingerprint $unrelatedPin
+Write-LnkFingerprint 'pin-from-start' $beforeStart
+Write-LnkFingerprint 'pin-from-running' $beforeRunning
+Write-LnkFingerprint 'pin-from-start-1.7.3' $beforeStart173
+Write-LnkFingerprint 'pin-from-running-1.7.3' $beforeRunning173
+Write-LnkFingerprint 'unrelated-notepad' $beforeUnrelated
+
+Write-Log 'Invoking PR heal_pins_in on the real User Pinned directory'
+$healedCount = Invoke-PinHeal $pinnedRoot $exe
+Write-Log "heal_pins_in returned healed=$healedCount"
+
+Write-Log 'After heal'
+$startPinHealed = Write-LnkDump 'pin-from-start' $pinFromStart
+$runningPinHealed = Write-LnkDump 'pin-from-running' $pinFromRunning
+$startPin173Healed = Write-LnkDump 'pin-from-start-1.7.3' $pinFromStart173
+$runningPin173Healed = Write-LnkDump 'pin-from-running-1.7.3' $pinFromRunning173
+$unrelatedAfter = Write-LnkDump 'unrelated-notepad' $unrelatedPin
+
+$afterStart = Get-LnkFingerprint $pinFromStart
+$afterRunning = Get-LnkFingerprint $pinFromRunning
+$afterStart173 = Get-LnkFingerprint $pinFromStart173
+$afterRunning173 = Get-LnkFingerprint $pinFromRunning173
+$afterUnrelated = Get-LnkFingerprint $unrelatedPin
+Write-LnkFingerprint 'pin-from-start' $afterStart
+Write-LnkFingerprint 'pin-from-running' $afterRunning
+Write-LnkFingerprint 'pin-from-start-1.7.3' $afterStart173
+Write-LnkFingerprint 'pin-from-running-1.7.3' $afterRunning173
+Write-LnkFingerprint 'unrelated-notepad' $afterUnrelated
+
 $failures = New-Object System.Collections.Generic.List[string]
 
 function Assert-StaleProductIconPin($Dump, [string]$Name) {
@@ -236,6 +361,42 @@ function Assert-HealthyPin($Dump, [string]$Name) {
     }
 }
 
+function Assert-HealedStrandPin($Dump, $BeforeFp, $AfterFp, [string]$Name) {
+    $usesInstaller = $Dump.IconPath -like '*\Installer\*'
+    $usesExe = [string]::Equals($Dump.IconPath, $exe, [StringComparison]::OrdinalIgnoreCase)
+    $emptyIcon = [string]::IsNullOrWhiteSpace($Dump.IconPath)
+    $iconOk = ($usesExe -and $Dump.IconFileExists -eq $true) -or $emptyIcon
+    if ($usesInstaller -or !$Dump.TargetExists -or !$iconOk) {
+        $failures.Add("$Name was not healed to strand.exe/empty icon: IconLocation=$($Dump.IconLocation) iconExists=$($Dump.IconFileExists) targetExists=$($Dump.TargetExists)")
+    } else {
+        Write-Log "CONFIRMED: $Name now uses a durable icon ($($Dump.IconLocation))."
+    }
+    if (!$AfterFp.Exists) {
+        $failures.Add("$Name .lnk is missing after heal; heal must not delete pins")
+        return
+    }
+    if ($BeforeFp.CreationTimeUtc -ne $AfterFp.CreationTimeUtc) {
+        $failures.Add("$Name CreationTime changed ($($BeforeFp.CreationTimeUtc) -> $($AfterFp.CreationTimeUtc)); heal must Save in place, not recreate")
+    }
+    if ($BeforeFp.Sha256 -eq $AfterFp.Sha256) {
+        $failures.Add("$Name sha256 did not change after heal; expected SetIconLocation + Save")
+    }
+}
+
+function Assert-UntouchedPin($BeforeDump, $AfterDump, $BeforeFp, $AfterFp, [string]$Name) {
+    if ($BeforeDump.IconLocation -ne $AfterDump.IconLocation -or $BeforeDump.TargetPath -ne $AfterDump.TargetPath) {
+        $failures.Add("$Name was rewritten: before IconLocation=$($BeforeDump.IconLocation) Target=$($BeforeDump.TargetPath); after IconLocation=$($AfterDump.IconLocation) Target=$($AfterDump.TargetPath)")
+    } else {
+        Write-Log "CONFIRMED: $Name IconLocation untouched ($($AfterDump.IconLocation))."
+    }
+    if ($BeforeFp.Sha256 -ne $AfterFp.Sha256) {
+        $failures.Add("$Name sha256 changed ($($BeforeFp.Sha256) -> $($AfterFp.Sha256)); heal must not Save pins it does not select")
+    }
+    if ($BeforeFp.CreationTimeUtc -ne $AfterFp.CreationTimeUtc) {
+        $failures.Add("$Name CreationTime changed; heal must not recreate unselected pins")
+    }
+}
+
 Assert-StaleProductIconPin $startPinAfter173 '1.7.2 start pin after 1.7.3'
 Assert-StaleProductIconPin $runningPinAfter173 '1.7.2 running-window pin after 1.7.3'
 Assert-StaleProductIconPin $startPinAfter174 '1.7.2 start pin after 1.7.4'
@@ -244,12 +405,27 @@ Assert-StaleProductIconPin $runningPinAfter174 '1.7.2 running-window pin after 1
 Assert-HealthyPin $startPin173After174 '1.7.3 start pin after 1.7.4'
 Assert-HealthyPin $runningPin173After174 '1.7.3 running-window pin after 1.7.4'
 
-Write-Log 'CI runner limits: no interactive desktop, no live taskbar bitmap, no HWND-pin from a visible Strand window. Pins are .lnk files in User Pinned\TaskBar with IconLocation copied the way Explorer copies the Start Menu shortcut when pinning by AppUserModelID.'
+if ($healedCount -lt 2) {
+    $failures.Add("heal_pins_in returned $healedCount; expected at least the two 1.7.2-era Strand pins")
+} else {
+    Write-Log "CONFIRMED: heal_pins_in rewrote $healedCount pin(s)."
+}
 
-$logLines | Set-Content -LiteralPath $LogPath -Encoding utf8
+Assert-HealedStrandPin $startPinHealed $beforeStart $afterStart '1.7.2 start pin after heal'
+Assert-HealedStrandPin $runningPinHealed $beforeRunning $afterRunning '1.7.2 running-window pin after heal'
+Assert-UntouchedPin $startPin173After174 $startPin173Healed $beforeStart173 $afterStart173 '1.7.3 start pin after heal'
+Assert-UntouchedPin $runningPin173After174 $runningPin173Healed $beforeRunning173 $afterRunning173 '1.7.3 running-window pin after heal'
+Assert-UntouchedPin $unrelatedBefore $unrelatedAfter $beforeUnrelated $afterUnrelated 'unrelated notepad pin after heal'
+
+Write-Log 'CI runner limits: no interactive desktop, no live taskbar bitmap, no HWND-pin from a visible Strand window. Pins are .lnk files in User Pinned\TaskBar with IconLocation copied the way Explorer copies the Start Menu shortcut when pinning by AppUserModelID. Heal is IShellLink SetIconLocation + Save on existing files; Explorer bitmap refresh (SHChangeNotify vs sign-out) is a live-desktop check.'
+
 if ($failures.Count) {
     Write-Log ("Rehearsal FAILED:`n - " + ($failures -join "`n - "))
+} else {
+    Write-Log "Rehearsal log written to $LogPath"
+    Write-Log 'Rehearsal PASSED'
+}
+$logLines | Set-Content -LiteralPath $LogPath -Encoding utf8
+if ($failures.Count) {
     throw "MSI pin rehearsal failed with $($failures.Count) check(s)."
 }
-Write-Log "Rehearsal log written to $LogPath"
-Write-Log 'Rehearsal PASSED'

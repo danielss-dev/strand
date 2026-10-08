@@ -6,7 +6,9 @@
 //! upgrade deletes that cache and the pin shows Windows' blank-page icon
 //! (#135, DAN-81). New MSI shortcuts omit `Icon_` and use `strand.exe`; this
 //! module only rewrites leftover pins whose target is the installed executable
-//! and whose icon path is missing or inside the Installer cache.
+//! and whose icon path is missing or inside the Installer cache. Matching
+//! `.lnk` files are updated in place (`SetIconLocation` + `IPersistFile::Save`);
+//! they are never deleted or replaced with a new file.
 
 #![cfg_attr(not(windows), allow(dead_code))]
 
@@ -209,14 +211,14 @@ fn create_shortcut(path: &Path, target: &Path, icon: &Path) -> windows::core::Re
         },
     };
 
-    let wide_path = wide_path(path);
-    let wide_target = wide_path(target);
-    let wide_icon = wide_path(icon);
+    let lnk_wide = wide_path(path);
+    let target_wide = wide_path(target);
+    let icon_wide = wide_path(icon);
     let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }?;
-    unsafe { link.SetPath(PCWSTR(wide_target.as_ptr())) }?;
-    unsafe { link.SetIconLocation(PCWSTR(wide_icon.as_ptr()), 0) }?;
+    unsafe { link.SetPath(PCWSTR(target_wide.as_ptr())) }?;
+    unsafe { link.SetIconLocation(PCWSTR(icon_wide.as_ptr()), 0) }?;
     let persist: IPersistFile = link.cast()?;
-    unsafe { persist.Save(PCWSTR(wide_path.as_ptr()), true) }?;
+    unsafe { persist.Save(PCWSTR(lnk_wide.as_ptr()), true) }?;
     Ok(())
 }
 
@@ -472,5 +474,24 @@ mod tests {
             &custom_pin.icon_path,
             &custom.to_string_lossy()
         ));
+    }
+
+    /// Rehearsal vehicle: `heal_pins_in` on the runner's real User Pinned dir.
+    /// Default `cargo test` skips this so we never rewrite a developer machine.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "rehearsal: set STRAND_PIN_HEAL_DIR and STRAND_PIN_HEAL_EXE"]
+    fn heals_rehearsal_user_pinned_dir() {
+        let dir = std::env::var("STRAND_PIN_HEAL_DIR")
+            .expect("STRAND_PIN_HEAL_DIR must point at the User Pinned directory");
+        let exe = std::env::var("STRAND_PIN_HEAL_EXE")
+            .expect("STRAND_PIN_HEAL_EXE must point at the installed strand.exe");
+        let healed = heal_pins_in(
+            &[PathBuf::from(&dir)],
+            Path::new(&exe),
+            &installer_cache_root(),
+        )
+        .expect("heal_pins_in");
+        eprintln!("STRAND_PIN_HEAL healed={healed} dir={dir} exe={exe}");
     }
 }

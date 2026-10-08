@@ -2145,9 +2145,16 @@ shortcut still has `Icon_=ProductIcon`. Leftover User Pinned `.lnk` copies
 from those older installers are safe to rewrite on launch when their target is
 the installed `strand.exe` and their icon path is missing or under
 `%WINDIR%\Installer` (`windows_pin::should_heal_pin`). Do not rewrite other
-shortcuts, IconCache databases, or Taskband blobs. `SHChangeNotify(UPDATEITEM)`
-is best-effort; a CI runner cannot prove Explorer's live taskbar bitmap, so a
+shortcuts, IconCache databases, or Taskband blobs. The heal runs once per
+process at `RunEvent::Ready`, is a no-op when nothing matches, and only
+calls `SetIconLocation` plus `IPersistFile::Save` on existing `.lnk` files —
+it never deletes or creates them. Errors are logged and must not block startup.
+`SHChangeNotify(UPDATEITEM)` is best-effort; a CI runner cannot prove
+Explorer's live taskbar bitmap (or whether a sign-out is needed), so a
 one-time unpin and re-pin remains the fallback if the icon still looks blank.
+Compile and run the COM path on `windows-latest` (`cargo test -p strand-tauri
+windows_pin` plus clippy in `windows-msi-pin-rehearsal.yml`); Linux CI does
+not typecheck `#[cfg(windows)]` IShellLink code.
 
 **Animated notifications need one stable accessibility channel (2026-07-18).**
 Keep visible success/error/network pills `aria-hidden` and mirror the active

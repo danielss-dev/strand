@@ -3114,9 +3114,10 @@ blank pin predates 1.7.3. Published 1.7.3/1.7.4 MSIs already omit shortcut
 `Icon_`; leftover User Pinned copies still pointed at a deleted ProductIcon
 cache. Strand now rewrites only those `.lnk` files whose target is the
 installed `strand.exe` and whose icon path is missing or under
-`%WINDIR%\Installer`. A Windows CI rehearsal records IconLocation across
-1.7.2 → 1.7.3 → 1.7.4; Explorer's live taskbar bitmap still needs a desktop
-check.
+`%WINDIR%\Installer`, in place (`SetIconLocation` + Save, never delete). A
+Windows CI rehearsal records IconLocation across 1.7.2 → 1.7.3 → 1.7.4, then
+runs the heal against the real User Pinned dir; Explorer's live taskbar bitmap
+still needs a desktop check.
 
 ## Cross-cutting tracks (run in parallel with all milestones)
 

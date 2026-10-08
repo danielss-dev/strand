@@ -1,7 +1,8 @@
 name: Windows MSI pin rehearsal
 
 # Records Start Menu / running-window taskbar pin IconLocation across published
-# MSI major upgrades. A windows-latest runner cannot prove Explorer's live
+# MSI major upgrades, then runs this PR's heal_pins_in against the real User
+# Pinned directory. A windows-latest runner cannot prove Explorer's live
 # taskbar bitmap; that remaining check is on a real Windows 11 desktop.
 
 on:
@@ -10,6 +11,7 @@ on:
       - 'packaging/windows/**'
       - 'crates/strand-tauri/src/windows_pin.rs'
       - 'crates/strand-tauri/src/main.rs'
+      - 'crates/strand-tauri/Cargo.toml'
       - 'scripts/check-msi-shortcuts.ps1'
       - 'scripts/rehearse-msi-pins.ps1'
       - '.github/workflows/windows-msi-pin-rehearsal.yml'
@@ -19,11 +21,46 @@ jobs:
   rehearse:
     name: MSI upgrade pin rehearsal
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-msi-pin-rehearsal
+
+      # Runtime detection/install follows Microsoft's WebView2 distribution guide:
+      # https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+      - name: Ensure WebView2 runtime
+        shell: pwsh
+        run: |
+          $runtimeKeys = @(
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+            'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          )
+          $installed = $runtimeKeys | ForEach-Object {
+            (Get-ItemProperty -LiteralPath $_ -Name pv -ErrorAction SilentlyContinue).pv
+          } | Where-Object { $_ -and $_ -ne '0.0.0.0' }
+          if (-not $installed) {
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $process = Start-Process -FilePath $installer -ArgumentList '/silent', '/install' -WindowStyle Hidden -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "WebView2 install failed: $($process.ExitCode)" }
+          }
+
+      - name: Test Windows pin heal (COM + selection)
+        run: cargo test -p strand-tauri windows_pin
+
+      - name: Clippy strand-tauri (deny warnings)
+        # Same invocation as CI's Rust job: lib+bins, not --all-targets (test-only
+        # lints like zombie_processes are pre-existing and not this PR).
+        run: cargo clippy -p strand-tauri -- -D warnings
 
       - name: Download published Strand MSIs
         env:
@@ -35,7 +72,7 @@ jobs:
           gh release download v1.7.4 --repo danielss-dev/strand --pattern "Strand_*_x64_en-US.msi" --dir msi-rehearsal
           Get-ChildItem msi-rehearsal | Format-Table Name, Length
 
-      - name: Rehearse 1.7.2 pin through 1.7.3 and 1.7.4 upgrades
+      - name: Rehearse 1.7.2 pin through 1.7.3 and 1.7.4 upgrades, then heal
         shell: pwsh
         run: |
           ./scripts/rehearse-msi-pins.ps1 `
