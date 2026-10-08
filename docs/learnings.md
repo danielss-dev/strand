@@ -2129,17 +2129,33 @@ and send both `WM_SETICON` messages. Verify the real visible HWND in a fresh
 process: `ICON_BIG` and `ICON_SMALL` must be non-zero and extract to the Strand
 artwork. Keep this contract in `scripts/check-release-security.mjs`.
 
-**MSI taskbar pins need a durable shortcut icon source (2026-09-30, #135).**
-Native HWND icon handles only cover the running window. Explorer can copy the
-Start Menu shortcut when pinning a running app; Tauri's default `ProductIcon`
-reference points into a version-specific Windows Installer cache that a major
-upgrade can remove. Omit the shortcut's `Icon` attribute so the installed
-executable supplies its icon. Keep `ProductIcon` for Add/Remove Programs and
-retain `System.AppUserModel.ID`. `packaging/windows/main.wxs` is Tauri CLI
-2.11.2's template with only that attribute removed; synchronize it on CLI
-upgrades and inspect compiled MSI shortcut tables with
-`scripts/check-msi-shortcuts.ps1`. Existing pins are copies and require a
-one-time re-pin; do not rewrite the user's pinned shortcuts or icon cache.
+**MSI taskbar pins need a durable shortcut icon source (2026-09-30, #135;
+healed 2026-10-08, DAN-81).** Native HWND icon handles only cover the running
+window, and a pinned taskbar button can keep using the `.lnk` icon even while
+Strand is running. Explorer can copy the Start Menu shortcut when pinning a
+running app; Tauri's default `ProductIcon` reference points into a
+version-specific Windows Installer cache that a major upgrade can remove.
+Omit the shortcut's `Icon` attribute so the installed executable supplies its
+icon. Keep `ProductIcon` for Add/Remove Programs and retain
+`System.AppUserModel.ID`. `packaging/windows/main.wxs` is Tauri CLI 2.11.2's
+template with only that attribute removed; synchronize it on CLI upgrades and
+inspect compiled MSI shortcut tables with `scripts/check-msi-shortcuts.ps1`.
+Published 1.7.3 and 1.7.4 MSIs already ship that table; 1.7.2's Start Menu
+shortcut still has `Icon_=ProductIcon`. Leftover User Pinned `.lnk` copies
+from those older installers are safe to rewrite on launch when their target is
+the installed `strand.exe` and their icon path is missing or under
+`%WINDIR%\Installer` (`windows_pin::should_heal_pin`). Do not rewrite other
+shortcuts, IconCache databases, or Taskband blobs. The heal runs once per
+process at `RunEvent::Ready`, is a no-op when nothing matches, and only
+calls `SetIconLocation` plus `IPersistFile::Save` on existing `.lnk` files —
+it never deletes or creates them. Errors are logged and must not block startup.
+`SHChangeNotify(UPDATEITEM)` is best-effort; a CI runner cannot prove
+Explorer's live taskbar bitmap (or whether a sign-out is needed), so a
+one-time unpin and re-pin remains the fallback if the icon still looks blank.
+Compile and run the COM path on `windows-latest` (`cargo test -p strand-tauri
+windows_pin` plus clippy in `windows-msi-pin-rehearsal.yml`); Linux CI does
+not typecheck `#[cfg(windows)]` IShellLink code.
+Expand shell-link target and icon environment variables before matching or checking existence; preserve working custom icons.
 
 **Animated notifications need one stable accessibility channel (2026-07-18).**
 Keep visible success/error/network pills `aria-hidden` and mirror the active

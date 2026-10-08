@@ -413,7 +413,9 @@ icon assets keep the Store taskbar and Start icon as sharp and background-free
 as the direct MSI, while explicit native Windows icon handles keep the taskbar
 icon visible while Strand runs. MSI Start Menu shortcuts use the installed
 executable's embedded icon so new taskbar pins survive in-place updates;
-pins created by older installers may need to be unpinned and re-pinned once.
+Strand also rewrites leftover pre-1.7.3 pins that still point at a missing
+Windows Installer icon cache. If Explorer still shows a blank-page bitmap,
+unpin Strand and pin it again once.
 The standalone GitHub MSI remains unsigned; the
 certificate-backed offline-WebView2 MSI workflow is only a fallback.
 Listing copy, privacy and user-content policies, in-product inappropriate-

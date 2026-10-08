@@ -62,7 +62,11 @@ windows = { version = "0.61", features = [
     "Foundation",
     "Services_Store",
     "System",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Environment",
     "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows-sys = { version = "0.61", features = [

@@ -580,8 +580,20 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Prevent MSI taskbar pins from retaining a removed installer icon (#135;
   `packaging/windows/main.wxs` omits the Start Menu shortcut's cached icon,
   `check-msi-shortcuts.ps1` verifies built artifacts in both MSI release paths).
-- ☐ Rehearse a Windows MSI upgrade with a taskbar pin created from the running
-  app and from Start; check the icon with Strand closed as well as running (#135).
+- ☑ Rehearse a Windows MSI upgrade with a taskbar pin created from the running
+  app and from Start; check the icon with Strand closed as well as running
+  (#135, DAN-81; `scripts/rehearse-msi-pins.ps1`, workflow
+  `windows-msi-pin-rehearsal.yml`). After 1.7.2 → 1.7.3 → 1.7.4 the workflow
+  runs `heal_pins_in` on the real User Pinned dir (`heals_rehearsal_user_pinned_dir`)
+  and asserts 1.7.2 pins now point at `strand.exe`, while 1.7.3-era pins and an
+  unrelated notepad pin stay untouched. A CI runner records `.lnk` IconLocation
+  and file existence, not Explorer's live taskbar bitmap.
+- ☑ Heal leftover pre-1.7.3 User Pinned `.lnk` files whose target is the
+  installed `strand.exe` and whose icon path is missing or under
+  `%WINDIR%\Installer` (`windows_pin::heal_broken_taskbar_pins`, selection
+  tests in `windows_pin::tests`). Windows COM + clippy run on `windows-latest`
+  in `windows-msi-pin-rehearsal.yml` (`cargo test -p strand-tauri windows_pin`
+  and `cargo clippy -p strand-tauri -- -D warnings`).
 - ☑ Drag-and-drop folder onto window → opens repo
 - ☐ Deep-link handler (`strand://open?path=…`) for CLI companion
 
