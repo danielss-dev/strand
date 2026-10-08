@@ -26,6 +26,8 @@ use crate::{
     commands::{CmdError, CmdResult},
     path_env,
 };
+#[cfg(any(windows, test))]
+use crate::ai::bin::base_command;
 
 const MAX_INPUT_BYTES: usize = 64 * 1024;
 const MAX_DIMENSION: u16 = 1_000;
@@ -457,10 +459,7 @@ pub fn wsl_distributions() -> Vec<String> {
     let Some(wsl) = resolve_wsl_program() else {
         return Vec::new();
     };
-    let Ok(output) = std::process::Command::new(wsl)
-        .args(["--list", "--quiet"])
-        .output()
-    else {
+    let Ok(output) = wsl_list_command(&wsl).output() else {
         return Vec::new();
     };
     if !output.status.success() {
@@ -480,6 +479,21 @@ pub fn wsl_distributions() -> Vec<String> {
         distributions.push(name.to_string());
     }
     distributions
+}
+
+/// Build the `wsl.exe --list --quiet` probe used to enumerate distributions.
+///
+/// It must go through `base_command(.., true)` so `CREATE_NO_WINDOW` is set:
+/// the release build is GUI-subsystem, so a default `wsl.exe` spawn allocates
+/// a **visible** console that flashes every time `TerminalSection` mounts (and
+/// again for the new-terminal button and the WSL Check, which both call
+/// `wsl_distributions`). This was DAN-83 (same lesson as
+/// `strand_core::git_command`).
+#[cfg(any(windows, test))]
+fn wsl_list_command(wsl: &Path) -> std::process::Command {
+    let mut command = base_command(wsl, true);
+    command.args(["--list", "--quiet"]);
+    command
 }
 
 #[cfg(windows)]
@@ -958,6 +972,32 @@ mod tests {
             command: format!("\"{}\"", launcher.display()),
         };
         assert!(resolve_shell(&choice, None).is_err());
+    }
+
+    #[test]
+    fn wsl_list_runs_through_the_hidden_console_helper() {
+        let program = if cfg!(windows) {
+            PathBuf::from(r"C:\Windows\System32\wsl.exe")
+        } else {
+            PathBuf::from("/usr/bin/wsl")
+        };
+        let command = wsl_list_command(&program);
+        assert_eq!(command.get_program(), program.as_os_str());
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(args, ["--list", "--quiet"]);
+        // `base_command` (the shared hide-console path that sets
+        // `CREATE_NO_WINDOW`) injects the resolved PATH; a bare
+        // `std::process::Command::new` — the DAN-83 regression — would not.
+        // The flag itself is not observable through std, so the PATH env is
+        // the proxy that proves the probe was built via `base_command`.
+        if path_env::effective_path().is_some() {
+            assert!(
+                command
+                    .get_envs()
+                    .any(|(key, _)| key.eq_ignore_ascii_case("PATH")),
+                "WSL list probe must be built via base_command"
+            );
+        }
     }
 
     #[test]

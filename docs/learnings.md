@@ -1507,6 +1507,18 @@ lesson as `strand_core::git_command`).
 Exception mirror: `spawn_detached` (login flows) keeps a visible console on
 purpose, because sign-in may need an interactive picker.
 
+**Scope is wider than provider modules (paid for again by DAN-83).** The
+hide-console rule is not limited to `ai/bin.rs` — it applies to *every*
+Windows `Command` spawn in `strand-tauri`. `terminal::wsl_distributions`
+probed installed distros with a bare `std::process::Command::new(wsl)
+.args(["--list", "--quiet"])`, so navigating Settings → (any section) →
+Terminal flashed a console window on every `TerminalSection` mount (the
+`EmbeddedShellPicker` effect, the new-terminal button, and the WSL Check all
+call it). Fix: build the probe through `base_command(wsl, true)`. When you
+add a Windows subprocess anywhere outside provider modules, route it through
+`base_command` / `strand_core::git_command` — do not reach for `Command::new`
+directly.
+
 ---
 
 ## Dialog `mountedRef` must re-arm in the effect body (StrictMode)

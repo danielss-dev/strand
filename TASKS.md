@@ -1468,6 +1468,10 @@ community plugins, performance and platform certification from Git feature gaps.
   installed-WSL discovery on Windows; WSL launches the chosen distribution at
   the repository through direct `wsl.exe --distribution … --cd …` argv
   (`TerminalSection`, `NewTerminalButton`, `terminal_wsl_distributions`).
+- ☑ Silence the WSL distribution probe on Windows so Settings → Terminal no
+  longer flashes a console window on mount; the list/Check spawn now routes
+  through the shared hide-console helper (`terminal::wsl_list_command` via
+  `base_command(.., true)`, DAN-83).
 - ☑ Workspace-aware final close confirmation stops live terminals and clears
   Work state/descriptors; non-final workspace removal and workspace hiding do
   not stop them (`workspaces.ts`).
