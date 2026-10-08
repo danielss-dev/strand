@@ -169,12 +169,13 @@ fn with_shell_link<T>(
 
 #[cfg(windows)]
 fn read_shortcut(path: &Path) -> windows::core::Result<ShortcutState> {
-    use windows::Win32::System::Com::STGM_READ;
+    use windows::Win32::{Storage::FileSystem::WIN32_FIND_DATAW, System::Com::STGM_READ};
 
     with_shell_link(path, STGM_READ, |link, _, _| {
         const SLGP_RAWPATH: u32 = 4;
         let mut target = vec![0u16; 2048];
-        unsafe { link.GetPath(&mut target, std::ptr::null_mut(), SLGP_RAWPATH) }?;
+        let mut find_data = WIN32_FIND_DATAW::default();
+        unsafe { link.GetPath(&mut target, std::ptr::addr_of_mut!(find_data), SLGP_RAWPATH) }?;
         let mut icon = vec![0u16; 2048];
         let mut icon_index = 0i32;
         unsafe { link.GetIconLocation(&mut icon, std::ptr::addr_of_mut!(icon_index)) }?;
