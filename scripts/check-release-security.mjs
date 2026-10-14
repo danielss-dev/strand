@@ -124,6 +124,13 @@ for (const id of ['ApplicationStartMenuShortcut', 'ApplicationDesktopShortcut'])
 if (!wixTemplate.includes('<ShortcutProperty Key="System.AppUserModel.ID" Value="{{bundle_id}}"/>')) {
   fail('MSI Start Menu shortcut must retain its application identity');
 }
+if (
+  !wixTemplate.includes(`<CustomAction Id="LaunchApplicationViaExplorer" Directory="INSTALLDIR" ExeCommand='"[WindowsFolder]explorer.exe" "[#Path]"' Return="asyncNoWait" />`)
+  || !wixTemplate.includes('<Custom Action="LaunchApplicationViaExplorer" After="InstallFinalize">AUTOLAUNCHAPP AND NOT Installed</Custom>')
+  || wixTemplate.includes('<Custom Action="LaunchApplication" ')
+) {
+  fail('MSI relaunch must start Strand through explorer.exe, outside the installer process tree');
+}
 
 const tagCheckout = 'ref: ${{ github.event.inputs.tag || github.ref }}';
 if (releaseWorkflow.split(tagCheckout).length - 1 < 3) {

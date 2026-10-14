@@ -2166,8 +2166,9 @@ version-specific Windows Installer cache that a major upgrade can remove.
 Omit the shortcut's `Icon` attribute so the installed executable supplies its
 icon. Keep `ProductIcon` for Add/Remove Programs and retain
 `System.AppUserModel.ID`. `packaging/windows/main.wxs` is Tauri CLI 2.11.2's
-template with only that attribute removed; synchronize it on CLI upgrades and
-inspect compiled MSI shortcut tables with `scripts/check-msi-shortcuts.ps1`.
+template with that attribute removed and the updater relaunch changed (below);
+synchronize it on CLI upgrades and inspect compiled MSI shortcut tables with
+`scripts/check-msi-shortcuts.ps1`.
 Published 1.7.3 and 1.7.4 MSIs already ship that table; 1.7.2's Start Menu
 shortcut still has `Icon_=ProductIcon`. Leftover User Pinned `.lnk` copies
 from those older installers are safe to rewrite on launch when their target is
@@ -2184,6 +2185,17 @@ Compile and run the COM path on `windows-latest` (`cargo test -p strand-tauri
 windows_pin` plus clippy in `windows-msi-pin-rehearsal.yml`); Linux CI does
 not typecheck `#[cfg(windows)]` IShellLink code.
 Expand shell-link target and icon environment variables before matching or checking existence; preserve working custom icons.
+
+**An MSI relaunch inherits the installer's RedirectionGuard (2026-10-10,
+#146).** `tauri-plugin-updater` runs `msiexec /i … AUTOLAUNCHAPP=True` and
+exits, so the MSI's launch action starts the new Strand. A process that an
+install-sequence custom action starts directly, and every shell and tool in its
+terminal, runs with `ProcessRedirectionTrustPolicy` enforced: it cannot follow
+junctions made by a non-admin user (`0x800701C0`), so `pnpm install` fails
+until Strand is restarted from the Start menu. The After-InstallFinalize
+launch therefore goes through `explorer.exe` (`LaunchApplicationViaExplorer`),
+which forwards no arguments, so `LAUNCHAPPARGS` is dropped. Check `strand.exe`
+with `GetProcessMitigationPolicy(handle, 16, &flags)`: `flags=1` means enforced.
 
 **Animated notifications need one stable accessibility channel (2026-07-18).**
 Keep visible success/error/network pills `aria-hidden` and mirror the active

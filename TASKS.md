@@ -594,6 +594,11 @@ community plugins, performance and platform certification from Git feature gaps.
   tests in `windows_pin::tests`). Windows COM + clippy run on `windows-latest`
   in `windows-msi-pin-rehearsal.yml` (`cargo test -p strand-tauri windows_pin`
   and `cargo clippy -p strand-tauri -- -D warnings`).
+- ☑ Relaunch Strand through `explorer.exe` after an MSI update so it does not
+  inherit the installer's RedirectionGuard (#146; `LaunchApplicationViaExplorer`
+  in `packaging/windows/main.wxs`).
+- ☐ Probe `strand.exe` with `GetProcessMitigationPolicy` after a real in-app
+  update into a build with that change and after a Finish-dialog launch (#146).
 - ☑ Drag-and-drop folder onto window → opens repo
 - ☐ Deep-link handler (`strand://open?path=…`) for CLI companion
 

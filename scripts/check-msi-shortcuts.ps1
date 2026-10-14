@@ -44,4 +44,16 @@ try {
     $view.Close()
 }
 
+$view = $database.OpenView('SELECT `Action` FROM `InstallExecuteSequence` WHERE `Action`=''LaunchApplication'' OR `Action`=''LaunchApplicationViaExplorer''')
+try {
+    $view.Execute()
+    $launch = @()
+    while ($record = $view.Fetch()) { $launch += $record.StringData(1) }
+    if (($launch -join ',') -ne 'LaunchApplicationViaExplorer') {
+        throw "The updater relaunch must start strand.exe through explorer.exe, found: $($launch -join ', ')."
+    }
+} finally {
+    $view.Close()
+}
+
 Write-Host 'MSI shortcuts use the installed executable icon and retain the application identity.'

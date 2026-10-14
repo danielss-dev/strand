@@ -1,8 +1,10 @@
 <!-- Based on Tauri CLI 2.11.2 (MIT, see LICENSE_MIT):
      https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.2/crates/tauri-bundler/src/bundle/windows/msi/main.wxs
-     Keep in sync when upgrading the CLI. The only behavior change is omitting
-     the Start Menu shortcut Icon attribute: pinned copies must use strand.exe,
-     not a version-specific Windows Installer ProductIcon cache (#135). -->
+     Keep in sync when upgrading the CLI. Behavior changes from the template:
+     - The Start Menu shortcut omits Icon: pinned copies must use strand.exe, not a
+       version-specific Windows Installer ProductIcon cache (#135).
+     - The updater relaunch starts strand.exe through explorer.exe, so it does not
+       inherit the installer service's RedirectionGuard (#146). -->
 <?if $(sys.BUILDARCH)="x86"?>
     <?define Win64 = "no" ?>
     <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
@@ -91,6 +93,7 @@
         <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)" />
         <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"/>
         <CustomAction Id="LaunchApplication" Impersonate="yes" FileKey="Path" ExeCommand="[LAUNCHAPPARGS]" Return="asyncNoWait" />
+        <CustomAction Id="LaunchApplicationViaExplorer" Directory="INSTALLDIR" ExeCommand='"[WindowsFolder]explorer.exe" "[#Path]"' Return="asyncNoWait" />
 
         <UI>
             <!-- launch app checkbox -->
@@ -377,7 +380,7 @@
         {{/if}}
 
         <InstallExecuteSequence>
-          <Custom Action="LaunchApplication" After="InstallFinalize">AUTOLAUNCHAPP AND NOT Installed</Custom>
+          <Custom Action="LaunchApplicationViaExplorer" After="InstallFinalize">AUTOLAUNCHAPP AND NOT Installed</Custom>
         </InstallExecuteSequence>
 
         <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLDIR]" After="CostFinalize"/>
