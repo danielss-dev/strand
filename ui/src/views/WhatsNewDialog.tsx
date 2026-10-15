@@ -33,14 +33,12 @@ export type PrBodyStatus =
   | { status: 'ready'; text: string };
 
 export function WhatsNewPrAccordion({
-  intro,
   prs,
   expanded,
   bodies,
   onToggle,
   onRetry,
 }: {
-  intro: string;
   prs: ReleasePr[];
   expanded: ReadonlySet<number>;
   bodies: Readonly<Record<number, PrBodyStatus>>;
@@ -49,7 +47,6 @@ export function WhatsNewPrAccordion({
 }) {
   return (
     <div className="whats-new-notes">
-      {intro ? <div className="markdown whats-new-intro">{renderMarkdown(intro, { onLinkClick: openReleaseLink })}</div> : null}
       <div className="whats-new-prs" role="list" aria-label={t('whatsNew.changes')}>
         {prs.map((pr) => {
           const open = expanded.has(pr.number);
@@ -149,7 +146,6 @@ export function ReleaseNotes({
 
   return (
     <WhatsNewPrAccordion
-      intro={parsed.intro}
       prs={parsed.prs}
       expanded={expanded}
       bodies={bodies}
@@ -211,15 +207,26 @@ export function WhatsNewLayout({
       );
       break;
     case 'ready':
-      pane = selected && selected.notes
-        ? <ReleaseNotes key={selected.version} notes={selected.notes} />
-        : (
-          <EmptyState
-            icon="file"
-            title={t('whatsNew.empty')}
-            hint={t('whatsNew.emptyHint')}
-          />
-        );
+      pane = selected ? (
+        <>
+          <h2 className="whats-new-heading">{t('whatsNew.versionHeading', { version: selected.version })}</h2>
+          {selected.notes
+            ? <ReleaseNotes key={selected.version} notes={selected.notes} />
+            : (
+              <EmptyState
+                icon="file"
+                title={t('whatsNew.empty')}
+                hint={t('whatsNew.emptyHint')}
+              />
+            )}
+        </>
+      ) : (
+        <EmptyState
+          icon="file"
+          title={t('whatsNew.empty')}
+          hint={t('whatsNew.emptyHint')}
+        />
+      );
       break;
     default: {
       const exhaustive: never = state;

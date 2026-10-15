@@ -4532,7 +4532,13 @@ textarea.clone-input {
   overflow-y: auto;
   padding: 16px;
 }
-.whats-new-intro { margin-bottom: 16px; }
+.whats-new-heading {
+  margin: 0 0 14px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+}
 .whats-new-prs {
   display: flex;
   flex-direction: column;

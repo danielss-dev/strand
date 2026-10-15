@@ -3136,11 +3136,12 @@ still needs a desktop check.
 **What's New dialog (2026-10-15, DAN-86):** Strand menu **What's New…** (and
 the command palette) opens a Settings-style split dialog. The left pane lists
 published `danielss-dev/strand` GitHub Release versions newest first. When a
-release body has a What's Changed PR list, the right pane is an accordion of
-those PRs (intro paragraph kept); expanding an item lazily fetches that PR's
-description from the public pulls API and strips agent chrome before
-`renderMarkdown`. Releases without a PR list still render as markdown. Missing
-bodies show an empty state and network failures offer Retry. Default
+release body has a What's Changed PR list, the right pane shows a
+`Strand {version}` heading and an accordion of those PRs (intro omitted);
+expanding an item lazily fetches that PR's description from the public pulls
+API and strips agent chrome before `renderMarkdown`. Releases without a PR
+list still render as markdown under the same heading. Missing bodies show an
+empty state (heading included) and network failures offer Retry. Default
 selection is `getVersion()` when that tag is in the list. Auto-popup after
 upgrade is out of scope.
 

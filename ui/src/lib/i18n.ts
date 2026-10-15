@@ -262,6 +262,7 @@ export const en = {
   'updates.openStore': 'Open Microsoft Store',
   'whatsNew.title': "What's New",
   'whatsNew.menu': "What's New…",
+  'whatsNew.versionHeading': 'Strand {version}',
   'whatsNew.versions': 'Versions',
   'whatsNew.loading': 'Loading release notes…',
   'whatsNew.empty': 'No release notes for this version.',

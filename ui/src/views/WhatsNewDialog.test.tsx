@@ -43,6 +43,7 @@ describe('WhatsNewLayout', () => {
         onRetry={() => {}}
       />,
     );
+    expect(workbench).toContain(t('whatsNew.versionHeading', { version: '1.7.6' }));
     expect(workbench).toContain('<h2');
     expect(workbench).toContain('Workbench');
     expect(workbench).toContain('Open files from Review.');
@@ -58,6 +59,7 @@ describe('WhatsNewLayout', () => {
         onRetry={() => {}}
       />,
     );
+    expect(pins).toContain(t('whatsNew.versionHeading', { version: '1.7.5' }));
     expect(pins).toContain('Healed blank taskbar pins.');
     expect(pins).not.toContain('Open files from Review.');
     expect(pins).toContain('id="whats-new-tab-1.7.5"');
@@ -72,9 +74,40 @@ describe('WhatsNewLayout', () => {
         onRetry={() => {}}
       />,
     );
+    expect(html).toContain(t('whatsNew.versionHeading', { version: '1.7.7' }));
     expect(html).toContain(t('whatsNew.empty'));
     expect(html).toContain(t('whatsNew.emptyHint'));
     expect(html).not.toContain('Open files from Review.');
+  });
+
+  it('does not render the intro when the release has a PR list', () => {
+    const withPrs: StrandRelease[] = [
+      {
+        tag: 'v1.7.6',
+        version: '1.7.6',
+        notes: [
+          'Right-click a file in **Local Changes**.',
+          '',
+          "## What's Changed",
+          '* Open files in Workbench by @danielss-dev in https://github.com/danielss-dev/strand/pull/145',
+          '* Hide WSL console by @danielss-dev in https://github.com/danielss-dev/strand/pull/144',
+        ].join('\n'),
+      },
+    ];
+    const html = render(
+      <WhatsNewLayout
+        state={{ status: 'ready', releases: withPrs }}
+        selectedVersion="1.7.6"
+        onSelect={() => {}}
+        onRetry={() => {}}
+      />,
+    );
+    expect(html).toContain(t('whatsNew.versionHeading', { version: '1.7.6' }));
+    expect(html).toContain('Open files in Workbench');
+    expect(html).toContain('Hide WSL console');
+    expect(html).toContain('whats-new-pr-header');
+    expect(html).not.toContain('Local Changes');
+    expect(html).not.toContain('whats-new-intro');
   });
 
   it('shows a recoverable error state', () => {
@@ -103,7 +136,6 @@ describe('WhatsNewPrAccordion', () => {
   it('renders one collapsed item per PR', () => {
     const html = render(
       <WhatsNewPrAccordion
-        intro="Right-click a file in **Local Changes**."
         prs={prs}
         expanded={new Set()}
         bodies={{}}
@@ -113,7 +145,6 @@ describe('WhatsNewPrAccordion', () => {
     );
     expect(html).toContain('Open files in Workbench');
     expect(html).toContain('Hide WSL console');
-    expect(html).toContain('Local Changes');
     expect(html.match(/aria-expanded="false"/g)?.length).toBe(2);
     expect(html).not.toContain(t('whatsNew.prLoading'));
   });
@@ -121,7 +152,6 @@ describe('WhatsNewPrAccordion', () => {
   it('shows the cleaned PR body when an item is expanded', () => {
     const html = render(
       <WhatsNewPrAccordion
-        intro=""
         prs={prs}
         expanded={new Set([145])}
         bodies={{ 145: { status: 'ready', text: '## Behaviour\n\nOpen the whole file in Work.' } }}
@@ -146,6 +176,7 @@ describe('WhatsNewPrAccordion', () => {
         onRetry={() => {}}
       />,
     );
+    expect(html).toContain(t('whatsNew.versionHeading', { version: '1.7.5' }));
     expect(html).toContain('Healed blank taskbar pins.');
     expect(html).not.toContain('whats-new-pr-header');
     expect(html).not.toContain(t('whatsNew.changes'));
@@ -154,7 +185,6 @@ describe('WhatsNewPrAccordion', () => {
   it('shows an empty description when the cleaned PR body is blank', () => {
     const html = render(
       <WhatsNewPrAccordion
-        intro=""
         prs={prs}
         expanded={new Set([145])}
         bodies={{ 145: { status: 'ready', text: '' } }}
@@ -168,7 +198,6 @@ describe('WhatsNewPrAccordion', () => {
   it('shows a per-item error with retry', () => {
     const html = render(
       <WhatsNewPrAccordion
-        intro=""
         prs={prs}
         expanded={new Set([144])}
         bodies={{ 144: { status: 'error' } }}
