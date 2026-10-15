@@ -2136,8 +2136,11 @@ path: launching by app identity on Windows may resolve to the installed
 `C:\Program Files\Strand\strand.exe` and produce false release evidence.
 
 **What's New reads public GitHub Releases, not `docs/changelog/` (2026-10-15).**
-`WhatsNewDialog` lists published `danielss-dev/strand` release tags from
+`WhatsNewDialog` lists published `danielss-dev/strand` app release tags
+(`vMAJOR.MINOR.PATCH`, e.g. `v1.7.7`) from
 `https://api.github.com/repos/danielss-dev/strand/releases` (unauthenticated).
+Skip helper tags such as `strand-azdo-v1.3.0` and any other non-`v`-prefixed
+tag (`isStrandAppReleaseTag`).
 When a body has a What's Changed PR list, the right pane shows an i18n heading
 `Strand {version}` and an accordion of those PRs — do not render the release
 intro/summary above the list. Expanding an item lazily fetches

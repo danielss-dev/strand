@@ -22,6 +22,11 @@ export function normalizeVersion(value: string): string {
   return value.replace(/^v/i, '').trim();
 }
 
+/** App releases are `vMAJOR.MINOR.PATCH` (e.g. `v1.7.7`). Helper tags are not. */
+export function isStrandAppReleaseTag(tag: string): boolean {
+  return /^v\d+\.\d+\.\d+$/.test(tag);
+}
+
 export function parseGithubReleases(data: unknown): StrandRelease[] {
   if (!Array.isArray(data)) throw new Error('Unexpected releases response');
   const out: StrandRelease[] = [];
@@ -30,6 +35,7 @@ export function parseGithubReleases(data: unknown): StrandRelease[] {
     const rec = item as Record<string, unknown>;
     if (rec.draft === true) continue;
     if (typeof rec.tag_name !== 'string' || rec.tag_name.length === 0) continue;
+    if (!isStrandAppReleaseTag(rec.tag_name)) continue;
     out.push({
       tag: rec.tag_name,
       version: normalizeVersion(rec.tag_name),

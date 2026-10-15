@@ -5,6 +5,7 @@ import {
   clearPullRequestBodyCache,
   fetchPullRequestBody,
   fetchStrandReleases,
+  isStrandAppReleaseTag,
   normalizeVersion,
   parseGithubReleases,
   parseReleaseNotes,
@@ -46,6 +47,31 @@ describe('parseGithubReleases', () => {
   it('rejects a non-array payload', () => {
     expect(() => parseGithubReleases({ message: 'nope' })).toThrow('Unexpected releases response');
   });
+
+  it('keeps only v-prefixed Strand app releases', () => {
+    const parsed = parseGithubReleases([
+      { tag_name: 'v1.7.7', body: '', draft: false },
+      { tag_name: 'v1.7.4', body: 'notes', draft: false },
+      { tag_name: 'strand-azdo-v1.3.0', body: 'helper', draft: false },
+      { tag_name: 'strand-azdo-protocol-7', body: 'channel', draft: false },
+      { tag_name: 'strand-azdo-latest', body: 'legacy', draft: false },
+      { tag_name: '1.0.0', body: 'no v prefix', draft: false },
+      { tag_name: 'v0.5.0', body: 'alpha', draft: false },
+    ]);
+    expect(parsed.map((r) => r.tag)).toEqual(['v1.7.7', 'v1.7.4', 'v0.5.0']);
+    expect(parsed.map((r) => r.version)).toEqual(['1.7.7', '1.7.4', '0.5.0']);
+  });
+});
+
+describe('isStrandAppReleaseTag', () => {
+  it('accepts vMAJOR.MINOR.PATCH and rejects helper tags', () => {
+    expect(isStrandAppReleaseTag('v1.7.7')).toBe(true);
+    expect(isStrandAppReleaseTag('v0.5.0')).toBe(true);
+    expect(isStrandAppReleaseTag('strand-azdo-v1.3.0')).toBe(false);
+    expect(isStrandAppReleaseTag('strand-azdo-protocol-7')).toBe(false);
+    expect(isStrandAppReleaseTag('1.7.7')).toBe(false);
+    expect(isStrandAppReleaseTag('v1.7')).toBe(false);
+  });
 });
 
 describe('selectDefaultRelease', () => {
@@ -84,21 +110,6 @@ describe('fetchStrandReleases', () => {
       throw new TypeError('Failed to fetch');
     }) as typeof fetch;
     await expect(fetchStrandReleases(fetchImpl)).rejects.toThrow('network');
-  });
-
-  it('keeps every published release, including older Strand tags', () => {
-    const payload = [
-      { tag_name: 'v1.7.7', body: '', draft: false },
-      { tag_name: 'v1.7.4', body: 'notes', draft: false },
-      { tag_name: 'strand-azdo-v1.3.0', body: 'helper', draft: false },
-      { tag_name: 'v0.5.0', body: 'alpha', draft: false },
-    ];
-    expect(parseGithubReleases(payload).map((r) => r.version)).toEqual([
-      '1.7.7',
-      '1.7.4',
-      'strand-azdo-v1.3.0',
-      '0.5.0',
-    ]);
   });
 });
 

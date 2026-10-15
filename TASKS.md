@@ -1694,8 +1694,9 @@ community plugins, performance and platform certification from Git feature gaps.
     prefs read by App's delayed launch auto-check (soft-fails while the
     endpoint is offline)
   - ☑ **What's New** (DAN-86): Strand menu / palette **What's New…** opens
-    `WhatsNewDialog` (Settings split layout). Left pane lists GitHub Release
-    versions newest first; right pane is `Strand {version}`
+    `WhatsNewDialog` (Settings split layout). Left pane lists `vX.Y.Z` GitHub
+    Release versions newest first (`isStrandAppReleaseTag`; helper tags
+    omitted); right pane is `Strand {version}`
     (`whatsNew.versionHeading`) then a per-PR accordion from What's Changed,
     with lazy unauthenticated `pulls/{n}` bodies (`parseReleaseNotes`,
     `cleanPullRequestBody`, `WhatsNewPrAccordion`; intro omitted when PRs

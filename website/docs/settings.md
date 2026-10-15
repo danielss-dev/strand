@@ -362,8 +362,9 @@ outputs, or sensitive classifications.
 
 ## Updates
 
-Browse notes for past Strand versions from the Strand menu **What's New…** (or
-the command palette). Each version opens with a **Strand {version}** heading.
+Browse notes for past Strand app versions (`vX.Y.Z`) from the Strand menu
+**What's New…** (or the command palette). Helper tags are omitted. Each version
+opens with a **Strand {version}** heading.
 Releases that list pull requests under What's Changed show those PRs as an
 accordion under the heading; expanding one loads its description. That dialog
 is separate from this section and does not check for or install updates.

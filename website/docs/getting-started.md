@@ -111,7 +111,8 @@ the right.
 ## What's New
 
 **What's New…** in the Strand menu (and the command palette) opens a dialog of
-published Strand versions, newest first. Selecting a version shows a
+published Strand app versions (`v1.7.7` and the like), newest first. Helper
+releases such as `strand-azdo-v1.3.0` are not listed. Selecting a version shows a
 **Strand {version}** heading and that release's notes. When GitHub listed pull
 requests under What's Changed, those PRs appear as an accordion under the
 heading — collapsed until you expand one, which loads that PR's description
