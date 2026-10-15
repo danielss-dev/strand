@@ -2137,10 +2137,14 @@ path: launching by app identity on Windows may resolve to the installed
 
 **What's New reads public GitHub Releases, not `docs/changelog/` (2026-10-15).**
 `WhatsNewDialog` lists published `danielss-dev/strand` release tags from
-`https://api.github.com/repos/danielss-dev/strand/releases` (unauthenticated)
-and renders each body's Markdown with `renderMarkdown`. `docs/changelog/` only
-covers early history. Soft-fail with retry when offline or the request fails.
-Do not require a GitHub login and do not auto-open the dialog after upgrade.
+`https://api.github.com/repos/danielss-dev/strand/releases` (unauthenticated).
+When a body has a What's Changed PR list, the right pane is an accordion;
+expanding an item lazily fetches `GET /repos/danielss-dev/strand/pulls/{n}`
+and caches the cleaned description for the session — do not prefetch. Strip
+`CURSOR_AGENT_PR_BODY_*` wrappers, Open in Web/Cursor footers, HTML comments,
+and artifact `<sub>` lines before `renderMarkdown`. Releases without a PR list
+keep the full notes as markdown. Soft-fail with retry when offline. Do not
+require a GitHub login and do not auto-open the dialog after upgrade.
 
 **English is a typed catalog, not an excuse for fixed formatting (2026-07-18).**
 Put new Strand-owned UI copy in `ui/src/lib/i18n.ts`; unknown keys should remain

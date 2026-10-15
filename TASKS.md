@@ -1695,12 +1695,11 @@ community plugins, performance and platform certification from Git feature gaps.
     endpoint is offline)
   - ☑ **What's New** (DAN-86): Strand menu / palette **What's New…** opens
     `WhatsNewDialog` (Settings split layout). Left pane lists GitHub Release
-    versions newest first; right pane renders that tag's body via
-    `renderMarkdown`. Public unauthenticated
-    `api.github.com/repos/danielss-dev/strand/releases` (`lib/releases.ts`);
-    current `getVersion()` is selected when present. Empty notes and
-    offline/error retry are covered (`WhatsNewDialog.test.tsx`,
-    `releases.test.ts`)
+    versions newest first; right pane is a per-PR accordion from What's
+    Changed, with lazy unauthenticated `pulls/{n}` bodies (`parseReleaseNotes`,
+    `cleanPullRequestBody`, `WhatsNewPrAccordion`). Releases without a PR list
+    keep `renderMarkdown`. Empty notes, catalog errors, and per-item
+    error/retry are covered (`WhatsNewDialog.test.tsx`, `releases.test.ts`)
 - ☑ Verify editor/terminal presets on Windows (`code.cmd -g` and `wt -d`
   launched from the exact production-protocol build under Computer Use on
   2026-07-18; Strand reported both launches and the resulting VS Code and

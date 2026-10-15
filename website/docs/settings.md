@@ -363,8 +363,9 @@ outputs, or sensitive classifications.
 ## Updates
 
 Browse notes for past Strand versions from the Strand menu **What's New…** (or
-the command palette). That dialog is separate from this section and does not
-check for or install updates.
+the command palette). Releases that list pull requests under What's Changed
+show those PRs as an accordion; expanding one loads its description. That
+dialog is separate from this section and does not check for or install updates.
 
 - **Version** — direct installations show the current version with a
   state-dependent action: **Check for updates**, **Download & install** (with a

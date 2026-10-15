@@ -53,20 +53,109 @@ export function selectDefaultRelease(
   return releases[0];
 }
 
+const GITHUB_JSON_HEADERS = {
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+} as const;
+
 export async function fetchStrandReleases(
   fetchImpl: typeof fetch = fetch,
 ): Promise<StrandRelease[]> {
   let response: Response;
   try {
-    response = await fetchImpl(STRAND_RELEASES_URL, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
+    response = await fetchImpl(STRAND_RELEASES_URL, { headers: GITHUB_JSON_HEADERS });
   } catch {
     throw new Error('network');
   }
   if (!response.ok) throw new Error(`http ${response.status}`);
   return parseGithubReleases(await response.json());
+}
+
+export interface ReleasePr {
+  number: number;
+  url: string;
+  title: string;
+}
+
+export interface ParsedReleaseNotes {
+  intro: string;
+  prs: ReleasePr[];
+}
+
+const CHANGED_HEADING = /^##\s+What['’]s Changed\s*$/i;
+const PR_URL = /https:\/\/github\.com\/danielss-dev\/strand\/pull\/(\d+)/i;
+const BY_AUTHOR_IN = /\s+by @[\w-]+\s+in\s+$/i;
+
+/** Split a GitHub release body into the intro blurb and What's Changed PRs. */
+export function parseReleaseNotes(notes: string): ParsedReleaseNotes {
+  const lines = notes.replace(/\r\n?/g, '\n').split('\n');
+  const heading = lines.findIndex((line) => CHANGED_HEADING.test(line.trim()));
+  if (heading === -1) return { intro: notes.trim(), prs: [] };
+
+  const intro = lines.slice(0, heading).join('\n').trim();
+  const prs: ReleasePr[] = [];
+  const seen = new Set<number>();
+  for (const line of lines.slice(heading + 1)) {
+    if (!/^\s*[*+-]\s+/.test(line)) continue;
+    const urlMatch = PR_URL.exec(line);
+    if (!urlMatch) continue;
+    const number = Number(urlMatch[1]);
+    if (seen.has(number)) continue;
+    seen.add(number);
+    let title = line.replace(/^\s*[*+-]\s+/, '').replace(urlMatch[0], '');
+    title = title.replace(BY_AUTHOR_IN, '').trim();
+    if (!title) title = `#${number}`;
+    prs.push({ number, url: urlMatch[0], title });
+  }
+  return { intro, prs };
+}
+
+const BODY_BEGIN = '<!-- CURSOR_AGENT_PR_BODY_BEGIN -->';
+const BODY_END = '<!-- CURSOR_AGENT_PR_BODY_END -->';
+
+/** Drop agent chrome so What's New shows the human-written PR description. */
+export function cleanPullRequestBody(raw: string | null | undefined): string {
+  let text = raw ?? '';
+  const begin = text.indexOf(BODY_BEGIN);
+  const end = text.indexOf(BODY_END);
+  if (begin !== -1 && end !== -1 && end > begin) {
+    text = text.slice(begin + BODY_BEGIN.length, end);
+  }
+  text = text.replace(/<!--[\s\S]*?-->/g, '');
+  text = text.replace(/<div\b[^>]*>[\s\S]*?(?:open-in-web|open-in-cursor|Open in Web|Open in Cursor)[\s\S]*?<\/div>/gi, '');
+  text = text.replace(/<sub\b[^>]*>[\s\S]*?<\/sub>/gi, '');
+  return text.trim();
+}
+
+export function strandPullUrl(number: number): string {
+  return `https://api.github.com/repos/danielss-dev/strand/pulls/${number}`;
+}
+
+const prBodyCache = new Map<number, string>();
+
+export function clearPullRequestBodyCache(): void {
+  prBodyCache.clear();
+}
+
+/** Lazy unauthenticated PR body fetch. Hits the 60/hour cap if prefetched. */
+export async function fetchPullRequestBody(
+  number: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const cached = prBodyCache.get(number);
+  if (cached !== undefined) return cached;
+  let response: Response;
+  try {
+    response = await fetchImpl(strandPullUrl(number), { headers: GITHUB_JSON_HEADERS });
+  } catch {
+    throw new Error('network');
+  }
+  if (!response.ok) throw new Error(`http ${response.status}`);
+  const data: unknown = await response.json();
+  const body = data && typeof data === 'object' && 'body' in data
+    ? (data as { body: unknown }).body
+    : null;
+  const cleaned = cleanPullRequestBody(typeof body === 'string' ? body : '');
+  prBodyCache.set(number, cleaned);
+  return cleaned;
 }

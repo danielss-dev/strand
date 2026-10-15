@@ -112,11 +112,14 @@ the right.
 
 **What's New…** in the Strand menu (and the command palette) opens a dialog of
 published Strand versions, newest first. Selecting a version shows that
-release's notes. The current app version is selected when GitHub has a matching
-tag; otherwise the newest release is selected. Empty notes and a failed fetch
-(offline or an error) show a clear state, with Retry when the catalog cannot
-load. This is a history browser — it does not check for or install updates.
-See [Settings](settings.md) → Updates for the updater.
+release's notes. When GitHub listed pull requests under What's Changed, those
+PRs appear as an accordion — collapsed until you expand one, which loads that
+PR's description from GitHub without opening a browser. Releases without a PR
+list still show the notes as markdown. The current app version is selected when
+GitHub has a matching tag; otherwise the newest release is selected. Empty notes
+and a failed fetch (offline or an error) show a clear state, with Retry when the
+catalog cannot load. This is a history browser — it does not check for or
+install updates. See [Settings](settings.md) → Updates for the updater.
 
 ## In-app updates
 

@@ -72,8 +72,9 @@ the resolved app appearance automatically.
 ## Features
 
 - **What's New** — Strand menu **What's New…** lists published release versions
-  and shows each version's GitHub release notes. Missing notes and offline
-  errors show an empty or retry state; Settings → Updates is unchanged.
+  and shows each version's GitHub release notes. What's Changed pull requests
+  expand in-app to the PR description. Missing notes and offline errors show
+  an empty or retry state; Settings → Updates is unchanged.
 
 - **Repository settings** — identity and signing defaults live in each repository’s
   context menu. Commit options holds per-commit signing; successful hook output

@@ -2185,8 +2185,8 @@ the audit does not mark these fixes or proposals shipped.
 - ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
   choices; signed-tag creation and verification, 2026-09-06).
 - ☑ **What's New dialog** (DAN-86, 2026-10-15) — Strand menu **What's New…**
-  lists published GitHub Release versions and shows each tag's notes;
-  Settings → Updates is unchanged
+  lists published GitHub Release versions; What's Changed PRs expand in-app
+  to the cleaned PR description; Settings → Updates is unchanged
 - Selectable beta updater channel (1.0 remains pinned to the signed stable
   GitHub Releases channel)
 - Opt-in product telemetry only if a concrete post-1.0 decision, disclosure,
@@ -3135,9 +3135,11 @@ still needs a desktop check.
 
 **What's New dialog (2026-10-15, DAN-86):** Strand menu **What's New…** (and
 the command palette) opens a Settings-style split dialog. The left pane lists
-published `danielss-dev/strand` GitHub Release versions newest first; the
-right pane renders that release's body with `renderMarkdown`. Notes are
-fetched at runtime from the public unauthenticated Releases API; missing
+published `danielss-dev/strand` GitHub Release versions newest first. When a
+release body has a What's Changed PR list, the right pane is an accordion of
+those PRs (intro paragraph kept); expanding an item lazily fetches that PR's
+description from the public pulls API and strips agent chrome before
+`renderMarkdown`. Releases without a PR list still render as markdown. Missing
 bodies show an empty state and network failures offer Retry. Default
 selection is `getVersion()` when that tag is in the list. Auto-popup after
 upgrade is out of scope.
