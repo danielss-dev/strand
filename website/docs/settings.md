@@ -362,6 +362,10 @@ outputs, or sensitive classifications.
 
 ## Updates
 
+Browse notes for past Strand versions from the Strand menu **What's New…** (or
+the command palette). That dialog is separate from this section and does not
+check for or install updates.
+
 - **Version** — direct installations show the current version with a
   state-dependent action: **Check for updates**, **Download & install** (with a
   progress bar), or **Restart now**. Release notes are shown when available.

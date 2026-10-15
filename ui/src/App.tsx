@@ -136,6 +136,7 @@ const CloneScopeDialog = lazy(() => import('./views/CloneScopeDialog').then((m) 
 const SparseCheckoutDialog = lazy(() => import('./views/SparseCheckoutDialog').then((m) => ({ default: m.SparseCheckoutDialog })));
 const InitRepoDialog = lazy(() => import('./views/InitRepoDialog').then((m) => ({ default: m.InitRepoDialog })));
 const SettingsDialog = lazy(() => import('./views/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
+const WhatsNewDialog = lazy(() => import('./views/WhatsNewDialog').then((m) => ({ default: m.WhatsNewDialog })));
 const BranchCleanupDialog = lazy(() => import('./views/BranchCleanupDialog').then((m) => ({ default: m.BranchCleanupDialog })));
 const RebaseEditor = lazy(() => import('./views/RebaseEditor').then((m) => ({ default: m.RebaseEditor })));
 const MaintenanceDialog = lazy(() => import('./views/MaintenanceDialog').then((m) => ({ default: m.MaintenanceDialog })));
@@ -365,6 +366,7 @@ export function App() {
   const [workbenchEditing, setWorkbenchEditing] = useState(false);
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [remoteReposOpen, setRemoteReposOpen] = useState(false);
   const [repositorySettingsPath, setRepositorySettingsPath] = useState<string | null>(null);
   const [repositorySettingsSection, setRepositorySettingsSection] = useState<'identity' | 'signing'>('identity');
@@ -1303,6 +1305,7 @@ export function App() {
       openSettingsAt('updates');
       void useUpdates.getState().check();
     },
+    openWhatsNew: () => setWhatsNewOpen(true),
     openPalette: () => { if (!remoteReposOpen) setPaletteOpen((o) => !o); },
     showView: (v) => {
       if (v === 'work') setWorkbenchEditing(false);
@@ -2171,6 +2174,7 @@ export function App() {
     }
     base.push(
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
+      { id: 'whats-new', label: t('whatsNew.menu'), group: 'Actions', keywords: 'whats new changelog release notes versions history', run: () => setWhatsNewOpen(true) },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
       { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email', run: () => openSettingsAt('git') },
       ...(meta ? [{ id: 'settings-git', label: 'Repository settings: Identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => setRepositorySettingsPath(meta.path) } satisfies PaletteAction] : []),
@@ -2579,6 +2583,10 @@ export function App() {
 
       {settingsOpen && (
         <SettingsDialog initialSection={settingsSection} onClose={() => setSettingsOpen(false)} />
+      )}
+
+      {whatsNewOpen && (
+        <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />
       )}
 
       {cloneOpen && (

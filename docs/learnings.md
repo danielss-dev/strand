@@ -2125,12 +2125,22 @@ Keep production CSP, main-window capabilities, signed updater artifacts, the
 HTTPS stable endpoint, and updater key ID mirrored in
 `scripts/check-release-security.mjs`; PR and release CI must reject silent
 broadening or disabling. Tauri production assets need its IPC and asset
-protocols, self-hosted scripts/fonts, inline styles for React/Pierre, and HTTPS
-images for provider avatars/Markdown attachments. The desktop frontend uses no
+protocols, self-hosted scripts/fonts, inline styles for React/Pierre, HTTPS
+images for provider avatars/Markdown attachments, and `https://api.github.com`
+on `connect-src` for the What's New dialog's unauthenticated Releases fetch.
+Do not add further connect-src origins without updating the allowlist
+script in the same change. The desktop frontend uses no
 OS-info commands even though the OS plugin injects platform internals, so do
 not restore `os:default`. Verify changes against an exact workspace executable
 path: launching by app identity on Windows may resolve to the installed
 `C:\Program Files\Strand\strand.exe` and produce false release evidence.
+
+**What's New reads public GitHub Releases, not `docs/changelog/` (2026-10-15).**
+`WhatsNewDialog` lists published `danielss-dev/strand` release tags from
+`https://api.github.com/repos/danielss-dev/strand/releases` (unauthenticated)
+and renders each body's Markdown with `renderMarkdown`. `docs/changelog/` only
+covers early history. Soft-fail with retry when offline or the request fails.
+Do not require a GitHub login and do not auto-open the dialog after upgrade.
 
 **English is a typed catalog, not an excuse for fixed formatting (2026-07-18).**
 Put new Strand-owned UI copy in `ui/src/lib/i18n.ts`; unknown keys should remain

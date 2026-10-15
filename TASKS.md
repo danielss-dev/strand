@@ -1693,6 +1693,14 @@ community plugins, performance and platform certification from Git feature gaps.
     plugin-updater/plugin-process) + `updateAutoCheck` / `updateAutoInstall`
     prefs read by App's delayed launch auto-check (soft-fails while the
     endpoint is offline)
+  - ☑ **What's New** (DAN-86): Strand menu / palette **What's New…** opens
+    `WhatsNewDialog` (Settings split layout). Left pane lists GitHub Release
+    versions newest first; right pane renders that tag's body via
+    `renderMarkdown`. Public unauthenticated
+    `api.github.com/repos/danielss-dev/strand/releases` (`lib/releases.ts`);
+    current `getVersion()` is selected when present. Empty notes and
+    offline/error retry are covered (`WhatsNewDialog.test.tsx`,
+    `releases.test.ts`)
 - ☑ Verify editor/terminal presets on Windows (`code.cmd -g` and `wt -d`
   launched from the exact production-protocol build under Computer Use on
   2026-07-18; Strand reported both launches and the resulting VS Code and

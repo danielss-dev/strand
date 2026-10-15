@@ -38,6 +38,7 @@ export interface MenuHandlers {
   cloneRepo(): void;
   openSettings(): void;
   checkUpdates(): void;
+  openWhatsNew(): void;
   openPalette(): void;
   showView(view: MenuViewId): void;
   customizeWorkbench(): void;
@@ -95,6 +96,11 @@ export async function installAppMenu(
       id: 'check-updates',
       text: 'Check for Updates…',
       action: () => handlers().checkUpdates(),
+    }),
+    await item({
+      id: 'whats-new',
+      text: t('whatsNew.menu'),
+      action: () => handlers().openWhatsNew(),
     }),
   ];
   if (platform === 'macos') {

@@ -16,7 +16,7 @@ function fail(message) {
 const expectedCsp = {
   'default-src': "'self' customprotocol: asset:",
   'base-uri': "'none'",
-  'connect-src': 'ipc: http://ipc.localhost',
+  'connect-src': 'ipc: http://ipc.localhost https://api.github.com',
   'font-src': "'self' data:",
   'form-action': "'none'",
   'frame-src': "'none'",

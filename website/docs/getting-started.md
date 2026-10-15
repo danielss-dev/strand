@@ -108,6 +108,16 @@ the right.
 
 `Mod+K` opens the command palette from anywhere — a fuzzy-searchable list of actions, branches, tags, stashes, files, commits, workspaces, and recent repositories. Nearly everything in Strand is reachable from it. See [Keyboard and palette](keyboard-and-palette.md) for the full reference.
 
+## What's New
+
+**What's New…** in the Strand menu (and the command palette) opens a dialog of
+published Strand versions, newest first. Selecting a version shows that
+release's notes. The current app version is selected when GitHub has a matching
+tag; otherwise the newest release is selected. Empty notes and a failed fetch
+(offline or an error) show a clear state, with Retry when the catalog cannot
+load. This is a history browser — it does not check for or install updates.
+See [Settings](settings.md) → Updates for the updater.
+
 ## In-app updates
 
 Direct Strand installations check for updates on launch by default and manage
