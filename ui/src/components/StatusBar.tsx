@@ -1,17 +1,40 @@
 import { useEffect, useState } from 'react';
 
 import { Icon } from './Icon';
+import {
+  detectFromFileContent,
+  formatFileEncodingLabel,
+  type FileEncodingInfo,
+} from '../lib/fileEncoding';
 import { t } from '../lib/i18n';
 import { formatBinding } from '../lib/keys';
+import { tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
+
+/** Encoding / line-ending chip. Renders nothing when detection has no honest label. */
+export function StatusBarFileEncoding({ info }: { info: FileEncodingInfo | null }) {
+  const label = formatFileEncodingLabel(info);
+  if (!label) return null;
+  return (
+    <>
+      <div className="sb-item" title={label}>{label}</div>
+      <span className="sep">·</span>
+    </>
+  );
+}
 
 export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const meta = useRepo((s) => s.meta);
   const status = useRepo((s) => s.status);
   const selectedFile = useRepo((s) => s.selectedFile);
+  const selectedFileIsDirectory = useRepo((s) => s.selectedFileIsDirectory);
+  const selectedFileRevision = useRepo((s) => s.selectedFileRevision);
+  const activePath = useRepo((s) => s.activePath);
+  const diffsTick = useRepo((s) => s.diffsTick);
   const platform = useSettings((s) => s.platform);
   const [focusedWorktreePath, setFocusedWorktreePath] = useState<string | null>(null);
+  const [encodingInfo, setEncodingInfo] = useState<FileEncodingInfo | null>(null);
 
   useEffect(() => {
     const onWorktreeFocus = (event: Event) => {
@@ -20,6 +43,24 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     window.addEventListener('strand:worktree-focus', onWorktreeFocus);
     return () => window.removeEventListener('strand:worktree-focus', onWorktreeFocus);
   }, []);
+
+  useEffect(() => {
+    if (!activePath || !selectedFile || selectedFileIsDirectory) {
+      setEncodingInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setEncodingInfo(null);
+    tauri
+      .repoFileContent(activePath, selectedFile, selectedFileRevision)
+      .then((content) => {
+        if (!cancelled) setEncodingInfo(detectFromFileContent(content));
+      })
+      .catch(() => {
+        if (!cancelled) setEncodingInfo(null);
+      });
+    return () => { cancelled = true; };
+  }, [activePath, selectedFile, selectedFileIsDirectory, selectedFileRevision, diffsTick]);
 
   const syncLabel = !meta
     ? t('status.noRepository')
@@ -62,12 +103,7 @@ export function StatusBar({ onOpenSettings }: { onOpenSettings: () => void }) {
             {focusedWorktreePath}
           </div>
         )}
-        {selectedFile && (
-          <>
-            <div className="sb-item">UTF-8 · LF</div>
-            <span className="sep">·</span>
-          </>
-        )}
+        <StatusBarFileEncoding info={encodingInfo} />
         <button
           type="button"
           className="sb-item sb-gear"

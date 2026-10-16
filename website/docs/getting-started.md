@@ -101,8 +101,11 @@ sidebar or the palette action "Show: Pull Requests". See [Pull Requests](pull-re
 
 The bottom status bar shows the current branch with ahead/behind counts and a
 derived sync state — up to date, ahead, behind, diverged, or conflicts needing
-resolution — on the left. Modified/staged counts and the Settings gear are on
-the right.
+resolution — on the left. When a text file is selected, the right side shows
+that file's detected encoding and line endings (for example `UTF-8 · CRLF`).
+The label is omitted for folders, binary files, and while content is still
+loading, so it never claims LF without reading the file. The Settings gear is
+also on the right.
 
 ### Command palette
 
