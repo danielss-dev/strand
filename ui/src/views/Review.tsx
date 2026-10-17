@@ -13,6 +13,7 @@ import { PaneHeader } from '../components/PaneHeader';
 import { ImageDiff } from '../components/ImageDiff';
 import { isImagePath } from '../lib/image';
 import { emptyDiffMessage } from '../lib/emptyDiff';
+import { pathLeaf } from '../lib/repoIdentity';
 import {
   copyToClipboard,
   diffStatusToGit,
@@ -509,7 +510,7 @@ export function Review({
     const files = collectFeedbackFiles(state.baseline ? state.baselineDiffs : state.reviewUnstagedDiffs, state.reviewNotes);
     copyToClipboard(
       buildReviewFeedback({
-        repoName: basename(activePath),
+        repoName: pathLeaf(activePath),
         branch: meta?.branch ?? null,
         baselineShort: baseline?.short ?? null,
         files,
@@ -1253,10 +1254,6 @@ export function Review({
 
     </div>
   );
-}
-/** Last path segment — the repo's directory name from its absolute path. */
-function basename(p: string): string {
-  return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 }
 
 function currentReviewPoolKey(state: ReturnType<typeof useRepo.getState>): string {
