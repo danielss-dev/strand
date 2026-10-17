@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mainPathFromCommonDir,
   pathKey,
+  pathLeaf,
   repoFamilyName,
   repoTabLabel,
   tabWorktreeName,
@@ -83,6 +84,50 @@ describe('repo identity labels', () => {
       branch: 'HEAD',
       is_linked_worktree: true,
     }))).toBe('new-task');
+  });
+});
+
+describe('pathLeaf', () => {
+  /** Local copies deleted from App/Review/Commits: `split(/[\\/]/).filter(Boolean).pop() ?? p`. */
+  function legacyBasename(p: string): string {
+    return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+  }
+
+  it('returns the last segment of unix and windows paths', () => {
+    expect(pathLeaf('/src/strand')).toBe('strand');
+    expect(pathLeaf('C:\\dev\\portal')).toBe('portal');
+    expect(pathLeaf('C:/dev/portal')).toBe('portal');
+    expect(pathLeaf('strand')).toBe('strand');
+  });
+
+  it('ignores trailing and repeated separators', () => {
+    expect(pathLeaf('/src/strand/')).toBe('strand');
+    expect(pathLeaf('C:\\dev\\portal\\')).toBe('portal');
+    expect(pathLeaf('/src//strand')).toBe('strand');
+  });
+
+  it('returns the original string when there is no usable segment', () => {
+    expect(pathLeaf('')).toBe('');
+    expect(pathLeaf('/')).toBe('/');
+    expect(pathLeaf('\\\\')).toBe('\\\\');
+  });
+
+  it('matches the deleted split/filter basename copies', () => {
+    const samples = [
+      '/src/strand',
+      '/src/strand/',
+      '/src//strand',
+      'C:\\dev\\portal',
+      'C:\\dev\\portal\\',
+      'C:/dev/portal',
+      'strand',
+      '',
+      '/',
+      '\\\\',
+    ];
+    for (const sample of samples) {
+      expect(pathLeaf(sample)).toBe(legacyBasename(sample));
+    }
   });
 });
 

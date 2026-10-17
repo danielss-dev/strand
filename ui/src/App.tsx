@@ -29,7 +29,7 @@ import { DEFAULT_WORKSPACE_ID, useWorkspaces } from './stores/workspaces';
 import { useWorkspaceReview } from './stores/workspaceReview';
 import { useUpdates } from './stores/updates';
 import { UPDATES_MANAGED_BY_STORE } from './lib/distribution';
-import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
+import { accentHueForColor, groupTabs, pathKey, pathLeaf, repoFamilyName, workspaceMemberSet } from './lib/repoIdentity';
 import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
@@ -202,12 +202,6 @@ interface OpProgress {
   /** When set, the op failed: the popup shows this reason + a Dismiss button
    *  and stays until dismissed, instead of silently vanishing. */
   error?: string | null;
-}
-
-/** Last path segment of a filesystem path (handles `/` and `\`). */
-function basename(p: string): string {
-  const parts = p.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? p;
 }
 
 const MAIN_SURFACE_BY_VIEW: Partial<Record<View, CustomSurfaceId>> = {
@@ -805,7 +799,7 @@ export function App() {
         id,
         kind: 'open',
         title: 'Opening',
-        subject: basename(path),
+        subject: pathLeaf(path),
         percent: null,
         detail: 'Reading repository…',
         eta: null,
@@ -848,7 +842,7 @@ export function App() {
       id,
       kind: 'clone',
       title: 'Cloning',
-      subject: basename(dest),
+      subject: pathLeaf(dest),
       percent: null,
       detail: 'Starting…',
       eta: null,
@@ -892,7 +886,7 @@ export function App() {
     // open the freshly cloned repo.
     setOpProgress((cur) =>
       cur && cur.id === id
-        ? { id, kind: 'open', title: 'Opening', subject: basename(clonedPath!), percent: null, detail: 'Reading repository…', eta: null, startedAt: Date.now() }
+        ? { id, kind: 'open', title: 'Opening', subject: pathLeaf(clonedPath!), percent: null, detail: 'Reading repository…', eta: null, startedAt: Date.now() }
         : cur,
     );
     try {
@@ -918,7 +912,7 @@ export function App() {
       request.createInitialCommit,
     );
     await useWorkspaces.getState().openRepoInActive(outcome.path);
-    showToast(`Initialized ${basename(outcome.path)} on ${outcome.initial_branch}`);
+    showToast(`Initialized ${pathLeaf(outcome.path)} on ${outcome.initial_branch}`);
   }, [showToast]);
 
   // Open a batch of repos as tabs, one after another. Sequential (not
@@ -956,7 +950,7 @@ export function App() {
   // rail and the toolbar tab strip (whichever `repoNav` selects).
   const openIconDialog = useCallback((path: string) => {
     const tab = useRepo.getState().tabs.find((t) => t.path === path);
-    setIconDialog({ path, name: tab ? repoFamilyName(tab.meta) : basename(path) });
+    setIconDialog({ path, name: tab ? repoFamilyName(tab.meta) : pathLeaf(path) });
   }, []);
 
   // Switch the active repository to the next (+1) / previous (-1) open one,
