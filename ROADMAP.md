@@ -167,7 +167,11 @@ through `discardPatch` (stage/unstage are non-destructive). A self-contained
 `UndoToast` in `App.tsx` surfaces an Undo button for 6s per discard
 ("Undo send" model) — single-undo only ever recovers the most recent
 discard. Selected-line discard joined the same single-undo pipeline on
-2026-07-18; a persistent multi-entry undo stack remains future work.
+2026-07-18. Ref-moving Git actions (commit, amend, reset, branch
+create/delete/rename, checkout, merge, rebase, cherry-pick) now keep a
+per-worktree journal with Undo Git Action and Redo Git Action
+(2026-10-19). Discard, stash, fetch, pull, and push stay outside that
+stack.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-

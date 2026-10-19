@@ -9987,3 +9987,18 @@ select.clone-input {
 .pr-code-overview { flex-wrap: wrap; padding-block: 8px; font-size: var(--type-ui-sm); }
 .pr-code-overview > .h-link { flex-shrink: 0; white-space: nowrap; }
 .pr-code-overview code { font-size: inherit; }
+
+.git-history-dialog { max-height: calc(100vh - 112px); }
+.git-history-body { display: flex; flex-direction: column; gap: 12px; }
+.git-history-group { display: flex; flex-direction: column; gap: 4px; }
+.git-history-label { color: var(--text-muted); font-size: var(--type-ui-sm); }
+.git-history-row {
+  text-align: start;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  padding: 6px 8px;
+}
+.git-history-row:hover,
+.git-history-row:focus-visible { background: var(--bg-hover); }
+.git-history-row:focus-visible { border-color: var(--border); outline: none; }

@@ -38,6 +38,23 @@ impl Repo {
     /// `target`. Refuses while a merge/rebase/cherry-pick/revert is paused —
     /// resetting mid-operation strands the sequencer state.
     pub fn reset(&self, target: &str, mode: ResetMode) -> Result<ResetOutcome> {
+        let mode_name = match mode {
+            ResetMode::Soft => "soft",
+            ResetMode::Mixed => "mixed",
+            ResetMode::Hard => "hard",
+        };
+        // Soft and mixed leave the worktree as it was. Hard replaces it.
+        let touches_worktree = matches!(mode, ResetMode::Hard);
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Reset,
+            format!("Reset {mode_name} to {target}"),
+            touches_worktree,
+            || self.reset_inner(target, mode),
+        )
+    }
+
+    fn reset_inner(&self, target: &str, mode: ResetMode) -> Result<ResetOutcome> {
         if let Some(op) = self.meta()?.operation {
             return Err(Error::Other(format!(
                 "finish or abort the in-progress {op} first"
@@ -97,6 +114,21 @@ impl Repo {
             snapshot_oid,
         })
     }
+}
+
+/// Refuse a worktree checkout that would overwrite an untracked or ignored
+/// path. Shared with git-action undo so a ref restore can't clobber bytes the
+/// hard-reset guard already treats as unsafe.
+pub(crate) fn guard_target_commit_collisions(repo: &Repo, commit_oid: &str) -> Result<()> {
+    let git = repo.git2()?;
+    if repo.sparse_enabled() {
+        repo.sparse_read_index(git)?;
+    } else {
+        git.index()?.read(true)?;
+    }
+    let commit = git.find_commit(git2::Oid::from_str(commit_oid)?)?;
+    let tree = commit.tree()?;
+    guard_reset_tree(git, &git.index()?, &tree, repo.path(), std::path::Path::new(""))
 }
 
 fn collision(path: &std::path::Path) -> Error {

@@ -55,6 +55,9 @@ export interface MenuHandlers {
   openBisect(): void;
   openAdvancedRefs(mode?: 'notes' | 'replace'): void;
   openGitflow(): void;
+  undoGitAction(): void;
+  redoGitAction(): void;
+  openGitHistory(): void;
 }
 
 let preemptsKeydown = false;
@@ -144,6 +147,27 @@ export async function installAppMenu(
     items: [
       await PredefinedMenuItem.new({ item: 'Undo' }),
       await PredefinedMenuItem.new({ item: 'Redo' }),
+      await sep(),
+      // No `cmd`: a Mod+Z accelerator would become the macOS key equivalent
+      // and run before the webview, including inside text fields.
+      await item({
+        id: 'undo-git',
+        text: t('gitUndo.undo'),
+        enabled: hasRepo,
+        action: () => handlers().undoGitAction(),
+      }),
+      await item({
+        id: 'redo-git',
+        text: t('gitUndo.redo'),
+        enabled: hasRepo,
+        action: () => handlers().redoGitAction(),
+      }),
+      await item({
+        id: 'git-history',
+        text: t('gitUndo.historyMenu'),
+        enabled: hasRepo,
+        action: () => handlers().openGitHistory(),
+      }),
       await sep(),
       await PredefinedMenuItem.new({ item: 'Cut' }),
       await PredefinedMenuItem.new({ item: 'Copy' }),

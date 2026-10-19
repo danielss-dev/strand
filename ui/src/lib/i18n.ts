@@ -406,6 +406,20 @@ export const en = {
   'amendInto.selectCommit': 'Select a commit in the graph first',
   'amendInto.done': 'Amended staged changes into {label}',
   'amendInto.conflict': 'Amend into {label} has conflicts — resolve them, then Continue or Abort',
+  'gitUndo.undo': 'Undo Git Action',
+  'gitUndo.redo': 'Redo Git Action',
+  'gitUndo.history': 'Git Action History',
+  'gitUndo.historyMenu': 'Git Action History…',
+  'gitUndo.undid': 'Undid {label}',
+  'gitUndo.redid': 'Redid {label}',
+  'gitUndo.undidStash': 'Undid {label}. Tracked changes are in safety stash {oid}.',
+  'gitUndo.redidStash': 'Redid {label}. Tracked changes are in safety stash {oid}.',
+  'gitUndo.undoStack': 'Undo',
+  'gitUndo.redoStack': 'Redo',
+  'gitUndo.empty': 'No git actions to undo or redo.',
+  'gitUndo.hint': 'Enter walks the stack through the focused action.',
+  'gitUndo.drop': 'Remove “{label}” from history',
+  'gitUndo.dropHint': 'This entry can’t be applied any more. Removing it changes nothing in the repository.',
 } as const;
 
 export type MessageKey = keyof typeof en;

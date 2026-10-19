@@ -1,5 +1,41 @@
 # Learnings
 
+## Git undo must not own the Edit → Undo accelerator (2026-10-19)
+
+**Rule.** `undo-git` and `redo-git` stay out of `MENU_COMMANDS` (`menu` is
+unset). The Edit menu items call the handlers with no `cmd`, so they never
+receive a native accelerator. The window keydown handler runs them only when
+`gitUndoBindingAllowed` is true: focus is inside
+`[data-git-undo-surface="graph"|"local"]`, and not inside an editable,
+`.work-content`, or `.work-terminal-host`. Otherwise it returns without
+`preventDefault`.
+
+**Why.** On macOS, `nativeMenuPreemptsKeydown()` is true and the predefined
+Undo/Redo items own ⌘Z / ⌘⇧Z for text fields. A custom menu item with that
+accelerator is dispatched by AppKit before the webview, including inside the
+commit message box and the Work editor.
+
+**How to apply.** Do not set `menu: true` on these commands, and do not pass
+`cmd` for them in `installAppMenu`.
+
+## Git undo journal safety rules (DAN-87)
+
+**Rule.** `apply_entry` refuses before writing anything when a moved,
+deleted, or target HEAD branch is checked out in another worktree, or when
+moving a branch drops a commit its upstream (else `refs/remotes/*/<branch>`)
+already has. Every load → modify → save holds `strand-journal.json.lock`
+(`create_new`, 60 s stale takeover) and saves through a unique temp file plus
+`rename`. Staged-only changes count as dirty, and after the forced tree
+checkout the restored staged paths go back on disk with `checkout-index`.
+
+**Why.** git2 `set_head` / ref deletes skip git's worktree guard; a pushed
+commit undone locally is a force push waiting to happen; two writers on a
+fixed `json.tmp` lost entries; and a carried staged change was overwritten
+by the forced checkout.
+
+**How to apply.** New journal writers take `JournalLock`. A stale entry is
+removed with `drop_git_action`, never by editing the file.
+
 ## Local Changes / Review Open in Workbench reuses Files → Open (2026-10-08)
 
 **Rule.** The Local Changes and Review tree menus open a whole working-tree

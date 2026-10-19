@@ -44,6 +44,9 @@ export type CommandId =
   | 'pull'
   | 'push'
   | 'sync'
+  | 'undo-git'
+  | 'redo-git'
+  | 'git-history'
   | 'open-editor'
   | 'open-terminal'
   | 'refresh'
@@ -104,6 +107,12 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'sync',   label: 'Sync (fetch + pull + push)',   category: 'Git', defaultBinding: 'Mod+Shift+S', menu: true, needsRepo: true },
   { id: 'suggest-commit', label: 'Suggest commit message', category: 'Git', defaultBinding: 'Mod+Shift+M', needsRepo: true },
   { id: 'suggest-conflict', label: t('merge.ai.command'), category: 'Git', defaultBinding: 'Mod+Shift+J', needsRepo: true },
+  // Not `menu: true`. The predefined Edit → Undo/Redo items own Mod+Z for
+  // text, and on macOS a native accelerator would steal that before the
+  // webview sees the key. App runs these only from gitUndoBindingAllowed.
+  { id: 'undo-git', label: t('gitUndo.undo'), category: 'Git', defaultBinding: 'Mod+Z', needsRepo: true },
+  { id: 'redo-git', label: t('gitUndo.redo'), category: 'Git', defaultBinding: 'Mod+Shift+Z', needsRepo: true },
+  { id: 'git-history', label: t('gitUndo.history'), category: 'Git', defaultBinding: null, needsRepo: true },
 
   { id: 'open-editor',   label: 'Open in editor',        category: 'Repository', defaultBinding: 'Mod+Shift+E', needsRepo: true },
   { id: 'open-terminal', label: 'Open in terminal',      category: 'Repository', defaultBinding: 'Mod+Shift+C', needsRepo: true },
@@ -174,6 +183,25 @@ export function isPlainKey(binding: string): boolean {
  * one must never be treated as a plain-key shortcut. */
 export const EDITABLE_SELECTOR =
   'input, textarea, select, [contenteditable="true"], [role="combobox"]';
+
+/** Graph and Local Changes roots. Git undo's shortcut is limited to these. */
+export const GIT_UNDO_SURFACE_SELECTOR =
+  '[data-git-undo-surface="graph"], [data-git-undo-surface="local"]';
+
+/** Text fields and the Work editor/terminal keep their own undo. */
+export const GIT_UNDO_BLOCK_SELECTOR =
+  `${EDITABLE_SELECTOR}, .work-content, .work-terminal-host`;
+
+/**
+ * True when Mod+Z / Mod+Shift+Z should undo or redo a Git action.
+ * An editable wins even when it sits inside a Git-undo surface (the commit
+ * message box is inside Local Changes). Otherwise the handler must not call
+ * `preventDefault`, so text undo still runs.
+ */
+export function gitUndoBindingAllowed(event: EventLike): boolean {
+  if (eventInside(event, GIT_UNDO_BLOCK_SELECTOR)) return false;
+  return eventInside(event, GIT_UNDO_SURFACE_SELECTOR);
+}
 
 /** Structural slice of `Element` this module touches — duck-typed (no DOM
  * globals) so the file stays unit-testable in a node environment. */

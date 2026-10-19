@@ -30,6 +30,16 @@ impl Repo {
     /// check goes through the worktree registry; a registry read failure
     /// falls through (the rollback below still protects the repo).
     pub fn checkout_branch(&self, name: &str) -> Result<CheckoutOutcome> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Checkout,
+            format!("Checkout {name}"),
+            true,
+            || self.checkout_branch_inner(name),
+        )
+    }
+
+    fn checkout_branch_inner(&self, name: &str) -> Result<CheckoutOutcome> {
         if self.sparse_enabled() || self.is_partial_clone() {
             self.git2()?.find_branch(name, git2::BranchType::Local)?;
             crate::network::run_git_streaming(&self.path, &["switch", "--", name], |_| {}, None)?;
@@ -125,6 +135,23 @@ impl Repo {
         start_point: Option<&str>,
         checkout: bool,
     ) -> Result<CheckoutOutcome> {
+        let label = if checkout {
+            format!("Create and check out branch {name}")
+        } else {
+            format!("Create branch {name}")
+        };
+        // Nested checkout is one user action: the outer record owns the entry.
+        crate::journal::record(self, crate::journal::GitOp::BranchCreate, label, checkout, || {
+            self.create_branch_inner(name, start_point, checkout)
+        })
+    }
+
+    fn create_branch_inner(
+        &self,
+        name: &str,
+        start_point: Option<&str>,
+        checkout: bool,
+    ) -> Result<CheckoutOutcome> {
         let repo = self.git2()?;
 
         let target_rev = start_point.unwrap_or("HEAD");
@@ -158,6 +185,16 @@ impl Repo {
     ///
     /// [`checkout_branch`]: Repo::checkout_branch
     pub fn checkout_commit(&self, rev: &str) -> Result<CheckoutOutcome> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Checkout,
+            format!("Checkout {rev}"),
+            true,
+            || self.checkout_commit_inner(rev),
+        )
+    }
+
+    fn checkout_commit_inner(&self, rev: &str) -> Result<CheckoutOutcome> {
         let repo = self.git2()?;
         let commit = repo.revparse_single(rev)?.peel_to_commit()?;
 
@@ -192,6 +229,16 @@ impl Repo {
     /// This keeps a confirmation opened from stale UI state from deleting a
     /// branch that moved in the meantime.
     pub fn delete_branch(&self, name: &str, force: bool) -> Result<()> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::BranchDelete,
+            format!("Delete branch {name}"),
+            false,
+            || self.delete_branch_inner(name, force),
+        )
+    }
+
+    fn delete_branch_inner(&self, name: &str, force: bool) -> Result<()> {
         let repo = self.git2()?;
         let mut branch = repo.find_branch(name, git2::BranchType::Local)?;
         if branch.is_head() {
@@ -236,6 +283,16 @@ impl Repo {
     /// the exact source commit the provider reported. This is the squash/rebase
     /// merge counterpart to [`delete_branch`]'s ancestry guard.
     pub fn delete_branch_at(&self, name: &str, expected_target: &str) -> Result<()> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::BranchDelete,
+            format!("Delete branch {name}"),
+            false,
+            || self.delete_branch_at_inner(name, expected_target),
+        )
+    }
+
+    fn delete_branch_at_inner(&self, name: &str, expected_target: &str) -> Result<()> {
         let expected = git2::Oid::from_str(expected_target)?;
         let repo = self.git2()?;
         let mut branch = repo.find_branch(name, git2::BranchType::Local)?;
@@ -271,6 +328,16 @@ impl Repo {
     /// branch's config section (upstream) along, and HEAD follows when the
     /// renamed branch is checked out. No force — errors if `new` exists.
     pub fn rename_branch(&self, old: &str, new: &str) -> Result<()> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::BranchRename,
+            format!("Rename branch {old} to {new}"),
+            false,
+            || self.rename_branch_inner(old, new),
+        )
+    }
+
+    fn rename_branch_inner(&self, old: &str, new: &str) -> Result<()> {
         let new = new.trim();
         if new.is_empty() {
             return Err(crate::Error::Other("branch name is required".into()));

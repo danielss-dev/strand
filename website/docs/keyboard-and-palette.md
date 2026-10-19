@@ -66,6 +66,9 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+P` | Push | Git |
 | `Mod+Shift+S` | Sync (fetch + pull + push) | Git |
 | `Mod+Shift+M` | Suggest commit message | Git |
+| `Mod+Z` | Undo Git Action | Git |
+| `Mod+Shift+Z` | Redo Git Action | Git |
+| — | Git Action History | Git |
 | `Mod+Shift+E` | Open in editor | Repository |
 | `Mod+Shift+C` | Open in terminal | Repository |
 | `Mod+R` | Refresh | Repository |
@@ -73,6 +76,8 @@ All of these are rebindable in **Settings → Keyboard** (see [Settings](setting
 | `Mod+B` | Toggle sidebar | Appearance |
 
 Push is deliberately on `Mod+P` and pull on `Mod+Shift+P`. The Git shortcuts act only on the currently open repository, and most Navigation/Git/Repository commands need a repository open — `Mod+E` is the exception and lists recents even with nothing open.
+
+**Undo Git Action** (`Mod+Z`) and **Redo Git Action** (`Mod+Shift+Z`) walk a per-worktree journal of commit, amend, reset, branch create/delete/rename, checkout, merge, rebase, and cherry-pick. The shortcut runs only while the commit graph or Local Changes has focus. It does not run while typing in the commit message, any other text field, or the Work editor — those keep text undo. The same commands are in the Edit menu and the command palette. The menu items have no accelerator of their own, so Edit → Undo/Redo still owns text undo. A success toast names the action. **Git Action History** lists the undo and redo stacks; Enter on a row walks the stack through that action. Undo refuses, and changes nothing, when it would drop commits already pushed to the branch's remote, or move a branch checked out in another worktree. When an entry can no longer be applied, the history dialog offers **Remove from history**; that changes nothing in the repository. Push, fetch, pull, stash, discard, and a merge, rebase, or cherry-pick that stopped on conflicts are not in this journal.
 
 Alternative network strategies are palette actions rather than fixed shortcuts: fetch with or without pruning; pull with merge, rebase, or fast-forward-only, with or without autostash; push annotated tags; push every tag; and force-push with a lease. The current branch also contributes “Manage current branch upstream…” and “Push current branch to…” actions. Force-push always opens a branch-specific confirmation dialog, and plain `--force` is not exposed. Any branch or remote-branch row can open its richer context menu from the keyboard with the Menu key or `Shift+F10`.
 
@@ -203,6 +208,7 @@ row or control.
 | `d` | Discard the selected file (press twice within 2.5 s to confirm) |
 | `Delete` / `Backspace` | Discard immediately, no confirm |
 | `c` | Focus the commit subject field |
+| `Mod+Z` / `Mod+Shift+Z` | Undo / redo the latest Git action when this view has focus, not from the commit message |
 | `Mod+Enter` | Commit (from the message box) |
 | `Mod+F` | Search within the current file or diff |
 
@@ -248,6 +254,7 @@ Opened with `Mod+F` in Local Changes, Review, or Workspace Review.
 | Menu key / `Shift+F10` | Open the row context menu |
 | `Escape` | Clear the selection |
 | `/` | Focus the commit search field |
+| `Mod+Z` / `Mod+Shift+Z` | Undo / redo the latest Git action while the graph has focus |
 
 In the search field: `Enter` steps loaded matches (`Shift+Enter` backwards); `Mod+Enter` — or plain `Enter` in Content mode — runs the full-history search; `↑`/`↓` navigate the results dropdown and `Enter` opens a hit; `Escape` clears the query, then blurs. See [Commits and history](commits-and-history.md).
 

@@ -2003,6 +2003,30 @@ pub fn repo_reset(path: String, target: String, mode: ResetMode) -> CmdResult<Re
 }
 
 #[tauri::command(async)]
+pub fn repo_undo_git_action(path: String) -> CmdResult<strand_core::journal::GitActionOutcome> {
+    Ok(Repo::discover(&path)?.undo_git_action()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_redo_git_action(path: String) -> CmdResult<strand_core::journal::GitActionOutcome> {
+    Ok(Repo::discover(&path)?.redo_git_action()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_git_action_history(path: String) -> CmdResult<strand_core::journal::GitActionHistory> {
+    Ok(Repo::discover(&path)?.git_action_history()?)
+}
+
+/// Remove the newest undo or redo entry without applying it (a stale entry).
+#[tauri::command(async)]
+pub fn repo_drop_git_action(
+    path: String,
+    direction: strand_core::journal::GitActionDirection,
+) -> CmdResult<strand_core::journal::GitActionHistory> {
+    Ok(Repo::discover(&path)?.drop_git_action(direction)?)
+}
+
+#[tauri::command(async)]
 pub fn repo_abort_operation(path: String) -> CmdResult<()> {
     Repo::discover(&path)?.abort_operation()?;
     Ok(())

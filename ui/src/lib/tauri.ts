@@ -95,6 +95,9 @@ import type {
   RepoMeta,
   ResetMode,
   ResetOutcome,
+  GitActionDirection,
+  GitActionHistory,
+  GitActionOutcome,
   RestoredWorktree,
   Snapshot,
   Stash,
@@ -745,6 +748,14 @@ export const tauri = {
   // `snapshot_oid` reports it so the UI can point at the stash stack.
   repoReset: (path: string, target: string, mode: ResetMode) =>
     invoke<ResetOutcome>('repo_reset', { path, target, mode }),
+  repoUndoGitAction: (path: string) =>
+    invoke<GitActionOutcome>('repo_undo_git_action', { path }),
+  repoRedoGitAction: (path: string) =>
+    invoke<GitActionOutcome>('repo_redo_git_action', { path }),
+  repoGitActionHistory: (path: string) =>
+    invoke<GitActionHistory>('repo_git_action_history', { path }),
+  repoDropGitAction: (path: string, direction: GitActionDirection) =>
+    invoke<GitActionHistory>('repo_drop_git_action', { path, direction }),
   repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
   // Resume a paused merge/rebase/cherry-pick/revert. `true` = paused again on
   // a fresh conflict or interactive-rebase edit step.
