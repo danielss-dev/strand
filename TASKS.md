@@ -387,7 +387,7 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Rebase (onto branch, onto commit) (`Repo::rebase(onto, update_refs)` —
   `git rebase [--update-refs|--no-update-refs] <onto>`, any revspec; sidebar
   branch menu "Rebase <current> onto this" opens `RebaseOntoDialog`. The
-  choice is remembered as local `rebase.updateRefs`.)
+  choice is remembered as local `strand.rebaseUpdateRefs` when a rebase starts.)
 - ☑ Abort in-progress op (`Repo::abort_operation` — detects rebase / cherry-pick
   / revert / merge from `.git/` markers and runs the matching `--abort`; surfaced
   by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)

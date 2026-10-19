@@ -3277,7 +3277,9 @@ quiet activity-log entries. Git is spawned through `git_command`
 
 **Rebase `--update-refs` (2026-10-19, DAN-88 first slice):** Plain rebase and
 the interactive editor can move other local branches whose tips sit in the
-rewritten range. The choice is this repo's `rebase.updateRefs`. The flat
+rewritten range. The choice is remembered per repo in Strand's own
+`strand.rebaseUpdateRefs` (not git's `rebase.updateRefs`, which would change
+`git pull --rebase` too) and saved when a rebase starts. The flat
 sequence editor overwrites git's todo, so Strand writes the `update-ref`
 lines itself, after the last kept commit each branch contained (including
 after a reword amend or a squash chain). Preserve-merges leaves git's lines

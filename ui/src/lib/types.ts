@@ -71,7 +71,7 @@ export interface RebaseOutcome {
   moved: string[];
 }
 
-/** Repo-local `rebase.updateRefs`, plus whether this git can honor it. */
+/** Repo-local `strand.rebaseUpdateRefs`, plus whether this git can honor it. */
 export interface RebaseUpdateRefsSetting {
   supported: boolean;
   enabled: boolean;

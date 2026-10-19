@@ -214,7 +214,7 @@ impl Repo {
     ///
     /// `update_refs` passes `--update-refs` when git is 2.38 or newer, so other
     /// local branches whose tips sit in the rewritten range move too. The flag
-    /// on this call wins over the repo's remembered `rebase.updateRefs`. A dirty
+    /// on this call wins over any `rebase.updateRefs` the user set. A dirty
     /// working tree makes git refuse — that surfaces as `Err`. `paused` is set
     /// when the rebase stopped on a conflict; branch tips move only once it
     /// completes.
@@ -227,17 +227,19 @@ impl Repo {
         self.finish_rebase(&args, &[])
     }
 
-    /// Remembered per repo as git's own `rebase.updateRefs` (local scope).
-    /// `supported` is false when the git Strand finds is older than 2.38.
+    /// Remembered per repo in Strand's own local key `strand.rebaseUpdateRefs`,
+    /// not git's `rebase.updateRefs`: that one would also change `git pull
+    /// --rebase` and the user's terminal rebases. Every Strand rebase passes
+    /// the flag explicitly. `supported` is false when git is older than 2.38.
     pub fn rebase_update_refs_setting(&self) -> Result<RebaseUpdateRefsSetting> {
         Ok(RebaseUpdateRefsSetting {
             supported: git_supports_update_refs(),
-            enabled: crate::signing::git_bool(self, "rebase.updateRefs")?,
+            enabled: crate::signing::git_bool(self, STRAND_UPDATE_REFS_KEY)?,
         })
     }
 
-    /// Write `rebase.updateRefs` in the repo's local config. Refuses when git
-    /// is too old to honor the setting, so a later rebase cannot fail on the flag.
+    /// Write `strand.rebaseUpdateRefs` in the repo's local config. Refuses when
+    /// git is too old to honor the flag, so a later rebase cannot fail on it.
     pub fn set_rebase_update_refs(&self, enabled: bool) -> Result<()> {
         if !git_supports_update_refs() {
             return Err(Error::Other(
@@ -246,7 +248,7 @@ impl Repo {
         }
         self.set_scoped_config(
             "--local",
-            "rebase.updateRefs",
+            STRAND_UPDATE_REFS_KEY,
             Some(if enabled { "true" } else { "false" }),
         )
     }
@@ -873,6 +875,9 @@ fn append_update_refs(todo: &mut String, refs: Option<&[String]>) {
     }
 }
 
+/// Strand-only per-repo memory of the update-refs toggle (local config).
+const STRAND_UPDATE_REFS_KEY: &str = "strand.rebaseUpdateRefs";
+
 /// `--update-refs` / `--no-update-refs` landed in Git 2.38. Older git must not
 /// see the flag at all. When the caller asked for it and git is too old, fail
 /// before the rebase starts.
@@ -884,7 +889,8 @@ fn push_update_refs(args: &mut Vec<&str>, update_refs: bool) -> Result<()> {
 }
 
 /// `None` on Git older than 2.38 (and an error if the caller still asked for
-/// the feature). Otherwise the explicit flag that wins over `rebase.updateRefs`.
+/// the feature). Otherwise the explicit flag that wins over `rebase.updateRefs`
+/// from the user's own git config.
 fn update_refs_flag(supported: bool, update_refs: bool) -> Result<Option<&'static str>> {
     if !supported {
         return if update_refs {
@@ -1062,8 +1068,11 @@ fn anchors_to_preview(anchors: Vec<UpdateRefAnchor>) -> Vec<RebaseRefPreview> {
 /// - drop: the previous kept ancestor in `original`, or the rebase base when
 ///   every commit the branch contained was dropped
 ///
-/// Reordering does not pull in commits that were never on the branch. A branch
-/// checked out in another worktree is reported with `will_move` false.
+/// The anchor is chosen by original order, then placed where that commit sits
+/// in the new plan. A reorder can therefore move commits that were never on
+/// the branch below its tip, or move one of its own commits above it; the
+/// plan preview shows the result. A branch checked out in another worktree is
+/// reported with `will_move` false.
 pub fn plan_update_refs(
     original: &[String],
     steps: &[RebaseStep],
@@ -1665,8 +1674,8 @@ mod tests {
         write_commit(&dir, "main.txt", "main\n", "main moves");
         git(&dir, &["checkout", "-q", "stack-b"]);
         let a_before = tip(&dir, "stack-a");
-        // A remembered `rebase.updateRefs=true` must not override an explicit off,
-        // and an explicit on must win over a stored false.
+        // A remembered choice must not override an explicit off, and an
+        // explicit on must win over a stored false.
         repo.set_rebase_update_refs(false).unwrap();
         assert!(!repo.rebase_update_refs_setting().unwrap().enabled);
         let on = repo.rebase("main", true).unwrap();
@@ -1728,6 +1737,92 @@ mod tests {
         assert_eq!(tip(&dir, "stack-a^"), main);
         assert_eq!(tip(&dir, "stack-b^"), tip(&dir, "stack-a"));
         assert!(dir.join("g.txt").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// base ← X (f=x, stack-a) ← Y (f=y, stack-b). Reordering to Y, X conflicts
+    /// on both picks, on the flat path where Strand writes `update-ref` itself.
+    fn conflicting_stack() -> (Repo, PathBuf, String, String, String) {
+        let (repo, dir) = scratch_repo();
+        let main = write_commit(&dir, "f.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "stack-b"]);
+        let x = write_commit(&dir, "f.txt", "x\n", "commit X");
+        git(&dir, &["branch", "stack-a"]);
+        let y = write_commit(&dir, "f.txt", "y\n", "commit Y");
+        (repo, dir, main, x, y)
+    }
+
+    #[test]
+    fn flat_update_refs_conflict_abort_restores_every_tip() {
+        let (repo, dir, main, x, y) = conflicting_stack();
+        let (a_before, b_before) = (tip(&dir, "stack-a"), tip(&dir, "stack-b"));
+        let out = repo
+            .interactive_rebase(
+                Some(&main),
+                &[step(RebaseAction::Pick, &y), step(RebaseAction::Pick, &x)],
+                false,
+                true,
+            )
+            .unwrap();
+        assert!(out.paused, "reorder conflicts");
+        assert!(out.moved.is_empty());
+        assert_eq!(tip(&dir, "stack-a"), a_before, "refs move only on completion");
+        repo.abort_operation().unwrap();
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert_eq!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(tip(&dir, "stack-b"), b_before);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn flat_update_refs_conflict_continue_moves_the_stacked_branch() {
+        let (repo, dir, main, x, y) = conflicting_stack();
+        let a_before = tip(&dir, "stack-a");
+        let out = repo
+            .interactive_rebase(
+                Some(&main),
+                &[step(RebaseAction::Pick, &y), step(RebaseAction::Pick, &x)],
+                false,
+                true,
+            )
+            .unwrap();
+        assert!(out.paused);
+        let mut paused = true;
+        let mut guard = 0;
+        while paused {
+            let resolved = if guard == 0 { "y\n" } else { "x\n" };
+            std::fs::write(dir.join("f.txt"), resolved).unwrap();
+            git(&dir, &["add", "f.txt"]);
+            paused = repo.continue_operation().unwrap();
+            guard += 1;
+            assert!(guard < 5, "rebase should converge");
+        }
+        assert_eq!(repo.meta().unwrap().operation, None);
+        // stack-a contained X, which is now the last kept commit.
+        assert_ne!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(tip(&dir, "stack-a"), tip(&dir, "stack-b"));
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "stack-a"]), "commit X");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn update_refs_choice_lives_in_a_strand_key_not_rebase_update_refs() {
+        let (repo, dir, _main) = stack_on_main();
+        git(&dir, &["config", "--local", "rebase.updateRefs", "true"]);
+        assert!(
+            !repo.rebase_update_refs_setting().unwrap().enabled,
+            "the user's own rebase.updateRefs is not Strand's toggle"
+        );
+        git(&dir, &["config", "--local", "--unset", "rebase.updateRefs"]);
+        repo.set_rebase_update_refs(true).unwrap();
+        assert!(repo.rebase_update_refs_setting().unwrap().enabled);
+        assert_eq!(git(&dir, &["config", "--local", "strand.rebaseUpdateRefs"]), "true");
+        let status = crate::git_command()
+            .current_dir(&dir)
+            .args(["config", "--local", "--get", "rebase.updateRefs"])
+            .status()
+            .unwrap();
+        assert!(!status.success(), "rebase.updateRefs stays unset, so pull --rebase is unaffected");
         let _ = std::fs::remove_dir_all(dir);
     }
 

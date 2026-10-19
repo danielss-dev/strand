@@ -3148,12 +3148,15 @@ when `--update-refs` is on. Place each line after the last kept commit that
 branch's tip contained, and after that step's reword `exec` amend and any
 following squash/fixup chain. A dropped tip falls back to the previous kept
 ancestor in the original range, or to the rebase base when nothing it
-contained survives. Reordering must not adopt commits the branch never
-contained. Do not also emit lines on the preserve-merges path: that awk
+contained survives. The anchor is picked by original order, so a reorder
+can put commits the branch never had below its tip (or one of its own
+above it); the editor preview must show that. Do not also emit lines on the preserve-merges path: that awk
 prints unknown lines (including abbreviated `u`) unchanged, and a second
 copy would move the branch twice. Pass `--update-refs` or `--no-update-refs`
-explicitly on Git 2.38+ so this call wins over the remembered
-`rebase.updateRefs`; on older Git pass neither flag, and refuse before the
+explicitly on Git 2.38+ so this call wins over any `rebase.updateRefs` in the
+user's config. Remember the toggle in Strand's own `strand.rebaseUpdateRefs`,
+never in `rebase.updateRefs`: git's key also changes `git pull --rebase` and
+terminal rebases. On older Git pass neither flag, and refuse before the
 rebase starts if the caller asked for the feature. The UI disables the
 toggle with a tooltip instead.
 

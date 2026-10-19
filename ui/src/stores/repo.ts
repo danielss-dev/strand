@@ -525,9 +525,9 @@ export interface RepoState {
   revert(commits: string[], mainline?: number): Promise<boolean>;
   merge(refname: string, mode: MergeMode): Promise<boolean>;
   rebase(onto: string, updateRefs: boolean): Promise<RebaseOutcome>;
-  /** Repo-local `rebase.updateRefs`, and whether this git supports the flag. */
+  /** Repo-local `strand.rebaseUpdateRefs`, and whether this git supports the flag. */
   loadRebaseUpdateRefs(): Promise<RebaseUpdateRefsSetting>;
-  /** Remember `--update-refs` for this repo (`rebase.updateRefs`, local scope). */
+  /** Remember `--update-refs` for this repo (`strand.rebaseUpdateRefs`, local scope). */
   setRebaseUpdateRefs(enabled: boolean): Promise<void>;
   /**
    * Load the editable commit range (oldest→newest) an interactive rebase over

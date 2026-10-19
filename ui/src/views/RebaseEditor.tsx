@@ -283,11 +283,11 @@ export function RebaseEditor({
   const isNoop = useMemo(() => {
     if (!rows) return false;
     const orig = origOrderRef.current;
-    const planNoop =
+    return (
       rows.length === orig.length &&
-      rows.every((r, i) => r.action === 'pick' && r.oid === orig[i]);
-    return planNoop && !refLines.some((line) => line.willMove);
-  }, [refLines, rows]);
+      rows.every((r, i) => r.action === 'pick' && r.oid === orig[i])
+    );
+  }, [rows]);
 
   const setPreserveMode = (enabled: boolean) => {
     setPreserveMerges(enabled);
@@ -320,6 +320,8 @@ export function RebaseEditor({
       message: r.action === 'reword' ? r.message : null,
     }));
     try {
+      // Remember the choice only once a rebase actually starts.
+      if (updateRefsSupported) await setRebaseUpdateRefs(updateRefs);
       const outcome = await interactiveRebase(
         base,
         steps,
@@ -394,15 +396,7 @@ export function RebaseEditor({
                 supported={updateRefsSupported}
                 enabled={updateRefs}
                 busy={busy}
-                onChange={(enabled) => {
-                  setUpdateRefs(enabled);
-                  if (!updateRefsSupported) return;
-                  void setRebaseUpdateRefs(enabled).catch((caught) => {
-                    if (!mountedRef.current) return;
-                    setUpdateRefs(!enabled);
-                    setSubmitError(errMessage(caught));
-                  });
-                }}
+                onChange={setUpdateRefs}
               />
               {!updateRefsSupported ? (
                 <div className="rebase-warn" role="note">

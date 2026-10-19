@@ -11,7 +11,7 @@ import { UpdateRefsToggle } from './RebaseUpdateRefs';
 /**
  * Confirm a plain `git rebase <onto>` and choose whether other local branches
  * in the range follow (`--update-refs`). The choice is remembered per repo as
- * `rebase.updateRefs`.
+ * Strand's `strand.rebaseUpdateRefs` once the rebase starts.
  */
 export function RebaseOntoDialog({
   onto,
@@ -67,16 +67,9 @@ export function RebaseOntoDialog({
     };
   }, [loadRebaseUpdateRefs, onto, path]);
 
-  async function onToggle(enabled: boolean) {
+  function onToggle(enabled: boolean) {
     setUpdateRefs(enabled);
     setError(null);
-    try {
-      await setRebaseUpdateRefs(enabled);
-    } catch (caught) {
-      if (!mountedRef.current) return;
-      setUpdateRefs(!enabled);
-      setError(errMessage(caught));
-    }
   }
 
   async function submit() {
@@ -84,6 +77,8 @@ export function RebaseOntoDialog({
     setBusy(true);
     setError(null);
     try {
+      // Remember the choice only once a rebase actually starts.
+      if (supported) await setRebaseUpdateRefs(updateRefs);
       const outcome = await rebase(onto, supported && updateRefs);
       const done = outcome.paused
         ? t('rebase.plainConflict', { onto })
