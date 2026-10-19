@@ -390,6 +390,22 @@ export const en = {
   'rebase.paused': 'Rebase paused — amend the commit or resolve conflicts, then Continue',
   'rebase.pausedAgain': 'Rebase paused again — amend the commit or resolve conflicts, then Continue',
   'rebase.moved': '{message} Moved {branches}.',
+  'amendInto.action': 'Amend staged changes into this commit',
+  'amendInto.actionNeedsStage': 'Amend staged changes into this commit (stage changes first)',
+  'amendInto.title': 'Amend into this commit',
+  'amendInto.blurb': 'Fold the staged changes into {label} ({subject}) and rewrite every commit from there to HEAD.',
+  'amendInto.rewritten': 'Commits that will be rewritten',
+  'amendInto.target': 'target',
+  'amendInto.autostash': 'Unstaged changes are stashed for the rewrite and restored when it finishes or is aborted.',
+  'amendInto.pushed': 'This commit is already on the upstream. A force push will be needed.',
+  'amendInto.merge': 'This range contains a merge commit, so Strand will not rewrite it.',
+  'amendInto.confirm': 'Amend into commit',
+  'amendInto.busy': 'Amending…',
+  'amendInto.loading': 'Loading commits…',
+  'amendInto.palette': 'Amend staged changes into selected commit…',
+  'amendInto.selectCommit': 'Select a commit in the graph first',
+  'amendInto.done': 'Amended staged changes into {label}',
+  'amendInto.conflict': 'Amend into {label} has conflicts — resolve them, then Continue or Abort',
 } as const;
 
 export type MessageKey = keyof typeof en;

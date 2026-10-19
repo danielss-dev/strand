@@ -76,6 +76,7 @@ Right-click a commit (or use `Shift+F10`) for:
 - **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution;
   merge commits first ask which parent is the mainline.
 - **Create fixup! commit** — commits the currently staged changes as `fixup!` of this commit (enabled only when something is staged); fold it in later with an interactive rebase.
+- **Amend staged changes into this commit** — folds the staged changes into this commit immediately. Strand lists every commit that will be rewritten and asks you to confirm. It refuses when that range contains a merge, and warns when the commit is already on the upstream (a force push will be needed). Unstaged changes are stashed and restored. A conflict uses the same Continue / Abort banner as any other rebase; Abort returns to the original tip. Enabled only when something is staged. The same action is in the commit detail menu and the command palette ("Amend staged changes into selected commit…").
 - **Rebase from here…** — open the interactive rebase editor over this commit and everything newer. With **Update other branches** on, other local branches in that range move with the rewritten commits.
 - **Reset \<branch\> to here…** — opens the Reset dialog.
 - **New worktree from here…** — cut a task branch at this exact commit; see [Worktrees](worktrees.md).

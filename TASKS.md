@@ -414,6 +414,16 @@ community plugins, performance and platform certification from Git feature gaps.
   oid-prefix target resolution, stacked prefixes stripped, unmatched stay
   `pick`) seeds `RebaseEditor.tsx`, which shows an "Autosquash: N fixup
   commits moved…" notice; the seeded plan stays fully editable.
+- ☑ Amend staged changes into an older commit (DAN-92, first slice). Graph and
+  commit-detail action "Amend staged changes into this commit" plus palette
+  "Amend staged changes into selected commit…". `Repo::amend_into_commit`
+  commits a fixup and runs `interactive_rebase` from an oid plan (fixup step
+  immediately after the target; `--root` when the target has no parent;
+  `--autostash` for unstaged work). `Repo::amend_into_plan` lists the rewrite
+  range, sets `has_merge` so the dialog refuses, and sets `pushed` when the
+  target is contained in `@{upstream}`. Abort soft-resets to the pre-fixup tip
+  recorded in `.git/strand-amend-into`. Hunk moves between commits are out of
+  this slice.
 - ☑ Interactive rebase: `edit` (pause-to-amend) action (`RebaseAction::Edit`
   leaves Git's rebase markers active; Local Changes amend + OpBanner Continue
   completes the plan, with later reword files persisted across the pause)

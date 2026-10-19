@@ -393,6 +393,8 @@ export const handlers: Record<string, Handler> = {
   repo_continue_operation: () => false,
   repo_rebase_todo: (a) => repo.rebaseTodo(wtOf(a), a.base == null ? null : str(a.base)),
   repo_interactive_rebase: (a) => { repo.interactiveRebase(wtOf(a), a.base == null ? null : str(a.base), a.steps as never); return { paused: false, moved: [] as string[] }; },
+  repo_amend_into_plan: (a) => repo.amendIntoPlan(wtOf(a), str(a.target)),
+  repo_amend_into: (a) => { repo.amendInto(wtOf(a), str(a.target)); return false; },
 
   // ---- stash -------------------------------------------------------------
   repo_stash_list: () => repo.stashList(),

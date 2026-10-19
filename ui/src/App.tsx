@@ -75,6 +75,7 @@ import { MergeDialog } from './views/MergeDialog';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { FileEntryDialog } from './views/FileEntryDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
+import { AmendIntoDialog } from './views/AmendIntoDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
 import { RepoIconDialog } from './views/RepoIconDialog';
@@ -434,6 +435,7 @@ export function App() {
   // null = closed; otherwise the interactive-rebase base (revspec before the
   // first editable commit, null ⇒ root) + a short label for the blurb.
   const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
+  const [amendInto, setAmendInto] = useState<{ target: string; label: string; subject: string } | null>(null);
   // null = closed; otherwise the commit-ish to reset to + its human label.
   const [resetDialog, setResetDialog] = useState<{ target: string; label: string } | null>(null);
   // The "Add ignore pattern…" dialog is opened from two surfaces (Local Changes
@@ -2200,6 +2202,13 @@ export function App() {
           if (!c) { showToast('Select a commit in the graph first'); return; }
           setRebaseDialog({ base: c.parents.length ? `${c.hash}^` : null, label: c.short_hash });
         } },
+        { id: 'amend-into', label: t('amendInto.palette'), group: 'Actions', keywords: 'amend fixup staged older commit rewrite history rebase autosquash', run: () => {
+          const st = useRepo.getState();
+          const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
+          if (!c) { showToast(t('amendInto.selectCommit')); return; }
+          if (!st.status.some((entry) => entry.staged)) { showToast(t('amendInto.actionNeedsStage')); return; }
+          setAmendInto({ target: c.hash, label: c.short_hash, subject: c.subject });
+        } },
       );
     }
     base.push(
@@ -2359,6 +2368,7 @@ export function App() {
           <Commits
             onCreateTag={(target, label) => setTagDialog({ target, label })}
             onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+            onAmendInto={(target, label, subject) => setAmendInto({ target, label, subject })}
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
             onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
@@ -2741,6 +2751,16 @@ export function App() {
           target={resetDialog.target}
           label={resetDialog.label}
           onClose={() => setResetDialog(null)}
+          onToast={showToast}
+        />
+      )}
+
+      {amendInto && (
+        <AmendIntoDialog
+          target={amendInto.target}
+          label={amendInto.label}
+          subject={amendInto.subject}
+          onClose={() => setAmendInto(null)}
           onToast={showToast}
         />
       )}

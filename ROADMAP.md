@@ -3149,6 +3149,14 @@ empty state (heading included) and network failures offer Retry. Default
 selection is `getVersion()` when that tag is in the list. Auto-popup after
 upgrade is out of scope.
 
+**Amend into an older commit (2026-10-19, DAN-92):** The commit graph can fold
+the staged index into any earlier commit on the current branch in one action.
+Strand commits a fixup and rebases with an oid plan (not `--autosquash`),
+autostashes unstaged work, confirms the commits that will be rewritten, refuses
+a merge in that range, and warns when the target is already on the upstream.
+Abort of a conflicted rewrite restores the original tip. Moving hunks between
+existing commits stays a later slice.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Main hardening audit kick (2026-09-29):** Audited 1.7.2 at `f5ed9a8` after

@@ -93,6 +93,15 @@ export interface RebaseEntry {
   is_merge: boolean;
 }
 
+/** Read-only preview of folding the index into an older commit. */
+export interface AmendIntoPlan {
+  commits: RebaseEntry[];
+  /** Target is already reachable from the branch upstream. */
+  pushed: boolean;
+  /** A merge commit sits in the range, so the rewrite is refused. */
+  has_merge: boolean;
+}
+
 export type StatusKind = 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED' | 'CONFLICTED';
 
 export interface FileStatus {

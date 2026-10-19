@@ -84,6 +84,7 @@ import type {
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
   PushMode,
+  AmendIntoPlan,
   RebaseEntry,
   RebaseOutcome,
   RebaseRefPreview,
@@ -759,6 +760,15 @@ export const tauri = {
     preserveMerges: boolean,
     updateRefs: boolean,
   ) => invoke<RebaseOutcome>('repo_interactive_rebase', { path, base, steps, preserveMerges, updateRefs }),
+  /** Commits an amend-into would rewrite, plus merge refusal and upstream warning. */
+  repoAmendIntoPlan: (path: string, target: string) =>
+    invoke<AmendIntoPlan>('repo_amend_into_plan', { path, target }),
+  /**
+   * Fold staged changes into `target` (fixup + scripted rebase). `true` when
+   * the rebase paused on a conflict.
+   */
+  repoAmendInto: (path: string, target: string) =>
+    invoke<boolean>('repo_amend_into', { path, target }),
   repoReadConflictFile: (path: string, file: string) =>
     invoke<string>('repo_read_conflict_file', { path, file }),
   repoResolveConflict: (path: string, file: string, contents: string) =>

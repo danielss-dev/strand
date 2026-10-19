@@ -306,6 +306,8 @@ The rebase editor is a keyboard-operable list of the commits in the plan:
 
 **Autosquash**: the graph context menu's "Create fixup! commit" commits your staged changes as `fixup! <subject>` of the chosen commit. When you next open the rebase editor, fixup! commits are automatically arranged next to their targets (like `git rebase --autosquash`), with a notice telling you how many moved — and the plan stays fully editable before you run it.
 
+**Amend into this commit**: the same menus also offer "Amend staged changes into this commit", which does the fold immediately. The confirmation lists the commits that will be rewritten. Strand places the fixup by commit id, so two commits with the same subject cannot steal the change. A merge in the range is refused. A commit already on the upstream shows a force-push warning. Unstaged work is restored afterward, including when you Abort a conflict.
+
 **Edit** pauses the rebase immediately after the chosen commit. Strand opens
 Local Changes: change and stage files, enable **Amend**, commit the amendment,
 then use the operation banner's **Continue** button. You can also continue

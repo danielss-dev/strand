@@ -365,6 +365,8 @@ fn main() {
             commands::repo_continue_operation,
             commands::repo_rebase_todo,
             commands::repo_interactive_rebase,
+            commands::repo_amend_into_plan,
+            commands::repo_amend_into,
             commands::repo_read_conflict_file,
             commands::repo_resolve_conflict,
             commands::repo_open_mergetool,

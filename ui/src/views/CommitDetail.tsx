@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon';
 import { ImageDiff } from '../components/ImageDiff';
 import { copyToClipboard } from '../components/PierreTree';
 import { isImagePath } from '../lib/image';
+import { t } from '../lib/i18n';
 import { errMessage, tauri } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import { useSettings } from '../stores/settings';
@@ -39,6 +40,7 @@ function rememberSignature(key: string, value: CommitSignature) {
 export function CommitDetail({
   onCreateTag,
   onInteractiveRebase,
+  onAmendInto,
   onExportPatch,
   onToast,
 }: {
@@ -46,6 +48,8 @@ export function CommitDetail({
   onCreateTag: (target: string, label: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
+  /** Confirm folding staged changes into this commit. */
+  onAmendInto: (target: string, label: string, subject: string) => void;
   /** Export this exact commit as an mbox-compatible patch. */
   onExportPatch: (commit: Commit) => void;
   /** Surface cherry-pick / revert success or git's conflict message. */
@@ -64,6 +68,7 @@ export function CommitDetail({
   const revert = useRepo((s) => s.revert);
   const stashApply = useRepo((s) => s.stashApply);
   const stashPop = useRepo((s) => s.stashPop);
+  const hasStaged = useRepo((s) => s.status.some((entry) => entry.staged));
   const diffMode = useSettings((s) => s.diffMode);
   const layout = toPierreLayout(diffMode);
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
@@ -379,6 +384,12 @@ export function CommitDetail({
               disabled: historyBusy,
               onSelect: () =>
                 onInteractiveRebase(commit.parents.length ? `${hash}^` : null, commit.short_hash),
+            },
+            {
+              label: hasStaged ? t('amendInto.action') : t('amendInto.actionNeedsStage'),
+              icon: 'rebase',
+              disabled: historyBusy || !hasStaged,
+              onSelect: () => onAmendInto(hash, commit.short_hash, commit.subject),
             },
             {
               label: 'Copy subject',
