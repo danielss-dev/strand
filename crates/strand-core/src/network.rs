@@ -867,18 +867,44 @@ pub(crate) fn prepare_git_command(
     }
     if quiet_auth {
         command.env("GCM_INTERACTIVE", "never");
-        command.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        // GIT_SSH_COMMAND outranks core.sshCommand and GIT_SSH, so only
+        // force BatchMode when the user hasn't chosen their own ssh. Theirs
+        // still gets null stdin and SSH_ASKPASS_REQUIRE=never.
+        if !user_ssh_command(cwd) {
+            command.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        }
         command.env("SSH_ASKPASS_REQUIRE", "never");
         command.env_remove("GIT_ASKPASS");
         command.env_remove("SSH_ASKPASS");
     }
+    command.args(crate::GIT_SAFE_CONFIG);
+    if quiet_auth {
+        // git runs a configured core.askPass before it checks
+        // GIT_TERMINAL_PROMPT; an empty value disables it.
+        command.args(["-c", "core.askPass="]);
+    }
     command
-        .args(crate::GIT_SAFE_CONFIG)
         .args(args)
         .stdin(if piped_stdin { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     command
+}
+
+/// The user picked an ssh command: `GIT_SSH_COMMAND` / `GIT_SSH` in the
+/// environment, or `core.sshCommand` in the repo's effective config.
+fn user_ssh_command(cwd: &Path) -> bool {
+    let set = |key: &str| std::env::var_os(key).is_some_and(|value| !value.is_empty());
+    if set("GIT_SSH_COMMAND") || set("GIT_SSH") {
+        return true;
+    }
+    crate::git_command()
+        .current_dir(cwd)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .args(["config", "--get", "core.sshCommand"])
+        .output()
+        .is_ok_and(|out| out.status.success() && !out.stdout.trim_ascii().is_empty())
 }
 
 pub(crate) fn run_git_input_transcript_env(
@@ -1791,6 +1817,25 @@ mod tests {
     }
 
     #[test]
+    fn background_fetch_keeps_the_users_core_ssh_command() {
+        let dir = std::env::temp_dir().join(format!("strand-ssh-cmd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            assert!(std::process::Command::new("git").current_dir(&dir).args(args).status().unwrap().success());
+        };
+        git(&["init", "-q"]);
+        git(&["config", "core.sshCommand", "ssh -i ~/.ssh/work"]);
+        let quiet = prepare_git_command(&dir, &background_fetch_args(false), &[], true, false);
+        assert!(
+            quiet.get_envs().all(|(key, _)| key != "GIT_SSH_COMMAND"),
+            "core.sshCommand must not be overridden"
+        );
+        assert!(quiet.get_envs().any(|(key, value)| key == "SSH_ASKPASS_REQUIRE" && value == Some("never".as_ref())));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn background_fetch_command_uses_hidden_git_and_cannot_prompt() {
         let quiet = prepare_git_command(Path::new("."), &background_fetch_args(false), &[], true, false);
         assert_eq!(quiet.get_program(), "git");
@@ -1809,9 +1854,13 @@ mod tests {
         assert_eq!(env("SSH_ASKPASS_REQUIRE"), Some(Some("never".into())));
         assert_eq!(env("GIT_ASKPASS"), Some(None));
         assert_eq!(env("SSH_ASKPASS"), Some(None));
+        let askpass = args.iter().position(|arg| arg == "core.askPass=").expect("core.askPass cleared");
+        assert_eq!(args[askpass - 1], "-c");
+        assert!(askpass < args.iter().position(|arg| arg == "fetch").unwrap());
 
         let manual = prepare_git_command(Path::new("."), &["fetch", "--prune", "--progress"], &[], false, false);
         assert!(manual.get_envs().all(|(key, _)| key != "GCM_INTERACTIVE"));
+        assert!(!manual.get_args().any(|arg| arg == "core.askPass="));
 
         let src = include_str!("network.rs");
         let start = src.find("pub(crate) fn prepare_git_command").expect("prepare_git_command");
