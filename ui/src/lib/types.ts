@@ -971,6 +971,19 @@ export interface CodeReviewSuggestion {
   findings: CodeReviewFinding[];
 }
 
+export type ConflictConfidence = 'low' | 'medium' | 'high';
+
+export interface ConflictHunkSuggestion {
+  text: string;
+  explanation: string;
+  confidence: ConflictConfidence;
+}
+
+/** Per-hunk AI resolution. Nothing is written until the user accepts it and resolves the file. */
+export interface ConflictResolutionSuggestion {
+  hunks: ConflictHunkSuggestion[];
+}
+
 export type AiSensitiveDecision =
   | { mode: 'scan' }
   | { mode: 'exclude'; fingerprint: string }
@@ -982,7 +995,7 @@ export interface AiGenerationRequest {
   styleInstruction: string | null;
 }
 
-export type AiInputScope = 'staged' | 'unstaged' | 'committed' | 'review';
+export type AiInputScope = 'staged' | 'unstaged' | 'committed' | 'review' | 'conflict';
 
 export interface AiInputCoverage {
   scope: AiInputScope;

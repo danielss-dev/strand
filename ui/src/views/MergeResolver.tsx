@@ -3,26 +3,38 @@ import { File as PierreFile } from '@pierre/diffs/react';
 
 import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
-import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
-import { pierreThemeOptions } from '../lib/pierreTheme';
-import { errMessage, tauri } from '../lib/tauri';
-import { useRepo } from '../stores/repo';
-import { useSettings } from '../stores/settings';
+import { aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
+import {
+  applyHunkAction,
+  suggestionMatchesHunks,
+  writableResolution,
+  type AiHunkSuggestion,
+} from '../lib/conflictAi';
 import {
   buildViews,
   conflictAtLine,
+  conflictHunks,
   parseConflicts,
   toLineRange,
   type Resolution,
 } from '../lib/conflictParse';
+import { t } from '../lib/i18n';
+import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { pierreThemeOptions } from '../lib/pierreTheme';
+import { AI_AUTH_REQUIRED, errMessage, gitErrorHint, isCancelled, tauri } from '../lib/tauri';
+import type { AiProvider, AiSensitiveDecision, AiSensitiveFile } from '../lib/types';
+import { useRepo } from '../stores/repo';
+import { useSettings } from '../stores/settings';
+import { ConflictSuggestionReview } from './ConflictSuggestionReview';
 
 /**
  * Full-screen three-way merge resolver (Sublime/Fork style): incoming
  * ("theirs") and current ("ours") on top, the assembled result below. The user
  * walks conflicts with the ‹ › nav (or clicks a side's highlighted block) and
- * accepts theirs / ours / both per conflict; the result is built from those
- * picks (pick-sides only — no free editing). Resolve writes the merged file and
- * stages it via `useRepo.resolveConflict`.
+ * accepts theirs / ours / both per conflict, or a reviewed AI replacement.
+ * Suggest asks the configured provider for one resolution per hunk and never
+ * writes it. Accept, edit, or reject each hunk, then Resolve writes the
+ * merged file and stages it via `useRepo.resolveConflict`.
  */
 export function MergeResolver({ path, onClose }: { path: string; onClose: () => void }) {
   const activePath = useRepo((s) => s.activePath);
@@ -30,6 +42,11 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
   const resolveConflict = useRepo((s) => s.resolveConflict);
   const resolvedTheme = useSettings((s) => s.resolvedTheme);
   const diffSyntaxTheme = useSettings((s) => s.diffSyntaxTheme);
+  const aiProvider = useSettings((s) => s.aiProvider);
+  const openaiModel = useSettings((s) => s.openaiModel);
+  const anthropicModel = useSettings((s) => s.anthropicModel);
+  const openaiCli = useSettings((s) => s.openaiCli);
+  const anthropicCli = useSettings((s) => s.anthropicCli);
   const pierreTheme = pierreThemeOptions(resolvedTheme, diffSyntaxTheme);
 
   const [raw, setRaw] = useState<string | null>(null);
@@ -37,6 +54,16 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
   const [resolutions, setResolutions] = useState<Map<number, Resolution>>(() => new Map());
   const [focused, setFocused] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<AiHunkSuggestion[] | null>(null);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [sensitivePrompt, setSensitivePrompt] = useState<{ fingerprint: string; files: AiSensitiveFile[] } | null>(null);
+  const [retryProvider, setRetryProvider] = useState<AiProvider | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState('');
+  const [rejected, setRejected] = useState<Set<number>>(() => new Set());
+  const requestRef = useRef<{ opId: string; path: string; provider: AiProvider; model: string; target: string } | null>(null);
+  const suggestingRef = useRef(false);
 
   // Load the raw conflicted file once per file/repo.
   useEffect(() => {
@@ -46,6 +73,11 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     setLoadError(null);
     setResolutions(new Map());
     setFocused(0);
+    setSuggestions(null);
+    setSuggestError(null);
+    setSensitivePrompt(null);
+    setEditing(false);
+    setRejected(new Set());
     tauri
       .repoReadConflictFile(activePath, path)
       .then((c) => { if (!cancelled) setRaw(c); })
@@ -132,10 +164,131 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     requestAnimationFrame(() => { syncing.current = false; });
   };
 
-  // Esc cancels; ‹ › / [ ] step conflicts when no text field is focused.
+  const cancelSuggestion = useCallback(() => {
+    const request = requestRef.current;
+    requestRef.current = null;
+    suggestingRef.current = false;
+    setSuggesting(false);
+    if (request) void tauri.repoCancelOp(request.opId);
+  }, []);
+
+  useEffect(() => cancelSuggestion, [activePath, path, aiProvider, openaiCli, anthropicCli, openaiModel, anthropicModel, cancelSuggestion]);
+
+  useEffect(() => {
+    useRepo.setState({ conflictResolverOpen: true });
+    return () => useRepo.setState({ conflictResolverOpen: false });
+  }, []);
+
+  const suggest = useCallback(async (
+    sensitiveDecision: AiSensitiveDecision = { mode: 'scan' },
+    provider: AiProvider = aiProvider,
+  ) => {
+    if (!activePath || !raw || suggestingRef.current) return;
+    const parsedNow = parseConflicts(raw);
+    const hunkCount = conflictHunks(parsedNow).length;
+    if (hunkCount === 0) return;
+    const opId = `conflict-ai-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const model = provider === 'openai' ? openaiModel : anthropicModel;
+    const request = { opId, path: activePath, provider, model, target: path };
+    requestRef.current = request;
+    suggestingRef.current = true;
+    setSuggesting(true);
+    setSuggestError(null);
+    setSensitivePrompt(null);
+    setRetryProvider(null);
+    setEditing(false);
+    try {
+      const outcome = await tauri.repoSuggestConflictResolution(
+        activePath,
+        path,
+        hunkCount,
+        provider,
+        model,
+        { opId, sensitiveDecision, styleInstruction: null },
+        openaiCli,
+        anthropicCli,
+      );
+      if (requestRef.current !== request || !aiRequestMatches(request, {
+        path: useRepo.getState().activePath ?? '',
+        provider,
+        target: path,
+      })) return;
+      if (outcome.status === 'needs_confirmation') {
+        setSensitivePrompt({ fingerprint: outcome.fingerprint, files: outcome.sensitiveFiles });
+        return;
+      }
+      if (outcome.provider !== provider) return;
+      const hunks = outcome.suggestion.hunks;
+      if (!suggestionMatchesHunks(parseConflicts(raw).total, hunks)) {
+        setSuggestError(t('merge.ai.mismatch'));
+        return;
+      }
+      setSuggestions(hunks);
+      setRejected(new Set());
+    } catch (e) {
+      if (requestRef.current !== request || isCancelled(e)) return;
+      const message = gitErrorHint(e);
+      if (message.startsWith(AI_AUTH_REQUIRED)) {
+        try {
+          await tauri.aiProviderLogin(provider, openaiCli, anthropicCli);
+          setSuggestError(t('merge.ai.signIn'));
+        } catch (loginErr) {
+          setSuggestError(t('merge.ai.signInFailed', { message: gitErrorHint(loginErr) }));
+        }
+        return;
+      }
+      setSuggestError(t('merge.ai.failed', { message }));
+      setRetryProvider(otherAiProvider(provider));
+    } finally {
+      if (requestRef.current === request) {
+        requestRef.current = null;
+        suggestingRef.current = false;
+        setSuggesting(false);
+      }
+    }
+  }, [activePath, aiProvider, anthropicCli, anthropicModel, openaiCli, openaiModel, path, raw]);
+
+  useEffect(() => {
+    const onRequest = () => { void suggest(); };
+    window.addEventListener('strand:suggest-conflict-resolution', onRequest);
+    return () => window.removeEventListener('strand:suggest-conflict-resolution', onRequest);
+  }, [suggest]);
+
+  useEffect(() => { setEditing(false); }, [focused]);
+
+  function applyAction(index: number, action: Parameters<typeof applyHunkAction>[2]) {
+    const applied = applyHunkAction(resolutions, index, action);
+    if (!applied.ok) {
+      setSuggestError(t('merge.ai.markers'));
+      return;
+    }
+    setResolutions(applied.resolutions);
+    setSuggestError(null);
+    if (action.type === 'reject') {
+      setRejected((prev) => new Set(prev).add(index));
+      setEditing(false);
+      return;
+    }
+    setRejected((prev) => {
+      if (!prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+    setEditing(false);
+    pick(index, applied.resolutions.get(index)!);
+  }
+
+  // Esc cancels a suggestion or edit first, then the dialog. ‹ › / [ ] step
+  // conflicts when no text field is focused.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) { onClose(); return; }
+      if (e.key === 'Escape' && !busy) {
+        if (suggesting) { cancelSuggestion(); return; }
+        if (editing) { setEditing(false); return; }
+        onClose();
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (eventInside(e, EDITABLE_SELECTOR)) return;
       if (e.key === '[' || e.key === 'ArrowLeft') step(-1);
@@ -143,13 +296,15 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [busy, onClose, step]);
+  }, [busy, cancelSuggestion, editing, onClose, step, suggesting]);
 
   async function save() {
-    if (!views || !allResolved || busy) return;
+    if (!parsed || busy) return;
+    const text = writableResolution(parsed, resolutions);
+    if (text == null) return;
     setBusy(true);
     try {
-      await resolveConflict(path, views.resultText);
+      await resolveConflict(path, text);
       onClose();
     } catch (e) {
       setLoadError(errMessage(e));
@@ -247,11 +402,51 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
                 {focusedRange?.resolved ? ' · resolved' : ''}
               </span>
               <div className="mm-actions-btns">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={suggesting || busy || total === 0}
+                  onClick={() => void suggest()}
+                >
+                  {suggesting ? t('merge.ai.suggesting') : t('merge.ai.suggest')}
+                </button>
+                {suggesting && (
+                  <button type="button" className="btn" onClick={cancelSuggestion}>{t('merge.ai.cancel')}</button>
+                )}
                 <button type="button" className="btn" onClick={() => pick(focused, 'theirs')}>Take theirs</button>
                 <button type="button" className="btn" onClick={() => pick(focused, 'both')}>Take both</button>
                 <button type="button" className="btn" onClick={() => pick(focused, 'ours')}>Take ours</button>
               </div>
             </div>
+
+            {suggestError && <p className="mm-ai-error" role="alert">{suggestError}{retryProvider && (
+              <> <button type="button" className="btn" onClick={() => void suggest({ mode: 'scan' }, retryProvider)}>{t('merge.ai.retry', { provider: retryProvider === 'openai' ? 'Codex' : 'Claude Code' })}</button></>
+            )}</p>}
+            {sensitivePrompt && (
+              <div className="mm-ai" role="alert">
+                <p className="mm-ai-explain">{t('merge.ai.sensitive')}</p>
+                <ul>{sensitivePrompt.files.map((file) => <li key={file.path}>{file.path}</li>)}</ul>
+                <div className="mm-ai-btns">
+                  <button type="button" className="btn primary" onClick={() => void suggest({ mode: 'exclude', fingerprint: sensitivePrompt.fingerprint })}>{t('merge.ai.exclude')}</button>
+                  <button type="button" className="btn" onClick={() => void suggest({ mode: 'include', fingerprint: sensitivePrompt.fingerprint })}>{t('merge.ai.include')}</button>
+                  <button type="button" className="btn" onClick={() => setSensitivePrompt(null)}>{t('common.cancel')}</button>
+                </div>
+              </div>
+            )}
+            {suggestions?.[focused] && (
+              <ConflictSuggestionReview
+                suggestion={suggestions[focused]}
+                editing={editing}
+                draft={editDraft}
+                rejected={rejected.has(focused)}
+                onAccept={() => applyAction(focused, { type: 'accept', text: suggestions[focused].text })}
+                onEdit={() => { setEditDraft(suggestions[focused].text); setEditing(true); }}
+                onReject={() => applyAction(focused, { type: 'reject' })}
+                onDraft={setEditDraft}
+                onUseEdit={() => applyAction(focused, { type: 'edit', text: editDraft })}
+                onCancelEdit={() => setEditing(false)}
+              />
+            )}
 
             <section className="mm-result">
               <header className="mm-pane-head result">

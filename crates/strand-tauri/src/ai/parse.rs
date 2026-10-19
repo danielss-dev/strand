@@ -1,4 +1,7 @@
-use super::{CodeReviewSuggestion, CommitMessageSuggestion, PullRequestSuggestion};
+use super::{
+    CodeReviewSuggestion, CommitMessageSuggestion, ConflictConfidence, ConflictHunkSuggestion,
+    ConflictResolutionSuggestion, PullRequestSuggestion,
+};
 
 const MAX_COMMIT_BODY_BYTES: usize = 65_536;
 const MAX_DIAGNOSTIC_BYTES: usize = 2_048;
@@ -79,6 +82,112 @@ pub fn parse_code_review_suggestion(raw: &str) -> Result<CodeReviewSuggestion, S
         .ok_or_else(|| {
             "Could not parse AI review. Expected JSON with a findings array.".to_string()
         })
+}
+
+/// Extract per-hunk resolutions. Failures do not echo model output: a conflict
+/// hunk may contain source or secrets. A count mismatch is rejected here so
+/// the caller never writes the file.
+pub fn parse_conflict_resolution(
+    raw: &str,
+    expected_hunks: usize,
+) -> Result<ConflictResolutionSuggestion, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("AI returned an empty response. Nothing was written.".into());
+    }
+    let parsed = serde_json::from_str::<RawConflictResolution>(trimmed)
+        .ok()
+        .or_else(|| {
+            extract_json_object(trimmed)
+                .and_then(|json| serde_json::from_str::<RawConflictResolution>(&json).ok())
+        })
+        .or_else(|| {
+            extract_fenced_json(trimmed)
+                .and_then(|json| serde_json::from_str::<RawConflictResolution>(&json).ok())
+        })
+        .ok_or_else(|| {
+            "Could not parse AI conflict resolution. Expected JSON with a hunks array. Nothing was written."
+                .to_string()
+        })?;
+    normalize_conflict_resolution(parsed, expected_hunks)
+}
+
+#[derive(serde::Deserialize)]
+struct RawConflictResolution {
+    hunks: Vec<RawConflictHunk>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawConflictHunk {
+    text: String,
+    #[serde(default)]
+    explanation: String,
+    confidence: Option<serde_json::Value>,
+}
+
+fn normalize_conflict_resolution(
+    raw: RawConflictResolution,
+    expected_hunks: usize,
+) -> Result<ConflictResolutionSuggestion, String> {
+    if raw.hunks.len() != expected_hunks {
+        return Err(format!(
+            "AI returned {} conflict hunks but this file has {expected_hunks}. Nothing was written.",
+            raw.hunks.len()
+        ));
+    }
+    let mut hunks = Vec::with_capacity(raw.hunks.len());
+    for hunk in raw.hunks {
+        if hunk.text.len() > 65_536 {
+            return Err("AI returned a conflict resolution that is too large. Nothing was written.".into());
+        }
+        if super::markers::contains_conflict_marker(&hunk.text) {
+            return Err(
+                "AI returned conflict markers inside a resolution. Nothing was written.".into(),
+            );
+        }
+        let explanation = hunk.explanation.trim();
+        if explanation.is_empty() {
+            return Err(
+                "AI returned a conflict hunk without an explanation. Nothing was written.".into(),
+            );
+        }
+        let mut explanation = explanation.to_string();
+        truncate_utf8_bytes(&mut explanation, 2_000);
+        let confidence = parse_confidence(hunk.confidence.as_ref()).ok_or_else(|| {
+            "AI returned a conflict hunk with an invalid confidence. Nothing was written.".to_string()
+        })?;
+        hunks.push(ConflictHunkSuggestion {
+            text: hunk.text,
+            explanation,
+            confidence,
+        });
+    }
+    Ok(ConflictResolutionSuggestion { hunks })
+}
+
+fn parse_confidence(value: Option<&serde_json::Value>) -> Option<ConflictConfidence> {
+    match value? {
+        serde_json::Value::String(text) => match text.trim().to_ascii_lowercase().as_str() {
+            "low" => Some(ConflictConfidence::Low),
+            "medium" => Some(ConflictConfidence::Medium),
+            "high" => Some(ConflictConfidence::High),
+            _ => None,
+        },
+        serde_json::Value::Number(number) => {
+            let score = number.as_f64()?;
+            if !(0.0..=1.0).contains(&score) {
+                return None;
+            }
+            Some(if score >= 0.75 {
+                ConflictConfidence::High
+            } else if score >= 0.4 {
+                ConflictConfidence::Medium
+            } else {
+                ConflictConfidence::Low
+            })
+        }
+        _ => None,
+    }
 }
 
 fn normalize(mut s: CommitMessageSuggestion) -> Result<CommitMessageSuggestion, String> {
@@ -265,6 +374,31 @@ mod tests {
         let review = parse_code_review_suggestion(raw).unwrap();
         assert_eq!(review.findings.len(), 1);
         assert_eq!(review.findings[0].path, "src/lib.rs");
+    }
+
+    #[test]
+    fn conflict_resolution_accepts_exactly_n_hunks() {
+        let raw = r#"{"hunks":[
+            {"text":"    format!(\"hello {name}\")","explanation":"Keep the current greeting.","confidence":"high"},
+            {"text":"fn renamed_helper() {}","explanation":"Take the incoming name.","confidence":0.5}
+        ]}"#;
+        let suggestion = parse_conflict_resolution(raw, 2).unwrap();
+        assert_eq!(suggestion.hunks.len(), 2);
+        assert_eq!(suggestion.hunks[0].confidence, ConflictConfidence::High);
+        assert_eq!(suggestion.hunks[1].confidence, ConflictConfidence::Medium);
+        assert!(parse_conflict_resolution(raw, 1).unwrap_err().contains("this file has 1"));
+        assert!(parse_conflict_resolution(raw, 1).unwrap_err().contains("Nothing was written"));
+    }
+
+    #[test]
+    fn conflict_resolution_rejects_malformed_output_without_echoing_it() {
+        let raw = "SECRET_CONFLICT_BODY is not json";
+        let err = parse_conflict_resolution(raw, 2).unwrap_err();
+        assert!(err.contains("Could not parse AI conflict resolution"));
+        assert!(err.contains("Nothing was written"));
+        assert!(!err.contains("SECRET_CONFLICT_BODY"));
+        let marked = r#"{"hunks":[{"text":"<<<<<<< HEAD\nours","explanation":"bad","confidence":"low"}]}"#;
+        assert!(parse_conflict_resolution(marked, 1).unwrap_err().contains("conflict markers"));
     }
 
     #[test]

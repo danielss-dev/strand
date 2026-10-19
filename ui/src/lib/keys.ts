@@ -47,7 +47,8 @@ export type CommandId =
   | 'open-editor'
   | 'open-terminal'
   | 'refresh'
-  | 'suggest-commit';
+  | 'suggest-commit'
+  | 'suggest-conflict';
 
 export type CommandCategory = 'General' | 'Navigation' | 'Git' | 'Repository' | 'Appearance';
 
@@ -102,6 +103,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'push',   label: 'Push',                         category: 'Git', defaultBinding: 'Mod+P',       menu: true, needsRepo: true },
   { id: 'sync',   label: 'Sync (fetch + pull + push)',   category: 'Git', defaultBinding: 'Mod+Shift+S', menu: true, needsRepo: true },
   { id: 'suggest-commit', label: 'Suggest commit message', category: 'Git', defaultBinding: 'Mod+Shift+M', needsRepo: true },
+  { id: 'suggest-conflict', label: t('merge.ai.command'), category: 'Git', defaultBinding: 'Mod+Shift+J', needsRepo: true },
 
   { id: 'open-editor',   label: 'Open in editor',        category: 'Repository', defaultBinding: 'Mod+Shift+E', needsRepo: true },
   { id: 'open-terminal', label: 'Open in terminal',      category: 'Repository', defaultBinding: 'Mod+Shift+C', needsRepo: true },

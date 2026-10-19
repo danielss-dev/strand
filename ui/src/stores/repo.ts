@@ -648,6 +648,8 @@ export interface RepoState {
   suggestCommitSignal: boolean;
   requestSuggestCommitMessage(): void;
   clearSuggestCommitMessage(): void;
+  /** True while the merge resolver modal is mounted. */
+  conflictResolverOpen: boolean;
   /** One-shot: open the stash dialog (e.g. from Local Changes context menu). */
   stashDialogRequest: { snapshot: boolean; keepIndex: boolean } | null;
   requestStashDialog(opts?: { snapshot?: boolean; keepIndex?: boolean }): void;
@@ -959,6 +961,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   commitSearchMode: null,
   diffSearchSignal: false,
   suggestCommitSignal: false,
+  conflictResolverOpen: false,
   stashDialogRequest: null as { snapshot: boolean; keepIndex: boolean } | null,
   selectSinceBaseline: false,
   diffsTick: 0,

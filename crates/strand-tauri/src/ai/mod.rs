@@ -7,6 +7,7 @@ pub(crate) mod bin;
 mod claude;
 mod codex;
 mod input;
+mod markers;
 mod parse;
 mod prompt;
 
@@ -220,6 +221,29 @@ pub struct CodeReviewSuggestion {
     pub findings: Vec<CodeReviewFinding>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictConfidence {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConflictHunkSuggestion {
+    pub text: String,
+    pub explanation: String,
+    pub confidence: ConflictConfidence,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConflictResolutionSuggestion {
+    pub hunks: Vec<ConflictHunkSuggestion>,
+}
+
+const MAX_CONFLICT_HUNKS: usize = 64;
+const MAX_CONFLICT_FILE_BYTES: usize = 1_048_576;
+
 pub fn provider_status(provider: AiProvider, cli_override: Option<&str>) -> AiProviderStatus {
     adapter(provider).status(cli_override)
 }
@@ -391,6 +415,114 @@ pub fn review_changes_with_request(
         coverage,
         provider,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn suggest_conflict_resolution_with_request(
+    provider: AiProvider,
+    repo_path: &std::path::Path,
+    file: &str,
+    expected_hunks: usize,
+    model: Option<&str>,
+    cli_override: Option<&str>,
+    cancel: Option<&bin::AiCancelHandle>,
+    decision: &AiSensitiveDecision,
+) -> Result<AiGenerationOutcome<ConflictResolutionSuggestion>, String> {
+    if cancel.is_some_and(bin::AiCancelHandle::is_cancelled) {
+        return Err("cancelled".into());
+    }
+    let path = repo_path
+        .to_str()
+        .ok_or_else(|| "Repository path is not valid Unicode.".to_string())?;
+    let repo = strand_core::Repo::discover(path).map_err(|err| err.to_string())?;
+    let raw = repo.read_conflict_file(file).map_err(|err| err.to_string())?;
+    if raw.len() > MAX_CONFLICT_FILE_BYTES {
+        return Err("This conflicted file is too large for an AI suggestion. Resolve it manually. Nothing was written.".into());
+    }
+    if is_lfs_conflict(&raw) {
+        return Err("AI conflict resolution does not support Git LFS conflicts. Nothing was written.".into());
+    }
+    let parsed = markers::parse_conflict_text(&raw);
+    if parsed.hunks.len() != expected_hunks {
+        return Err(format!(
+            "Conflict hunk count changed (file has {}, the resolver expected {expected_hunks}). Reload the file. Nothing was written.",
+            parsed.hunks.len()
+        ));
+    }
+    if parsed.hunks.is_empty() {
+        return Err("No conflict markers found. Nothing was written.".into());
+    }
+    if parsed.hunks.len() > MAX_CONFLICT_HUNKS {
+        return Err(format!(
+            "This file has {} conflict hunks. Resolve some manually before asking AI (limit {MAX_CONFLICT_HUNKS}). Nothing was written.",
+            parsed.hunks.len()
+        ));
+    }
+
+    let diff = conflict_input_diff(file, &raw);
+    let subjects = repo.conflict_side_subjects();
+    let prepared = match input::prepare_input(
+        std::slice::from_ref(&diff),
+        AiInputScope::Conflict,
+        decision,
+    )? {
+        input::InputPreparation::NeedsConfirmation {
+            fingerprint,
+            mut coverage,
+            sensitive_files,
+        } => {
+            let built = prompt::build_conflict_prompt(
+                &parsed.hunks,
+                subjects.ours.as_deref(),
+                subjects.theirs.as_deref(),
+            );
+            apply_prompt_coverage(&mut coverage, &built);
+            return Ok(AiGenerationOutcome::NeedsConfirmation {
+                fingerprint,
+                coverage,
+                sensitive_files,
+            });
+        }
+        input::InputPreparation::Ready(prepared) => prepared,
+    };
+    let mut coverage = prepared.coverage;
+    let built = prompt::build_conflict_prompt(
+        &parsed.hunks,
+        subjects.ours.as_deref(),
+        subjects.theirs.as_deref(),
+    );
+    apply_prompt_coverage(&mut coverage, &built);
+    if cancel.is_some_and(bin::AiCancelHandle::is_cancelled) {
+        return Err("cancelled".into());
+    }
+    let text = format!(
+        "{}\n\nRemember: reply with JSON only and include exactly {expected_hunks} hunks. Do not write a file.",
+        built.text
+    );
+    let raw_output = adapter(provider).suggest(repo.path(), &text, model, cli_override, cancel)?;
+    let suggestion = parse::parse_conflict_resolution(&raw_output, expected_hunks)?;
+    Ok(AiGenerationOutcome::Generated {
+        suggestion,
+        coverage,
+        provider,
+    })
+}
+
+fn is_lfs_conflict(text: &str) -> bool {
+    text.contains("https://git-lfs.github.com/spec/v1")
+}
+
+fn conflict_input_diff(path: &str, raw: &str) -> FileDiff {
+    FileDiff {
+        path: path.to_string(),
+        old_path: None,
+        status: strand_core::diff::DiffStatus::Modified,
+        adds: 0,
+        dels: 0,
+        binary: false,
+        patch: raw.to_string(),
+        note: None,
+    }
 }
 
 fn normalize_review_findings(suggestion: &mut CodeReviewSuggestion, diffs: &[FileDiff]) {
@@ -674,5 +806,170 @@ mod tests {
         assert_eq!(suggestion.findings[0].title, "Race");
         assert_eq!(suggestion.findings[0].body, "Unsynchronized write.");
         assert_eq!(suggestion.findings[1].line, None);
+    }
+
+    const CONFLICT: &str = "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\n";
+
+    fn init_repo(dir: &std::path::Path) {
+        let git = bin::resolve_cli("git", None).expect("git on PATH");
+        bin::run_capture(
+            &git,
+            &["init", "-q", "-b", "main"],
+            Some(dir),
+            None,
+            bin::STATUS_TIMEOUT,
+        )
+        .expect("git init");
+    }
+
+    fn conflict_file(dir: &std::path::Path, name: &str, contents: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn cancelled_conflict_suggestion_does_not_write_or_start_a_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        let file = conflict_file(dir.path(), "f.txt", CONFLICT);
+        let cancel = bin::AiCancelHandle::new();
+        cancel.cancel();
+        let err = suggest_conflict_resolution_with_request(
+            AiProvider::Openai,
+            dir.path(),
+            "f.txt",
+            1,
+            None,
+            None,
+            Some(&cancel),
+            &AiSensitiveDecision::Scan,
+        )
+        .unwrap_err();
+        assert_eq!(err, "cancelled");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), CONFLICT);
+    }
+
+    fn assert_generation_cancel_leaves_file(program: &str, args: &[&str]) {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f.txt");
+        std::fs::write(&file, CONFLICT).unwrap();
+        let cancel = bin::AiCancelHandle::new();
+        let worker_cancel = cancel.clone();
+        let cwd = dir.path().to_path_buf();
+        let program = program.to_string();
+        let args = args.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
+        let worker = std::thread::spawn(move || {
+            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            bin::run_capture_cancellable(
+                std::path::Path::new(&program),
+                &arg_refs,
+                Some(&cwd),
+                None,
+                bin::SUGGEST_TIMEOUT,
+                Some(&worker_cancel),
+            )
+        });
+        let ready = dir.path().join("ready");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ready.exists() && !worker.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let started = std::time::Instant::now();
+        cancel.cancel();
+        let err = worker.join().unwrap().unwrap_err();
+        assert!(ready.exists(), "child did not reach its cancellation checkpoint: {err}");
+        assert_eq!(err, "cancelled");
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+        assert_eq!(std::fs::read_to_string(file).unwrap(), CONFLICT);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancel_mid_generation_kills_the_child_and_leaves_the_conflict_file() {
+        assert_generation_cancel_leaves_file("/bin/sh", &["-c", "sleep 30 & printf ready > ready; wait"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cancel_mid_generation_kills_the_child_and_leaves_the_conflict_file() {
+        assert_generation_cancel_leaves_file("cmd.exe", &["/C", "echo ready>ready & ping -n 30 127.0.0.1"]);
+    }
+
+    #[test]
+    fn mismatched_hunk_count_and_lfs_conflicts_do_not_write() {
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        let file = conflict_file(dir.path(), "f.txt", CONFLICT);
+        let err = suggest_conflict_resolution_with_request(
+            AiProvider::Openai,
+            dir.path(),
+            "f.txt",
+            4,
+            None,
+            None,
+            None,
+            &AiSensitiveDecision::Scan,
+        )
+        .unwrap_err();
+        assert!(err.contains("expected 4"), "{err}");
+        assert!(err.contains("Nothing was written"), "{err}");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), CONFLICT);
+
+        let lfs = "<<<<<<< HEAD\nversion https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 1\n=======\nversion https://git-lfs.github.com/spec/v1\noid sha256:def\nsize 2\n>>>>>>> feature\n";
+        conflict_file(dir.path(), "f.txt", lfs);
+        let err = suggest_conflict_resolution_with_request(
+            AiProvider::Anthropic,
+            dir.path(),
+            "f.txt",
+            1,
+            None,
+            None,
+            None,
+            &AiSensitiveDecision::Scan,
+        )
+        .unwrap_err();
+        assert!(err.contains("Git LFS"), "{err}");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), lfs);
+    }
+
+    #[test]
+    fn sensitive_conflict_asks_before_calling_a_provider_and_does_not_write() {
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        let contents = "<<<<<<< HEAD\nAPI_KEY=super-secret-value-123456\n=======\nsafe\n>>>>>>> feature\n";
+        let file = conflict_file(dir.path(), ".env", contents);
+        let outcome = suggest_conflict_resolution_with_request(
+            AiProvider::Openai,
+            dir.path(),
+            ".env",
+            1,
+            None,
+            None,
+            None,
+            &AiSensitiveDecision::Scan,
+        )
+        .unwrap();
+        let AiGenerationOutcome::NeedsConfirmation { fingerprint, .. } = outcome else {
+            panic!("expected a sensitive-file confirmation before any provider call");
+        };
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), contents);
+
+        let err = suggest_conflict_resolution_with_request(
+            AiProvider::Openai,
+            dir.path(),
+            ".env",
+            1,
+            None,
+            None,
+            None,
+            &AiSensitiveDecision::Exclude { fingerprint },
+        )
+        .unwrap_err();
+        assert!(err.contains("No non-sensitive changes remain"), "{err}");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), contents);
     }
 }

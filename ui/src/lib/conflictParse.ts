@@ -6,10 +6,14 @@
  * picks. Pure + UI-agnostic so it's easy to reason about and test.
  *
  * In git's markers the first block (`<<<<<<< HEAD`) is *ours* (current/HEAD)
- * and the block after `=======` is *theirs* (incoming).
+ * and the block after `=======` is *theirs* (incoming). A diff3 `|||||||`
+ * section, when present, is kept on {@link ParsedConflict.bases} and is not
+ * part of either side. A custom resolution is reviewed replacement text
+ * (an accepted or edited AI suggestion); it is assembled like a side pick
+ * and is still written only by the existing resolve action.
  */
 
-export type Resolution = 'ours' | 'theirs' | 'both';
+export type Resolution = 'ours' | 'theirs' | 'both' | { kind: 'custom'; text: string };
 
 type Seg =
   | { kind: 'common'; lines: string[] }
@@ -17,12 +21,25 @@ type Seg =
 
 export interface ParsedConflict {
   segs: Seg[];
+  /**
+   * One entry per conflict segment, in order. `null` when that hunk has no
+   * diff3 `|||||||` section (the default 2-way marker style). An empty array
+   * means the section was present but had no lines.
+   */
+  bases: (string[] | null)[];
   /** Label after `<<<<<<<` (usually `HEAD`). */
   oursLabel: string;
   /** Label after `>>>>>>>` (the merged-in branch). */
   theirsLabel: string;
   /** Number of conflict regions. */
   total: number;
+}
+
+/** One conflict hunk as prompt text. `base` is null when diff3 text is absent. */
+export interface ConflictHunkText {
+  ours: string;
+  theirs: string;
+  base: string | null;
 }
 
 /** 0-based half-open `[start, end)` line span within a built view. */
@@ -53,6 +70,7 @@ export function parseConflicts(text: string): ParsedConflict {
   const lines = text.split('\n');
   const segs: Seg[] = [];
   let common: string[] = [];
+  const bases: (string[] | null)[] = [];
   let oursLabel = 'HEAD';
   let theirsLabel = 'incoming';
   let total = 0;
@@ -81,10 +99,15 @@ export function parseConflicts(text: string): ParsedConflict {
       ours.push(lines[i]);
       i++;
     }
-    // Skip an optional diff3 base section (`||||||| … =======`).
+    // Keep an optional diff3 base section (`||||||| … =======`) off both sides.
+    let base: string[] | null = null;
     if (i < lines.length && isBase(lines[i])) {
+      base = [];
       i++;
-      while (i < lines.length && !isSep(lines[i]) && !isEnd(lines[i])) i++;
+      while (i < lines.length && !isSep(lines[i]) && !isEnd(lines[i])) {
+        base.push(lines[i]);
+        i++;
+      }
     }
     if (i < lines.length && isSep(lines[i])) i++;
 
@@ -98,11 +121,36 @@ export function parseConflicts(text: string): ParsedConflict {
       i++;
     }
     segs.push({ kind: 'conflict', ours, theirs });
+    bases.push(base);
     total++;
   }
   flushCommon();
 
-  return { segs, oursLabel, theirsLabel, total };
+  return { segs, bases, oursLabel, theirsLabel, total };
+}
+
+/** Hunk texts in resolver order. `base` is null when that hunk is 2-way. */
+export function conflictHunks(parsed: ParsedConflict): ConflictHunkText[] {
+  const hunks: ConflictHunkText[] = [];
+  let index = 0;
+  for (const seg of parsed.segs) {
+    if (seg.kind !== 'conflict') continue;
+    const base = parsed.bases[index] ?? null;
+    hunks.push({
+      ours: seg.ours.join('\n'),
+      theirs: seg.theirs.join('\n'),
+      base: base === null ? null : base.join('\n'),
+    });
+    index++;
+  }
+  return hunks;
+}
+
+function customLines(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, '\n');
+  if (normalized === '') return [];
+  const trimmed = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
+  return trimmed.split('\n');
 }
 
 /**
@@ -138,7 +186,10 @@ export function buildViews(
     if (res === 'ours') result.push(...seg.ours);
     else if (res === 'theirs') result.push(...seg.theirs);
     else if (res === 'both') result.push(...seg.ours, ...seg.theirs);
-    else result.push('··· unresolved merge conflict — choose theirs, ours, or both ···');
+    else if (res) {
+      const custom: { kind: 'custom'; text: string } = res;
+      result.push(...customLines(custom.text));
+    } else result.push('··· unresolved merge conflict — choose theirs, ours, or both ···');
 
     ranges.push({
       index: ci,

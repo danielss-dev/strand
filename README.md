@@ -316,7 +316,9 @@ the resolved app appearance automatically.
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
   merge, and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
-  pause/conflict Continue / Abort.
+  pause/conflict Continue / Abort. The merge editor can suggest a per-hunk AI
+  resolution (explanation and confidence); it is written only after you accept
+  or edit each hunk and click Resolve.
 - **Patch interchange** — preview affected paths and validate patch imports
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,
