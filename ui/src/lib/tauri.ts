@@ -85,7 +85,10 @@ import type {
   PullRequestSuggestion,
   PushMode,
   RebaseEntry,
+  RebaseOutcome,
+  RebaseRefPreview,
   RebaseStep,
+  RebaseUpdateRefsSetting,
   Refs,
   ReflogEntry,
   RepoMeta,
@@ -729,7 +732,14 @@ export const tauri = {
     invoke<boolean>('repo_revert', { path, commits, mainline: mainline ?? null }),
   repoMerge: (path: string, refname: string, mode: MergeMode) =>
     invoke<boolean>('repo_merge', { path, refname, mode }),
-  repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),
+  repoRebase: (path: string, onto: string, updateRefs: boolean) =>
+    invoke<RebaseOutcome>('repo_rebase', { path, onto, updateRefs }),
+  repoRebaseUpdateRefs: (path: string) =>
+    invoke<RebaseUpdateRefsSetting>('repo_rebase_update_refs', { path }),
+  repoSetRebaseUpdateRefs: (path: string, enabled: boolean) =>
+    invoke<void>('repo_set_rebase_update_refs', { path, enabled }),
+  repoRebaseRefPreview: (path: string, onto: string) =>
+    invoke<RebaseRefPreview[]>('repo_rebase_ref_preview', { path, onto }),
   // Hard resets of a dirty tree stash a safety snapshot first; the outcome's
   // `snapshot_oid` reports it so the UI can point at the stash stack.
   repoReset: (path: string, target: string, mode: ResetMode) =>
@@ -747,7 +757,8 @@ export const tauri = {
     base: string | null,
     steps: RebaseStep[],
     preserveMerges: boolean,
-  ) => invoke<boolean>('repo_interactive_rebase', { path, base, steps, preserveMerges }),
+    updateRefs: boolean,
+  ) => invoke<RebaseOutcome>('repo_interactive_rebase', { path, base, steps, preserveMerges, updateRefs }),
   repoReadConflictFile: (path: string, file: string) =>
     invoke<string>('repo_read_conflict_file', { path, file }),
   repoResolveConflict: (path: string, file: string, contents: string) =>

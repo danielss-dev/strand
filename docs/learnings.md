@@ -3139,3 +3139,30 @@ manifest views are snapshots. Pretending a static markdown surface can follow
 an agent worktree would either lie about the API or pollute the privileged
 webview with third-party JS.
 
+## Rebase `--update-refs` cannot trust git's todo on the flat path (2026-10-19)
+
+**Rule.** The flat interactive sequence editor is `cat "$STRAND_REBASE_PLAN" >`,
+which replaces git's todo. Git's `update-ref refs/heads/<name>` lines do not
+survive that overwrite, so `Repo::interactive_rebase` must emit them itself
+when `--update-refs` is on. Place each line after the last kept commit that
+branch's tip contained, and after that step's reword `exec` amend and any
+following squash/fixup chain. A dropped tip falls back to the previous kept
+ancestor in the original range, or to the rebase base when nothing it
+contained survives. The anchor is picked by original order, so a reorder
+can put commits the branch never had below its tip (or one of its own
+above it); the editor preview must show that. Do not also emit lines on the preserve-merges path: that awk
+prints unknown lines (including abbreviated `u`) unchanged, and a second
+copy would move the branch twice. Pass `--update-refs` or `--no-update-refs`
+explicitly on Git 2.38+ so this call wins over any `rebase.updateRefs` in the
+user's config. Remember the toggle in Strand's own `strand.rebaseUpdateRefs`,
+never in `rebase.updateRefs`: git's key also changes `git pull --rebase` and
+terminal rebases. On older Git pass neither flag, and refuse before the
+rebase starts if the caller asked for the feature. The UI disables the
+toggle with a tooltip instead.
+
+**Why.** An `update-ref` recorded before a reword amend keeps the
+pre-amend commit. One recorded before a squash keeps the pre-squash snapshot.
+Git applies the placeholder at the end of the rebase, so a conflict pause
+and an abort leave every ref where it was; tips move only when the rebase
+finishes. Branches checked out in another worktree are shown and skipped.
+

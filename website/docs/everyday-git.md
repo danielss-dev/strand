@@ -270,7 +270,7 @@ objects.
   oldest-to-newest order. Exactly two selected commits can also be compared in
   a changed-file and full-diff dialog.
 - **Merge** ("Merge into <current>" on a branch) opens a dialog with three modes: fast-forward when possible, always create a merge commit (no-FF), or squash — a squash merge leaves the result staged so you write the commit yourself.
-- A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu, behind a confirm step.
+- A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu. It opens a dialog that names the branch being replayed and lets you turn on **Update other branches (--update-refs)**. That choice is remembered for this repository once you start the rebase. It is Strand's own setting, so `git pull --rebase` and rebases you run in a terminal are unaffected. When it is on, the dialog lists other local branches whose tips sit in the range and will move with it, and names any that will not because they are checked out in another worktree. The result toast lists the branches that actually moved. The option needs Git 2.38 or newer; on an older Git it stays off, with an explanation, and the rebase still runs.
 
 Open **Compare branches…** from the command palette (⌘K / Ctrl+K) or the
 **Branches → Branch actions** menu to compare any two local or remote branches.
@@ -315,6 +315,16 @@ When the range contains a merge, **Preserve merge commits** is enabled by
 default. Strand keeps Git's branch topology and disables reorder,
 squash/fixup, and dropping a merge commit while that mode is active. Turn it
 off explicitly if you intend to flatten the range into linear history.
+
+**Update other branches (--update-refs)** is the same per-repository choice
+as in a plain rebase, and it needs Git 2.38 or newer. With it on, the plan
+shows an `update-ref` line under the commit each other local branch will
+follow. Dropping, squashing, or reordering a commit moves that branch to the
+last of its commits the plan still keeps (a squash lands on the combined
+commit; dropping every commit it contained parks it on the rebase base). A
+branch checked out in another worktree is listed and left where it is. The
+completion toast names every branch that moved. Abort leaves them all
+untouched; a conflict does too, until Continue finishes the rebase.
 
 Interactive rebase shells out to your system git, so hooks and commit signing apply to rewritten commits.
 

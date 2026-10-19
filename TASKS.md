@@ -384,8 +384,10 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Merge (ff / no-ff / squash) (`Repo::merge(refname, MergeMode)` — `git merge`
   `[--no-ff|--squash] --no-edit`; sidebar branch menu "Merge into <current>" →
   `MergeDialog` with the three strategies. Squash leaves the result staged.)
-- ☑ Rebase (onto branch, onto commit) (`Repo::rebase(onto)` — `git rebase <onto>`,
-  any revspec; sidebar branch menu "Rebase <current> onto this", confirm step.)
+- ☑ Rebase (onto branch, onto commit) (`Repo::rebase(onto, update_refs)` —
+  `git rebase [--update-refs|--no-update-refs] <onto>`, any revspec; sidebar
+  branch menu "Rebase <current> onto this" opens `RebaseOntoDialog`. The
+  choice is remembered as local `strand.rebaseUpdateRefs` when a rebase starts.)
 - ☑ Abort in-progress op (`Repo::abort_operation` — detects rebase / cherry-pick
   / revert / merge from `.git/` markers and runs the matching `--abort`; surfaced
   by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)
@@ -394,7 +396,7 @@ community plugins, performance and platform certification from Git feature gaps.
   paused rebase only advances this way, not via a commit. Surfaced by the
   `OpBanner` "Continue" button, gated until conflicts clear.)
 - ☑ Interactive rebase (custom sequence-editor; shells out) — `Repo::rebase_todo`
-  lists `base..HEAD`; `Repo::interactive_rebase(base, steps)` drives `git rebase
+  lists `base..HEAD`; `Repo::interactive_rebase(base, steps, preserve_merges, update_refs)` drives `git rebase
   -i` with **no editor**: the todo is fed via `GIT_SEQUENCE_EDITOR=cat
   "$STRAND_REBASE_PLAN" >`, `GIT_EDITOR=true` keeps squash on git's default
   combined message, and `reword` is `pick` + `exec git commit --amend -F <msg>`
@@ -418,6 +420,15 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Interactive rebase: preserve merges (`--rebase-merges`) — enabled by
   default for merge ranges; Strand's sequence editor retains Git's generated
   label/reset/merge topology while applying pick/reword/edit/drop actions
+- ☑ Rebase `--update-refs` (DAN-88 first slice) — flat todos emit
+  `update-ref refs/heads/<name>` from `plan_update_refs` because
+  `GIT_SEQUENCE_EDITOR=cat` overwrites git's lines; preserve-merges awk
+  passes git's lines through. `UpdateRefsToggle` in `RebaseEditor` and
+  `RebaseOntoDialog` (disabled with a tooltip before Git 2.38). Result
+  toasts use `withMovedBranches`. Refs move only when the rebase finishes.
+- ☐ Stacked branches after `--update-refs` (DAN-88 later slices): record a
+  parent branch, group them in the sidebar, show restack-needed, and create
+  a PR for the stack. Not part of the first slice.
 - ☑ Cherry-pick / revert a merge commit (validated `-m` support in
   `Repo::{cherry_pick,revert}` + keyboard-operable `MainlineDialog`)
 - ☑ Submodule init / update / sync (`Repo::submodule_update` — `git submodule
