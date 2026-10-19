@@ -619,6 +619,18 @@ export const handlers: Record<string, Handler> = {
     };
     return generated('committed', commits.length, suggestion, a);
   },
+  repo_suggest_conflict_resolution: async (a) => {
+    await sleep(400);
+    const count = Math.max(1, Number(a.expectedHunks) || 1);
+    return generated('conflict', 1, {
+      hunks: Array.from({ length: count }, (_, index) => ({
+        text: `resolved hunk ${index}`,
+        explanation: 'Demo suggestion only — accept, edit, or reject it before resolving.',
+        confidence: 'medium' as const,
+        truncated: false,
+      })),
+    }, a);
+  },
   repo_review_changes: async (a) => {
     const wt = wtOf(a);
     await sleep(1400);

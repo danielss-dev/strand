@@ -39,6 +39,29 @@ impl Repo {
         Ok(())
     }
 
+    /// Commit subjects for the two sides of an in-progress merge, rebase,
+    /// cherry-pick, or revert. Missing subjects are `None` — callers say so
+    /// in the prompt instead of failing. Reads git data through libgit2 and
+    /// the operation's message file; it does not spawn a process.
+    pub fn conflict_side_subjects(&self) -> ConflictSideSubjects {
+        let Ok(git) = self.git2() else {
+            return ConflictSideSubjects { ours: None, theirs: None };
+        };
+        let git_dir = git.path();
+        let rebase = git_dir.join("rebase-merge").is_dir() || git_dir.join("rebase-apply").is_dir();
+        let theirs = if rebase {
+            rebase_subject(git).or_else(|| {
+                first_commit_subject(git, &["REBASE_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD"])
+            })
+        } else {
+            first_commit_subject(git, &["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"])
+        };
+        ConflictSideSubjects {
+            ours: commit_subject(git, "HEAD"),
+            theirs,
+        }
+    }
+
     /// Launch the user's configured external merge tool on `rel_path`
     /// (`git mergetool --no-prompt -- <file>`) and block until it exits.
     /// The escape hatch for conflicts the pick-sides resolver can't express;
@@ -113,6 +136,48 @@ impl Repo {
     }
 }
 
+/// Subjects of the commits involved in the conflict. Either side may be
+/// absent (unborn HEAD, or no incoming ref).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictSideSubjects {
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+}
+
+fn commit_subject(repo: &git2::Repository, spec: &str) -> Option<String> {
+    let summary = repo.revparse_single(spec).ok()?.peel_to_commit().ok()?.summary()?.to_string();
+    bounded_subject(&summary)
+}
+
+fn first_commit_subject(repo: &git2::Repository, specs: &[&str]) -> Option<String> {
+    specs.iter().find_map(|spec| commit_subject(repo, spec))
+}
+
+fn rebase_subject(repo: &git2::Repository) -> Option<String> {
+    for rel in ["rebase-merge/message", "rebase-apply/msg", "rebase-apply/message"] {
+        let Ok(text) = std::fs::read_to_string(repo.path().join(rel)) else {
+            continue;
+        };
+        if let Some(subject) = text.lines().find_map(bounded_subject) {
+            return Some(subject);
+        }
+    }
+    None
+}
+
+fn bounded_subject(summary: &str) -> Option<String> {
+    let summary = summary.trim();
+    if summary.is_empty() {
+        return None;
+    }
+    let mut end = summary.len().min(200);
+    while !summary.is_char_boundary(end) {
+        end -= 1;
+    }
+    let bounded = summary[..end].trim_end();
+    (!bounded.is_empty()).then(|| bounded.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,6 +243,40 @@ mod tests {
         // A normal nested path still works.
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         assert!(repo.resolve_conflict("sub/ok.txt", "hi\n").is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn conflict_subjects_come_from_head_and_merge_head() {
+        let (repo, dir) = scratch_repo();
+        let git = git2::Repository::open(&dir).unwrap();
+        std::fs::write(dir.join("f.txt"), "ours\n").unwrap();
+        let mut index = git.index().unwrap();
+        index.add_path(Path::new("f.txt")).unwrap();
+        index.write().unwrap();
+        let tree = git.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = git.signature().unwrap();
+        let parent = git.head().unwrap().peel_to_commit().unwrap();
+        git.commit(Some("HEAD"), &sig, &sig, "ours subject", &tree, &[&parent]).unwrap();
+
+        std::fs::write(dir.join("g.txt"), "theirs\n").unwrap();
+        index.add_path(Path::new("g.txt")).unwrap();
+        index.write().unwrap();
+        let tree = git.find_tree(index.write_tree().unwrap()).unwrap();
+        let parent = git.head().unwrap().peel_to_commit().unwrap();
+        let theirs = git.commit(None, &sig, &sig, "theirs subject", &tree, &[&parent]).unwrap();
+        std::fs::write(git.path().join("MERGE_HEAD"), format!("{theirs}\n")).unwrap();
+
+        let subjects = repo.conflict_side_subjects();
+        assert_eq!(subjects.ours.as_deref(), Some("ours subject"));
+        assert_eq!(subjects.theirs.as_deref(), Some("theirs subject"));
+
+        std::fs::remove_file(git.path().join("MERGE_HEAD")).unwrap();
+        std::fs::create_dir_all(git.path().join("rebase-merge")).unwrap();
+        std::fs::write(git.path().join("rebase-merge/message"), "rebased subject\n\nbody\n").unwrap();
+        let subjects = repo.conflict_side_subjects();
+        assert_eq!(subjects.theirs.as_deref(), Some("rebased subject"));
+
         let _ = std::fs::remove_dir_all(dir);
     }
 }

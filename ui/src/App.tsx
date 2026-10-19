@@ -1245,6 +1245,13 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
+    'suggest-conflict': () => {
+      if (!useRepo.getState().conflictResolverOpen) {
+        showToast(t('merge.ai.closed'));
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('strand:suggest-conflict-resolution'));
+    },
   }), [openViaDialog, openSettingsAt, setView, selectFile, openWorkbench, customizeWorkbench, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
        requestSuggestCommitMessage]);
@@ -2007,6 +2014,13 @@ export function App() {
           requestDiffSearch();
         } },
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
+        { id: 'suggest-conflict', label: t('merge.ai.command'), group: 'Actions', shortcut: keyHint('suggest-conflict'), keywords: 'ai merge conflict resolve suggest codex claude hunk', run: () => {
+          if (!useRepo.getState().conflictResolverOpen) {
+            showToast(t('merge.ai.closed'));
+            return;
+          }
+          window.dispatchEvent(new CustomEvent('strand:suggest-conflict-resolution'));
+        } },
         { id: 'review-with-ai', label: 'Review changes with AI…', group: 'Actions', keywords: 'ai codex claude inspect code bugs issues findings', run: () => {
           setView('review');
           selectFile(null);

@@ -29,6 +29,7 @@ pub enum AiInputScope {
     Unstaged,
     Committed,
     Review,
+    Conflict,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

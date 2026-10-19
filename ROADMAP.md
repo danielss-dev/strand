@@ -3267,3 +3267,11 @@ Clean up stay in the single pane header. Path-keyed selection survives metadata
 updates, Home/End join arrow navigation, and narrow panes collapse the commit
 column. Failed status reads are no longer presented as clean; cleanup excludes
 locked checkouts. This supersedes the September 3 persist-cut presentation.
+
+**AI merge-conflict resolution (2026-10-19, DAN-91):** The merge editor's
+Suggest resolution with AI action asks the configured Codex or Claude provider
+for one reviewed replacement per conflict hunk (explanation and confidence).
+Base text comes from a diff3 `|||||||` section when the file has one; a 2-way
+file says the base is unavailable and still suggests. Accept, edit, or reject
+each hunk. The suggestion command never writes; Resolve still goes through
+`resolveConflict`.

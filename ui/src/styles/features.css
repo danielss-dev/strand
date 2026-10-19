@@ -7470,6 +7470,58 @@ textarea.clone-input {
   display: inline-flex;
   gap: 8px;
 }
+.mm-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 8px 14px 10px;
+  background: var(--bg-elev);
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.mm-ai-meta,
+.mm-ai-explain {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.mm-ai-explain { white-space: pre-wrap; }
+.mm-ai-truncated {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+.mm-ai-preview,
+.mm-ai-edit {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.mm-ai-edit {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+}
+.mm-ai-btns {
+  display: inline-flex;
+  gap: 8px;
+}
+.mm-ai-error {
+  margin: 0;
+  flex: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--del);
+  white-space: pre-wrap;
+}
 
 /* Bottom: the assembled result. */
 .mm-result {

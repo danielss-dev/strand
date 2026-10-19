@@ -497,8 +497,8 @@ two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
 `requestAnimationFrame` re-entrancy guard).
 
 **How to apply.**
-- `parseConflicts(text)` → segments (`common` | `conflict{ours,theirs}`);
-  `buildViews(parsed, resolutions)` → `{theirsText, oursText, resultText,
+- `parseConflicts(text)` → segments (`common` | `conflict{ours,theirs}`) plus
+  `bases` (diff3 text or `null`). `buildViews(parsed, resolutions)` → `{theirsText, oursText, resultText,
   ranges}` where each `ConflictRange` carries the 0-based `[start,end)` span of
   that conflict in *each* view, so `toLineRange` feeds Pierre's `selectedLines`
   and `conflictAtLine` maps a `onLineClick` back to a conflict (click a side's
@@ -523,6 +523,21 @@ two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
   `is_conflicted()` entry — they carry no wt/index bit so they'd otherwise be
   dropped); resolving = write + `git add` (`Repo::resolve_conflict`), and the
   op stays in progress (`meta.operation`) until the user commits.
+- **AI suggestions stay reviewed.** `parseConflicts` keeps a diff3 `|||||||`
+  section on `ParsedConflict.bases` (`null` for 2-way markers — the prompt
+  then says base is unavailable). `Suggest resolution with AI`
+  (`repo_suggest_conflict_resolution`) returns one replacement per hunk and
+  never writes. Accept / Edit store `{ kind: 'custom', text }`; Reject leaves
+  ours/theirs/both picks alone. The file changes only when the user clicks
+  Resolve, which still calls `resolveConflict`.
+- **Leftover-marker check is structural.** Only a line of exactly seven `<`
+  or `>` (then end of line or whitespace) counts, and only in custom hunk
+  text (`hasConflictMarkers` / `contains_conflict_marker`). A lone `=======`
+  is a Markdown/RST setext underline; scanning the whole result for it made
+  such files unsaveable. Side picks write `resultText` unchanged.
+- **Truncated hunks are flagged.** A side or base over 4,000 bytes is cut in
+  the prompt; the hunk comes back with `truncated: true`, the review shows a
+  warning, and one-click Accept is disabled (Edit still works).
 
 ---
 

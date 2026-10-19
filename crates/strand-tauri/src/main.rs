@@ -391,6 +391,7 @@ fn main() {
             commands::heroi_skills,
             commands::repo_suggest_pull_request,
             commands::repo_review_changes,
+            commands::repo_suggest_conflict_resolution,
             commands::crash_report_check,
         ])
         .setup(|app| {

@@ -2905,7 +2905,7 @@ extraction above as prerequisite. **Do not start before 1.0 ships**
   dedicated Linux/Windows matrix was removed after its Windows full-crate build
   added roughly five minutes to exercise a one-second scoped suite
 - ☐ Rebase reword suggestions (share CommitBar generator)
-- ☐ Conflict-resolution hints — PRD Q3 follow-up
+- ☑ Conflict-resolution hints — PRD Q3 follow-up (`repo_suggest_conflict_resolution`, `MergeResolver` Accept/Edit/Reject, `Resolution` custom text, diff3 `bases`)
 
 ### Pre-1.0 guardrails (active now)
 

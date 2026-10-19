@@ -2486,6 +2486,41 @@ pub async fn repo_review_changes(
     result
 }
 
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub async fn repo_suggest_conflict_resolution(
+    path: String,
+    file: String,
+    expected_hunks: usize,
+    provider: ai::AiProvider,
+    model: Option<String>,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+    request: ai::AiGenerationRequest,
+    state: State<'_, AppState>,
+) -> CmdResult<ai::AiGenerationOutcome<ai::ConflictResolutionSuggestion>> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(request.op_id.clone());
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("ai suggest conflict resolution", move || {
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::suggest_conflict_resolution_with_request(
+            provider,
+            std::path::Path::new(&path),
+            &file,
+            expected_hunks,
+            model.as_deref(),
+            override_path.as_deref(),
+            Some(&cancel),
+            &request.sensitive_decision,
+        )
+        .map_err(CmdError::from_msg)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
 impl CmdError {
     fn from_msg(message: String) -> Self {
         Self { message }
