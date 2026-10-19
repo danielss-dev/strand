@@ -7769,6 +7769,19 @@ textarea.clone-input {
   color: var(--text-dim);
   border-style: dashed;
 }
+/* Git-row drags set these on <html> so row `cursor: pointer` cannot win. */
+html.git-drag-invalid,
+html.git-drag-invalid * {
+  cursor: no-drop !important;
+}
+html.git-drag-valid,
+html.git-drag-valid * {
+  cursor: copy !important;
+}
+.side-row[data-git-drop-hover='valid'],
+tr[data-git-drop-hover='valid'] {
+  background: var(--bg-sel);
+}
 
 /* Files sidebar tab — a bounded-height column so the tree owns its own scroll
    (it must not nest inside the .side-scroll region used by the Git tab). */

@@ -16,6 +16,7 @@ import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { PullRequestMonitor } from './components/PullRequestMonitor';
 import { RepoRail } from './components/RepoRail';
 import { RepositoryFiles } from './components/RepositoryFiles';
+import { GitDragHost } from './components/GitDragHost';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
@@ -33,6 +34,7 @@ import { accentHueForColor, groupTabs, pathKey, repoFamilyName, workspaceMemberS
 import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
+import type { RebaseSeed } from './lib/gitDrag';
 import { t } from './lib/i18n';
 import { LFS_ACTIONS } from './lib/lfs';
 import { SUBMODULE_ACTIONS, type SubmoduleDialogAction } from './lib/submodules';
@@ -435,10 +437,18 @@ export function App() {
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
   const [branchNetworkDialog, setBranchNetworkDialog] = useState<BranchNetworkDialogMode | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
-  const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
+  const [mergeDialog, setMergeDialog] = useState<{
+    source: string;
+    into: string;
+    wrap?: <T>(step: () => Promise<T>) => Promise<T>;
+  } | null>(null);
   // null = closed; otherwise the interactive-rebase base (revspec before the
   // first editable commit, null ⇒ root) + a short label for the blurb.
-  const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
+  const [rebaseDialog, setRebaseDialog] = useState<{
+    base: string | null;
+    label: string;
+    seed?: RebaseSeed | null;
+  } | null>(null);
   const [amendInto, setAmendInto] = useState<{ target: string; label: string; subject: string } | null>(null);
   // null = closed; otherwise the commit-ish to reset to + its human label.
   const [resetDialog, setResetDialog] = useState<{ target: string; label: string } | null>(null);
@@ -2790,15 +2800,23 @@ export function App() {
         <MergeDialog
           source={mergeDialog.source}
           into={mergeDialog.into}
+          wrap={mergeDialog.wrap}
           onClose={() => setMergeDialog(null)}
           onToast={showToast}
         />
       )}
+      <GitDragHost
+        onOpenMerge={(request) => setMergeDialog(request)}
+        onPush={(request) => { void onPushBranch(request); }}
+        onOpenRebase={(request) => setRebaseDialog(request)}
+        onToast={showToast}
+      />
 
       {rebaseDialog && (
         <RebaseEditor
           base={rebaseDialog.base}
           label={rebaseDialog.label}
+          seed={rebaseDialog.seed}
           onClose={() => setRebaseDialog(null)}
           onToast={showToast}
         />

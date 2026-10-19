@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { Select } from '../components/Select';
+import { rebaseSeedMessageKey, type RebaseSeed } from '../lib/gitDrag';
 import { t } from '../lib/i18n';
-import { autosquashPlan, planUpdateRefs, withMovedBranches } from '../lib/rebase';
+import { applyRebaseSeed, autosquashPlan, planUpdateRefs, withMovedBranches } from '../lib/rebase';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import type { RebaseAction, RebaseStep } from '../lib/types';
@@ -56,6 +57,7 @@ const KEY_TO_ACTION: Record<string, RebaseAction> = {
 export function RebaseEditor({
   base,
   label,
+  seed = null,
   onClose,
   onToast,
 }: {
@@ -63,6 +65,8 @@ export function RebaseEditor({
   base: string | null;
   /** Short human label for the starting point, shown in the blurb. */
   label: string;
+  /** Drag plan to review. When set, autosquash is skipped and Start is the only Git write. */
+  seed?: RebaseSeed | null;
   onClose: () => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
@@ -129,14 +133,25 @@ export function RebaseEditor({
         // every row stays editable, and isNoop correctly sees a non-noop plan.
         const hasMergeEntries = entries.some((entry) => entry.is_merge);
         setPreserveMerges(hasMergeEntries);
-        const plan = hasMergeEntries
-          ? null
-          : autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
-        if (plan) {
+        if (seed) {
+          const plan = hasMergeEntries ? null : applyRebaseSeed(entries, seed);
+          if (!plan) {
+            setLoadError(t('drag.git.rebaseSeedMissing'));
+            return;
+          }
           const byOid = new Map(next.map((r) => [r.oid, r]));
-          next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
+          next = plan.map((step) => ({ ...byOid.get(step.oid)!, action: step.action }));
+          setAutosquashed(0);
+        } else {
+          const plan = hasMergeEntries
+            ? null
+            : autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
+          if (plan) {
+            const byOid = new Map(next.map((r) => [r.oid, r]));
+            next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
+          }
+          setAutosquashed(plan ? plan.filter((s) => s.action !== 'pick').length : 0);
         }
-        setAutosquashed(plan ? plan.filter((s) => s.action !== 'pick').length : 0);
         setRows(next);
         setFocused(0);
       })
@@ -146,7 +161,7 @@ export function RebaseEditor({
     return () => {
       alive = false;
     };
-  }, [base, loadRebaseTodo]);
+  }, [base, loadRebaseTodo, seed]);
 
   useEffect(() => {
     let alive = true;
@@ -385,6 +400,11 @@ export function RebaseEditor({
                 <kbd>p</kbd>/<kbd>r</kbd>/<kbd>e</kbd>/<kbd>s</kbd>/<kbd>f</kbd>/<kbd>d</kbd>.
               </p>
 
+              {seed ? (
+                <div className="rebase-warn" role="note">
+                  {t(rebaseSeedMessageKey(seed), { commits: seed.moveLabel, target: seed.anchorLabel })}
+                </div>
+              ) : null}
               {autosquashed > 0 ? (
                 <div className="rebase-warn" role="note">
                   Autosquash: {autosquashed} fixup commit{autosquashed === 1 ? '' : 's'} moved under{' '}

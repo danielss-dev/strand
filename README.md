@@ -318,9 +318,14 @@ the resolved app appearance automatically.
   tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
   merge, plain rebase onto a branch (with a per-repo `--update-refs` choice),
-  and a fully keyboard-operable interactive rebase (reorder, reword,
-  edit/pause-to-amend, squash, fixup, drop, merge preservation, and moving
-  other local branches in the range) with pause/conflict Continue / Abort.
+  drag-and-drop merge/rebase of sidebar branches (including remote-tracking
+  branches), drag-to-push onto a remote, drag-to-cherry-pick graph commits
+  onto a local branch, and drag-to-reorder or squash commits on the current
+  branch (the interactive rebase editor opens prefilled), always behind a
+  confirmation, and a fully keyboard-operable interactive rebase (reorder,
+  reword, edit/pause-to-amend, squash, fixup, drop, merge preservation, and
+  moving other local branches in the range) with pause/conflict Continue /
+  Abort.
   **Amend staged changes into this commit** folds the index into an older
   commit on the branch in one confirmed rewrite.
   The merge editor can suggest a per-hunk AI resolution (explanation and

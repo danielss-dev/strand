@@ -398,6 +398,16 @@ community plugins, performance and platform certification from Git feature gaps.
   `git rebase [--update-refs|--no-update-refs] <onto>`, any revspec; sidebar
   branch menu "Rebase <current> onto this" opens `RebaseOntoDialog`. The
   choice is remembered as local `strand.rebaseUpdateRefs` when a rebase starts.)
+- ☑ Drag-and-drop Git actions (DAN-90). Branch onto branch: `GitDragHost` +
+  `resolveBranchDrop` confirm **Merge** / **Rebase** through `MergeDialog` and
+  `RebaseOntoDialog` (`Repo::rebase(onto, update_refs)`), including remote-tracking branches (sidebar remote menu
+  items too). Local branch onto a remote folder confirms `Repo::push_branch`
+  and offers to create a missing upstream. Graph commits dropped on a local
+  branch confirm `Repo::cherry_pick` (oldest first; a single merge opens
+  `MainlineDialog`; a mixed selection is refused). Dragging commits on the
+  linear tip of the current branch opens `RebaseEditor` prefilled
+  (`applyRebaseSeed`) to reorder or squash; Start is the only Git write.
+  Escape and no-drop targets do not run Git.
 - ☑ Abort in-progress op (`Repo::abort_operation` — detects rebase / cherry-pick
   / revert / merge from `.git/` markers and runs the matching `--abort`; surfaced
   by `RepoMeta.operation` + the in-progress banner and a ⌘K "Abort <op>" action.)

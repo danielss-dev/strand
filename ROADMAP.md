@@ -3299,6 +3299,19 @@ in place. Git older than 2.38 disables the toggle instead of failing
 mid-rebase. Later stack slices (parent branch, sidebar grouping, restack,
 stacked PRs) stay open.
 
+**Drag-and-drop branch merge/rebase (2026-10-19, DAN-90):** Dropping a sidebar
+branch on another branch opens a confirmation that names both refs and offers
+Merge or Rebase. Those verbs call the existing merge dialog and `Repo::rebase`,
+including remote-tracking branches in either direction. A branch dropped on
+itself, on a tag, or during a paused merge/rebase shows a no-drop cursor.
+Escape cancels with no checkout and no Git write. Dropping a local branch on
+a remote confirms `Repo::push_branch` and offers to create a missing upstream.
+Dropping graph commits on a local branch confirms the same cherry-pick as the
+graph menu, including the mainline parent dialog for a single merge commit.
+Dragging those commits onto another commit on the linear tip opens the
+interactive rebase editor with that reorder or squash already filled in.
+Escape closes the editor before Start, so Git does not run.
+
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and
 latest commit in separate columns, explicit current/locked indicators, and

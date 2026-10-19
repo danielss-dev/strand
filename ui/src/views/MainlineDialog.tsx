@@ -11,11 +11,14 @@ export type MainlineOperation = 'cherry-pick' | 'revert';
 export function MainlineDialog({
   commit,
   operation,
+  wrap,
   onClose,
   onToast,
 }: {
   commit: Commit;
   operation: MainlineOperation;
+  /** Wraps the history command once the parent is confirmed. */
+  wrap?: <T>(step: () => Promise<T>) => Promise<T>;
   onClose: () => void;
   onToast: (message: string, kind?: 'success' | 'error') => void;
 }) {
@@ -30,10 +33,11 @@ export function MainlineDialog({
     setBusy(true);
     setError(null);
     try {
-      const conflicted =
+      const run = () =>
         operation === 'cherry-pick'
-          ? await cherryPick([commit.hash], parent)
-          : await revert([commit.hash], parent);
+          ? cherryPick([commit.hash], parent)
+          : revert([commit.hash], parent);
+      const conflicted = await (wrap ? wrap(run) : run());
       const verb = operation === 'cherry-pick' ? 'Cherry-pick' : 'Revert';
       onToast(
         conflicted

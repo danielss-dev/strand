@@ -73,11 +73,17 @@ Right-click a commit (or use `Shift+F10`) for:
   “Checking out commit…” progress pill as a sidebar branch switch until HEAD
   updates.
 - **Tag…** — create a tag here.
-- **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution;
-  merge commits first ask which parent is the mainline.
+- **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution.
+  Drag one or more graph commits onto a local branch in the sidebar to cherry-pick
+  them there. The confirmation names the commits and the branch; Escape cancels
+  with no checkout and no cherry-pick. A multi-selection that includes a merge
+  commit is refused, the same as the graph menu, so each merge can pick a mainline
+  parent. Dropping onto the current branch runs the same `git cherry-pick` as
+  **Cherry-pick** / **Cherry-pick selected**. A single merge commit still asks
+  which parent is the mainline.
 - **Create fixup! commit** — commits the currently staged changes as `fixup!` of this commit (enabled only when something is staged); fold it in later with an interactive rebase.
 - **Amend staged changes into this commit** — folds the staged changes into this commit immediately. Strand lists every commit that will be rewritten and asks you to confirm. It refuses when that range contains a merge, and warns when the commit is already on the upstream (a force push will be needed). Unstaged changes are stashed and restored. A conflict uses the same Continue / Abort banner as any other rebase; Abort returns to the original tip. Enabled only when something is staged. The same action is in the commit detail menu and the command palette ("Amend staged changes into selected commit…").
-- **Rebase from here…** — open the interactive rebase editor over this commit and everything newer. With **Update other branches** on, other local branches in that range move with the rewritten commits.
+- **Rebase from here…** — open the interactive rebase editor over this commit and everything newer. Drag a commit on the current branch’s linear history onto another commit there to open the same editor with the move already filled in: the top of a row places the commits newer than that commit, the bottom places them older, and the middle squashes them into it. The editor names the commits, the target, and the operation. Escape closes it, and Git runs only when you start the rebase. The same review is **Interactive rebase…** on a branch, then ⌥↑/⌥↓ to reorder or `s` to squash. With **Update other branches** on, other local branches in that range move with the rewritten commits.
 - **Reset \<branch\> to here…** — opens the Reset dialog.
 - **New worktree from here…** — cut a task branch at this exact commit; see [Worktrees](worktrees.md).
 - **Review changes since this** — pin the review baseline here and jump to the Review view.

@@ -167,3 +167,39 @@ export function withMovedBranches(message: string, moved: readonly string[]): st
   const base = message.endsWith('.') ? message : `${message}.`;
   return t('rebase.moved', { message: base, branches: moved.join(', ') });
 }
+
+/** Dragged commits inserted around an anchor in an oldest-first todo. */
+export interface RebaseSeedPlan {
+  move: string[];
+  mode: 'reorder' | 'squash';
+  anchor: string;
+  /** Where `move` sits relative to `anchor` in the oldest-first todo. */
+  place: 'before' | 'after';
+}
+
+/**
+ * Apply a drag plan to a rebase todo. Moved commits leave their old slots and
+ * land as a block before or after the anchor. Squash marks only the moved
+ * commits, so they fold into the anchor when placed after it. Returns null
+ * when an oid is missing or the anchor is one of the moved commits — the
+ * editor shows that and does not start a rebase.
+ */
+export function applyRebaseSeed(
+  entries: readonly { oid: string }[],
+  seed: RebaseSeedPlan,
+): { oid: string; action: 'pick' | 'squash' }[] | null {
+  if (seed.move.length === 0 || seed.move.includes(seed.anchor)) return null;
+  const known = new Set(entries.map((entry) => entry.oid));
+  if (!known.has(seed.anchor) || seed.move.some((oid) => !known.has(oid))) return null;
+  const moving = new Set(seed.move);
+  const rest = entries.filter((entry) => !moving.has(entry.oid));
+  const anchorAt = rest.findIndex((entry) => entry.oid === seed.anchor);
+  if (anchorAt < 0) return null;
+  const insertAt = seed.place === 'before' ? anchorAt : anchorAt + 1;
+  const moved = seed.move.map((oid) => entries.find((entry) => entry.oid === oid)!);
+  const ordered = [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)];
+  return ordered.map((entry) => ({
+    oid: entry.oid,
+    action: seed.mode === 'squash' && moving.has(entry.oid) ? 'squash' : 'pick',
+  }));
+}

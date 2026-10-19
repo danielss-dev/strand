@@ -265,12 +265,15 @@ objects.
 
 - **Cherry-pick** and **Revert** act on a single commit from the commit detail
   panel or graph row menu. For a merge commit, choose the parent Git should
-  treat as the mainline.
+  treat as the mainline. Drag commits from the graph onto a local branch in the
+  sidebar for the same cherry-pick; the confirmation names the commits and the
+  branch, and Escape cancels before Git runs.
 - Multi-select commits in All Commits to **Cherry-pick selected** in
   oldest-to-newest order. Exactly two selected commits can also be compared in
   a changed-file and full-diff dialog.
 - **Merge** ("Merge into <current>" on a branch) opens a dialog with three modes: fast-forward when possible, always create a merge commit (no-FF), or squash — a squash merge leaves the result staged so you write the commit yourself.
 - A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu. It opens a dialog that names the branch being replayed and lets you turn on **Update other branches (--update-refs)**. That choice is remembered for this repository once you start the rebase. It is Strand's own setting, so `git pull --rebase` and rebases you run in a terminal are unaffected. When it is on, the dialog lists other local branches whose tips sit in the range and will move with it, and names any that will not because they are checked out in another worktree. The result toast lists the branches that actually moved. The option needs Git 2.38 or newer; on an older Git it stays off, with an explanation, and the rebase still runs.
+- Drag a branch onto another branch in the sidebar. The confirmation names both refs and offers **Merge** (the dragged ref into the drop target) or **Rebase** (the drop target onto the dragged ref) — the same commands as those menu items. **Rebase** opens the same Rebase dialog as the menu item, including **Update other branches (--update-refs)**. Remote-tracking branches work in either direction; the local branch is the one Git moves, and a remote branch's menu has the same **Merge into…** and **Rebase … onto this** items. Dropping a branch on itself, on a tag, or while a merge, rebase, cherry-pick, revert, `git am` or bisect is paused shows a no-drop cursor and does nothing. When the drop has to switch to another branch first, the confirmation says so; if Git then fails, Strand switches back to the branch you were on — unless the failure left the operation paused, in which case you stay on that branch to Continue or Abort it. Escape closes the confirmation without checking out or running Git. Drop a local branch on a remote (the remote's own row, such as `origin`) to push it. If the branch has no upstream, the confirmation offers to create `remote/branch` — the same push the **Push to remote…** dialog sends when you accept that remote, destination, and upstream checkbox. Drag commits within the current branch’s linear history to reorder or squash them: the interactive rebase editor opens with that plan filled in, and Escape closes it before Git runs.
 
 Open **Compare branches…** from the command palette (⌘K / Ctrl+K) or the
 **Branches → Branch actions** menu to compare any two local or remote branches.
