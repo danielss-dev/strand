@@ -335,6 +335,16 @@ community plugins, performance and platform certification from Git feature gaps.
   (radiogroup, mixed default, danger-styled hard) and the Reflog's "Reset HEAD
   here…"; palette "Undo last commit (soft reset)" = soft reset to `HEAD~1`,
   gated on a non-root HEAD.)
+- ☑ Per-worktree Git action journal (`journal.rs` —
+  `Repo::undo_git_action` / `redo_git_action` / `git_action_history`,
+  `strand-journal.json` in the worktree git dir). Records commit, amend,
+  reset, branch create/delete/rename, checkout, merge, rebase, and
+  cherry-pick. UI: Edit menu and palette "Undo Git Action" / "Redo Git
+  Action" (`undo-git` / `redo-git`) plus "Git Action History".
+- ☐ Journal working-tree actions (discard, stash) and remote updates
+  (push, fetch, pull). Conflicted sequencer ops, sparse/partial clones,
+  tags, and hosting-provider actions stay out until they can be reversed
+  without discarding uncommitted work or rewriting a published ref.
 - ☑ Rename / move a working-tree entry (`Repo::move_path` in `rename.rs` —
   `to` is the full destination path. Tracked sources (any index entry at the
   path or under it) shell out to `git mv` so the index entry moves with the

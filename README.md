@@ -44,7 +44,8 @@ shortcuts").
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
 | `Mod+B` | Toggle sidebar |
-| `Mod+Z` | Undo last Workbench layout change while customizing |
+| `Mod+Z` / `Mod+Shift+Z` | Undo / redo the latest Git action when the graph or Local Changes is focused |
+| `Mod+Z` | Undo the last Workbench layout change while customizing, when focus is outside those views and any text field |
 | `Mod+[` / `Mod+]` | Cycle panes in a composed Workbench |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
@@ -325,6 +326,9 @@ the resolved app appearance automatically.
   The merge editor can suggest a per-hunk AI resolution (explanation and
   confidence); it is written only after you accept or edit each hunk and
   click Resolve.
+  Undo Git Action and Redo Git Action walk a per-worktree journal of commit,
+  amend, reset, branch, checkout, merge, rebase, and cherry-pick; `Mod+Z` does
+  this only from the graph or Local Changes.
 - **Patch interchange** — preview affected paths and validate patch imports
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,

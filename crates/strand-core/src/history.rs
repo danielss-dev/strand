@@ -168,6 +168,16 @@ impl Repo {
     /// not a failure), `Ok(false)` when it applied cleanly, and `Err` only for
     /// a real failure (e.g. picking a merge commit without `-m`).
     pub fn cherry_pick(&self, commits: &[String], mainline: Option<u32>) -> Result<bool> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::CherryPick,
+            cherry_pick_label(commits),
+            true,
+            || self.cherry_pick_inner(commits, mainline),
+        )
+    }
+
+    fn cherry_pick_inner(&self, commits: &[String], mainline: Option<u32>) -> Result<bool> {
         if commits.is_empty() {
             return Err(Error::Other("cherry-pick: no commits given".into()));
         }
@@ -204,6 +214,16 @@ impl Repo {
     /// (left in progress for resolution), `Ok(false)` on a clean merge, and
     /// `Err` for a real failure (dirty tree, unrelated histories, …).
     pub fn merge(&self, refname: &str, mode: MergeMode) -> Result<bool> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Merge,
+            format!("Merge {refname}"),
+            true,
+            || self.merge_inner(refname, mode),
+        )
+    }
+
+    fn merge_inner(&self, refname: &str, mode: MergeMode) -> Result<bool> {
         validate_ref(refname)?;
         let mut args = vec!["merge"];
         match mode {
@@ -228,8 +248,19 @@ impl Repo {
     /// on this call wins over any `rebase.updateRefs` the user set. A dirty
     /// working tree makes git refuse — that surfaces as `Err`. `paused` is set
     /// when the rebase stopped on a conflict; branch tips move only once it
-    /// completes.
+    /// completes. One journal entry covers every ref the rebase moved, so Undo
+    /// also puts stacked branches back.
     pub fn rebase(&self, onto: &str, update_refs: bool) -> Result<RebaseOutcome> {
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Rebase,
+            format!("Rebase onto {onto}"),
+            true,
+            || self.rebase_inner(onto, update_refs),
+        )
+    }
+
+    fn rebase_inner(&self, onto: &str, update_refs: bool) -> Result<RebaseOutcome> {
         validate_ref(onto)?;
         let mut args = vec!["rebase"];
         push_update_refs(&mut args, update_refs)?;
@@ -360,7 +391,13 @@ impl Repo {
         preserve_merges: bool,
         update_refs: bool,
     ) -> Result<RebaseOutcome> {
-        self.interactive_rebase_inner(base, steps, preserve_merges, update_refs, false)
+        let label = match base {
+            Some(base) => format!("Rebase onto {base}"),
+            None => "Rebase from root".to_string(),
+        };
+        crate::journal::record(self, crate::journal::GitOp::Rebase, label, true, || {
+            self.interactive_rebase_inner(base, steps, preserve_merges, update_refs, false)
+        })
     }
 
     fn interactive_rebase_inner(
@@ -641,7 +678,21 @@ impl Repo {
     /// range is refused before anything is written. Other local branches whose
     /// tips sit in the rewritten range move with it (`--update-refs`), so a
     /// stacked branch never keeps the pre-amend commits.
+    ///
+    /// The fixup commit and the rebase are one Git Action History entry, so a
+    /// single Undo returns to the pre-amend tip, index and stacked branches.
     pub fn amend_into_commit(&self, target: &str) -> Result<bool> {
+        let short: String = target.chars().take(7).collect();
+        crate::journal::record(
+            self,
+            crate::journal::GitOp::Amend,
+            format!("Amend staged changes into {short}"),
+            true,
+            || self.amend_into_commit_inner(target),
+        )
+    }
+
+    fn amend_into_commit_inner(&self, target: &str) -> Result<bool> {
         if let Some(operation) = self.operation_in_progress() {
             return Err(Error::Other(format!(
                 "cannot amend into a commit while {operation} is in progress"
@@ -998,6 +1049,16 @@ fn is_ancestor(cwd: &Path, maybe_ancestor: &str) -> Result<bool> {
         .status()
         .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
     Ok(status.success())
+}
+
+fn cherry_pick_label(commits: &[String]) -> String {
+    if commits.len() == 1 {
+        let oid = &commits[0];
+        let short = &oid[..oid.len().min(7)];
+        format!("Cherry-pick {short}")
+    } else {
+        format!("Cherry-pick {} commits", commits.len())
+    }
 }
 
 fn rebase_action_name(action: RebaseAction) -> &'static str {

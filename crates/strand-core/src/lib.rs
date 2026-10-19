@@ -52,6 +52,7 @@ pub mod worktree;
 pub mod blame;
 pub mod file;
 pub mod file_actions;
+pub mod journal;
 pub mod reflog;
 pub mod rename;
 pub mod reset;

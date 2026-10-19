@@ -45,6 +45,7 @@ import {
   EDITABLE_SELECTOR,
   eventInside,
   eventToBinding,
+  gitUndoBindingAllowed,
   formatBinding,
   isPlainKey,
   MENU_COMMANDS,
@@ -64,6 +65,7 @@ import { backgroundFetchInFlight, manualOpPath } from './lib/autoFetch';
 import { withMovedBranches } from './lib/rebase';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useAutoFetch } from './lib/useAutoFetch';
+import { runExclusive } from './lib/runExclusive';
 import { useTheme } from './lib/theme';
 import type { InitRepoRequest } from './views/InitRepoDialog';
 import type { SettingsSectionId } from './views/SettingsDialog';
@@ -80,6 +82,7 @@ import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
 import { RepoIconDialog } from './views/RepoIconDialog';
 import { Commits } from './views/Commits';
+import { formatGitActionToast, GitHistoryDialog } from './views/GitHistoryDialog';
 import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
@@ -371,6 +374,7 @@ export function App() {
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [remoteReposOpen, setRemoteReposOpen] = useState(false);
   const [repositorySettingsPath, setRepositorySettingsPath] = useState<string | null>(null);
   const [repositorySettingsSection, setRepositorySettingsSection] = useState<'identity' | 'signing'>('identity');
@@ -1231,6 +1235,25 @@ export function App() {
     [keyMap, platform],
   );
 
+  // A second undo/redo while one is still running is dropped, not queued.
+  const gitActionInFlightRef = useRef(false);
+  const runGitAction = useCallback((direction: 'undo' | 'redo') => runExclusive(gitActionInFlightRef, async () => {
+    const path = useRepo.getState().activePath;
+    if (!path) return;
+    try {
+      const outcome = direction === 'undo'
+        ? await tauri.repoUndoGitAction(path)
+        : await tauri.repoRedoGitAction(path);
+      showToast(formatGitActionToast(outcome));
+      await Promise.all([
+        useRepo.getState().refreshLocalChanges(),
+        useRepo.getState().refreshLog(),
+      ]);
+    } catch (error) {
+      showToast(errMessage(error), 'error');
+    }
+  }), [showToast]);
+
   // One handler per global command. Rebuilt each render so it closes over the
   // latest callbacks; the keydown effect reads it through a ref (below) so it
   // never has to re-subscribe.
@@ -1270,9 +1293,12 @@ export function App() {
       }
       window.dispatchEvent(new CustomEvent('strand:suggest-conflict-resolution'));
     },
+    'undo-git': () => { void runGitAction('undo'); },
+    'redo-git': () => { void runGitAction('redo'); },
+    'git-history': () => setGitHistoryOpen(true),
   }), [openViaDialog, openSettingsAt, setView, selectFile, openWorkbench, customizeWorkbench, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
-       requestSuggestCommitMessage]);
+       requestSuggestCommitMessage, runGitAction]);
   const commandHandlersRef = useRef(commandHandlers);
   commandHandlersRef.current = commandHandlers;
   const keyMapRef = useRef(keyMap);
@@ -1354,6 +1380,9 @@ export function App() {
     openGitflow: () => { const path = useRepo.getState().activePath; if (path) setGitflowPath(path); },
     openAdvancedRefs: (mode = 'notes') => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode }); },
     openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
+    undoGitAction: () => { void runGitAction('undo'); },
+    redoGitAction: () => { void runGitAction('redo'); },
+    openGitHistory: () => setGitHistoryOpen(true),
   };
   const hasRepo = Boolean(meta) && !remoteReposOpen;
   useEffect(() => {
@@ -1584,9 +1613,18 @@ export function App() {
       if (isPlainKey(binding) && eventInside(e, EDITABLE_SELECTOR)) return;
       // Repo-scoped commands no-op without a repository open.
       if (REPO_COMMANDS.has(cmd) && !useRepo.getState().meta) return;
+      // Git undo shares Mod+Z with text undo. Outside the graph and Local
+      // Changes — and inside any text field or the Work editor — leave the
+      // event alone so the field's own undo still runs.
+      if ((cmd === 'undo-git' || cmd === 'redo-git') && !gitUndoBindingAllowed(e)) return;
       const handler = commandHandlersRef.current[cmd];
       if (!handler) return;
       e.preventDefault();
+      if (cmd === 'undo-git' || cmd === 'redo-git') {
+        e.stopImmediatePropagation();
+        // A held Mod+Z must not walk the journal back one step per repeat.
+        if (e.repeat) return;
+      }
       handler();
     };
     window.addEventListener('keydown', onKey);
@@ -2196,6 +2234,9 @@ export function App() {
               },
             } satisfies PaletteAction]
           : []),
+        { id: 'undo-git', label: t('gitUndo.undo'), group: 'Actions', shortcut: keyHint('undo-git'), keywords: 'undo git action journal rollback', run: () => { void runGitAction('undo'); } },
+        { id: 'redo-git', label: t('gitUndo.redo'), group: 'Actions', shortcut: keyHint('redo-git'), keywords: 'redo git action journal replay', run: () => { void runGitAction('redo'); } },
+        { id: 'git-history', label: t('gitUndo.historyMenu'), group: 'Actions', keywords: 'undo redo git history journal stack', run: () => setGitHistoryOpen(true) },
         { id: 'rebase-i', label: 'Interactive rebase…', group: 'Actions', keywords: 'rebase reorder squash fixup reword drop history edit', run: () => {
           const st = useRepo.getState();
           const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
@@ -2300,7 +2341,7 @@ export function App() {
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, setBranchBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, copyFreshDiffs,
-      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
+      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view, runGitAction,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestHasReviewTools, activePullRequestFollowed, activePullRequestCanUpdateBranch,
       toggleActivePullRequest, customCommands, customCommandContext,
@@ -2627,6 +2668,23 @@ export function App() {
 
       {whatsNewOpen && (
         <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />
+      )}
+
+      {gitHistoryOpen && activePath && (
+        <GitHistoryDialog
+          path={activePath}
+          onClose={() => setGitHistoryOpen(false)}
+          onApplied={(outcome) => {
+            showToast(formatGitActionToast(outcome));
+            void refreshLocalChanges();
+            void refreshLog();
+          }}
+          onError={(message) => {
+            showToast(message, 'error');
+            void refreshLocalChanges();
+            void refreshLog();
+          }}
+        />
       )}
 
       {cloneOpen && (

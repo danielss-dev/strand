@@ -354,7 +354,7 @@ export function LocalChanges({
   }, [active, confirmDiscard, fail]);
 
   return (
-    <div className="lc-stack">
+    <div className="lc-stack" data-git-undo-surface="local">
       {conflicts.length > 0 && (
         <ConflictBar
           files={conflicts}

@@ -55,6 +55,41 @@ export interface ResetOutcome {
   snapshot_oid: string | null;
 }
 
+/** A ref-moving action recorded in the per-worktree git journal. */
+export type GitOp =
+  | 'commit'
+  | 'amend'
+  | 'reset'
+  | 'branch_create'
+  | 'branch_delete'
+  | 'branch_rename'
+  | 'checkout'
+  | 'merge'
+  | 'rebase'
+  | 'cherry_pick';
+
+export type GitActionDirection = 'undo' | 'redo';
+
+export interface GitHistoryItem {
+  op: GitOp;
+  label: string;
+}
+
+export interface GitActionHistory {
+  /** Newest undoable action first. */
+  undo: GitHistoryItem[];
+  /** Newest redoable action first. */
+  redo: GitHistoryItem[];
+}
+
+export interface GitActionOutcome {
+  op: GitOp;
+  label: string;
+  direction: GitActionDirection;
+  /** Set when undo/redo stashed tracked work before moving a tree. */
+  snapshot_oid: string | null;
+}
+
 /** A git interactive-rebase verb the sequence editor exposes. */
 export type RebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 

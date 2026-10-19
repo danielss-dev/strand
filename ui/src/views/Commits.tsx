@@ -1190,6 +1190,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
             <div
               ref={graphMainRef}
               className="graph-main"
+              data-git-undo-surface="graph"
               tabIndex={0}
               role="grid"
               aria-multiselectable

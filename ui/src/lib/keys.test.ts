@@ -6,7 +6,11 @@ import {
   eventInside,
   eventToBinding,
   formatBinding,
+  GIT_UNDO_BLOCK_SELECTOR,
+  GIT_UNDO_SURFACE_SELECTOR,
+  gitUndoBindingAllowed,
   isPlainKey,
+  MENU_COMMANDS,
   resolveBindings,
   toMudaAccelerator,
   type KeyLike,
@@ -156,5 +160,46 @@ describe('COMMANDS table', () => {
     const ids = COMMANDS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(conflictingCommands(resolveBindings().byCommand).size).toBe(0);
+  });
+
+  it('keeps Git undo off the native Edit Undo accelerator', () => {
+    const { byBinding, byCommand } = resolveBindings();
+    expect(byBinding.get('Mod+Z')).toBe('undo-git');
+    expect(byBinding.get('Mod+Shift+Z')).toBe('redo-git');
+    expect(byCommand.get('git-history')).toBeNull();
+    expect(MENU_COMMANDS.has('undo-git')).toBe(false);
+    expect(MENU_COMMANDS.has('redo-git')).toBe(false);
+    expect(COMMANDS.find((command) => command.id === 'undo-git')?.menu).toBeUndefined();
+  });
+});
+
+describe('gitUndoBindingAllowed', () => {
+  const el = (matched: string[]): unknown => ({
+    matches: (sel: string) => matched.includes(sel),
+    closest: (sel: string) => (matched.includes(sel) ? {} : null),
+  });
+
+  it('allows the graph and Local Changes', () => {
+    expect(gitUndoBindingAllowed({
+      target: el([]),
+      composedPath: () => [el([GIT_UNDO_SURFACE_SELECTOR])],
+    })).toBe(true);
+    expect(gitUndoBindingAllowed({
+      target: el([GIT_UNDO_SURFACE_SELECTOR]),
+    })).toBe(true);
+  });
+
+  it('refuses text fields, the commit box, and the Work editor', () => {
+    expect(gitUndoBindingAllowed({
+      target: el([]),
+      composedPath: () => [el([GIT_UNDO_BLOCK_SELECTOR]), el([GIT_UNDO_SURFACE_SELECTOR])],
+    })).toBe(false);
+    expect(gitUndoBindingAllowed({
+      target: el([GIT_UNDO_BLOCK_SELECTOR]),
+    })).toBe(false);
+  });
+
+  it('refuses focus that is on neither surface', () => {
+    expect(gitUndoBindingAllowed({ target: el([]), composedPath: () => [el([])] })).toBe(false);
   });
 });
