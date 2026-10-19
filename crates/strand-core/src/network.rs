@@ -102,6 +102,26 @@ pub struct NetworkOutcome {
     pub output: String,
 }
 
+/// Result of one background `git fetch`. Failures stay in this struct so the
+/// scheduler can record a quiet entry and back off; they are not raised as
+/// command errors. The fetch never pulls, merges, or rebases.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackgroundFetchOutcome {
+    pub ok: bool,
+    /// Credential fill would have prompted. The caller should record one
+    /// quiet failure and skip later ticks until its backoff elapses.
+    pub auth_required: bool,
+    pub output: String,
+    /// Short command line for the activity log (`git fetch --prune`).
+    pub command: String,
+    /// Commits that arrived on the current branch's upstream during this fetch.
+    pub new_commits: u32,
+    /// Upstream short name, e.g. `origin/main`, when the branch tracks one.
+    pub upstream: Option<String>,
+    /// Behind-count of the current branch after the fetch.
+    pub behind: u32,
+}
+
 /// Full subprocess transcript used by callers that need to retain both
 /// successful and failed Git output instead of mapping a non-zero exit to an
 /// error immediately.
@@ -286,6 +306,51 @@ impl Repo {
             args.push(r);
         }
         run_git_streaming(&self.path, &args, on_progress, cancel)
+    }
+
+    /// Fetch remotes without merging, without touching the index or worktree,
+    /// and without opening a credential or console prompt. Uses the same
+    /// spawn path as [`Repo::fetch`] (`git_command` / `CREATE_NO_WINDOW`)
+    /// with non-interactive auth env. `prune` is the repo's fetch-prune
+    /// setting. Auth failures return `ok: false` rather than hanging.
+    pub fn fetch_background(&self, prune: bool) -> Result<BackgroundFetchOutcome> {
+        let before = read_head_upstream(&self.path);
+        let quiet_auth = true;
+        let args = background_fetch_args(prune);
+        let command = format!("git {}", args.join(" "));
+        let transcript = run_git_input_transcript_env(
+            &self.path,
+            &args,
+            None,
+            &[],
+            quiet_auth,
+            |_| {},
+            None,
+        )?;
+        if !transcript.success {
+            let output = error_summary(&transcript.output, &args);
+            let auth_required = is_auth_failure(&output) || is_auth_failure(&transcript.output);
+            return Ok(BackgroundFetchOutcome {
+                ok: false,
+                auth_required,
+                output,
+                command,
+                new_commits: 0,
+                upstream: before.as_ref().map(|u| u.name.clone()),
+                behind: before.as_ref().map(|u| u.behind).unwrap_or(0),
+            });
+        }
+        let after = read_head_upstream(&self.path);
+        let new_commits = new_upstream_commits(&self.path, before.as_ref(), after.as_ref());
+        Ok(BackgroundFetchOutcome {
+            ok: true,
+            auth_required: false,
+            output: transcript.output,
+            command,
+            new_commits,
+            upstream: after.as_ref().map(|u| u.name.clone()),
+            behind: after.as_ref().map(|u| u.behind).unwrap_or(0),
+        })
     }
 
     pub fn pull(
@@ -656,7 +721,7 @@ pub fn clone_with_options(
     let args = owned_args.iter().map(String::as_str).collect::<Vec<_>>();
     let lfs_skip = [("GIT_LFS_SKIP_SMUDGE", "1")];
     let parent = cwd.unwrap_or_else(|| Path::new("."));
-    let transcript = run_git_input_transcript_env(parent, &args, None, &lfs_skip, &mut on_progress, cancel)?;
+    let transcript = run_git_input_transcript_env(parent, &args, None, &lfs_skip, false, &mut on_progress, cancel)?;
     if !transcript.success {
         return Err(Error::Other(error_summary(&transcript.output, &args)));
     }
@@ -772,18 +837,35 @@ pub(crate) fn run_git_input_transcript(
     on_progress: impl FnMut(Progress),
     cancel: Option<&CancelHandle>,
 ) -> Result<GitRunTranscript> {
-    run_git_input_transcript_env(cwd, args, input, &[], on_progress, cancel)
+    run_git_input_transcript_env(cwd, args, input, &[], false, on_progress, cancel)
 }
 
-pub(crate) fn run_git_input_transcript_env(
+/// Build the `git` command shared by manual and background network ops.
+/// Always starts from [`crate::git_command`] so Windows gets `CREATE_NO_WINDOW`.
+/// `quiet_auth` is the background-fetch path: cached credentials may still be
+/// used, but a missing credential must fail instead of opening a prompt.
+pub(crate) fn prepare_git_command(
     cwd: &Path,
     args: &[&str],
-    input: Option<Vec<u8>>,
     extra_env: &[(&str, &str)],
-    mut on_progress: impl FnMut(Progress),
-    cancel: Option<&CancelHandle>,
-) -> Result<GitRunTranscript> {
-    if cancel.is_some_and(CancelHandle::is_cancelled) { return Err(Error::Cancelled); }
+    quiet_auth: bool,
+    piped_stdin: bool,
+) -> std::process::Command {
+    prepare_git_command_probed(cwd, args, extra_env, quiet_auth, piped_stdin, || {
+        user_ssh_command(cwd, |key| std::env::var_os(key), &[])
+    })
+}
+
+/// [`prepare_git_command`] with the "did the user pick an ssh?" probe passed
+/// in, so tests can run it against an isolated environment and config.
+fn prepare_git_command_probed(
+    cwd: &Path,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+    quiet_auth: bool,
+    piped_stdin: bool,
+    user_ssh: impl FnOnce() -> bool,
+) -> std::process::Command {
     let mut command = crate::git_command();
     #[cfg(unix)]
     {
@@ -798,14 +880,65 @@ pub(crate) fn run_git_input_transcript_env(
     for &(key, value) in extra_env {
         command.env(key, value);
     }
+    if quiet_auth {
+        command.env("GCM_INTERACTIVE", "never");
+        // GIT_SSH_COMMAND outranks core.sshCommand and GIT_SSH, so only
+        // force BatchMode when the user hasn't chosen their own ssh. Theirs
+        // still gets null stdin and SSH_ASKPASS_REQUIRE=never.
+        if !user_ssh() {
+            command.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        }
+        command.env("SSH_ASKPASS_REQUIRE", "never");
+        command.env_remove("GIT_ASKPASS");
+        command.env_remove("SSH_ASKPASS");
+    }
+    command.args(crate::GIT_SAFE_CONFIG);
+    if quiet_auth {
+        // git runs a configured core.askPass before it checks
+        // GIT_TERMINAL_PROMPT; an empty value disables it.
+        command.args(["-c", "core.askPass="]);
+    }
     command
-        // Neutralize repo-local config that would run code as a side effect.
-        .args(crate::GIT_SAFE_CONFIG)
-        // Force progress reporting even though stderr isn't a TTY.
         .args(args)
-        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
+        .stdin(if piped_stdin { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    command
+}
+
+/// The user picked an ssh command: `GIT_SSH_COMMAND` / `GIT_SSH` in the
+/// environment, or `core.sshCommand` in the repo's effective config.
+/// `env` reads the environment; `config_env` is added to the config probe.
+fn user_ssh_command(
+    cwd: &Path,
+    env: impl Fn(&str) -> Option<std::ffi::OsString>,
+    config_env: &[(&str, &str)],
+) -> bool {
+    let set = |key: &str| env(key).is_some_and(|value| !value.is_empty());
+    if set("GIT_SSH_COMMAND") || set("GIT_SSH") {
+        return true;
+    }
+    crate::git_command()
+        .current_dir(cwd)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .envs(config_env.iter().copied())
+        .stdin(Stdio::null())
+        .args(["config", "--get", "core.sshCommand"])
+        .output()
+        .is_ok_and(|out| out.status.success() && !out.stdout.trim_ascii().is_empty())
+}
+
+pub(crate) fn run_git_input_transcript_env(
+    cwd: &Path,
+    args: &[&str],
+    input: Option<Vec<u8>>,
+    extra_env: &[(&str, &str)],
+    quiet_auth: bool,
+    mut on_progress: impl FnMut(Progress),
+    cancel: Option<&CancelHandle>,
+) -> Result<GitRunTranscript> {
+    if cancel.is_some_and(CancelHandle::is_cancelled) { return Err(Error::Cancelled); }
+    let mut command = prepare_git_command(cwd, args, extra_env, quiet_auth, input.is_some());
     #[cfg(windows)]
     let (mut child, job) = crate::windows_job::WindowsJob::spawn(&mut command).map_err(Error::Other)?;
     #[cfg(not(windows))]
@@ -989,6 +1122,73 @@ mod bounded_process_tests {
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(cancelled_at.unwrap().elapsed().as_secs() < 15);
     }
+}
+
+fn background_fetch_args(prune: bool) -> [&'static str; 2] {
+    ["fetch", if prune { "--prune" } else { "--no-prune" }]
+}
+
+struct HeadUpstream {
+    name: String,
+    oid: Option<git2::Oid>,
+    behind: u32,
+}
+
+/// Fresh git2 open so a fetch that just updated refs is visible. The cached
+/// handle on `Repo` can keep the pre-fetch ref snapshot.
+fn read_head_upstream(path: &Path) -> Option<HeadUpstream> {
+    let repo = git2::Repository::open(path).ok()?;
+    let head = repo.head().ok()?;
+    if !head.is_branch() {
+        return None;
+    }
+    let short = head.shorthand()?.to_string();
+    let branch = repo.find_branch(&short, git2::BranchType::Local).ok()?;
+    let upstream = branch.upstream().ok()?;
+    let name = upstream.name().ok().flatten()?.to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let oid = upstream.get().target();
+    let behind = match (head.target(), oid) {
+        (Some(local), Some(remote)) => repo
+            .graph_ahead_behind(local, remote)
+            .map(|(_, behind)| behind as u32)
+            .unwrap_or(0),
+        _ => 0,
+    };
+    Some(HeadUpstream { name, oid, behind })
+}
+
+fn new_upstream_commits(path: &Path, before: Option<&HeadUpstream>, after: Option<&HeadUpstream>) -> u32 {
+    let Some(after) = after else { return 0 };
+    match (before.and_then(|prior| prior.oid), after.oid) {
+        (Some(old), Some(new)) if old != new => git2::Repository::open(path)
+            .ok()
+            .and_then(|repo| repo.graph_ahead_behind(new, old).ok())
+            .map(|(ahead, _)| ahead as u32)
+            .unwrap_or(0),
+        (None, Some(_)) => after.behind,
+        _ => 0,
+    }
+}
+
+fn is_auth_failure(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "terminal prompts disabled",
+        "could not read username",
+        "could not read password",
+        "authentication failed",
+        "authentication required",
+        "authorization failed",
+        "invalid username or password",
+        "permission denied (publickey)",
+        "401 unauthorized",
+        "returned error: 401",
+        "returned error: 403",
+    ];
+    MARKERS.iter().any(|marker| lower.contains(marker))
 }
 
 /// Pull the meaningful failure out of a git transcript. git streams progress to
@@ -1629,5 +1829,232 @@ mod tests {
         assert_eq!(validate_branch_ref("--force", "branch").unwrap(), "refs/heads/--force");
         assert!(validate_branch_ref("../escape", "branch").is_err());
         assert!(validate_tracking_ref("origin", "bad..name").is_err());
+    }
+
+    #[test]
+    fn background_fetch_args_follow_the_prune_setting() {
+        assert_eq!(background_fetch_args(true), ["fetch", "--prune"]);
+        assert_eq!(background_fetch_args(false), ["fetch", "--no-prune"]);
+    }
+
+    /// A fresh `git init` repo in a temp dir, optionally with repo-local config.
+    fn ssh_probe_repo(name: &str, config: &[(&str, &str)]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            assert!(std::process::Command::new("git").current_dir(&dir).args(args).status().unwrap().success());
+        };
+        git(&["init", "-q"]);
+        for (key, value) in config {
+            git(&["config", key, value]);
+        }
+        std::fs::write(dir.join(".git").join("empty-global-config"), "").unwrap();
+        dir
+    }
+
+    /// The quiet background-fetch command, with the ssh probe blind to the
+    /// developer's GIT_SSH_COMMAND / GIT_SSH and global/system config.
+    fn isolated_quiet_fetch(dir: &Path) -> Command {
+        let global = dir.join(".git").join("empty-global-config");
+        let global = global.to_str().unwrap();
+        prepare_git_command_probed(dir, &background_fetch_args(false), &[], true, false, || {
+            user_ssh_command(dir, |_| None, &[("GIT_CONFIG_GLOBAL", global), ("GIT_CONFIG_NOSYSTEM", "1")])
+        })
+    }
+
+    #[test]
+    fn background_fetch_keeps_the_users_core_ssh_command() {
+        let dir = ssh_probe_repo("strand-ssh-cmd", &[("core.sshCommand", "ssh -i ~/.ssh/work")]);
+        let quiet = isolated_quiet_fetch(&dir);
+        assert!(
+            quiet.get_envs().all(|(key, _)| key != "GIT_SSH_COMMAND"),
+            "core.sshCommand must not be overridden"
+        );
+        assert!(quiet.get_envs().any(|(key, value)| key == "SSH_ASKPASS_REQUIRE" && value == Some("never".as_ref())));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn background_fetch_command_uses_hidden_git_and_cannot_prompt() {
+        let dir = ssh_probe_repo("strand-ssh-batch", &[]);
+        let quiet = isolated_quiet_fetch(&dir);
+        assert_eq!(quiet.get_program(), "git");
+        let args: Vec<_> = quiet.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
+        assert!(args.iter().any(|arg| arg == "fetch"));
+        assert!(args.iter().any(|arg| arg == "--no-prune"));
+        assert!(!args.iter().any(|arg| arg == "pull" || arg == "merge" || arg == "rebase"));
+        let env = |key: &str| {
+            quiet.get_envs().find(|(name, _)| *name == key).map(|(_, value)| {
+                value.map(|value| value.to_string_lossy().into_owned())
+            })
+        };
+        assert_eq!(env("GIT_TERMINAL_PROMPT"), Some(Some("0".into())));
+        assert_eq!(env("GCM_INTERACTIVE"), Some(Some("never".into())));
+        assert_eq!(env("GIT_SSH_COMMAND"), Some(Some("ssh -o BatchMode=yes".into())));
+        assert_eq!(env("SSH_ASKPASS_REQUIRE"), Some(Some("never".into())));
+        assert_eq!(env("GIT_ASKPASS"), Some(None));
+        assert_eq!(env("SSH_ASKPASS"), Some(None));
+        let askpass = args.iter().position(|arg| arg == "core.askPass=").expect("core.askPass cleared");
+        assert_eq!(args[askpass - 1], "-c");
+        assert!(askpass < args.iter().position(|arg| arg == "fetch").unwrap());
+
+        let manual = prepare_git_command(&dir, &["fetch", "--prune", "--progress"], &[], false, false);
+        assert!(manual.get_envs().all(|(key, _)| key != "GCM_INTERACTIVE"));
+        assert!(!manual.get_args().any(|arg| arg == "core.askPass="));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let src = include_str!("network.rs");
+        let start = src.find("pub(crate) fn prepare_git_command").expect("prepare_git_command");
+        let body = &src[start..];
+        let end = body.find("pub(crate) fn run_git_input_transcript_env").expect("runner");
+        let body = &body[..end];
+        assert!(body.contains("crate::git_command()"));
+        assert!(!body.contains("Command::new"), "bare Command::new flashes a console on Windows");
+
+        let fetch_start = src.find("pub fn fetch_background").expect("fetch_background");
+        let fetch_body = &src[fetch_start..];
+        let fetch_end = fetch_body.find("\n    pub fn pull(").expect("pull");
+        let fetch_body = &fetch_body[..fetch_end];
+        assert!(fetch_body.contains("let quiet_auth = true;"));
+        assert!(fetch_body.contains("run_git_input_transcript_env"));
+        assert!(!fetch_body.contains("Command::new"));
+        assert!(!fetch_body.contains("\"pull\""));
+        assert!(!fetch_body.contains("\"merge\""));
+        assert!(!fetch_body.contains("\"rebase\""));
+    }
+
+    #[test]
+    fn auth_failure_text_is_classified_without_treating_network_blips_as_auth() {
+        assert!(is_auth_failure("fatal: could not read Username for 'https://example': terminal prompts disabled"));
+        assert!(is_auth_failure("fatal: Authentication failed for 'https://example/repo.git'"));
+        assert!(!is_auth_failure("fatal: unable to access 'https://example/': Could not resolve host"));
+    }
+
+    #[test]
+    fn background_fetch_one_tick_reports_new_commits_without_touching_worktree() {
+        let (publisher, publisher_path, base) = push_fixture();
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+
+        let remote = base.join("remote.git");
+        git(&remote, &["symbolic-ref", "HEAD", "refs/heads/topic"]);
+        let consumer_path = base.join("consumer");
+        git(&base, &["clone", "-q", remote.to_str().unwrap(), consumer_path.to_str().unwrap()]);
+        std::fs::write(consumer_path.join("a.txt"), "dirty worktree\n").unwrap();
+        std::fs::write(consumer_path.join("staged.txt"), "staged\n").unwrap();
+        git(&consumer_path, &["add", "staged.txt"]);
+
+        let head_before = git(&consumer_path, &["rev-parse", "HEAD"]);
+        let status_before = git(&consumer_path, &["status", "--porcelain=v1", "-uall"]);
+        // Staged content, not the raw index file. `git fetch` may refresh the
+        // untracked-cache extension without staging or unstaging anything.
+        let index_entries_before = git(&consumer_path, &["ls-files", "-s"]);
+        let worktree_before = std::fs::read(consumer_path.join("a.txt")).unwrap();
+        let staged_before = std::fs::read(consumer_path.join("staged.txt")).unwrap();
+        let index_tree_before = git(&consumer_path, &["write-tree"]);
+
+        std::fs::write(publisher_path.join("a.txt"), "two\n").unwrap();
+        git(&publisher_path, &["add", "a.txt"]);
+        git(&publisher_path, &["commit", "-q", "-m", "second"]);
+        publisher.push(PushMode::Default, |_| {}, None).unwrap();
+
+        let consumer = Repo::discover(&consumer_path).unwrap();
+        let outcome = consumer.fetch_background(false).unwrap();
+        assert!(outcome.ok, "{}", outcome.output);
+        assert!(!outcome.auth_required);
+        assert_eq!(outcome.new_commits, 1);
+        assert_eq!(outcome.behind, 1);
+        assert_eq!(outcome.upstream.as_deref(), Some("origin/topic"));
+        assert_eq!(outcome.command, "git fetch --no-prune");
+        assert_eq!(git(&consumer_path, &["rev-parse", "HEAD"]), head_before);
+        assert_eq!(git(&consumer_path, &["status", "--porcelain=v1", "-uall"]), status_before);
+        assert_eq!(git(&consumer_path, &["ls-files", "-s"]), index_entries_before);
+        assert_eq!(std::fs::read(consumer_path.join("a.txt")).unwrap(), worktree_before);
+        assert_eq!(std::fs::read(consumer_path.join("staged.txt")).unwrap(), staged_before);
+        assert_eq!(git(&consumer_path, &["write-tree"]), index_tree_before);
+
+        drop(consumer);
+        drop(publisher);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn background_fetch_auth_failure_does_not_prompt() {
+        let base = std::env::temp_dir().join(format!(
+            "strand-auth-fetch-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let local = base.join("local");
+        std::fs::create_dir_all(&local).unwrap();
+        git(&local, &["init", "-q", "-b", "main"]);
+        git(&local, &["config", "user.name", "Test"]);
+        git(&local, &["config", "user.email", "test@example.com"]);
+        git(&local, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(local.join("a.txt"), "one\n").unwrap();
+        git(&local, &["add", "a.txt"]);
+        git(&local, &["commit", "-q", "-m", "first"]);
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let _ = listener.set_nonblocking(false);
+            for _ in 0..8 {
+                let Ok((mut sock, _)) = listener.accept() else { break };
+                let _ = sock.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                let mut buf = [0u8; 2048];
+                let _ = std::io::Read::read(&mut sock, &mut buf);
+                let _ = std::io::Write::write_all(
+                    &mut sock,
+                    b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"strand\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+            }
+        });
+
+        let marker = base.join("prompted");
+        let script = base.join("helper.sh");
+        let marker_arg = marker.to_string_lossy().replace('\\', "/");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nmarker=$1\nif [ \"$GCM_INTERACTIVE\" = \"never\" ] && [ \"$GIT_TERMINAL_PROMPT\" = \"0\" ]; then\n  exit 1\nfi\necho prompted > \"$marker\"\nsleep 60\nexit 1\n",
+        ).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let script_arg = script.to_string_lossy().replace('\\', "/");
+        git(&local, &["config", "--local", "credential.helper", ""]);
+        git(&local, &[
+            "config",
+            "--local",
+            "--add",
+            "credential.helper",
+            &format!("!sh \"{script_arg}\" \"{marker_arg}\""),
+        ]);
+        git(&local, &[
+            "remote",
+            "add",
+            "origin",
+            &format!("http://127.0.0.1:{port}/repo.git"),
+        ]);
+
+        let repo = Repo::discover(&local).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(repo.fetch_background(true));
+        });
+        let outcome = rx.recv_timeout(std::time::Duration::from_secs(20))
+            .expect("background fetch blocked on a credential prompt")
+            .unwrap();
+        assert!(!outcome.ok, "expected a quiet auth failure, got {outcome:?}");
+        assert!(outcome.auth_required, "output was not classified as auth: {}", outcome.output);
+        assert!(!marker.exists(), "credential helper opened a prompt");
+        assert_eq!(outcome.new_commits, 0);
+        assert_eq!(git(&local, &["status", "--porcelain"]), "");
+
+        drop(rx);
+        let _ = std::fs::remove_dir_all(base);
     }
 }

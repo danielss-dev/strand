@@ -2184,6 +2184,9 @@ the audit does not mark these fixes or proposals shipped.
   `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
 - ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
   choices; signed-tag creation and verification, 2026-09-06).
+- ☑ **Auto-fetch** (DAN-89, 2026-10-19) — open repositories fetch on a timer
+  (Off / 5 / 10 / 30 min, default 10). Behind-count updates and a short toast
+  reports new upstream commits. Fetch only; no pull, merge, or credential prompt.
 - ☑ **What's New dialog** (DAN-86, 2026-10-15) — Strand menu **What's New…**
   lists `vX.Y.Z` app releases; What's Changed PRs expand in-app to the
   cleaned PR description; Settings → Updates is unchanged
@@ -3258,6 +3261,19 @@ and a clean status; failure still opens the repo and shows Git LFS's own
 reason plus a Pull retry hint. `error_summary` keeps LFS explanation lines.
 Fixtures in `clone_lfs.rs`. Live check against private Azure DevOps
 `portal-setup` remains on Daniels' machine.
+
+**Auto-fetch (2026-10-19, DAN-89):** Open repositories fetch in the background
+on the Settings → Git interval. Daniels chose 10 minutes as the default
+(Off, 5, and 30 remain available, and each open repository can opt out).
+The active repository goes first and the others are staggered. A tick is
+skipped when that repository already has a manual fetch, pull, or push, when
+Strand is offline, or when a fetch is already running. The fetch honors the
+repository's fetch-prune setting and never pulls, merges, rebases, or touches
+the worktree or index. A remote with no cached credential fails once, quietly,
+and backs off instead of opening a prompt. New commits on the current branch's
+upstream update the behind-count and show a toast. Background fetches are
+quiet activity-log entries. Git is spawned through `git_command`
+(`CREATE_NO_WINDOW`), the same hidden-console path as DAN-83.
 
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and

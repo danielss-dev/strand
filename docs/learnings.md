@@ -3099,6 +3099,28 @@ sparse expansion through its existing reader. git2 0.19 `Index::get_path`
 already normalizes Windows separators through `path_to_repo_path`; do not add
 lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.
 
+## Background fetch stays on `git_command` and never prompts (DAN-89)
+
+**Rule.** Auto-fetch spawns git only through `prepare_git_command` →
+`git_command` / `hide_console` (`CREATE_NO_WINDOW`). The background call sets
+`quiet_auth`: `GCM_INTERACTIVE=never`, `-c core.askPass=` (git consults it
+before `GIT_TERMINAL_PROMPT`), `SSH_ASKPASS_REQUIRE=never`, and removes
+`GIT_ASKPASS` / `SSH_ASKPASS`. It sets `GIT_SSH_COMMAND=ssh -o BatchMode=yes`
+only when the user has no `core.sshCommand` / `GIT_SSH_COMMAND` / `GIT_SSH`;
+the env var outranks config, so setting it unconditionally drops their key.
+Manual fetch must keep the user's credential helper and askpass. An auth
+failure is one quiet activity entry plus backoff — do not retry every tick,
+and do not pull, merge, or touch the index. A fetch that printed nothing and
+brought no commits writes no activity entry. Refresh the repo afterwards
+through the store's `refreshUpstream` (coalesced queue), not a direct setState.
+
+**Why.** The release build is GUI-subsystem. A bare `Command::new("git")`
+flashes a console on Windows (DAN-83). A background tick that opens Git
+Credential Manager or an SSH prompt steals focus and can hang the interval.
+
+**How to apply.** Add new network spawns to `prepare_git_command`. Lock the
+path with the source test in `network.rs` and, on Windows, `console_probe`.
+
 ## Agent Session Recap is a Strand builtin, not static markdown (2026-10-01)
 
 **Rule.** Community plugins stay data-only (`markdown` / `status`,

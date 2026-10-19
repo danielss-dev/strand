@@ -527,6 +527,18 @@ export interface NetworkOutcome {
   output: string;
 }
 
+/** One background `git fetch`. Auth failures stay here so the scheduler can
+ * record a single quiet entry and back off instead of prompting. */
+export interface BackgroundFetchOutcome {
+  ok: boolean;
+  auth_required: boolean;
+  output: string;
+  command: string;
+  new_commits: number;
+  upstream: string | null;
+  behind: number;
+}
+
 export type MaintenanceTask = 'maintenance' | 'garbage-collect' | 'integrity-check';
 
 export interface MaintenanceOutcome {
@@ -538,7 +550,7 @@ export interface MaintenanceOutcome {
 
 export interface RepoActivityEntry extends MaintenanceOutcome {
   id: string;
-  task: MaintenanceTask | 'commit' | 'amend';
+  task: MaintenanceTask | 'commit' | 'amend' | 'background-fetch';
   started_at: number;
 }
 

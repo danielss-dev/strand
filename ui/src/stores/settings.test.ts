@@ -21,6 +21,7 @@ test('persists startup settings and seeds the configured initial space', async (
 
   const { useSettings } = await import('./settings');
   expect(useSettings.getState().startupSpace).toBe('work');
+  expect(useSettings.getState().autoFetchIntervalMin).toBe(10);
   expect(useSettings.getState().keybindings).toEqual({ 'customize-workbench': 'Mod+9' });
   useSettings.getState().set('aiConnectionStatus', {
     openai: { installed: true, loggedIn: true, checkedAt: 123 },

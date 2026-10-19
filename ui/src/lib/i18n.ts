@@ -369,6 +369,15 @@ export const en = {
   'merge.ai.retry': 'Retry with {provider}',
   'merge.ai.signIn': 'Sign-in started — complete it in the browser or CLI window, then suggest again.',
   'merge.ai.signInFailed': 'Sign-in failed: {message}',
+  'git.autoFetch': 'Auto-fetch',
+  'git.autoFetchHint': 'Fetch open repositories on a timer. Fetch only — Strand does not pull, merge, or change your files.',
+  'git.autoFetch.off': 'Off',
+  'git.autoFetch.minutes': '{count} min',
+  'git.autoFetchRepoHint': 'Uncheck a repository to skip its background fetch.',
+  'git.autoFetchNone': 'Open a repository to choose a per-repository exception.',
+  'git.activity.fetch': 'Background fetch',
+  'git.notice.one': '1 new commit on {upstream}',
+  'git.notice.other': '{count} new commits on {upstream}',
 } as const;
 
 export type MessageKey = keyof typeof en;
