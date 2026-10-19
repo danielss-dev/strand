@@ -445,6 +445,11 @@ export interface RepoState {
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
+  /**
+   * After a background fetch: re-read `path`'s meta (ahead/behind) through the
+   * coalesced refresh queue, and its refs when it is the active repository.
+   */
+  refreshUpstream(path: string): Promise<void>;
   /** Default strategy used by the primary Pull action for this repository. */
   pullMode: PullMode;
   setPullMode(mode: PullMode): void;
@@ -1929,6 +1934,23 @@ export const useRepo = create<RepoState>((set, get) => ({
       meta,
       tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
     }));
+  },
+  async refreshUpstream(path) {
+    const key = pathKey(path);
+    await refreshes.run(`${key}:upstream`, async (current) => {
+      try {
+        const meta = await tauri.repoMeta(path);
+        if (!current()) return;
+        set((s) => {
+          const tabs = s.tabs.map((t) => (pathKey(t.path) === key ? { ...t, meta } : t));
+          return s.activePath && pathKey(s.activePath) === key ? { tabs, meta } : { tabs };
+        });
+      } catch (e) {
+        console.warn('repoMeta failed', e);
+      }
+    });
+    const active = get().activePath;
+    if (active && pathKey(active) === key) await get().refreshRefs();
   },
   setPullMode(mode) {
     set({ pullMode: mode });

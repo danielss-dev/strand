@@ -3103,11 +3103,16 @@ lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.
 
 **Rule.** Auto-fetch spawns git only through `prepare_git_command` →
 `git_command` / `hide_console` (`CREATE_NO_WINDOW`). The background call sets
-`quiet_auth`: `GCM_INTERACTIVE=never`, `GIT_SSH_COMMAND=ssh -o BatchMode=yes`,
-`SSH_ASKPASS_REQUIRE=never`, and removes `GIT_ASKPASS` / `SSH_ASKPASS`.
+`quiet_auth`: `GCM_INTERACTIVE=never`, `-c core.askPass=` (git consults it
+before `GIT_TERMINAL_PROMPT`), `SSH_ASKPASS_REQUIRE=never`, and removes
+`GIT_ASKPASS` / `SSH_ASKPASS`. It sets `GIT_SSH_COMMAND=ssh -o BatchMode=yes`
+only when the user has no `core.sshCommand` / `GIT_SSH_COMMAND` / `GIT_SSH`;
+the env var outranks config, so setting it unconditionally drops their key.
 Manual fetch must keep the user's credential helper and askpass. An auth
 failure is one quiet activity entry plus backoff — do not retry every tick,
-and do not pull, merge, or touch the index.
+and do not pull, merge, or touch the index. A fetch that printed nothing and
+brought no commits writes no activity entry. Refresh the repo afterwards
+through the store's `refreshUpstream` (coalesced queue), not a direct setState.
 
 **Why.** The release build is GUI-subsystem. A bare `Command::new("git")`
 flashes a console on Windows (DAN-83). A background tick that opens Git

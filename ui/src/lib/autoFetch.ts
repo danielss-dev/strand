@@ -104,6 +104,11 @@ export function autoFetchNotice(result: Pick<BackgroundFetchOutcome, 'new_commit
   );
 }
 
+/** A successful fetch that git reported nothing for: no ref moved or was pruned. */
+export function autoFetchIsNoop(result: Pick<BackgroundFetchOutcome, 'ok' | 'output' | 'new_commits'>): boolean {
+  return result.ok && result.new_commits <= 0 && result.output.trim() === '';
+}
+
 export function autoFetchActivity(
   path: string,
   result: BackgroundFetchOutcome,

@@ -558,10 +558,17 @@ export function App() {
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
   const autoFetchIntervalMin = useSettings((s) => s.autoFetchIntervalMin);
+  // Manual network ops run against the repository that was active when they
+  // started. Remember that one, so switching tabs mid-op doesn't move the
+  // auto-fetch skip onto a repository that is idle.
+  const manualBusy = syncing || pulling || pushing;
+  const manualBusyPath = useRef<string | null>(null);
+  if (!manualBusy) manualBusyPath.current = null;
+  else if (manualBusyPath.current === null) manualBusyPath.current = activePath;
   useAutoFetch({
     intervalMin: autoFetchIntervalMin,
-    manualBusy: syncing || pulling || pushing,
-    manualPath: activePath,
+    manualBusy,
+    manualPath: manualBusyPath.current,
     notify: showToast,
   });
 

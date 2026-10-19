@@ -6,6 +6,7 @@ import { isTauri, tauri } from './tauri';
 import type { AutoFetchIntervalMin } from './autoFetch';
 import {
   autoFetchActivity,
+  autoFetchIsNoop,
   autoFetchNotice,
   startAutoFetch,
 } from './autoFetch';
@@ -64,26 +65,14 @@ export function useAutoFetch(options: {
       onResult: (repo, result, startedAt, finishedAt) => {
         const notice = autoFetchNotice(result);
         if (notice) optionsRef.current.notify(notice);
+        // A fetch that changed nothing is not worth an activity row every tick.
+        if (autoFetchIsNoop(result)) return;
         const entry = autoFetchActivity(repo.path, result, startedAt, finishedAt);
         void repoActivity.append(repo.path, entry).catch(() => {});
         if (!result.ok) return;
-        void refreshUpstream(repo.path);
+        void useRepo.getState().refreshUpstream(repo.path);
       },
     });
     return () => loop.stop();
   }, [intervalMin]);
-}
-
-async function refreshUpstream(path: string): Promise<void> {
-  try {
-    const [meta, refs] = await Promise.all([tauri.repoMeta(path), tauri.repoRefs(path)]);
-    useRepo.setState((state) => {
-      const key = pathKey(path);
-      const tabs = state.tabs.map((tab) => (pathKey(tab.path) === key ? { ...tab, meta } : tab));
-      if (state.activePath && pathKey(state.activePath) === key) return { tabs, meta, refs };
-      return { tabs };
-    });
-  } catch {
-    // The next manual refresh picks up the remote-tracking refs.
-  }
 }

@@ -4,6 +4,7 @@ import type { BackgroundFetchOutcome } from './types';
 import {
   AUTO_FETCH_AUTH_BACKOFF_MS,
   autoFetchActivity,
+  autoFetchIsNoop,
   autoFetchNotice,
   backgroundFetchInFlight,
   normalizeAutoFetchInterval,
@@ -327,6 +328,16 @@ describe('startAutoFetch', () => {
     expect(fetched).toBe(0);
     expect(queued).toEqual([]);
     loop.stop();
+  });
+});
+
+describe('autoFetchIsNoop', () => {
+  it('treats a silent successful fetch as a no-op and anything else as worth logging', () => {
+    expect(autoFetchIsNoop(unchanged)).toBe(true);
+    expect(autoFetchIsNoop({ ...unchanged, output: ' \n' })).toBe(true);
+    expect(autoFetchIsNoop({ ...unchanged, output: ' - [deleted] (none) -> origin/old' })).toBe(false);
+    expect(autoFetchIsNoop({ ...unchanged, new_commits: 2, output: '' })).toBe(false);
+    expect(autoFetchIsNoop({ ...unchanged, ok: false })).toBe(false);
   });
 });
 
