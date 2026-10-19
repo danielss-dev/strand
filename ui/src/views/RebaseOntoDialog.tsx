@@ -12,17 +12,28 @@ import { UpdateRefsToggle } from './RebaseUpdateRefs';
  * Confirm a plain `git rebase <onto>` and choose whether other local branches
  * in the range follow (`--update-refs`). The choice is remembered per repo as
  * Strand's `strand.rebaseUpdateRefs` once the rebase starts.
+ *
+ * The sidebar Rebase menu and a branch drag-and-drop both open this dialog.
+ * A drop that has to switch branches first passes `checkout` and `wrap`; the
+ * branch preview is skipped then, because it is computed from the current
+ * HEAD, not the branch the drop checks out.
  */
 export function RebaseOntoDialog({
   onto,
   branch,
   onClose,
   onToast,
+  checkout = null,
+  wrap,
 }: {
   onto: string;
   branch: string;
   onClose: () => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
+  /** Branch a drop checks out before rebasing; null when HEAD is already `branch`. */
+  checkout?: string | null;
+  /** Runs the rebase after that checkout, switching back if it fails. */
+  wrap?: <T>(step: () => Promise<T>) => Promise<T>;
 }) {
   const rebase = useRepo((s) => s.rebase);
   const loadRebaseUpdateRefs = useRepo((s) => s.loadRebaseUpdateRefs);
@@ -53,7 +64,7 @@ export function RebaseOntoDialog({
       .catch((caught) => {
         if (alive) setError(errMessage(caught));
       });
-    if (path) {
+    if (path && !checkout) {
       tauri.repoRebaseRefPreview(path, onto)
         .then((rows) => {
           if (alive) setPreview(rows);
@@ -65,7 +76,7 @@ export function RebaseOntoDialog({
     return () => {
       alive = false;
     };
-  }, [loadRebaseUpdateRefs, onto, path]);
+  }, [checkout, loadRebaseUpdateRefs, onto, path]);
 
   function onToggle(enabled: boolean) {
     setUpdateRefs(enabled);
@@ -79,7 +90,8 @@ export function RebaseOntoDialog({
     try {
       // Remember the choice only once a rebase actually starts.
       if (supported) await setRebaseUpdateRefs(updateRefs);
-      const outcome = await rebase(onto, supported && updateRefs);
+      const run = () => rebase(onto, supported && updateRefs);
+      const outcome = wrap ? await wrap(run) : await run();
       const done = outcome.paused
         ? t('rebase.plainConflict', { onto })
         : t('rebase.plainDone', { branch, onto });
@@ -114,7 +126,10 @@ export function RebaseOntoDialog({
       }
     >
       <div className="clone-body">
-        <p className="stash-blurb">{t('rebase.ontoBlurb', { branch, onto })}</p>
+        <p className="stash-blurb">
+          {t('rebase.ontoBlurb', { branch, onto })}
+          {checkout ? ` ${t('drag.git.checkoutFirst', { branch: checkout })}` : null}
+        </p>
         <UpdateRefsToggle
           supported={supported}
           enabled={updateRefs}

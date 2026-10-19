@@ -6,6 +6,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { computeGraph } from '../lib/graph';
 import { pickCommitPatchDestination } from '../lib/dialog';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { commitIndexByHash, linearTipHashes } from '../lib/gitDrag';
 import { selectedCommitsOldestFirst } from '../lib/historySelection';
 import {
   checkoutCommitProgress,
@@ -540,6 +541,23 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
     [providerMergedBranches, refs],
   );
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
+  const rewriteCommits = useMemo(() => linearTipHashes(commits, currentCommit), [commits, currentCommit]);
+  // Drag order uses the index in `commits`, never the graph row (stash rows
+  // shift row numbers), so rows and multi-selections compare the same way.
+  const commitIndex = useMemo(() => commitIndexByHash(rows), [rows]);
+  const commitDragSelection = useMemo(
+    () => {
+      if (bulkSelection.length <= 1) return undefined;
+      return JSON.stringify(bulkSelection.map((commit) => ({
+        hash: commit.hash,
+        short: commit.short_hash,
+        parents: commit.parents,
+        index: commitIndex.get(commit.hash) ?? 0,
+        rewrite: rewriteCommits.has(commit.hash),
+      })));
+    },
+    [bulkSelection, commitIndex, rewriteCommits],
+  );
   const colWidth = graphColWidth(graph.laneCount);
 
   // Hashes of the commits since the review baseline (`baseline..HEAD` over
@@ -1191,6 +1209,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
               ref={graphMainRef}
               className="graph-main"
               data-git-undo-surface="graph"
+              data-git-selection={commitDragSelection}
               tabIndex={0}
               role="grid"
               aria-multiselectable
@@ -1238,6 +1257,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
                           .filter(Boolean)
                           .join(' ') || undefined}
                         aria-selected={selected}
+                        data-git-source={stash ? undefined : 'commit'}
+                        data-git-drop={stash ? undefined : 'commit'}
+                        data-git-hash={stash ? undefined : c.hash}
+                        data-git-short={stash ? undefined : c.short_hash}
+                        data-git-parents={stash ? undefined : c.parents.join(' ')}
+                        data-git-index={stash ? undefined : commitIndex.get(c.hash)}
+                        data-git-selected={!stash && selected ? '1' : undefined}
+                        data-git-tip={!stash && c.hash === currentCommit ? '1' : undefined}
+                        data-git-rewrite={!stash && rewriteCommits.has(c.hash) ? '1' : undefined}
                         onClick={(e) => (stash ? onStashClick(stash) : onRowClick(c.hash, e))}
                         onContextMenu={(e) => {
                           e.preventDefault();

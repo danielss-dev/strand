@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { autosquashPlan, planUpdateRefs, withMovedBranches, type AutosquashInput } from './rebase';
+import { applyRebaseSeed, autosquashPlan, planUpdateRefs, withMovedBranches, type AutosquashInput } from './rebase';
 
 const e = (oid: string, subject: string): AutosquashInput => ({ oid, subject });
 
@@ -180,5 +180,30 @@ describe('withMovedBranches', () => {
     expect(withMovedBranches('Interactive rebase complete', ['stack-a', 'stack-b'])).toBe(
       'Interactive rebase complete. Moved stack-a, stack-b.',
     );
+  });
+});
+
+describe('applyRebaseSeed', () => {
+  const todo = [{ oid: 'a' }, { oid: 'b' }, { oid: 'c' }];
+
+  it('moves a newer commit to just before an older one', () => {
+    expect(applyRebaseSeed(todo, { move: ['c'], mode: 'reorder', anchor: 'b', place: 'before' })).toEqual([
+      { oid: 'a', action: 'pick' },
+      { oid: 'c', action: 'pick' },
+      { oid: 'b', action: 'pick' },
+    ]);
+  });
+
+  it('squashes the moved commits into the anchor', () => {
+    expect(applyRebaseSeed(todo, { move: ['c'], mode: 'squash', anchor: 'b', place: 'after' })).toEqual([
+      { oid: 'a', action: 'pick' },
+      { oid: 'b', action: 'pick' },
+      { oid: 'c', action: 'squash' },
+    ]);
+  });
+
+  it('returns null when a dragged commit is outside the todo', () => {
+    expect(applyRebaseSeed(todo, { move: ['missing'], mode: 'reorder', anchor: 'b', place: 'after' })).toBeNull();
+    expect(applyRebaseSeed(todo, { move: ['b'], mode: 'squash', anchor: 'b', place: 'after' })).toBeNull();
   });
 });
