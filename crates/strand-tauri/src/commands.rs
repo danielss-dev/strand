@@ -26,7 +26,7 @@ use strand_core::{
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     lfs::LfsAction,
-    history::{MergeMode, RebaseEntry, RebaseOutcome, RebaseRefPreview, RebaseStep, RebaseUpdateRefsSetting}, log::{Commit, SearchMode},
+    history::{AmendIntoPlan, MergeMode, RebaseEntry, RebaseOutcome, RebaseRefPreview, RebaseStep, RebaseUpdateRefsSetting}, log::{Commit, SearchMode},
     network::{clone_with_options as core_clone, BackgroundFetchOutcome, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
@@ -2032,6 +2032,16 @@ pub fn repo_interactive_rebase(
         preserve_merges,
         update_refs,
     )?)
+}
+
+#[tauri::command(async)]
+pub fn repo_amend_into_plan(path: String, target: String) -> CmdResult<AmendIntoPlan> {
+    Ok(Repo::discover(&path)?.amend_into_plan(&target)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_amend_into(path: String, target: String) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.amend_into_commit(&target)?)
 }
 
 #[tauri::command(async)]

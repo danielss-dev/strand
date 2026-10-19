@@ -320,6 +320,8 @@ the resolved app appearance automatically.
   and a fully keyboard-operable interactive rebase (reorder, reword,
   edit/pause-to-amend, squash, fixup, drop, merge preservation, and moving
   other local branches in the range) with pause/conflict Continue / Abort.
+  **Amend staged changes into this commit** folds the index into an older
+  commit on the branch in one confirmed rewrite.
   The merge editor can suggest a per-hunk AI resolution (explanation and
   confidence); it is written only after you accept or edit each hunk and
   click Resolve.

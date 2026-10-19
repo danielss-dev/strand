@@ -3166,3 +3166,22 @@ Git applies the placeholder at the end of the rebase, so a conflict pause
 and an abort leave every ref where it was; tips move only when the rebase
 finishes. Branches checked out in another worktree are shown and skipped.
 
+## Amend-into an older commit is an oid plan, not `--autosquash` (2026-10-19)
+
+**Rule.** `Repo::amend_into_commit` (`history.rs`) folds the index into a
+chosen ancestor by committing a fixup, then calling the existing scripted
+rebase with that fixup placed immediately after the target oid. Do not shell
+out to `git rebase --autosquash`: two commits with the same subject fold into
+the wrong one. A root target uses the existing `--root` path. Unstaged work
+goes through `git rebase --autostash` on that one call; plain
+`interactive_rebase` stays non-autostashing. Before the rebase, write the
+pre-fixup HEAD to `.git/strand-amend-into` (not inside `strand-rebase-plan`,
+which the todo writer replaces). `abort_operation` soft-resets to that oid
+only when it is the parent of the post-abort HEAD, so Abort restores the
+original tip and the staged index. `continue_operation` deletes the marker
+when the rebase finishes and does not reset. Refuse when `rebase_todo` reports
+a merge in the range, before creating the fixup. Warn, don't refuse, when
+`git merge-base --is-ancestor <target> @{upstream}` succeeds; silence stderr
+because no upstream is normal. Hunk and line moves between existing commits
+are a later slice and are not this path.
+

@@ -148,6 +148,17 @@ pub struct UpdateRefAnchor {
     pub will_move: bool,
 }
 
+/// Preview of folding the index into an older commit. `commits` is the range
+/// that a confirm dialog lists (oldest → newest). Nothing is written.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmendIntoPlan {
+    pub commits: Vec<RebaseEntry>,
+    /// `target` is reachable from `@{upstream}` — rewriting it needs a force push.
+    pub pushed: bool,
+    /// The range contains a merge commit, so the rewrite must be refused.
+    pub has_merge: bool,
+}
+
 impl Repo {
     /// Cherry-pick one or more commits onto HEAD, in the order given
     /// (`git cherry-pick <oid>…`). Each commit is any revspec git understands.
@@ -339,12 +350,26 @@ impl Repo {
     /// each other local branch should follow (see [`plan_update_refs`]). The
     /// preserve-merges editor prints unknown lines through, so git's own
     /// `update-ref` lines survive there and Strand does not emit a second copy.
+    ///
+    /// Does not autostash. [`amend_into_commit`](Repo::amend_into_commit) is the
+    /// path that stashes unstaged work for the duration of the rewrite.
     pub fn interactive_rebase(
         &self,
         base: Option<&str>,
         steps: &[RebaseStep],
         preserve_merges: bool,
         update_refs: bool,
+    ) -> Result<RebaseOutcome> {
+        self.interactive_rebase_inner(base, steps, preserve_merges, update_refs, false)
+    }
+
+    fn interactive_rebase_inner(
+        &self,
+        base: Option<&str>,
+        steps: &[RebaseStep],
+        preserve_merges: bool,
+        update_refs: bool,
+        autostash: bool,
     ) -> Result<RebaseOutcome> {
         if let Some(operation) = self.operation_in_progress() {
             return Err(Error::Other(format!(
@@ -486,6 +511,9 @@ impl Repo {
 
         let mut args: Vec<&str> = vec!["rebase", "-i"];
         push_update_refs(&mut args, update_refs)?;
+        if autostash {
+            args.push("--autostash");
+        }
         if preserve_merges {
             args.push("--rebase-merges");
         }
@@ -589,6 +617,134 @@ impl Repo {
         Ok(plan_update_refs(original, steps, &branches))
     }
 
+    /// Commits that would be rewritten by [`amend_into_commit`](Repo::amend_into_commit),
+    /// plus whether that rewrite is blocked on a merge or needs a force push.
+    /// Read-only.
+    pub fn amend_into_plan(&self, target: &str) -> Result<AmendIntoPlan> {
+        let (commits, _base, target_oid) = self.amend_into_range(target)?;
+        Ok(AmendIntoPlan {
+            pushed: commit_is_pushed(&self.path, &target_oid)?,
+            has_merge: commits.iter().any(|entry| entry.is_merge),
+            commits,
+        })
+    }
+
+    /// Fold the staged index into `target` in one step: commit a fixup at HEAD,
+    /// then replay `target..HEAD` with that fixup placed by oid immediately
+    /// after `target`. The plan is explicit — subject matching (`--autosquash`)
+    /// can fold into the wrong commit when two subjects match.
+    ///
+    /// Unstaged work is autostashed for the rebase and restored when it
+    /// finishes or aborts. A conflict pauses like any other rebase
+    /// (`Ok(true)`); [`abort_operation`](Repo::abort_operation) returns to the
+    /// pre-fixup tip and puts the index back. A merge anywhere in the rewritten
+    /// range is refused before anything is written. Other local branches whose
+    /// tips sit in the rewritten range move with it (`--update-refs`), so a
+    /// stacked branch never keeps the pre-amend commits.
+    pub fn amend_into_commit(&self, target: &str) -> Result<bool> {
+        if let Some(operation) = self.operation_in_progress() {
+            return Err(Error::Other(format!(
+                "cannot amend into a commit while {operation} is in progress"
+            )));
+        }
+        let (commits, base, target_oid) = self.amend_into_range(target)?;
+        if commits.iter().any(|entry| entry.is_merge) {
+            return Err(Error::Other(
+                "this range contains a merge commit — Strand won't rewrite it".into(),
+            ));
+        }
+        if !index_has_staged(&self.path)? {
+            return Err(Error::Other(
+                "nothing staged to amend into this commit".into(),
+            ));
+        }
+        let original = run_git(&self.path, &["rev-parse", "HEAD"])?;
+        let subject = commits
+            .iter()
+            .find(|entry| entry.oid == target_oid)
+            .map(|entry| entry.subject.as_str())
+            .unwrap_or("");
+        let fixup = self.commit(&format!("fixup! {subject}"), None, false)?;
+        let marker = amend_into_marker(self);
+        // Original tip, then the fixup. Abort only restores when HEAD is
+        // exactly that fixup, so a stale marker can't reset unrelated work.
+        if let Err(e) = std::fs::write(&marker, format!("{original}\n{}\n", fixup.oid)) {
+            let _ = run_git(&self.path, &["reset", "--soft", &original]);
+            return Err(Error::Other(format!("write amend marker: {e}")));
+        }
+        let mut steps = Vec::with_capacity(commits.len() + 1);
+        for entry in &commits {
+            steps.push(RebaseStep {
+                action: RebaseAction::Pick,
+                oid: entry.oid.clone(),
+                message: None,
+            });
+            if entry.oid == target_oid {
+                steps.push(RebaseStep {
+                    action: RebaseAction::Fixup,
+                    oid: fixup.oid.clone(),
+                    message: None,
+                });
+            }
+        }
+        // Pass `--update-refs` explicitly (Git 2.38+) so other local branches
+        // stacked in `target..HEAD` follow the rewritten commits instead of
+        // being left on the pre-amend history. Older git passes neither flag.
+        let result = self
+            .interactive_rebase_inner(
+                base.as_deref(),
+                &steps,
+                false,
+                git_supports_update_refs(),
+                true,
+            )
+            .map(|outcome| outcome.paused);
+        match &result {
+            Ok(false) => {
+                let _ = std::fs::remove_file(&marker);
+                // git exits 0 when re-applying the autostash conflicts, so a
+                // finished rewrite can still leave conflicted unstaged work.
+                self.check_autostash_applied()?;
+            }
+            Ok(true) => {}
+            Err(_) => {
+                // The rebase never moved HEAD off the fixup (it failed before
+                // rewriting). Put the index back.
+                if self.operation_in_progress().is_none() {
+                    let head = run_git(&self.path, &["rev-parse", "HEAD"]).unwrap_or_default();
+                    if head == fixup.oid {
+                        let _ = run_git(&self.path, &["reset", "--soft", &original]);
+                    }
+                    let _ = std::fs::remove_file(&marker);
+                }
+            }
+        }
+        result
+    }
+
+    /// `base` (parent of `target`, or `None` for a root), the commits that
+    /// would be rewritten, and `target`'s full oid. `target` must sit on the
+    /// current branch.
+    fn amend_into_range(&self, target: &str) -> Result<(Vec<RebaseEntry>, Option<String>, String)> {
+        validate_ref(target)?;
+        let target_oid = run_git(
+            &self.path,
+            &["rev-parse", "--verify", &format!("{target}^{{commit}}")],
+        )?;
+        let base = run_git(
+            &self.path,
+            &["rev-parse", "--verify", &format!("{target_oid}^")],
+        )
+        .ok();
+        let commits = self.rebase_todo(base.as_deref())?;
+        if !commits.iter().any(|entry| entry.oid == target_oid) {
+            return Err(Error::Other(format!(
+                "{target} is not on the current branch — can't amend into it"
+            )));
+        }
+        Ok((commits, base, target_oid))
+    }
+
     /// Resume the sequencer/merge/rebase op paused mid-flight (after the user
     /// resolved conflicts in the working tree, or for any deliberate stop).
     /// Detects the live op from the same on-disk markers as
@@ -615,6 +771,14 @@ impl Repo {
         let result = self.run_sequencer_env(&[cmd, "--continue"], &[("GIT_EDITOR", "true")]);
         if self.operation_in_progress().is_none() {
             let _ = std::fs::remove_dir_all(self.git_dir().join("strand-rebase-plan"));
+            // The rewrite finished. Drop the pre-fixup tip so a later abort
+            // cannot soft-reset over the new history.
+            let marker = amend_into_marker(self);
+            let amend_into = marker.exists();
+            let _ = std::fs::remove_file(marker);
+            if amend_into && matches!(result, Ok(false)) {
+                self.check_autostash_applied()?;
+            }
         }
         result
     }
@@ -674,8 +838,63 @@ impl Repo {
         };
         run_git(&self.path, &[cmd, "--abort"])?;
         let _ = std::fs::remove_dir_all(self.git_dir().join("strand-rebase-plan"));
+        // An amend-into rebase aborts back onto the temporary fixup. Soft-reset
+        // to the tip recorded before that fixup so Abort restores the original.
+        self.restore_amend_into_original(op == "rebase")?;
         Ok(())
     }
+
+    /// After an amend-into rewrite finishes, git reports a conflicting
+    /// autostash re-apply on stderr and still exits 0, leaving unmerged
+    /// entries. Surface that instead of reporting a clean success.
+    fn check_autostash_applied(&self) -> Result<()> {
+        // Out of process: the cached git2 index can still hold the conflict
+        // that paused the rebase before Continue.
+        let unmerged = run_git(&self.path, &["ls-files", "--unmerged"]).unwrap_or_default();
+        if !unmerged.is_empty() {
+            return Err(Error::Other(
+                "The commit was rewritten, but re-applying your unstaged changes conflicted. \
+                 They are safe in the stash (`git stash list`). Resolve the conflicts in the \
+                 working tree, then drop that stash entry."
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// `strand-amend-into` records the pre-amend tip and the fixup commit.
+    /// Only a rebase abort that lands exactly on that fixup restores the
+    /// pre-amend tip. Any other abort or HEAD just drops the marker (it was
+    /// stale, or this abort was not an amend-into rewrite).
+    fn restore_amend_into_original(&self, rebase_aborted: bool) -> Result<()> {
+        let path = amend_into_marker(self);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(Error::Other(format!("read amend marker: {error}"))),
+        };
+        let mut lines = text.lines().map(str::trim);
+        let (Some(original), Some(fixup)) = (lines.next(), lines.next()) else {
+            let _ = std::fs::remove_file(&path);
+            return Ok(());
+        };
+        if !rebase_aborted || original.is_empty() || fixup.is_empty() {
+            let _ = std::fs::remove_file(&path);
+            return Ok(());
+        }
+        let head = run_git(&self.path, &["rev-parse", "HEAD"])?;
+        if head == fixup {
+            run_git(&self.path, &["reset", "--soft", original]).map_err(|error| {
+                Error::Other(format!(
+                    "{error} (original tip {original} is recorded in {})",
+                    path.display()
+                ))
+            })?;
+        }
+        let _ = std::fs::remove_file(&path);
+        Ok(())
+    }
+
 }
 
 /// Append validated revspecs after a `--` end-of-options separator.
@@ -1128,6 +1347,53 @@ fn landing_anchor(original: &[String], steps: &[RebaseStep], tip: &str) -> Optio
         RebaseAction::Drop => None,
     }
 }
+
+/// Pre-fixup HEAD for an in-progress amend-into. Lives beside the worktree git
+/// dir, not inside `strand-rebase-plan`, because that directory is replaced
+/// when the rebase todo is written.
+fn amend_into_marker(repo: &Repo) -> PathBuf {
+    repo.git_dir().join("strand-amend-into")
+}
+
+/// `git diff --cached --quiet` exits 0 when the index matches HEAD and 1 when
+/// it doesn't. Any other status is a real failure (missing HEAD, bad index).
+fn index_has_staged(cwd: &Path) -> Result<bool> {
+    let status = crate::git_command()
+        .current_dir(cwd)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .args(crate::GIT_SAFE_CONFIG)
+        .args(["diff", "--cached", "--quiet"])
+        .status()
+        .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
+    match status.code() {
+        Some(0) => Ok(false),
+        Some(1) => Ok(true),
+        _ => Err(Error::Other(
+            "couldn't tell whether the index has staged changes".into(),
+        )),
+    }
+}
+
+/// Whether `oid` is already contained in the current branch's upstream. No
+/// upstream (detached HEAD, unset tracking) is not pushed — there is nothing
+/// to force-push.
+fn commit_is_pushed(cwd: &Path, oid: &str) -> Result<bool> {
+    let status = crate::git_command()
+        .current_dir(cwd)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        // No upstream is the common case and git reports it on stderr.
+        .stderr(std::process::Stdio::null())
+        .args(crate::GIT_SAFE_CONFIG)
+        .args(["merge-base", "--is-ancestor", "--", oid, "@{upstream}"])
+        .status()
+        .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
+    Ok(status.success())
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -2135,4 +2401,429 @@ mod tests {
         }
         Command::new("sh")
     }
+
+
+    /// Blob contents as stored (`git show`), trailing newline trimmed by `git()`.
+    fn blob(dir: &Path, rev: &str, file: &str) -> String {
+        git(dir, &["show", &format!("{rev}:{file}")]).replace("\r\n", "\n")
+    }
+
+    fn worktree_text(dir: &Path, file: &str) -> String {
+        std::fs::read_to_string(dir.join(file))
+            .unwrap()
+            .replace("\r\n", "\n")
+    }
+
+    /// C1 touches `a.txt`; C2 and C3 touch other files. Returns (c0, c1, c2, c3).
+    fn c1_c2_c3(dir: &Path) -> (String, String, String, String) {
+        let c0 = write_commit(dir, "base.txt", "base\n", "c0");
+        let c1 = write_commit(dir, "a.txt", "a\n", "c1");
+        let c2 = write_commit(dir, "b.txt", "b\n", "c2");
+        let c3 = write_commit(dir, "c.txt", "c\n", "c3");
+        (c0, c1, c2, c3)
+    }
+
+    #[test]
+    fn amend_into_moves_a_stacked_branch_with_the_rewrite() {
+        if !git_supports_update_refs() {
+            return;
+        }
+        let (repo, dir) = scratch_repo();
+        let (c0, c1, c2, _c3) = c1_c2_c3(&dir);
+        // A stacked branch whose tip is inside the rewritten range.
+        git(&dir, &["branch", "stack-a", &c2]);
+        std::fs::write(dir.join("a.txt"), "a\nplus\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+
+        assert!(!repo.amend_into_commit(&c1).unwrap());
+        let stacked = tip(&dir, "stack-a");
+        assert_ne!(stacked, c2, "stack-a must not keep the pre-amend commit");
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "stack-a"]), "c2");
+        assert_eq!(
+            git(&dir, &["rev-parse", "HEAD~1"]),
+            stacked,
+            "stack-a follows the rewritten c2"
+        );
+        let new_c1 = git(&dir, &["rev-parse", "stack-a~1"]);
+        assert_eq!(git(&dir, &["rev-parse", "stack-a~2"]), c0);
+        assert_eq!(blob(&dir, &new_c1, "a.txt"), "a\nplus");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_folds_staged_changes_and_keeps_later_messages() {
+        let (repo, dir) = scratch_repo();
+        let (c0, c1, c2, c3) = c1_c2_c3(&dir);
+        let plan = repo.amend_into_plan(&c1).unwrap();
+        assert_eq!(
+            plan.commits
+                .iter()
+                .map(|c| c.subject.as_str())
+                .collect::<Vec<_>>(),
+            ["c1", "c2", "c3"]
+        );
+        assert!(!plan.pushed);
+        assert!(!plan.has_merge);
+        let untouched = repo.amend_into_commit(&c1).unwrap_err().to_string();
+        assert!(untouched.contains("nothing staged"), "{untouched}");
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), c3);
+
+        std::fs::write(dir.join("a.txt"), "a\nplus\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        // Unstaged edit on a file the rewrite still has to replay.
+        std::fs::write(dir.join("c.txt"), "c\nlocal\n").unwrap();
+
+        assert!(
+            !repo.amend_into_commit(&c1).unwrap(),
+            "clean fold does not pause"
+        );
+        let rewritten: Vec<String> = git(
+            &dir,
+            &["log", "--reverse", "--format=%H %s", &format!("{c0}..HEAD")],
+        )
+        .lines()
+        .map(str::to_string)
+        .collect();
+        let subjects: Vec<&str> = rewritten
+            .iter()
+            .map(|line| line.split_once(' ').unwrap().1)
+            .collect();
+        assert_eq!(subjects, ["c1", "c2", "c3"]);
+        let new_c1 = rewritten[0].split_once(' ').unwrap().0;
+        let new_c2 = rewritten[1].split_once(' ').unwrap().0;
+        let new_c3 = rewritten[2].split_once(' ').unwrap().0;
+        assert_ne!(new_c1, c1);
+        assert_ne!(new_c2, c2);
+        assert_ne!(new_c3, c3);
+        assert_eq!(blob(&dir, new_c1, "a.txt"), "a\nplus");
+        assert_eq!(blob(&dir, new_c2, "b.txt"), "b");
+        assert_eq!(blob(&dir, new_c3, "c.txt"), "c");
+        assert!(
+            !git(&dir, &["log", "--format=%s", "HEAD"]).contains("fixup!"),
+            "fixup commit must be folded away"
+        );
+        assert_eq!(worktree_text(&dir, "c.txt"), "c\nlocal\n");
+        assert_eq!(git(&dir, &["show", ":c.txt"]).replace("\r\n", "\n"), "c");
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+        println!(
+            "PROOF fold: subjects={subjects:?} c1_a.txt={} unstaged_c.txt={} rewritten={new_c1} {new_c2} {new_c3}",
+            blob(&dir, new_c1, "a.txt"),
+            worktree_text(&dir, "c.txt").trim()
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_targets_the_oid_when_subjects_match() {
+        let (repo, dir) = scratch_repo();
+        let c0 = write_commit(&dir, "base.txt", "base\n", "c0");
+        let c1 = write_commit(&dir, "a.txt", "a\n", "same");
+        let _c2 = write_commit(&dir, "b.txt", "b\n", "same");
+        write_commit(&dir, "c.txt", "c\n", "other");
+        std::fs::write(dir.join("a.txt"), "a\nplus\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+
+        assert!(!repo.amend_into_commit(&c1).unwrap());
+        let oids: Vec<String> = git(
+            &dir,
+            &["log", "--reverse", "--format=%H", &format!("{c0}..HEAD")],
+        )
+        .lines()
+        .map(str::to_string)
+        .collect();
+        let diff_c1 = git(
+            &dir,
+            &["diff", &format!("{}^", oids[0]), &oids[0], "--", "a.txt"],
+        );
+        let diff_c2 = git(&dir, &["diff", &oids[0], &oids[1], "--", "a.txt"]);
+        assert!(
+            diff_c1.contains("+plus"),
+            "change landed in the chosen commit: {diff_c1}"
+        );
+        assert!(
+            diff_c2.is_empty(),
+            "later commit with the same subject was not the target: {diff_c2}"
+        );
+        println!(
+            "PROOF oid-plan: c1_diff_has_plus c2_diff_empty subjects={}",
+            git(
+                &dir,
+                &["log", "--reverse", "--format=%s", &format!("{c0}..HEAD")]
+            )
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_root_uses_root_rebase() {
+        let (repo, dir) = scratch_repo();
+        let root = write_commit(&dir, "a.txt", "a\n", "root");
+        write_commit(&dir, "b.txt", "b\n", "c2");
+        std::fs::write(dir.join("a.txt"), "a\nplus\n").unwrap();
+        git(&dir, &["add", "a.txt"]);
+        let plan = repo.amend_into_plan(&root).unwrap();
+        assert_eq!(
+            plan.commits
+                .iter()
+                .map(|c| c.subject.as_str())
+                .collect::<Vec<_>>(),
+            ["root", "c2"]
+        );
+
+        assert!(!repo.amend_into_commit(&root).unwrap());
+        let root_now = git(&dir, &["rev-list", "--max-parents=0", "HEAD"]);
+        assert_eq!(blob(&dir, &root_now, "a.txt"), "a\nplus");
+        assert_eq!(git(&dir, &["log", "--reverse", "--format=%s"]), "root\nc2");
+        println!(
+            "PROOF root: file={} subjects=root,c2",
+            blob(&dir, &root_now, "a.txt")
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_conflict_abort_restores_original_tip() {
+        let (repo, dir) = scratch_repo();
+        let c0 = write_commit(&dir, "base.txt", "base\n", "c0");
+        let c1 = write_commit(&dir, "f.txt", "base\n", "c1");
+        write_commit(&dir, "f.txt", "middle\n", "c2");
+        let original = write_commit(&dir, "g.txt", "g\n", "c3");
+        std::fs::write(dir.join("f.txt"), "staged\n").unwrap();
+        git(&dir, &["add", "f.txt"]);
+        std::fs::write(dir.join("g.txt"), "g\nlocal\n").unwrap();
+
+        let conflicted = repo.amend_into_commit(&c1).unwrap();
+        assert!(conflicted, "fixup onto c1 conflicts");
+        assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
+        assert!(repo.git_dir().join("strand-amend-into").exists());
+
+        repo.abort_operation().unwrap();
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), original);
+        assert_eq!(
+            git(&dir, &["show", ":f.txt"]).replace("\r\n", "\n"),
+            "staged"
+        );
+        assert_eq!(worktree_text(&dir, "g.txt"), "g\nlocal\n");
+        assert_eq!(git(&dir, &["show", ":g.txt"]).replace("\r\n", "\n"), "g");
+        assert!(!git(&dir, &["log", "--format=%s", &format!("{c0}..HEAD")]).contains("fixup!"));
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+        println!(
+            "PROOF abort: head={original} staged_f={} unstaged_g={}",
+            git(&dir, &["show", ":f.txt"]),
+            worktree_text(&dir, "g.txt").trim()
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_conflict_continue_finishes_the_rewrite() {
+        let (repo, dir) = scratch_repo();
+        let c0 = write_commit(&dir, "base.txt", "base\n", "c0");
+        let c1 = write_commit(&dir, "f.txt", "base\n", "c1");
+        write_commit(&dir, "f.txt", "middle\n", "c2");
+        let original = write_commit(&dir, "g.txt", "g\n", "c3");
+        std::fs::write(dir.join("f.txt"), "staged\n").unwrap();
+        git(&dir, &["add", "f.txt"]);
+        std::fs::write(dir.join("g.txt"), "g\nlocal\n").unwrap();
+
+        let mut conflicted = repo.amend_into_commit(&c1).unwrap();
+        assert!(conflicted);
+        let mut guard = 0;
+        while conflicted {
+            assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
+            std::fs::write(
+                dir.join("f.txt"),
+                if guard == 0 { "staged\n" } else { "middle\n" },
+            )
+            .unwrap();
+            git(&dir, &["add", "f.txt"]);
+            conflicted = repo.continue_operation().unwrap();
+            guard += 1;
+            assert!(guard < 5, "rebase should converge");
+        }
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert_ne!(git(&dir, &["rev-parse", "HEAD"]), original);
+        assert_eq!(
+            git(
+                &dir,
+                &["log", "--reverse", "--format=%s", &format!("{c0}..HEAD")]
+            ),
+            "c1\nc2\nc3"
+        );
+        let new_c1 = git(
+            &dir,
+            &["log", "--reverse", "--format=%H", &format!("{c0}..HEAD")],
+        )
+        .lines()
+        .next()
+        .unwrap()
+        .to_string();
+        assert_eq!(blob(&dir, &new_c1, "f.txt"), "staged");
+        assert!(!git(&dir, &["log", "--format=%s"]).contains("fixup!"));
+        assert_eq!(worktree_text(&dir, "g.txt"), "g\nlocal\n");
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+        println!(
+            "PROOF continue: c1_f.txt={} subjects=c1,c2,c3 unstaged_g={}",
+            blob(&dir, &new_c1, "f.txt"),
+            worktree_text(&dir, "g.txt").trim()
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_refuses_a_merge_in_range_without_rewriting() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "base.txt", "base\n", "c0");
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        write_commit(&dir, "feat.txt", "feature\n", "feature");
+        git(&dir, &["checkout", "-q", "main"]);
+        let main_c = write_commit(&dir, "main.txt", "main\n", "main");
+        repo.merge("feature", MergeMode::NoFastForward).unwrap();
+        let head = write_commit(&dir, "after.txt", "after\n", "after");
+        std::fs::write(dir.join("main.txt"), "main\nplus\n").unwrap();
+        git(&dir, &["add", "main.txt"]);
+        let staged = git(&dir, &["diff", "--cached", "--name-only"]);
+
+        let plan = repo.amend_into_plan(&main_c).unwrap();
+        assert!(
+            plan.has_merge,
+            "confirmation can see the merge in the rewritten range"
+        );
+        assert!(plan.commits.iter().any(|entry| entry.subject == "main"));
+        let err = repo.amend_into_commit(&main_c).unwrap_err().to_string();
+        assert!(err.contains("merge commit"), "{err}");
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), head);
+        assert_eq!(git(&dir, &["diff", "--cached", "--name-only"]), staged);
+        assert!(!git(&dir, &["log", "--format=%s"]).contains("fixup!"));
+        println!(
+            "PROOF merge-refusal: error={err} head_unchanged={head} listed={}",
+            plan.commits
+                .iter()
+                .map(|c| c.subject.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_refuses_a_merge_commit_target_without_rewriting() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "base.txt", "base\n", "c0");
+        git(&dir, &["checkout", "-q", "-b", "feature"]);
+        write_commit(&dir, "feat.txt", "feature\n", "feature");
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "main.txt", "main\n", "main");
+        repo.merge("feature", MergeMode::NoFastForward).unwrap();
+        let merge = git(&dir, &["rev-parse", "HEAD"]);
+        std::fs::write(dir.join("main.txt"), "main\nplus\n").unwrap();
+        git(&dir, &["add", "main.txt"]);
+        let staged = git(&dir, &["diff", "--cached"]);
+
+        let err = repo.amend_into_commit(&merge).unwrap_err().to_string();
+        assert!(err.contains("merge commit"), "{err}");
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), merge);
+        assert_eq!(git(&dir, &["diff", "--cached"]), staged);
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stale_amend_marker_does_not_reset_on_an_unrelated_abort() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "f.txt", "base\n", "c0");
+        let original = write_commit(&dir, "g.txt", "g\n", "c1");
+        git(&dir, &["checkout", "-q", "-b", "other"]);
+        let pick = write_commit(&dir, "f.txt", "other\n", "other");
+        git(&dir, &["checkout", "-q", "main"]);
+        let x = write_commit(&dir, "f.txt", "main\n", "x");
+        // Left behind by an amend-into finished outside Strand: HEAD^ is the
+        // recorded original, which the old parent check would have reset to.
+        std::fs::write(
+            repo.git_dir().join("strand-amend-into"),
+            format!("{original}\n{}\n", "0".repeat(40)),
+        )
+        .unwrap();
+
+        assert!(repo.cherry_pick(&[pick], None).unwrap(), "pick conflicts");
+        repo.abort_operation().unwrap();
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), x);
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_continue_surfaces_a_conflicting_autostash() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "base.txt", "base\n", "c0");
+        let c1 = write_commit(&dir, "f.txt", "base\n", "c1");
+        write_commit(&dir, "f.txt", "middle\n", "c2");
+        let original = write_commit(&dir, "g.txt", "g\n", "c3");
+        std::fs::write(dir.join("f.txt"), "staged\n").unwrap();
+        git(&dir, &["add", "f.txt"]);
+        // Unstaged on top of the staged change: the autostash holds it.
+        std::fs::write(dir.join("f.txt"), "staged\nlocal\n").unwrap();
+
+        let mut paused = repo.amend_into_commit(&c1).unwrap();
+        let mut guard = 0;
+        let mut last = Ok(false);
+        while paused {
+            std::fs::write(dir.join("f.txt"), if guard == 0 { "staged\n" } else { "middle\n" })
+                .unwrap();
+            git(&dir, &["add", "f.txt"]);
+            last = repo.continue_operation();
+            paused = matches!(last, Ok(true));
+            guard += 1;
+            assert!(guard < 5, "rebase should converge");
+        }
+        let err = last.unwrap_err().to_string();
+        assert!(err.contains("stash"), "{err}");
+        assert_eq!(repo.meta().unwrap().operation, None);
+        assert_ne!(git(&dir, &["rev-parse", "HEAD"]), original);
+        assert!(!git(&dir, &["stash", "list"]).is_empty(), "unstaged work kept in the stash");
+        assert!(!repo.git_dir().join("strand-amend-into").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn amend_into_plan_warns_when_the_target_is_on_upstream() {
+        let (repo, dir) = scratch_repo();
+        let c0 = write_commit(&dir, "a.txt", "a\n", "c1");
+        write_commit(&dir, "b.txt", "b\n", "c2");
+        let pushed_tip = write_commit(&dir, "c.txt", "c\n", "c3");
+        let origin = dir.join("origin.git");
+        git(&dir, &["init", "--bare", "-q", origin.to_str().unwrap()]);
+        git(&dir, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        git(&dir, &["push", "-q", "-u", "origin", "main"]);
+
+        let plan = repo.amend_into_plan(&c0).unwrap();
+        assert!(plan.pushed, "c1 is contained in @{{upstream}}");
+        assert!(!plan.has_merge);
+
+        let local = write_commit(&dir, "d.txt", "d\n", "c4");
+        let local_plan = repo.amend_into_plan(&local).unwrap();
+        assert!(!local_plan.pushed, "c4 is not on upstream");
+        let still_pushed = repo.amend_into_plan(&c0).unwrap();
+        assert!(still_pushed.pushed);
+        assert_eq!(git(&dir, &["rev-parse", "HEAD"]), local);
+        assert_eq!(git(&dir, &["rev-parse", "origin/main"]), pushed_tip);
+        println!(
+            "PROOF upstream: c1_pushed={} c4_pushed={} upstream={}",
+            plan.pushed, local_plan.pushed, pushed_tip
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
 }

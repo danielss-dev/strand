@@ -546,6 +546,11 @@ export interface RepoState {
     preserveMerges: boolean,
     updateRefs: boolean,
   ): Promise<RebaseOutcome>;
+  /**
+   * Fold the staged index into `target` via one fixup + scripted rebase.
+   * `true` when the rebase paused on a conflict.
+   */
+  amendInto(target: string): Promise<boolean>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
   /**
@@ -2253,6 +2258,13 @@ export const useRepo = create<RepoState>((set, get) => ({
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
       return tauri.repoInteractiveRebase(path, base, steps, preserveMerges, updateRefs);
+    });
+  },
+  async amendInto(target) {
+    return runHistoryOp(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoAmendInto(path, target);
     });
   },
   async abortOperation() {

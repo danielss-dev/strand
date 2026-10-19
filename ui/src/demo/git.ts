@@ -6,6 +6,7 @@
  */
 
 import type {
+  AmendIntoPlan,
   BlameLine,
   Branch,
   Commit,
@@ -873,6 +874,38 @@ export class DemoRepo {
     flush();
     if (!head) throw new GitError('rebase would leave no commits');
     this.moveHeadKeepingWork(wt, head);
+  }
+
+  amendIntoPlan(wt: DemoWorktree, target: string): AmendIntoPlan {
+    const oid = this.resolve(target, wt);
+    if (!this.ancestors(this.headOf(wt)).has(oid)) {
+      throw new GitError(`${target} is not an ancestor of HEAD — can't build a rebase plan`);
+    }
+    const base = this.commit(oid).parents[0] ?? null;
+    const commits = this.rebaseTodo(wt, base);
+    if (!commits.some((entry) => entry.oid === oid)) {
+      throw new GitError(`${target} is not on the current branch — can't amend into it`);
+    }
+    const upstreamName = wt.branch ? this.upstreams.get(wt.branch) : undefined;
+    const upstream = upstreamName ? this.remoteBranches.get(upstreamName) : undefined;
+    const pushed = upstream != null && this.ancestors(upstream).has(oid);
+    return { commits, pushed, has_merge: commits.some((entry) => entry.is_merge) };
+  }
+
+  /** Same shape as the real op: fixup commit, then an oid plan. Demo rebases never pause. */
+  amendInto(wt: DemoWorktree, target: string): void {
+    const plan = this.amendIntoPlan(wt, target);
+    if (plan.has_merge) throw new GitError("this range contains a merge commit — Strand won't rewrite it");
+    const oid = this.resolve(target, wt);
+    const subject = this.commit(oid).subject;
+    const fixup = this.commitIndex(wt, `fixup! ${subject}`, null, false);
+    const steps: RebaseStep[] = [];
+    for (const entry of plan.commits) {
+      steps.push({ action: 'pick', oid: entry.oid, message: null });
+      if (entry.oid === oid) steps.push({ action: 'fixup', oid: fixup.hash, message: null });
+    }
+    const base = this.commit(oid).parents[0] ?? null;
+    this.interactiveRebase(wt, base, steps);
   }
 
   private firstParentChain(from: string, stop: string | null): DemoCommit[] {
