@@ -7,6 +7,8 @@ import {
   autoFetchIsNoop,
   autoFetchNotice,
   backgroundFetchInFlight,
+  isManualBusyRepo,
+  manualOpPath,
   normalizeAutoFetchInterval,
   planAutoFetch,
   resetAutoFetchState,
@@ -159,6 +161,57 @@ describe('planAutoFetch', () => {
       inFlight: new Set(),
     });
     expect(after.start.map((item) => item.path)).toEqual(['/repo']);
+  });
+});
+
+describe('manual op skip', () => {
+  const tabs = ['/a', '/b'];
+  // Mirrors useAutoFetch's repos callback: the busy flag follows the op's repo.
+  function plan(activePath: string, manualPath: string | null, lastStarted = new Map<string, number>()) {
+    return planAutoFetch({
+      now: 10 * 60_000,
+      intervalMin: 10,
+      offline: false,
+      repos: tabs.map((path) => repo({
+        path,
+        active: path === activePath,
+        manualBusy: isManualBusyRepo(path, manualPath),
+      })),
+      armedAt: 0,
+      lastStarted,
+      backoffUntil: new Map(),
+      inFlight: new Set(),
+      staggerMs: 1_000,
+    }).start.map((item) => item.path);
+  }
+
+  it('skips the busy non-active repo and still fetches the active one', () => {
+    expect(plan('/a', '/b')).toEqual(['/a']);
+  });
+
+  it('skips the busy active repo and still fetches the other one', () => {
+    expect(plan('/a', '/a')).toEqual(['/b']);
+  });
+
+  it('keeps the skip on the original repo when tabs switch mid-op, and clears it when the op ends', () => {
+    // Op starts on /b, then the user switches to /a while it runs.
+    let remembered = manualOpPath(true, null, '/b');
+    expect(remembered).toBe('/b');
+    remembered = manualOpPath(true, remembered, '/a');
+    expect(remembered).toBe('/b');
+    expect(plan('/a', remembered)).toEqual(['/a']);
+    expect(plan('/a', remembered, new Map([['/a', 10 * 60_000]]))).toEqual([]);
+
+    // Op ends: nothing is skipped, and the next op picks up the new active repo.
+    remembered = manualOpPath(false, remembered, '/a');
+    expect(remembered).toBeNull();
+    expect(plan('/a', remembered, new Map([['/a', 10 * 60_000]]))).toEqual(['/b']);
+    expect(manualOpPath(true, remembered, '/a')).toBe('/a');
+  });
+
+  it('matches the busy repo by path identity', () => {
+    expect(isManualBusyRepo('C:\\repo', 'C:/repo/')).toBe(true);
+    expect(isManualBusyRepo('/repo', null)).toBe(false);
   });
 });
 

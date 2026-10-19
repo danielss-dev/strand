@@ -60,7 +60,7 @@ import {
   stashApplyProgress,
   stashPopProgress,
 } from './lib/localGitOp';
-import { backgroundFetchInFlight } from './lib/autoFetch';
+import { backgroundFetchInFlight, manualOpPath } from './lib/autoFetch';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useAutoFetch } from './lib/useAutoFetch';
 import { useTheme } from './lib/theme';
@@ -563,8 +563,7 @@ export function App() {
   // auto-fetch skip onto a repository that is idle.
   const manualBusy = syncing || pulling || pushing;
   const manualBusyPath = useRef<string | null>(null);
-  if (!manualBusy) manualBusyPath.current = null;
-  else if (manualBusyPath.current === null) manualBusyPath.current = activePath;
+  manualBusyPath.current = manualOpPath(manualBusy, manualBusyPath.current, activePath);
   useAutoFetch({
     intervalMin: autoFetchIntervalMin,
     manualBusy,

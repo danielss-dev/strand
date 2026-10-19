@@ -31,6 +31,20 @@ export interface AutoFetchRepo {
   manualBusy: boolean;
 }
 
+/**
+ * The repository a manual network op runs against: the one active when it
+ * started. Switching tabs mid-op keeps it; the op ending clears it.
+ */
+export function manualOpPath(busy: boolean, remembered: string | null, activePath: string | null): string | null {
+  if (!busy) return null;
+  return remembered ?? activePath;
+}
+
+/** Whether `path` is the repository a running manual network op targets. */
+export function isManualBusyRepo(path: string, manualPath: string | null): boolean {
+  return !!manualPath && pathKey(manualPath) === pathKey(path);
+}
+
 export interface AutoFetchPlanInput {
   now: number;
   intervalMin: number;

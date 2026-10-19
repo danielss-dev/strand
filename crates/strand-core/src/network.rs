@@ -851,6 +851,21 @@ pub(crate) fn prepare_git_command(
     quiet_auth: bool,
     piped_stdin: bool,
 ) -> std::process::Command {
+    prepare_git_command_probed(cwd, args, extra_env, quiet_auth, piped_stdin, || {
+        user_ssh_command(cwd, |key| std::env::var_os(key), &[])
+    })
+}
+
+/// [`prepare_git_command`] with the "did the user pick an ssh?" probe passed
+/// in, so tests can run it against an isolated environment and config.
+fn prepare_git_command_probed(
+    cwd: &Path,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+    quiet_auth: bool,
+    piped_stdin: bool,
+    user_ssh: impl FnOnce() -> bool,
+) -> std::process::Command {
     let mut command = crate::git_command();
     #[cfg(unix)]
     {
@@ -870,7 +885,7 @@ pub(crate) fn prepare_git_command(
         // GIT_SSH_COMMAND outranks core.sshCommand and GIT_SSH, so only
         // force BatchMode when the user hasn't chosen their own ssh. Theirs
         // still gets null stdin and SSH_ASKPASS_REQUIRE=never.
-        if !user_ssh_command(cwd) {
+        if !user_ssh() {
             command.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
         }
         command.env("SSH_ASKPASS_REQUIRE", "never");
@@ -893,14 +908,20 @@ pub(crate) fn prepare_git_command(
 
 /// The user picked an ssh command: `GIT_SSH_COMMAND` / `GIT_SSH` in the
 /// environment, or `core.sshCommand` in the repo's effective config.
-fn user_ssh_command(cwd: &Path) -> bool {
-    let set = |key: &str| std::env::var_os(key).is_some_and(|value| !value.is_empty());
+/// `env` reads the environment; `config_env` is added to the config probe.
+fn user_ssh_command(
+    cwd: &Path,
+    env: impl Fn(&str) -> Option<std::ffi::OsString>,
+    config_env: &[(&str, &str)],
+) -> bool {
+    let set = |key: &str| env(key).is_some_and(|value| !value.is_empty());
     if set("GIT_SSH_COMMAND") || set("GIT_SSH") {
         return true;
     }
     crate::git_command()
         .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .envs(config_env.iter().copied())
         .stdin(Stdio::null())
         .args(["config", "--get", "core.sshCommand"])
         .output()
@@ -1816,17 +1837,36 @@ mod tests {
         assert_eq!(background_fetch_args(false), ["fetch", "--no-prune"]);
     }
 
-    #[test]
-    fn background_fetch_keeps_the_users_core_ssh_command() {
-        let dir = std::env::temp_dir().join(format!("strand-ssh-cmd-{}", std::process::id()));
+    /// A fresh `git init` repo in a temp dir, optionally with repo-local config.
+    fn ssh_probe_repo(name: &str, config: &[(&str, &str)]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let git = |args: &[&str]| {
             assert!(std::process::Command::new("git").current_dir(&dir).args(args).status().unwrap().success());
         };
         git(&["init", "-q"]);
-        git(&["config", "core.sshCommand", "ssh -i ~/.ssh/work"]);
-        let quiet = prepare_git_command(&dir, &background_fetch_args(false), &[], true, false);
+        for (key, value) in config {
+            git(&["config", key, value]);
+        }
+        std::fs::write(dir.join(".git").join("empty-global-config"), "").unwrap();
+        dir
+    }
+
+    /// The quiet background-fetch command, with the ssh probe blind to the
+    /// developer's GIT_SSH_COMMAND / GIT_SSH and global/system config.
+    fn isolated_quiet_fetch(dir: &Path) -> Command {
+        let global = dir.join(".git").join("empty-global-config");
+        let global = global.to_str().unwrap();
+        prepare_git_command_probed(dir, &background_fetch_args(false), &[], true, false, || {
+            user_ssh_command(dir, |_| None, &[("GIT_CONFIG_GLOBAL", global), ("GIT_CONFIG_NOSYSTEM", "1")])
+        })
+    }
+
+    #[test]
+    fn background_fetch_keeps_the_users_core_ssh_command() {
+        let dir = ssh_probe_repo("strand-ssh-cmd", &[("core.sshCommand", "ssh -i ~/.ssh/work")]);
+        let quiet = isolated_quiet_fetch(&dir);
         assert!(
             quiet.get_envs().all(|(key, _)| key != "GIT_SSH_COMMAND"),
             "core.sshCommand must not be overridden"
@@ -1837,7 +1877,8 @@ mod tests {
 
     #[test]
     fn background_fetch_command_uses_hidden_git_and_cannot_prompt() {
-        let quiet = prepare_git_command(Path::new("."), &background_fetch_args(false), &[], true, false);
+        let dir = ssh_probe_repo("strand-ssh-batch", &[]);
+        let quiet = isolated_quiet_fetch(&dir);
         assert_eq!(quiet.get_program(), "git");
         let args: Vec<_> = quiet.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
         assert!(args.iter().any(|arg| arg == "fetch"));
@@ -1858,9 +1899,10 @@ mod tests {
         assert_eq!(args[askpass - 1], "-c");
         assert!(askpass < args.iter().position(|arg| arg == "fetch").unwrap());
 
-        let manual = prepare_git_command(Path::new("."), &["fetch", "--prune", "--progress"], &[], false, false);
+        let manual = prepare_git_command(&dir, &["fetch", "--prune", "--progress"], &[], false, false);
         assert!(manual.get_envs().all(|(key, _)| key != "GCM_INTERACTIVE"));
         assert!(!manual.get_args().any(|arg| arg == "core.askPass="));
+        let _ = std::fs::remove_dir_all(&dir);
 
         let src = include_str!("network.rs");
         let start = src.find("pub(crate) fn prepare_git_command").expect("prepare_git_command");

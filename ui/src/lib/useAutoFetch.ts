@@ -8,6 +8,7 @@ import {
   autoFetchActivity,
   autoFetchIsNoop,
   autoFetchNotice,
+  isManualBusyRepo,
   startAutoFetch,
 } from './autoFetch';
 import { useRepo } from '../stores/repo';
@@ -57,7 +58,7 @@ export function useAutoFetch(options: {
             active: !!activePath && pathKey(activePath) === pathKey(tab.path),
             optedOut,
             prune,
-            manualBusy: !!manualPath && pathKey(manualPath) === pathKey(tab.path),
+            manualBusy: isManualBusyRepo(tab.path, manualPath),
           };
         }));
       },
