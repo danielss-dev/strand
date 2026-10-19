@@ -627,6 +627,7 @@ export const handlers: Record<string, Handler> = {
         text: `resolved hunk ${index}`,
         explanation: 'Demo suggestion only — accept, edit, or reject it before resolving.',
         confidence: 'medium' as const,
+        truncated: false,
       })),
     }, a);
   },

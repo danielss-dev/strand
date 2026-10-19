@@ -6,8 +6,8 @@ import { Icon } from '../components/Icon';
 import { aiRequestMatches, otherAiProvider } from '../lib/aiGeneration';
 import {
   applyHunkAction,
+  saveResolution,
   suggestionMatchesHunks,
-  writableResolution,
   type AiHunkSuggestion,
 } from '../lib/conflictAi';
 import {
@@ -300,11 +300,13 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
 
   async function save() {
     if (!parsed || busy) return;
-    const text = writableResolution(parsed, resolutions);
-    if (text == null) return;
     setBusy(true);
     try {
-      await resolveConflict(path, text);
+      const saved = await saveResolution(parsed, resolutions, (text) => resolveConflict(path, text));
+      if (saved === 'blocked') {
+        setSuggestError(t('merge.saveBlocked'));
+        return;
+      }
       onClose();
     } catch (e) {
       setLoadError(errMessage(e));
@@ -439,7 +441,9 @@ export function MergeResolver({ path, onClose }: { path: string; onClose: () => 
                 editing={editing}
                 draft={editDraft}
                 rejected={rejected.has(focused)}
-                onAccept={() => applyAction(focused, { type: 'accept', text: suggestions[focused].text })}
+                onAccept={() => {
+                  if (!suggestions[focused].truncated) applyAction(focused, { type: 'accept', text: suggestions[focused].text });
+                }}
                 onEdit={() => { setEditDraft(suggestions[focused].text); setEditing(true); }}
                 onReject={() => applyAction(focused, { type: 'reject' })}
                 onDraft={setEditDraft}

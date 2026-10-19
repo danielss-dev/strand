@@ -234,6 +234,9 @@ pub struct ConflictHunkSuggestion {
     pub text: String,
     pub explanation: String,
     pub confidence: ConflictConfidence,
+    /// A side or base was cut to fit the prompt; the UI blocks one-click Accept.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -499,8 +502,21 @@ pub fn suggest_conflict_resolution_with_request(
         "{}\n\nRemember: reply with JSON only and include exactly {expected_hunks} hunks. Do not write a file.",
         built.text
     );
-    let raw_output = adapter(provider).suggest(repo.path(), &text, model, cli_override, cancel)?;
-    let suggestion = parse::parse_conflict_resolution(&raw_output, expected_hunks)?;
+    // The adapters wrap a cancelled run in their failure text; report it as
+    // the plain "cancelled" the UI treats as a user cancel, not an error.
+    let raw_output = adapter(provider)
+        .suggest(repo.path(), &text, model, cli_override, cancel)
+        .map_err(|err| {
+            if cancel.is_some_and(bin::AiCancelHandle::is_cancelled) {
+                "cancelled".to_string()
+            } else {
+                err
+            }
+        })?;
+    let mut suggestion = parse::parse_conflict_resolution(&raw_output, expected_hunks)?;
+    for (hunk, source) in suggestion.hunks.iter_mut().zip(&parsed.hunks) {
+        hunk.truncated = prompt::conflict_hunk_truncated(source);
+    }
     Ok(AiGenerationOutcome::Generated {
         suggestion,
         coverage,
@@ -853,50 +869,119 @@ mod tests {
         assert_eq!(std::fs::read_to_string(file).unwrap(), CONFLICT);
     }
 
-    fn assert_generation_cancel_leaves_file(program: &str, args: &[&str]) {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("f.txt");
-        std::fs::write(&file, CONFLICT).unwrap();
-        let cancel = bin::AiCancelHandle::new();
-        let worker_cancel = cancel.clone();
-        let cwd = dir.path().to_path_buf();
-        let program = program.to_string();
-        let args = args.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
-        let worker = std::thread::spawn(move || {
-            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-            bin::run_capture_cancellable(
-                std::path::Path::new(&program),
-                &arg_refs,
-                Some(&cwd),
-                None,
-                bin::SUGGEST_TIMEOUT,
-                Some(&worker_cancel),
-            )
-        });
-        let ready = dir.path().join("ready");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while !ready.exists() && !worker.is_finished() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        let started = std::time::Instant::now();
-        cancel.cancel();
-        let err = worker.join().unwrap().unwrap_err();
-        assert!(ready.exists(), "child did not reach its cancellation checkpoint: {err}");
-        assert_eq!(err, "cancelled");
-        assert!(started.elapsed() < std::time::Duration::from_secs(3));
-        assert_eq!(std::fs::read_to_string(file).unwrap(), CONFLICT);
+    /// A fake Codex CLI. `login status` succeeds so the failure path's health
+    /// check does not hang; anything else runs `body`.
+    #[cfg(unix)]
+    fn fake_codex(dir: &std::path::Path, body: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("fake-codex");
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\ncase \"$*\" in *login*) exit 0;; esac\n{body}\n"),
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
     }
 
     #[cfg(unix)]
     #[test]
-    fn cancel_mid_generation_kills_the_child_and_leaves_the_conflict_file() {
-        assert_generation_cancel_leaves_file("/bin/sh", &["-c", "sleep 30 & printf ready > ready; wait"]);
+    fn cancel_mid_generation_kills_the_provider_and_leaves_the_conflict_file() {
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        let file = conflict_file(dir.path(), "f.txt", CONFLICT);
+        let state = tempfile::tempdir().unwrap();
+        let ready = state.path().join("ready");
+        let child = state.path().join("child");
+        // Codex runs in its own temp dir, so the script reports by absolute path.
+        let cli = fake_codex(
+            state.path(),
+            &format!(
+                "sleep 30 &\necho $! > '{}'\nprintf ready > '{}'\nwait",
+                child.display(),
+                ready.display()
+            ),
+        );
+        let cancel = bin::AiCancelHandle::new();
+        let worker_cancel = cancel.clone();
+        let repo = dir.path().to_path_buf();
+        let cli_path = cli.to_string_lossy().into_owned();
+        let worker = std::thread::spawn(move || {
+            suggest_conflict_resolution_with_request(
+                AiProvider::Openai,
+                &repo,
+                "f.txt",
+                1,
+                None,
+                Some(&cli_path),
+                Some(&worker_cancel),
+                &AiSensitiveDecision::Scan,
+            )
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ready.exists() && !worker.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(ready.exists(), "fake provider never started");
+        let started = std::time::Instant::now();
+        cancel.cancel();
+        let err = worker.join().unwrap().unwrap_err();
+        assert_eq!(err, "cancelled");
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+        assert_eq!(std::fs::read(&file).unwrap(), CONFLICT.as_bytes());
+
+        let pid: i32 = std::fs::read_to_string(&child).unwrap().trim().parse().unwrap();
+        let gone = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        // The grandchild `sleep` must die with the provider's process group.
+        // A reaped or zombie process no longer runs.
+        let alive = || {
+            // SAFETY: signal 0 only checks that the pid exists.
+            let exists = unsafe { libc::kill(pid, 0) } == 0;
+            let zombie = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .is_ok_and(|stat| stat.rsplit(')').next().is_some_and(|rest| rest.trim_start().starts_with('Z')));
+            exists && !zombie
+        };
+        while alive() && std::time::Instant::now() < gone {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!alive(), "provider child {pid} survived cancellation");
     }
 
-    #[cfg(windows)]
+    #[cfg(unix)]
     #[test]
-    fn cancel_mid_generation_kills_the_child_and_leaves_the_conflict_file() {
-        assert_generation_cancel_leaves_file("cmd.exe", &["/C", "echo ready>ready & ping -n 30 127.0.0.1"]);
+    fn generated_conflict_suggestion_flags_truncated_hunks_and_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        let long = "x".repeat(5_000);
+        let contents = format!(
+            "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nmid\n<<<<<<< HEAD\n{long}\n=======\nb\n>>>>>>> feature\n"
+        );
+        let file = conflict_file(dir.path(), "f.txt", &contents);
+        let state = tempfile::tempdir().unwrap();
+        let cli = fake_codex(
+            state.path(),
+            r#"cat > /dev/null
+printf '%s' '{"hunks":[{"text":"ours","explanation":"Keep ours.","confidence":"high"},{"text":"b","explanation":"Take theirs.","confidence":"low"}]}'"#,
+        );
+        let outcome = suggest_conflict_resolution_with_request(
+            AiProvider::Openai,
+            dir.path(),
+            "f.txt",
+            2,
+            None,
+            Some(&cli.to_string_lossy()),
+            None,
+            &AiSensitiveDecision::Scan,
+        )
+        .unwrap();
+        let AiGenerationOutcome::Generated { suggestion, .. } = outcome else {
+            panic!("expected a generated suggestion");
+        };
+        assert_eq!(
+            suggestion.hunks.iter().map(|hunk| hunk.truncated).collect::<Vec<_>>(),
+            [false, true]
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), contents);
     }
 
     #[test]

@@ -34,6 +34,43 @@ describe('ConflictSuggestionReview', () => {
     expect(html).toContain('fn renamed_helper() {}');
   });
 
+  it('warns on a truncated hunk and disables one-click Accept but keeps Edit', () => {
+    const html = renderToStaticMarkup(
+      <ConflictSuggestionReview
+        suggestion={{ ...suggestion, truncated: true }}
+        editing={false}
+        draft=""
+        rejected={false}
+        onAccept={() => {}}
+        onEdit={() => {}}
+        onReject={() => {}}
+        onDraft={() => {}}
+        onUseEdit={() => {}}
+        onCancelEdit={() => {}}
+      />,
+    );
+    expect(html).toContain(t('merge.ai.truncated'));
+    expect(html).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*>${t('merge.ai.accept')}</button>`));
+    expect(html).not.toMatch(new RegExp(`<button[^>]*disabled=""[^>]*>${t('merge.ai.edit')}</button>`));
+
+    const full = renderToStaticMarkup(
+      <ConflictSuggestionReview
+        suggestion={{ ...suggestion, truncated: false }}
+        editing={false}
+        draft=""
+        rejected={false}
+        onAccept={() => {}}
+        onEdit={() => {}}
+        onReject={() => {}}
+        onDraft={() => {}}
+        onUseEdit={() => {}}
+        onCancelEdit={() => {}}
+      />,
+    );
+    expect(full).not.toContain(t('merge.ai.truncated'));
+    expect(full).not.toContain('disabled=""');
+  });
+
   it('shows the editable draft and a rejected hint', () => {
     const html = renderToStaticMarkup(
       <ConflictSuggestionReview

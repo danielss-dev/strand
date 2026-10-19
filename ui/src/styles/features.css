@@ -7486,6 +7486,11 @@ textarea.clone-input {
   color: var(--text-2);
 }
 .mm-ai-explain { white-space: pre-wrap; }
+.mm-ai-truncated {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warn);
+}
 .mm-ai-preview,
 .mm-ai-edit {
   margin: 0;

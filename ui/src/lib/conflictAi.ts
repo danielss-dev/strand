@@ -10,6 +10,8 @@ export interface AiHunkSuggestion {
   text: string;
   explanation: string;
   confidence: ConflictConfidence;
+  /** A side or base was cut to fit the prompt; the model never saw all of it. */
+  truncated?: boolean;
 }
 
 export type HunkAction =
@@ -21,9 +23,13 @@ export type ApplyHunkResult =
   | { ok: true; resolutions: Map<number, Resolution> }
   | { ok: false; reason: 'markers' };
 
-const MARKER = /^(<{7}|\|{7}|={7}|>{7})/;
+// Exactly seven `<` or `>`, then end of line or whitespace and a label: the
+// lines git writes to open and close a conflict. A lone `=======` (a Markdown
+// or RST setext underline) or a longer run is ordinary text; `=======` and
+// `|||||||` only mean something between those lines, which this already flags.
+const MARKER = /^(<{7}|>{7})(\s|$)/;
 
-/** True when a line would still be a conflict marker after a write. */
+/** True when the text still holds a conflict's opening or closing marker line. */
 export function hasConflictMarkers(text: string): boolean {
   return text.split('\n').some((line) => MARKER.test(line.replace(/\r$/, '')));
 }
@@ -59,15 +65,36 @@ export function applyHunkAction(
   }
 }
 
-/** The text Resolve may write, or null when the file must stay untouched. */
+/**
+ * The text Resolve may write, or null when the file must stay untouched.
+ * Ours/theirs/both picks write exactly what they did before AI suggestions;
+ * only custom (AI or edited) hunk text is checked for markers.
+ */
 export function writableResolution(
   parsed: ParsedConflict,
   resolutions: ReadonlyMap<number, Resolution>,
 ): string | null {
   const views = buildViews(parsed, new Map(resolutions));
   if (views.total === 0 || views.ranges.some((range) => !range.resolved)) return null;
-  if (hasConflictMarkers(views.resultText)) return null;
+  for (const resolution of resolutions.values()) {
+    if (typeof resolution !== 'string' && hasConflictMarkers(resolution.text)) return null;
+  }
   return views.resultText;
+}
+
+/**
+ * Resolve: write the merged text once through `write`, or report why not.
+ * Suggest, Accept, Edit, and Reject never reach this.
+ */
+export async function saveResolution(
+  parsed: ParsedConflict,
+  resolutions: ReadonlyMap<number, Resolution>,
+  write: (text: string) => Promise<void>,
+): Promise<'written' | 'blocked'> {
+  const text = writableResolution(parsed, resolutions);
+  if (text == null) return 'blocked';
+  await write(text);
+  return 'written';
 }
 
 export function suggestionMatchesHunks(

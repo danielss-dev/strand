@@ -139,6 +139,14 @@ fn json_optional(value: Option<&str>) -> String {
     }
 }
 
+/// True when [`build_conflict_prompt`] cuts any side or the base of `hunk`.
+pub fn conflict_hunk_truncated(hunk: &super::markers::ConflictHunk) -> bool {
+    [Some(&hunk.ours), Some(&hunk.theirs), hunk.base.as_ref()]
+        .into_iter()
+        .flatten()
+        .any(|side| side.len() > MAX_CONFLICT_SIDE_BYTES)
+}
+
 fn truncate_side(value: &str) -> (String, bool) {
     if value.len() <= MAX_CONFLICT_SIDE_BYTES {
         return (value.to_string(), false);
@@ -462,6 +470,20 @@ mod tests {
         assert!(built.text.contains("fn welcome() {}"));
         assert!(built.text.contains("rename helper"));
         assert!(!built.text.contains("original function"));
+    }
+
+    #[test]
+    fn conflict_truncation_is_reported_per_hunk() {
+        use super::super::markers::ConflictHunk;
+        let long = "x".repeat(MAX_CONFLICT_SIDE_BYTES + 1);
+        let short = ConflictHunk { ours: "a".into(), theirs: "b".into(), base: None };
+        let long_base = ConflictHunk { ours: "a".into(), theirs: "b".into(), base: Some(long.clone()) };
+        let long_theirs = ConflictHunk { ours: "a".into(), theirs: long, base: None };
+        assert!(!conflict_hunk_truncated(&short));
+        assert!(conflict_hunk_truncated(&long_base));
+        assert!(conflict_hunk_truncated(&long_theirs));
+        let built = build_conflict_prompt(&[short, long_base, long_theirs], None, None);
+        assert_eq!(built.truncated_patch_files, 2);
     }
 
     #[test]

@@ -160,6 +160,7 @@ fn normalize_conflict_resolution(
             text: hunk.text,
             explanation,
             confidence,
+            truncated: false,
         });
     }
     Ok(ConflictResolutionSuggestion { hunks })
@@ -399,6 +400,8 @@ mod tests {
         assert!(!err.contains("SECRET_CONFLICT_BODY"));
         let marked = r#"{"hunks":[{"text":"<<<<<<< HEAD\nours","explanation":"bad","confidence":"low"}]}"#;
         assert!(parse_conflict_resolution(marked, 1).unwrap_err().contains("conflict markers"));
+        let heading = r#"{"hunks":[{"text":"Title\n=======","explanation":"Setext heading.","confidence":"high"}]}"#;
+        assert_eq!(parse_conflict_resolution(heading, 1).unwrap().hunks[0].text, "Title\n=======");
     }
 
     #[test]

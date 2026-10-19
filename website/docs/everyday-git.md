@@ -332,7 +332,7 @@ The merge editor is a full-screen three-way view:
 - Incoming and current versions side by side, scroll-synced, with the assembled result below.
 - `‹` / `›` steps through conflicts with a counter that turns from red to green as you resolve them.
 - Per conflict, take current, incoming, or both — or click a side's block directly. Per-side "take all" checkboxes resolve everything at once.
-- **Suggest resolution with AI** (`Mod+Shift+J`, or the command palette) proposes one replacement per conflict, with an explanation and a confidence level, using the provider from Settings → AI. Nothing is written until you Accept or edit a hunk and then click **Resolve**. Reject leaves that hunk unchanged. If the file has no diff3 base, the suggestion still runs and the prompt records that the base is unavailable.
+- **Suggest resolution with AI** (`Mod+Shift+J`, or the command palette) proposes one replacement per conflict, with an explanation and a confidence level, using the provider from Settings → AI. Nothing is written until you Accept or edit a hunk and then click **Resolve**. Reject leaves that hunk unchanged. A very long conflict is cut to fit the prompt; that hunk shows a warning and can only be used through Edit. If the file has no diff3 base, the suggestion still runs and the prompt records that the base is unavailable.
 - **Resolve** writes the result and stages the file. Side picks stay ours / theirs / both; an accepted or edited AI suggestion is the only free-form text, and only after you review it.
 
 Once every conflicted file is resolved, the banner's Continue button resumes the operation.

@@ -530,6 +530,14 @@ two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
   never writes. Accept / Edit store `{ kind: 'custom', text }`; Reject leaves
   ours/theirs/both picks alone. The file changes only when the user clicks
   Resolve, which still calls `resolveConflict`.
+- **Leftover-marker check is structural.** Only a line of exactly seven `<`
+  or `>` (then end of line or whitespace) counts, and only in custom hunk
+  text (`hasConflictMarkers` / `contains_conflict_marker`). A lone `=======`
+  is a Markdown/RST setext underline; scanning the whole result for it made
+  such files unsaveable. Side picks write `resultText` unchanged.
+- **Truncated hunks are flagged.** A side or base over 4,000 bytes is cut in
+  the prompt; the hunk comes back with `truncated: true`, the review shows a
+  warning, and one-click Accept is disabled (Edit still works).
 
 ---
 

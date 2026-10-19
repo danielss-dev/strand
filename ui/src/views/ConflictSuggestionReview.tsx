@@ -50,6 +50,7 @@ export function ConflictSuggestionReview({
         {rejected ? ` · ${t('merge.ai.rejectedHint')}` : ''}
       </p>
       <p className="mm-ai-explain">{suggestion.explanation}</p>
+      {suggestion.truncated && <p className="mm-ai-truncated" role="note">{t('merge.ai.truncated')}</p>}
       {editing ? (
         <>
           <textarea
@@ -67,7 +68,15 @@ export function ConflictSuggestionReview({
         <>
           <pre className="mm-ai-preview">{suggestion.text}</pre>
           <div className="mm-ai-btns">
-            <button type="button" className="btn primary" onClick={onAccept}>{t('merge.ai.accept')}</button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={suggestion.truncated}
+              title={suggestion.truncated ? t('merge.ai.truncatedAccept') : undefined}
+              onClick={onAccept}
+            >
+              {t('merge.ai.accept')}
+            </button>
             <button type="button" className="btn" onClick={onEdit}>{t('merge.ai.edit')}</button>
             <button type="button" className="btn" onClick={onReject}>{t('merge.ai.reject')}</button>
           </div>

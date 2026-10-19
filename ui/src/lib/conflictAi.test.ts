@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { applyHunkAction, hasConflictMarkers, suggestionMatchesHunks, writableResolution } from './conflictAi';
-import { conflictHunks, parseConflicts, type Resolution } from './conflictParse';
+import {
+  applyHunkAction,
+  hasConflictMarkers,
+  saveResolution,
+  suggestionMatchesHunks,
+  writableResolution,
+} from './conflictAi';
+import { buildViews, conflictHunks, parseConflicts, type Resolution } from './conflictParse';
 
 /**
  * Both sides edit the same function (diff3), and one side renames a helper
@@ -77,7 +83,8 @@ describe('accept, edit, and reject', () => {
     }
     expect(resolutions.size).toBe(0);
     expect(writableResolution(parsed, resolutions)).toBeNull();
-    expect(FIXTURE).toBe(FIXTURE);
+    // Rejecting left every hunk unresolved, so Resolve has nothing to write.
+    expect(buildViews(parsed, resolutions).ranges.map((range) => range.resolved)).toEqual([false, false]);
 
     for (let index = 0; index < suggestions.length; index++) {
       const accepted = applyHunkAction(resolutions, index, { type: 'accept', text: suggestions[index].text });
@@ -122,6 +129,57 @@ describe('accept, edit, and reject', () => {
     const rejectedSide = applyHunkAction(rejectedCustom.resolutions, 0, { type: 'reject' });
     expect(rejectedSide.ok).toBe(true);
     if (rejectedSide.ok) expect(rejectedSide.resolutions.get(0)).toBe('theirs');
+  });
+
+  it('treats only opening and closing marker lines as conflict markers', () => {
+    expect(hasConflictMarkers('<<<<<<< HEAD\nours')).toBe(true);
+    expect(hasConflictMarkers('a\n>>>>>>> feature')).toBe(true);
+    expect(hasConflictMarkers('a\n<<<<<<<\r\nb')).toBe(true);
+    expect(hasConflictMarkers('Title\n=======\n\nBody')).toBe(false);
+    expect(hasConflictMarkers('Title\n==========')).toBe(false);
+    expect(hasConflictMarkers('<<<<<<<<<< not a marker\n|||||||')).toBe(false);
+  });
+
+  it('saves side picks in a file with a setext heading exactly as before', () => {
+    const raw = [
+      'Title',
+      '=======',
+      '',
+      '<<<<<<< HEAD',
+      'ours',
+      '=======',
+      'theirs',
+      '>>>>>>> feature',
+    ].join('\n');
+    const parsed = parseConflicts(raw);
+    const resolutions = new Map<number, Resolution>([[0, 'theirs']]);
+    expect(writableResolution(parsed, resolutions)).toBe(buildViews(parsed, resolutions).resultText);
+    expect(writableResolution(parsed, resolutions)).toBe('Title\n=======\n\ntheirs');
+    const custom = new Map<number, Resolution>([[0, { kind: 'custom', text: 'Sub\n=======' }]]);
+    expect(writableResolution(parsed, custom)).toBe('Title\n=======\n\nSub\n=======');
+  });
+
+  it('writes only on Resolve, once, and reports a blocked save', async () => {
+    const parsed = parseConflicts(FIXTURE);
+    const write = vi.fn(async () => {});
+    let resolutions = new Map<number, Resolution>();
+    const accepted = applyHunkAction(resolutions, 0, { type: 'accept', text: 'merged' });
+    if (accepted.ok) resolutions = accepted.resolutions;
+    const rejected = applyHunkAction(resolutions, 1, { type: 'reject' });
+    if (rejected.ok) resolutions = rejected.resolutions;
+    expect(write).not.toHaveBeenCalled();
+
+    await expect(saveResolution(parsed, resolutions, write)).resolves.toBe('blocked');
+    expect(write).not.toHaveBeenCalled();
+
+    resolutions.set(1, 'ours');
+    await expect(saveResolution(parsed, resolutions, write)).resolves.toBe('written');
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith('fn greet(name: &str) -> String {\nmerged\n}\n\nfn helper() {}');
+
+    const marked = new Map<number, Resolution>([[0, { kind: 'custom', text: '<<<<<<< HEAD' }], [1, 'ours']]);
+    await expect(saveResolution(parsed, marked, write)).resolves.toBe('blocked');
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it('refuses replacement text that still contains conflict markers', () => {

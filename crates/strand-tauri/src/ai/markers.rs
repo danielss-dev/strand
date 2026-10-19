@@ -99,10 +99,18 @@ fn marker_label(line: &str) -> Option<String> {
     (!label.is_empty()).then(|| label.to_string())
 }
 
+/// True when `text` still holds a line git writes to open or close a
+/// conflict: exactly seven `<` or `>`, then end of line or whitespace and a
+/// label. Mirrors `hasConflictMarkers` in `ui/src/lib/conflictAi.ts`. A lone
+/// `=======` (Markdown/RST setext underline) or a longer run is ordinary text;
+/// `=======` and `|||||||` only mean something between those lines.
 pub fn contains_conflict_marker(text: &str) -> bool {
     text.split('\n').any(|line| {
         let line = line.trim_end_matches('\r');
-        is_start(line) || is_base(line) || is_sep(line) || is_end(line)
+        ["<<<<<<<", ">>>>>>>"].iter().any(|marker| {
+            line.strip_prefix(marker)
+                .is_some_and(|rest| rest.chars().next().is_none_or(char::is_whitespace))
+        })
     })
 }
 
@@ -127,6 +135,16 @@ mod tests {
         "fn renamed_helper() {}\n",
         ">>>>>>> feature",
     );
+
+    #[test]
+    fn only_opening_and_closing_lines_count_as_leftover_markers() {
+        assert!(contains_conflict_marker("<<<<<<< HEAD\nours"));
+        assert!(contains_conflict_marker("a\n>>>>>>> feature"));
+        assert!(contains_conflict_marker("a\n<<<<<<<\r\nb"));
+        assert!(!contains_conflict_marker("Title\n=======\n\nBody"));
+        assert!(!contains_conflict_marker("Title\n=========="));
+        assert!(!contains_conflict_marker("<<<<<<<<<< not a marker\n|||||||"));
+    }
 
     #[test]
     fn mixed_fixture_keeps_base_only_where_diff3_is_present() {

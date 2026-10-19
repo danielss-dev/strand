@@ -977,6 +977,8 @@ export interface ConflictHunkSuggestion {
   text: string;
   explanation: string;
   confidence: ConflictConfidence;
+  /** A side or base was cut to fit the prompt. Accept is disabled; Edit still works. */
+  truncated: boolean;
 }
 
 /** Per-hunk AI resolution. Nothing is written until the user accepts it and resolves the file. */
