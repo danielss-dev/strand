@@ -156,7 +156,7 @@ mod console_probe {
     fn hidden_console_child_has_no_window() {
         if std::env::var_os("STRAND_CONSOLE_PROBE").is_some() {
             let hwnd = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
-            std::process::exit(if hwnd == 0 { 0 } else { 7 });
+            std::process::exit(if hwnd.is_null() { 0 } else { 7 });
         }
 
         let spawn = |hide: bool| {
@@ -182,7 +182,7 @@ mod console_probe {
         // for a bare spawn. Service sessions have no console at all; only
         // assert the differential when the parent itself has one.
         let parent = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
-        if parent != 0 {
+        if !parent.is_null() {
             let bare = spawn(false);
             assert!(
                 !bare.success(),
