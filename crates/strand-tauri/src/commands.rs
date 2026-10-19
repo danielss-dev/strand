@@ -27,7 +27,7 @@ use strand_core::{
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     lfs::LfsAction,
     history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
-    network::{clone_with_options as core_clone, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
+    network::{clone_with_options as core_clone, BackgroundFetchOutcome, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
@@ -1191,6 +1191,16 @@ pub async fn repo_fetch(
     .await;
     deregister_op(&state, &op_id);
     result
+}
+
+/// Background auto-fetch. Same git spawn as `repo_fetch` (`CREATE_NO_WINDOW`,
+/// non-interactive auth) and no progress channel — the scheduler stays quiet.
+#[tauri::command(async)]
+pub async fn repo_background_fetch(path: String, prune: bool) -> CmdResult<BackgroundFetchOutcome> {
+    run_blocking("background fetch", move || {
+        Ok(Repo::discover(&path)?.fetch_background(prune)?)
+    })
+    .await
 }
 
 #[tauri::command(async)]

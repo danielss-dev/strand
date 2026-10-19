@@ -270,6 +270,7 @@ fn main() {
             commands::repo_apply_patch,
             commands::repo_commit,
             commands::repo_fetch,
+            commands::repo_background_fetch,
             commands::repo_pull,
             commands::repo_push,
             commands::repo_branch_push,

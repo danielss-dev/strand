@@ -448,6 +448,15 @@ community plugins, performance and platform certification from Git feature gaps.
 - ☑ Persist fetch-prune, pull-strategy, and pull-autostash defaults per
   repository, with explicit one-operation overrides (`repoNetworkPreferences`,
   `Repo::{fetch,pull,pull_branch}` explicit flags, topbar/palette actions).
+- ☑ Auto-fetch open repositories on a timer (DAN-89). Settings → Git interval
+  Off / 5 / 10 / 30 min, default 10 (Daniels's choice), per-repo opt-out
+  (`repoAutoFetch`). Active repo first, others staggered. Skips a manual
+  fetch/pull/push, offline, and in-flight work. Fetch only, honoring
+  fetch-prune. Missing credentials fail quietly and back off
+  (`Repo::fetch_background`, `useAutoFetch`). New upstream commits update the
+  behind-count and toast “N new commits on origin/<branch>”. Quiet activity
+  log entries (`background-fetch`). Windows spawn stays on `git_command`
+  (`CREATE_NO_WINDOW`).
 - ☑ Edit a remote's fetch and push URLs independently (`RemoteDialog`,
   `repo_remote_set_urls`, native Git remote config).
 - ☑ Credentials: inherit user's `git` config (helper, SSH agent) via

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Dialog } from '../components/Dialog';
 import { repoActivity } from '../lib/db';
+import { t } from '../lib/i18n';
 import { errMessage, isCancelled, tauri } from '../lib/tauri';
 import type { MaintenanceOutcome, MaintenanceTask, RepoActivityEntry } from '../lib/types';
 
@@ -33,6 +34,25 @@ const TASKS: Array<{
 
 function taskDefinition(task: MaintenanceTask) {
   return TASKS.find((candidate) => candidate.task === task) as (typeof TASKS)[number];
+}
+
+function activityLabel(task: RepoActivityEntry['task']): string {
+  switch (task) {
+    case 'commit':
+      return 'Commit';
+    case 'amend':
+      return 'Amend commit';
+    case 'background-fetch':
+      return t('git.activity.fetch');
+    case 'maintenance':
+    case 'garbage-collect':
+    case 'integrity-check':
+      return taskDefinition(task).label;
+    default: {
+      const exhaustive: never = task;
+      return exhaustive;
+    }
+  }
 }
 
 function duration(ms: number): string {
@@ -161,7 +181,7 @@ export function MaintenanceDialog({
           ) : entries.map((entry) => (
             <details key={entry.id} className={`maintenance-entry${entry.success ? '' : ' failed'}`}>
               <summary>
-                <span>{entry.task === 'commit' ? 'Commit' : entry.task === 'amend' ? 'Amend commit' : taskDefinition(entry.task).label}</span>
+                <span>{activityLabel(entry.task)}</span>
                 <span>{entry.success ? 'Completed' : 'Failed'} · {duration(entry.duration_ms)} · {new Date(entry.started_at).toLocaleString()}</span>
               </summary>
               <code className="maintenance-command">{entry.command}</code>

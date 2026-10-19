@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react';
 
+import { type AutoFetchIntervalMin } from '../../lib/autoFetch';
+import { repoAutoFetch } from '../../lib/db';
 import { pickDirectory } from '../../lib/dialog';
+import { t } from '../../lib/i18n';
 import { errMessage, isTauri, tauri } from '../../lib/tauri';
+import { useRepo } from '../../stores/repo';
 import { useSettings } from '../../stores/settings';
+import { CheckRow, SegRow } from './shared';
+
+const AUTO_FETCH_OPTIONS: { id: `${AutoFetchIntervalMin}`; label: string }[] = [
+  { id: '0', label: t('git.autoFetch.off') },
+  { id: '5', label: t('git.autoFetch.minutes', { count: 5 }) },
+  { id: '10', label: t('git.autoFetch.minutes', { count: 10 }) },
+  { id: '30', label: t('git.autoFetch.minutes', { count: 30 }) },
+];
 
 /**
  * Git — the global identity (`user.name` / `user.email`, written to
@@ -12,13 +24,31 @@ import { useSettings } from '../../stores/settings';
  */
 export function GitSection() {
   const defaultCloneDir = useSettings((s) => s.defaultCloneDir);
+  const autoFetchIntervalMin = useSettings((s) => s.autoFetchIntervalMin);
   const set = useSettings((s) => s.set);
+  const tabs = useRepo((s) => s.tabs);
+  const tabKey = tabs.map((tab) => tab.path).join('\n');
+  const [autoFetchOff, setAutoFetchOff] = useState<Record<string, boolean>>({});
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    const paths = tabKey ? tabKey.split('\n') : [];
+    void Promise.all(paths.map(async (path) => [path, (await repoAutoFetch.get(path)) === false] as const))
+      .then((rows) => {
+        if (!cancelled) setAutoFetchOff(Object.fromEntries(rows));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tabKey]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -99,6 +129,42 @@ export function GitSection() {
           </button>
           {status && <span className="settings-hint">{status}</span>}
         </div>
+      </div>
+
+      <div className="settings-field">
+        <span className="settings-field-label">{t('git.autoFetch')}</span>
+        <p className="settings-hint">{t('git.autoFetchHint')}</p>
+        <div className="settings-rows">
+          <SegRow
+            label={t('git.autoFetch')}
+            options={AUTO_FETCH_OPTIONS}
+            value={String(autoFetchIntervalMin) as `${AutoFetchIntervalMin}`}
+            onChange={(id) => {
+              const minutes = Number(id);
+              if (minutes === 0 || minutes === 5 || minutes === 10 || minutes === 30) {
+                set('autoFetchIntervalMin', minutes);
+              }
+            }}
+          />
+        </div>
+        <p className="settings-hint">{t('git.autoFetchRepoHint')}</p>
+        {tabs.length === 0 ? (
+          <p className="settings-hint">{t('git.autoFetchNone')}</p>
+        ) : (
+          <div className="settings-rows">
+            {tabs.map((tab) => (
+              <CheckRow
+                key={tab.path}
+                label={tab.meta.name}
+                checked={autoFetchOff[tab.path] !== true}
+                onChange={(enabled) => {
+                  setAutoFetchOff((current) => ({ ...current, [tab.path]: !enabled }));
+                  void repoAutoFetch.set(tab.path, enabled);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="settings-field">

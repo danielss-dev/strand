@@ -332,6 +332,17 @@ export const repoNetworkPreferences = {
   },
 };
 
+/** Per-repository auto-fetch opt-out. Missing or `true` means the global
+ * interval applies; `false` skips this repository. */
+export const repoAutoFetch = {
+  get(repoPath: string): Promise<boolean | null> {
+    return settings.get<boolean>(`auto-fetch:${repoPath}`);
+  },
+  set(repoPath: string, enabled: boolean): Promise<void> {
+    return settings.set(`auto-fetch:${repoPath}`, enabled);
+  },
+};
+
 /** Durable, bounded transcript of explicit repository housekeeping runs. */
 export const repoActivity = {
   async list(repoPath: string): Promise<RepoActivityEntry[]> {

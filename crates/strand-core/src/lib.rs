@@ -126,13 +126,68 @@ pub fn init() {
 /// Exception: `mergetool` keeps default flags — a console-based merge tool
 /// needs a real console window to be usable.
 pub(crate) fn git_command() -> std::process::Command {
-    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cmd = std::process::Command::new("git");
+    hide_console(&mut cmd);
+    cmd
+}
+
+/// Apply `CREATE_NO_WINDOW` on Windows so a child of the GUI-subsystem build
+/// does not flash a console. No-op elsewhere. Background fetch and every
+/// other `git_command` spawn go through here — do not set the flag ad hoc.
+pub(crate) fn hide_console(cmd: &mut std::process::Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    cmd
+    #[cfg(not(windows))]
+    {
+        let _ = cmd;
+    }
+}
+
+#[cfg(all(test, windows))]
+mod console_probe {
+    use super::hide_console;
+
+    /// Child side exits 0 when this process has no console window, 7 when it does.
+    #[test]
+    fn hidden_console_child_has_no_window() {
+        if std::env::var_os("STRAND_CONSOLE_PROBE").is_some() {
+            let hwnd = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
+            std::process::exit(if hwnd == 0 { 0 } else { 7 });
+        }
+
+        let spawn = |hide: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args(["--exact", "console_probe::hidden_console_child_has_no_window", "--nocapture"])
+                .env("STRAND_CONSOLE_PROBE", "1")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            if hide {
+                hide_console(&mut command);
+            }
+            command.status().expect("spawn console probe")
+        };
+
+        let hidden = spawn(true);
+        assert!(
+            hidden.success(),
+            "CREATE_NO_WINDOW child still had a console window: {hidden}"
+        );
+        // A console parent (the usual Windows test host) would show a window
+        // for a bare spawn. Service sessions have no console at all; only
+        // assert the differential when the parent itself has one.
+        let parent = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
+        if parent != 0 {
+            let bare = spawn(false);
+            assert!(
+                !bare.success(),
+                "bare Command::new unexpectedly hid its console; the probe cannot tell CREATE_NO_WINDOW apart"
+            );
+        }
+    }
 }

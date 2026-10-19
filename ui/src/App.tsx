@@ -60,7 +60,9 @@ import {
   stashApplyProgress,
   stashPopProgress,
 } from './lib/localGitOp';
+import { backgroundFetchInFlight } from './lib/autoFetch';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
+import { useAutoFetch } from './lib/useAutoFetch';
 import { useTheme } from './lib/theme';
 import type { InitRepoRequest } from './views/InitRepoDialog';
 import type { SettingsSectionId } from './views/SettingsDialog';
@@ -555,6 +557,13 @@ export function App() {
   // latest showToast through this ref instead of re-subscribing.
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
+  const autoFetchIntervalMin = useSettings((s) => s.autoFetchIntervalMin);
+  useAutoFetch({
+    intervalMin: autoFetchIntervalMin,
+    manualBusy: syncing || pulling || pushing,
+    manualPath: activePath,
+    notify: showToast,
+  });
 
   const networkBusyRef = useRef(false);
   networkBusyRef.current = syncing || pulling || pushing;
@@ -982,7 +991,7 @@ export function App() {
   }, []);
 
   const onExpandHistory = useCallback(async (path: string, remote: string, expansion: HistoryExpansion) => {
-    if (syncing || pulling || pushing) throw new Error('Another network operation is running.');
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) throw new Error('Another network operation is running.');
     setSyncing(true);
     setNetProgress('Downloading history…');
     const opId = nextOpId();
@@ -1001,7 +1010,7 @@ export function App() {
   }, [syncing, pulling, pushing, nextOpId, showToast]);
 
   const onFetch = useCallback(async (prune?: boolean) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     setNetProgress('Fetching…');
     const opId = nextOpId();
@@ -1021,7 +1030,7 @@ export function App() {
   }, [fetchRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
   const onPull = useCallback(async (mode?: PullMode, autostash?: boolean) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const effectiveMode = mode ?? pullMode;
     const effectiveAutostash = autostash ?? pullAutostash;
     const label = effectiveMode === 'rebase'
@@ -1050,7 +1059,7 @@ export function App() {
   }, [pullRepo, showToast, flashDone, syncing, pulling, pushing, pullAutostash, pullMode, nextOpId]);
 
   const onPush = useCallback(async (mode: PushMode = 'default') => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const label = mode === 'force-with-lease'
       ? 'Force push with lease'
       : mode === 'follow-tags'
@@ -1075,7 +1084,7 @@ export function App() {
   }, [pushRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
   const onPushAllTags = useCallback(async () => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setPushing(true);
     setNetProgress('Pushing all tags…');
     await waitForPaint();
@@ -1091,7 +1100,7 @@ export function App() {
   }, [pushAllTags, showToast, flashDone, syncing, pulling, pushing]);
 
   const onFetchBranch = useCallback(async (remoteBranch: RemoteBranch) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     setNetProgress(`Fetching ${remoteBranch.name}…`);
     const opId = nextOpId();
@@ -1112,7 +1121,7 @@ export function App() {
   }, [fetchBranch, flashDone, nextOpId, pulling, pushing, showToast, syncing]);
 
   const onPullBranch = useCallback(async (remoteBranch: RemoteBranch, mode?: PullMode) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const effectiveMode = mode ?? pullMode;
     setPulling(true);
     setNetProgress(`Pulling ${remoteBranch.name}…`);
@@ -1141,7 +1150,7 @@ export function App() {
   }, [flashDone, nextOpId, pullAutostash, pullBranch, pullMode, pulling, pushing, showToast, syncing]);
 
   const onPushBranch = useCallback(async (request: BranchPushRequest) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setPushing(true);
     setNetProgress(`Pushing ${request.branch} to ${request.remote}/${request.remoteBranch}…`);
     const opId = nextOpId();
@@ -1162,7 +1171,7 @@ export function App() {
   }, [flashDone, nextOpId, pulling, pushBranch, pushing, showToast, syncing]);
 
   const onSync = useCallback(async () => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     const opId = nextOpId();
     setNetOpId(opId);
@@ -2190,7 +2199,7 @@ export function App() {
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'whats-new', label: t('whatsNew.menu'), group: 'Actions', keywords: 'whats new changelog release notes versions history', run: () => setWhatsNewOpen(true) },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
-      { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email', run: () => openSettingsAt('git') },
+      { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email auto-fetch interval background', run: () => openSettingsAt('git') },
       ...(meta ? [{ id: 'settings-git', label: 'Repository settings: Identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => setRepositorySettingsPath(meta.path) } satisfies PaletteAction] : []),
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-hosting', label: 'Settings: Hosting', group: 'Actions', keywords: 'github enterprise custom host gitlab bitbucket azure provider authentication account', run: () => openSettingsAt('hosting') },

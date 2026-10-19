@@ -302,7 +302,9 @@ the resolved app appearance automatically.
   track, tag/commit detach, graph and reflog detached checkout, and stash
   apply/pop/drop show a transient progress
   pill; fetch / pull /
-  push with streaming progress and explicit
+  push with streaming progress; background auto-fetch of open repositories
+  (Settings → Git, default 10 minutes, per-repository opt-out) that updates
+  the behind-count and notices new upstream commits without merging; explicit
   pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;

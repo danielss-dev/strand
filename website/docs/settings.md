@@ -120,6 +120,7 @@ and key details expand when needed.
 ## Git
 
 - **Global identity** — Name and Email inputs written to your global git config (`~/.gitconfig`) with an explicit **Save identity** button. These defaults apply to Git outside Strand too; repository, worktree, conditional and environment overrides can take precedence.
+- **Auto-fetch** — Off, 5 min, 10 min, or 30 min. The default is 10 min. Strand fetches each open repository on that interval, the active one first and the others a few seconds apart. It only fetches: nothing is pulled, merged, or checked out. A repository can opt out with its checkbox. Turn the interval off to stop background fetches entirely. New commits on the current branch's upstream update the behind-count and show a short notice. A remote that needs a credential you have not saved fails once, without a prompt, and waits before trying again. Successful and failed background fetches are listed in **Activity history…**.
 - **Default clone & open folder** — a path with **Choose…** and **Clear** buttons. This is where the clone dialog and the open-repository picker start.
 
 Network operations, commit/amend and tag creation use your system Git.

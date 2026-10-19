@@ -62,6 +62,7 @@ import type {
   SubmoduleAction,
   SubmodulePage,
   MergeMode,
+  BackgroundFetchOutcome,
   NetworkOutcome,
   Progress,
   PullMode,
@@ -478,6 +479,9 @@ export const tauri = {
       opId,
       onEvent: progressChannel(onProgress),
     }),
+  /** Background auto-fetch. No progress channel and no credential prompt. */
+  repoBackgroundFetch: (path: string, prune: boolean) =>
+    invoke<BackgroundFetchOutcome>('repo_background_fetch', { path, prune }),
   repoPull: (path: string, mode: PullMode, autostash: boolean, onProgress?: (p: Progress) => void, opId?: string) =>
     invoke<NetworkOutcome>('repo_pull', {
       path,
