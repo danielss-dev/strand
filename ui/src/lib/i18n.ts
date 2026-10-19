@@ -378,6 +378,18 @@ export const en = {
   'git.activity.fetch': 'Background fetch',
   'git.notice.one': '1 new commit on {upstream}',
   'git.notice.other': '{count} new commits on {upstream}',
+  'rebase.updateRefs': 'Update other branches (--update-refs)',
+  'rebase.updateRefsUnsupported': 'Requires Git 2.38 or newer',
+  'rebase.wontMove': '{branch} won’t move — checked out in another worktree',
+  'rebase.willMove': 'Will also move {branches}',
+  'rebase.ontoTitle': 'Rebase onto branch',
+  'rebase.ontoBlurb': 'Rebase {branch} onto {onto}.',
+  'rebase.interactiveDone': 'Interactive rebase complete',
+  'rebase.plainDone': 'Rebased {branch} onto {onto}',
+  'rebase.plainConflict': 'Rebase onto {onto} has conflicts — resolve in Local Changes',
+  'rebase.paused': 'Rebase paused — amend the commit or resolve conflicts, then Continue',
+  'rebase.pausedAgain': 'Rebase paused again — amend the commit or resolve conflicts, then Continue',
+  'rebase.moved': '{message} Moved {branches}.',
 } as const;
 
 export type MessageKey = keyof typeof en;

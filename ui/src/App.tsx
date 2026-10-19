@@ -61,6 +61,7 @@ import {
   stashPopProgress,
 } from './lib/localGitOp';
 import { backgroundFetchInFlight, manualOpPath } from './lib/autoFetch';
+import { withMovedBranches } from './lib/rebase';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
 import { useAutoFetch } from './lib/useAutoFetch';
 import { useTheme } from './lib/theme';
@@ -2992,11 +2993,12 @@ function OpBanner({ onToast, onOpenMailbox, onOpenBisect }: { onToast: (msg: str
     if (busy) return;
     setBusy('continue');
     try {
-      const stillPaused = await continueOperation();
+      const { paused: stillPaused, moved } = await continueOperation();
+      const done = `${OP_LABEL[operation].replace(' in progress', '')} complete`;
       onToast(
         stillPaused
           ? 'Rebase paused again — amend the commit or resolve conflicts, then Continue'
-          : `${OP_LABEL[operation].replace(' in progress', '')} complete`,
+          : withMovedBranches(done, moved),
       );
     } catch (e) {
       onToast(`Continue failed: ${errMessage(e)}`, 'error');

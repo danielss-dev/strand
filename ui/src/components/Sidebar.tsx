@@ -41,6 +41,7 @@ import type {
 import type { RemoteDialogMode } from '../views/RemoteDialog';
 import type { BranchNetworkDialogMode } from '../views/BranchNetworkDialog';
 import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
+import { RebaseOntoDialog } from '../views/RebaseOntoDialog';
 import { CompareRefsDialog, type CompareChoice } from '../views/CompareRefsDialog';
 
 type SideTab = 'git' | 'files';
@@ -254,7 +255,6 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     health: WorktreeHealth;
     dirty: number;
   } | null>(null);
-  const rebase = useRepo((s) => s.rebase);
   const setBaseline = useRepo((s) => s.setBaseline);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
   const compareChoices = useMemo<CompareChoice[]>(
@@ -490,20 +490,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
 
   // Merge/rebase a non-current branch into/onto the current one. Both can
   // conflict — surface git's message (and success) via a toast.
-  const runRebase = (onto: string) => {
-    void (async () => {
-      try {
-        const conflicted = await rebase(onto);
-        onToast(
-          conflicted
-            ? `Rebase onto ${onto} has conflicts — resolve in Local Changes`
-            : `Rebased ${currentBranch} onto ${onto}`,
-        );
-      } catch (e) {
-        onToast(`Rebase failed: ${errMessage(e)}`, 'error');
-      }
-    })();
-  };
+  const [rebaseOnto, setRebaseOnto] = useState<string | null>(null);
 
   // Pin the review baseline at merge-base(HEAD, base) and open the Review
   // view — the current branch's own work, reviewed against the branch the
@@ -612,7 +599,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     if (currentBranch) {
       items.push({ label: `Review ${currentBranch} vs this`, icon: 'eye', onSelect: () => reviewAgainst(b.name) });
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
-      items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
+      items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', onSelect: () => setRebaseOnto(b.name) });
     }
     items.push(
       { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
@@ -1245,6 +1232,14 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
+      {rebaseOnto && currentBranch ? (
+        <RebaseOntoDialog
+          onto={rebaseOnto}
+          branch={currentBranch}
+          onClose={() => setRebaseOnto(null)}
+          onToast={onToast}
+        />
+      ) : null}
     </div>
   );
 }

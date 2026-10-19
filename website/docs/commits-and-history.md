@@ -76,7 +76,7 @@ Right-click a commit (or use `Shift+F10`) for:
 - **Cherry-pick** / **Revert** — conflicts land in Local Changes for resolution;
   merge commits first ask which parent is the mainline.
 - **Create fixup! commit** — commits the currently staged changes as `fixup!` of this commit (enabled only when something is staged); fold it in later with an interactive rebase.
-- **Rebase from here…** — open the interactive rebase editor over this commit and everything newer.
+- **Rebase from here…** — open the interactive rebase editor over this commit and everything newer. With **Update other branches** on, other local branches in that range move with the rewritten commits.
 - **Reset \<branch\> to here…** — opens the Reset dialog.
 - **New worktree from here…** — cut a task branch at this exact commit; see [Worktrees](worktrees.md).
 - **Review changes since this** — pin the review baseline here and jump to the Review view.

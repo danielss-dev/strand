@@ -65,6 +65,25 @@ export interface RebaseStep {
   message: string | null;
 }
 
+/** Plain or interactive rebase. `moved` is empty while the rebase is paused. */
+export interface RebaseOutcome {
+  paused: boolean;
+  moved: string[];
+}
+
+/** Repo-local `rebase.updateRefs`, plus whether this git can honor it. */
+export interface RebaseUpdateRefsSetting {
+  supported: boolean;
+  enabled: boolean;
+}
+
+/** A local branch whose tip sits in the range a plain rebase would rewrite. */
+export interface RebaseRefPreview {
+  name: string;
+  full_ref: string;
+  will_move: boolean;
+}
+
 /** A commit in the editable range, oldest→newest, as the sequence editor lists it. */
 export interface RebaseEntry {
   oid: string;

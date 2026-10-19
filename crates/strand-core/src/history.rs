@@ -18,7 +18,10 @@
 //!
 //! [`network`]: crate::network
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -96,6 +99,55 @@ pub struct RebaseEntry {
     pub is_merge: bool,
 }
 
+/// Outcome of a plain or interactive rebase.
+///
+/// `moved` lists local branches whose tips changed. It is empty while the
+/// rebase is paused: `--update-refs` records placeholders and git moves the
+/// refs only when the rebase completes. Abort leaves every ref untouched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RebaseOutcome {
+    pub paused: bool,
+    pub moved: Vec<String>,
+}
+
+/// Whether this repo remembers `--update-refs`, and whether the installed git
+/// is new enough to honor it (2.38+). Older git disables the toggle instead of
+/// failing mid-rebase.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RebaseUpdateRefsSetting {
+    pub supported: bool,
+    pub enabled: bool,
+}
+
+/// A local branch whose tip sits in the range a plain rebase would rewrite.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RebaseRefPreview {
+    pub name: String,
+    pub full_ref: String,
+    pub will_move: bool,
+}
+
+/// A local branch tip considered for `update-ref` placement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateRefBranch {
+    pub name: String,
+    pub full_ref: String,
+    pub tip: String,
+    pub checked_out_elsewhere: bool,
+}
+
+/// Where one `update-ref` line lands in a flat (non `--rebase-merges`) plan.
+///
+/// `anchor` is the pick/reword/edit step the branch follows. `None` parks the
+/// branch on the rebase base — every commit it contained was dropped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateRefAnchor {
+    pub name: String,
+    pub full_ref: String,
+    pub anchor: Option<usize>,
+    pub will_move: bool,
+}
+
 impl Repo {
     /// Cherry-pick one or more commits onto HEAD, in the order given
     /// (`git cherry-pick <oid>…`). Each commit is any revspec git understands.
@@ -158,12 +210,71 @@ impl Repo {
         self.run_sequencer(&args)
     }
 
-    /// Rebase the current branch onto `onto` (`git rebase <onto>`). A dirty
-    /// working tree makes git refuse — that surfaces as `Err`. `Ok(true)` when
-    /// the rebase paused on a conflict.
-    pub fn rebase(&self, onto: &str) -> Result<bool> {
+    /// Rebase the current branch onto `onto` (`git rebase <onto>`).
+    ///
+    /// `update_refs` passes `--update-refs` when git is 2.38 or newer, so other
+    /// local branches whose tips sit in the rewritten range move too. The flag
+    /// on this call wins over the repo's remembered `rebase.updateRefs`. A dirty
+    /// working tree makes git refuse — that surfaces as `Err`. `paused` is set
+    /// when the rebase stopped on a conflict; branch tips move only once it
+    /// completes.
+    pub fn rebase(&self, onto: &str, update_refs: bool) -> Result<RebaseOutcome> {
         validate_ref(onto)?;
-        self.run_sequencer(&["rebase", "--", onto])
+        let mut args = vec!["rebase"];
+        push_update_refs(&mut args, update_refs)?;
+        args.push("--");
+        args.push(onto);
+        self.finish_rebase(&args, &[])
+    }
+
+    /// Remembered per repo as git's own `rebase.updateRefs` (local scope).
+    /// `supported` is false when the git Strand finds is older than 2.38.
+    pub fn rebase_update_refs_setting(&self) -> Result<RebaseUpdateRefsSetting> {
+        Ok(RebaseUpdateRefsSetting {
+            supported: git_supports_update_refs(),
+            enabled: crate::signing::git_bool(self, "rebase.updateRefs")?,
+        })
+    }
+
+    /// Write `rebase.updateRefs` in the repo's local config. Refuses when git
+    /// is too old to honor the setting, so a later rebase cannot fail on the flag.
+    pub fn set_rebase_update_refs(&self, enabled: bool) -> Result<()> {
+        if !git_supports_update_refs() {
+            return Err(Error::Other(
+                "--update-refs requires Git 2.38 or newer".into(),
+            ));
+        }
+        self.set_scoped_config(
+            "--local",
+            "rebase.updateRefs",
+            Some(if enabled { "true" } else { "false" }),
+        )
+    }
+
+    /// Local branches, other than the one checked out here, whose tips sit in
+    /// `onto..HEAD` — the commits a plain rebase onto `onto` would rewrite.
+    /// Branches checked out in another worktree are listed with `will_move`
+    /// false; git skips those.
+    pub fn rebase_ref_preview(&self, onto: &str) -> Result<Vec<RebaseRefPreview>> {
+        validate_ref(onto)?;
+        let range = format!("{onto}..HEAD");
+        let out = run_git(&self.path, &["rev-list", "--reverse", &range])?;
+        let original: Vec<String> = out
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect();
+        let steps: Vec<RebaseStep> = original
+            .iter()
+            .map(|oid| RebaseStep {
+                action: RebaseAction::Pick,
+                oid: oid.clone(),
+                message: None,
+            })
+            .collect();
+        Ok(anchors_to_preview(
+            self.flat_update_ref_anchors_resolved(&original, &steps)?,
+        ))
     }
 
     /// List the commits an interactive rebase would let the user edit —
@@ -217,14 +328,22 @@ impl Repo {
     /// is forced to `true` (so `squash` keeps git's default combined message
     /// and nothing blocks), and a `reword` is applied as `pick` + an
     /// `exec git commit --amend -F <msg>` so its new message maps to the right
-    /// commit deterministically. `Ok(true)` when the rebase paused on a
+    /// commit deterministically. `paused` is true when the rebase stopped on a
     /// conflict (resolve, then [`continue_operation`](Repo::continue_operation)).
+    ///
+    /// `update_refs` asks git for `--update-refs`. On the flat path the sequence
+    /// editor **overwrites** git's todo, which would drop those lines, so Strand
+    /// emits `update-ref refs/heads/<name>` itself — after the rewritten commit
+    /// each other local branch should follow (see [`plan_update_refs`]). The
+    /// preserve-merges editor prints unknown lines through, so git's own
+    /// `update-ref` lines survive there and Strand does not emit a second copy.
     pub fn interactive_rebase(
         &self,
         base: Option<&str>,
         steps: &[RebaseStep],
         preserve_merges: bool,
-    ) -> Result<bool> {
+        update_refs: bool,
+    ) -> Result<RebaseOutcome> {
         if let Some(operation) = self.operation_in_progress() {
             return Err(Error::Other(format!(
                 "cannot start an interactive rebase while {operation} is in progress"
@@ -238,6 +357,11 @@ impl Repo {
         }
         if steps.iter().all(|s| s.action == RebaseAction::Drop) {
             return Err(Error::Other("interactive rebase: the plan keeps no commits".into()));
+        }
+        if update_refs && !git_supports_update_refs() {
+            return Err(Error::Other(
+                "--update-refs requires Git 2.38 or newer".into(),
+            ));
         }
 
         if preserve_merges {
@@ -263,6 +387,33 @@ impl Repo {
             }
         }
 
+        // Flat path: git would insert update-ref lines, then our sequence editor
+        // overwrites the todo. Compute where each other local branch lands and
+        // emit the lines ourselves. Preserve-merges keeps git's lines.
+        let anchors = if update_refs && !preserve_merges {
+            self.flat_update_ref_anchors(base, steps)?
+        } else {
+            Vec::new()
+        };
+        let mut at_base: Vec<String> = Vec::new();
+        let mut after_step: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+        for anchor in &anchors {
+            if !anchor.will_move {
+                continue;
+            }
+            match anchor.anchor {
+                Some(index) => after_step
+                    .entry(index)
+                    .or_default()
+                    .push(anchor.full_ref.clone()),
+                None => at_base.push(anchor.full_ref.clone()),
+            }
+        }
+        for refs in after_step.values_mut() {
+            refs.sort();
+        }
+        at_base.sort();
+
         // Keep the todo + reword message files beside this worktree's git dir:
         // an edit/conflict pause can outlive this command, and later `exec`
         // lines still need their message files when the user continues.
@@ -270,6 +421,10 @@ impl Repo {
         let mut todo = String::new();
         let mut mapping = String::new();
         let safe = crate::GIT_SAFE_CONFIG.join(" ");
+        for full_ref in &at_base {
+            todo.push_str(&format!("update-ref {full_ref}\n"));
+        }
+        let mut open_anchor: Option<usize> = None;
         for (i, s) in steps.iter().enumerate() {
             let mut message_path = String::new();
             if s.action == RebaseAction::Reword {
@@ -287,6 +442,15 @@ impl Repo {
                 ));
                 continue;
             }
+            let kept = matches!(
+                s.action,
+                RebaseAction::Pick | RebaseAction::Reword | RebaseAction::Edit
+            );
+            if kept {
+                if let Some(anchor) = open_anchor.take() {
+                    append_update_refs(&mut todo, after_step.get(&anchor).map(Vec::as_slice));
+                }
+            }
             match s.action {
                 // A missing line drops the commit; emit nothing.
                 RebaseAction::Drop => {}
@@ -296,12 +460,22 @@ impl Repo {
                 RebaseAction::Fixup => todo.push_str(&format!("fixup {}\n", s.oid)),
                 RebaseAction::Reword => {
                     // `exec` runs via the shell; a forward-slashed, single-quoted
-                    // path is safe on every platform git supports.
+                    // path is safe on every platform git supports. The update-ref
+                    // that follows this anchor is emitted after the amend, so the
+                    // branch lands on the reworded commit rather than the pick.
                     todo.push_str(&format!("pick {}\n", s.oid));
                     todo.push_str(&format!(
                         "exec git {safe} commit --amend --no-edit -F '{message_path}'\n"
                     ));
                 }
+            }
+            if kept {
+                open_anchor = Some(i);
+            }
+        }
+        if !preserve_merges {
+            if let Some(anchor) = open_anchor.take() {
+                append_update_refs(&mut todo, after_step.get(&anchor).map(Vec::as_slice));
             }
         }
         let todo_path = work.join("todo");
@@ -309,6 +483,7 @@ impl Repo {
             .map_err(|e| Error::Other(format!("write rebase todo: {e}")))?;
 
         let mut args: Vec<&str> = vec!["rebase", "-i"];
+        push_update_refs(&mut args, update_refs)?;
         if preserve_merges {
             args.push("--rebase-merges");
         }
@@ -324,6 +499,7 @@ impl Repo {
         // appended todo path forms a redirect — no helper script, no path
         // quoting (the plan path travels in an env var sh expands).
         let plan = sh_path(&todo_path);
+        let before = branch_tips(&self.path)?;
         let result = if preserve_merges {
             let (editor, awk) = write_preserve_merge_editor(&work, &safe)?;
             let editor = sh_path(&editor);
@@ -351,7 +527,64 @@ impl Repo {
         if self.operation_in_progress().is_none() {
             let _ = std::fs::remove_dir_all(&work);
         }
-        result
+        let paused = result?;
+        let moved = moved_branches(&before, &branch_tips(&self.path)?)?;
+        Ok(RebaseOutcome { paused, moved })
+    }
+
+    fn finish_rebase(&self, args: &[&str], envs: &[(&str, &str)]) -> Result<RebaseOutcome> {
+        let before = branch_tips(&self.path)?;
+        let paused = self.run_sequencer_env(args, envs)?;
+        let moved = moved_branches(&before, &branch_tips(&self.path)?)?;
+        Ok(RebaseOutcome { paused, moved })
+    }
+
+    /// Anchors for the flat interactive todo. Step oids are resolved to full
+    /// commit ids so they match `for-each-ref` tips.
+    fn flat_update_ref_anchors(
+        &self,
+        base: Option<&str>,
+        steps: &[RebaseStep],
+    ) -> Result<Vec<UpdateRefAnchor>> {
+        let original = self.rebase_todo(base)?;
+        let original_oids: Vec<String> = original.into_iter().map(|entry| entry.oid).collect();
+        let resolved = resolve_commits(
+            &self.path,
+            &steps
+                .iter()
+                .map(|step| step.oid.clone())
+                .collect::<Vec<_>>(),
+        )?;
+        let resolved_steps: Vec<RebaseStep> = steps
+            .iter()
+            .zip(resolved)
+            .map(|(step, oid)| RebaseStep {
+                action: step.action,
+                oid,
+                message: None,
+            })
+            .collect();
+        self.flat_update_ref_anchors_resolved(&original_oids, &resolved_steps)
+    }
+
+    fn flat_update_ref_anchors_resolved(
+        &self,
+        original: &[String],
+        steps: &[RebaseStep],
+    ) -> Result<Vec<UpdateRefAnchor>> {
+        let head = current_branch(&self.path)?;
+        let elsewhere = checked_out_elsewhere(&self.path, head.as_deref())?;
+        let branches = local_tips(&self.path)?
+            .into_iter()
+            .filter(|tip| head.as_deref() != Some(tip.name.as_str()))
+            .map(|tip| UpdateRefBranch {
+                checked_out_elsewhere: elsewhere.contains(&tip.name),
+                name: tip.name,
+                full_ref: tip.full_ref,
+                tip: tip.oid,
+            })
+            .collect::<Vec<_>>();
+        Ok(plan_update_refs(original, steps, &branches))
     }
 
     /// Resume the sequencer/merge/rebase op paused mid-flight (after the user
@@ -632,6 +865,261 @@ fn sh_path(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
+fn append_update_refs(todo: &mut String, refs: Option<&[String]>) {
+    if let Some(refs) = refs {
+        for full_ref in refs {
+            todo.push_str(&format!("update-ref {full_ref}\n"));
+        }
+    }
+}
+
+/// `--update-refs` / `--no-update-refs` landed in Git 2.38. Older git must not
+/// see the flag at all. When the caller asked for it and git is too old, fail
+/// before the rebase starts.
+fn push_update_refs(args: &mut Vec<&str>, update_refs: bool) -> Result<()> {
+    if let Some(flag) = update_refs_flag(git_supports_update_refs(), update_refs)? {
+        args.push(flag);
+    }
+    Ok(())
+}
+
+/// `None` on Git older than 2.38 (and an error if the caller still asked for
+/// the feature). Otherwise the explicit flag that wins over `rebase.updateRefs`.
+fn update_refs_flag(supported: bool, update_refs: bool) -> Result<Option<&'static str>> {
+    if !supported {
+        return if update_refs {
+            Err(Error::Other(
+                "--update-refs requires Git 2.38 or newer".into(),
+            ))
+        } else {
+            Ok(None)
+        };
+    }
+    Ok(Some(if update_refs {
+        "--update-refs"
+    } else {
+        "--no-update-refs"
+    }))
+}
+
+/// `git version 2.43.0` → `(2, 43, 0)`. Extra suffixes (`windows.1`) are ignored.
+pub fn parse_git_version(text: &str) -> Option<(u32, u32, u32)> {
+    let rest = text.trim().strip_prefix("git version ")?;
+    let mut nums = rest
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|part| !part.is_empty());
+    let major = nums.next()?.parse().ok()?;
+    let minor = nums.next()?.parse().ok()?;
+    let patch = nums.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
+}
+
+fn git_version_tuple() -> Option<(u32, u32, u32)> {
+    static CACHE: OnceLock<Option<(u32, u32, u32)>> = OnceLock::new();
+    *CACHE.get_or_init(|| {
+        let out = crate::git_command().arg("--version").output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        parse_git_version(&String::from_utf8_lossy(&out.stdout))
+    })
+}
+
+/// Git 2.38 introduced `rebase --update-refs`.
+pub fn git_supports_update_refs() -> bool {
+    git_version_tuple().is_some_and(|version| version >= (2, 38, 0))
+}
+
+struct BranchTip {
+    name: String,
+    full_ref: String,
+    oid: String,
+}
+
+fn branch_tips(path: &Path) -> Result<BTreeMap<String, String>> {
+    Ok(local_tips(path)?
+        .into_iter()
+        .map(|tip| (tip.name, tip.oid))
+        .collect())
+}
+
+fn local_tips(path: &Path) -> Result<Vec<BranchTip>> {
+    let out = run_git(
+        path,
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(refname:short)%00%(objectname)",
+            "refs/heads",
+        ],
+    )?;
+    let mut tips = Vec::new();
+    for line in out.lines() {
+        let mut parts = line.split('\0');
+        let full_ref = parts.next().unwrap_or("").to_string();
+        let name = parts.next().unwrap_or("").to_string();
+        let oid = parts.next().unwrap_or("").to_string();
+        if full_ref.is_empty() || name.is_empty() || oid.is_empty() {
+            continue;
+        }
+        tips.push(BranchTip {
+            name,
+            full_ref,
+            oid,
+        });
+    }
+    Ok(tips)
+}
+
+fn moved_branches(
+    before: &BTreeMap<String, String>,
+    after: &BTreeMap<String, String>,
+) -> Result<Vec<String>> {
+    let mut moved: Vec<String> = after
+        .iter()
+        .filter(|(name, oid)| before.get(*name).is_some_and(|prev| prev != *oid))
+        .map(|(name, _)| name.clone())
+        .collect();
+    moved.sort();
+    Ok(moved)
+}
+
+fn current_branch(path: &Path) -> Result<Option<String>> {
+    let out = crate::git_command()
+        .current_dir(path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .args(crate::GIT_SAFE_CONFIG)
+        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .output()
+        .map_err(|e| Error::Other(format!("spawn git failed: {e}")))?;
+    if out.status.success() {
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        return Ok((!name.is_empty()).then_some(name));
+    }
+    if out.status.code() == Some(1) {
+        return Ok(None);
+    }
+    Err(Error::Other(format!(
+        "symbolic-ref failed: {}",
+        String::from_utf8_lossy(&out.stderr).trim()
+    )))
+}
+
+/// Short names of branches checked out in a worktree other than HEAD here.
+/// Git will not move those with `--update-refs`.
+fn checked_out_elsewhere(path: &Path, head: Option<&str>) -> Result<BTreeSet<String>> {
+    let out = run_git(path, &["worktree", "list", "--porcelain"])?;
+    let mut elsewhere = BTreeSet::new();
+    for line in out.lines() {
+        if let Some(name) = line.strip_prefix("branch refs/heads/") {
+            if Some(name) != head {
+                elsewhere.insert(name.to_string());
+            }
+        }
+    }
+    Ok(elsewhere)
+}
+
+fn resolve_commits(path: &Path, revs: &[String]) -> Result<Vec<String>> {
+    if revs.is_empty() {
+        return Ok(Vec::new());
+    }
+    // `--verify` accepts only one revision ("Needed a single revision" otherwise).
+    // A bare `rev-parse` resolves every `^{commit}` in one shot and still
+    // fails the whole command when any rev is missing. `--` would stop
+    // revision parsing and echo the specs back unchanged.
+    let specs: Vec<String> = revs.iter().map(|rev| format!("{rev}^{{commit}}")).collect();
+    let mut args = vec!["rev-parse"];
+    args.extend(specs.iter().map(String::as_str));
+    let out = run_git(path, &args)?;
+    let lines: Vec<String> = out.lines().map(str::to_string).collect();
+    if lines.len() != revs.len() {
+        return Err(Error::Other("could not resolve rebase commits".into()));
+    }
+    Ok(lines)
+}
+
+fn anchors_to_preview(anchors: Vec<UpdateRefAnchor>) -> Vec<RebaseRefPreview> {
+    anchors
+        .into_iter()
+        .map(|anchor| RebaseRefPreview {
+            name: anchor.name,
+            full_ref: anchor.full_ref,
+            will_move: anchor.will_move,
+        })
+        .collect()
+}
+
+/// Decide where each local branch tip in `original` (oldest→newest ancestry)
+/// lands after `steps` (the user's plan, which may drop, squash, or reorder).
+///
+/// A branch follows the rewritten form of the last commit it contained that
+/// the plan still keeps:
+/// - pick / reword / edit: that commit, after its reword amend and after any
+///   squash or fixup lines that fold into it
+/// - squash / fixup: the pick/reword/edit the chain folds into (the combined
+///   commit), not the pre-squash snapshot
+/// - drop: the previous kept ancestor in `original`, or the rebase base when
+///   every commit the branch contained was dropped
+///
+/// Reordering does not pull in commits that were never on the branch. A branch
+/// checked out in another worktree is reported with `will_move` false.
+pub fn plan_update_refs(
+    original: &[String],
+    steps: &[RebaseStep],
+    branches: &[UpdateRefBranch],
+) -> Vec<UpdateRefAnchor> {
+    let mut planned = Vec::new();
+    for branch in branches {
+        if !original.iter().any(|oid| oid == &branch.tip) {
+            continue;
+        }
+        planned.push(UpdateRefAnchor {
+            name: branch.name.clone(),
+            full_ref: branch.full_ref.clone(),
+            anchor: landing_anchor(original, steps, &branch.tip),
+            will_move: !branch.checked_out_elsewhere,
+        });
+    }
+    planned.sort_by(|a, b| a.name.cmp(&b.name));
+    planned
+}
+
+/// Step index of the pick/reword/edit the branch follows, or `None` for the base.
+fn landing_anchor(original: &[String], steps: &[RebaseStep], tip: &str) -> Option<usize> {
+    let tip_at = original.iter().position(|oid| oid == tip)?;
+    let mut kept: Option<&str> = None;
+    for oid in &original[..=tip_at] {
+        let action = steps
+            .iter()
+            .find(|step| step.oid == *oid)
+            .map(|step| step.action)
+            .unwrap_or(RebaseAction::Drop);
+        if action != RebaseAction::Drop {
+            kept = Some(oid.as_str());
+        }
+    }
+    let kept = kept?;
+    let step_at = steps.iter().position(|step| step.oid == kept)?;
+    match steps[step_at].action {
+        RebaseAction::Pick | RebaseAction::Reword | RebaseAction::Edit => Some(step_at),
+        RebaseAction::Squash | RebaseAction::Fixup => {
+            let mut index = step_at;
+            while index > 0 {
+                index -= 1;
+                match steps[index].action {
+                    RebaseAction::Pick | RebaseAction::Reword | RebaseAction::Edit => {
+                        return Some(index);
+                    }
+                    RebaseAction::Squash | RebaseAction::Fixup | RebaseAction::Drop => {}
+                }
+            }
+            None
+        }
+        RebaseAction::Drop => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,8 +1329,9 @@ mod tests {
                     step(RebaseAction::Drop, &c3),
                 ],
                 false,
+                false,
             )
-            .unwrap();
+            .unwrap().paused;
         assert!(!conflicted, "independent files don't conflict");
         assert_eq!(subjects(&dir, &format!("{base}..HEAD")), ["c2", "c1"]);
         assert!(!dir.join("d.txt").exists(), "dropped commit's file is gone");
@@ -864,6 +1353,7 @@ mod tests {
                 step(RebaseAction::Pick, &c3),
             ],
             false,
+            false,
         )
         .unwrap();
         assert_eq!(subjects(&dir, &format!("{base}..HEAD")), ["c1", "c3"]);
@@ -876,7 +1366,11 @@ mod tests {
         let (c1, c2) = (t[0].oid.clone(), t[1].oid.clone());
         repo.interactive_rebase(
             Some(&base),
-            &[step(RebaseAction::Pick, &c1), step(RebaseAction::Squash, &c2)],
+            &[
+                step(RebaseAction::Pick, &c1),
+                step(RebaseAction::Squash, &c2),
+            ],
+            false,
             false,
         )
         .unwrap();
@@ -901,6 +1395,7 @@ mod tests {
                 },
                 step(RebaseAction::Pick, &c3),
             ],
+            false,
             false,
         )
         .unwrap();
@@ -927,8 +1422,9 @@ mod tests {
                     },
                 ],
                 false,
+                false,
             )
-            .unwrap();
+            .unwrap().paused;
         assert!(paused, "edit leaves the rebase deliberately paused");
         assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
 
@@ -984,7 +1480,7 @@ mod tests {
             .collect();
 
         git(&dir, &["config", "rebase.abbreviateCommands", "true"]);
-        assert!(repo.interactive_rebase(Some(&base), &steps, true).unwrap());
+        assert!(repo.interactive_rebase(Some(&base), &steps, true, false).unwrap().paused);
         assert_eq!(repo.meta().unwrap().operation.as_deref(), Some("rebase"));
         assert!(!repo.continue_operation().unwrap());
         assert_eq!(git(&dir, &["rev-list", "--count", "--min-parents=2", "HEAD"]), "1");
@@ -1009,8 +1505,9 @@ mod tests {
                 Some(&base),
                 &[step(RebaseAction::Pick, &c2), step(RebaseAction::Pick, &c1)],
                 false,
+                false,
             )
-            .unwrap();
+            .unwrap().paused;
         assert!(conflicted, "reordered same-line edits conflict");
 
         // Resolve + stage + continue, until the rebase converges (it can pause
@@ -1026,5 +1523,521 @@ mod tests {
         }
         assert_eq!(repo.meta().unwrap().operation, None);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn tip(dir: &Path, name: &str) -> String {
+        git(dir, &["rev-parse", name])
+    }
+
+    fn branch_ref(name: &str, oid: &str, elsewhere: bool) -> UpdateRefBranch {
+        UpdateRefBranch {
+            name: name.to_string(),
+            full_ref: format!("refs/heads/{name}"),
+            tip: oid.to_string(),
+            checked_out_elsewhere: elsewhere,
+        }
+    }
+
+    /// `main ← A ← B`, with B checked out and A's tip inside `main..B`.
+    /// Returns `(repo, dir, main oid)`.
+    fn stack_on_main() -> (Repo, PathBuf, String) {
+        let (repo, dir) = scratch_repo();
+        let main = write_commit(&dir, "base.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "stack-b"]);
+        write_commit(&dir, "a.txt", "a\n", "commit A");
+        git(&dir, &["branch", "stack-a"]);
+        write_commit(&dir, "b.txt", "b\n", "commit B");
+        (repo, dir, main)
+    }
+
+    #[test]
+    fn parse_git_version_accepts_upstream_and_windows_suffixes() {
+        assert_eq!(parse_git_version("git version 2.38.0"), Some((2, 38, 0)));
+        assert_eq!(parse_git_version("git version 2.37.9\n"), Some((2, 37, 9)));
+        assert_eq!(
+            parse_git_version("git version 2.43.0.windows.1"),
+            Some((2, 43, 0))
+        );
+        assert!(parse_git_version("not git").is_none());
+        assert!((2, 38, 0) >= (2, 38, 0));
+        assert!((2, 37, 9) < (2, 38, 0));
+        assert_eq!(update_refs_flag(true, true).unwrap(), Some("--update-refs"));
+        assert_eq!(
+            update_refs_flag(true, false).unwrap(),
+            Some("--no-update-refs")
+        );
+        assert_eq!(update_refs_flag(false, false).unwrap(), None);
+        assert!(update_refs_flag(false, true).is_err());
+    }
+
+    #[test]
+    fn update_ref_anchor_follows_kept_ancestor_through_drop_squash_and_reorder() {
+        let (a, b, c) = ("a".to_string(), "b".to_string(), "c".to_string());
+        let original = vec![a.clone(), b.clone(), c.clone()];
+        let branches = vec![branch_ref("mid", &b, false), branch_ref("held", &b, true)];
+
+        // Drop B. The last kept commit it contained is A, even when C is replayed first.
+        let dropped = plan_update_refs(
+            &original,
+            &[
+                step(RebaseAction::Pick, &c),
+                step(RebaseAction::Drop, &b),
+                step(RebaseAction::Pick, &a),
+            ],
+            &branches,
+        );
+        assert_eq!(dropped[0].name, "held");
+        assert!(
+            !dropped[0].will_move,
+            "a branch checked out elsewhere is not moved"
+        );
+        assert_eq!(dropped[1].anchor, Some(2), "mid follows rewritten A, not C");
+        assert!(dropped[1].will_move);
+
+        // Every commit mid contained was dropped → park on the rebase base.
+        let all_dropped = plan_update_refs(
+            &original,
+            &[
+                step(RebaseAction::Drop, &a),
+                step(RebaseAction::Drop, &b),
+                step(RebaseAction::Pick, &c),
+            ],
+            &branches[..1],
+        );
+        assert_eq!(all_dropped[0].anchor, None);
+
+        // Squash B into A. Both the branch at A and the branch at B follow the
+        // combined commit (the pick), not the pre-squash snapshot.
+        let mut with_a = branches[..1].to_vec();
+        with_a.push(branch_ref("lower", &a, false));
+        let squashed = plan_update_refs(
+            &original,
+            &[
+                step(RebaseAction::Pick, &a),
+                step(RebaseAction::Squash, &b),
+                step(RebaseAction::Pick, &c),
+            ],
+            &with_a,
+        );
+        let lower = squashed.iter().find(|plan| plan.name == "lower").unwrap();
+        let mid = squashed.iter().find(|plan| plan.name == "mid").unwrap();
+        assert_eq!(lower.anchor, Some(0));
+        assert_eq!(mid.anchor, Some(0));
+
+        // Reorder: mid still follows B, which is now the first kept commit.
+        let reordered = plan_update_refs(
+            &original,
+            &[
+                step(RebaseAction::Pick, &b),
+                step(RebaseAction::Pick, &a),
+                step(RebaseAction::Pick, &c),
+            ],
+            &branches[..1],
+        );
+        assert_eq!(reordered[0].anchor, Some(0));
+    }
+
+    #[test]
+    fn plain_rebase_update_refs_moves_stack_only_when_asked() {
+        let (repo, dir, _main) = stack_on_main();
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "main.txt", "main\n", "main moves");
+        git(&dir, &["checkout", "-q", "stack-b"]);
+        let a_before = tip(&dir, "stack-a");
+        let b_before = tip(&dir, "stack-b");
+        // Remembered true must not override an explicit off for this run.
+        repo.set_rebase_update_refs(true).unwrap();
+        assert!(repo.rebase_update_refs_setting().unwrap().enabled);
+
+        let off = repo.rebase("main", false).unwrap();
+        assert!(!off.paused);
+        assert_eq!(tip(&dir, "stack-a"), a_before, "update-refs off leaves A");
+        assert_ne!(tip(&dir, "stack-b"), b_before);
+        assert_eq!(off.moved, vec!["stack-b".to_string()]);
+        // A is rewritten onto the new main; B sits on that rewrite. The old
+        // stack-a tip is left behind, so it is not B's parent.
+        assert_ne!(tip(&dir, "stack-b^"), a_before);
+        assert_eq!(tip(&dir, "stack-b^^"), tip(&dir, "main"));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (repo, dir, _) = stack_on_main();
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "main.txt", "main\n", "main moves");
+        git(&dir, &["checkout", "-q", "stack-b"]);
+        let a_before = tip(&dir, "stack-a");
+        // A remembered `rebase.updateRefs=true` must not override an explicit off,
+        // and an explicit on must win over a stored false.
+        repo.set_rebase_update_refs(false).unwrap();
+        assert!(!repo.rebase_update_refs_setting().unwrap().enabled);
+        let on = repo.rebase("main", true).unwrap();
+        assert!(!on.paused);
+        assert_ne!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(tip(&dir, "stack-a^"), tip(&dir, "main"));
+        assert_eq!(tip(&dir, "stack-b^"), tip(&dir, "stack-a"));
+        assert_eq!(on.moved, vec!["stack-a".to_string(), "stack-b".to_string()]);
+        // A's rewritten tip is still inside main..HEAD, so a second preview
+        // still names it. The checked-out branch (stack-b) is not listed.
+        let again = repo.rebase_ref_preview("main").unwrap();
+        assert_eq!(again.len(), 1);
+        assert_eq!(again[0].name, "stack-a");
+        assert!(again[0].will_move);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plain_rebase_update_refs_conflict_updates_refs_only_when_finished() {
+        let (repo, dir) = scratch_repo();
+        write_commit(&dir, "f.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "stack-b"]);
+        write_commit(&dir, "f.txt", "aaa\n", "commit A");
+        git(&dir, &["branch", "stack-a"]);
+        write_commit(&dir, "g.txt", "b\n", "commit B");
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "f.txt", "main\n", "main moves");
+        git(&dir, &["checkout", "-q", "stack-b"]);
+        let a_before = tip(&dir, "stack-a");
+        let b_before = tip(&dir, "stack-b");
+        let main = tip(&dir, "main");
+
+        let preview = repo.rebase_ref_preview("main").unwrap();
+        assert_eq!(preview.len(), 1);
+        assert_eq!(preview[0].name, "stack-a");
+        assert!(preview[0].will_move);
+
+        let paused = repo.rebase("main", true).unwrap();
+        assert!(paused.paused);
+        assert!(
+            paused.moved.is_empty(),
+            "refs stay put while the rebase is paused"
+        );
+        assert_eq!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(tip(&dir, "stack-b"), b_before);
+        repo.abort_operation().unwrap();
+        assert_eq!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(tip(&dir, "stack-b"), b_before);
+        assert_eq!(repo.meta().unwrap().operation, None);
+
+        let paused = repo.rebase("main", true).unwrap();
+        assert!(paused.paused);
+        std::fs::write(dir.join("f.txt"), "resolved\n").unwrap();
+        git(&dir, &["add", "f.txt"]);
+        let done = repo.continue_operation().unwrap();
+        assert!(!done);
+        assert_ne!(tip(&dir, "stack-a"), a_before);
+        assert_ne!(tip(&dir, "stack-b"), b_before);
+        assert_eq!(tip(&dir, "stack-a^"), main);
+        assert_eq!(tip(&dir, "stack-b^"), tip(&dir, "stack-a"));
+        assert!(dir.join("g.txt").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn interactive_reword_update_refs_moves_contained_branch() {
+        let (repo, dir, main) = stack_on_main();
+        let todo = repo.rebase_todo(Some(&main)).unwrap();
+        let (a, b) = (todo[0].oid.clone(), todo[1].oid.clone());
+        let a_before = tip(&dir, "stack-a");
+
+        let off = repo
+            .interactive_rebase(
+                Some(&main),
+                &[
+                    RebaseStep {
+                        action: RebaseAction::Reword,
+                        oid: a.clone(),
+                        message: Some("commit A reworded".into()),
+                    },
+                    step(RebaseAction::Pick, &b),
+                ],
+                false,
+                false,
+            )
+            .unwrap();
+        assert!(!off.paused);
+        assert_eq!(tip(&dir, "stack-a"), a_before, "update-refs off leaves A");
+        assert_eq!(off.moved, vec!["stack-b".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (repo, dir, main) = stack_on_main();
+        let todo = repo.rebase_todo(Some(&main)).unwrap();
+        let (a, b) = (todo[0].oid.clone(), todo[1].oid.clone());
+        let on = repo
+            .interactive_rebase(
+                Some(&main),
+                &[
+                    RebaseStep {
+                        action: RebaseAction::Reword,
+                        oid: a,
+                        message: Some("commit A reworded".into()),
+                    },
+                    step(RebaseAction::Pick, &b),
+                ],
+                false,
+                true,
+            )
+            .unwrap();
+        assert!(!on.paused);
+        assert_eq!(
+            git(&dir, &["log", "-1", "--format=%s", "stack-a"]),
+            "commit A reworded"
+        );
+        assert_eq!(tip(&dir, "stack-a^"), main);
+        assert_eq!(tip(&dir, "stack-b^"), tip(&dir, "stack-a"));
+        assert_eq!(on.moved, vec!["stack-a".to_string(), "stack-b".to_string()]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn interactive_update_refs_lands_dropped_squashed_and_reordered_branches() {
+        let (repo, dir, base) = three_commits();
+        let t = repo.rebase_todo(Some(&base)).unwrap();
+        let (c1, c2, c3) = (t[0].oid.clone(), t[1].oid.clone(), t[2].oid.clone());
+        git(&dir, &["branch", "mid", &c2]);
+
+        // Drop c2 while replaying c3 first. mid contained c1, so it follows c1 — not c3.
+        repo.interactive_rebase(
+            Some(&base),
+            &[
+                step(RebaseAction::Pick, &c3),
+                step(RebaseAction::Drop, &c2),
+                step(RebaseAction::Pick, &c1),
+            ],
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "mid"]), "c1");
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "mid^"]), "c3");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (repo, dir, base) = three_commits();
+        let t = repo.rebase_todo(Some(&base)).unwrap();
+        let (c1, c2, c3) = (t[0].oid.clone(), t[1].oid.clone(), t[2].oid.clone());
+        git(&dir, &["branch", "lower", &c1]);
+        git(&dir, &["branch", "mid", &c2]);
+        repo.interactive_rebase(
+            Some(&base),
+            &[
+                step(RebaseAction::Pick, &c1),
+                step(RebaseAction::Squash, &c2),
+                step(RebaseAction::Pick, &c3),
+            ],
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(tip(&dir, "lower"), tip(&dir, "mid"));
+        assert_eq!(
+            tip(&dir, "HEAD^"),
+            tip(&dir, "mid"),
+            "the squashed commit is what both branches follow"
+        );
+        let message = git(&dir, &["log", "-1", "--format=%B", "mid"]);
+        assert!(
+            message.contains("c1") && message.contains("c2"),
+            "{message}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (repo, dir, base) = three_commits();
+        let t = repo.rebase_todo(Some(&base)).unwrap();
+        let (c1, c2, c3) = (t[0].oid.clone(), t[1].oid.clone(), t[2].oid.clone());
+        git(&dir, &["branch", "mid", &c1]);
+        repo.interactive_rebase(
+            Some(&base),
+            &[
+                step(RebaseAction::Pick, &c2),
+                step(RebaseAction::Pick, &c1),
+                step(RebaseAction::Pick, &c3),
+            ],
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "mid"]), "c1");
+        assert_eq!(git(&dir, &["log", "-1", "--format=%s", "mid^"]), "c2");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Nothing mid contained survived: it parks on the rebase base.
+        let (repo, dir, base) = three_commits();
+        let t = repo.rebase_todo(Some(&base)).unwrap();
+        let (c1, c2, c3) = (t[0].oid.clone(), t[1].oid.clone(), t[2].oid.clone());
+        git(&dir, &["branch", "mid", &c2]);
+        repo.interactive_rebase(
+            Some(&base),
+            &[
+                step(RebaseAction::Drop, &c1),
+                step(RebaseAction::Drop, &c2),
+                step(RebaseAction::Pick, &c3),
+            ],
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(tip(&dir, "mid"), base);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn update_refs_skips_a_branch_checked_out_in_another_worktree() {
+        let (repo, dir, _main) = stack_on_main();
+        git(&dir, &["checkout", "-q", "main"]);
+        write_commit(&dir, "main.txt", "main\n", "main moves");
+        git(&dir, &["checkout", "-q", "stack-b"]);
+        let wt = std::env::temp_dir().join(format!(
+            "strand-update-ref-wt-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&wt);
+        git(
+            &dir,
+            &["worktree", "add", "-q", wt.to_str().unwrap(), "stack-a"],
+        );
+        let a_before = tip(&dir, "stack-a");
+        let preview = repo.rebase_ref_preview("main").unwrap();
+        assert_eq!(preview.len(), 1);
+        assert_eq!(preview[0].name, "stack-a");
+        assert!(!preview[0].will_move);
+
+        let outcome = repo.rebase("main", true).unwrap();
+        assert!(!outcome.paused);
+        assert_eq!(tip(&dir, "stack-a"), a_before);
+        assert_eq!(outcome.moved, vec!["stack-b".to_string()]);
+        assert_eq!(tip(&dir, "stack-b^^"), tip(&dir, "main"));
+
+        git(
+            &dir,
+            &["worktree", "remove", "--force", wt.to_str().unwrap()],
+        );
+        let _ = std::fs::remove_dir_all(&wt);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preserve_merges_passes_git_update_ref_lines_through() {
+        let (repo, dir) = scratch_repo();
+        let base = write_commit(&dir, "base.txt", "base\n", "base");
+        git(&dir, &["checkout", "-q", "-b", "stack-b"]);
+        let commit_a = write_commit(&dir, "a.txt", "a\n", "commit A");
+        git(&dir, &["branch", "stack-a"]);
+        git(&dir, &["checkout", "-q", "-b", "side", &base]);
+        write_commit(&dir, "side.txt", "side\n", "side work");
+        git(&dir, &["checkout", "-q", "stack-b"]);
+        repo.merge("side", MergeMode::NoFastForward).unwrap();
+        write_commit(&dir, "b.txt", "b\n", "commit B");
+
+        let entries = repo.rebase_todo(Some(&base)).unwrap();
+        assert!(entries.iter().any(|entry| entry.is_merge));
+        let steps: Vec<RebaseStep> = entries
+            .iter()
+            .map(|entry| {
+                if entry.oid == commit_a {
+                    RebaseStep {
+                        action: RebaseAction::Reword,
+                        oid: entry.oid.clone(),
+                        message: Some("commit A reworded".into()),
+                    }
+                } else {
+                    step(RebaseAction::Pick, &entry.oid)
+                }
+            })
+            .collect();
+        // Preserve-merges does not emit update-ref lines of its own. The awk
+        // filter prints unknown lines unchanged, so this move is git's line
+        // surviving that overwrite.
+        let outcome = repo
+            .interactive_rebase(Some(&base), &steps, true, true)
+            .unwrap();
+        assert!(!outcome.paused, "clean merge rebase should finish");
+        assert_eq!(
+            git(&dir, &["log", "-1", "--format=%s", "stack-a"]),
+            "commit A reworded"
+        );
+        git(&dir, &["merge-base", "--is-ancestor", "stack-a", "HEAD"]);
+        assert!(outcome.moved.contains(&"stack-a".to_string()));
+        assert_eq!(
+            git(&dir, &["rev-list", "--count", "--min-parents=2", "HEAD"]),
+            "1"
+        );
+
+        // And the filter itself, given a todo git would have written: a dropped
+        // pick disappears and both `update-ref` and abbreviated `u` lines remain.
+        let work = dir.join("editor-probe");
+        std::fs::create_dir_all(&work).unwrap();
+        let (editor, awk) = write_preserve_merge_editor(&work, "-c core.pager=cat").unwrap();
+        let full_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let full_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        std::fs::write(
+            work.join("plan"),
+            format!("{full_a}\tdrop\t\n{full_b}\tpick\t\n"),
+        )
+        .unwrap();
+        let todo = work.join("todo");
+        std::fs::write(
+            &todo,
+            format!(
+                "pick {full_a} commit A\nupdate-ref refs/heads/stack-a\nu refs/heads/side\npick {full_b} commit B\n"
+            ),
+        )
+        .unwrap();
+        let mut shell = preserve_editor_shell();
+        let output = shell
+            .env("STRAND_REBASE_AWK", sh_path(&awk))
+            .env("STRAND_REBASE_PLAN", sh_path(&work.join("plan")))
+            .arg(sh_path(&editor))
+            .arg(sh_path(&todo))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "preserve editor failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let rewritten = std::fs::read_to_string(&todo).unwrap();
+        assert!(
+            rewritten.contains("update-ref refs/heads/stack-a"),
+            "{rewritten}"
+        );
+        assert!(rewritten.contains("u refs/heads/side"), "{rewritten}");
+        assert!(rewritten.contains(&format!("pick {full_b}")), "{rewritten}");
+        assert!(
+            !rewritten.contains(&format!("pick {full_a}")),
+            "{rewritten}"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Git runs the preserve-merges editor with its own shell. Use `sh` when it
+    /// is on PATH, otherwise the copy shipped beside Git for Windows.
+    fn preserve_editor_shell() -> Command {
+        if Command::new("sh")
+            .arg("-c")
+            .arg("exit 0")
+            .output()
+            .is_ok_and(|out| out.status.success())
+        {
+            return Command::new("sh");
+        }
+        let exec = Command::new("git").args(["--exec-path"]).output().ok();
+        let exec_path = exec
+            .filter(|out| out.status.success())
+            .map(|out| PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()));
+        if let Some(exec_path) = exec_path {
+            for relative in [
+                "../bin/sh.exe",
+                "../../bin/sh.exe",
+                "../usr/bin/sh.exe",
+                "../../usr/bin/sh.exe",
+            ] {
+                let candidate = exec_path.join(relative);
+                if candidate.exists() {
+                    return Command::new(candidate);
+                }
+            }
+        }
+        Command::new("sh")
     }
 }

@@ -38,7 +38,9 @@ import type {
   PullMode,
   PushMode,
   RebaseEntry,
+  RebaseOutcome,
   RebaseStep,
+  RebaseUpdateRefsSetting,
   RecentRepo,
   Refs,
   ReflogEntry,
@@ -522,7 +524,11 @@ export interface RepoState {
   cherryPick(commits: string[], mainline?: number): Promise<boolean>;
   revert(commits: string[], mainline?: number): Promise<boolean>;
   merge(refname: string, mode: MergeMode): Promise<boolean>;
-  rebase(onto: string): Promise<boolean>;
+  rebase(onto: string, updateRefs: boolean): Promise<RebaseOutcome>;
+  /** Repo-local `rebase.updateRefs`, and whether this git supports the flag. */
+  loadRebaseUpdateRefs(): Promise<RebaseUpdateRefsSetting>;
+  /** Remember `--update-refs` for this repo (`rebase.updateRefs`, local scope). */
+  setRebaseUpdateRefs(enabled: boolean): Promise<void>;
   /**
    * Load the editable commit range (oldest→newest) an interactive rebase over
    * `base..HEAD` would offer. `base` null = from the root. Read-only — does not
@@ -532,19 +538,21 @@ export interface RepoState {
   /**
    * Run an interactive rebase from a `steps` plan the editor built. When
    * `preserveMerges` is true, the plan keeps Git's generated merge topology.
+   * `updateRefs` moves other local branches whose tips sit in the range.
    */
   interactiveRebase(
     base: string | null,
     steps: RebaseStep[],
     preserveMerges: boolean,
-  ): Promise<boolean>;
+    updateRefs: boolean,
+  ): Promise<RebaseOutcome>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
   /**
    * Resume a paused merge/rebase/cherry-pick/revert. `true` means Git paused
    * again on another conflict or `edit` step.
    */
-  continueOperation(): Promise<boolean>;
+  continueOperation(): Promise<{ paused: boolean; moved: string[] }>;
   /**
    * Write a conflicted file's resolved contents back and stage it (marks it
    * resolved). The op stays in progress until the user commits — refresh
@@ -938,6 +946,32 @@ async function runHistoryOp(
     await refreshAfterHistoryOp(get);
     if (conflicted) set({ view: 'local', localSelection: null });
   }
+}
+
+async function runRebaseOutcome(
+  get: () => RepoState,
+  set: (partial: Partial<RepoState>) => void,
+  op: () => Promise<RebaseOutcome>,
+): Promise<RebaseOutcome> {
+  let outcome: RebaseOutcome = { paused: false, moved: [] };
+  try {
+    outcome = await op();
+    return outcome;
+  } finally {
+    await refreshAfterHistoryOp(get);
+    if (outcome.paused) set({ view: 'local', localSelection: null });
+  }
+}
+
+function movedBranchNames(before: Map<string, string>, branches: { name: string; target: string }[]): string[] {
+  const moved = branches
+    .filter((branch) => {
+      const previous = before.get(branch.name);
+      return previous != null && previous !== branch.target;
+    })
+    .map((branch) => branch.name);
+  moved.sort();
+  return moved;
 }
 
 async function persistSession(state: RepoState): Promise<void> {
@@ -2192,23 +2226,33 @@ export const useRepo = create<RepoState>((set, get) => ({
       return tauri.repoMerge(path, refname, mode);
     });
   },
-  async rebase(onto) {
-    return runHistoryOp(get, set, () => {
+  async rebase(onto, updateRefs) {
+    return runRebaseOutcome(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoRebase(path, onto);
+      return tauri.repoRebase(path, onto, updateRefs);
     });
+  },
+  async loadRebaseUpdateRefs() {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    return tauri.repoRebaseUpdateRefs(path);
+  },
+  async setRebaseUpdateRefs(enabled) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoSetRebaseUpdateRefs(path, enabled);
   },
   async loadRebaseTodo(base) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     return tauri.repoRebaseTodo(path, base);
   },
-  async interactiveRebase(base, steps, preserveMerges) {
-    return runHistoryOp(get, set, () => {
+  async interactiveRebase(base, steps, preserveMerges, updateRefs) {
+    return runRebaseOutcome(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoInteractiveRebase(path, base, steps, preserveMerges);
+      return tauri.repoInteractiveRebase(path, base, steps, preserveMerges, updateRefs);
     });
   },
   async abortOperation() {
@@ -2221,11 +2265,15 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
   },
   async continueOperation() {
-    return runHistoryOp(get, set, () => {
+    const before = new Map(get().refs.branches.map((branch) => [branch.name, branch.target]));
+    const wasRebase = get().meta?.operation === 'rebase';
+    const paused = await runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
       return tauri.repoContinueOperation(path);
     });
+    const moved = !paused && wasRebase ? movedBranchNames(before, get().refs.branches) : [];
+    return { paused, moved };
   },
   async resolveConflict(file, contents) {
     const path = get().activePath;

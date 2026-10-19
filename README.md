@@ -316,11 +316,13 @@ the resolved app appearance automatically.
   branches,
   tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
-  merge, and a fully keyboard-operable interactive rebase (reorder, reword,
-  edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
-  pause/conflict Continue / Abort. The merge editor can suggest a per-hunk AI
-  resolution (explanation and confidence); it is written only after you accept
-  or edit each hunk and click Resolve.
+  merge, plain rebase onto a branch (with a per-repo `--update-refs` choice),
+  and a fully keyboard-operable interactive rebase (reorder, reword,
+  edit/pause-to-amend, squash, fixup, drop, merge preservation, and moving
+  other local branches in the range) with pause/conflict Continue / Abort.
+  The merge editor can suggest a per-hunk AI resolution (explanation and
+  confidence); it is written only after you accept or edit each hunk and
+  click Resolve.
 - **Patch interchange** — preview affected paths and validate patch imports
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,

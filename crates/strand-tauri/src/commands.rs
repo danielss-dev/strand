@@ -26,7 +26,7 @@ use strand_core::{
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     lfs::LfsAction,
-    history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
+    history::{MergeMode, RebaseEntry, RebaseOutcome, RebaseRefPreview, RebaseStep, RebaseUpdateRefsSetting}, log::{Commit, SearchMode},
     network::{clone_with_options as core_clone, BackgroundFetchOutcome, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
@@ -1977,8 +1977,24 @@ pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<bool
 }
 
 #[tauri::command(async)]
-pub fn repo_rebase(path: String, onto: String) -> CmdResult<bool> {
-    Ok(Repo::discover(&path)?.rebase(&onto)?)
+pub fn repo_rebase(path: String, onto: String, update_refs: bool) -> CmdResult<RebaseOutcome> {
+    Ok(Repo::discover(&path)?.rebase(&onto, update_refs)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_rebase_update_refs(path: String) -> CmdResult<RebaseUpdateRefsSetting> {
+    Ok(Repo::discover(&path)?.rebase_update_refs_setting()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_set_rebase_update_refs(path: String, enabled: bool) -> CmdResult<()> {
+    Repo::discover(&path)?.set_rebase_update_refs(enabled)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn repo_rebase_ref_preview(path: String, onto: String) -> CmdResult<Vec<RebaseRefPreview>> {
+    Ok(Repo::discover(&path)?.rebase_ref_preview(&onto)?)
 }
 
 #[tauri::command(async)]
@@ -2008,11 +2024,13 @@ pub fn repo_interactive_rebase(
     base: Option<String>,
     steps: Vec<RebaseStep>,
     preserve_merges: bool,
-) -> CmdResult<bool> {
+    update_refs: bool,
+) -> CmdResult<RebaseOutcome> {
     Ok(Repo::discover(&path)?.interactive_rebase(
         base.as_deref(),
         &steps,
         preserve_merges,
+        update_refs,
     )?)
 }
 

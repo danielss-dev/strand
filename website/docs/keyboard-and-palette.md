@@ -276,6 +276,8 @@ the commit graph when pressed again.
 | `Backspace` / `Delete` | Drop the row |
 | `Escape` | Close the editor |
 
+**Update other branches (--update-refs)** is a checkbox in the editor (and in the plain rebase dialog). Tab reaches it; Space toggles it. On Git older than 2.38 the checkbox stays disabled and its tooltip says why. `update-ref` rows in the plan are not focusable list items.
+
 ### Worktrees dashboard
 
 | Key | Action |

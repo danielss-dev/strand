@@ -3275,6 +3275,16 @@ upstream update the behind-count and show a toast. Background fetches are
 quiet activity-log entries. Git is spawned through `git_command`
 (`CREATE_NO_WINDOW`), the same hidden-console path as DAN-83.
 
+**Rebase `--update-refs` (2026-10-19, DAN-88 first slice):** Plain rebase and
+the interactive editor can move other local branches whose tips sit in the
+rewritten range. The choice is this repo's `rebase.updateRefs`. The flat
+sequence editor overwrites git's todo, so Strand writes the `update-ref`
+lines itself, after the last kept commit each branch contained (including
+after a reword amend or a squash chain). Preserve-merges leaves git's lines
+in place. Git older than 2.38 disables the toggle instead of failing
+mid-rebase. Later stack slices (parent branch, sidebar grouping, restack,
+stacked PRs) stay open.
+
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and
 latest commit in separate columns, explicit current/locked indicators, and
