@@ -1669,9 +1669,10 @@ community plugins, performance and platform certification from Git feature gaps.
   list (only the viewport slice mounts, since blame can run to 50k lines); click
   a line to jump to its commit in the graph
 - ☐ Tab state persistence per-file (settings store)
-- ☐ Replace the status bar's hardcoded `UTF-8 · LF` label with the selected
-  file's detected encoding and line endings (`StatusBar.tsx`; currently reports
-  LF even for CRLF working-tree files).
+- ☑ Replace the status bar's hardcoded `UTF-8 · LF` label with the selected
+  file's detected encoding and line endings (`detectFromFileContent` /
+  `StatusBarFileEncoding`; `repo_file_content` text preserves CRLF; binary
+  and undetected files hide the chip).
 
 ### Command palette
 - ☑ Open / close, ⌘K, fuzzy filter, run-on-Enter
