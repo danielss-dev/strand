@@ -3,10 +3,14 @@ import type { KeyboardEvent } from 'react';
 
 import { useRepo } from '../stores/repo';
 import { checkoutCommitProgress, type LocalGitOp } from '../lib/localGitOp';
+import { plural } from '../lib/plural';
+import { repoFamilyName } from '../lib/repoIdentity';
 import { errMessage } from '../lib/tauri';
 import type { ReflogEntry } from '../lib/types';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu';
+import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
+import { PaneHeader } from '../components/PaneHeader';
 
 /**
  * Reflog view — the local, chronological record of where HEAD has pointed.
@@ -32,6 +36,7 @@ export function Reflog({
   /** App-owned local write progress (ToastViewport `networkMessage`, no cancel). */
   onLocalGitOp: LocalGitOp;
 }) {
+  const meta = useRepo((s) => s.meta);
   const activePath = useRepo((s) => s.activePath);
   const reflog = useRepo((s) => s.reflog);
   const refreshReflog = useRepo((s) => s.refreshReflog);
@@ -122,62 +127,79 @@ export function Reflog({
     }
   };
 
-  if (reflog.length === 0) {
-    return (
-      <div className="reflog-empty">
-        <Icon name="history" size={22} />
-        <p>No reflog entries yet.</p>
-        <span>HEAD movements — commits, checkouts, resets, merges — will appear here.</span>
-      </div>
-    );
-  }
+  const repoName = repoFamilyName(meta);
 
   return (
-    <>
-      <div
-        ref={listRef}
-        className="reflog-list"
-        role="listbox"
-        tabIndex={0}
-        aria-label="HEAD reflog"
-        aria-activedescendant={`reflog-row-${focused}`}
-        onKeyDown={onKeyDown}
-      >
-        {reflog.map((e, i) => {
-          const { op, rest } = splitMessage(e.message);
-          return (
-            <button
-              type="button"
-              key={`${e.index}-${e.new_oid}`}
-              id={`reflog-row-${i}`}
-              ref={i === focused ? focusedRowRef : undefined}
-              role="option"
-              aria-selected={i === focused}
-              className={'reflog-row' + (i === focused ? ' focused' : '')}
-              onClick={() => {
-                setFocused(i);
-                revealInGraph(e.new_oid);
-              }}
-              onContextMenu={(ev) => {
-                ev.preventDefault();
-                setFocused(i);
-                openEntryMenu(e, ev.clientX, ev.clientY);
-              }}
-              title="Jump to this commit in the graph"
-            >
-              <span className="sel">HEAD@&#123;{e.index}&#125;</span>
-              <span className={'op ' + opClass(op)}>{op}</span>
-              <span className="msg">{rest || <em>(no message)</em>}</span>
-              <span className="when">{relTime(e.time_unix)}</span>
-              <span className="hash">{e.new_short}</span>
-            </button>
-          );
-        })}
-      </div>
-      {menu && (
-        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+    <div className="reflog-view">
+      <PaneHeader
+        title={
+          <span className="wt-breadcrumb">
+            {repoName} / <strong>Reflog</strong>
+          </span>
+        }
+        meta={plural(reflog.length, 'entry', 'entries')}
+        actions={
+          <button type="button" className="btn" onClick={() => void refreshReflog()}>
+            <Icon name="refresh" size={13} stroke={2} />
+            <span>Refresh</span>
+          </button>
+        }
+      />
+
+      {reflog.length === 0 ? (
+        <EmptyState
+          icon="history"
+          title="No reflog entries yet."
+          hint="HEAD movements — commits, checkouts, resets, merges — will appear here."
+        />
+      ) : (
+        <>
+          <div
+            ref={listRef}
+            className="reflog-list"
+            role="listbox"
+            tabIndex={0}
+            aria-label="HEAD reflog"
+            aria-activedescendant={`reflog-row-${focused}`}
+            onKeyDown={onKeyDown}
+          >
+            {reflog.map((e, i) => {
+              const { op, rest } = splitMessage(e.message);
+              return (
+                <button
+                  type="button"
+                  key={`${e.index}-${e.new_oid}`}
+                  id={`reflog-row-${i}`}
+                  ref={i === focused ? focusedRowRef : undefined}
+                  role="option"
+                  aria-selected={i === focused}
+                  className={'reflog-row' + (i === focused ? ' focused' : '')}
+                  onClick={() => {
+                    setFocused(i);
+                    revealInGraph(e.new_oid);
+                  }}
+                  onContextMenu={(ev) => {
+                    ev.preventDefault();
+                    setFocused(i);
+                    openEntryMenu(e, ev.clientX, ev.clientY);
+                  }}
+                  title="Jump to this commit in the graph"
+                >
+                  <span className="sel">HEAD@&#123;{e.index}&#125;</span>
+                  <span className={'op ' + opClass(op)}>{op}</span>
+                  <span className="msg">{rest || <em>(no message)</em>}</span>
+                  <span className="when">{formatWhen(e.time_unix)}</span>
+                  <span className="hash">{e.new_short}</span>
+                </button>
+              );
+            })}
+          </div>
+          {menu && (
+            <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+          )}
+        </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -201,7 +223,7 @@ function opClass(op: string): string {
   return '';
 }
 
-function relTime(unix: number): string {
+function formatWhen(unix: number): string {
   return new Date(unix * 1000).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
