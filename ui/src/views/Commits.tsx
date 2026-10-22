@@ -16,7 +16,7 @@ import {
   type LocalGitOp,
 } from '../lib/localGitOp';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
-import { pathKey } from '../lib/repoIdentity';
+import { pathKey, pathLeaf } from '../lib/repoIdentity';
 import { t } from '../lib/i18n';
 import { errMessage, tauri } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
@@ -961,7 +961,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
             title={`Back to ${fileReturn}`}
           >
             <Icon name="chev-left" size={13} />
-            <span>Back to {fileReturn.split(/[\\/]/).filter(Boolean).pop() ?? fileReturn}</span>
+            <span>Back to {pathLeaf(fileReturn)}</span>
           </button>
         )}
         <div className="graph-toolbar-spacer" />
@@ -1038,7 +1038,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onReset
             title={`Back to ${workFileReturn.path}`}
           >
             <Icon name="chev-left" size={13} />
-            <span>Back to {workFileReturn.path.split(/[\\/]/).filter(Boolean).pop() ?? workFileReturn.path}</span>
+            <span>Back to {pathLeaf(workFileReturn.path)}</span>
           </button>
         )}
         <button
