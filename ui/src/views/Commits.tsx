@@ -6,6 +6,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { computeGraph } from '../lib/graph';
 import { pickCommitPatchDestination } from '../lib/dialog';
 import { EDITABLE_SELECTOR, eventInside } from '../lib/keys';
+import { commitIndexByHash, linearTipHashes } from '../lib/gitDrag';
 import { selectedCommitsOldestFirst } from '../lib/historySelection';
 import {
   checkoutCommitProgress,
@@ -16,6 +17,7 @@ import {
 } from '../lib/localGitOp';
 import { providerMergedBranchNames } from '../lib/branchIntegration';
 import { pathKey, pathLeaf } from '../lib/repoIdentity';
+import { t } from '../lib/i18n';
 import { errMessage, tauri } from '../lib/tauri';
 import type { Commit, Refs, Stash } from '../lib/types';
 import { useRepo } from '../stores/repo';
@@ -64,6 +66,8 @@ interface CommitsProps {
   onCreateTag: (target: string, label: string) => void;
   /** Open the interactive-rebase editor over `base..HEAD` (base null = root). */
   onInteractiveRebase: (base: string | null, label: string) => void;
+  /** Confirm folding staged changes into this commit. */
+  onAmendInto: (target: string, label: string, subject: string) => void;
   /** Open the Reset dialog targeting a commit (revspec + label). */
   onResetTo: (target: string, label: string) => void;
   /** Open the New-worktree dialog with a pre-picked start point. */
@@ -83,7 +87,7 @@ interface CommitsProps {
 }
 
 /** All Commits view: graph + selectable rows + right-side detail panel. */
-export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateWorktree, onToast, onLocalGitOp, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
+export function Commits({ onCreateTag, onInteractiveRebase, onAmendInto, onResetTo, onCreateWorktree, onToast, onLocalGitOp, onReviewNavigate, onWorkNavigate, active = true }: CommitsProps) {
   const commits = useRepo((s) => s.commits);
   const meta = useRepo((s) => s.meta);
   const stashes = useRepo((s) => s.stashes);
@@ -333,6 +337,14 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
           })(),
         },
         {
+          label: hasStaged
+            ? t('amendInto.action')
+            : t('amendInto.actionNeedsStage'),
+          icon: 'rebase',
+          disabled: !hasStaged,
+          onSelect: () => onAmendInto(c.hash, c.short_hash, c.subject),
+        },
+        {
           label: 'Rebase from here…',
           icon: 'rebase',
           // Edit this commit and everything newer: base is its parent (or root
@@ -398,7 +410,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
       setMenu({ x, y, items });
     },
     [bulkBusy, bulkSelection, cherryPick, checkoutCommit, commit, exportCommits,
-      hasStaged, meta, multi, onCreateTag, onCreateWorktree, onInteractiveRebase,
+      hasStaged, meta, multi, onAmendInto, onCreateTag, onCreateWorktree, onInteractiveRebase,
       onLocalGitOp, onResetTo, onReviewNavigate, onToast, revert, runBulkCherryPick,
       selectFile, setBaseline, setView],
   );
@@ -529,6 +541,23 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
     [providerMergedBranches, refs],
   );
   const currentCommit = useMemo(() => currentCommitHash(refs, commits), [commits, refs]);
+  const rewriteCommits = useMemo(() => linearTipHashes(commits, currentCommit), [commits, currentCommit]);
+  // Drag order uses the index in `commits`, never the graph row (stash rows
+  // shift row numbers), so rows and multi-selections compare the same way.
+  const commitIndex = useMemo(() => commitIndexByHash(rows), [rows]);
+  const commitDragSelection = useMemo(
+    () => {
+      if (bulkSelection.length <= 1) return undefined;
+      return JSON.stringify(bulkSelection.map((commit) => ({
+        hash: commit.hash,
+        short: commit.short_hash,
+        parents: commit.parents,
+        index: commitIndex.get(commit.hash) ?? 0,
+        rewrite: rewriteCommits.has(commit.hash),
+      })));
+    },
+    [bulkSelection, commitIndex, rewriteCommits],
+  );
   const colWidth = graphColWidth(graph.laneCount);
 
   // Hashes of the commits since the review baseline (`baseline..HEAD` over
@@ -1179,6 +1208,8 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
             <div
               ref={graphMainRef}
               className="graph-main"
+              data-git-undo-surface="graph"
+              data-git-selection={commitDragSelection}
               tabIndex={0}
               role="grid"
               aria-multiselectable
@@ -1226,6 +1257,15 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                           .filter(Boolean)
                           .join(' ') || undefined}
                         aria-selected={selected}
+                        data-git-source={stash ? undefined : 'commit'}
+                        data-git-drop={stash ? undefined : 'commit'}
+                        data-git-hash={stash ? undefined : c.hash}
+                        data-git-short={stash ? undefined : c.short_hash}
+                        data-git-parents={stash ? undefined : c.parents.join(' ')}
+                        data-git-index={stash ? undefined : commitIndex.get(c.hash)}
+                        data-git-selected={!stash && selected ? '1' : undefined}
+                        data-git-tip={!stash && c.hash === currentCommit ? '1' : undefined}
+                        data-git-rewrite={!stash && rewriteCommits.has(c.hash) ? '1' : undefined}
                         onClick={(e) => (stash ? onStashClick(stash) : onRowClick(c.hash, e))}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -1313,6 +1353,7 @@ export function Commits({ onCreateTag, onInteractiveRebase, onResetTo, onCreateW
                 <CommitDetail
                   onCreateTag={onCreateTag}
                   onInteractiveRebase={onInteractiveRebase}
+                  onAmendInto={onAmendInto}
                   onExportPatch={(candidate) => void exportCommits([candidate])}
                   onToast={onToast}
                 />

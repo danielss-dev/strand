@@ -1,5 +1,41 @@
 # Learnings
 
+## Git undo must not own the Edit → Undo accelerator (2026-10-19)
+
+**Rule.** `undo-git` and `redo-git` stay out of `MENU_COMMANDS` (`menu` is
+unset). The Edit menu items call the handlers with no `cmd`, so they never
+receive a native accelerator. The window keydown handler runs them only when
+`gitUndoBindingAllowed` is true: focus is inside
+`[data-git-undo-surface="graph"|"local"]`, and not inside an editable,
+`.work-content`, or `.work-terminal-host`. Otherwise it returns without
+`preventDefault`.
+
+**Why.** On macOS, `nativeMenuPreemptsKeydown()` is true and the predefined
+Undo/Redo items own ⌘Z / ⌘⇧Z for text fields. A custom menu item with that
+accelerator is dispatched by AppKit before the webview, including inside the
+commit message box and the Work editor.
+
+**How to apply.** Do not set `menu: true` on these commands, and do not pass
+`cmd` for them in `installAppMenu`.
+
+## Git undo journal safety rules (DAN-87)
+
+**Rule.** `apply_entry` refuses before writing anything when a moved,
+deleted, or target HEAD branch is checked out in another worktree, or when
+moving a branch drops a commit its upstream (else `refs/remotes/*/<branch>`)
+already has. Every load → modify → save holds `strand-journal.json.lock`
+(`create_new`, 60 s stale takeover) and saves through a unique temp file plus
+`rename`. Staged-only changes count as dirty, and after the forced tree
+checkout the restored staged paths go back on disk with `checkout-index`.
+
+**Why.** git2 `set_head` / ref deletes skip git's worktree guard; a pushed
+commit undone locally is a force push waiting to happen; two writers on a
+fixed `json.tmp` lost entries; and a carried staged change was overwritten
+by the forced checkout.
+
+**How to apply.** New journal writers take `JournalLock`. A stale entry is
+removed with `drop_git_action`, never by editing the file.
+
 ## Local Changes / Review Open in Workbench reuses Files → Open (2026-10-08)
 
 **Rule.** The Local Changes and Review tree menus open a whole working-tree
@@ -497,8 +533,8 @@ two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
 `requestAnimationFrame` re-entrancy guard).
 
 **How to apply.**
-- `parseConflicts(text)` → segments (`common` | `conflict{ours,theirs}`);
-  `buildViews(parsed, resolutions)` → `{theirsText, oursText, resultText,
+- `parseConflicts(text)` → segments (`common` | `conflict{ours,theirs}`) plus
+  `bases` (diff3 text or `null`). `buildViews(parsed, resolutions)` → `{theirsText, oursText, resultText,
   ranges}` where each `ConflictRange` carries the 0-based `[start,end)` span of
   that conflict in *each* view, so `toLineRange` feeds Pierre's `selectedLines`
   and `conflictAtLine` maps a `onLineClick` back to a conflict (click a side's
@@ -523,6 +559,21 @@ two source panes are scroll-synced (1:1 `scrollTop`/`scrollLeft` with a
   `is_conflicted()` entry — they carry no wt/index bit so they'd otherwise be
   dropped); resolving = write + `git add` (`Repo::resolve_conflict`), and the
   op stays in progress (`meta.operation`) until the user commits.
+- **AI suggestions stay reviewed.** `parseConflicts` keeps a diff3 `|||||||`
+  section on `ParsedConflict.bases` (`null` for 2-way markers — the prompt
+  then says base is unavailable). `Suggest resolution with AI`
+  (`repo_suggest_conflict_resolution`) returns one replacement per hunk and
+  never writes. Accept / Edit store `{ kind: 'custom', text }`; Reject leaves
+  ours/theirs/both picks alone. The file changes only when the user clicks
+  Resolve, which still calls `resolveConflict`.
+- **Leftover-marker check is structural.** Only a line of exactly seven `<`
+  or `>` (then end of line or whitespace) counts, and only in custom hunk
+  text (`hasConflictMarkers` / `contains_conflict_marker`). A lone `=======`
+  is a Markdown/RST setext underline; scanning the whole result for it made
+  such files unsaveable. Side picks write `resultText` unchanged.
+- **Truncated hunks are flagged.** A side or base over 4,000 bytes is cut in
+  the prompt; the hunk comes back with `truncated: true`, the review shows a
+  warning, and one-click Accept is disabled (Edit still works).
 
 ---
 
@@ -3084,6 +3135,28 @@ sparse expansion through its existing reader. git2 0.19 `Index::get_path`
 already normalizes Windows separators through `path_to_repo_path`; do not add
 lossy string conversion to fix a raw-libgit2 issue the Rust binding handles.
 
+## Background fetch stays on `git_command` and never prompts (DAN-89)
+
+**Rule.** Auto-fetch spawns git only through `prepare_git_command` →
+`git_command` / `hide_console` (`CREATE_NO_WINDOW`). The background call sets
+`quiet_auth`: `GCM_INTERACTIVE=never`, `-c core.askPass=` (git consults it
+before `GIT_TERMINAL_PROMPT`), `SSH_ASKPASS_REQUIRE=never`, and removes
+`GIT_ASKPASS` / `SSH_ASKPASS`. It sets `GIT_SSH_COMMAND=ssh -o BatchMode=yes`
+only when the user has no `core.sshCommand` / `GIT_SSH_COMMAND` / `GIT_SSH`;
+the env var outranks config, so setting it unconditionally drops their key.
+Manual fetch must keep the user's credential helper and askpass. An auth
+failure is one quiet activity entry plus backoff — do not retry every tick,
+and do not pull, merge, or touch the index. A fetch that printed nothing and
+brought no commits writes no activity entry. Refresh the repo afterwards
+through the store's `refreshUpstream` (coalesced queue), not a direct setState.
+
+**Why.** The release build is GUI-subsystem. A bare `Command::new("git")`
+flashes a console on Windows (DAN-83). A background tick that opens Git
+Credential Manager or an SSH prompt steals focus and can hang the interval.
+
+**How to apply.** Add new network spawns to `prepare_git_command`. Lock the
+path with the source test in `network.rs` and, on Windows, `console_probe`.
+
 ## Agent Session Recap is a Strand builtin, not static markdown (2026-10-01)
 
 **Rule.** Community plugins stay data-only (`markdown` / `status`,
@@ -3101,4 +3174,50 @@ and no-repository states are required. Remote marketplace stays deferred
 manifest views are snapshots. Pretending a static markdown surface can follow
 an agent worktree would either lie about the API or pollute the privileged
 webview with third-party JS.
+
+## Rebase `--update-refs` cannot trust git's todo on the flat path (2026-10-19)
+
+**Rule.** The flat interactive sequence editor is `cat "$STRAND_REBASE_PLAN" >`,
+which replaces git's todo. Git's `update-ref refs/heads/<name>` lines do not
+survive that overwrite, so `Repo::interactive_rebase` must emit them itself
+when `--update-refs` is on. Place each line after the last kept commit that
+branch's tip contained, and after that step's reword `exec` amend and any
+following squash/fixup chain. A dropped tip falls back to the previous kept
+ancestor in the original range, or to the rebase base when nothing it
+contained survives. The anchor is picked by original order, so a reorder
+can put commits the branch never had below its tip (or one of its own
+above it); the editor preview must show that. Do not also emit lines on the preserve-merges path: that awk
+prints unknown lines (including abbreviated `u`) unchanged, and a second
+copy would move the branch twice. Pass `--update-refs` or `--no-update-refs`
+explicitly on Git 2.38+ so this call wins over any `rebase.updateRefs` in the
+user's config. Remember the toggle in Strand's own `strand.rebaseUpdateRefs`,
+never in `rebase.updateRefs`: git's key also changes `git pull --rebase` and
+terminal rebases. On older Git pass neither flag, and refuse before the
+rebase starts if the caller asked for the feature. The UI disables the
+toggle with a tooltip instead.
+
+**Why.** An `update-ref` recorded before a reword amend keeps the
+pre-amend commit. One recorded before a squash keeps the pre-squash snapshot.
+Git applies the placeholder at the end of the rebase, so a conflict pause
+and an abort leave every ref where it was; tips move only when the rebase
+finishes. Branches checked out in another worktree are shown and skipped.
+
+## Amend-into an older commit is an oid plan, not `--autosquash` (2026-10-19)
+
+**Rule.** `Repo::amend_into_commit` (`history.rs`) folds the index into a
+chosen ancestor by committing a fixup, then calling the existing scripted
+rebase with that fixup placed immediately after the target oid. Do not shell
+out to `git rebase --autosquash`: two commits with the same subject fold into
+the wrong one. A root target uses the existing `--root` path. Unstaged work
+goes through `git rebase --autostash` on that one call; plain
+`interactive_rebase` stays non-autostashing. Before the rebase, write the
+pre-fixup HEAD to `.git/strand-amend-into` (not inside `strand-rebase-plan`,
+which the todo writer replaces). `abort_operation` soft-resets to that oid
+only when it is the parent of the post-abort HEAD, so Abort restores the
+original tip and the staged index. `continue_operation` deletes the marker
+when the rebase finishes and does not reset. Refuse when `rebase_todo` reports
+a merge in the range, before creating the fixup. Warn, don't refuse, when
+`git merge-base --is-ancestor <target> @{upstream}` succeeds; silence stderr
+because no upstream is normal. Hunk and line moves between existing commits
+are a later slice and are not this path.
 

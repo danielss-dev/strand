@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { autosquashPlan, type AutosquashInput } from './rebase';
+import { applyRebaseSeed, autosquashPlan, planUpdateRefs, withMovedBranches, type AutosquashInput } from './rebase';
 
 const e = (oid: string, subject: string): AutosquashInput => ({ oid, subject });
 
@@ -109,5 +109,101 @@ describe('autosquashPlan', () => {
       { oid: 'b2', action: 'pick' },
       { oid: 'c3', action: 'fixup' },
     ]);
+  });
+});
+
+describe('planUpdateRefs', () => {
+  const original = ['a', 'b', 'c'];
+  const mid = { name: 'mid', fullRef: 'refs/heads/mid', tip: 'b', checkedOutElsewhere: false };
+  const held = { name: 'held', fullRef: 'refs/heads/held', tip: 'b', checkedOutElsewhere: true };
+
+  it('follows the last kept ancestor when the tip is dropped or squashed', () => {
+    const dropped = planUpdateRefs(
+      original,
+      [
+        { oid: 'c', action: 'pick' },
+        { oid: 'b', action: 'drop' },
+        { oid: 'a', action: 'pick' },
+      ],
+      [mid, held],
+    );
+    expect(dropped).toEqual([
+      { name: 'held', fullRef: 'refs/heads/held', afterStep: 2, willMove: false },
+      { name: 'mid', fullRef: 'refs/heads/mid', afterStep: 2, willMove: true },
+    ]);
+
+    const squashed = planUpdateRefs(
+      original,
+      [
+        { oid: 'a', action: 'pick' },
+        { oid: 'b', action: 'squash' },
+        { oid: 'c', action: 'pick' },
+      ],
+      [mid, { name: 'lower', fullRef: 'refs/heads/lower', tip: 'a', checkedOutElsewhere: false }],
+    );
+    expect(squashed.map((line) => [line.name, line.afterStep, line.willMove])).toEqual([
+      ['lower', 0, true],
+      ['mid', 0, true],
+    ]);
+  });
+
+  it('parks a fully dropped branch on the rebase base and follows a reorder', () => {
+    expect(
+      planUpdateRefs(
+        original,
+        [
+          { oid: 'a', action: 'drop' },
+          { oid: 'b', action: 'drop' },
+          { oid: 'c', action: 'pick' },
+        ],
+        [mid],
+      ),
+    ).toEqual([{ name: 'mid', fullRef: 'refs/heads/mid', afterStep: null, willMove: true }]);
+
+    expect(
+      planUpdateRefs(
+        original,
+        [
+          { oid: 'b', action: 'pick' },
+          { oid: 'a', action: 'pick' },
+          { oid: 'c', action: 'pick' },
+        ],
+        [mid],
+      )[0].afterStep,
+    ).toBe(0);
+  });
+});
+
+describe('withMovedBranches', () => {
+  it('lists the branches a finished rebase moved', () => {
+    expect(withMovedBranches('Interactive rebase complete', [])).toBe('Interactive rebase complete');
+    expect(withMovedBranches('Interactive rebase complete', ['stack-a', 'stack-b'])).toBe(
+      'Interactive rebase complete. Moved stack-a, stack-b.',
+    );
+  });
+});
+
+describe('applyRebaseSeed', () => {
+  const todo = [{ oid: 'a' }, { oid: 'b' }, { oid: 'c' }];
+
+  it('moves a newer commit to just before an older one', () => {
+    expect(applyRebaseSeed(todo, { move: ['c'], mode: 'reorder', anchor: 'b', place: 'before' })).toEqual([
+      { oid: 'a', action: 'pick' },
+      { oid: 'c', action: 'pick' },
+      { oid: 'b', action: 'pick' },
+    ]);
+  });
+
+  it('squashes the moved commits into the anchor', () => {
+    expect(applyRebaseSeed(todo, { move: ['c'], mode: 'squash', anchor: 'b', place: 'after' })).toEqual([
+      { oid: 'a', action: 'pick' },
+      { oid: 'b', action: 'pick' },
+      { oid: 'c', action: 'squash' },
+    ]);
+  });
+
+  it('returns null when a dragged commit is outside the todo', () => {
+    expect(applyRebaseSeed(todo, { move: ['missing'], mode: 'reorder', anchor: 'b', place: 'after' })).toBeNull();
+    expect(applyRebaseSeed(todo, { move: ['b'], mode: 'squash', anchor: 'b', place: 'after' })).toBeNull();
   });
 });

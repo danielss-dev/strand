@@ -1780,6 +1780,7 @@
 /* Reflog view */
 .reflog-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   outline: none;
 }
@@ -1853,25 +1854,6 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-dim);
-}
-.reflog-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 24px;
-}
-.reflog-empty p {
-  margin: 0;
-  color: var(--text-2);
-}
-.reflog-empty span {
-  font-size: var(--type-ui-sm);
-  max-width: 320px;
 }
 
 /* Compare picker */
@@ -4311,6 +4293,36 @@ textarea.clone-input {
   line-height: 1.45;
   color: var(--text-2);
 }
+.amend-into-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: var(--r-sm);
+  box-shadow: 0 0 0 0.5px var(--border) inset;
+}
+.amend-into-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: var(--type-ui);
+}
+.amend-into-list li + li {
+  box-shadow: 0 -0.5px 0 var(--border);
+}
+.amend-into-target {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--type-ui);
+}
+.amend-into-warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--type-ui);
+  line-height: 1.45;
+}
 .stash-check {
   display: flex;
   align-items: flex-start;
@@ -5469,6 +5481,20 @@ textarea.clone-input {
 }
 .rebase-preserve input {
   accent-color: var(--accent);
+}
+.rebase-step {
+  display: contents;
+}
+.rebase-ref {
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.rebase-ref.blocked {
+  opacity: 0.72;
+}
+.rb-ref-verb {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
 }
 .rebase-list {
   display: flex;
@@ -7470,6 +7496,58 @@ textarea.clone-input {
   display: inline-flex;
   gap: 8px;
 }
+.mm-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 8px 14px 10px;
+  background: var(--bg-elev);
+  box-shadow: 0 0.5px 0 var(--border);
+}
+.mm-ai-meta,
+.mm-ai-explain {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.mm-ai-explain { white-space: pre-wrap; }
+.mm-ai-truncated {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+.mm-ai-preview,
+.mm-ai-edit {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.mm-ai-edit {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+}
+.mm-ai-btns {
+  display: inline-flex;
+  gap: 8px;
+}
+.mm-ai-error {
+  margin: 0;
+  flex: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--del);
+  white-space: pre-wrap;
+}
 
 /* Bottom: the assembled result. */
 .mm-result {
@@ -7672,6 +7750,19 @@ textarea.clone-input {
 .tree-drag-ghost.invalid {
   color: var(--text-dim);
   border-style: dashed;
+}
+/* Git-row drags set these on <html> so row `cursor: pointer` cannot win. */
+html.git-drag-invalid,
+html.git-drag-invalid * {
+  cursor: no-drop !important;
+}
+html.git-drag-valid,
+html.git-drag-valid * {
+  cursor: copy !important;
+}
+.side-row[data-git-drop-hover='valid'],
+tr[data-git-drop-hover='valid'] {
+  background: var(--bg-sel);
 }
 
 /* Files sidebar tab — a bounded-height column so the tree owns its own scroll
@@ -8208,8 +8299,7 @@ textarea.clone-input {
 .custom-pane-body > .graph-wrap,
 .custom-pane-body > .pr-view,
 .custom-pane-body > .wt-view,
-.custom-pane-body > .reflog-list,
-.custom-pane-body > .reflog-empty,
+.custom-pane-body > .reflog-view,
 .custom-pane-body > .side-files {
   width: 100%;
   height: 100%;
@@ -8493,7 +8583,8 @@ textarea.clone-input {
 }
 
 /* ── Worktrees overview ─────────────────────────────────────────────────── */
-.wt-view {
+.wt-view,
+.reflog-view {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -8502,10 +8593,14 @@ textarea.clone-input {
   overflow: hidden;
   container-type: inline-size;
 }
-.wt-view .pane-head-title {
+.wt-view .pane-head-title,
+.reflog-view .pane-head-title {
   font-size: var(--type-ui-sm);
   font-weight: 400;
   color: var(--text-muted);
+}
+.reflog-view > .empty-state {
+  flex: 1;
 }
 .wt-breadcrumb strong {
   color: var(--text);
@@ -9891,3 +9986,18 @@ select.clone-input {
 .pr-code-overview { flex-wrap: wrap; padding-block: 8px; font-size: var(--type-ui-sm); }
 .pr-code-overview > .h-link { flex-shrink: 0; white-space: nowrap; }
 .pr-code-overview code { font-size: inherit; }
+
+.git-history-dialog { max-height: calc(100vh - 112px); }
+.git-history-body { display: flex; flex-direction: column; gap: 12px; }
+.git-history-group { display: flex; flex-direction: column; gap: 4px; }
+.git-history-label { color: var(--text-muted); font-size: var(--type-ui-sm); }
+.git-history-row {
+  text-align: start;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  padding: 6px 8px;
+}
+.git-history-row:hover,
+.git-history-row:focus-visible { background: var(--bg-hover); }
+.git-history-row:focus-visible { border-color: var(--border); outline: none; }

@@ -120,6 +120,35 @@ describe('repository navigation state', () => {
   });
 });
 
+describe('background fetch refresh', () => {
+  it('coalesces upstream refreshes and only reloads refs for the active repository', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const meta = { branch: 'main', ahead: 0, behind: 3 } as unknown as RepoMeta;
+    const repoMeta = vi.spyOn(tauri, 'repoMeta').mockImplementation(async () => { await gate; return meta; });
+    const refreshRefs = vi.fn(async () => {});
+    useRepo.setState({
+      activePath: '/active',
+      tabs: [{ path: '/active' }, { path: '/other' }] as never,
+      refreshRefs,
+    });
+
+    const first = useRepo.getState().refreshUpstream('/other');
+    const second = useRepo.getState().refreshUpstream('/other');
+    release();
+    await Promise.all([first, second]);
+
+    expect(repoMeta).toHaveBeenCalledTimes(1);
+    expect(refreshRefs).not.toHaveBeenCalled();
+    expect(useRepo.getState().tabs.find((t) => t.path === '/other')?.meta).toBe(meta);
+    expect(useRepo.getState().meta).not.toBe(meta);
+
+    await useRepo.getState().refreshUpstream('/active');
+    expect(refreshRefs).toHaveBeenCalledOnce();
+    expect(useRepo.getState().meta).toBe(meta);
+  });
+});
+
 describe('AI review notes', () => {
   it('adds accepted AI findings without touching existing feedback', () => {
     const next = addAiReviewNoteSet(

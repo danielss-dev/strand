@@ -1,3 +1,6 @@
+import { t } from './i18n';
+import type { RebaseAction } from './types';
+
 /** A commit in the todo range (oldest→newest), as `loadRebaseTodo` lists it. */
 export interface AutosquashInput {
   oid: string;
@@ -74,4 +77,129 @@ export function autosquashPlan(entries: AutosquashInput[]): AutosquashStep[] | n
     }
   });
   return out;
+}
+
+/** A local branch tip that might follow this rebase. */
+export interface UpdateRefBranchInput {
+  name: string;
+  fullRef: string;
+  tip: string;
+  checkedOutElsewhere: boolean;
+}
+
+/**
+ * One `update-ref` row in the plan. `afterStep` is the pick/reword/edit the
+ * branch follows; `null` parks it on the rebase base.
+ *
+ * Mirrors `plan_update_refs` in `crates/strand-core/src/history.rs`: a branch
+ * follows the last commit it contained that the plan still keeps. A dropped
+ * tip falls back to that ancestor (not whatever happens to sit earlier in the
+ * edited plan). Squash and fixup land on the combined commit. A branch checked
+ * out in another worktree is shown and not moved.
+ */
+export interface PlannedUpdateRef {
+  name: string;
+  fullRef: string;
+  afterStep: number | null;
+  willMove: boolean;
+}
+
+export function planUpdateRefs(
+  originalOids: readonly string[],
+  steps: readonly { oid: string; action: RebaseAction }[],
+  branches: readonly UpdateRefBranchInput[],
+): PlannedUpdateRef[] {
+  const planned: PlannedUpdateRef[] = [];
+  for (const branch of branches) {
+    if (!originalOids.includes(branch.tip)) continue;
+    planned.push({
+      name: branch.name,
+      fullRef: branch.fullRef,
+      afterStep: landingAnchor(originalOids, steps, branch.tip),
+      willMove: !branch.checkedOutElsewhere,
+    });
+  }
+  planned.sort((a, b) => a.name.localeCompare(b.name));
+  return planned;
+}
+
+function landingAnchor(
+  originalOids: readonly string[],
+  steps: readonly { oid: string; action: RebaseAction }[],
+  tip: string,
+): number | null {
+  const tipAt = originalOids.indexOf(tip);
+  if (tipAt < 0) return null;
+  let kept: string | null = null;
+  for (const oid of originalOids.slice(0, tipAt + 1)) {
+    const action = steps.find((step) => step.oid === oid)?.action ?? 'drop';
+    if (action !== 'drop') kept = oid;
+  }
+  if (!kept) return null;
+  const stepAt = steps.findIndex((step) => step.oid === kept);
+  if (stepAt < 0) return null;
+  const action = steps[stepAt].action;
+  switch (action) {
+    case 'pick':
+    case 'reword':
+    case 'edit':
+      return stepAt;
+    case 'squash':
+    case 'fixup': {
+      for (let index = stepAt - 1; index >= 0; index -= 1) {
+        const earlier = steps[index].action;
+        if (earlier === 'pick' || earlier === 'reword' || earlier === 'edit') return index;
+      }
+      return null;
+    }
+    case 'drop':
+      return null;
+    default: {
+      const exhaustive: never = action;
+      return exhaustive;
+    }
+  }
+}
+
+/** Append the branches a finished rebase moved. An empty list leaves the message alone. */
+export function withMovedBranches(message: string, moved: readonly string[]): string {
+  if (moved.length === 0) return message;
+  const base = message.endsWith('.') ? message : `${message}.`;
+  return t('rebase.moved', { message: base, branches: moved.join(', ') });
+}
+
+/** Dragged commits inserted around an anchor in an oldest-first todo. */
+export interface RebaseSeedPlan {
+  move: string[];
+  mode: 'reorder' | 'squash';
+  anchor: string;
+  /** Where `move` sits relative to `anchor` in the oldest-first todo. */
+  place: 'before' | 'after';
+}
+
+/**
+ * Apply a drag plan to a rebase todo. Moved commits leave their old slots and
+ * land as a block before or after the anchor. Squash marks only the moved
+ * commits, so they fold into the anchor when placed after it. Returns null
+ * when an oid is missing or the anchor is one of the moved commits — the
+ * editor shows that and does not start a rebase.
+ */
+export function applyRebaseSeed(
+  entries: readonly { oid: string }[],
+  seed: RebaseSeedPlan,
+): { oid: string; action: 'pick' | 'squash' }[] | null {
+  if (seed.move.length === 0 || seed.move.includes(seed.anchor)) return null;
+  const known = new Set(entries.map((entry) => entry.oid));
+  if (!known.has(seed.anchor) || seed.move.some((oid) => !known.has(oid))) return null;
+  const moving = new Set(seed.move);
+  const rest = entries.filter((entry) => !moving.has(entry.oid));
+  const anchorAt = rest.findIndex((entry) => entry.oid === seed.anchor);
+  if (anchorAt < 0) return null;
+  const insertAt = seed.place === 'before' ? anchorAt : anchorAt + 1;
+  const moved = seed.move.map((oid) => entries.find((entry) => entry.oid === oid)!);
+  const ordered = [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)];
+  return ordered.map((entry) => ({
+    oid: entry.oid,
+    action: seed.mode === 'squash' && moving.has(entry.oid) ? 'squash' : 'pick',
+  }));
 }

@@ -31,6 +31,7 @@ import type {
   CommitSignature,
   CommitMessageSuggestion,
   CodeReviewSuggestion,
+  ConflictResolutionSuggestion,
   CommitSearchMode,
   CommitOutcome,
   CrashCheck,
@@ -61,6 +62,7 @@ import type {
   SubmoduleAction,
   SubmodulePage,
   MergeMode,
+  BackgroundFetchOutcome,
   NetworkOutcome,
   Progress,
   PullMode,
@@ -82,13 +84,20 @@ import type {
   PullRequestReviewThreadUpdate,
   PullRequestSuggestion,
   PushMode,
+  AmendIntoPlan,
   RebaseEntry,
+  RebaseOutcome,
+  RebaseRefPreview,
   RebaseStep,
+  RebaseUpdateRefsSetting,
   Refs,
   ReflogEntry,
   RepoMeta,
   ResetMode,
   ResetOutcome,
+  GitActionDirection,
+  GitActionHistory,
+  GitActionOutcome,
   RestoredWorktree,
   Snapshot,
   Stash,
@@ -477,6 +486,9 @@ export const tauri = {
       opId,
       onEvent: progressChannel(onProgress),
     }),
+  /** Background auto-fetch. No progress channel and no credential prompt. */
+  repoBackgroundFetch: (path: string, prune: boolean) =>
+    invoke<BackgroundFetchOutcome>('repo_background_fetch', { path, prune }),
   repoPull: (path: string, mode: PullMode, autostash: boolean, onProgress?: (p: Progress) => void, opId?: string) =>
     invoke<NetworkOutcome>('repo_pull', {
       path,
@@ -724,11 +736,26 @@ export const tauri = {
     invoke<boolean>('repo_revert', { path, commits, mainline: mainline ?? null }),
   repoMerge: (path: string, refname: string, mode: MergeMode) =>
     invoke<boolean>('repo_merge', { path, refname, mode }),
-  repoRebase: (path: string, onto: string) => invoke<boolean>('repo_rebase', { path, onto }),
+  repoRebase: (path: string, onto: string, updateRefs: boolean) =>
+    invoke<RebaseOutcome>('repo_rebase', { path, onto, updateRefs }),
+  repoRebaseUpdateRefs: (path: string) =>
+    invoke<RebaseUpdateRefsSetting>('repo_rebase_update_refs', { path }),
+  repoSetRebaseUpdateRefs: (path: string, enabled: boolean) =>
+    invoke<void>('repo_set_rebase_update_refs', { path, enabled }),
+  repoRebaseRefPreview: (path: string, onto: string) =>
+    invoke<RebaseRefPreview[]>('repo_rebase_ref_preview', { path, onto }),
   // Hard resets of a dirty tree stash a safety snapshot first; the outcome's
   // `snapshot_oid` reports it so the UI can point at the stash stack.
   repoReset: (path: string, target: string, mode: ResetMode) =>
     invoke<ResetOutcome>('repo_reset', { path, target, mode }),
+  repoUndoGitAction: (path: string) =>
+    invoke<GitActionOutcome>('repo_undo_git_action', { path }),
+  repoRedoGitAction: (path: string) =>
+    invoke<GitActionOutcome>('repo_redo_git_action', { path }),
+  repoGitActionHistory: (path: string) =>
+    invoke<GitActionHistory>('repo_git_action_history', { path }),
+  repoDropGitAction: (path: string, direction: GitActionDirection) =>
+    invoke<GitActionHistory>('repo_drop_git_action', { path, direction }),
   repoAbortOperation: (path: string) => invoke<void>('repo_abort_operation', { path }),
   // Resume a paused merge/rebase/cherry-pick/revert. `true` = paused again on
   // a fresh conflict or interactive-rebase edit step.
@@ -742,7 +769,17 @@ export const tauri = {
     base: string | null,
     steps: RebaseStep[],
     preserveMerges: boolean,
-  ) => invoke<boolean>('repo_interactive_rebase', { path, base, steps, preserveMerges }),
+    updateRefs: boolean,
+  ) => invoke<RebaseOutcome>('repo_interactive_rebase', { path, base, steps, preserveMerges, updateRefs }),
+  /** Commits an amend-into would rewrite, plus merge refusal and upstream warning. */
+  repoAmendIntoPlan: (path: string, target: string) =>
+    invoke<AmendIntoPlan>('repo_amend_into_plan', { path, target }),
+  /**
+   * Fold staged changes into `target` (fixup + scripted rebase). `true` when
+   * the rebase paused on a conflict.
+   */
+  repoAmendInto: (path: string, target: string) =>
+    invoke<boolean>('repo_amend_into', { path, target }),
   repoReadConflictFile: (path: string, file: string) =>
     invoke<string>('repo_read_conflict_file', { path, file }),
   repoResolveConflict: (path: string, file: string, contents: string) =>
@@ -832,6 +869,26 @@ export const tauri = {
       provider,
       openaiCli: openaiCli ?? null,
       anthropicCli: anthropicCli ?? null,
+    }),
+  repoSuggestConflictResolution: (
+    path: string,
+    file: string,
+    expectedHunks: number,
+    provider: AiProvider,
+    model: string,
+    request: AiGenerationRequest,
+    openaiCli?: string | null,
+    anthropicCli?: string | null,
+  ) =>
+    invoke<AiGenerationOutcome<ConflictResolutionSuggestion>>('repo_suggest_conflict_resolution', {
+      path,
+      file,
+      expectedHunks,
+      provider,
+      model,
+      openaiCli: openaiCli ?? null,
+      anthropicCli: anthropicCli ?? null,
+      request,
     }),
   repoSuggestCommitMessage: (
     path: string,

@@ -167,7 +167,11 @@ through `discardPatch` (stage/unstage are non-destructive). A self-contained
 `UndoToast` in `App.tsx` surfaces an Undo button for 6s per discard
 ("Undo send" model) — single-undo only ever recovers the most recent
 discard. Selected-line discard joined the same single-undo pipeline on
-2026-07-18; a persistent multi-entry undo stack remains future work.
+2026-07-18. Ref-moving Git actions (commit, amend, reset, branch
+create/delete/rename, checkout, merge, rebase, cherry-pick) now keep a
+per-worktree journal with Undo Git Action and Redo Git Action
+(2026-10-19). Discard, stash, fetch, pull, and push stay outside that
+stack.
 
 **Commit graph + detail panel (2026-05-28):** All Commits is now an
 actual graph: `ui/src/lib/graph.ts` walks `repo_log`'s topologically-
@@ -2184,6 +2188,9 @@ the audit does not mark these fixes or proposals shipped.
   `Repo::lfs_action`); real Git fixtures and native dialog verification pass.
 - ☑ GPG / SSH commit signing UI (repository/worktree settings and per-operation
   choices; signed-tag creation and verification, 2026-09-06).
+- ☑ **Auto-fetch** (DAN-89, 2026-10-19) — open repositories fetch on a timer
+  (Off / 5 / 10 / 30 min, default 10). Behind-count updates and a short toast
+  reports new upstream commits. Fetch only; no pull, merge, or credential prompt.
 - ☑ **What's New dialog** (DAN-86, 2026-10-15) — Strand menu **What's New…**
   lists `vX.Y.Z` app releases; What's Changed PRs expand in-app to the
   cleaned PR description; Settings → Updates is unchanged
@@ -3146,6 +3153,14 @@ empty state (heading included) and network failures offer Retry. Default
 selection is `getVersion()` when that tag is in the list. Auto-popup after
 upgrade is out of scope.
 
+**Amend into an older commit (2026-10-19, DAN-92):** The commit graph can fold
+the staged index into any earlier commit on the current branch in one action.
+Strand commits a fixup and rebases with an oid plan (not `--autosquash`),
+autostashes unstaged work, confirms the commits that will be rewritten, refuses
+a merge in that range, and warns when the target is already on the upstream.
+Abort of a conflicted rewrite restores the original tip. Moving hunks between
+existing commits stays a later slice.
+
 ## Cross-cutting tracks (run in parallel with all milestones)
 
 **Main hardening audit kick (2026-09-29):** Audited 1.7.2 at `f5ed9a8` after
@@ -3259,6 +3274,44 @@ reason plus a Pull retry hint. `error_summary` keeps LFS explanation lines.
 Fixtures in `clone_lfs.rs`. Live check against private Azure DevOps
 `portal-setup` remains on Daniels' machine.
 
+**Auto-fetch (2026-10-19, DAN-89):** Open repositories fetch in the background
+on the Settings → Git interval. Daniels chose 10 minutes as the default
+(Off, 5, and 30 remain available, and each open repository can opt out).
+The active repository goes first and the others are staggered. A tick is
+skipped when that repository already has a manual fetch, pull, or push, when
+Strand is offline, or when a fetch is already running. The fetch honors the
+repository's fetch-prune setting and never pulls, merges, rebases, or touches
+the worktree or index. A remote with no cached credential fails once, quietly,
+and backs off instead of opening a prompt. New commits on the current branch's
+upstream update the behind-count and show a toast. Background fetches are
+quiet activity-log entries. Git is spawned through `git_command`
+(`CREATE_NO_WINDOW`), the same hidden-console path as DAN-83.
+
+**Rebase `--update-refs` (2026-10-19, DAN-88 first slice):** Plain rebase and
+the interactive editor can move other local branches whose tips sit in the
+rewritten range. The choice is remembered per repo in Strand's own
+`strand.rebaseUpdateRefs` (not git's `rebase.updateRefs`, which would change
+`git pull --rebase` too) and saved when a rebase starts. The flat
+sequence editor overwrites git's todo, so Strand writes the `update-ref`
+lines itself, after the last kept commit each branch contained (including
+after a reword amend or a squash chain). Preserve-merges leaves git's lines
+in place. Git older than 2.38 disables the toggle instead of failing
+mid-rebase. Later stack slices (parent branch, sidebar grouping, restack,
+stacked PRs) stay open.
+
+**Drag-and-drop branch merge/rebase (2026-10-19, DAN-90):** Dropping a sidebar
+branch on another branch opens a confirmation that names both refs and offers
+Merge or Rebase. Those verbs call the existing merge dialog and `Repo::rebase`,
+including remote-tracking branches in either direction. A branch dropped on
+itself, on a tag, or during a paused merge/rebase shows a no-drop cursor.
+Escape cancels with no checkout and no Git write. Dropping a local branch on
+a remote confirms `Repo::push_branch` and offers to create a missing upstream.
+Dropping graph commits on a local branch confirms the same cherry-pick as the
+graph menu, including the mainline parent dialog for a single merge commit.
+Dragging those commits onto another commit on the linear tip opens the
+interactive rebase editor with that reorder or squash already filled in.
+Escape closes the editor before Start, so Git does not run.
+
 **Worktrees UI revision (2026-09-04):** Reworked PR 113's cramped table into
 readable two-line rows: branch and directory together, working changes and
 latest commit in separate columns, explicit current/locked indicators, and
@@ -3267,3 +3320,11 @@ Clean up stay in the single pane header. Path-keyed selection survives metadata
 updates, Home/End join arrow navigation, and narrow panes collapse the commit
 column. Failed status reads are no longer presented as clean; cleanup excludes
 locked checkouts. This supersedes the September 3 persist-cut presentation.
+
+**AI merge-conflict resolution (2026-10-19, DAN-91):** The merge editor's
+Suggest resolution with AI action asks the configured Codex or Claude provider
+for one reviewed replacement per conflict hunk (explanation and confidence).
+Base text comes from a diff3 `|||||||` section when the file has one; a 2-way
+file says the base is unavailable and still suggests. Accept, edit, or reject
+each hunk. The suggestion command never writes; Resolve still goes through
+`resolveConflict`.

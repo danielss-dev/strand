@@ -16,6 +16,7 @@ import { ProgressPopup, formatDuration } from './components/ProgressPopup';
 import { PullRequestMonitor } from './components/PullRequestMonitor';
 import { RepoRail } from './components/RepoRail';
 import { RepositoryFiles } from './components/RepositoryFiles';
+import { GitDragHost } from './components/GitDragHost';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
 import { Topbar } from './components/Topbar';
@@ -33,6 +34,7 @@ import { accentHueForColor, groupTabs, pathKey, pathLeaf, repoFamilyName, worksp
 import { buildContentReportUrl, buildCrashIssueUrl } from './lib/crashReport';
 import { pickCodeWorkspaceFile, pickRepoDirectories } from './lib/dialog';
 import { editorTemplate, osType, terminalTemplate } from './lib/integrations';
+import type { RebaseSeed } from './lib/gitDrag';
 import { t } from './lib/i18n';
 import { LFS_ACTIONS } from './lib/lfs';
 import { SUBMODULE_ACTIONS, type SubmoduleDialogAction } from './lib/submodules';
@@ -45,6 +47,7 @@ import {
   EDITABLE_SELECTOR,
   eventInside,
   eventToBinding,
+  gitUndoBindingAllowed,
   formatBinding,
   isPlainKey,
   MENU_COMMANDS,
@@ -60,7 +63,11 @@ import {
   stashApplyProgress,
   stashPopProgress,
 } from './lib/localGitOp';
+import { backgroundFetchInFlight, manualOpPath } from './lib/autoFetch';
+import { withMovedBranches } from './lib/rebase';
 import { errMessage, isCancelled, isTauri, tauri } from './lib/tauri';
+import { useAutoFetch } from './lib/useAutoFetch';
+import { runExclusive } from './lib/runExclusive';
 import { useTheme } from './lib/theme';
 import type { InitRepoRequest } from './views/InitRepoDialog';
 import type { SettingsSectionId } from './views/SettingsDialog';
@@ -72,10 +79,12 @@ import { MergeDialog } from './views/MergeDialog';
 import { RemoteDialog, type RemoteDialogMode } from './views/RemoteDialog';
 import { FileEntryDialog } from './views/FileEntryDialog';
 import { RenameBranchDialog } from './views/RenameBranchDialog';
+import { AmendIntoDialog } from './views/AmendIntoDialog';
 import { ResetDialog } from './views/ResetDialog';
 import { IgnoreDialog } from './views/IgnoreDialog';
 import { RepoIconDialog } from './views/RepoIconDialog';
 import { Commits } from './views/Commits';
+import { formatGitActionToast, GitHistoryDialog } from './views/GitHistoryDialog';
 import { FileView } from './views/FileView';
 import { Work } from './views/Work';
 import { useWork } from './stores/work';
@@ -361,6 +370,7 @@ export function App() {
   const [repoSwitcherOpen, setRepoSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [gitHistoryOpen, setGitHistoryOpen] = useState(false);
   const [remoteReposOpen, setRemoteReposOpen] = useState(false);
   const [repositorySettingsPath, setRepositorySettingsPath] = useState<string | null>(null);
   const [repositorySettingsSection, setRepositorySettingsSection] = useState<'identity' | 'signing'>('identity');
@@ -421,10 +431,19 @@ export function App() {
   const [renameBranchDialog, setRenameBranchDialog] = useState<{ name: string } | null>(null);
   const [branchNetworkDialog, setBranchNetworkDialog] = useState<BranchNetworkDialogMode | null>(null);
   // null = closed; otherwise the branch to merge (`source`) into the current (`into`).
-  const [mergeDialog, setMergeDialog] = useState<{ source: string; into: string } | null>(null);
+  const [mergeDialog, setMergeDialog] = useState<{
+    source: string;
+    into: string;
+    wrap?: <T>(step: () => Promise<T>) => Promise<T>;
+  } | null>(null);
   // null = closed; otherwise the interactive-rebase base (revspec before the
   // first editable commit, null ⇒ root) + a short label for the blurb.
-  const [rebaseDialog, setRebaseDialog] = useState<{ base: string | null; label: string } | null>(null);
+  const [rebaseDialog, setRebaseDialog] = useState<{
+    base: string | null;
+    label: string;
+    seed?: RebaseSeed | null;
+  } | null>(null);
+  const [amendInto, setAmendInto] = useState<{ target: string; label: string; subject: string } | null>(null);
   // null = closed; otherwise the commit-ish to reset to + its human label.
   const [resetDialog, setResetDialog] = useState<{ target: string; label: string } | null>(null);
   // The "Add ignore pattern…" dialog is opened from two surfaces (Local Changes
@@ -549,6 +568,19 @@ export function App() {
   // latest showToast through this ref instead of re-subscribing.
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
+  const autoFetchIntervalMin = useSettings((s) => s.autoFetchIntervalMin);
+  // Manual network ops run against the repository that was active when they
+  // started. Remember that one, so switching tabs mid-op doesn't move the
+  // auto-fetch skip onto a repository that is idle.
+  const manualBusy = syncing || pulling || pushing;
+  const manualBusyPath = useRef<string | null>(null);
+  manualBusyPath.current = manualOpPath(manualBusy, manualBusyPath.current, activePath);
+  useAutoFetch({
+    intervalMin: autoFetchIntervalMin,
+    manualBusy,
+    manualPath: manualBusyPath.current,
+    notify: showToast,
+  });
 
   const networkBusyRef = useRef(false);
   networkBusyRef.current = syncing || pulling || pushing;
@@ -976,7 +1008,7 @@ export function App() {
   }, []);
 
   const onExpandHistory = useCallback(async (path: string, remote: string, expansion: HistoryExpansion) => {
-    if (syncing || pulling || pushing) throw new Error('Another network operation is running.');
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) throw new Error('Another network operation is running.');
     setSyncing(true);
     setNetProgress('Downloading history…');
     const opId = nextOpId();
@@ -995,7 +1027,7 @@ export function App() {
   }, [syncing, pulling, pushing, nextOpId, showToast]);
 
   const onFetch = useCallback(async (prune?: boolean) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     setNetProgress('Fetching…');
     const opId = nextOpId();
@@ -1015,7 +1047,7 @@ export function App() {
   }, [fetchRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
   const onPull = useCallback(async (mode?: PullMode, autostash?: boolean) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const effectiveMode = mode ?? pullMode;
     const effectiveAutostash = autostash ?? pullAutostash;
     const label = effectiveMode === 'rebase'
@@ -1044,7 +1076,7 @@ export function App() {
   }, [pullRepo, showToast, flashDone, syncing, pulling, pushing, pullAutostash, pullMode, nextOpId]);
 
   const onPush = useCallback(async (mode: PushMode = 'default') => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const label = mode === 'force-with-lease'
       ? 'Force push with lease'
       : mode === 'follow-tags'
@@ -1069,7 +1101,7 @@ export function App() {
   }, [pushRepo, showToast, flashDone, syncing, pulling, pushing, nextOpId]);
 
   const onPushAllTags = useCallback(async () => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setPushing(true);
     setNetProgress('Pushing all tags…');
     await waitForPaint();
@@ -1085,7 +1117,7 @@ export function App() {
   }, [pushAllTags, showToast, flashDone, syncing, pulling, pushing]);
 
   const onFetchBranch = useCallback(async (remoteBranch: RemoteBranch) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     setNetProgress(`Fetching ${remoteBranch.name}…`);
     const opId = nextOpId();
@@ -1106,7 +1138,7 @@ export function App() {
   }, [fetchBranch, flashDone, nextOpId, pulling, pushing, showToast, syncing]);
 
   const onPullBranch = useCallback(async (remoteBranch: RemoteBranch, mode?: PullMode) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     const effectiveMode = mode ?? pullMode;
     setPulling(true);
     setNetProgress(`Pulling ${remoteBranch.name}…`);
@@ -1135,7 +1167,7 @@ export function App() {
   }, [flashDone, nextOpId, pullAutostash, pullBranch, pullMode, pulling, pushing, showToast, syncing]);
 
   const onPushBranch = useCallback(async (request: BranchPushRequest) => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setPushing(true);
     setNetProgress(`Pushing ${request.branch} to ${request.remote}/${request.remoteBranch}…`);
     const opId = nextOpId();
@@ -1156,7 +1188,7 @@ export function App() {
   }, [flashDone, nextOpId, pulling, pushBranch, pushing, showToast, syncing]);
 
   const onSync = useCallback(async () => {
-    if (syncing || pulling || pushing) return;
+    if (syncing || pulling || pushing || backgroundFetchInFlight(useRepo.getState().activePath)) return;
     setSyncing(true);
     const opId = nextOpId();
     setNetOpId(opId);
@@ -1207,6 +1239,25 @@ export function App() {
     [keyMap, platform],
   );
 
+  // A second undo/redo while one is still running is dropped, not queued.
+  const gitActionInFlightRef = useRef(false);
+  const runGitAction = useCallback((direction: 'undo' | 'redo') => runExclusive(gitActionInFlightRef, async () => {
+    const path = useRepo.getState().activePath;
+    if (!path) return;
+    try {
+      const outcome = direction === 'undo'
+        ? await tauri.repoUndoGitAction(path)
+        : await tauri.repoRedoGitAction(path);
+      showToast(formatGitActionToast(outcome));
+      await Promise.all([
+        useRepo.getState().refreshLocalChanges(),
+        useRepo.getState().refreshLog(),
+      ]);
+    } catch (error) {
+      showToast(errMessage(error), 'error');
+    }
+  }), [showToast]);
+
   // One handler per global command. Rebuilt each render so it closes over the
   // latest callbacks; the keydown effect reads it through a ref (below) so it
   // never has to re-subscribe.
@@ -1239,9 +1290,19 @@ export function App() {
     'open-terminal': openInTerminal,
     'refresh': onRefresh,
     'suggest-commit': () => { requestSuggestCommitMessage(); },
+    'suggest-conflict': () => {
+      if (!useRepo.getState().conflictResolverOpen) {
+        showToast(t('merge.ai.closed'));
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('strand:suggest-conflict-resolution'));
+    },
+    'undo-git': () => { void runGitAction('undo'); },
+    'redo-git': () => { void runGitAction('redo'); },
+    'git-history': () => setGitHistoryOpen(true),
   }), [openViaDialog, openSettingsAt, setView, selectFile, openWorkbench, customizeWorkbench, cycleTheme, showToast, toggleSidebar,
        onFetch, onSync, onPull, onPush, openInEditor, openInTerminal, onRefresh, cycleTab,
-       requestSuggestCommitMessage]);
+       requestSuggestCommitMessage, runGitAction]);
   const commandHandlersRef = useRef(commandHandlers);
   commandHandlersRef.current = commandHandlers;
   const keyMapRef = useRef(keyMap);
@@ -1323,6 +1384,9 @@ export function App() {
     openGitflow: () => { const path = useRepo.getState().activePath; if (path) setGitflowPath(path); },
     openAdvancedRefs: (mode = 'notes') => { const path = useRepo.getState().activePath; if (path) setAdvancedRefs({ path, mode }); },
     openBisect: () => { const path = useRepo.getState().activePath; if (path) setBisectPath(path); },
+    undoGitAction: () => { void runGitAction('undo'); },
+    redoGitAction: () => { void runGitAction('redo'); },
+    openGitHistory: () => setGitHistoryOpen(true),
   };
   const hasRepo = Boolean(meta) && !remoteReposOpen;
   useEffect(() => {
@@ -1553,9 +1617,18 @@ export function App() {
       if (isPlainKey(binding) && eventInside(e, EDITABLE_SELECTOR)) return;
       // Repo-scoped commands no-op without a repository open.
       if (REPO_COMMANDS.has(cmd) && !useRepo.getState().meta) return;
+      // Git undo shares Mod+Z with text undo. Outside the graph and Local
+      // Changes — and inside any text field or the Work editor — leave the
+      // event alone so the field's own undo still runs.
+      if ((cmd === 'undo-git' || cmd === 'redo-git') && !gitUndoBindingAllowed(e)) return;
       const handler = commandHandlersRef.current[cmd];
       if (!handler) return;
       e.preventDefault();
+      if (cmd === 'undo-git' || cmd === 'redo-git') {
+        e.stopImmediatePropagation();
+        // A held Mod+Z must not walk the journal back one step per repeat.
+        if (e.repeat) return;
+      }
       handler();
     };
     window.addEventListener('keydown', onKey);
@@ -2001,6 +2074,13 @@ export function App() {
           requestDiffSearch();
         } },
         { id: 'suggest-commit', label: 'Suggest commit message', group: 'Actions', shortcut: keyHint('suggest-commit'), keywords: 'ai generate commit message chatgpt codex claude suggest', run: () => { requestSuggestCommitMessage(); } },
+        { id: 'suggest-conflict', label: t('merge.ai.command'), group: 'Actions', shortcut: keyHint('suggest-conflict'), keywords: 'ai merge conflict resolve suggest codex claude hunk', run: () => {
+          if (!useRepo.getState().conflictResolverOpen) {
+            showToast(t('merge.ai.closed'));
+            return;
+          }
+          window.dispatchEvent(new CustomEvent('strand:suggest-conflict-resolution'));
+        } },
         { id: 'review-with-ai', label: 'Review changes with AI…', group: 'Actions', keywords: 'ai codex claude inspect code bugs issues findings', run: () => {
           setView('review');
           selectFile(null);
@@ -2158,11 +2238,21 @@ export function App() {
               },
             } satisfies PaletteAction]
           : []),
+        { id: 'undo-git', label: t('gitUndo.undo'), group: 'Actions', shortcut: keyHint('undo-git'), keywords: 'undo git action journal rollback', run: () => { void runGitAction('undo'); } },
+        { id: 'redo-git', label: t('gitUndo.redo'), group: 'Actions', shortcut: keyHint('redo-git'), keywords: 'redo git action journal replay', run: () => { void runGitAction('redo'); } },
+        { id: 'git-history', label: t('gitUndo.historyMenu'), group: 'Actions', keywords: 'undo redo git history journal stack', run: () => setGitHistoryOpen(true) },
         { id: 'rebase-i', label: 'Interactive rebase…', group: 'Actions', keywords: 'rebase reorder squash fixup reword drop history edit', run: () => {
           const st = useRepo.getState();
           const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
           if (!c) { showToast('Select a commit in the graph first'); return; }
           setRebaseDialog({ base: c.parents.length ? `${c.hash}^` : null, label: c.short_hash });
+        } },
+        { id: 'amend-into', label: t('amendInto.palette'), group: 'Actions', keywords: 'amend fixup staged older commit rewrite history rebase autosquash', run: () => {
+          const st = useRepo.getState();
+          const c = st.selectedCommit ? st.commits.find((x) => x.hash === st.selectedCommit) : null;
+          if (!c) { showToast(t('amendInto.selectCommit')); return; }
+          if (!st.status.some((entry) => entry.staged)) { showToast(t('amendInto.actionNeedsStage')); return; }
+          setAmendInto({ target: c.hash, label: c.short_hash, subject: c.subject });
         } },
       );
     }
@@ -2170,7 +2260,7 @@ export function App() {
       { id: 'settings', label: 'Settings…', group: 'Actions', shortcut: keyHint('settings'), keywords: 'preferences shortcuts keyboard config options', run: () => openSettingsAt('appearance') },
       { id: 'whats-new', label: t('whatsNew.menu'), group: 'Actions', keywords: 'whats new changelog release notes versions history', run: () => setWhatsNewOpen(true) },
       { id: 'keybindings', label: 'Settings: Keyboard shortcuts', group: 'Actions', keywords: 'keyboard shortcuts keybindings rebind configure customize', run: () => openSettingsAt('keyboard') },
-      { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email', run: () => openSettingsAt('git') },
+      { id: 'settings-git-global', label: 'Settings: Git', group: 'Actions', keywords: 'global identity name email auto-fetch interval background', run: () => openSettingsAt('git') },
       ...(meta ? [{ id: 'settings-git', label: 'Repository settings: Identity and signing', group: 'Actions', keywords: 'author committer name email local override config gpg ssh key sign tags', run: () => setRepositorySettingsPath(meta.path) } satisfies PaletteAction] : []),
       { id: 'settings-ai', label: 'Settings: AI', group: 'Actions', keywords: 'ai chatgpt codex claude commit message suggest login', run: () => openSettingsAt('ai') },
       { id: 'settings-hosting', label: 'Settings: Hosting', group: 'Actions', keywords: 'github enterprise custom host gitlab bitbucket azure provider authentication account', run: () => openSettingsAt('hosting') },
@@ -2255,7 +2345,7 @@ export function App() {
       repoActions, setRebaseDialog, setRemoteDialog, setRenameBranchDialog,
       baseline, setBaseline, setBranchBaseline, clearBaseline, stageReviewed, commits, resetTo,
       unstagedCount, stagedCount, copyFreshDiffs,
-      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view,
+      reviewNoteCount, clearReviewNotes, keyHint, platform, cycleTab, view, runGitAction,
       workspaces, activeWorkspaceId, importCodeWorkspaceFlow, pruneWorktrees,
       activePullRequestKey, activePullRequestHasReviewTools, activePullRequestFollowed, activePullRequestCanUpdateBranch,
       toggleActivePullRequest, customCommands, customCommandContext,
@@ -2323,6 +2413,7 @@ export function App() {
           <Commits
             onCreateTag={(target, label) => setTagDialog({ target, label })}
             onInteractiveRebase={(base, label) => setRebaseDialog({ base, label })}
+            onAmendInto={(target, label, subject) => setAmendInto({ target, label, subject })}
             onResetTo={(target, label) => setResetDialog({ target, label })}
             onCreateWorktree={(start) => setWorktreeDialog({ start })}
             onReviewNavigate={host === 'panel' ? openReviewInCustom : undefined}
@@ -2583,6 +2674,23 @@ export function App() {
         <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />
       )}
 
+      {gitHistoryOpen && activePath && (
+        <GitHistoryDialog
+          path={activePath}
+          onClose={() => setGitHistoryOpen(false)}
+          onApplied={(outcome) => {
+            showToast(formatGitActionToast(outcome));
+            void refreshLocalChanges();
+            void refreshLog();
+          }}
+          onError={(message) => {
+            showToast(message, 'error');
+            void refreshLocalChanges();
+            void refreshLog();
+          }}
+        />
+      )}
+
       {cloneOpen && (
         <CloneDialog onClose={() => setCloneOpen(false)} onStartClone={runClone} />
       )}
@@ -2686,15 +2794,23 @@ export function App() {
         <MergeDialog
           source={mergeDialog.source}
           into={mergeDialog.into}
+          wrap={mergeDialog.wrap}
           onClose={() => setMergeDialog(null)}
           onToast={showToast}
         />
       )}
+      <GitDragHost
+        onOpenMerge={(request) => setMergeDialog(request)}
+        onPush={(request) => { void onPushBranch(request); }}
+        onOpenRebase={(request) => setRebaseDialog(request)}
+        onToast={showToast}
+      />
 
       {rebaseDialog && (
         <RebaseEditor
           base={rebaseDialog.base}
           label={rebaseDialog.label}
+          seed={rebaseDialog.seed}
           onClose={() => setRebaseDialog(null)}
           onToast={showToast}
         />
@@ -2705,6 +2821,16 @@ export function App() {
           target={resetDialog.target}
           label={resetDialog.label}
           onClose={() => setResetDialog(null)}
+          onToast={showToast}
+        />
+      )}
+
+      {amendInto && (
+        <AmendIntoDialog
+          target={amendInto.target}
+          label={amendInto.label}
+          subject={amendInto.subject}
+          onClose={() => setAmendInto(null)}
           onToast={showToast}
         />
       )}
@@ -2957,11 +3083,12 @@ function OpBanner({ onToast, onOpenMailbox, onOpenBisect }: { onToast: (msg: str
     if (busy) return;
     setBusy('continue');
     try {
-      const stillPaused = await continueOperation();
+      const { paused: stillPaused, moved } = await continueOperation();
+      const done = `${OP_LABEL[operation].replace(' in progress', '')} complete`;
       onToast(
         stillPaused
           ? 'Rebase paused again — amend the commit or resolve conflicts, then Continue'
-          : `${OP_LABEL[operation].replace(' in progress', '')} complete`,
+          : withMovedBranches(done, moved),
       );
     } catch (e) {
       onToast(`Continue failed: ${errMessage(e)}`, 'error');

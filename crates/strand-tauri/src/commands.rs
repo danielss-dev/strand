@@ -26,8 +26,8 @@ use strand_core::{
     init::{init_repository, InitOutcome},
     maintenance::{MaintenanceOutcome, MaintenanceTask},
     lfs::LfsAction,
-    history::{MergeMode, RebaseEntry, RebaseStep}, log::{Commit, SearchMode},
-    network::{clone_with_options as core_clone, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
+    history::{AmendIntoPlan, MergeMode, RebaseEntry, RebaseOutcome, RebaseRefPreview, RebaseStep, RebaseUpdateRefsSetting}, log::{Commit, SearchMode},
+    network::{clone_with_options as core_clone, BackgroundFetchOutcome, CancelHandle, CloneOptions, CloneOutcome, CloneScope, HistoryExpansion, NetworkOutcome, Progress, PullMode, PushMode},
     reflog::ReflogEntry,
     refs::{BaseBranch, Refs}, repo::RepoMeta, reset::{ResetMode, ResetOutcome},
     snapshot::Snapshot, stash::{Stash, StashOutcome},
@@ -1193,6 +1193,16 @@ pub async fn repo_fetch(
     result
 }
 
+/// Background auto-fetch. Same git spawn as `repo_fetch` (`CREATE_NO_WINDOW`,
+/// non-interactive auth) and no progress channel — the scheduler stays quiet.
+#[tauri::command(async)]
+pub async fn repo_background_fetch(path: String, prune: bool) -> CmdResult<BackgroundFetchOutcome> {
+    run_blocking("background fetch", move || {
+        Ok(Repo::discover(&path)?.fetch_background(prune)?)
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub async fn repo_pull(
     path: String,
@@ -1967,13 +1977,53 @@ pub fn repo_merge(path: String, refname: String, mode: String) -> CmdResult<bool
 }
 
 #[tauri::command(async)]
-pub fn repo_rebase(path: String, onto: String) -> CmdResult<bool> {
-    Ok(Repo::discover(&path)?.rebase(&onto)?)
+pub fn repo_rebase(path: String, onto: String, update_refs: bool) -> CmdResult<RebaseOutcome> {
+    Ok(Repo::discover(&path)?.rebase(&onto, update_refs)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_rebase_update_refs(path: String) -> CmdResult<RebaseUpdateRefsSetting> {
+    Ok(Repo::discover(&path)?.rebase_update_refs_setting()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_set_rebase_update_refs(path: String, enabled: bool) -> CmdResult<()> {
+    Repo::discover(&path)?.set_rebase_update_refs(enabled)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn repo_rebase_ref_preview(path: String, onto: String) -> CmdResult<Vec<RebaseRefPreview>> {
+    Ok(Repo::discover(&path)?.rebase_ref_preview(&onto)?)
 }
 
 #[tauri::command(async)]
 pub fn repo_reset(path: String, target: String, mode: ResetMode) -> CmdResult<ResetOutcome> {
     Ok(Repo::discover(&path)?.reset(&target, mode)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_undo_git_action(path: String) -> CmdResult<strand_core::journal::GitActionOutcome> {
+    Ok(Repo::discover(&path)?.undo_git_action()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_redo_git_action(path: String) -> CmdResult<strand_core::journal::GitActionOutcome> {
+    Ok(Repo::discover(&path)?.redo_git_action()?)
+}
+
+#[tauri::command(async)]
+pub fn repo_git_action_history(path: String) -> CmdResult<strand_core::journal::GitActionHistory> {
+    Ok(Repo::discover(&path)?.git_action_history()?)
+}
+
+/// Remove the newest undo or redo entry without applying it (a stale entry).
+#[tauri::command(async)]
+pub fn repo_drop_git_action(
+    path: String,
+    direction: strand_core::journal::GitActionDirection,
+) -> CmdResult<strand_core::journal::GitActionHistory> {
+    Ok(Repo::discover(&path)?.drop_git_action(direction)?)
 }
 
 #[tauri::command(async)]
@@ -1998,12 +2048,24 @@ pub fn repo_interactive_rebase(
     base: Option<String>,
     steps: Vec<RebaseStep>,
     preserve_merges: bool,
-) -> CmdResult<bool> {
+    update_refs: bool,
+) -> CmdResult<RebaseOutcome> {
     Ok(Repo::discover(&path)?.interactive_rebase(
         base.as_deref(),
         &steps,
         preserve_merges,
+        update_refs,
     )?)
+}
+
+#[tauri::command(async)]
+pub fn repo_amend_into_plan(path: String, target: String) -> CmdResult<AmendIntoPlan> {
+    Ok(Repo::discover(&path)?.amend_into_plan(&target)?)
+}
+
+#[tauri::command(async)]
+pub fn repo_amend_into(path: String, target: String) -> CmdResult<bool> {
+    Ok(Repo::discover(&path)?.amend_into_commit(&target)?)
 }
 
 #[tauri::command(async)]
@@ -2474,6 +2536,41 @@ pub async fn repo_review_changes(
             provider,
             repo.path(),
             &diffs,
+            model.as_deref(),
+            override_path.as_deref(),
+            Some(&cancel),
+            &request.sensitive_decision,
+        )
+        .map_err(CmdError::from_msg)
+    })
+    .await;
+    deregister_op(&state, &op_id);
+    result
+}
+
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub async fn repo_suggest_conflict_resolution(
+    path: String,
+    file: String,
+    expected_hunks: usize,
+    provider: ai::AiProvider,
+    model: Option<String>,
+    openai_cli: Option<String>,
+    anthropic_cli: Option<String>,
+    request: ai::AiGenerationRequest,
+    state: State<'_, AppState>,
+) -> CmdResult<ai::AiGenerationOutcome<ai::ConflictResolutionSuggestion>> {
+    let cancel = ai::bin::AiCancelHandle::new();
+    let op_id = Some(request.op_id.clone());
+    register_op(&state, &op_id, OperationCancelHandle::Ai(cancel.clone()));
+    let result = run_blocking("ai suggest conflict resolution", move || {
+        let override_path = ai_cli_override(provider, openai_cli, anthropic_cli);
+        ai::suggest_conflict_resolution_with_request(
+            provider,
+            std::path::Path::new(&path),
+            &file,
+            expected_hunks,
             model.as_deref(),
             override_path.as_deref(),
             Some(&cancel),

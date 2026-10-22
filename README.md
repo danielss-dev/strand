@@ -44,7 +44,8 @@ shortcuts").
 | `Mod+R` | Refresh |
 | `Mod+Shift+T` | Toggle light/dark theme |
 | `Mod+B` | Toggle sidebar |
-| `Mod+Z` | Undo last Workbench layout change while customizing |
+| `Mod+Z` / `Mod+Shift+Z` | Undo / redo the latest Git action when the graph or Local Changes is focused |
+| `Mod+Z` | Undo the last Workbench layout change while customizing, when focus is outside those views and any text field |
 | `Mod+[` / `Mod+]` | Cycle panes in a composed Workbench |
 
 Surface-local keys (not rebindable, documented in Settings → Keyboard):
@@ -302,7 +303,9 @@ the resolved app appearance automatically.
   track, tag/commit detach, graph and reflog detached checkout, and stash
   apply/pop/drop show a transient progress
   pill; fetch / pull /
-  push with streaming progress and explicit
+  push with streaming progress; background auto-fetch of open repositories
+  (Settings → Git, default 10 minutes, per-repository opt-out) that updates
+  the behind-count and notices new upstream commits without merging; explicit
   pull modes (merge, rebase, fast-forward only) plus a per-repo default; normal,
   annotated-tag, all-tag, and guarded force-with-lease pushes; explicit push of
   any local branch to a chosen remote destination; upstream set/change/unset;
@@ -314,9 +317,23 @@ the resolved app appearance automatically.
   branches,
   tags, stashes, remotes, ordered multi-commit
   cherry-pick, merge-mainline cherry-pick/revert, branch/tag/commit comparison,
-  merge, and a fully keyboard-operable interactive rebase (reorder, reword,
-  edit/pause-to-amend, squash, fixup, drop, and merge preservation) with
-  pause/conflict Continue / Abort.
+  merge, plain rebase onto a branch (with a per-repo `--update-refs` choice),
+  drag-and-drop merge/rebase of sidebar branches (including remote-tracking
+  branches), drag-to-push onto a remote, drag-to-cherry-pick graph commits
+  onto a local branch, and drag-to-reorder or squash commits on the current
+  branch (the interactive rebase editor opens prefilled), always behind a
+  confirmation, and a fully keyboard-operable interactive rebase (reorder,
+  reword, edit/pause-to-amend, squash, fixup, drop, merge preservation, and
+  moving other local branches in the range) with pause/conflict Continue /
+  Abort.
+  **Amend staged changes into this commit** folds the index into an older
+  commit on the branch in one confirmed rewrite.
+  The merge editor can suggest a per-hunk AI resolution (explanation and
+  confidence); it is written only after you accept or edit each hunk and
+  click Resolve.
+  Undo Git Action and Redo Git Action walk a per-worktree journal of commit,
+  amend, reset, branch, checkout, merge, rebase, and cherry-pick; `Mod+Z` does
+  this only from the graph or Local Changes.
 - **Patch interchange** — preview affected paths and validate patch imports
   into the working tree, index, or both; import mailboxes with original authors
   and Continue / Skip / Abort recovery; verify bundle refs and prerequisites,

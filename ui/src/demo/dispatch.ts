@@ -32,6 +32,7 @@ export class DemoUnavailable extends Error {}
 
 const world = buildWorld();
 const { repo } = world;
+let demoUpdateRefs = false;
 const terminals = new Map<string, { term: DemoTerminal; path: string }>();
 
 const str = (v: unknown): string => String(v ?? '');
@@ -379,7 +380,10 @@ export const handlers: Record<string, Handler> = {
   repo_cherry_pick: (a) => { repo.cherryPick(wtOf(a), a.commits as string[]); return false; },
   repo_revert: (a) => { repo.revert(wtOf(a), a.commits as string[]); return false; },
   repo_merge: (a) => { repo.merge(wtOf(a), str(a.refname), a.mode as 'auto' | 'no_ff' | 'squash'); return false; },
-  repo_rebase: (a) => { repo.rebase(wtOf(a), str(a.onto)); return false; },
+  repo_rebase: (a) => { repo.rebase(wtOf(a), str(a.onto)); return { paused: false, moved: [] as string[] }; },
+  repo_rebase_update_refs: () => ({ supported: true, enabled: demoUpdateRefs }),
+  repo_set_rebase_update_refs: (a) => { demoUpdateRefs = Boolean(a.enabled); },
+  repo_rebase_ref_preview: () => [],
   repo_reset: (a) => {
     const wt = wtOf(a);
     const snapshot = repo.reset(wt, str(a.target), a.mode as 'soft' | 'mixed' | 'hard');
@@ -388,7 +392,9 @@ export const handlers: Record<string, Handler> = {
   repo_abort_operation: () => undefined,
   repo_continue_operation: () => false,
   repo_rebase_todo: (a) => repo.rebaseTodo(wtOf(a), a.base == null ? null : str(a.base)),
-  repo_interactive_rebase: (a) => { repo.interactiveRebase(wtOf(a), a.base == null ? null : str(a.base), a.steps as never); return false; },
+  repo_interactive_rebase: (a) => { repo.interactiveRebase(wtOf(a), a.base == null ? null : str(a.base), a.steps as never); return { paused: false, moved: [] as string[] }; },
+  repo_amend_into_plan: (a) => repo.amendIntoPlan(wtOf(a), str(a.target)),
+  repo_amend_into: (a) => { repo.amendInto(wtOf(a), str(a.target)); return false; },
 
   // ---- stash -------------------------------------------------------------
   repo_stash_list: () => repo.stashList(),
@@ -618,6 +624,18 @@ export const handlers: Record<string, Handler> = {
       description: `## Summary\n\n${commits.map((c) => `- ${c.subject}`).join('\n')}\n\n## Test plan\n\n- [ ] \`pnpm test\`\n- [ ] Verify retry behaviour against a flaky upstream`,
     };
     return generated('committed', commits.length, suggestion, a);
+  },
+  repo_suggest_conflict_resolution: async (a) => {
+    await sleep(400);
+    const count = Math.max(1, Number(a.expectedHunks) || 1);
+    return generated('conflict', 1, {
+      hunks: Array.from({ length: count }, (_, index) => ({
+        text: `resolved hunk ${index}`,
+        explanation: 'Demo suggestion only — accept, edit, or reject it before resolving.',
+        confidence: 'medium' as const,
+        truncated: false,
+      })),
+    }, a);
   },
   repo_review_changes: async (a) => {
     const wt = wtOf(a);

@@ -26,6 +26,20 @@ impl Repo {
     }
 
     pub fn commit_with_signing(&self, subject: &str, body: Option<&str>, amend: bool, signing: SigningMode) -> Result<CommitOutcome> {
+        let subject_label = action_subject(subject);
+        let (op, label) = if amend {
+            (crate::journal::GitOp::Amend, format!("Amend: {subject_label}"))
+        } else {
+            (crate::journal::GitOp::Commit, format!("Commit: {subject_label}"))
+        };
+        // Commit and amend move HEAD only. The index is already the committed
+        // tree, so undo is a soft ref move and must not rewrite the index.
+        crate::journal::record(self, op, label, false, || {
+            self.commit_with_signing_inner(subject, body, amend, signing)
+        })
+    }
+
+    fn commit_with_signing_inner(&self, subject: &str, body: Option<&str>, amend: bool, signing: SigningMode) -> Result<CommitOutcome> {
         let message = match body.map(str::trim).filter(|b| !b.is_empty()) {
             Some(b) => format!("{}\n\n{}\n", subject.trim(), b),
             None => format!("{}\n", subject.trim()),
@@ -80,6 +94,18 @@ pub(crate) fn temp_message_file(message: &str) -> Result<std::path::PathBuf> {
     Err(Error::Other(
         "write commit message: could not create a fresh temp file".into(),
     ))
+}
+
+fn action_subject(subject: &str) -> String {
+    let line = subject.lines().next().unwrap_or("").trim();
+    let mut short: String = line.chars().take(72).collect();
+    if line.chars().count() > 72 {
+        short.push('…');
+    }
+    if short.is_empty() {
+        short = "(no message)".to_string();
+    }
+    short
 }
 
 /// Run a blocking `git` subcommand in `cwd`, returning trimmed stdout and

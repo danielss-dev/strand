@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from '../components/Icon';
 import { Select } from '../components/Select';
-import { autosquashPlan } from '../lib/rebase';
+import { rebaseSeedMessageKey, type RebaseSeed } from '../lib/gitDrag';
+import { t } from '../lib/i18n';
+import { applyRebaseSeed, autosquashPlan, planUpdateRefs, withMovedBranches } from '../lib/rebase';
 import { errMessage } from '../lib/tauri';
 import { useRepo } from '../stores/repo';
 import type { RebaseAction, RebaseStep } from '../lib/types';
+import { UpdateRefsToggle } from './RebaseUpdateRefs';
 
 /** A row in the plan: the commit plus the user's chosen verb + reword message. */
 interface Row {
@@ -54,6 +57,7 @@ const KEY_TO_ACTION: Record<string, RebaseAction> = {
 export function RebaseEditor({
   base,
   label,
+  seed = null,
   onClose,
   onToast,
 }: {
@@ -61,17 +65,26 @@ export function RebaseEditor({
   base: string | null;
   /** Short human label for the starting point, shown in the blurb. */
   label: string;
+  /** Drag plan to review. When set, autosquash is skipped and Start is the only Git write. */
+  seed?: RebaseSeed | null;
   onClose: () => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
   const loadRebaseTodo = useRepo((s) => s.loadRebaseTodo);
   const interactiveRebase = useRepo((s) => s.interactiveRebase);
+  const loadRebaseUpdateRefs = useRepo((s) => s.loadRebaseUpdateRefs);
+  const setRebaseUpdateRefs = useRepo((s) => s.setRebaseUpdateRefs);
+  const branches = useRepo((s) => s.refs.branches);
+  const worktrees = useRepo((s) => s.worktrees);
 
   const [rows, setRows] = useState<Row[] | null>(null);
   // How many fixup!/squash! commits autosquash moved under their targets
   // (0 = none, no notice). The seeded plan stays fully editable.
   const [autosquashed, setAutosquashed] = useState(0);
   const [preserveMerges, setPreserveMerges] = useState(false);
+  const [updateRefsSupported, setUpdateRefsSupported] = useState(true);
+  const [updateRefs, setUpdateRefs] = useState(false);
+  const [originalOids, setOriginalOids] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focused, setFocused] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -103,7 +116,9 @@ export function RebaseEditor({
     loadRebaseTodo(base)
       .then((entries) => {
         if (!alive) return;
-        origOrderRef.current = entries.map((e) => e.oid);
+        const oids = entries.map((e) => e.oid);
+        origOrderRef.current = oids;
+        setOriginalOids(oids);
         let next: Row[] = entries.map((e) => ({
           oid: e.oid,
           short: e.short,
@@ -118,14 +133,25 @@ export function RebaseEditor({
         // every row stays editable, and isNoop correctly sees a non-noop plan.
         const hasMergeEntries = entries.some((entry) => entry.is_merge);
         setPreserveMerges(hasMergeEntries);
-        const plan = hasMergeEntries
-          ? null
-          : autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
-        if (plan) {
+        if (seed) {
+          const plan = hasMergeEntries ? null : applyRebaseSeed(entries, seed);
+          if (!plan) {
+            setLoadError(t('drag.git.rebaseSeedMissing'));
+            return;
+          }
           const byOid = new Map(next.map((r) => [r.oid, r]));
-          next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
+          next = plan.map((step) => ({ ...byOid.get(step.oid)!, action: step.action }));
+          setAutosquashed(0);
+        } else {
+          const plan = hasMergeEntries
+            ? null
+            : autosquashPlan(entries.map((e) => ({ oid: e.oid, subject: e.subject })));
+          if (plan) {
+            const byOid = new Map(next.map((r) => [r.oid, r]));
+            next = plan.map((s) => ({ ...byOid.get(s.oid)!, action: s.action }));
+          }
+          setAutosquashed(plan ? plan.filter((s) => s.action !== 'pick').length : 0);
         }
-        setAutosquashed(plan ? plan.filter((s) => s.action !== 'pick').length : 0);
         setRows(next);
         setFocused(0);
       })
@@ -135,7 +161,23 @@ export function RebaseEditor({
     return () => {
       alive = false;
     };
-  }, [base, loadRebaseTodo]);
+  }, [base, loadRebaseTodo, seed]);
+
+  useEffect(() => {
+    let alive = true;
+    loadRebaseUpdateRefs()
+      .then((setting) => {
+        if (!alive) return;
+        setUpdateRefsSupported(setting.supported);
+        setUpdateRefs(setting.supported && setting.enabled);
+      })
+      .catch(() => {
+        if (alive) setUpdateRefsSupported(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [loadRebaseUpdateRefs]);
 
   // Move keyboard focus into the list once it's populated.
   useEffect(() => {
@@ -235,6 +277,24 @@ export function RebaseEditor({
     const first = rows?.find((r) => r.action !== 'drop');
     return first ? first.action === 'squash' || first.action === 'fixup' : false;
   }, [rows]);
+  const refLines = useMemo(() => {
+    if (!updateRefs || !updateRefsSupported || !rows) return [];
+    const elsewhere = new Set(
+      worktrees.filter((worktree) => !worktree.is_current && worktree.branch).map((worktree) => worktree.branch),
+    );
+    return planUpdateRefs(
+      originalOids,
+      rows.map((row) => ({ oid: row.oid, action: row.action })),
+      branches
+        .filter((branch) => !branch.is_head)
+        .map((branch) => ({
+          name: branch.name,
+          fullRef: branch.full_name,
+          tip: branch.target,
+          checkedOutElsewhere: elsewhere.has(branch.name),
+        })),
+    );
+  }, [branches, originalOids, rows, updateRefs, updateRefsSupported, worktrees]);
   const isNoop = useMemo(() => {
     if (!rows) return false;
     const orig = origOrderRef.current;
@@ -275,11 +335,18 @@ export function RebaseEditor({
       message: r.action === 'reword' ? r.message : null,
     }));
     try {
-      const paused = await interactiveRebase(base, steps, preserveMerges && hasMerges);
+      // Remember the choice only once a rebase actually starts.
+      if (updateRefsSupported) await setRebaseUpdateRefs(updateRefs);
+      const outcome = await interactiveRebase(
+        base,
+        steps,
+        preserveMerges && hasMerges,
+        updateRefsSupported && updateRefs,
+      );
       onToast(
-        paused
-          ? 'Rebase paused — amend the commit or resolve conflicts, then Continue'
-          : 'Interactive rebase complete',
+        outcome.paused
+          ? t('rebase.paused')
+          : withMovedBranches(t('rebase.interactiveDone'), outcome.moved),
       );
       // A conflict is an expected outcome — close and let the resolver open
       // (the store switched to Local Changes). Only a real failure keeps us open.
@@ -333,11 +400,27 @@ export function RebaseEditor({
                 <kbd>p</kbd>/<kbd>r</kbd>/<kbd>e</kbd>/<kbd>s</kbd>/<kbd>f</kbd>/<kbd>d</kbd>.
               </p>
 
+              {seed ? (
+                <div className="rebase-warn" role="note">
+                  {t(rebaseSeedMessageKey(seed), { commits: seed.moveLabel, target: seed.anchorLabel })}
+                </div>
+              ) : null}
               {autosquashed > 0 ? (
                 <div className="rebase-warn" role="note">
                   Autosquash: {autosquashed} fixup commit{autosquashed === 1 ? '' : 's'} moved under{' '}
                   {autosquashed === 1 ? 'its target' : 'their targets'} — review the plan before
                   running.
+                </div>
+              ) : null}
+              <UpdateRefsToggle
+                supported={updateRefsSupported}
+                enabled={updateRefs}
+                busy={busy}
+                onChange={setUpdateRefs}
+              />
+              {!updateRefsSupported ? (
+                <div className="rebase-warn" role="note">
+                  {t('rebase.updateRefsUnsupported')}
                 </div>
               ) : null}
               {hasMerges ? (
@@ -378,9 +461,14 @@ export function RebaseEditor({
                 aria-activedescendant={`rebase-row-${focused}`}
                 onKeyDown={onListKeyDown}
               >
+                {refLines
+                  .filter((line) => line.afterStep === null)
+                  .map((line) => (
+                    <RefLine key={line.fullRef} name={line.name} fullRef={line.fullRef} willMove={line.willMove} />
+                  ))}
                 {rows.map((r, i) => (
+                  <div key={r.oid} className="rebase-step">
                   <div
-                    key={r.oid}
                     id={`rebase-row-${i}`}
                     data-idx={i}
                     role="option"
@@ -461,6 +549,12 @@ export function RebaseEditor({
                       <span className="rb-subject">{r.subject}</span>
                     )}
                   </div>
+                  {refLines
+                    .filter((line) => line.afterStep === i)
+                    .map((line) => (
+                      <RefLine key={line.fullRef} name={line.name} fullRef={line.fullRef} willMove={line.willMove} />
+                    ))}
+                  </div>
                 ))}
               </div>
             </>
@@ -483,6 +577,15 @@ export function RebaseEditor({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RefLine({ name, fullRef, willMove }: { name: string; fullRef: string; willMove: boolean }) {
+  return (
+    <div className={'rebase-row rebase-ref' + (willMove ? '' : ' blocked')} role="presentation">
+      <span className="rb-ref-verb">update-ref</span>
+      <span className="rb-subject">{willMove ? fullRef : t('rebase.wontMove', { branch: name })}</span>
     </div>
   );
 }

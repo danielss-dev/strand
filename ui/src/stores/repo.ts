@@ -38,7 +38,9 @@ import type {
   PullMode,
   PushMode,
   RebaseEntry,
+  RebaseOutcome,
   RebaseStep,
+  RebaseUpdateRefsSetting,
   RecentRepo,
   Refs,
   ReflogEntry,
@@ -445,6 +447,11 @@ export interface RepoState {
 
   /** Re-read RepoMeta (branch, ahead/behind) for the active tab. */
   refreshMeta(): Promise<void>;
+  /**
+   * After a background fetch: re-read `path`'s meta (ahead/behind) through the
+   * coalesced refresh queue, and its refs when it is the active repository.
+   */
+  refreshUpstream(path: string): Promise<void>;
   /** Default strategy used by the primary Pull action for this repository. */
   pullMode: PullMode;
   setPullMode(mode: PullMode): void;
@@ -517,7 +524,11 @@ export interface RepoState {
   cherryPick(commits: string[], mainline?: number): Promise<boolean>;
   revert(commits: string[], mainline?: number): Promise<boolean>;
   merge(refname: string, mode: MergeMode): Promise<boolean>;
-  rebase(onto: string): Promise<boolean>;
+  rebase(onto: string, updateRefs: boolean): Promise<RebaseOutcome>;
+  /** Repo-local `strand.rebaseUpdateRefs`, and whether this git supports the flag. */
+  loadRebaseUpdateRefs(): Promise<RebaseUpdateRefsSetting>;
+  /** Remember `--update-refs` for this repo (`strand.rebaseUpdateRefs`, local scope). */
+  setRebaseUpdateRefs(enabled: boolean): Promise<void>;
   /**
    * Load the editable commit range (oldest→newest) an interactive rebase over
    * `base..HEAD` would offer. `base` null = from the root. Read-only — does not
@@ -527,19 +538,26 @@ export interface RepoState {
   /**
    * Run an interactive rebase from a `steps` plan the editor built. When
    * `preserveMerges` is true, the plan keeps Git's generated merge topology.
+   * `updateRefs` moves other local branches whose tips sit in the range.
    */
   interactiveRebase(
     base: string | null,
     steps: RebaseStep[],
     preserveMerges: boolean,
-  ): Promise<boolean>;
+    updateRefs: boolean,
+  ): Promise<RebaseOutcome>;
+  /**
+   * Fold the staged index into `target` via one fixup + scripted rebase.
+   * `true` when the rebase paused on a conflict.
+   */
+  amendInto(target: string): Promise<boolean>;
   /** Abort the merge/rebase/cherry-pick/revert currently in progress. */
   abortOperation(): Promise<void>;
   /**
    * Resume a paused merge/rebase/cherry-pick/revert. `true` means Git paused
    * again on another conflict or `edit` step.
    */
-  continueOperation(): Promise<boolean>;
+  continueOperation(): Promise<{ paused: boolean; moved: string[] }>;
   /**
    * Write a conflicted file's resolved contents back and stage it (marks it
    * resolved). The op stays in progress until the user commits — refresh
@@ -648,6 +666,8 @@ export interface RepoState {
   suggestCommitSignal: boolean;
   requestSuggestCommitMessage(): void;
   clearSuggestCommitMessage(): void;
+  /** True while the merge resolver modal is mounted. */
+  conflictResolverOpen: boolean;
   /** One-shot: open the stash dialog (e.g. from Local Changes context menu). */
   stashDialogRequest: { snapshot: boolean; keepIndex: boolean } | null;
   requestStashDialog(opts?: { snapshot?: boolean; keepIndex?: boolean }): void;
@@ -933,6 +953,32 @@ async function runHistoryOp(
   }
 }
 
+async function runRebaseOutcome(
+  get: () => RepoState,
+  set: (partial: Partial<RepoState>) => void,
+  op: () => Promise<RebaseOutcome>,
+): Promise<RebaseOutcome> {
+  let outcome: RebaseOutcome = { paused: false, moved: [] };
+  try {
+    outcome = await op();
+    return outcome;
+  } finally {
+    await refreshAfterHistoryOp(get);
+    if (outcome.paused) set({ view: 'local', localSelection: null });
+  }
+}
+
+function movedBranchNames(before: Map<string, string>, branches: { name: string; target: string }[]): string[] {
+  const moved = branches
+    .filter((branch) => {
+      const previous = before.get(branch.name);
+      return previous != null && previous !== branch.target;
+    })
+    .map((branch) => branch.name);
+  moved.sort();
+  return moved;
+}
+
 async function persistSession(state: RepoState): Promise<void> {
   try {
     const payload: PersistedSession = {
@@ -959,6 +1005,7 @@ export const useRepo = create<RepoState>((set, get) => ({
   commitSearchMode: null,
   diffSearchSignal: false,
   suggestCommitSignal: false,
+  conflictResolverOpen: false,
   stashDialogRequest: null as { snapshot: boolean; keepIndex: boolean } | null,
   selectSinceBaseline: false,
   diffsTick: 0,
@@ -1927,6 +1974,23 @@ export const useRepo = create<RepoState>((set, get) => ({
       tabs: s.tabs.map((t) => (t.path === path ? { ...t, meta } : t)),
     }));
   },
+  async refreshUpstream(path) {
+    const key = pathKey(path);
+    await refreshes.run(`${key}:upstream`, async (current) => {
+      try {
+        const meta = await tauri.repoMeta(path);
+        if (!current()) return;
+        set((s) => {
+          const tabs = s.tabs.map((t) => (pathKey(t.path) === key ? { ...t, meta } : t));
+          return s.activePath && pathKey(s.activePath) === key ? { tabs, meta } : { tabs };
+        });
+      } catch (e) {
+        console.warn('repoMeta failed', e);
+      }
+    });
+    const active = get().activePath;
+    if (active && pathKey(active) === key) await get().refreshRefs();
+  },
   setPullMode(mode) {
     set({ pullMode: mode });
     const path = get().activePath;
@@ -2167,23 +2231,40 @@ export const useRepo = create<RepoState>((set, get) => ({
       return tauri.repoMerge(path, refname, mode);
     });
   },
-  async rebase(onto) {
-    return runHistoryOp(get, set, () => {
+  async rebase(onto, updateRefs) {
+    return runRebaseOutcome(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoRebase(path, onto);
+      return tauri.repoRebase(path, onto, updateRefs);
     });
+  },
+  async loadRebaseUpdateRefs() {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    return tauri.repoRebaseUpdateRefs(path);
+  },
+  async setRebaseUpdateRefs(enabled) {
+    const path = get().activePath;
+    if (!path) throw new Error('no repo open');
+    await tauri.repoSetRebaseUpdateRefs(path, enabled);
   },
   async loadRebaseTodo(base) {
     const path = get().activePath;
     if (!path) throw new Error('no repo open');
     return tauri.repoRebaseTodo(path, base);
   },
-  async interactiveRebase(base, steps, preserveMerges) {
+  async interactiveRebase(base, steps, preserveMerges, updateRefs) {
+    return runRebaseOutcome(get, set, () => {
+      const path = get().activePath;
+      if (!path) throw new Error('no repo open');
+      return tauri.repoInteractiveRebase(path, base, steps, preserveMerges, updateRefs);
+    });
+  },
+  async amendInto(target) {
     return runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
-      return tauri.repoInteractiveRebase(path, base, steps, preserveMerges);
+      return tauri.repoAmendInto(path, target);
     });
   },
   async abortOperation() {
@@ -2196,11 +2277,15 @@ export const useRepo = create<RepoState>((set, get) => ({
     }
   },
   async continueOperation() {
-    return runHistoryOp(get, set, () => {
+    const before = new Map(get().refs.branches.map((branch) => [branch.name, branch.target]));
+    const wasRebase = get().meta?.operation === 'rebase';
+    const paused = await runHistoryOp(get, set, () => {
       const path = get().activePath;
       if (!path) throw new Error('no repo open');
       return tauri.repoContinueOperation(path);
     });
+    const moved = !paused && wasRebase ? movedBranchNames(before, get().refs.branches) : [];
+    return { paused, moved };
   },
   async resolveConflict(file, contents) {
     const path = get().activePath;

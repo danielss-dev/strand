@@ -55,6 +55,41 @@ export interface ResetOutcome {
   snapshot_oid: string | null;
 }
 
+/** A ref-moving action recorded in the per-worktree git journal. */
+export type GitOp =
+  | 'commit'
+  | 'amend'
+  | 'reset'
+  | 'branch_create'
+  | 'branch_delete'
+  | 'branch_rename'
+  | 'checkout'
+  | 'merge'
+  | 'rebase'
+  | 'cherry_pick';
+
+export type GitActionDirection = 'undo' | 'redo';
+
+export interface GitHistoryItem {
+  op: GitOp;
+  label: string;
+}
+
+export interface GitActionHistory {
+  /** Newest undoable action first. */
+  undo: GitHistoryItem[];
+  /** Newest redoable action first. */
+  redo: GitHistoryItem[];
+}
+
+export interface GitActionOutcome {
+  op: GitOp;
+  label: string;
+  direction: GitActionDirection;
+  /** Set when undo/redo stashed tracked work before moving a tree. */
+  snapshot_oid: string | null;
+}
+
 /** A git interactive-rebase verb the sequence editor exposes. */
 export type RebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
 
@@ -65,6 +100,25 @@ export interface RebaseStep {
   message: string | null;
 }
 
+/** Plain or interactive rebase. `moved` is empty while the rebase is paused. */
+export interface RebaseOutcome {
+  paused: boolean;
+  moved: string[];
+}
+
+/** Repo-local `strand.rebaseUpdateRefs`, plus whether this git can honor it. */
+export interface RebaseUpdateRefsSetting {
+  supported: boolean;
+  enabled: boolean;
+}
+
+/** A local branch whose tip sits in the range a plain rebase would rewrite. */
+export interface RebaseRefPreview {
+  name: string;
+  full_ref: string;
+  will_move: boolean;
+}
+
 /** A commit in the editable range, oldest→newest, as the sequence editor lists it. */
 export interface RebaseEntry {
   oid: string;
@@ -72,6 +126,15 @@ export interface RebaseEntry {
   subject: string;
   author: string;
   is_merge: boolean;
+}
+
+/** Read-only preview of folding the index into an older commit. */
+export interface AmendIntoPlan {
+  commits: RebaseEntry[];
+  /** Target is already reachable from the branch upstream. */
+  pushed: boolean;
+  /** A merge commit sits in the range, so the rewrite is refused. */
+  has_merge: boolean;
 }
 
 export type StatusKind = 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED' | 'CONFLICTED';
@@ -527,6 +590,18 @@ export interface NetworkOutcome {
   output: string;
 }
 
+/** One background `git fetch`. Auth failures stay here so the scheduler can
+ * record a single quiet entry and back off instead of prompting. */
+export interface BackgroundFetchOutcome {
+  ok: boolean;
+  auth_required: boolean;
+  output: string;
+  command: string;
+  new_commits: number;
+  upstream: string | null;
+  behind: number;
+}
+
 export type MaintenanceTask = 'maintenance' | 'garbage-collect' | 'integrity-check';
 
 export interface MaintenanceOutcome {
@@ -538,7 +613,7 @@ export interface MaintenanceOutcome {
 
 export interface RepoActivityEntry extends MaintenanceOutcome {
   id: string;
-  task: MaintenanceTask | 'commit' | 'amend';
+  task: MaintenanceTask | 'commit' | 'amend' | 'background-fetch';
   started_at: number;
 }
 
@@ -971,6 +1046,21 @@ export interface CodeReviewSuggestion {
   findings: CodeReviewFinding[];
 }
 
+export type ConflictConfidence = 'low' | 'medium' | 'high';
+
+export interface ConflictHunkSuggestion {
+  text: string;
+  explanation: string;
+  confidence: ConflictConfidence;
+  /** A side or base was cut to fit the prompt. Accept is disabled; Edit still works. */
+  truncated: boolean;
+}
+
+/** Per-hunk AI resolution. Nothing is written until the user accepts it and resolves the file. */
+export interface ConflictResolutionSuggestion {
+  hunks: ConflictHunkSuggestion[];
+}
+
 export type AiSensitiveDecision =
   | { mode: 'scan' }
   | { mode: 'exclude'; fingerprint: string }
@@ -982,7 +1072,7 @@ export interface AiGenerationRequest {
   styleInstruction: string | null;
 }
 
-export type AiInputScope = 'staged' | 'unstaged' | 'committed' | 'review';
+export type AiInputScope = 'staged' | 'unstaged' | 'committed' | 'review' | 'conflict';
 
 export interface AiInputCoverage {
   scope: AiInputScope;

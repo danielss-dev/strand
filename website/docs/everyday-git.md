@@ -113,7 +113,7 @@ the other provider without changing the default in Settings.
 
 ## Fetch, pull, push
 
-The topbar Fetch / Pull / Push buttons show real ahead/behind counts. The adjacent chevron opens the full network menu: fetch with or without pruning stale remote-tracking branches; pull using Git's configured behavior, an explicit merge, rebase, or fast-forward-only, with or without autostash; and push the current branch, follow annotated tags, push every tag, or force-push with a lease. Fetch-prune, pull-strategy, and pull-autostash choices can each be saved as this repository's default. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure. Sync runs fetch, then the repository's default pull, then push, and stops at the first failed stage.
+Open repositories also fetch on their own. Settings → Git → **Auto-fetch** is 10 minutes by default (or 5, 30, or off), and any open repository can opt out. Strand fetches only — it does not pull or change your files — then updates the behind-count. When new commits arrive on the current branch's upstream, a short notice names the count and the upstream (`2 new commits on origin/main`). Nothing is shown when the fetch finds no new commits. A missing credential does not open a prompt; that repository waits before the next try. The topbar Fetch / Pull / Push buttons show real ahead/behind counts. The adjacent chevron opens the full network menu: fetch with or without pruning stale remote-tracking branches; pull using Git's configured behavior, an explicit merge, rebase, or fast-forward-only, with or without autostash; and push the current branch, follow annotated tags, push every tag, or force-push with a lease. Fetch-prune, pull-strategy, and pull-autostash choices can each be saved as this repository's default. Network operations stream progress (phase and percent) into a live topbar toast, are cancellable, and surface git's own stderr in a toast on failure. Sync runs fetch, then the repository's default pull, then push, and stops at the first failed stage.
 
 Force-push is deliberately guarded: Strand only exposes `--force-with-lease`, names the branch and upstream in a confirmation dialog, and refuses the update if the remote branch moved since the last fetch. Plain `--force` is not available. The same strategy actions are keyboard-reachable from the command palette; the current branch's context menu also exposes the pull and push variants.
 
@@ -265,12 +265,15 @@ objects.
 
 - **Cherry-pick** and **Revert** act on a single commit from the commit detail
   panel or graph row menu. For a merge commit, choose the parent Git should
-  treat as the mainline.
+  treat as the mainline. Drag commits from the graph onto a local branch in the
+  sidebar for the same cherry-pick; the confirmation names the commits and the
+  branch, and Escape cancels before Git runs.
 - Multi-select commits in All Commits to **Cherry-pick selected** in
   oldest-to-newest order. Exactly two selected commits can also be compared in
   a changed-file and full-diff dialog.
 - **Merge** ("Merge into <current>" on a branch) opens a dialog with three modes: fast-forward when possible, always create a merge commit (no-FF), or squash — a squash merge leaves the result staged so you write the commit yourself.
-- A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu, behind a confirm step.
+- A plain **rebase** ("Rebase <current> onto this") is available from the branch context menu. It opens a dialog that names the branch being replayed and lets you turn on **Update other branches (--update-refs)**. That choice is remembered for this repository once you start the rebase. It is Strand's own setting, so `git pull --rebase` and rebases you run in a terminal are unaffected. When it is on, the dialog lists other local branches whose tips sit in the range and will move with it, and names any that will not because they are checked out in another worktree. The result toast lists the branches that actually moved. The option needs Git 2.38 or newer; on an older Git it stays off, with an explanation, and the rebase still runs.
+- Drag a branch onto another branch in the sidebar. The confirmation names both refs and offers **Merge** (the dragged ref into the drop target) or **Rebase** (the drop target onto the dragged ref) — the same commands as those menu items. **Rebase** opens the same Rebase dialog as the menu item, including **Update other branches (--update-refs)**. Remote-tracking branches work in either direction; the local branch is the one Git moves, and a remote branch's menu has the same **Merge into…** and **Rebase … onto this** items. Dropping a branch on itself, on a tag, or while a merge, rebase, cherry-pick, revert, `git am` or bisect is paused shows a no-drop cursor and does nothing. When the drop has to switch to another branch first, the confirmation says so; if Git then fails, Strand switches back to the branch you were on — unless the failure left the operation paused, in which case you stay on that branch to Continue or Abort it. Escape closes the confirmation without checking out or running Git. Drop a local branch on a remote (the remote's own row, such as `origin`) to push it. If the branch has no upstream, the confirmation offers to create `remote/branch` — the same push the **Push to remote…** dialog sends when you accept that remote, destination, and upstream checkbox. Drag commits within the current branch’s linear history to reorder or squash them: the interactive rebase editor opens with that plan filled in, and Escape closes it before Git runs.
 
 Open **Compare branches…** from the command palette (⌘K / Ctrl+K) or the
 **Branches → Branch actions** menu to compare any two local or remote branches.
@@ -306,6 +309,8 @@ The rebase editor is a keyboard-operable list of the commits in the plan:
 
 **Autosquash**: the graph context menu's "Create fixup! commit" commits your staged changes as `fixup! <subject>` of the chosen commit. When you next open the rebase editor, fixup! commits are automatically arranged next to their targets (like `git rebase --autosquash`), with a notice telling you how many moved — and the plan stays fully editable before you run it.
 
+**Amend into this commit**: the same menus also offer "Amend staged changes into this commit", which does the fold immediately. The confirmation lists the commits that will be rewritten. Strand places the fixup by commit id, so two commits with the same subject cannot steal the change. A merge in the range is refused. A commit already on the upstream shows a force-push warning. Unstaged work is restored afterward, including when you Abort a conflict.
+
 **Edit** pauses the rebase immediately after the chosen commit. Strand opens
 Local Changes: change and stage files, enable **Amend**, commit the amendment,
 then use the operation banner's **Continue** button. You can also continue
@@ -315,6 +320,16 @@ When the range contains a merge, **Preserve merge commits** is enabled by
 default. Strand keeps Git's branch topology and disables reorder,
 squash/fixup, and dropping a merge commit while that mode is active. Turn it
 off explicitly if you intend to flatten the range into linear history.
+
+**Update other branches (--update-refs)** is the same per-repository choice
+as in a plain rebase, and it needs Git 2.38 or newer. With it on, the plan
+shows an `update-ref` line under the commit each other local branch will
+follow. Dropping, squashing, or reordering a commit moves that branch to the
+last of its commits the plan still keeps (a squash lands on the combined
+commit; dropping every commit it contained parks it on the rebase base). A
+branch checked out in another worktree is listed and left where it is. The
+completion toast names every branch that moved. Abort leaves them all
+untouched; a conflict does too, until Continue finishes the rebase.
 
 Interactive rebase shells out to your system git, so hooks and commit signing apply to rewritten commits.
 
@@ -332,7 +347,8 @@ The merge editor is a full-screen three-way view:
 - Incoming and current versions side by side, scroll-synced, with the assembled result below.
 - `‹` / `›` steps through conflicts with a counter that turns from red to green as you resolve them.
 - Per conflict, take current, incoming, or both — or click a side's block directly. Per-side "take all" checkboxes resolve everything at once.
-- **Resolve** writes the result and stages the file. The editor is pick-sides only; it does not support free-form text editing.
+- **Suggest resolution with AI** (`Mod+Shift+J`, or the command palette) proposes one replacement per conflict, with an explanation and a confidence level, using the provider from Settings → AI. Nothing is written until you Accept or edit a hunk and then click **Resolve**. Reject leaves that hunk unchanged. A very long conflict is cut to fit the prompt; that hunk shows a warning and can only be used through Edit. If the file has no diff3 base, the suggestion still runs and the prompt records that the base is unavailable.
+- **Resolve** writes the result and stages the file. Side picks stay ours / theirs / both; an accepted or edited AI suggestion is the only free-form text, and only after you review it.
 
 Once every conflicted file is resolved, the banner's Continue button resumes the operation.
 

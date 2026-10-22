@@ -33,11 +33,15 @@ const MODES: { value: MergeMode; label: string; hint: string }[] = [
 export function MergeDialog({
   source,
   into,
+  wrap,
   onClose,
   onToast,
 }: {
   source: string;
   into: string;
+  /** Wraps `merge` once Merge is confirmed (a drop checks out first and
+   *  switches back on failure). Escape never calls it. */
+  wrap?: <T>(step: () => Promise<T>) => Promise<T>;
   onClose: () => void;
   onToast: (msg: string, kind?: 'success' | 'error') => void;
 }) {
@@ -56,7 +60,8 @@ export function MergeDialog({
     setBusy(true);
     setError(null);
     try {
-      const conflicted = await merge(source, mode);
+      const run = () => merge(source, mode);
+      const conflicted = await (wrap ? wrap(run) : run());
       onToast(
         conflicted
           ? `Merge stopped with conflicts — resolve them in Local Changes`

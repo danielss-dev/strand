@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { UserAction } from '../lib/userActions';
 import { persist } from 'zustand/middleware';
 
+import { DEFAULT_AUTO_FETCH_INTERVAL_MIN, normalizeAutoFetchInterval, type AutoFetchIntervalMin } from '../lib/autoFetch';
 import { t } from '../lib/i18n';
 import type { KeyOverrides } from '../lib/keys';
 import type { AiProvider, EmbeddedShellChoice } from '../lib/types';
@@ -135,6 +136,11 @@ export interface SettingsState {
   fileOpenTab: FileOpenTab;
   /** Directory the clone dialog and open-repo picker start in. */
   defaultCloneDir: string | null;
+  /**
+   * Background fetch interval in minutes. `0` is off.
+   * Default is {@link DEFAULT_AUTO_FETCH_INTERVAL_MIN} (Daniels chose 10).
+   */
+  autoFetchIntervalMin: AutoFetchIntervalMin;
   editorTool: ExternalTool;
   terminalTool: ExternalTool;
   userActions: UserAction[];
@@ -279,6 +285,7 @@ export const useSettings = create<SettingsState>()(
       diffWordHighlight: true,
       fileOpenTab: 'preview',
       defaultCloneDir: null,
+      autoFetchIntervalMin: DEFAULT_AUTO_FETCH_INTERVAL_MIN,
       editorTool: null,
       terminalTool: null,
       userActions: [],
@@ -348,6 +355,7 @@ export const useSettings = create<SettingsState>()(
           platform: detectPlatform(),
           terminalFont,
           diffSyntaxTheme,
+          autoFetchIntervalMin: normalizeAutoFetchInterval(next.autoFetchIntervalMin),
           terminalFontSize: Number.isFinite(storedSize)
             ? Math.min(32, Math.max(10, Math.round(storedSize)))
             : current.terminalFontSize,

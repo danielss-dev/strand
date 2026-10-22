@@ -5,6 +5,7 @@ import { userActionMenu } from '../lib/userActions';
 import { Icon, type IconName } from './Icon';
 import { copyToClipboard } from './PierreTree';
 import { RepositoryFiles } from './RepositoryFiles';
+import { upstreamBranchName } from '../lib/gitDrag';
 import { t } from '../lib/i18n';
 import { formatBinding } from '../lib/keys';
 import { customPanes } from '../lib/customView';
@@ -41,6 +42,7 @@ import type {
 import type { RemoteDialogMode } from '../views/RemoteDialog';
 import type { BranchNetworkDialogMode } from '../views/BranchNetworkDialog';
 import { WorktreeMergeDialog } from '../views/WorktreeMergeDialog';
+import { RebaseOntoDialog } from '../views/RebaseOntoDialog';
 import { CompareRefsDialog, type CompareChoice } from '../views/CompareRefsDialog';
 
 type SideTab = 'git' | 'files';
@@ -254,7 +256,6 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     health: WorktreeHealth;
     dirty: number;
   } | null>(null);
-  const rebase = useRepo((s) => s.rebase);
   const setBaseline = useRepo((s) => s.setBaseline);
   const currentBranch = useMemo(() => refs.branches.find((b) => b.is_head)?.name ?? null, [refs]);
   const compareChoices = useMemo<CompareChoice[]>(
@@ -490,20 +491,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
 
   // Merge/rebase a non-current branch into/onto the current one. Both can
   // conflict — surface git's message (and success) via a toast.
-  const runRebase = (onto: string) => {
-    void (async () => {
-      try {
-        const conflicted = await rebase(onto);
-        onToast(
-          conflicted
-            ? `Rebase onto ${onto} has conflicts — resolve in Local Changes`
-            : `Rebased ${currentBranch} onto ${onto}`,
-        );
-      } catch (e) {
-        onToast(`Rebase failed: ${errMessage(e)}`, 'error');
-      }
-    })();
-  };
+  const [rebaseOnto, setRebaseOnto] = useState<string | null>(null);
 
   // Pin the review baseline at merge-base(HEAD, base) and open the Review
   // view — the current branch's own work, reviewed against the branch the
@@ -612,7 +600,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     if (currentBranch) {
       items.push({ label: `Review ${currentBranch} vs this`, icon: 'eye', onSelect: () => reviewAgainst(b.name) });
       items.push({ label: `Merge into ${currentBranch}`, icon: 'branch', onSelect: () => onMerge(b.name, currentBranch) });
-      items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', confirm: true, onSelect: () => runRebase(b.name) });
+      items.push({ label: `Rebase ${currentBranch} onto this`, icon: 'rebase', onSelect: () => setRebaseOnto(b.name) });
     }
     items.push(
       { label: 'Copy branch name', icon: 'file', onSelect: () => { void copyToClipboard(b.name); onToast('Branch name copied'); } },
@@ -634,6 +622,16 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       onSelect: () => compareAgainst(rb.name),
     });
     if (currentBranch) {
+      items.push({
+        label: t('drag.git.menuMerge', { branch: currentBranch }),
+        icon: 'branch',
+        onSelect: () => onMerge(rb.name, currentBranch),
+      });
+      items.push({
+        label: t('drag.git.menuRebase', { branch: currentBranch }),
+        icon: 'rebase',
+        onSelect: () => setRebaseOnto(rb.name),
+      });
       items.push({
         label: `Pull into ${currentBranch}`,
         icon: 'arrow-down',
@@ -949,6 +947,15 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
         depth={depth}
         icon={b.is_head ? 'check' : wt ? 'worktree' : 'branch'}
         label={b.name}
+        git={{
+          source: 'local-branch',
+          drop: 'local-branch',
+          ref: b.name,
+          label: b.name,
+          head: b.is_head,
+          upstreamRemote: b.upstream?.remote ?? null,
+          upstreamBranch: b.upstream ? upstreamBranchName(b.upstream) : null,
+        }}
         meta={wt ? 'worktree' : undefined}
         merged={merged}
         title={
@@ -980,6 +987,12 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
     return (
       <SideLeaf
         key={rb.full_name}
+        git={{
+          source: 'remote-branch',
+          drop: 'remote-branch',
+          ref: rb.name,
+          label: rb.name,
+        }}
         depth={depth}
         icon="branch"
         label={rb.branch}
@@ -1009,6 +1022,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       depth={depth}
       icon="tag"
       label={leafName(tg.name)}
+      git={{ drop: 'tag', ref: tg.full_name, label: tg.name }}
       meta={tg.annotated ? 'annotated' : undefined}
       title={`${leafName(tg.name)} — click to reveal, double-click to check out`}
       onActivate={() => void runBranchOp(checkoutCommitProgress(), () => checkoutCommit(tg.target))}
@@ -1164,6 +1178,7 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
               showFolderCount: false,
               folderMenu: remoteFolderMenu,
               openMenu,
+              remoteDrop: true,
             })}
 
           <SideSection
@@ -1245,6 +1260,14 @@ export function Sidebar({ onManageSubmodules, onOpenWorkbench, onOpenWorkSurface
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
+      {rebaseOnto && currentBranch ? (
+        <RebaseOntoDialog
+          onto={rebaseOnto}
+          branch={currentBranch}
+          onClose={() => setRebaseOnto(null)}
+          onToast={onToast}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1268,6 +1291,8 @@ function renderTreeChildren<T>(
      * tree's remote-name rows. Opened via `openMenu` (the owner's menu state). */
     folderMenu?: (name: string) => MenuItem[];
     openMenu?: (x: number, y: number, items: MenuItem[]) => void;
+    /** Depth-0 folders are remotes and accept a local-branch push drop. */
+    remoteDrop?: boolean;
   },
 ): React.ReactNode {
   const open = folderOpts?.openMenu;
@@ -1288,6 +1313,7 @@ function renderTreeChildren<T>(
           count={folderOpts?.showFolderCount === false ? undefined : child.leaves}
           onToggle={() => toggleCollapsed(collapseKey)}
           onMenu={menuFor && open ? (x, y) => open(x, y, menuFor(child.name)) : undefined}
+          gitDrop={folderOpts?.remoteDrop && depth === 0 ? { ref: child.name, label: child.name } : undefined}
         />
         {!isCollapsed &&
           renderTreeChildren(child, depth + 1, collapsed, toggleCollapsed, renderLeaf, keyPrefix, folderOpts)}
@@ -1338,9 +1364,11 @@ interface FolderRowProps {
   /** Open the folder's action menu at the given viewport coordinates —
    * wired like SideLeaf's (right-click, or ContextMenu / Shift+F10). */
   onMenu?: (x: number, y: number) => void;
+  /** Remote root row. Local branches dropped here push. */
+  gitDrop?: { ref: string; label: string };
 }
 
-function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle, onMenu }: FolderRowProps) {
+function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle, onMenu, gitDrop }: FolderRowProps) {
   const rowRef = useRef<HTMLButtonElement>(null);
   const openKeyboardMenu = () => {
     const r = rowRef.current?.getBoundingClientRect();
@@ -1352,6 +1380,9 @@ function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle, o
       type="button"
       className={'side-row branch-folder' + (collapsed ? ' collapsed' : '')}
       style={{ paddingLeft: 16 + depth * 14 }}
+      data-git-drop={gitDrop ? 'remote' : undefined}
+      data-git-ref={gitDrop?.ref}
+      data-git-label={gitDrop?.label}
       onClick={onToggle}
       onContextMenu={
         onMenu
@@ -1381,10 +1412,21 @@ function FolderRow({ name, depth, collapsed, icon = 'folder', count, onToggle, o
   );
 }
 
+interface SideGitDrag {
+  source?: 'local-branch' | 'remote-branch';
+  drop?: 'local-branch' | 'remote-branch' | 'remote' | 'tag';
+  ref: string;
+  label: string;
+  head?: boolean;
+  upstreamRemote?: string | null;
+  upstreamBranch?: string | null;
+}
+
 interface SideLeafProps {
   depth: number;
   icon: IconName;
   label: string;
+  git?: SideGitDrag;
   /** Muted trailing text (stash branch, "annotated", …). */
   meta?: string;
   /** Commits ahead of upstream — rendered as a green `N↑`. */
@@ -1411,7 +1453,7 @@ interface SideLeafProps {
  * — also lives in a right-click menu opened via `onMenu`. Keyboard users open
  * it with the Menu key or Shift+F10, positioned at the row's corner.
  */
-function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, merged, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
+function SideLeaf({ depth, icon, label, git, meta, ahead = 0, behind = 0, merged, active, title, onActivate, onSelect, onMenu }: SideLeafProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const openKeyboardMenu = () => {
     const r = rowRef.current?.getBoundingClientRect();
@@ -1422,6 +1464,13 @@ function SideLeaf({ depth, icon, label, meta, ahead = 0, behind = 0, merged, act
       ref={rowRef}
       className={'side-row branch-row' + (active ? ' active' : '')}
       style={{ paddingLeft: 16 + depth * 14 }}
+      data-git-source={git?.source}
+      data-git-drop={git?.drop}
+      data-git-ref={git?.ref}
+      data-git-label={git?.label}
+      data-git-head={git?.head ? '1' : undefined}
+      data-git-upstream-remote={git?.upstreamRemote ?? undefined}
+      data-git-upstream-branch={git?.upstreamBranch ?? undefined}
       onClick={onSelect}
       onDoubleClick={onActivate}
       onContextMenu={(e) => {

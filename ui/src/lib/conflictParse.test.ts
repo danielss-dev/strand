@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildViews,
   conflictAtLine,
+  conflictHunks,
   parseConflicts,
   toLineRange,
   type Resolution,
@@ -101,6 +102,70 @@ describe('buildViews', () => {
     expect(conflictAtLine(views.ranges, 'ours', 3)).toBe(1);
     expect(conflictAtLine(views.ranges, 'ours', 1)).toBe(0);
     expect(conflictAtLine(views.ranges, 'ours', 2)).toBe(-1); // 'mid'
+  });
+});
+
+describe('diff3 base', () => {
+  it('retains the base section without copying it into either side', () => {
+    const text = [
+      '<<<<<<< HEAD',
+      'ours',
+      '||||||| merged common ancestors',
+      'base — must not leak into either side',
+      '=======',
+      'theirs',
+      '>>>>>>> topic',
+    ].join('\n');
+    const parsed = parseConflicts(text);
+    const [hunk] = conflictHunks(parsed);
+    expect(hunk.ours).toBe('ours');
+    expect(hunk.theirs).toBe('theirs');
+    expect(hunk.base).toBe('base — must not leak into either side');
+    expect(hunk.ours).not.toContain('must not leak');
+    expect(hunk.theirs).not.toContain('must not leak');
+  });
+
+  it('reports base as unavailable for 2-way markers', () => {
+    expect(conflictHunks(parseConflicts(SIMPLE))[0].base).toBeNull();
+  });
+});
+
+describe('custom resolutions', () => {
+  it('assembles reviewed replacement text and leaves side picks unchanged', () => {
+    const text = [
+      '<<<<<<< HEAD',
+      'A-ours',
+      '=======',
+      'A-theirs',
+      '>>>>>>> x',
+      'mid',
+      '<<<<<<< HEAD',
+      'B-ours',
+      '=======',
+      'B-theirs',
+      '>>>>>>> x',
+      'tail',
+      '<<<<<<< HEAD',
+      'C-ours',
+      '=======',
+      'C-theirs',
+      '>>>>>>> x',
+    ].join('\n');
+    const views = buildViews(parseConflicts(text), new Map<number, Resolution>([
+      [0, { kind: 'custom', text: 'ai line\nedited tail' }],
+      [1, 'ours'],
+      [2, 'theirs'],
+    ]));
+    expect(views.resultText.split('\n')).toEqual([
+      'ai line',
+      'edited tail',
+      'mid',
+      'B-ours',
+      'tail',
+      'C-theirs',
+    ]);
+    expect(views.ranges.every((range) => range.resolved)).toBe(true);
+    expect(views.resultText).not.toContain('<<<<<<<');
   });
 });
 
