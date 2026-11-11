@@ -4,7 +4,8 @@ Status (2026-07-29): release CI builds all three platforms, signs and notarizes
 the universal macOS app, produces minisign-verified updater artifacts, and
 keyless-signs Linux AppImages with Sigstore. Partner Center signing of the
 production Microsoft Store MSIX closes the Windows trusted-distribution gate;
-the standalone GitHub MSI remains unsigned. Remaining distribution work is
+the standalone GitHub MSI is Authenticode-signed through Azure Artifact Signing
+once the `WINDOWS_SIGNING` repository variable is on (§ "Windows Authenticode"). Remaining distribution work is
 release-candidate validation on Windows, macOS, GNOME, and KDE. The 1.0 updater
 is stable-only; a selectable beta channel is explicitly post-1.0.
 
@@ -114,8 +115,9 @@ removed. Verify a candidate with `WM_GETICON` for both `ICON_BIG` and
 Windows (`.msi`) and Linux (`.deb`/`.rpm`/`.appimage`) targets are already in
 `bundle.targets` and build without an Apple account. Release CI gives each
 AppImage a keyless Sigstore bundle. The Partner Center-signed Store MSIX is the
-trusted Windows distribution; a separate Windows publisher identity is needed
-only for the unmanaged MSI/EXE fallback.
+trusted Windows distribution; the unmanaged GitHub MSI and the Windows helper
+are Authenticode-signed through Azure Artifact Signing (§ "Windows
+Authenticode").
 
 ### Microsoft Store MSIX release
 
@@ -242,8 +244,8 @@ rebuilds or replaces desktop installers.
 
 The macOS helper binary is Developer-ID signed before archiving and its archive
 is submitted to Apple notarization. The separately downloaded Windows helper
-binary is outside the Store MSIX trust boundary and remains coupled to any
-future Windows Authenticode certificate work; its signed manifest is mandatory
+binary is outside the Store MSIX trust boundary, so it is Authenticode-signed
+before archiving when `WINDOWS_SIGNING` is on; its signed manifest is mandatory
 on all platforms. Installation extracts only the expected regular file, refuses
 links/traversal, and keeps the previous helper until the replacement verifies.
 
@@ -280,6 +282,36 @@ For helper-only tags, use `pnpm version:azdo <version|major|minor|patch>`.
 That command changes only `crates/strand-azdo/Cargo.toml` and its Cargo.lock
 entry and prints the required `strand-azdo-vX.Y.Z` tag.
 
+### Windows Authenticode
+
+With the repository **variable** `WINDOWS_SIGNING` set to `true`, the release
+workflow signs every Windows binary it publishes outside the Store:
+
+- `strand.exe` and the `.msi`: Tauri runs `scripts/windows-sign.ps1` as
+  `bundle.windows.signCommand`, from a config
+  `scripts/windows-signing-client.ps1` writes and passes as `--config`.
+- `strand-cli.exe`, bundled as a resource that Tauri doesn't sign:
+  `scripts/build-companion.mjs`.
+- The separately downloaded `strand-azdo.exe`: the helper job, before it is
+  archived and hashed into the manifest.
+
+`scripts/windows-signing-client.ps1` fetches the SHA-256-pinned
+`Microsoft.ArtifactSigning.Client` (SignTool's dlib) and writes the account
+metadata. `scripts/windows-sign.ps1` signs with the newest Windows SDK SignTool
+and Microsoft's timestamp server, then fails unless Windows reports the
+signature `Valid`. After the build, every MSI is unpacked (administrative
+install) and the MSI and each `.exe` in it must verify.
+
+The certificate comes from the Azure Artifact Signing account
+`halterio-signing` (resource group `rg-halterio-signing`, East US), certificate
+profile `public-trust`, shared with the developer's other apps. Strand signs as
+its own service principal, `strand-release-signing`, which has only the
+Artifact Signing Certificate Profile Signer role on that account; its secret
+was made 2026-11-11 for two years. Renew it with
+`az ad sp credential reset --id <AZURE_SIGNING_CLIENT_ID> --years 2` and
+`gh secret set AZURE_SIGNING_CLIENT_SECRET`. A newly signed MSI can still meet
+a SmartScreen prompt until the certificate builds reputation.
+
 ### Secrets to add (Settings → Secrets and variables → Actions)
 
 `GITHUB_TOKEN` is provided automatically — don't add it. Everything below is a
@@ -295,6 +327,7 @@ repo (or org) Actions **secret**.
 | `APPLE_TEAM_ID` | macOS notarization | `57CBXS5P39` |
 | `TAURI_SIGNING_PRIVATE_KEY` | **Every build** | Tauri updater private key (see below) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **Every build** | Password for that key |
+| `AZURE_SIGNING_CLIENT_ID` / `AZURE_SIGNING_TENANT_ID` / `AZURE_SIGNING_CLIENT_SECRET` | Windows Authenticode | Service principal `strand-release-signing` (§ "Windows Authenticode") |
 | `WINDOWS_CERTIFICATE_BASE64` | Microsoft Store candidate | Base64 PKCS#12/PFX publisher certificate with private key |
 | `WINDOWS_CERTIFICATE_PASSWORD` | Microsoft Store candidate | Password for the publisher PKCS#12/PFX |
 
@@ -302,9 +335,10 @@ The `APPLE_*` secrets are mandatory for the release workflow because both the
 app and the universal helper must be signed/notarized. The
 `TAURI_SIGNING_*` pair is also **mandatory**: it signs updater artifacts and
 the helper manifest, and `bundle.createUpdaterArtifacts` is `true`. Any bundle
-build (CI or local) fails without the private key. Windows Authenticode signing
-is wired only for the unmanaged MSI/EXE fallback once those two external
-certificate secrets exist; the Partner Center-signed MSIX needs neither secret.
+build (CI or local) fails without the private key. Windows Authenticode for the
+GitHub MSI and helper uses the `AZURE_SIGNING_*` secrets and the
+`WINDOWS_SIGNING` variable (§ "Windows Authenticode"); the Partner
+Center-signed MSIX needs none of them.
 Linux AppImage publisher identity is keyless and needs no repository secret.
 
 > **Local builds** now need the key too. Point Tauri at the generated file:

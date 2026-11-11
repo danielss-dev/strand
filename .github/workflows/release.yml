@@ -124,8 +124,29 @@ jobs:
       - name: Build Windows helper
         if: matrix.platform == 'windows-latest'
         shell: pwsh
+        run: cargo build -p strand-azdo --release --target "${{ matrix.target }}"
+
+      # Authenticode (docs/packaging.md § "Windows Authenticode"), in its own
+      # step so dependency build scripts never see the credentials.
+      - name: Windows signing client
+        id: winsign
+        if: matrix.platform == 'windows-latest' && vars.WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        run: ./scripts/windows-signing-client.ps1
+
+      - name: Sign Windows helper
+        if: steps.winsign.outcome == 'success'
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
+        run: ./scripts/windows-sign.ps1 "target/${{ matrix.target }}/release/strand-azdo.exe"
+
+      - name: Package Windows helper
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
         run: |
-          cargo build -p strand-azdo --release --target "${{ matrix.target }}"
           New-Item -ItemType Directory -Force dist | Out-Null
           $Asset = "strand-azdo-$env:HELPER_VERSION-${{ matrix.target }}.zip"
           Compress-Archive -Path "target/${{ matrix.target }}/release/strand-azdo.exe" -DestinationPath "dist/$Asset"
@@ -242,10 +263,24 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
+      # Windows Authenticode (docs/packaging.md § "Windows Authenticode"):
+      # Tauri signs strand.exe and the MSI through scripts/windows-sign.ps1,
+      # and build-companion.mjs signs strand-cli.exe.
+      - name: Windows signing client
+        id: winsign
+        if: matrix.platform == 'windows-latest' && vars.WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        run: ./scripts/windows-signing-client.ps1
+
       - name: Build, sign, and release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- Windows Authenticode (Azure Artifact Signing) ---
+          AZURE_CLIENT_ID: ${{ steps.winsign.outcome == 'success' && secrets.AZURE_SIGNING_CLIENT_ID || '' }}
+          AZURE_TENANT_ID: ${{ steps.winsign.outcome == 'success' && secrets.AZURE_SIGNING_TENANT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ steps.winsign.outcome == 'success' && secrets.AZURE_SIGNING_CLIENT_SECRET || '' }}
 
           # --- macOS code signing (Developer ID) ---
           # Base64 of the exported .p12 + its export password. tauri-action
@@ -270,7 +305,7 @@ jobs:
           releaseName: 'Strand ${{ github.event.inputs.tag || github.ref_name }}'
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ steps.winsign.outputs.tauri_args || matrix.args }}
 
       - name: Verify updater signature identity
         run: pnpm release:check-updater-signatures
@@ -283,6 +318,26 @@ jobs:
           if (!$packages.Count) { throw 'No MSI artifacts found.' }
           foreach ($package in $packages) {
             ./scripts/check-msi-shortcuts.ps1 -MsiPath $package.FullName
+          }
+
+      - name: Verify Windows Authenticode signatures
+        if: steps.winsign.outcome == 'success'
+        shell: pwsh
+        run: |
+          # The MSI itself, and every executable it installs (an administrative
+          # install unpacks it without running it).
+          $files = @(Get-ChildItem target/release/bundle/msi -Filter '*.msi')
+          if (!$files.Count) { throw 'No MSI artifacts found.' }
+          foreach ($msi in @($files)) {
+            $unpacked = Join-Path $env:RUNNER_TEMP "msi-$($msi.BaseName)"
+            $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$unpacked`"")
+            if ($process.ExitCode -ne 0) { throw "Could not unpack $($msi.Name): $($process.ExitCode)" }
+            $files += @(Get-ChildItem $unpacked -Recurse -Filter '*.exe')
+          }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid') { throw "$($file.Name) signature is $($signature.Status): $($signature.StatusMessage)" }
+            Write-Host "$($file.Name): $($signature.SignerCertificate.Subject)"
           }
 
       - name: Sign and verify Linux AppImage with Sigstore
