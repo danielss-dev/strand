@@ -156,10 +156,19 @@ for (const fragment of [
   'CHANNEL="strand-azdo-protocol-$PROTOCOL_VERSION"',
   'gh release create "$RELEASE_TAG"',
   'node scripts/check-azdo-helper-metadata.mjs',
+  'run: ./scripts/windows-signing-client.ps1',
+  './scripts/windows-sign.ps1 "target/${{ matrix.target }}/release/strand-azdo.exe"',
+  'args: ${{ steps.winsign.outputs.tauri_args || matrix.args }}',
+  'name: Verify Windows Authenticode signatures',
 ]) {
   if (!releaseWorkflow.includes(fragment)) {
     fail(`release workflow policy is missing: ${fragment}`);
   }
 }
 
-console.log('Release CSP, capabilities, updater-safe Windows icons and MSI shortcuts, signed updater/helper channels, tag checkout, and Linux Sigstore policies are valid.');
+const companionBuild = readFileSync('scripts/build-companion.mjs', 'utf8');
+if (!companionBuild.includes("resolve('scripts/windows-sign.ps1')")) {
+  fail('the bundled strand-cli.exe is no longer Authenticode-signed with the app');
+}
+
+console.log('Release CSP, capabilities, updater-safe Windows icons and MSI shortcuts, signed updater/helper channels, tag checkout, Windows Authenticode, and Linux Sigstore policies are valid.');

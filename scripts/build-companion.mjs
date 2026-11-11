@@ -16,6 +16,10 @@ if (target === 'universal-apple-darwin') {
   execFileSync('cargo', ['build', '-p', 'strand-headless', '--release', ...(target ? ['--target', target] : [])], { stdio: 'inherit' });
   copyFileSync(resolve('target', ...(target ? [target] : []), 'release', name), `${out}/${name}`);
 }
+// Windows Authenticode, set up by release.yml when WINDOWS_SIGNING is on.
+if (process.platform === 'win32' && process.env.WINDOWS_SIGN_DLIB) {
+  execFileSync('pwsh', ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', resolve('scripts/windows-sign.ps1'), `${out}/${name}`], { stdio: 'inherit' });
+}
 if (process.platform === 'darwin' && process.env.APPLE_SIGNING_IDENTITY) {
   execFileSync('codesign', ['--force', '--options', 'runtime', '--timestamp', '--sign', process.env.APPLE_SIGNING_IDENTITY, `${out}/${name}`], { stdio: 'inherit' });
 }
